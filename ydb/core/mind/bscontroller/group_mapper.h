@@ -57,6 +57,7 @@ namespace NKikimr {
                 const bool Usable;
                 ui32 NumSlots;
                 const ui32 MaxSlots;
+                const ui32 SlotSizeInUnits;
                 TStackVec<ui32, 16> Groups;
                 i64 SpaceAvailable;
                 const bool Operational;

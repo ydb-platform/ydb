@@ -335,7 +335,7 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
-bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool canUseVolatileTx, const bool commit) {
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit) {
     auto getTable = [](const NKqpProto::TKqpPhyTableId& table) {
         return NKikimr::TTableId(table.GetOwnerId(), table.GetTableId());
     };
@@ -402,27 +402,11 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     modifiedTables.insert(getTable(settings.GetTable()));
-                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && (!commit || !canUseVolatileTx)) {
+                    if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
                         // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.
                         return true;
                     }
                 } else {
-                    return true;
-                }
-            }
-        }
-    }
-    return false;
-}
-
-bool HasSinkInsert(const TKqpPhyTxHolder::TConstPtr& tx) {
-     for (const auto &stage : tx->GetStages()) {
-        for (const auto& sink : stage.GetSinks()) {
-            if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink) {
-                YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
-                NKikimrKqp::TKqpTableSinkSettings settings;
-                YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-                if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     return true;
                 }
             }

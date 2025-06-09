@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
-#include <contrib/libs/brotli/include/brotli/decode.h>
+#include <contrib/libs/brotli/c/include/brotli/decode.h>
 #include "output_queue.h"
 
 namespace NYql {

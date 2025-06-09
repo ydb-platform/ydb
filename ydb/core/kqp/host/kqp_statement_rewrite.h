@@ -25,6 +25,7 @@ TPrepareRewriteInfo PrepareRewrite(
     NYql::TExprContext& exprCtx,
     NYql::TTypeAnnotationContext& typeCtx,
     const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+    const NMiniKQL::IFunctionRegistry& funcRegistry,
     const TString& cluster);
 
 TVector<NYql::TExprNode::TPtr> RewriteExpression(

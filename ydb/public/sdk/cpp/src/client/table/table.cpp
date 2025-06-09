@@ -2687,6 +2687,11 @@ TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
     return *this;
 }
 
+TChangefeedDescription& TChangefeedDescription::WithSchemaChanges() {
+    SchemaChanges_ = true;
+    return *this;
+}
+
 TChangefeedDescription& TChangefeedDescription::WithResolvedTimestamps(const TDuration& value) {
     ResolvedTimestamps_ = value;
     return *this;
@@ -2740,6 +2745,10 @@ EChangefeedState TChangefeedDescription::GetState() const {
 
 bool TChangefeedDescription::GetVirtualTimestamps() const {
     return VirtualTimestamps_;
+}
+
+bool TChangefeedDescription::GetSchemaChanges() const {
+    return SchemaChanges_;
 }
 
 const std::optional<TDuration>& TChangefeedDescription::GetResolvedTimestamps() const {
@@ -2806,6 +2815,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     if (proto.virtual_timestamps()) {
         ret.WithVirtualTimestamps();
     }
+    if (proto.schema_changes()) {
+        ret.WithSchemaChanges();
+    }
     if (proto.has_resolved_timestamps_interval()) {
         ret.WithResolvedTimestamps(TDuration::MilliSeconds(
             ::google::protobuf::util::TimeUtil::DurationToMilliseconds(proto.resolved_timestamps_interval())));
@@ -2849,6 +2861,7 @@ template <typename TProto>
 void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_name(TStringType{Name_});
     proto.set_virtual_timestamps(VirtualTimestamps_);
+    proto.set_schema_changes(SchemaChanges_);
     proto.set_aws_region(TStringType{AwsRegion_});
 
     switch (Mode_) {
@@ -2932,7 +2945,8 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
     o << "{ name: \"" << Name_ << "\""
       << ", mode: " << Mode_ << ""
       << ", format: " << Format_ << ""
-      << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << "";
+      << ", virtual_timestamps: " << (VirtualTimestamps_ ? "on": "off") << ""
+      << ", schema_changes: " << (SchemaChanges_ ? "on": "off") << "";
 
     if (ResolvedTimestamps_) {
         o << ", resolved_timestamps: " << *ResolvedTimestamps_;
@@ -2958,6 +2972,7 @@ bool operator==(const TChangefeedDescription& lhs, const TChangefeedDescription&
         && lhs.GetMode() == rhs.GetMode()
         && lhs.GetFormat() == rhs.GetFormat()
         && lhs.GetVirtualTimestamps() == rhs.GetVirtualTimestamps()
+        && lhs.GetSchemaChanges() == rhs.GetSchemaChanges()
         && lhs.GetResolvedTimestamps() == rhs.GetResolvedTimestamps()
         && lhs.GetAwsRegion() == rhs.GetAwsRegion();
 }

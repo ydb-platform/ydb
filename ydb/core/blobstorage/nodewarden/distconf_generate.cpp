@@ -123,9 +123,18 @@ namespace NKikimr::NStorage {
         // generate initial cluster state, if needed
         if (Cfg->BridgeConfig) {
             auto *state = config->MutableClusterState();
+            state->SetGeneration(1);
             auto *piles = state->MutablePerPileState();
             for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
                 piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
+            }
+
+            auto *history = config->MutableClusterStateHistory();
+            auto *entry = history->AddUnsyncedEntries();
+            entry->MutableClusterState()->CopyFrom(*state);
+            entry->SetOperationGuid(RandomNumber<ui64>());
+            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
+                entry->AddUnsyncedPiles(i);
             }
         }
 
@@ -433,11 +442,13 @@ namespace NKikimr::NStorage {
             }
 
             ui32 maxSlots = defaultMaxSlots;
+            ui32 slotSizeInUnits = 0;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
                 }
+                slotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
             }
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
@@ -448,6 +459,7 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable && pileFilter,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
+                .SlotSizeInUnits = slotSizeInUnits,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

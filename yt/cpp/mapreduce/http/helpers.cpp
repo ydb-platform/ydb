@@ -100,16 +100,6 @@ void LogRequest(const THttpHeader& header, const TString& url, bool includeParam
         GetLoggedAttributes(header, url, includeParameters, Max<size_t>()));
 }
 
-void ExtendGenericError(TErrorResponse& errorResponse, int code, TString message)
-{
-    const auto& error = errorResponse.GetError();
-
-    auto inner = error.InnerErrors();
-    inner.emplace_back(code, std::move(message));
-
-    errorResponse.SetError(TYtError(error.GetCode(), error.GetMessage(), std::move(inner), error.GetAttributes()));
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

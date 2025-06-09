@@ -40,11 +40,7 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     //        result->AddMovePortions(data.GetMovePortions());
     //    }
     result->SetTargetCompactionLevel(data.GetTargetCompactionLevel());
-    if (auto levelPortions = std::dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()])) {
-        result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
-    } else if (auto levelPortions = std::dynamic_pointer_cast<TZeroLevelPortions>(Levels[level->GetLevelId()])) {
-        result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
-    }
+    result->SetPortionExpectedSize(Levels[data.GetTargetCompactionLevel()]->GetExpectedPortionSize());
     auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
         "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());

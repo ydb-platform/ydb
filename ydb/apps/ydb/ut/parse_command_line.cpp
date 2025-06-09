@@ -217,6 +217,10 @@ public:
         ClientCertFile = EnvFile(ClientCert, "client_cert.pem");
         ClientKey = clientCert.PrivateKey;
         ClientKeyFile = EnvFile(ClientKey, "client_key.pem");
+        ClientKeyPassword = "test_password";
+        ClientKeyPasswordFile = EnvFile(ClientKeyPassword, "client_key_password.txt");
+        ClientKeyWithPassword = clientCert.GetKeyWithPassword(ClientKeyPassword);
+        ClientKeyWithPasswordFile = EnvFile(ClientKeyWithPassword, "client_key_with_password.pem");
 
         const TCertAndKey wrongCa = GenerateCA(TProps::AsCA());
         WrongRootCA = wrongCa.Certificate;
@@ -224,9 +228,10 @@ public:
     }
 
 #define DECL_CERT_GETTER(name) \
-    TString Get##name() { \
-        GenerateCerts(); \
-        return name; \
+    TString name;              \
+    TString Get##name() {      \
+        GenerateCerts();       \
+        return name;           \
     }
 
     DECL_CERT_GETTER(RootCAFile);
@@ -241,6 +246,10 @@ public:
     DECL_CERT_GETTER(ClientCert);
     DECL_CERT_GETTER(ClientKeyFile);
     DECL_CERT_GETTER(ClientKey);
+    DECL_CERT_GETTER(ClientKeyWithPasswordFile);
+    DECL_CERT_GETTER(ClientKeyWithPassword);
+    DECL_CERT_GETTER(ClientKeyPasswordFile);
+    DECL_CERT_GETTER(ClientKeyPassword);
 
     void MakeSslServerCredentials() {
         ConnectSchema = "grpcs";
@@ -354,18 +363,6 @@ private:
     std::list<TTempFile> EnvFiles;
 
     std::shared_ptr<grpc::ServerCredentials> ServerCredentials;
-    TString RootCA;
-    TString RootCAFile;
-    TString WrongRootCA;
-    TString WrongRootCAFile;
-    TString ServerCert;
-    TString ServerCertFile;
-    TString ServerKey;
-    TString ServerKeyFile;
-    TString ClientCert;
-    TString ClientCertFile;
-    TString ClientKey;
-    TString ClientKeyFile;
 };
 
 class TCliTestFixtureWithSsl : public TCliTestFixture {
@@ -996,6 +993,22 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         {
             {"YDB_TOKEN", "token"},
         });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "--client-cert-file", GetClientCertFile(),
+            "--client-cert-key-file", GetClientKeyWithPasswordFile(),
+            "--client-cert-key-password-file", GetClientKeyPasswordFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
     }
 
     Y_UNIT_TEST_F(ParseClientCertFromEnv, TCliTestFixtureWithSsl) {
@@ -1013,6 +1026,38 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
             {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
         });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+            {"YDB_CLIENT_CERT_KEY_PASSWORD", GetClientKeyPassword()},
+        });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+            {"YDB_CLIENT_CERT_KEY_PASSWORD_FILE", GetClientKeyPasswordFile()},
+        });
     }
 
     Y_UNIT_TEST_F(ParseClientCertFileFromProfile, TCliTestFixtureWithSsl) {
@@ -1024,13 +1069,22 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                 ca-file: {ca_file}
                 client-cert-file: {client_cert_file}
                 client-cert-key-file: {client_cert_key_file}
+            test_profile_with_client_cert_password:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                client-cert-file: {client_cert_file}
+                client-cert-key-file: {client_cert_key_with_password_file}
+                client-cert-key-password-file: {client_cert_key_password_file}
         active_profile: active_test_profile
         )yaml",
         "endpoint"_a = GetEndpoint(),
         "database"_a = GetDatabase(),
         "ca_file"_a = GetRootCAFile(),
         "client_cert_file"_a = GetClientCertFile(),
-        "client_cert_key_file"_a = GetClientKeyFile()
+        "client_cert_key_file"_a = GetClientKeyFile(),
+        "client_cert_key_with_password_file"_a = GetClientKeyWithPasswordFile(),
+        "client_cert_key_password_file"_a = GetClientKeyPasswordFile()
         );
 
         ExpectToken("token");
@@ -1046,7 +1100,21 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             profile
         );
 
-        ExpectToken("token");
+        ExpectToken("token2");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "-p", "test_profile_with_client_cert_password",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token2"},
+            },
+            profile
+        );
+
+        ExpectToken("token3");
         ExpectClientCert();
         RunCli(
             {
@@ -1055,7 +1123,7 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
                 "scheme", "ls",
             },
             {
-                {"YDB_TOKEN", "token"},
+                {"YDB_TOKEN", "token3"},
             },
             profile
         );

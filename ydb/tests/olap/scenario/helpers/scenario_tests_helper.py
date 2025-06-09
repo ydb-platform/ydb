@@ -11,6 +11,8 @@ from abc import abstractmethod, ABC
 from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
 
+import logging
+logger = logging.getLogger(__name__)
 
 class TestContext:
     """Scenario test execution context.
@@ -348,6 +350,9 @@ class ScenarioTestHelper:
                 error = e
                 status = error.status
                 allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
+
+            if error != None:
+                logger.error(f'DEBUG____: {repr(status)}: {error}')
 
             if status in expected_status:
                 return result

@@ -602,11 +602,16 @@ void TKafkaBalancerActor::JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEv
 
         // check all clients have joined or their timeout has expired
         for (auto prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.begin(); prevGenerationMembersAndTimeoutsIt != WaitedMemberIdsAndTimeouts.end();) {
+            ui32 memberRebalanceTimeoutMs = prevGenerationMembersAndTimeoutsIt->second.RebalanceTimeoutMs;
+            TInstant memberHeartbeatDeadline = prevGenerationMembersAndTimeoutsIt->second.HeartbeatDeadline;
             if (AllWorkerStates.count(prevGenerationMembersAndTimeoutsIt->first) == 1) {
                 KAFKA_LOG_D(TStringBuilder() << "Waited member connected: " << prevGenerationMembersAndTimeoutsIt->first);
                 prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
-            } else if ((RebalanceStartTime + TDuration::MilliSeconds(prevGenerationMembersAndTimeoutsIt->second)) < now) {
-                KAFKA_LOG_D(TStringBuilder() << "Waited member connect deadline: " << prevGenerationMembersAndTimeoutsIt->first);
+            } else if ((RebalanceStartTime + TDuration::MilliSeconds(memberRebalanceTimeoutMs)) < now) {
+                KAFKA_LOG_D(TStringBuilder() << "Waited member connect rebalance deadline: " << prevGenerationMembersAndTimeoutsIt->first);
+                prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
+            } else if (memberHeartbeatDeadline < now) {
+                KAFKA_LOG_D(TStringBuilder() << "Waited member connect session deadline: " << prevGenerationMembersAndTimeoutsIt->first);
                 prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
             } else {
                 ++prevGenerationMembersAndTimeoutsIt;
@@ -938,7 +943,7 @@ bool TKafkaBalancerActor::ParseAssignments(
 
 bool TKafkaBalancerActor::ParseMembersAndRebalanceTimeouts(
     NKqp::TEvKqp::TEvQueryResponse::TPtr ev,
-    std::unordered_map<TString, ui32>& membersAndRebalanceTimeouts,
+    std::unordered_map<TString, NKafka::MemberTimeoutsMs>& membersAndTimeouts,
     TString& lastMemberId)
 {
     if (!ev) {
@@ -956,7 +961,9 @@ bool TKafkaBalancerActor::ParseMembersAndRebalanceTimeouts(
         TString memberId = TString(parser.ColumnParser("member_id").GetUtf8());
         TString instanceId = parser.ColumnParser("instance_id").GetOptionalUtf8().value_or("");
         ui32 rebalanceTimeoutMs = parser.ColumnParser("rebalance_timeout_ms").GetOptionalUint32().value_or(DEFAULT_REBALANCE_TIMEOUT_MS);
-        membersAndRebalanceTimeouts[memberId] = rebalanceTimeoutMs;
+        ui32 sessionTimeoutMs = parser.ColumnParser("session_timeout_ms").GetOptionalUint32().value_or(DEFAULT_SESSION_TIMEOUT_MS);
+        TInstant heartbeatDeadline = parser.ColumnParser("heartbeat_deadline").GetOptionalDatetime().value_or(TInstant::Now() + TDuration::MilliSeconds(sessionTimeoutMs));
+        membersAndTimeouts[memberId] = {rebalanceTimeoutMs, heartbeatDeadline};
 
         lastMemberId = memberId;
     }
@@ -1224,7 +1231,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildInsertMemberParams() {
     params.AddParam("$MemberId").Utf8(MemberId).Build();
     params.AddParam("$InstanceId").Utf8(InstanceId).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-    params.AddParam("$HeartbeatDeadline").Datetime(TInstant::Now() + TDuration::MilliSeconds(RebalanceTimeoutMs + SessionTimeoutMs)).Build();
+    params.AddParam("$HeartbeatDeadline").Datetime(TInstant::Now() + TDuration::MilliSeconds( SessionTimeoutMs)).Build();
     params.AddParam("$SessionTimeoutMs").Uint32(SessionTimeoutMs).Build();
     params.AddParam("$RebalanceTimeoutMs").Uint32(RebalanceTimeoutMs).Build();
 

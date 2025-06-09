@@ -69,16 +69,16 @@ namespace NYdb::NConsoleClient {
             replxx::Replxx::completions_t entries;
             entries.reserve(candidates.size());
             for (auto& candidate : candidates) {
-                if (candidate.Kind == NSQLComplete::ECandidateKind::FolderName &&
-                    candidate.Content.EndsWith('`')) {
-                    candidate.Content.pop_back();
-                }
                 entries.emplace_back(ReplxxCompletionOf(std::move(candidate)));
             }
             return entries;
         }
 
         replxx::Replxx::Completion ReplxxCompletionOf(NSQLComplete::TCandidate candidate) const {
+            Y_ENSURE(candidate.CursorShift <= candidate.Content.length());
+            const size_t prefixLen = candidate.Content.length() - candidate.CursorShift;
+            candidate.Content.resize(prefixLen);
+
             const auto back = candidate.Content.back();
             if (
                 !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName ||

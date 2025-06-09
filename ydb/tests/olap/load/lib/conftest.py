@@ -128,121 +128,53 @@ class LoadSuiteBase:
     @classmethod
     def __attach_logs(cls, start_time, attach_name, query_text):
         hosts = [node.host for node in filter(lambda x: x.role == YdbCluster.Node.Role.STORAGE, YdbCluster.get_cluster_nodes())]
-        logging.info(f"Starting __attach_logs for {attach_name}, found {len(hosts)} storage hosts: {hosts}")
-        
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).isoformat()
         cmd = f"ulimit -n 100500;unified_agent select -S '{start}' -s {{storage}}{{container}}"
-        logging.info(f"Base unified_agent command: {cmd}")
-        
         exec_kikimr = {
             '': {},
         }
         exec_start = deepcopy(exec_kikimr)
-        
         for host in hosts:
-            logging.info(f"Processing host: {host}")
             for c in exec_kikimr.keys():
                 try:
-                    kikimr_cmd = cmd.format(
+                    exec_kikimr[c][host] = cls.__execute_ssh(host, cmd.format(
                         storage='kikimr',
                         container=f' -m k8s_container:{c}' if c else ''
-                    )
-                    logging.info(f"Executing kikimr command on {host}: {kikimr_cmd}")
-                    exec_kikimr[c][host] = cls.__execute_ssh(host, kikimr_cmd)
+                    ))
                 except BaseException as e:
-                    logging.error(f"Error executing kikimr command on {host}, container '{c}': {e}")
+                    logging.error(e)
             for c in exec_start.keys():
                 try:
-                    start_cmd = cmd.format(
+                    exec_start[c][host] = cls.__execute_ssh(host, cmd.format(
                         storage='kikimr-start',
-                        container=f' -m k8s_container:{c}' if c else ''
-                    )
-                    logging.info(f"Executing kikimr-start command on {host}: {start_cmd}")
-                    exec_start[c][host] = cls.__execute_ssh(host, start_cmd)
+                        container=f' -m k8s_container:{c}' if c else ''))
                 except BaseException as e:
-                    logging.error(f"Error executing kikimr-start command on {host}, container '{c}': {e}")
+                    logging.error(e)
 
-        # Обрабатываем результаты exec_start
-        logging.info("Processing exec_start results...")
         error_log = ''
         for c, execs in exec_start.items():
-            logging.info(f"Processing exec_start container '{c}' with {len(execs)} executions")
             for host, e in sorted(execs.items()):
-                logging.info(f"Waiting for exec_start command completion on {host}")
                 e.wait(check_exit_code=False)
-                logging.info(f"Command on {host} completed with return code: {e.returncode}")
-                
-                host_output = e.stdout if e.returncode == 0 else e.stderr
-                host_output_len = len(host_output) if host_output else 0
-                logging.info(f"Host {host} output length: {host_output_len}")
-                if host_output_len > 0:
-                    logging.info(f"Host {host} output preview (first 100 chars): {host_output[:100]}")
-                
-                error_log += f'{host}:\n{host_output}\n'
-            
-            final_error_log = cls.__hide_query_text(error_log, query_text)
-            logging.info(f"Final error_log length for container '{c}': {len(final_error_log)}")
-            allure.attach(final_error_log, f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
+                error_log += f'{host}:\n{e.stdout if e.returncode == 0 else e.stderr}\n'
+            allure.attach(cls.__hide_query_text(error_log, query_text), f'{attach_name}_{c}_stderr', allure.attachment_type.TEXT)
 
-        # Обрабатываем результаты exec_kikimr
-        logging.info("Processing exec_kikimr results...")
         for c, execs in exec_kikimr.items():
-            logging.info(f"Processing exec_kikimr container '{c}' with {len(execs)} executions")
             dir = os.path.join(yatest.common.tempfile.gettempdir(), f'{attach_name}_{c}_logs')
-            logging.info(f"Creating directory: {dir}")
             os.makedirs(dir, exist_ok=True)
-            
-            total_files_written = 0
-            total_content_length = 0
-            
             for host, e in execs.items():
-                logging.info(f"Waiting for exec_kikimr command completion on {host}")
                 e.wait(check_exit_code=False)
-                logging.info(f"Command on {host} completed with return code: {e.returncode}")
-                
-                host_output = e.stdout if e.returncode == 0 else e.stderr
-                host_output_len = len(host_output) if host_output else 0
-                logging.info(f"Host {host} output length: {host_output_len}")
-                
-                if host_output_len > 0:
-                    logging.info(f"Host {host} output preview (first 100 chars): {host_output[:100]}")
-                
-                file_path = os.path.join(dir, host)
-                content = cls.__hide_query_text(host_output, query_text)
-                
-                with open(file_path, 'w') as f:
-                    f.write(content)
-                
-                written_size = os.path.getsize(file_path)
-                logging.info(f"Written file {file_path} with size: {written_size} bytes")
-                
-                total_files_written += 1
-                total_content_length += written_size
-                
-            logging.info(f"Total files written: {total_files_written}, total content length: {total_content_length}")
-            
+                with open(os.path.join(dir, host), 'w') as f:
+                    f.write(cls.__hide_query_text(e.stdout if e.returncode == 0 else e.stderr, query_text))
             archive = dir + '.tar.gz'
-            logging.info(f"Creating archive: {archive}")
-            try:
-                yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
-                archive_size = os.path.getsize(archive)
-                logging.info(f"Archive created successfully, size: {archive_size} bytes")
-                allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
-            except Exception as e:
-                logging.error(f"Error creating archive {archive}: {e}")
-        
-        logging.info(f"__attach_logs completed for {attach_name}")
+            yatest.common.execute(['tar', '-C', dir, '-czf', archive, '.'])
+            allure.attach.file(archive, f'{attach_name}_{c}_logs', extension='tar.gz')
 
     @classmethod
     def save_nodes_state(cls) -> None:
-        cls.__nodes_state = {n.slot: n for n in YdbCluster.get_cluster_nodes(db_only=True)}
-
-    @classmethod
-    def save_nodes_state_for_diagnostics(cls) -> None:
         """
-        Сохраняет состояние нод только для диагностики.
-        Не проверяет перезапуски/падения, но собирает coredump'ы и OOM информацию.
+        Сохраняет текущее состояние нод кластера.
+        Используется как для проверки перезапусков/падений, так и для диагностики (coredump'ы, OOM).
         """
         cls.__nodes_state = {n.slot: n for n in YdbCluster.get_cluster_nodes(db_only=True)}
 
@@ -1187,7 +1119,6 @@ class WorkloadTestBase(LoadSuiteBase):
             if not is_false_positive:
                 # Дополнительные проверки на реальные ошибочные сообщения
                 real_error_indicators = [
-                    "FATAL ERROR",             # "FATAL ERROR: something went wrong"
                     "fatal:",                   # "Fatal: something went wrong"
                     "error:",                   # "Error: something went wrong"
                     "error occurred",           # "An error occurred"
@@ -1210,16 +1141,19 @@ class WorkloadTestBase(LoadSuiteBase):
         return False
 
     def execute_workload_test(self, workload_executor, workload_name: str, command_args: str, 
-                             duration_value: float = None, additional_stats: dict = None):
+                             duration_value: float = None, additional_stats: dict = None,
+                             use_chunks: bool = False, duration_param: str = "--duration"):
         """
-        Выполняет полный цикл workload теста (одиночный запуск)
+        Выполняет полный цикл workload теста
         
         Args:
             workload_executor: Фикстура для выполнения workload (не используется, для совместимости)
             workload_name: Имя workload для отчетов
-            command_args: Аргументы командной строки
+            command_args: Аргументы командной строки (может быть шаблоном при use_chunks=True)
             duration_value: Время выполнения в секундах (если None, используется self.timeout)
             additional_stats: Дополнительная статистика
+            use_chunks: Использовать ли разбивку на чанки для повышения надежности
+            duration_param: Параметр для передачи времени выполнения (используется только при use_chunks=True)
         """
         if duration_value is None:
             duration_value = self.timeout
@@ -1227,36 +1161,10 @@ class WorkloadTestBase(LoadSuiteBase):
         return self._execute_workload_with_deployment(
             workload_name=workload_name,
             command_args_template=command_args,
-            duration_param=None,  # Используем полные command_args как есть
+            duration_param=duration_param if use_chunks else None,
             duration_value=duration_value,
             additional_stats=additional_stats,
-            use_chunks=False
-        )
-
-    def execute_workload_test_with_chunks(self, workload_executor, workload_name: str, command_args_template: str, 
-                                          duration_param: str = "--duration", duration_value: float = None,
-                                          additional_stats: dict = None):
-        """
-        Выполняет workload test разбивая общее время на чанки для повышения надежности
-        
-        Args:
-            workload_executor: Фикстура для выполнения workload (не используется, для совместимости)  
-            workload_name: Имя workload для отчетов
-            command_args_template: Шаблон аргументов команды (без duration параметра)
-            duration_param: Параметр для передачи времени выполнения (например "--duration", "--time")
-            duration_value: Время выполнения в секундах (если None, используется self.timeout)
-            additional_stats: Дополнительная статистика
-        """
-        if duration_value is None:
-            duration_value = self.timeout
-            
-        return self._execute_workload_with_deployment(
-            workload_name=workload_name,
-            command_args_template=command_args_template,
-            duration_param=duration_param,
-            duration_value=duration_value,
-            additional_stats=additional_stats,
-            use_chunks=True
+            use_chunks=use_chunks
         )
 
     def _execute_workload_with_deployment(self, workload_name: str, command_args_template: str,
@@ -1264,72 +1172,151 @@ class WorkloadTestBase(LoadSuiteBase):
                                          additional_stats: dict = None, use_chunks: bool = False):
         """
         Базовый метод для выполнения workload с deployment и повторными запусками
-        
-        Args:
-            workload_name: Имя workload для отчетов
-            command_args_template: Шаблон аргументов команды
-            duration_param: Параметр для времени (None, "--duration", "--time" и т.д.)
-            duration_value: Общее время выполнения
-            additional_stats: Дополнительная статистика  
-            use_chunks: Использовать ли чанкование
         """
         logging.info(f"=== Starting workload execution for {workload_name} ===")
-        logging.info(f"Duration: {duration_value}s, chunks: {use_chunks}, duration_param: {duration_param}")
         
-        # Сохраняем состояние нод для диагностики
-        with allure.step('Save nodes state for diagnostics'):
-            self.save_nodes_state_for_diagnostics()
+        # ФАЗА 1: ПОДГОТОВКА
+        preparation_result = self._prepare_workload_execution(
+            workload_name, duration_value, use_chunks, duration_param
+        )
         
-        # Выполняем deploy один раз в начале
-        deployed_binary_path, target_node = self._deploy_workload_binary(workload_name)
+        # ФАЗА 2: ВЫПОЛНЕНИЕ
+        execution_result = self._execute_workload_runs(
+            workload_name, command_args_template, duration_param, 
+            use_chunks, preparation_result
+        )
         
-        # Определяем стратегию выполнения
-        if use_chunks:
-            execution_plan = self._create_chunks_plan(duration_value)
-        else:
-            execution_plan = self._create_single_run_plan(duration_value)
+        # ФАЗА 3: РЕЗУЛЬТАТЫ
+        final_result = self._finalize_workload_results(
+            workload_name, execution_result, additional_stats, duration_value, use_chunks
+        )
+        
+        logging.info(f"=== Workload test completed for {workload_name} ===")
+        return final_result
+
+    def _prepare_workload_execution(self, workload_name: str, duration_value: float, 
+                                   use_chunks: bool, duration_param: str):
+        """ФАЗА 1: Подготовка к выполнению workload"""
+        with allure.step('Phase 1: Prepare workload execution'):
+            logging.info(f"Preparing execution: Duration={duration_value}s, chunks={use_chunks}, param={duration_param}")
             
-        logging.info(f"Execution plan: {len(execution_plan)} runs")
-        
-        # Создаем общий результат
-        overall_result = YdbCliHelper.WorkloadRunResult()
-        overall_result.start_time = time()  # Включает время deployment для общей статистики
-        
-        # Отдельно трекаем время выполнения workload для диагностики
-        workload_start_time = time()
-        
-        successful_runs = 0
-        total_execution_time = 0
-        
-        # Выполняем план
-        for run_num, run_config in enumerate(execution_plan, 1):
-            run_name = f"{workload_name}_run_{run_num}" if not use_chunks else f"{workload_name}_chunk_{run_config['chunk_num']}"
+            # Сохраняем состояние нод для диагностики
+            self.save_nodes_state()
             
-            # Обновляем workload_start_time только для первого запуска
-            if run_num == 1:
-                workload_start_time = time()
+            # Выполняем deploy
+            deployed_binary_path, target_node = self._deploy_workload_binary(workload_name)
             
-            success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
-                deployed_binary_path=deployed_binary_path,
-                target_node=target_node,
-                run_name=run_name,
-                command_args_template=command_args_template,
-                duration_param=duration_param,
-                run_config=run_config
-            )
+            # Создаем план выполнения
+            execution_plan = (self._create_chunks_plan(duration_value) if use_chunks 
+                            else self._create_single_run_plan(duration_value))
             
-            total_execution_time += execution_time
+            # Инициализируем результат
+            overall_result = YdbCliHelper.WorkloadRunResult()
+            overall_result.start_time = time()
             
+            logging.info(f"Preparation completed: {len(execution_plan)} runs planned")
+            
+            return {
+                'deployed_binary_path': deployed_binary_path,
+                'target_node': target_node,
+                'execution_plan': execution_plan,
+                'overall_result': overall_result,
+                'workload_start_time': time()
+            }
+
+    def _execute_workload_runs(self, workload_name: str, command_args_template: str, 
+                              duration_param: str, use_chunks: bool, preparation_result: dict):
+            """ФАЗА 2: Выполнение workload runs"""
+            with allure.step('Phase 2: Execute workload runs'):
+                deployed_binary_path = preparation_result['deployed_binary_path']
+                target_node = preparation_result['target_node']
+                execution_plan = preparation_result['execution_plan']
+                overall_result = preparation_result['overall_result']
+                
+                successful_runs = 0
+                total_execution_time = 0
+                workload_start_time = None
+                
+                # Выполняем план
+                for run_num, run_config in enumerate(execution_plan, 1):
+                    # Запоминаем время начала первого workload run
+                    if run_num == 1:
+                        workload_start_time = time()
+                    
+                    run_name = (f"{workload_name}_chunk_{run_config['chunk_num']}" if use_chunks 
+                              else f"{workload_name}_run_{run_num}")
+                    
+                    # Выполняем один run
+                    success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                        deployed_binary_path, target_node, run_name,
+                        command_args_template, duration_param, run_config
+                    )
+                    
+                    # Обрабатываем результат run'а
+                    self._process_single_run_result(
+                        overall_result, workload_name, run_num, run_config,
+                        success, execution_time, stdout, stderr, is_timeout
+                    )
+                    
+                    total_execution_time += execution_time
+                    if success:
+                        successful_runs += 1
+                        logging.info(f"Run {run_num} completed successfully")
+                    else:
+                        logging.warning(f"Run {run_num} failed")
+                        if not use_chunks:
+                            break  # Прерываем при ошибке для одиночного запуска
+                
+                logging.info(f"Execution completed: {successful_runs}/{len(execution_plan)} successful")
+                
+                return {
+                    'overall_result': overall_result,
+                    'successful_runs': successful_runs,
+                    'total_runs': len(execution_plan),
+                    'total_execution_time': total_execution_time,
+                    'workload_start_time': workload_start_time
+                }
+
+    def _finalize_workload_results(self, workload_name: str, execution_result: dict, 
+                                  additional_stats: dict, duration_value: float, use_chunks: bool):
+            """ФАЗА 3: Финализация результатов и диагностика"""
+            with allure.step('Phase 3: Finalize results and diagnostics'):
+                overall_result = execution_result['overall_result']
+                successful_runs = execution_result['successful_runs']
+                total_runs = execution_result['total_runs']
+                
+                # Проверяем состояние схемы
+                self._check_scheme_state()
+                
+                # Анализируем результаты и добавляем ошибки/предупреждения
+                self._analyze_execution_results(overall_result, successful_runs, total_runs, use_chunks)
+                
+                # Собираем и добавляем статистику
+                self._add_execution_statistics(
+                    overall_result, workload_name, execution_result, 
+                    additional_stats, duration_value, use_chunks
+                )
+                
+                # Финальная обработка с диагностикой
+                overall_result.workload_start_time = execution_result['workload_start_time']
+                self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
+                
+                logging.info(f"Final result: success={overall_result.success}, successful_runs={successful_runs}/{total_runs}")
+                return overall_result
+
+    def _process_single_run_result(self, overall_result, workload_name: str, run_num: int, 
+                                  run_config: dict, success: bool, execution_time: float,
+                                  stdout: str, stderr: str, is_timeout: bool):
+            """Обрабатывает результат одного run'а"""
             # Создаем результат для run'а
             run_result = self.create_workload_result(
-                workload_name=run_name,
+                workload_name=f"{workload_name}_run_{run_num}",
                 stdout=stdout,
                 stderr=stderr,
                 success=success,
                 additional_stats={
-                    **(additional_stats or {}),
                     "run_number": run_num,
-                    "run_duration": run_config.get('duration', duration_value),
+                    "run_duration": run_config.get('duration'),
                     "run_execution_time": execution_time,
                     **run_config
                 },
@@ -1338,8 +1325,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 actual_execution_time=execution_time
             )
             
-            # Добавляем как iteration в общий результат
-            # run_result уже содержит правильную iteration с номером run_num
+            # Добавляем iteration в общий результат
             overall_result.iterations[run_num] = run_result.iterations[run_num]
             
             # Накапливаем stdout/stderr
@@ -1347,60 +1333,43 @@ class WorkloadTestBase(LoadSuiteBase):
                 overall_result.stdout = ""
             if overall_result.stderr is None:
                 overall_result.stderr = ""
-                
+            
             overall_result.stdout += f"\n=== Run {run_num} ===\n{stdout or ''}"
             overall_result.stderr += f"\n=== Run {run_num} stderr ===\n{stderr or ''}"
+
+    def _analyze_execution_results(self, overall_result, successful_runs: int, 
+                                  total_runs: int, use_chunks: bool):
+            """Анализирует результаты выполнения и добавляет ошибки/предупреждения"""
+            if successful_runs == 0:
+                overall_result.add_error(f"All {total_runs} runs failed to execute successfully")
+            elif successful_runs < total_runs and use_chunks:
+                overall_result.add_warning(f"Only {successful_runs}/{total_runs} runs completed successfully")
+
+    def _add_execution_statistics(self, overall_result, workload_name: str, execution_result: dict,
+                                 additional_stats: dict, duration_value: float, use_chunks: bool):
+            """Собирает и добавляет статистику выполнения"""
+            successful_runs = execution_result['successful_runs']
+            total_runs = execution_result['total_runs']
+            total_execution_time = execution_result['total_execution_time']
             
-            if success and not run_result.error_message:
-                successful_runs += 1
-                logging.info(f"Run {run_num} completed successfully")
-            else:
-                logging.warning(f"Run {run_num} failed: {run_result.error_message}")
-                if not use_chunks:
-                    # Для одиночного запуска - прерываем при ошибке
-                    break
-        
-        logging.info(f"=== Workload execution completed ===")
-        logging.info(f"Successful runs: {successful_runs}/{len(execution_plan)}")
-        logging.info(f"Total execution time: {total_execution_time:.1f}s")
-        
-        # Проверяем состояние схемы
-        self._check_scheme_state()
-        
-        # Финализируем результат
-        if successful_runs == 0:
-            overall_result.add_error(f"All {len(execution_plan)} runs failed to execute successfully")
-        elif successful_runs < len(execution_plan) and use_chunks:
-            overall_result.add_warning(f"Only {successful_runs}/{len(execution_plan)} runs completed successfully")
-        
-        # Добавляем общую статистику
-        run_stats = {
-            "total_runs": len(execution_plan),
-            "successful_runs": successful_runs,
-            "failed_runs": len(execution_plan) - successful_runs,
-            "total_execution_time": total_execution_time,
-            "planned_duration": duration_value,
-            "success_rate": successful_runs / len(execution_plan) if len(execution_plan) > 0 else 0,
-            "use_chunks": use_chunks
-        }
-        
-        if additional_stats:
-            run_stats.update(additional_stats)
+            # Базовая статистика
+            stats = {
+                "total_runs": total_runs,
+                "successful_runs": successful_runs,
+                "failed_runs": total_runs - successful_runs,
+                "total_execution_time": total_execution_time,
+                "planned_duration": duration_value,
+                "success_rate": successful_runs / total_runs if total_runs > 0 else 0,
+                "use_chunks": use_chunks
+            }
             
-        # Добавляем статистику в результат
-        for key, value in run_stats.items():
-            overall_result.add_stat(workload_name, key, value)
-        
-        # Финальная обработка с диагностикой
-        with allure.step('Generate diagnostics and reports'):
-            # Используем время начала workload (без deployment) для точной диагностики
-            overall_result.workload_start_time = workload_start_time
-            self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
+            # Добавляем дополнительную статистику
+            if additional_stats:
+                stats.update(additional_stats)
             
-        logging.info(f"=== Workload test completed for {workload_name} ===")
-        logging.info(f"Final result: success={overall_result.success}, successful_runs={successful_runs}/{len(execution_plan)}")
-        
-        return overall_result
+            # Добавляем всю статистику в результат
+            for key, value in stats.items():
+                overall_result.add_stat(workload_name, key, value)
 
     def _deploy_workload_binary(self, workload_name: str):
         """Выполняет deploy workload binary и возвращает путь к бинарному файлу и target node"""

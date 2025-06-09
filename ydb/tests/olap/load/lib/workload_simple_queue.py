@@ -35,13 +35,14 @@ class SimpleQueueBase(WorkloadTestBase):
         }
         
         # Запускаем тест с чанками
-        self.execute_workload_test_with_chunks(
+        self.execute_workload_test(
             workload_executor=workload_executor,
             workload_name=f"SimpleQueue_{table_type}",
-            command_args_template=command_args_template,
-            duration_param="--duration",
+            command_args=command_args_template,
             duration_value=self.timeout,
-            additional_stats=additional_stats
+            additional_stats=additional_stats,
+            use_chunks=True,
+            duration_param="--duration"
         )
 
 

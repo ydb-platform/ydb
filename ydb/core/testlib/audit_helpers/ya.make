@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     library/cpp/logger
     ydb/core/audit
+    library/cpp/testing/unittest
 )
 
 END()

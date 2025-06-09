@@ -6,7 +6,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/login_page.h>
@@ -15,6 +15,10 @@
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
+using TMemoryLogBackend = NKikimr::Tests::TMemoryLogBackend;
+using NKikimr::Tests::CreateTestAuditLogBackends;
+using NKikimr::Tests::FindAuditLine;
 
 namespace NSchemeShardUT_Private {
 

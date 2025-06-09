@@ -24,12 +24,9 @@ PEERDIR(
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/table
-    ydb/core/testlib/audit_helpers
 )
 
 SRCS(
-    auditlog_helpers.cpp
-    auditlog_helpers.h
     data_erasure_helpers.cpp
     export_reboots_common.cpp
     failing_mtpq.cpp

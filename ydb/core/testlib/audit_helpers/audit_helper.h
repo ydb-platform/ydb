@@ -14,19 +14,14 @@ class TMemoryLogBackend: public TLogBackend {
 public:
     std::vector<std::string>& Buffer;
 
-    TMemoryLogBackend(std::vector<std::string>& buffer)
-        : Buffer(buffer)
-    {}
-
-    virtual void WriteData(const TLogRecord& rec) override {
-        Buffer.emplace_back(rec.Data, rec.Len);
-    }
-
-    virtual void ReopenLog() override {
-    }
+    TMemoryLogBackend(std::vector<std::string>& buffer);
+    virtual void WriteData(const TLogRecord& rec) override;
+    virtual void ReopenLog() override;
 };
 
 NAudit::TAuditLogBackends CreateTestAuditLogBackends(std::vector<std::string>& lineBuffer);
+
+std::string FindAuditLine(const std::vector<std::string>& auditLines, const std::string& substr);
 
 } // namespace Tests
 } // namespace NKikimr

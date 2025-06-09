@@ -409,6 +409,38 @@ void ColumnType_Int16(const std::string& tableType) {
     });
 }
 
+void ColumnType_Int32(const std::string& tableType) {
+    MainTestCase(std::nullopt, tableType).Run({
+        .TableDDL = R"(
+            CREATE TABLE `%s` (
+                Key Uint64 NOT NULL,
+                Message Int32,
+                PRIMARY KEY (Key)
+            )  WITH (
+                STORE = %s
+            );
+        )",
+
+        .Lambda = R"(
+            $l = ($x) -> {
+                return [
+                    <|
+                        Key:CAST($x._offset AS Uint64),
+                        Message:CAST($x._data AS Int32)
+                    |>
+                ];
+            };
+        )",
+
+        .Messages = {{"2147483647"}},
+
+        .Expectations = {{
+            _C("Key", ui64(0)),
+            _C("Message", i32(2147483647)),
+        }}
+    });
+}
+
 void MessageField_Partition(const std::string& tableType) {
     MainTestCase(std::nullopt, tableType).Run({
         .TableDDL = R"(

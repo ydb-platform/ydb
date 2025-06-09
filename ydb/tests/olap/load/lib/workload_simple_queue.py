@@ -1,5 +1,5 @@
 import pytest
-from .conftest import WorkloadTestBase
+from .workload_executor import WorkloadTestBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import Enum

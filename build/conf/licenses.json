@@ -164,10 +164,10 @@
     },
     "NDA": {
         "default": [
+            "Custom-cryptopro-client",
             "Intel-NDA",
             "mimepp",
-            "OracleOebs",
-            "Custom-cryptopro-client"
+            "OracleOebs"
         ]
     },
     "REQUIRE_CITATION": {
@@ -235,9 +235,9 @@
             "GPL-2.0-only WITH Classpath-exception-2.0",
             "GPL-2.0-only WITH GCC-exception-2.0",
             "GPL-2.0-only WITH Linux-syscall-note",
-            "GPL-2.0-or-later WITH Linux-syscall-note",
             "GPL-2.0-or-later WITH Bison-exception-2.0",
             "GPL-2.0-or-later WITH Bison-exception-2.2",
+            "GPL-2.0-or-later WITH Linux-syscall-note",
             "GPL-3.0-only WITH Bison-exception-2.2",
             "GPL-3.0-or-later WITH Bison-exception-2.2",
             "H2",

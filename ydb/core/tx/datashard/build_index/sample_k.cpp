@@ -115,35 +115,56 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
-        LOG_D("Seek " << seq << " " << Debug());
+        try {
+            LOG_D("Seek " << seq << " " << Debug());
 
-        lead = Lead;
+            lead = Lead;
 
-        return EScan::Feed;
+            return EScan::Feed;
+        } catch (const std::exception& exc) {
+            HasBuildError = true;
+            Issues.AddIssue(NYql::TIssue(TStringBuilder()
+                << "Scan failed " << exc.what()));
+            return EScan::Final;
+        }
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
-        LOG_T("Feed " << Debug());
+        try {
+            LOG_T("Feed " << Debug());
 
-        ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+            ++ReadRows;
+            ReadBytes += CountBytes(key, row);
 
-        Sampler.Add([&row](){
-            return TSerializedCellVec::Serialize(*row);
-        });
+            Sampler.Add([&row](){
+                return TSerializedCellVec::Serialize(*row);
+            });
 
-        if (Sampler.GetMaxProbability() == 0) {
+            if (Sampler.GetMaxProbability() == 0) {
+                return EScan::Final;
+            }
+
+            return EScan::Feed;
+        } catch (const std::exception& exc) {
+            HasBuildError = true;
+            Issues.AddIssue(NYql::TIssue(TStringBuilder()
+                << "Scan failed " << exc.what()));
             return EScan::Final;
         }
-
-        return EScan::Feed;
     }
 
     EScan Exhausted() noexcept final
     {
-        LOG_D("Exhausted " << Debug());
+        try {
+            LOG_D("Exhausted " << Debug());
 
-        return EScan::Final;
+            return EScan::Final;
+        } catch (const std::exception& exc) {
+            HasBuildError = true;
+            Issues.AddIssue(NYql::TIssue(TStringBuilder()
+                << "Scan failed " << exc.what()));
+            return EScan::Final;
+        }
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {

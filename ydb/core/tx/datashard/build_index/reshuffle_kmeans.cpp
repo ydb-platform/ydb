@@ -234,39 +234,54 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
-        LOG_D("Seek " << seq << " " << Debug());
+        try {
+            LOG_D("Seek " << seq << " " << Debug());
 
-        if (IsExhausted) {
-            return Uploader.CanFinish()
-                ? EScan::Final
-                : EScan::Sleep;
+            if (IsExhausted) {
+                return Uploader.CanFinish()
+                    ? EScan::Final
+                    : EScan::Sleep;
+            }
+
+            lead = Lead;
+
+            return EScan::Feed;
+        } catch (const std::exception& exc) {
+            Uploader.AddIssue(exc);
+            return EScan::Final;
         }
-
-        lead = Lead;
-
-        return EScan::Feed;
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
-        LOG_T("Feed " << Debug());
+        try {
+            LOG_T("Feed " << Debug());
 
-        ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+            ++ReadRows;
+            ReadBytes += CountBytes(key, row);
 
-        Feed(key, *row);
+            Feed(key, *row);
 
-        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+            return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+        } catch (const std::exception& exc) {
+            Uploader.AddIssue(exc);
+            return EScan::Final;
+        }
     }
 
     EScan Exhausted() noexcept final
     {
-        LOG_D("Exhausted " << Debug());
+        try {
+            LOG_D("Exhausted " << Debug());
 
-        IsExhausted = true;
-        
-        // call Seek to wait uploads
-        return EScan::Reset;
+            IsExhausted = true;
+            
+            // call Seek to wait uploads
+            return EScan::Reset;
+        } catch (const std::exception& exc) {
+            Uploader.AddIssue(exc);
+            return EScan::Final;
+        }
     }
 
 private:

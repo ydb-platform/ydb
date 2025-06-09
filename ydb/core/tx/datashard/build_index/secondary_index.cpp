@@ -127,7 +127,6 @@ protected:
 
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TUploadStatus UploadStatus;
-    bool HasBuildError = false;
 
     TBuildScanUpload(ui64 buildIndexId,
                      const TString& target,
@@ -237,9 +236,7 @@ public:
         progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
         progress->Record.SetRequestSeqNoRound(SeqNo.Round);
 
-        if (HasBuildError) {
-            progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        } else if (abort != EAbort::None) {
+        if (abort != EAbort::None) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (!UploadStatus.IsSuccess()) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);

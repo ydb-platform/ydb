@@ -128,9 +128,9 @@ public:
     }
 
     void AddIssue(const std::exception& exc) {
+        HasBuildError = true;
         UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
             << "Scan failed " << exc.what()));
-        HasBuildError = true;
     }
 
     template<typename TResponse> 

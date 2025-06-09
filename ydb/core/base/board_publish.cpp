@@ -115,7 +115,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
 
     const TDuration& GetCurrentDelay(TRetryState& state) {
         if (state.CurrentDelay == TDuration::Zero()) {
-            state.CurrentDelay = BoardRetrySettings.StartDelayMs;
+            state.CurrentDelay = BoardRetrySettings.StartDelay;
         }
         return state.CurrentDelay;
     }
@@ -123,8 +123,8 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     TDuration GetRetryDelay(TRetryState& state) {
         auto newDelay = state.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > BoardRetrySettings.MaxDelayMs) {
-            newDelay = BoardRetrySettings.MaxDelayMs;
+        if (newDelay > BoardRetrySettings.MaxDelay) {
+            newDelay = BoardRetrySettings.MaxDelay;
         }
         newDelay *= AppData()->RandomProvider->Uniform(50, 200);
         newDelay /= 100;

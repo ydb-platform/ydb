@@ -1,4 +1,3 @@
-import pytest
 from .workload_executor import WorkloadTestBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
@@ -19,13 +18,13 @@ class OltpWorkloadBase(WorkloadTestBase):
             f"--database /{YdbCluster.ydb_database} "
             f"--path oltp_workload"
         )
-        
+
         # Дополнительная статистика специфичная для OLTP
         additional_stats = {
             "workload_type": "oltp",
             "path": "oltp_workload"
         }
-        
+
         # Используем новый метод с чанками для повышения надежности
         self.execute_workload_test(
             workload_name="OltpWorkload",
@@ -39,4 +38,4 @@ class OltpWorkloadBase(WorkloadTestBase):
 
 class TestOltpWorkload(OltpWorkloadBase):
     """Тест OLTP workload с таймаутом из get_external_param"""
-    timeout = int(get_external_param('workload_duration', 100)) 
+    timeout = int(get_external_param('workload_duration', 100))

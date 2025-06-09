@@ -27,13 +27,13 @@ class SimpleQueueBase(WorkloadTestBase):
             f"--database /{YdbCluster.ydb_database} "
             f"--mode {table_type}"
         )
-        
+
         # Дополнительная статистика специфичная для SimpleQueue
         additional_stats = {
             "table_type": table_type,
             "workload_type": "simple_queue"
         }
-        
+
         # Запускаем тест с чанками
         self.execute_workload_test(
             workload_name=f"SimpleQueue_{table_type}",

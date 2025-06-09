@@ -85,6 +85,9 @@ bool TWorkersPool::DrainTasks() {
         AFL_VERIFY(tasks.size());
         RunTask(std::move(tasks));
     }
+    if (!Processes.front().GetCategory()->HasTasks()) {
+        Counters->NoTasks->Add(1);
+    }
     return newTask;
 }
 

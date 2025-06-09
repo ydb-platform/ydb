@@ -19,11 +19,10 @@ TWorkersPoolCounters::TWorkersPoolCounters(const TString& poolName, const NColum
     , WaitWorkerRate(TBase::GetDeriviative("WaitWorker"))
     , UseWorkerRate(TBase::GetDeriviative("UseWorker"))
     , ChangeCPULimitRate(TBase::GetDeriviative("ChangeCPULimit"))
-{
+    , NoTasks(TBase::GetDeriviative("NoTasks")) {
 }
 
-
- TWPCategorySignals::TWPCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat)
+TWPCategorySignals::TWPCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat)
     : TBase(base, "wp_category", ::ToString(cat))
     , Category(cat)
     , WaitingHistogram(TBase::GetHistogram("Waiting/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
@@ -31,4 +30,4 @@ TWorkersPoolCounters::TWorkersPoolCounters(const TString& poolName, const NColum
     , ExecuteDuration(TBase::GetDeriviative("Execute/Duration/Us")) {
 }
 
-}
+}   // namespace NKikimr::NConveyorComposite

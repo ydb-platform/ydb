@@ -4,7 +4,7 @@ Serial types are integer types with an associated value-generation mechanism. Th
 
 ## Description
 
-When a column of a serial type is defined, a separate schema object called a `Sequence` is created and bound to this column. This object is a private sequence generator and is hidden from the user. The `Sequence` will be destroyed together with the table.
+When a column of a serial type is defined, a separate schema object called a `Sequence` is created and bound to this column. This object is a private sequence generator and it is hidden from the user. The `Sequence` will be destroyed together with the table.
 
 At present, the `Sequence` object supports several parameters that determine its behavior. These parameters can be altered after creation using the [ALTER SEQUENCE](../syntax/alter-sequence.md) command.
 

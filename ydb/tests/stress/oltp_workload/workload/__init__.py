@@ -34,8 +34,8 @@ class WorkloadRunner:
         stop = threading.Event()
         workloads = [
             WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
-            WorkloadSelectPartition(self.client, self.name, stop),
-            WorkloadVectorIndex(self.client, self.name, stop)
+            WorkloadVectorIndex(self.client, self.name, stop),
+            WorkloadSelectPartition(self.client, self.name, stop)
         ]
 
         for w in workloads:

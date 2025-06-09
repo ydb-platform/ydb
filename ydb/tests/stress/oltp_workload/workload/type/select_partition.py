@@ -17,6 +17,7 @@ class WorkloadSelectPartition(WorkloadBase):
         while not self.is_stop_requested():
             sql_select = """
                 SELECT * FROM `.sys/partition_stats`
+                WHERE Path = '/Root/oltp_workload/insert_delete_all_types/table'
             """
             result_set = self.client.query(sql_select, False)
             rows = result_set[0].rows

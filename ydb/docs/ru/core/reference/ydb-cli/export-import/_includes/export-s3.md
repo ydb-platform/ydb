@@ -40,9 +40,9 @@
 
 `--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз, для разных шаблонов.
 
-`--encryption-algorithm ALGORITHM`: Алгоритм шифрования. Поддерживаемые значения: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
+`--encryption-algorithm ALGORITHM`: Алгоритм шифрования (только для зашифрованных выгрузок). Поддерживаемые значения: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
 
-`--encryption-key-file PATH`: Путь к файлу, содержащему ключ шифрования.
+`--encryption-key-file PATH`: Путь к файлу, содержащему ключ шифрования (только для зашифрованных выгрузок).
 
 ### Дополнительные параметры {#aux}
 

@@ -14,7 +14,6 @@ PEERDIR(
     yql/essentials/providers/common/structured_token
     ydb/library/yql/providers/common/token_accessor/grpc
     ydb/public/sdk/cpp/src/client/types/credentials
-    ydb/public/sdk/cpp/client/ydb_types/credentials/login
 )
 
 END()

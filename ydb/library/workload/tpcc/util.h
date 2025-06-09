@@ -60,4 +60,12 @@ inline bool ShouldExit(const TStatus& status) {
            status.GetStatus() == EStatus::UNAUTHORIZED;
 }
 
+inline void QuickExit(int status) {
+#if !defined(__APPLE__)
+    std::quick_exit(status);
+#else
+    _exit(status);
+#endif
+}
+
 } // namespace NYdb::NTPCC

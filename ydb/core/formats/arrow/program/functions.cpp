@@ -49,20 +49,20 @@ struct SumImpl : public arrow::compute::ScalarAggregator {
   arrow::Status Consume(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch) override {
     if (batch[0].is_array()) {
       const auto& data = batch[0].array();
-      this->count += data->length - data->GetNullCount();
+      this->Count += data->length - data->GetNullCount();
       if (arrow::is_boolean_type<ArrowType>::value) {
-        this->sum +=
+        this->Sum +=
             static_cast<typename SumType::c_type>(arrow::BooleanArray(data).true_count());
       } else {
-        this->sum +=
+        this->Sum +=
             arrow::compute::detail::SumArray<CType, typename SumType::c_type, SimdLevel>(
                 *data);
       }
     } else {
       const auto& data = *batch[0].scalar();
-      this->count += data.is_valid * batch.length;
+      this->Count += data.is_valid * batch.length;
       if (data.is_valid) {
-        this->sum += arrow::compute::internal::UnboxScalar<ArrowType>::Unbox(data) * batch.length;
+        this->Sum += arrow::compute::internal::UnboxScalar<ArrowType>::Unbox(data) * batch.length;
       }
     }
     return arrow::Status::OK();
@@ -70,29 +70,29 @@ struct SumImpl : public arrow::compute::ScalarAggregator {
 
   arrow::Status MergeFrom(arrow::compute::KernelContext*, arrow::compute::KernelState&& src) override {
     const auto& other = arrow::checked_cast<const ThisType&>(src);
-    this->count += other.count;
-    this->sum += other.sum;
+    this->Count += other.Count;
+    this->Sum += other.Sum;
     return arrow::Status::OK();
   }
 
   arrow::Status Finalize(arrow::compute::KernelContext*, arrow::Datum* out) override {
-    if (this->count < options.min_count) {
+    if (this->Count < Options.min_count) {
       out->value = std::make_shared<OutputType>();
     } else {
-      out->value = arrow::MakeScalar(this->sum);
+      out->value = arrow::MakeScalar(this->Sum);
     }
     return arrow::Status::OK();
   }
 
-  size_t count = 0;
-  typename SumType::c_type sum = 0;
-  arrow::compute::ScalarAggregateOptions options;
+  size_t Count = 0;
+  typename SumType::c_type Sum = 0;
+  arrow::compute::ScalarAggregateOptions Options;
 };
 
 template <typename ArrowType>
 struct SumImplDefault : public SumImpl<ArrowType, arrow::compute::SimdLevel::NONE> {
-  explicit SumImplDefault(const arrow::compute::ScalarAggregateOptions& options_) {
-    this->options = options_;
+  explicit SumImplDefault(const arrow::compute::ScalarAggregateOptions& options) {
+    this->Options = options;
   }
 };
 

@@ -1231,7 +1231,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildInsertMemberParams() {
     params.AddParam("$MemberId").Utf8(MemberId).Build();
     params.AddParam("$InstanceId").Utf8(InstanceId).Build();
     params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
-    params.AddParam("$HeartbeatDeadline").Datetime(TInstant::Now() + TDuration::MilliSeconds( SessionTimeoutMs)).Build();
+    params.AddParam("$HeartbeatDeadline").Datetime(TInstant::Now() + TDuration::MilliSeconds(SessionTimeoutMs)).Build();
     params.AddParam("$SessionTimeoutMs").Uint32(SessionTimeoutMs).Build();
     params.AddParam("$RebalanceTimeoutMs").Uint32(RebalanceTimeoutMs).Build();
 

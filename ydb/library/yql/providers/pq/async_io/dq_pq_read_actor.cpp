@@ -901,8 +901,8 @@ ui32 ExtractPartitionsFromParams(
             YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
             NPq::NProto::TDqReadTaskParams params;
             YQL_ENSURE(params.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
-            readTaskParamsMsg.emplace_back(std::move(params));
             partitionCount = params.GetPartitioningParams().GetTopicPartitionsCount();
+            readTaskParamsMsg.emplace_back(std::move(params));
         }
         return partitionCount;
 }

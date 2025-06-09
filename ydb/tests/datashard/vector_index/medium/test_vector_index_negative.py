@@ -1,3 +1,5 @@
+import ydb
+
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
 from ydb.tests.datashard.lib.types_of_variables import (
@@ -106,7 +108,7 @@ class TestVectorIndexNegative(VectorBase):
                         vector_dimension=vector_dimension,
                         to_binary_string_converters=self.to_binary_string_converters,
                     )
-                except Exception as ex:
+                except ydb.issues.SchemeError as ex:
                     if "No global indexes for table /Root/table" not in str(ex):
                         raise ex
 
@@ -133,7 +135,7 @@ class TestVectorIndexNegative(VectorBase):
                         vector_dimension=vector_dimension,
                         to_binary_string_converters=self.to_binary_string_converters,
                     )
-                except Exception as ex:
+                except ydb.issues.SchemeError as ex:
                     if "Given predicate is not suitable for used index: idx_vector_vec_String" not in str(ex):
                         raise ex
                 self.drop_index()

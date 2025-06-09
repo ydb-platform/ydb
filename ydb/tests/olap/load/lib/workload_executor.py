@@ -49,7 +49,10 @@ class WorkloadTestBase(LoadSuiteBase):
         except Exception as e:
             logging.error(f"Error during teardown: {e}")
 
-    def create_workload_result(self, workload_name: str, stdout: str, stderr: str, success: bool, additional_stats: dict = None, is_timeout: bool = False, iteration_number: int = 0, actual_execution_time: float = None) -> YdbCliHelper.WorkloadRunResult:
+    def create_workload_result(self, workload_name: str, stdout: str, stderr: str,
+                               success: bool, additional_stats: dict = None, is_timeout: bool = False,
+                               iteration_number: int = 0, actual_execution_time: float = None
+                               ) -> YdbCliHelper.WorkloadRunResult:
         """
         Создает и заполняет WorkloadRunResult с общей логикой
 
@@ -90,7 +93,7 @@ class WorkloadTestBase(LoadSuiteBase):
             if not success:
                 result.add_error(f"Workload execution failed. stderr: {stderr}")
                 error_found = True
-            elif "error" in str(stderr).lower() and "warning: permanently added" not in str(stderr).lower():
+            elif "error" in str(stderr).lower():
                 result.add_error(f"Error detected in stderr: {stderr}")
                 error_found = True
             elif self._has_real_error_in_stdout(str(stdout)):
@@ -258,7 +261,7 @@ class WorkloadTestBase(LoadSuiteBase):
         return final_result
 
     def _prepare_workload_execution(self, workload_name: str, duration_value: float, use_chunks: bool, duration_param: str):
-        """ФАЗА 1: Подготовка к выполнению workload"""
+        # """ФАЗА 1: Подготовка к выполнению workload"""
         with allure.step('Phase 1: Prepare workload execution'):
             logging.info(f"Preparing execution: Duration={duration_value}s, chunks={use_chunks}, param={duration_param}")
 

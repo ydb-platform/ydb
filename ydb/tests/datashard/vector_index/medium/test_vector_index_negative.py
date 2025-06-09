@@ -74,18 +74,18 @@ class TestVectorIndexNegative(VectorBase):
             "vec_": vector.keys(),
         }
         pk_columns = {"pk_": pk_types.keys()}
-        prefixs = ["", "prefix_String"]
+        prefixes = ["", "prefix_String"]
         covers = [[], [f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()]]
         create_table_sql = create_table_sql_request(
             table_name=self.table_name,
             columns=columns,
-            pk_colums=pk_columns,
-            index_colums={},
+            pk_columns=pk_columns,
+            index_columns={},
             unique="",
             sync="",
         )
         self.query(create_table_sql)
-        for presix in prefixs:
+        for prefix in prefixes:
             for cover in covers:
                 self._upsert_values(
                     all_types=all_types,
@@ -102,7 +102,7 @@ class TestVectorIndexNegative(VectorBase):
                         col_name="vec_String",
                         knn_func="Knn::ManhattanDistance",
                         numb=1,
-                        prefix=presix,
+                        prefix=prefix,
                         vector_dimension=vector_dimension,
                         to_binary_string_converters=self.to_binary_string_converters,
                     )
@@ -118,7 +118,7 @@ class TestVectorIndexNegative(VectorBase):
                     vector_dimension=vector_dimension,
                     levels=1,
                     clusters=10,
-                    prefix=presix,
+                    prefix=prefix,
                     cover=cover,
                 )
 
@@ -129,7 +129,7 @@ class TestVectorIndexNegative(VectorBase):
                         col_name="vec_String",
                         knn_func="Knn::EuclideanDistance",
                         numb=1,
-                        prefix=presix,
+                        prefix=prefix,
                         vector_dimension=vector_dimension,
                         to_binary_string_converters=self.to_binary_string_converters,
                     )

@@ -22,9 +22,12 @@
 
 ### Перечень загружаемых объектов {#items}
 
+`--source-prefix PREFIX`: Префикс загрузки в бакете S3. Обязателен для зашифрованных загрузок.
+
 `--item STRING`: Описание объекта загрузки. Параметр `--item` может быть указан несколько раз, если необходимо выполнить загрузку нескольких объектов. `STRING` задается в формате `<свойство>=<значение>,...`, со следующими обязательными свойствами:
 
-- `source`, `src` или `s` — путь (префикс ключа) в S3 с загружаемой директорией или таблицей
+- `source`, `src` или `s` — префикс ключа в S3 с загружаемой директорией или таблицей.
+- `source_path` or `src_path` - путь к объекту относительно директории выгрузки. Не может быть использован без параметра `--source-prefix`.
 - `destination`, `dst`, или `d` —  путь в базе данных для размещения загружаемой директории или таблицы. Конечный элемент пути не должен существовать. Все директории на пути будут созданы, если не существуют.
 
 ### Дополнительные параметры {#aux}
@@ -36,6 +39,8 @@
 
 - `pretty`: Человекочитаемый формат (по умолчанию)
 - `proto-json-base64`: Protobuf в формате json, бинарные строки закодированы в base64
+
+`--encryption-key-file PATH`: Путь к файлу, содержащему ключ шифрования.
 
 ## Выполнение загрузки {#exec}
 
@@ -135,6 +140,19 @@
   --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
 ```
 
+### Загрузка зашифрованной выгрузки {#example-encryption}
+
+Загрузка одной таблицы, которая была выгружена по пути `dir/my_table`, в путь `dir1/dir/my_table` из зашифрованной выгрузки, расположенной по префиксу `export1` в бакете `mybucket`, используя секретный ключ из файла `~/my_secret_key`.
+
+```bashAdd commentMore actions
+ydb -p quickstart import s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --source-prefix export1 --destination-path dir1 \
+  --item src_path=dir/my_table \
+  --encryption-key-file ~/my_secret_key
+```
+
 ### Получение идентификаторов операций {#example-list-oneline}
 
 Для получения перечня идентификаторов операций загрузки в удобном для обработки в скриптах bash формате вы можете применить утилиту [jq](https://stedolan.github.io/jq/download/):
@@ -156,4 +174,3 @@ ydb://import/8?id=281474976788779&kind=s3
 ```bash
 {{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
-

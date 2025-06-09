@@ -29,7 +29,7 @@ namespace NKikimr {
         DataShardControlsCdcInitialScanReadAheadHi                                  /* "DataShardControls.CdcInitialScanReadAheadHi" */,
         DataShardControlsReadIteratorKeysExtBlobsPrecharge                          /* "DataShardControls.ReadIteratorKeysExtBlobsPrecharge" */,
         DataShardControlsPrioritizedMvccSnapshotReads                               /* "DataShardControls.PrioritizedMvccSnapshotReads" */,
-        DataShardControlsUnprotectedMvccSnapshotReads                              /* "DataShardControls.UnprotectedMvccSnapshotReads" */,
+        DataShardControlsUnprotectedMvccSnapshotReads                               /* "DataShardControls.UnprotectedMvccSnapshotReads" */,
         TxLimitControlsPerRequestDataSizeLimit                                      /* "TxLimitControls.PerRequestDataSizeLimit" */,
         TxLimitControlsPerShardReadSizeLimit                                        /* "TxLimitControls.PerShardReadSizeLimit" */,
         TxLimitControlsPerShardIncomingReadSetSizeLimit                             /* "TxLimitControls.PerShardIncomingReadSetSizeLimit" */,

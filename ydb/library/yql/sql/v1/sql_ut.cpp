@@ -4,6 +4,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/sql/sql.h>
+#include <ydb/library/yql/sql/v1/sql.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -6592,6 +6593,15 @@ Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
     }
 
+    Y_UNIT_TEST(CreateViewWithUdfs) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT "bbb" LIKE Unwrap("aaa");
+            )"
+        );
+        UNIT_ASSERT_C(res.Root, res.Issues.ToString());
+    }
+
     Y_UNIT_TEST(CreateViewIfNotExists) {
         constexpr const char* name = "TheView";
         NYql::TAstParseResult res = SqlToYql(std::format(R"(
@@ -7049,5 +7059,62 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifier) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+}
+
+Y_UNIT_TEST_SUITE(QuerySplit) {
+    Y_UNIT_TEST(Simple) {
+        TString query = R"(
+        ;
+        -- Comment 1
+        SELECT * From Input; -- Comment 2
+        -- Comment 3
+        $a = "a";
+
+        -- Comment 9
+        ;
+
+        -- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };
+
+        // Comment 7
+
+
+
+        )";
+
+        google::protobuf::Arena Arena;
+
+        NSQLTranslation::TTranslationSettings settings;
+        settings.AnsiLexer = false;
+        settings.Arena = &Arena;
+
+        TVector<TString> statements;
+        NYql::TIssues issues;
+
+        UNIT_ASSERT(NSQLTranslationV1::SplitQueryToStatements(query, statements, issues, settings));
+
+        UNIT_ASSERT_VALUES_EQUAL(statements.size(), 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(statements[0], "-- Comment 1\n        SELECT * From Input;");
+        UNIT_ASSERT_VALUES_EQUAL(statements[1], R"(-- Comment 2
+        -- Comment 3
+        $a = "a";)");
+        UNIT_ASSERT_VALUES_EQUAL(statements[2], R"(-- Comment 10
+
+        -- Comment 8
+
+        $b = ($x) -> {
+        -- comment 4
+        return /* Comment 5 */ $x;
+        -- Comment 6
+        };)");
     }
 }

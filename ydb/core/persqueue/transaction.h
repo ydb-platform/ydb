@@ -113,6 +113,8 @@ struct TDistributedTransaction {
 
     bool HasWriteOperations = false;
     size_t PredicateAcksCount = 0;
+
+    bool Pending = false;
 };
 
 }

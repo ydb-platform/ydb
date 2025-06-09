@@ -84,8 +84,6 @@
 
 Подробнее об уровнях доступа см. в статье [{#T}](./access-levels.md).
 
-### Уровни доступа {#access-levels}
-
 ## Владелец объекта {#owner}
 
 У каждого объекта доступа есть [владелец](../concepts/glossary.md#access-owner). Им по умолчанию становится [субъект доступа](../concepts/glossary.md#access-subject), создавший [объект доступа](../concepts/glossary.md#access-object).

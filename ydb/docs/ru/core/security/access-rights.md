@@ -25,3 +25,7 @@
 
 * [describe](../reference/ydb-cli/commands/scheme-describe.md)
 * [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
+
+## Смотрите также
+
+* [{#T}](./short-access-control-notation.md)

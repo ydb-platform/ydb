@@ -8,6 +8,8 @@ items:
     href: access-rights.md
   - name: Уровни доступа
     href: access-levels.md
+  - name: Краткая запись управления доступом
+    href: short-access-control-notation.md
 - name: Начальная настройка безопасности
   href: builtin-security.md
 - name: Аудитный лог
@@ -17,5 +19,3 @@ items:
   include:
     mode: link
     path: encryption/toc_p.yaml
-- name: Краткая запись управления доступом
-  href: short-access-control-notation.md

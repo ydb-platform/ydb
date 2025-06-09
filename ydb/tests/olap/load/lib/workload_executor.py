@@ -230,7 +230,7 @@ class WorkloadTestBase(LoadSuiteBase):
             duration_value: Время выполнения в секундах (если None, используется self.timeout)
             additional_stats: Дополнительная статистика
             use_chunks: Использовать ли разбивку на чанки для повышения надежности
-            duration_param: Параметр для передачи времени выполнения (используется только при use_chunks=True)
+            duration_param: Параметр для передачи времени выполнения
         """
         if duration_value is None:
             duration_value = self.timeout
@@ -238,7 +238,7 @@ class WorkloadTestBase(LoadSuiteBase):
         return self._execute_workload_with_deployment(
             workload_name=workload_name,
             command_args_template=command_args,
-            duration_param=duration_param if use_chunks else None,
+            duration_param=duration_param,
             duration_value=duration_value,
             additional_stats=additional_stats,
             use_chunks=use_chunks

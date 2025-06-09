@@ -33,6 +33,7 @@ target_link_libraries(ydb-services-ydb-backup_ut PUBLIC
   ydb-core-util
   core-wrappers-ut_helpers
   lib-ydb_cli-dump
+  src-client-coordination
   src-client-export
   src-client-import
   src-client-operation

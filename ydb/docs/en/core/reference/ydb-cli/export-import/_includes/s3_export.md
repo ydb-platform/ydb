@@ -29,12 +29,20 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 ### List of exported items {#items}
 
-`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
+`--destination-prefix PREFIX`: Destination prefix for export in bucket. Required for encrypted exports.
+
+`--source-path PATH`: Root folder for the objects being exported, database root if not provided.
+
+`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. If no `--item` parameters are specified, the whole source path will be exported. `STRING` is set in `<property>=<value>,...` format with the following properties:
 
 - `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
-- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items.
+- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items. It can be generated automatically from the name of the exported object. In the case of encrypted export, it is not recommended to specify an explicit destination path in order to anonymize exported object names.
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
+
+`--encryption-algorithm ALGORITHM`: Encryption algorithm. Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
+
+`--encryption-key-file PATH`: File path that contains encryption key.
 
 ### Additional parameters {#aux}
 
@@ -132,7 +140,7 @@ Exporting all DB objects whose names do not start with a dot and that are not st
 ```bash
 ydb -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --item src=.,dst=export1
+  --destination-prefix export1
 ```
 
 ### Exporting multiple directories {#example-specific-dirs}
@@ -144,6 +152,19 @@ ydb -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+```
+
+### Exporting a directory with encryption {#example-encryption}
+
+Exporting subdirectory dir1 of the database with encryption with the secret key stored in `~/my_secret_key` file to the `export1` directory in `mybucket` using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
+
+```bash
+ydb -p quickstart export s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --source-path dir1 \
+  --destination-prefix export1 \
+  --encryption-algorithm AES-128-GCM \
+  --encryption-key-file ~/my_secret_key
 ```
 
 ### Getting operation IDs {#example-list-oneline}

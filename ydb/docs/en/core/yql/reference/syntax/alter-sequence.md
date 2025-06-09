@@ -23,7 +23,7 @@ ALTER SEQUENCE [ IF EXISTS ] path_to_sequence
 
 * `INCREMENT [ BY ] increment` — sets the increment step for the sequence. Default: 1.
 
-* `START [ WITH ] start_value` — sets a new start value for the sequence. Changing this parameter with `ALTER SEQUENCE` does not affect the current value, but it will be used with `ALTER SEQUENCE RESTART` if no value is specified. Default: 1.
+* `START [ WITH ] start_value` — sets a new start value for the sequence. Changing this parameter with `ALTER SEQUENCE` does not affect the current value, but new start value will be used with `ALTER SEQUENCE RESTART` if no value is specified. Default: 1.
 
 * `RESTART [ [ WITH ] restart_value ]` — sets the current value of the sequence to the specified `restart_value`. If the value is not specified, the current value will be set to the current start value.
 

@@ -1,8 +1,12 @@
 LIBRARY()
 
 SRCS(
+    clean.cpp
     common_queries.cpp
+    data_splitter.cpp
     histogram.cpp
+    init.cpp
+    import.cpp
     runner.cpp
     task_queue.cpp
     terminal.cpp
@@ -12,6 +16,7 @@ SRCS(
     transaction_payment.cpp
     transaction_simulation.cpp
     transaction_stocklevel.cpp
+    util.cpp
 )
 
 PEERDIR(
@@ -21,6 +26,9 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/query
 )
+
+GENERATE_ENUM_SERIALIZATION(runner.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(constants.h)
 
 END()
 

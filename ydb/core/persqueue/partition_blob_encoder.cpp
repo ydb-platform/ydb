@@ -3,13 +3,14 @@
 
 namespace NKikimr::NPQ {
 
-TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition)
+TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite)
     : StartOffset(0)
     , EndOffset(0)
     , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
+    , ForFastWrite(fastWrite)
 {
 }
 
@@ -22,7 +23,9 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
         ui32 s = 0;
         for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
             Y_ABORT_UNLESS(p < HeadKeys.size());
-            Y_ABORT_UNLESS(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key);
+            Y_ABORT_UNLESS(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key,
+                           "DataKeysHead[%" PRIu32 "].Key[%" PRIu32 "]=%s, HeadKeys[%" PRIu32 "]=%s",
+                           j, k, DataKeysHead[j].GetKey(k).ToString().data(), p, HeadKeys[p].Key.ToString().data());
             Y_ABORT_UNLESS(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
             s += DataKeysHead[j].GetSize(k);
             Y_ABORT_UNLESS(j + 1 == totalLevels || DataKeysHead[j].GetSize(k) >= compactLevelBorder[j + 1]);
@@ -31,7 +34,11 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
         Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
     }
     Y_ABORT_UNLESS(DataKeysBody.empty() ||
-             Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
+                   Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount(),
+                   "DataKeysBody.size=%" PRISZT ", lastKey=%s, head.offset=%" PRIu64,
+                   DataKeysBody.size(),
+                   DataKeysBody.back().Key.ToString().data(),
+                   Head.Offset);
     Y_ABORT_UNLESS(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         Y_ABORT_UNLESS(HeadKeys.size() <= totalMaxCount);
@@ -203,7 +210,13 @@ ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
             --it; //point to blob with this offset
         Y_ABORT_UNLESS(it != DataKeysBody.end());
         sizeLag = it->Size + DataKeysBody.back().CumulativeSize - it->CumulativeSize;
-        Y_ABORT_UNLESS(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize);
+        Y_ABORT_UNLESS(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize,
+                       "BodySize=%" PRIu64
+                       ", DataKeysBody.back.CumulativeSize=%" PRIu64 ", DataKeysBody.back.Size=%" PRIu64
+                       ", DataKeysBody.front.CumulativeSize=%" PRIu64,
+                       BodySize,
+                       DataKeysBody.back().CumulativeSize, DataKeysBody.back().Size,
+                       DataKeysBody.front().CumulativeSize);
     }
     for (const auto& b : HeadKeys) {
         if ((i64)b.Key.GetOffset() >= offset)
@@ -238,11 +251,6 @@ const TDataKey* TPartitionBlobEncoder::GetLastKey() const
     return lastKey;
 }
 
-bool TPartitionBlobEncoder::IsNothingWritten() const
-{
-    return CompactedKeys.empty() && (NewHead.PackedSize == 0);
-}
-
 TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
                                                ui64 endOffset,
                                                TInstant& writeTimestamp) const
@@ -265,7 +273,9 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     }
 
     for (const auto& b : NewHead.GetBatches()) {
-        Y_ABORT_UNLESS(b.Packed);
+        Y_ABORT_UNLESS(b.Packed,
+                       "key=%s",
+                       key.ToString().data());
         b.SerializeTo(valueD);
         writeTimestamp = std::max(writeTimestamp, b.GetEndWriteTimestamp());
     }
@@ -300,14 +310,21 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     return valueD;
 }
 
-TKey TPartitionBlobEncoder::KeyFor(TKeyPrefix::EType type,
-                                   const TPartitionId& partitionId,
-                                   bool needCompaction) const
+TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
+                                        const TPartitionId& partitionId,
+                                        bool needCompaction) const
 {
+    Y_ABORT_UNLESS(!ForFastWrite);
     if (needCompaction) {
         return TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
     }
     return TKey::ForHead(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+}
+
+TKey TPartitionBlobEncoder::KeyForFastWrite(TKeyPrefix::EType type, const TPartitionId& partitionId) const
+{
+    Y_ABORT_UNLESS(ForFastWrite);
+    return TKey::ForFastWrite(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
 }
 
 void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
@@ -332,7 +349,8 @@ void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
                                        headCleared,
                                        needCompactHead,
                                        maxBlobSize,
-                                       nextPartNo);
+                                       nextPartNo,
+                                       ForFastWrite);
 }
 
 void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize)
@@ -398,12 +416,19 @@ void TPartitionBlobEncoder::SyncDataKeysBody(TInstant now,
 
     while (!CompactedKeys.empty()) {
         const auto& [key, blobSize] = CompactedKeys.front();
-        Y_ABORT_UNLESS(!key.HasSuffix());
+        //Y_ABORT_UNLESS(!key.HasSuffix(),
+        //               "key=%s",
+        //               key.ToString().data());
 
         BodySize += blobSize;
 
         ui64 lastOffset = DataKeysBody.empty() ? 0 : getNextOffset(DataKeysBody.back().Key);
-        Y_ABORT_UNLESS(lastOffset <= key.GetOffset());
+        //if (!(lastOffset <= key.GetOffset())) {
+        //    Dump();
+        //}
+        Y_ABORT_UNLESS(lastOffset <= key.GetOffset(),
+                       "lastOffset=%" PRIu64 ", key=%s",
+                       lastOffset, key.ToString().data());
 
         if (DataKeysBody.empty()) {
             startOffset = key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
@@ -432,6 +457,7 @@ void TPartitionBlobEncoder::SyncHeadFromNewHead()
 
 void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 {
+    Y_ABORT_UNLESS(!ForFastWrite);
     //append Head with newHead
     while (!NewHead.GetBatches().empty()) {
         Head.AddBatch(NewHead.ExtractFirstBatch());
@@ -445,10 +471,52 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
     endOffset = Head.GetNextOffset();
 }
 
+void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset)
+{
+    Y_ABORT_UNLESS(ForFastWrite);
+    Y_ABORT_UNLESS(Head.PackedSize == 0,
+                   "Head.PackedSize=%" PRIu32, Head.PackedSize);
+
+    // We calculate the initial offset if this is the first write operation.
+    if (NewHead.PackedSize > 0 && DataKeysBody.empty()) {
+        Y_ABORT_UNLESS(Head.Offset == NewHead.Offset);
+        Y_ABORT_UNLESS(Head.PartNo == NewHead.PartNo);
+
+        startOffset = NewHead.Offset + (NewHead.PartNo > 0 ? 1 : 0);
+    }
+
+    // In the FastWrite zone, everything is stored in the body. That's why we need to move the keys out of my head.
+    for (auto& k : HeadKeys) {
+        BodySize += k.Size;
+        k.CumulativeSize = DataKeysBody.empty() ? 0 : (DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size);
+        DataKeysBody.push_back(std::move(k));
+    }
+    HeadKeys.clear();
+
+    // Here is the Head.Packed Size != 0. Therefore, the keys must be in the body.
+    Y_ABORT_UNLESS(!DataKeysBody.empty());
+
+    endOffset = NewHead.GetNextOffset();
+
+    // In the FastWrite zone, the head should be empty after the write operation.
+    Head.Clear();
+    Head.Offset = endOffset;
+
+    // There's nothing in my head. Therefore, the packaging levels also need to be cleaned.
+    for (ui32 i = 0; i < DataKeysHead.size(); ++i) {
+        DataKeysHead[i].Clear();
+    }
+}
+
 void TPartitionBlobEncoder::ResetNewHead(ui64 endOffset)
 {
     NewHead.Clear();
     NewHead.Offset = endOffset;
+}
+
+bool TPartitionBlobEncoder::IsNothingWritten() const
+{
+    return CompactedKeys.empty() && (NewHead.PackedSize == 0);
 }
 
 bool TPartitionBlobEncoder::IsLastBatchPacked() const
@@ -487,5 +555,69 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     Y_ABORT_UNLESS(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
     return res;
 }
+
+//void TPartitionBlobEncoder::Dump() const
+//{
+//    auto dumpCompactedKeys = [this](const std::deque<std::pair<TKey, ui32>>& keys, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(prefix);
+//        for (size_t i = 0; i < keys.size(); ++i) {
+//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].first.ToString() << " (" << keys[i].second << ")");
+//        }
+//    };
+//    auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(prefix);
+//        if (keys.size() > 10) {
+//            auto dumpSubkeys = [this](const std::deque<TDataKey>& keys, size_t begin, size_t end, const char* prefix) {
+//                Y_UNUSED(this);
+//                Y_UNUSED(keys);
+//                Y_UNUSED(prefix);
+//                for (size_t i = begin; i < end; ++i) {
+//                    DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+//                                 ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+//                }
+//            };
+//            dumpSubkeys(keys, 0, 3, prefix);
+//            DBGTRACE_LOG("...");
+//            dumpSubkeys(keys, keys.size() - 3, keys.size(), prefix);
+//            return;
+//        }
+//        for (size_t i = 0; i < keys.size(); ++i) {
+//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+//                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+//        }
+//    };
+//    auto dumpHead = [this](const THead& head, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(head);
+//        Y_UNUSED(prefix);
+//        DBGTRACE_LOG(prefix <<
+//                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
+//                     ", PackedSize=" << head.PackedSize <<
+//                     ", Batches.size=" << head.GetBatches().size());
+//    };
+//    auto dumpDataKeysHead = [this](const TVector<TKeyLevel>& levels, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(prefix);
+//        for (size_t i = 0; i < levels.size(); ++i) {
+//            const auto& level = levels[i];
+//            DBGTRACE_LOG(prefix << "[" << i << "] " << level.Sum() << " / " << level.Border());
+//            for (ui32 j = 0; j < level.KeysCount(); ++j) {
+//                DBGTRACE_LOG("    [" << j << "] " << level.GetKey(j).ToString() << " (" << level.GetSize(j) << ")");
+//            }
+//        }
+//    };
+//
+//    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
+//    dumpCompactedKeys(CompactedKeys, "CompactedKeys");
+//    DBGTRACE_LOG("BodySize=" << BodySize);
+//    dumpKeys(DataKeysBody, "Body");
+//    dumpKeys(HeadKeys, "Head");
+//    dumpHead(Head, "Head");
+//    dumpDataKeysHead(DataKeysHead, "Levels");
+//    dumpHead(NewHead, "NewHead");
+//    DBGTRACE_LOG("NewHeadKey=" << NewHeadKey.Key.ToString() << " (" << NewHeadKey.Size << ")");
+//}
 
 }

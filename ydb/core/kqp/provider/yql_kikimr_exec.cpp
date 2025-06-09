@@ -2066,6 +2066,12 @@ public:
                                     const auto interval = TDuration::FromValue(value);
                                     auto& resolvedTimestamps = *add_changefeed->mutable_resolved_timestamps_interval();
                                     resolvedTimestamps.set_seconds(interval.Seconds());
+                                } else if (name == "schema_changes") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_schema_changes(FromString<bool>(to_lower(value)));
                                 } else if (name == "retention_period") {
                                     YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
                                     const auto value = FromString<i64>(

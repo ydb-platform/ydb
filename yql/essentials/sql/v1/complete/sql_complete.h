@@ -27,6 +27,7 @@ namespace NSQLComplete {
         FolderName,
         TableName,
         ClusterName,
+        BindingName,
         UnknownName,
     };
 
@@ -53,8 +54,9 @@ namespace NSQLComplete {
         };
 
         virtual ~ISqlCompletionEngine() = default;
-        virtual TCompletion Complete(TCompletionInput input) = 0; // TODO(YQL-19747): migrate YDB CLI to CompleteAsync
-        virtual NThreading::TFuture<TCompletion>
+        virtual TCompletion
+        Complete(TCompletionInput input, TEnvironment env = {}) = 0;
+        virtual NThreading::TFuture<TCompletion> // TODO(YQL-19747): Migrate YDB CLI to `Complete` method
         CompleteAsync(TCompletionInput input, TEnvironment env = {}) = 0;
     };
 

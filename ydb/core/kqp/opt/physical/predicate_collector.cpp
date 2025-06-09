@@ -10,10 +10,10 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions = {
-    {"EqualsIgnoreCase", "String.AsciiEqualsIgnoreCase"},
-    {"StartsWithIgnoreCase", "String.AsciiStartsWithIgnoreCase"},
-    {"EndsWithIgnoreCase", "String.AsciiEndsWithIgnoreCase"},
-    {"StringContainsIgnoreCase", "String.AsciiContainsIgnoreCase"}
+    {"EqualsIgnoreCase", "String._yql_AsciiEqualsIgnoreCase"},
+    {"StartsWithIgnoreCase", "String._yql_AsciiStartsWithIgnoreCase"},
+    {"EndsWithIgnoreCase", "String._yql_AsciiEndsWithIgnoreCase"},
+    {"StringContainsIgnoreCase", "String._yql_AsciiContainsIgnoreCase"}
 };
 
 namespace {
@@ -127,14 +127,14 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
     }
     const auto& name = udf.Head().Content();
     static const THashSet<TString> substringMatchUdfs = {
-        "String.AsciiEqualsIgnoreCase",
+        "String._yql_AsciiEqualsIgnoreCase",
 
         "String.Contains",
-        "String.AsciiContainsIgnoreCase",
+        "String._yql_AsciiContainsIgnoreCase",
         "String.StartsWith",
-        "String.AsciiStartsWithIgnoreCase",
+        "String._yql_AsciiStartsWithIgnoreCase",
         "String.EndsWith",
-        "String.AsciiEndsWithIgnoreCase"
+        "String._yql_AsciiEndsWithIgnoreCase"
     };
     return substringMatchUdfs.contains(name);
 }

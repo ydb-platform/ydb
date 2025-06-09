@@ -173,6 +173,25 @@ namespace NKikimr::NStorage {
                                 out << "<pre>";
                                 OutputPrettyMessage(out, *config);
                                 out << "</pre>";
+                                if (config->HasConfigComposite()) {
+                                    out << "<strong>config.yaml</strong><br/>";
+                                    TString yaml;
+                                    ui64 version;
+                                    TString fetchYaml;
+                                    auto error = DecomposeConfig(config->GetConfigComposite(), &yaml, &version, &fetchYaml);
+                                    if (error) {
+                                        out << "<strong>error: " << error << "</strong>";
+                                    } else {
+                                        out << "<pre>" << yaml << "</pre>";
+                                    }
+                                }
+                                if (config->HasCompressedStorageYaml()) {
+                                    TStringInput ss(config->GetCompressedStorageYaml());
+                                    TZstdDecompress zstd(&ss);
+                                    TString yaml = zstd.ReadAll();
+                                    out << "<strong>storage.yaml (size " << yaml.size() << ")</strong><br/><pre>"
+                                        << yaml << "</pre>";
+                                }
                             } else {
                                 out << "not defined";
                             }
@@ -278,6 +297,38 @@ namespace NKikimr::NStorage {
                                         TABLED() { out << info.SessionId; }
                                         TABLED() { out << makeBoundNodeIds(); }
                                         TABLED() { out << FormatList(info.ScatterTasks); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cache";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Key"; }
+                                    TABLEH() { out << "Generation"; }
+                                    TABLEH() { out << "Value size"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                std::vector<TString> keys;
+                                for (const auto& [key, value] : Cache) {
+                                    keys.push_back(key);
+                                }
+                                std::ranges::sort(keys);
+                                for (const TString& key : keys) {
+                                    const TCacheItem& value = Cache.at(key);
+                                    TABLER() {
+                                        TABLED() { out << key; }
+                                        TABLED() { out << value.Generation; }
+                                        TABLED() { out << (value.Value ? value.Value->size() : 0); }
                                     }
                                 }
                             }

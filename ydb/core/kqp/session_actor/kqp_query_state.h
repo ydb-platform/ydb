@@ -348,7 +348,7 @@ public:
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
-    bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx, const bool canUseVolatileTx) {
+    bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         if (!Commit) {
             return false;
@@ -376,7 +376,7 @@ public:
         }
 
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            if (tx && tx->GetHasEffects() && (!HasSinkInsert(tx) || canUseVolatileTx)) {
+            if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects
                 return CurrentTx + 1 == phyQuery.TransactionsSize();

@@ -26,10 +26,10 @@ index 1cd8d18..a53c26a 100644
  // may not be able to heap-allocate while crashing.
  ABSL_CONST_INIT static absl::base_internal::SpinLock crash_lock(
 diff --git a/tcmalloc/internal/logging.h b/tcmalloc/internal/logging.h
-index 2a5c761..f2ecc1d 100644
+index 2a5c761..43975dd 100644
 --- a/tcmalloc/internal/logging.h
 +++ b/tcmalloc/internal/logging.h
-@@ -51,6 +51,87 @@ GOOGLE_MALLOC_SECTION_BEGIN
+@@ -51,6 +51,96 @@ GOOGLE_MALLOC_SECTION_BEGIN
  namespace tcmalloc {
  namespace tcmalloc_internal {
  
@@ -43,6 +43,10 @@ index 2a5c761..f2ecc1d 100644
 +  public:
 +    static UserData Make() {
 +      return UserData{CreateSampleUserData()};
++    }
++    // must be matched with preceding Release
++    static void DestroyRaw(void* ptr) {
++      DestroySampleUserData(ptr);
 +    }
 +
 +    constexpr UserData() noexcept : ptr_(nullptr) {}
@@ -75,7 +79,12 @@ index 2a5c761..f2ecc1d 100644
 +      DestroySampleUserData(ptr_);
 +    }
 +
-+    void* Get() const { return ptr_; }
++    // should be paired with subsequent DestroyRaw
++    void* Release() && {
++      void* p = ptr_;
++      ptr_ = nullptr;
++      return p;
++    }
 +  private:
 +    UserData(void* ptr) noexcept : ptr_(ptr) {}
 +  private:
@@ -117,7 +126,7 @@ index 2a5c761..f2ecc1d 100644
  static constexpr int kMaxStackDepth = 64;
  
  // An opaque handle type used to identify allocations.
-@@ -84,6 +165,8 @@ struct StackTrace {
+@@ -84,6 +174,8 @@ struct StackTrace {
    // between the previous sample and this one
    size_t weight;
  
@@ -212,14 +221,22 @@ index 36fd433..702baa8 100644
  
  }  // namespace tcmalloc
 diff --git a/tcmalloc/stack_trace_table.cc b/tcmalloc/stack_trace_table.cc
-index cf57148..2de1a25 100644
+index cf57148..c6b6867 100644
 --- a/tcmalloc/stack_trace_table.cc
 +++ b/tcmalloc/stack_trace_table.cc
-@@ -88,6 +88,7 @@ void StackTraceTable::AddTrace(double sample_weight, const StackTrace& t) {
+@@ -39,6 +39,7 @@ StackTraceTable::StackTraceTable(ProfileType type)
+ StackTraceTable::~StackTraceTable() {
+   LinkedSample* cur = all_;
+   while (cur != nullptr) {
++    SampleUserDataSupport::UserData::DestroyRaw(cur->sample.user_data);
+     LinkedSample* next = cur->next;
+     tc_globals.linked_sample_allocator().Delete(cur);
+     cur = next;
+@@ -88,6 +89,7 @@ void StackTraceTable::AddTrace(double sample_weight, const StackTrace& t) {
    s->sample.span_start_address = t.span_start_address;
    s->sample.guarded_status = t.guarded_status;
    s->sample.type = t.allocation_type;
-+  s->sample.user_data = t.user_data.Get();
++  s->sample.user_data = SampleUserDataSupport::UserData{t.user_data}.Release();
  
    static_assert(kMaxStackDepth <= Profile::Sample::kMaxStackDepth,
                  "Profile stack size smaller than internal stack sizes");

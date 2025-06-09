@@ -91,14 +91,14 @@ public:
         }
 
         void AddPortion(const TPortionInfo& info) {
-            if (info.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+            if (info.GetPortionType() == EPortionType::Written) {
                 Owner.Inserted.AddPortion(info);
             } else {
                 Owner.Compacted.AddPortion(info);
             }
         }
         void RemovePortion(const TPortionInfo& info) {
-            if (info.GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+            if (info.GetPortionType() == EPortionType::Written) {
                 Owner.Inserted.RemovePortion(info);
             } else {
                 Owner.Compacted.RemovePortion(info);

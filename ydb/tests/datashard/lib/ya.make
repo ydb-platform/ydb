@@ -8,6 +8,7 @@ PY_SRCS(
     types_of_variables.py
     multicluster_test_base.py
     vector_base.py
+    vector_index.py
 )
 
 PEERDIR(

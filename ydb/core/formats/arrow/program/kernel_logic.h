@@ -151,7 +151,7 @@ public:
 class TLogicMatchAsciiEqualsIgnoreCase: public TLogicMatchString {
 private:
     static TString GetClassNameStatic() {
-        return "String.AsciiEqualsIgnoreCase";
+        return "String._yql_AsciiEqualsIgnoreCase";
     }
 public:
     TLogicMatchAsciiEqualsIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
@@ -163,7 +163,7 @@ public:
 class TLogicMatchAsciiContainsIgnoreCase: public TLogicMatchString {
 private:
     static TString GetClassNameStatic() {
-        return "String.AsciiContainsIgnoreCase";
+        return "String._yql_AsciiContainsIgnoreCase";
     }
 public:
     TLogicMatchAsciiContainsIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
@@ -175,7 +175,7 @@ public:
 class TLogicMatchAsciiStartsWithIgnoreCase: public TLogicMatchString {
 private:
     static TString GetClassNameStatic() {
-        return "String.AsciiStartsWithIgnoreCase";
+        return "String._yql_AsciiStartsWithIgnoreCase";
     }
 public:
     TLogicMatchAsciiStartsWithIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::StartsWith, false, false) {
@@ -187,7 +187,7 @@ public:
 class TLogicMatchAsciiEndsWithIgnoreCase: public TLogicMatchString {
 private:
     static TString GetClassNameStatic() {
-        return "String.AsciiEndsWithIgnoreCase";
+        return "String._yql_AsciiEndsWithIgnoreCase";
     }
 public:
     TLogicMatchAsciiEndsWithIgnoreCase() : TLogicMatchString(TIndexCheckOperation::EOperation::EndsWith, false, false) {

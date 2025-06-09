@@ -1,8 +1,10 @@
 #include "sql_complete.h"
 
 #include <yql/essentials/sql/v1/complete/syntax/grammar.h>
+#include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
 #include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
@@ -39,6 +41,7 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
+    using ECandidateKind::BindingName;
     using ECandidateKind::ClusterName;
     using ECandidateKind::FolderName;
     using ECandidateKind::FunctionName;
@@ -122,7 +125,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine, TString sharped) {
-        auto candidates = Complete(engine, sharped);
+        auto candidates = Complete(engine, std::move(sharped));
         candidates.crop(limit);
         return candidates;
     }
@@ -679,6 +682,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
+                {BindingName, "$hello"},
                 {TableName, "`maxim"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
@@ -694,6 +698,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
+                {BindingName, "$action"},
                 {TableName, "`people"},
                 {FolderName, "`yql/"},
                 {ClusterName, "example"},
@@ -983,6 +988,44 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         UNIT_ASSERT_GE(Complete(engine, "SELECT 1;").size(), 35);
     }
 
+    Y_UNIT_TEST(Bindings) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        TString query = R"(
+            $=0;
+            $a=0;
+            $abac=0;
+            SELECT 
+        )";
+
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "$a"},
+                {BindingName, "$abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, query), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "$abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query + "ab"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "a"},
+                {BindingName, "abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {BindingName, "abac"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$ab"), expected);
+        }
+    }
+
     Y_UNIT_TEST(Typing) {
         const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"
@@ -1226,6 +1269,41 @@ JOIN yt:$cluster_name.test;
         UNIT_ASSERT_EQUAL(Complete(engine, {"ROLL"}).size(), 0);
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"INSE"}).size(), 0);
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
+    }
+
+    Y_UNIT_TEST(CachedSchema) {
+        TLexerSupplier lexer = MakePureLexerSupplier();
+
+        auto cache = MakeLocalCache<
+            TSchemaListCacheKey, TVector<TFolderEntry>>(
+            NMonotonic::CreateDefaultMonotonicTimeProvider(), {});
+
+        auto aliceService = MakeSchemaNameService(
+            MakeSimpleSchema(
+                MakeCachedSimpleSchema(
+                    cache, "alice",
+                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "alice"}}}}}}))));
+
+        auto petyaService = MakeSchemaNameService(
+            MakeSimpleSchema(
+                MakeCachedSimpleSchema(
+                    cache, "petya",
+                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "petya"}}}}}}))));
+
+        auto aliceEngine = MakeSqlCompletionEngine(lexer, std::move(aliceService));
+        auto petyaEngine = MakeSqlCompletionEngine(lexer, std::move(petyaService));
+
+        TVector<TCandidate> empty;
+        TVector<TCandidate> aliceExpected = {{TableName, "`alice"}};
+        TVector<TCandidate> petyaExpected = {{TableName, "`petya"}};
+
+        // Cache is empty
+        UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), empty);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), empty);
+
+        // Updates in backround
+        UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), aliceExpected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), petyaExpected);
     }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

@@ -171,6 +171,10 @@ public:
         Data.reset();
     }
 
+    const TRecordBatchPtr& GetData() const {
+        return Data;
+    }
+
 private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc = nullptr;
     TRecordBatchPtr Data;
@@ -248,6 +252,10 @@ public:
             SerializedMemory += GetCellHeaderSize() * row.size() + size;
             Memory += size;
         }
+    }
+
+    const TOwnedCellVecBatch& GetRows() const {
+        return Rows;
     }
 
 private:
@@ -1015,6 +1023,76 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
         partitioning, keyColumns, inputColumns, std::move(writeIndex), std::move(alloc));
 }
 
+class TDataBatchProjection : public IDataBatchProjection {
+public:
+    TDataBatchProjection(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+            : Alloc(std::move(alloc)) {
+        AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
+        AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
+        AFL_ENSURE(outputColumns.size() <= inputColumns.size());
+
+        THashMap<TString, ui32> InputColumnNameToIndex;
+        for (size_t index = 0; index < inputColumns.size(); ++index) {
+            InputColumnNameToIndex[inputColumns[index].GetName()] = index;
+        }
+        std::vector<ui32> outputOrder(outputWriteIndex.size());
+        for (size_t index = 0; index < outputWriteIndex.size(); ++index) {
+            outputOrder[outputWriteIndex[index]] = index;
+        }
+
+        ColumnsMapping.resize(outputColumns.size());
+        for (size_t index = 0; index < outputColumns.size(); ++index) {
+            const auto& outputColumnIndex = outputOrder.at(index);
+            const auto& outputColumnName = outputColumns.at(outputColumnIndex).GetName();
+            const auto& inputColumnIndex = InputColumnNameToIndex.at(outputColumnName);
+            const auto& inputIndex = inputWriteIndex.at(inputColumnIndex);
+
+            ColumnsMapping[index] = inputIndex;
+        }
+    }
+
+    IDataBatchPtr Project(const IDataBatchPtr& data) const override {
+        auto* batch = dynamic_cast<TRowBatch*>(data.Get());
+        AFL_ENSURE(batch);
+        return ProjectDataShard(*batch);
+    }
+
+    IDataBatchPtr ProjectDataShard(const TRowBatch& data) const {
+        const size_t columnsCount = ColumnsMapping.size();
+        TRowsBatcher rowBatcher(columnsCount, std::nullopt, Alloc);
+        std::vector<TCell> cells(columnsCount);
+        for (const auto& row : data.GetRows()) {
+            for (size_t index = 0; index < columnsCount; ++index) {
+                cells[index] = row[ColumnsMapping[index]];
+            }
+            rowBatcher.AddRow(cells);
+        }
+        auto result = rowBatcher.Flush(true);
+        YQL_ENSURE(rowBatcher.IsEmpty());
+        return result;
+    }
+
+private:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+
+    std::vector<ui32> ColumnsMapping;
+};
+
+}
+
+IDataBatchProjectionPtr CreateDataBatchProjection(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return MakeIntrusive<TDataBatchProjection>(
+        inputColumns, inputWriteIndex, outputColumns, outputWriteIndex, std::move(alloc));
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -1307,22 +1385,20 @@ public:
             for (const auto& [token, writeInfo] : WriteInfos) {
                 if (writeInfo.Closed) {
                     Close(token);
-                } else {
-                    FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
                 }
             }
         }
     }
 
-    TWriteToken Open(
+    void Open(
+        const TWriteToken token,
         const TTableId tableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndex,
         const i64 priority) override {
-        auto token = CurrentWriteToken++;
-        auto iter = WriteInfos.emplace(
+        auto [iter, inserted] = WriteInfos.emplace(
             token,
             TWriteInfo {
                 .Metadata = TMetadata {
@@ -1335,7 +1411,9 @@ public:
                 },
                 .Serializer = nullptr,
                 .Closed = false,
-            }).first;
+            });
+        YQL_ENSURE(inserted);
+
         if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
                 *Partitioning,
@@ -1350,7 +1428,6 @@ public:
                 iter->second.Metadata.WriteIndex,
                 Alloc);
         }
-        return token;
     }
 
     void Write(TWriteToken token, IDataBatchPtr&& data) override {
@@ -1363,10 +1440,6 @@ public:
             data->AttachAlloc(Alloc);
         }
         info.Serializer->AddData(std::move(data));
-
-        if (info.Metadata.Priority == 0) {
-            FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
-        }
     }
 
     void Close(TWriteToken token) override {
@@ -1374,10 +1447,6 @@ public:
         AFL_ENSURE(info.Serializer);
         info.Closed = true;
         info.Serializer->Close();
-        if (info.Metadata.Priority == 0) {
-            FlushSerializer(token, true);
-            AFL_ENSURE(info.Serializer->IsFinished());
-        }
     }
 
     void CleanupClosedTokens() override {
@@ -1395,13 +1464,8 @@ public:
     void FlushBuffers() override {
         TVector<TWriteToken> writeTokensFoFlush;
         for (const auto& [token, writeInfo] : WriteInfos) {
-            AFL_ENSURE(writeInfo.Closed);
-            if (writeInfo.Metadata.Priority != 0) {
-                if (!writeInfo.Serializer->IsFinished()) {
-                    writeTokensFoFlush.push_back(token);
-                }
-            } else {
-                AFL_ENSURE(writeInfo.Serializer->IsFinished());
+             if ((writeInfo.Metadata.Priority == 0 || writeInfo.Closed) && !writeInfo.Serializer->IsFinished()) {
+                writeTokensFoFlush.push_back(token);
             }
         }
 
@@ -1416,7 +1480,11 @@ public:
         
         for (const TWriteToken token : writeTokensFoFlush) {
             FlushSerializer(token, true);
-            AFL_ENSURE(WriteInfos.at(token).Serializer->IsFinished());
+            const auto& writeInfo = WriteInfos.at(token);
+            if (writeInfo.Metadata.Priority != 0) {
+                AFL_ENSURE(writeInfo.Closed);
+                AFL_ENSURE(writeInfo.Serializer->IsFinished());
+            }
         }
     }
 
@@ -1670,7 +1738,6 @@ private:
     };
 
     std::map<TWriteToken, TWriteInfo> WriteInfos;
-    TWriteToken CurrentWriteToken = 0;
 
     TShardsInfo ShardsInfo;
     std::vector<IShardedWriteController::TPendingShardInfo> ShardUpdates;

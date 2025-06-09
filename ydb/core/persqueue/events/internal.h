@@ -188,7 +188,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	    EvTxBatchComplete,
+        EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -199,6 +199,7 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
+        EvRunCompaction,
         EvEnd
     };
 
@@ -1078,12 +1079,10 @@ struct TEvPQ {
         TEvGetWriteInfoResponse() = default;
         TEvGetWriteInfoResponse(ui32 cookie,
                                 NPQ::TSourceIdMap&& srcIdInfo,
-                                std::deque<NPQ::TDataKey>&& bodyKeys,
-                                TVector<NPQ::TClientBlob>&& blobsFromHead) :
+                                std::deque<NPQ::TDataKey>&& bodyKeys) :
             Cookie(cookie),
             SrcIdInfo(std::move(srcIdInfo)),
-            BodyKeys(std::move(bodyKeys)),
-            BlobsFromHead(std::move(blobsFromHead))
+            BodyKeys(std::move(bodyKeys))
         {
         }
 
@@ -1092,7 +1091,6 @@ struct TEvPQ {
 
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
-        TVector<NPQ::TClientBlob> BlobsFromHead;
 
         ui64 BytesWrittenTotal;
         ui64 BytesWrittenGrpc;
@@ -1194,6 +1192,17 @@ struct TEvPQ {
         bool HaveMoreTopics = false;
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         TString Error;
+    };
+
+    struct TEvRunCompaction : TEventLocal<TEvRunCompaction, EvRunCompaction> {
+        TEvRunCompaction(ui64 maxBlobSize, ui64 cumulativeSize) :
+            MaxBlobSize(maxBlobSize),
+            CumulativeSize(cumulativeSize)
+        {
+        }
+
+        ui64 MaxBlobSize = 0;
+        ui64 CumulativeSize = 0;
     };
 };
 

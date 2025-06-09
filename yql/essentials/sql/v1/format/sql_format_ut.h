@@ -23,6 +23,8 @@ Y_UNIT_TEST(DotAfterDigits) {
 Y_UNIT_TEST(AlterDatabase) {
     TCases cases {
         {"use plato;alter database `/Root/test` owner to user1;", "USE plato;\n\nALTER DATABASE `/Root/test` OWNER TO user1;\n"},
+        {"use plato;alter database `/Root/test` set (key1 = 1);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1);\n"},
+        {"use plato;alter database `/Root/test` set (\n\tkey1 = 1,\n\tkey2 = \"2\"\n);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1, key2 = '2');\n"}
     };
 
     TSetup setup;
@@ -529,6 +531,10 @@ Y_UNIT_TEST(AlterTable) {
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (virtual_timestamps = FALSE)\n;\n"},
         {"alter table user add changefeed user with (barriers_interval = Interval(\"PT1S\"))",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (barriers_interval = Interval('PT1S'))\n;\n"},
+        {"alter table user add changefeed user with (schema_changes = TruE)",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (schema_changes = TRUE)\n;\n"},
+        {"alter table user add changefeed user with (schema_changes = fAlSe)",
+            "ALTER TABLE user\n\tADD CHANGEFEED user WITH (schema_changes = FALSE)\n;\n"},
         {"alter table user add changefeed user with (topic_min_active_partitions = 1)",
             "ALTER TABLE user\n\tADD CHANGEFEED user WITH (topic_min_active_partitions = 1)\n;\n"},
         {"alter table user add changefeed user with (topic_auto_partitioning = 'ENABLED', topic_min_active_partitions = 1, topic_max_active_partitions = 7)",

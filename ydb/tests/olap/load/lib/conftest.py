@@ -38,7 +38,6 @@ class LoadSuiteBase:
     query_prefix: str = get_external_param('query-prefix', '')
     verify_data: bool = True
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
-    binaries_deploy_path: str = '/tmp/stress_binaries/'
 
     @classmethod
     def get_external_path(cls) -> str:
@@ -171,10 +170,6 @@ class LoadSuiteBase:
 
     @classmethod
     def save_nodes_state(cls) -> None:
-        """
-        Сохраняет текущее состояние нод кластера.
-        Используется как для проверки перезапусков/падений, так и для диагностики (coredump'ы, OOM).
-        """
         cls.__nodes_state = {n.slot: n for n in YdbCluster.get_cluster_nodes(db_only=True)}
 
     @classmethod

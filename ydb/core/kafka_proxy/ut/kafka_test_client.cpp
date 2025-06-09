@@ -147,7 +147,7 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartitio
     for (ui32 i = 0; i < keyValueMessages.size(); i++) {
         auto& keyValueMessage = keyValueMessages[i];
         batch.Records[i].Key = ToRawBytes(keyValueMessage.first);
-        batch.Records[i].Value = ToRawBytes(keyValueMessage.first);
+        batch.Records[i].Value = ToRawBytes(keyValueMessage.second);
     }
     if (producerInstanceId) {
         batch.ProducerId = producerInstanceId->Id;

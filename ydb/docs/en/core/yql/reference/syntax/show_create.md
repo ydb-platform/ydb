@@ -28,7 +28,8 @@ The command always returns **exactly one row** with three columns:
         - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index) — for index partitioning settings.
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md) — for adding a changefeed.
         - `ALTER SEQUENCE` — for restoring a `Sequence` state for `Serial` columns.
-    - For views: the definition via [CREATE VIEW](create-view.md), and, if necessary, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
+    - For views: the definition via [CREATE VIEW](create-view.md), and, if necessary, the statements the view has captured from the creation context, for example, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
+
 
 ## Examples
 

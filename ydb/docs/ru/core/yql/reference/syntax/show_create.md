@@ -28,7 +28,7 @@ SHOW CREATE [TABLE|VIEW] <name>;
         - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
         - `ALTER SEQUENCE` — для восстановления состояния `Sequence` у колонок типа [Serial](../../../yql/reference/types/serial.md).
-    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
+    - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
 
 ## Примеры
 

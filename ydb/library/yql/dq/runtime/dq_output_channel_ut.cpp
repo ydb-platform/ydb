@@ -869,6 +869,144 @@ void TestBackPressureWithSpilling(TTestContext& ctx, bool multi) {
     }
 }
 
+void TestBackPressureInMemoryLoad(TTestContext& ctx) {
+    TDqOutputChannelSettings settings;
+    settings.MaxStoredBytes = 100;
+    settings.MaxChunkBytes = 100;
+    settings.Level = TCollectStatsLevel::Profile;
+    settings.TransportVersion = ctx.TransportVersion;
+
+    TVector<IDqOutputChannel::TPtr> channels;
+
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    // constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
+        auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+        channels.emplace_back(channel);
+    }
+
+    TMaybe<ui8> minFillPercentage;
+    minFillPercentage = 100;
+    NDqProto::TTaskOutputHashPartition hashPartition;
+    IDqOutputConsumer::TPtr consumer;
+
+    TVector<IDqOutput::TPtr> outputs;
+    for (auto c : channels) {
+        outputs.emplace_back(c);
+    }
+    TVector<TColumnInfo> keyColumns;
+    keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    ui32 lastPopAll = 0;
+    ui32 channelIndex = 0;
+    ui32 blockCount = 0;
+    ui32 emptyPops = 0;
+
+    for (ui32 i = 0; i < 10000000; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        if (consumer->GetFillLevel() != NoLimit) {
+            blockCount++;
+            if (i > lastPopAll + 1000) {
+                for (ui32 c = 0; c < CHANNEL_COUNT; c++) {
+                    TDqSerializedBatch data;
+                    if(!channels[c]->PopAll(data)) {
+                        emptyPops++;
+                    }
+                }
+                lastPopAll = i;
+                UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            } else {
+                while (true) {
+                    channelIndex = ((channelIndex * 1103515245) + 12345) % CHANNEL_COUNT;
+                    TDqSerializedBatch data;
+                    if (channels[channelIndex]->Pop(data)) {
+                        if (consumer->GetFillLevel() == NoLimit) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Cerr << "Blocked " << blockCount << " time(s) emptyPops " << emptyPops << Endl;
+}
+
+void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
+    TDqOutputChannelSettings settings;
+    settings.MaxStoredBytes = 100;
+    settings.MaxChunkBytes = 100;
+    settings.Level = TCollectStatsLevel::Profile;
+    settings.TransportVersion = ctx.TransportVersion;
+
+    TVector<IDqOutputChannel::TPtr> channels;
+
+    constexpr ui32 CHANNEL_BITS = 3;
+    constexpr ui32 CHANNEL_COUNT = 1 << CHANNEL_BITS;
+    // constexpr ui32 MSG_PER_CHANNEL = 4;
+
+    for (ui32 i = 0; i < CHANNEL_COUNT; i++) {
+        // separate Storage for each channel is required
+        settings.ChannelStorage = MakeIntrusive<TMockChannelStorage>(100000ul);
+        auto channel = CreateDqOutputChannel(i, 1000, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+        channels.emplace_back(channel);
+    }
+
+    TMaybe<ui8> minFillPercentage;
+    minFillPercentage = 100;
+    NDqProto::TTaskOutputHashPartition hashPartition;
+    IDqOutputConsumer::TPtr consumer;
+
+    TVector<IDqOutput::TPtr> outputs;
+    for (auto c : channels) {
+        outputs.emplace_back(c);
+    }
+    TVector<TColumnInfo> keyColumns;
+    keyColumns.emplace_back(GetColumnInfo(ctx.GetOutputType(), "0")); // index !!!
+    consumer = CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumns), ctx.GetOutputType(), ctx.HolderFactory, minFillPercentage, hashPartition, nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    ui32 lastPopAll = 0;
+    ui32 channelIndex = 0;
+    ui32 blockCount = 0;
+    ui32 emptyPops = 0;
+
+    for (ui32 i = 0; i < 10000000; ++i) {
+        auto row = ctx.CreateRow(i);
+        ConsumeRow(ctx, std::move(row), consumer);
+        if (consumer->GetFillLevel() != NoLimit) {
+            blockCount++;
+            if (i > lastPopAll + 1000) {
+                for (ui32 c = 0; c < CHANNEL_COUNT; c++) {
+                    TDqSerializedBatch data;
+                    if(!channels[c]->PopAll(data)) {
+                        emptyPops++;
+                    }
+                }
+                lastPopAll = i;
+                UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+            } else {
+                while (true) {
+                    channelIndex = ((channelIndex * 1103515245) + 12345) % CHANNEL_COUNT;
+                    TDqSerializedBatch data;
+                    if (channels[channelIndex]->Pop(data)) {
+                        if (consumer->GetFillLevel() == NoLimit) {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Cerr << "Blocked " << blockCount << " time(s) emptyPops " << emptyPops << Endl;
+}
+
 Y_UNIT_TEST_SUITE(HashShuffle) {
 
 Y_UNIT_TEST(BackPressureInMemory) {
@@ -881,6 +1019,11 @@ Y_UNIT_TEST(BackPressureInMemoryMulti) {
     TestBackPressureInMemory(ctx, true);
 }
 
+Y_UNIT_TEST(BackPressureInMemoryLoad) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureInMemoryLoad(ctx);
+}
+
 Y_UNIT_TEST(BackPressureWithSpilling) {
     TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
     TestBackPressureWithSpilling(ctx, false);
@@ -889,6 +1032,11 @@ Y_UNIT_TEST(BackPressureWithSpilling) {
 Y_UNIT_TEST(BackPressureWithSpillingMulti) {
     TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
     TestBackPressureWithSpilling(ctx, true);
+}
+
+Y_UNIT_TEST(BackPressureWithSpillingLoad) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestBackPressureWithSpillingLoad(ctx);
 }
 
 }

@@ -356,6 +356,8 @@ void TPCCRunner::Join() {
 }
 
 void TPCCRunner::RunSync() {
+    Config.SetDisplayUpdateInterval();
+
     Clock::time_point now = Clock::now();
 
     TaskQueue->Run();
@@ -430,17 +432,18 @@ void TPCCRunner::RunSync() {
 
 void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
     auto delta = now - LastStatisticsSnapshot->Ts;
-    if (delta >= TRunConfig::DisplayUpdateInterval) {
-        std::unique_ptr<TAllStatistics> newStatistics = CollectStatistics(now);
-        LastStatisticsSnapshot = std::move(newStatistics);
+    if (delta < Config.DisplayUpdateInterval) {
+        return;
+    }
+    std::unique_ptr<TAllStatistics> newStatistics = CollectStatistics(now);
+    LastStatisticsSnapshot = std::move(newStatistics);
 
-        switch (Config.DisplayMode) {
-        case TRunConfig::EDisplayMode::Text:
-           UpdateDisplayTextMode();
-           break;
-        default:
-            ;
-        }
+    switch (Config.DisplayMode) {
+    case TRunConfig::EDisplayMode::Text:
+        UpdateDisplayTextMode();
+        break;
+    default:
+        ;
     }
 }
 

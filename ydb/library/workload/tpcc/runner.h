@@ -16,7 +16,7 @@ struct TRunConfig {
     enum class EDisplayMode {
         None = 0,
         Text,
-        Htop,
+        Tui,
     };
 
     TRunConfig() = default;
@@ -31,6 +31,20 @@ struct TRunConfig {
         }
 
         Path = connectionConfig.Database + '/' + Path;
+    }
+
+    void SetDisplayUpdateInterval() {
+        switch (DisplayMode) {
+        case EDisplayMode::None:
+            return;
+        case EDisplayMode::Text:
+            DisplayUpdateInterval = DisplayUpdateTextInterval;
+            return;
+        case EDisplayMode::Tui:
+            DisplayUpdateInterval = DisplayUpdateTuiInterval;
+            return;
+          break;
+        }
     }
 
     int WarehouseCount = DEFAULT_WAREHOUSE_COUNT;
@@ -56,8 +70,11 @@ struct TRunConfig {
     int SimulateTransactionMs = 0;
     int SimulateTransactionSelect1Count = 0;
 
+    std::chrono::duration<long long> DisplayUpdateInterval;
+
     static constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
-    static constexpr auto DisplayUpdateInterval = std::chrono::seconds(5);
+    static constexpr auto DisplayUpdateTextInterval = std::chrono::seconds(5);
+    static constexpr auto DisplayUpdateTuiInterval = std::chrono::seconds(1);
 };
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);

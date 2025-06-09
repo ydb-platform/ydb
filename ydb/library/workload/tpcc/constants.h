@@ -72,6 +72,8 @@ constexpr const char* TABLE_HISTORY = "history";
 constexpr const char* INDEX_CUSTOMER_NAME = "idx_customer_name";
 constexpr const char* INDEX_ORDER = "idx_order";
 
+constexpr const size_t INDEX_COUNT = 2;
+
 // don't change order!
 enum class ETransactionType {
     NewOrder = 0,

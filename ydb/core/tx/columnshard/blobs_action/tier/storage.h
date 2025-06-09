@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/tier/common.h>
+#include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/wrappers/abstract.h>
 #include "gc_info.h"
@@ -11,9 +12,8 @@ namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 class TOperator: public IBlobsStorageOperator {
 private:
-    using TColumnShardPtr = NKikimr::NColumnShard::TColumnShard*;
     using TBase = IBlobsStorageOperator;
-    TColumnShardPtr Owner = nullptr;
+    NKikimr::NColumnShard::TIndexationCounters& EvictionCounters;
     const NActors::TActorId TabletActorId;
     const ui64 Generation;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
@@ -47,6 +47,8 @@ public:
     TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
     TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
         const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation);
+    TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation, NKikimr::NColumnShard::TIndexationCounters& evictionCounters);
 
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         auto result = GCInfo->GetBlobsToDelete();

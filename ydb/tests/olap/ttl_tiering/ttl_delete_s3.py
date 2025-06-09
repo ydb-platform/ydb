@@ -319,17 +319,12 @@ class TestDeleteTtl(TllDeleteBase):
             """
         )
 
-        self.ydb_client.query(
-            f"""
-            ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
-            """
-        )
-
         logger.info(f"Table {table_path} created")
 
         self.ydb_client.query(f"CREATE OBJECT {access_key_id_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_id}'")
         self.ydb_client.query(f"CREATE OBJECT {access_key_secret_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_secret}'")
 
+        incorrect_path = "la-la-la"
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{cold_eds_path}` WITH (
                 SOURCE_TYPE="ObjectStorage",
@@ -344,13 +339,19 @@ class TestDeleteTtl(TllDeleteBase):
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{frozen_eds_path}` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="{self.s3_client.endpoint}/{frozen_bucket}",
+                LOCATION="{incorrect_path}/{frozen_bucket}",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key_id_secret_name}",
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="{access_key_secret_secret_name}",
                 AWS_REGION="{self.s3_client.region}"
             )
         """)
+
+        import sys
+        print("la-la-la", file=sys.stderr)
+        for _ in range(10000):
+            pass
+
         self.table = ColumnTableHelper(self.ydb_client, table_path)
 
         cur_rows = 0

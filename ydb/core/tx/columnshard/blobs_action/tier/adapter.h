@@ -1,21 +1,18 @@
 #pragma once
 #include <ydb/core/wrappers/abstract.h>
-
-namespace NKikimr::NColumnShard {
-    class TColumnShard;
-}
+#include <ydb/core/tx/columnshard/counters/indexation.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 class TRepliesAdapter: public NWrappers::NExternalStorage::IReplyAdapter {
 private:
-    using TColumnShardPtr = ::NKikimr::NColumnShard::TColumnShard*;
-    TColumnShardPtr Owner;
+    NKikimr::NColumnShard::TIndexationCounters& Counters;
     const TString StorageId;
 
 public:
-    TRepliesAdapter(TColumnShardPtr owner, const TString& storageId)
-        : Owner(owner), StorageId(std::move(storageId))
+    TRepliesAdapter(NKikimr::NColumnShard::TIndexationCounters& counters, const TString& storageId)
+        : Counters(counters)
+        , StorageId(std::move(storageId))
     {
 
     }

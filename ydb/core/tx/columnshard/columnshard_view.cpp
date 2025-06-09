@@ -57,6 +57,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     }
     JsonReport["tables_manager"].EraseValue("schema_versions");
     TStringStream html;
+    std::cout << "la-la-la-alena\n";
     html << "<h3>Special Values</h3>";
     html << "<b>CurrentSchemeShardId:</b> " << Self->CurrentSchemeShardId << "<br />";
     html << "<b>ProcessingParams:</b> " << Self->ProcessingParams.value_or(NKikimrSubDomains::TProcessingParams{}).ShortDebugString() << "<br />";
@@ -86,8 +87,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     }
 
     html << "<h3>Tiering Errors</h3>";
-    std::cout << "la-la-la4 " << Self->GetTieringErrors().size() << '\n';
-    const auto& errs = Self->GetTieringErrors();
+    // std::cout << "la-la-la4 " << Self->GetTieringErrors().size() << '\n';
+    const auto& errs = Self->Counters.GetEvictionCounters().TieringError;
 
     if (errs.empty()) {
         html << "No errors<br />";
@@ -97,8 +98,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         for (const auto& [tierName, info] : errs) {
             html << "<tr>"
                  << "<td>" << EscapeHtml(tierName) << "</td>"
-                 << "<td>" << info.Time.ToString() << "</td>"
-                 << "<td>" << EscapeHtml(info.Error) << "</td>"
+                //  << "<td>" << info.Time.ToString() << "</td>"
+                 << "<td>" << EscapeHtml(info) << "</td>"
                  << "</tr>";
         }
 

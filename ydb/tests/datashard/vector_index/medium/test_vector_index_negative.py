@@ -135,7 +135,7 @@ class TestVectorIndexNegative(VectorBase):
                         vector_dimension=vector_dimension,
                         to_binary_string_converters=self.to_binary_string_converters,
                     )
-                except ydb.issues.SchemeError as ex:
+                except ydb.issues.InternalError as ex:
                     if "Given predicate is not suitable for used index: idx_vector_vec_String" not in str(ex):
                         raise ex
                 self.drop_index()

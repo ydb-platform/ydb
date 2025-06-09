@@ -44,7 +44,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      TIntrusivePtr<TUserCounters> userCounters,
                                                      TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
                                                      const TString& tagsJson,
-                                                     const TString& userSid)
+                                                     const TString& userSid,
+                                                     const TString& sanitizedToken)
     : QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
@@ -59,6 +60,7 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , QuoterResources_(std::move(quoterResources))
     , TagsJson_(tagsJson)
     , UserSid_(userSid)
+    , SanitizedToken_(sanitizedToken)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -1064,7 +1066,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
             .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
             .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
-            .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "default_value_of_sanitized_token")
+            .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", SanitizedToken_)
             .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_authtype")
             .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
             .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
@@ -1228,7 +1230,8 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                 RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " <<
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
                 Register(new TDeleteQueueSchemaActorV2(QueuePath_, IsFifo_, TablesFormat_, SelfId(), RequestId_, UserCounters_,
-                                                           Version_, RequiredShardsCount_, IsFifo_, TagsJson_, UserSid_));
+                                                           Version_, RequiredShardsCount_, IsFifo_,
+                                                           FolderId_, TagsJson_, UserSid_, SanitizedToken_));
             }
 
         } else {
@@ -1258,8 +1261,10 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TActorId& sender,
                                                      const TString& requestId,
                                                      TIntrusivePtr<TUserCounters> userCounters,
+                                                     const TString& folderId,
                                                      const TString& tagsJson,
-                                                     const TString& userSid)
+                                                     const TString& userSid,
+                                                     const TString& sanitizedToken)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1269,6 +1274,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , UserCounters_(std::move(userCounters))
     , TagsJson_(tagsJson)
     , UserSid_(userSid)
+    , SanitizedToken_(sanitizedToken)
+    , FolderId_(folderId)
 {
 }
 
@@ -1281,8 +1288,10 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const ui64 advisedQueueVersion,
                                                      const ui64 advisedShardCount,
                                                      const bool advisedIsFifoFlag,
+                                                     const TString& folderId,
                                                      const TString& tagsJson,
-                                                     const TString& userSid)
+                                                     const TString& userSid,
+                                                     const TString& sanitizedToken)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1292,6 +1301,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , UserCounters_(std::move(userCounters))
     , TagsJson_(tagsJson)
     , UserSid_(userSid)
+    , SanitizedToken_(sanitizedToken)
+    , FolderId_(folderId)
 {
     Y_ABORT_UNLESS(advisedQueueVersion > 0);
 
@@ -1560,8 +1571,8 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("CLOUD_EVENT_TYPE", "DeleteMessageQueue")
                     .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
                     .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
-                    .Utf8("CLOUD_EVENT_FOLDER_ID", TagsJson_)
-                    .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "default_value_of_sanitized_token")
+                    .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
+                    .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", SanitizedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_auth_type")
                     .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
                     .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)

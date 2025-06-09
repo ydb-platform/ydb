@@ -46,8 +46,10 @@ private:
                 SelfId(),
                 RequestId_,
                 UserCounters_,
+                FolderId_,
                 tagsJson,
-                UserSID_
+                UserSID_,
+                SanitizedToken_
             )
         );
     }

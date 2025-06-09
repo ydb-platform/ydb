@@ -89,6 +89,7 @@ PEERDIR(
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
     ydb/library/mkql_proto/protos
+    ydb/library/security
     ydb/public/lib/scheme_types
     ydb/public/lib/value
     ydb/public/sdk/cpp/src/client/types/credentials

@@ -136,7 +136,7 @@ private:
                 << "\"" << UserName_ << "\"" << ","
                 << "\"" << FolderId_ << "\"" << ","
                 << "\"" << UserSID_ << "\"" << ","
-                << "\"" << "DEFAULT_UserSanitizedToken" << "\"" << ","
+                << "\"" << SanitizedToken_ << "\"" << ","
                 << "\"" << "DEFAULT_AuthType" << "\"" << ","
                 << "\"" << "DEFAULT_PeerName" << "\"" << ","
                 << "\"" << RequestId_ << "\"" << ","

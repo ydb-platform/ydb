@@ -32,7 +32,8 @@ public:
                                TIntrusivePtr<TUserCounters> userCounters,
                                TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
                                const TString& tagsJson,
-                               const TString& userSid);
+                               const TString& userSid,
+                               const TString& sanitizedToken);
 
     ~TCreateQueueSchemaActorV2();
 
@@ -135,6 +136,8 @@ private:
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     const TString TagsJson_;
     const TString UserSid_;
+    const TString SanitizedToken_;
+
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;
     TVector<TTable> RequiredTables_;
@@ -161,8 +164,10 @@ public:
                               const TActorId& sender,
                               const TString& requestId,
                               TIntrusivePtr<TUserCounters> userCounters,
+                              const TString& folderId,
                               const TString& tagsJson,
-                              const TString& userSid);
+                              const TString& userSid,
+                              const TString& sanitizedToken);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
                               bool isFifo,
@@ -173,8 +178,10 @@ public:
                               const ui64 advisedQueueVersion,
                               const ui64 advisedShardCount,
                               const bool advisedIsFifoFlag,
+                              const TString& folderId,
                               const TString& tagsJson,
-                              const TString& userSid);
+                              const TString& userSid,
+                              const TString& sanitizedToken);
 
     void Bootstrap();
 
@@ -231,6 +238,8 @@ private:
     TActorId DeleteQuoterResourceActor_;
     const TString TagsJson_;
     const TString UserSid_;
+    const TString SanitizedToken_;
+    const TString FolderId_;
 };
 
 } // namespace NKikimr::NSQS

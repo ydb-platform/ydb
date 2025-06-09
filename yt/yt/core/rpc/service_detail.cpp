@@ -377,8 +377,7 @@ public:
     {
         if (!Replied_) {
             // Prevent alerting.
-            SuppressMissingRequestInfoCheck();
-
+            RequestInfoSet_ = true;
             if (CanceledList_.IsFired()) {
                 if (TimedOutLatch_) {
                     Reply(TError(NYT::EErrorCode::Timeout, "Request timed out"));
@@ -1135,8 +1134,6 @@ private:
             }
         }
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
-
-        RequestInfoState_ = ERequestInfoState::Flushed;
     }
 
     void LogResponse() override

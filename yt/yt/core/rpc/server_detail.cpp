@@ -68,11 +68,6 @@ TServiceContextBase::TServiceContextBase(
 void TServiceContextBase::DoFlush()
 { }
 
-void TServiceContextBase::LogRequest()
-{
-    RequestInfoState_ = ERequestInfoState::Flushed;
-}
-
 void TServiceContextBase::Initialize()
 {
     LoggingEnabled_ = Logger.IsLevelEnabled(LogLevel_);
@@ -145,22 +140,16 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
 
 void TServiceContextBase::ReplyEpilogue()
 {
-    if (LoggingEnabled_) {
-        if (RequestInfoState_ == ERequestInfoState::Set) {
-            LogRequest();
-        }
-
-        if (RequestInfoState_ != ERequestInfoState::Flushed &&
-            Error_.IsOK() &&
-            TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
-        {
-            const auto& Logger = RpcServerLogger();
-            YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v, State: %v)",
-                RequestId_,
-                RequestHeader_->service(),
-                RequestHeader_->method(),
-                RequestInfoState_);
-        }
+    if (!RequestInfoSet_ &&
+        Error_.IsOK() &&
+        LoggingEnabled_ &&
+        TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
+    {
+        const auto& Logger = RpcServerLogger();
+        YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v)",
+            RequestId_,
+            RequestHeader_->service(),
+            RequestHeader_->method());
     }
 
     auto responseMessage = BuildResponseMessage();
@@ -454,9 +443,8 @@ bool TServiceContextBase::IsLoggingEnabled() const
 void TServiceContextBase::SetRawRequestInfo(std::string info, bool incremental)
 {
     YT_ASSERT(!Replied_);
-    YT_ASSERT(RequestInfoState_ != ERequestInfoState::Flushed);
 
-    RequestInfoState_ = ERequestInfoState::Set;
+    RequestInfoSet_ = true;
 
     if (!LoggingEnabled_) {
         return;
@@ -474,7 +462,7 @@ void TServiceContextBase::SuppressMissingRequestInfoCheck()
 {
     YT_ASSERT(!Replied_);
 
-    RequestInfoState_ = ERequestInfoState::Flushed;
+    RequestInfoSet_ = true;
 }
 
 void TServiceContextBase::SetRawResponseInfo(std::string info, bool incremental)

@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        // runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -701,24 +701,28 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         {
             auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            Cout << "BuildIndex 1 " << buildIndexOperation.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL_C(
                 buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
                 buildIndexOperation.DebugString()
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: { upload rows: 0, upload bytes: 0, read rows: 0, read bytes: 0 } }");
         }
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
         {
             auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            Cout << "BuildIndex 2 " << buildIndexOperation.DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL_C(
                 buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
                 buildIndexOperation.DebugString()
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: { upload rows: 0, upload bytes: 0, read rows: 0, read bytes: 0 } }");
         }
     }
 }

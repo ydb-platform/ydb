@@ -97,7 +97,6 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
         {'(', ')'},
         {'[', ']'},
         {'{', '}'},
-        {'`', '`'},
         {'\'', '\''},
         {'"', '"'},
     }) {

@@ -1,6 +1,6 @@
 # ALTER SEQUENCE
 
-Modifies the parameters of an existing `Sequence` object associated with a [Serial](../types/serial.md) column.
+Modifies parameters of an existing `Sequence` object associated with a [Serial](../types/serial.md) column.
 
 ## Syntax
 

@@ -32,12 +32,12 @@ add_subdirectory(data_events)
 add_subdirectory(program)
 add_subdirectory(conveyor)
 add_subdirectory(limiter)
+add_subdirectory(conveyor_composite)
 add_subdirectory(priorities)
 add_subdirectory(time_cast)
 add_subdirectory(tracing)
 add_subdirectory(coordinator)
 add_subdirectory(mediator)
-add_subdirectory(conveyor_composite)
 
 add_library(ydb-core-tx)
 

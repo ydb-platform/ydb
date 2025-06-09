@@ -24,11 +24,18 @@ target_link_libraries(yql-dq-comp_nodes PUBLIC
   yutil
   library-actors-core
   dq-actors-compute
+  yql-dq-runtime
+  essentials-minikql-comp_nodes
   essentials-minikql-computation
   yql-essentials-utils
 )
 
 target_sources(yql-dq-comp_nodes PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_hash_aggregate.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_hash_combine.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_hash_operator_common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_hash_operator_serdes.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_program_builder.cpp
 )
 

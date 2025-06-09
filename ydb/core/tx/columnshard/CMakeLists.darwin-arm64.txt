@@ -88,6 +88,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   columnshard-transactions-operators
   tx-columnshard-tx_reader
   tx-conveyor-usage
+  tx-conveyor_composite-service
   tx-long_tx_service-public
   tx-priorities-service
   core-tx-tiering

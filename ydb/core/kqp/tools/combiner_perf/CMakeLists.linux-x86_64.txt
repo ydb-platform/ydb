@@ -35,6 +35,8 @@ target_link_libraries(kqp-tools-combiner_perf PUBLIC
   minikql-codegen-llvm16
   minikql-invoke_builtins-llvm16
   cpp-testing-unittest
+  core-kqp-runtime
+  yql-dq-comp_nodes
   llvm16-lib-IR
   lib-ExecutionEngine-MCJIT
   llvm16-lib-Linker

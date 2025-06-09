@@ -161,9 +161,14 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
             "scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
             "debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>())("last", LastResultInstant);
     }
-    AFL_VERIFY(!!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)(
-                                             "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
-                                             "counters", ScanCountersPool.DebugString());
+    const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
+    AFL_VERIFY_DEBUG(ok)
+    ("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
+        "counters", ScanCountersPool.DebugString());
+    if (!ok) {
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("error", "CheckHanging");
+        ScanCountersPool.OnHangingRequestDetected();
+    }
 }
 
 void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {

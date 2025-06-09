@@ -57,7 +57,6 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     }
     JsonReport["tables_manager"].EraseValue("schema_versions");
     TStringStream html;
-    std::cout << "la-la-la-alena\n";
     html << "<h3>Special Values</h3>";
     html << "<b>CurrentSchemeShardId:</b> " << Self->CurrentSchemeShardId << "<br />";
     html << "<b>ProcessingParams:</b> " << Self->ProcessingParams.value_or(NKikimrSubDomains::TProcessingParams{}).ShortDebugString() << "<br />";

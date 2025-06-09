@@ -158,8 +158,11 @@ void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
 
 void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
-        const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
+        const NKikimrClient::TKeyValueRequest::EPriority priority,
+        const TDeque<ui64>& creationUnixTimes,
+        TTestContext &tc) {
     Y_ABORT_UNLESS(keys.size() == values.size());
+    Y_ABORT_UNLESS(creationUnixTimes.empty() || (creationUnixTimes.size() == keys.size()));
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -172,6 +175,10 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
             write->SetValue(values[idx]);
             write->SetStorageChannel(storageChannel);
             write->SetPriority(priority);
+            if (idx < creationUnixTimes.size()) {
+                Cerr << "idx=" << idx << ", creationUnixTime=" << creationUnixTimes[idx] << Endl;
+                write->SetCreationUnixTime(creationUnixTimes[idx]);
+            }
         }
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
@@ -190,6 +197,17 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         }
         return true;
     });
+}
+
+void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
+        const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
+        const NKikimrClient::TKeyValueRequest::EPriority priority,
+        TTestContext &tc) {
+    CmdWrite(keys, values,
+             storageChannel,
+             priority,
+             {},
+             tc);
 }
 
 struct TDiff {
@@ -232,10 +250,21 @@ void CmdPatch(const TString &originalKey, const TString &patchedKey, const TVect
 
 void CmdWrite(const TString &key, const TString &value,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
+        const NKikimrClient::TKeyValueRequest::EPriority priority,
+        const ui64 creationUnixTime,
+        TTestContext &tc) {
+    TDeque<TString> keys = {key};
+    TDeque<TString> values = {value};
+    TDeque<ui64> creationUnixTimes = {creationUnixTime};
+    CmdWrite(keys, values, storageChannel, priority, creationUnixTimes, tc);
+}
+
+void CmdWrite(const TString &key, const TString &value,
+        const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
     TDeque<TString> keys = {key};
     TDeque<TString> values = {value};
-    CmdWrite(keys, values, storageChannel, priority, tc);
+    CmdWrite(keys, values, storageChannel, priority, {}, tc);
 }
 
 void CmdRead(const TDeque<TString> &keys,
@@ -276,9 +305,11 @@ void CmdRead(const TDeque<TString> &keys,
     });
 }
 
-void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, TTestContext &tc,
-        bool expectOk = true) {
+void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, const TDeque<ui64>& renameUnixTimes,
+               TTestContext &tc, bool expectOk = true)
+{
     Y_ABORT_UNLESS(oldKeys.size() == newKeys.size());
+    Y_ABORT_UNLESS(renameUnixTimes.empty() || (oldKeys.size() == renameUnixTimes.size()));
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -290,6 +321,9 @@ void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, T
             auto cmd = request->Record.AddCmdRename();
             cmd->SetOldKey(oldKeys[idx]);
             cmd->SetNewKey(newKeys[idx]);
+            if (idx < renameUnixTimes.size()) {
+                cmd->SetCreationUnixTime(renameUnixTimes[idx]);
+            }
         }
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
@@ -311,10 +345,23 @@ void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, T
     });
 }
 
+void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, TTestContext &tc,
+        bool expectOk = true) {
+    CmdRename(oldKeys, newKeys, {}, tc, expectOk);
+}
+
+void CmdRename(const TString &oldKey, const TString &newKey, const ui64 renameUnixTime,
+               TTestContext &tc, bool expectOk = true) {
+    TDeque<TString> oldKeys = {oldKey};
+    TDeque<TString> newKeys = {newKey};
+    TDeque<ui64> renameUnixTimes = {renameUnixTime};
+    CmdRename(oldKeys, newKeys, renameUnixTimes, tc, expectOk);
+}
+
 void CmdRename(const TString &oldKey, const TString &newKey, TTestContext &tc, bool expectOk = true) {
     TDeque<TString> oldKeys = {oldKey};
     TDeque<TString> newKeys = {newKey};
-    CmdRename(oldKeys, newKeys, tc, expectOk);
+    CmdRename(oldKeys, newKeys, {}, tc, expectOk);
 }
 
 void CmdConcat(const TDeque<TString> &inputKeys, const TString &outputKey, const bool keepInputs, TTestContext &tc) {
@@ -446,6 +493,9 @@ void CheckResponse(NKikimrClient::TResponse &ar, NKikimrClient::TKeyValueRespons
             }
             UNIT_ASSERT_C(aPair.HasCreationUnixTime(), "Line# " << line);
             //TODO: UNIT_ASSERT(aPair.GetCreationUnixTime() >= unixTime);
+            if (ePair.HasCreationUnixTime()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(aPair.GetCreationUnixTime(), ePair.GetCreationUnixTime(), "Line# " << line);
+            }
         }
     }
 }
@@ -476,10 +526,11 @@ void RunRequest(TDesiredPair<TEvKeyValue::TEvRequest> &dp, TTestContext &tc, ui6
 void AddCmdReadRange(const TString &from, const bool includeFrom, const TString &to, const bool includeTo,
         const bool includeData, const ui64 limitBytes,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
-        const TDeque<TString> &expectedKeys, const TDeque<TString> &expectedValues,
+        const TDeque<TString> &expectedKeys, const TDeque<TString> &expectedValues, const TDeque<ui64>& expectedCreationUnixTimes,
         const NKikimrProto::EReplyStatus expectedStatus, TTestContext &tc, TDesiredPair<TEvKeyValue::TEvRequest> &dp) {
     Y_UNUSED(tc);
     Y_ABORT_UNLESS(!includeData || expectedKeys.size() == expectedValues.size());
+    Y_ABORT_UNLESS(expectedCreationUnixTimes.empty() || (expectedCreationUnixTimes.size() == expectedKeys.size()));
 
     {
         auto cmd = dp.Request.AddCmdReadRange();
@@ -504,8 +555,27 @@ void AddCmdReadRange(const TString &from, const bool includeFrom, const TString 
             if (i < expectedValues.size()) {
                 pair->SetValue(expectedValues[i]);
             }
+            if (i < expectedCreationUnixTimes.size()) {
+                pair->SetCreationUnixTime(expectedCreationUnixTimes[i]);
+            }
         }
     }
+}
+
+void AddCmdReadRange(const TString &from, const bool includeFrom, const TString &to, const bool includeTo,
+        const bool includeData, const ui64 limitBytes,
+        const NKikimrClient::TKeyValueRequest::EPriority priority,
+        const TDeque<TString> &expectedKeys, const TDeque<TString> &expectedValues,
+        const NKikimrProto::EReplyStatus expectedStatus, TTestContext &tc, TDesiredPair<TEvKeyValue::TEvRequest> &dp) {
+    AddCmdReadRange(from, includeFrom,
+                    to, includeTo,
+                    includeData,
+                    limitBytes,
+                    priority,
+                    expectedKeys, expectedValues, {},
+                    expectedStatus,
+                    tc,
+                    dp);
 }
 
 void CmdGetStatus(const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
@@ -2676,6 +2746,51 @@ Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
             }
         }
     });
+}
+
+Y_UNIT_TEST(TestWriteAndRenameWithCreationUnixTime)
+{
+    const ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    CmdWrite("key-1", "value",
+             NKikimrClient::TKeyValueRequest::MAIN,
+             NKikimrClient::TKeyValueRequest::REALTIME,
+             creationUnixTime,
+             tc);
+
+    {
+        TDesiredPair<TEvKeyValue::TEvRequest> dp;
+        AddCmdReadRange("key-1", true, "key-1", true,
+                        false,
+                        Max<ui64>(),
+                        NKikimrClient::TKeyValueRequest::REALTIME,
+                        {"key-1"}, {}, {creationUnixTime},
+                        NKikimrProto::OK,
+                        tc, dp);
+        RunRequest(dp, tc, __LINE__);
+    }
+
+    const ui64 renameUnixTime = creationUnixTime - 1000;
+
+    CmdRename("key-1", "key-2", renameUnixTime, tc);
+
+    {
+        TDesiredPair<TEvKeyValue::TEvRequest> dp;
+        AddCmdReadRange("key-2", true, "key-2", true,
+                        false,
+                        Max<ui64>(),
+                        NKikimrClient::TKeyValueRequest::REALTIME,
+                        {"key-2"}, {}, {renameUnixTime},
+                        NKikimrProto::OK,
+                        tc, dp);
+        RunRequest(dp, tc, __LINE__);
+    }
+
 }
 
 } // TKeyValueTest

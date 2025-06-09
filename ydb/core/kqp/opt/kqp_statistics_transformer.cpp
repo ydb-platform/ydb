@@ -1171,7 +1171,7 @@ private:
 
         TJoinColumn GetColumnFromMember(const TCoMember& member) {
             TJoinColumn column = TJoinColumn::FromString(member.Name().StringValue());
-            if (auto stats = TypeCtx.GetStats(member.Raw()); column.RelName.empty()) {
+            if (auto stats = TypeCtx.GetStats(member.Raw()); stats && column.RelName.empty()) {
                 if (stats->Aliases && stats->Aliases->size() == 1) {
                     column.RelName = *stats->Aliases->begin();
                 }

@@ -22,9 +22,14 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 ### List of imported objects {#items}
 
-`--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times if you need to import multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
+`--source-prefix PREFIX`: Source prefix for export in bucket. Required for encrypted exports.
 
-- `source`, `src` or `s` is the path (key prefix) in S3 that hosts the imported directory or table
+`--destination-path PATH`: Root destination folder for the objects being imported, database root if not provided.
+
+`--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times if you need to import multiple items. `STRING` is set in `<property>=<value>,...` format with the following properties:
+
+- `source`, `src` or `s` is the key prefix in S3 that hosts the imported directory or table.
+- `source_path` or `src_path` is the path relative to export prefix directory to the object being imported. Can not be used without `--source-prefix` parameter.
 - `destination`, `dst`, or `d` is the database path to host the imported directory or table. The destination of the path must not exist. All the directories along the path will be created if missing.
 
 ### Additional parameters {#aux}
@@ -36,6 +41,8 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 - `pretty`: Human-readable format (default).
 - `proto-json-base64`: Protobuf in JSON format, binary strings are Base64-encoded.
+
+`--encryption-key-file PATH`: File path that contains encryption key.
 
 ## Importing {#exec}
 
@@ -135,6 +142,19 @@ ydb -p quickstart import s3 \
   --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
 ```
 
+### Importing encrypted export {#example-encryption}
+
+Importing one table, that was exported using path `dir/my_table`, to the path `dir1/dir/my_table` from encrypted export located in `export1` in the `mybucket` S3 bucket using the secret key stored in `~/my_secret_key` file.
+
+```bash
+ydb -p quickstart import s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --source-prefix export1 --destination-path dir1 \
+  --item src_path=dir/my_table \
+  --encryption-key-file ~/my_secret_key
+```
+
 ### Getting operation IDs {#example-list-oneline}
 
 To get a list of import operation IDs in a bash-friendly format, use the [jq](https://stedolan.github.io/jq/download/) utility:
@@ -156,4 +176,3 @@ You can use these IDs, for example, to run a loop to end all the current operati
 ```bash
 {{ ydb-cli }} -p quickstart operation list import/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
-

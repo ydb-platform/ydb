@@ -18,7 +18,7 @@ namespace NCloudEvents {
     }
 
     void TAuditSender::Send(const TEventInfo& evInfo) {
-        static constexpr TStringBuf componentName = "YMQ";
+        static constexpr TStringBuf componentName = "ymq";
         static const     TString emptyValue = "{none}";
         static constexpr TStringBuf permission = "ymq.queues.list";
 
@@ -28,7 +28,6 @@ namespace NCloudEvents {
             AUDIT_PART("operation", evInfo.Type)
             AUDIT_PART("status", TString(evInfo.Issue.empty() ? "SUCCESS" : "ERROR"))
             AUDIT_PART("reason", evInfo.Issue, !evInfo.Issue.empty())
-            AUDIT_PART("operation", evInfo.Type)
             AUDIT_PART("remote_address", evInfo.RemoteAddress)
             AUDIT_PART("subject", evInfo.UserSID)
             AUDIT_PART("sanitized_token", (!evInfo.UserSanitizedToken.empty() ? evInfo.UserSanitizedToken : emptyValue))
@@ -40,7 +39,7 @@ namespace NCloudEvents {
             AUDIT_PART("request_id", (!evInfo.RequestId.empty() ? evInfo.RequestId : emptyValue))
             AUDIT_PART("idempotency_id", (!evInfo.IdempotencyId.empty() ? evInfo.IdempotencyId : emptyValue))
             AUDIT_PART("issue", (!evInfo.Issue.empty() ? evInfo.Issue : emptyValue))
-            AUDIT_PART("queue_name", (!evInfo.QueueName.empty() ? evInfo.QueueName : emptyValue))
+            AUDIT_PART("queue", (!evInfo.QueueName.empty() ? evInfo.QueueName : emptyValue))
             AUDIT_PART("labels", evInfo.Labels)
         );
     }
@@ -134,6 +133,30 @@ namespace NCloudEvents {
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), IEventHandle::FlagTrackDelivery);
     }
 
+    void TProcessor::MakeDeleteResponse() {
+        NYdb::TParamsBuilder paramsBuilder;
+
+        auto& param = paramsBuilder.AddParam("$Events");
+        param.BeginList();
+
+        for (const auto& cloudEv : Events) {
+            param.AddListItem()
+                .BeginStruct()
+                .AddMember("CreatedAt")
+                    .Uint64(cloudEv.CreatedAt)
+                .AddMember("Id")
+                    .Uint64(cloudEv.OriginalId)
+                .EndStruct();
+        }
+
+        param.EndList();
+        param.Build();
+
+        auto params = paramsBuilder.Build();
+        RunQuery(DeleteQuery, std::make_unique<decltype(params)>(params));
+        Become(&TProcessor::StateWaitDeleteResponse);
+    }
+
     void TProcessor::StopSession() {
         if (!SessionId.empty()) {
             auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -144,6 +167,7 @@ namespace NCloudEvents {
     }
 
     void TProcessor::PutToSleep() {
+        Events.clear();
         StopSession();
         Schedule(RetryTimeout, new TEvents::TEvWakeup);
         Become(&TProcessor::StateWaitWakeUp);
@@ -220,36 +244,16 @@ namespace NCloudEvents {
 
         const auto& response = record.GetResponse();
 
-        auto eventsList = ConvertSelectResponseToEventList(response);
+        Events = ConvertSelectResponseToEventList(response);
+
         UpdateSessionId(ev);
 
-        if (!eventsList.empty()) {
-            for (const auto& cloudEvent : eventsList) {
+        if (!Events.empty()) {
+            for (const auto& cloudEvent : Events) {
                 TAuditSender::Send(cloudEvent);
             }
 
-            NYdb::TParamsBuilder paramsBuilder;
-
-            auto& param = paramsBuilder.AddParam("$Events");
-            param.BeginList();
-
-            for (const auto& cloudEv : eventsList) {
-                param.AddListItem()
-                    .BeginStruct()
-                    .AddMember("CreatedAt")
-                        .Uint64(cloudEv.CreatedAt)
-                    .AddMember("Id")
-                        .Uint64(cloudEv.OriginalId)
-                    .EndStruct();
-            }
-
-            param.EndList();
-            param.Build();
-
-            auto params = paramsBuilder.Build();
-
-            RunQuery(DeleteQuery, std::make_unique<decltype(params)>(params));
-            Become(&TProcessor::StateWaitDeleteResponse);
+            MakeDeleteResponse();
         } else {
             PutToSleep();
         }
@@ -263,9 +267,12 @@ namespace NCloudEvents {
             }
 
             LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::SQS, error);
-        }
 
-        PutToSleep();
+            StopSession();
+            MakeDeleteResponse();
+        } else {
+            PutToSleep();
+        }
     }
 } // namespace NCloudEvents
 } // namespace NKikimr::NSQS

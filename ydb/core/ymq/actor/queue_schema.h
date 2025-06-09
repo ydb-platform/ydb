@@ -31,7 +31,8 @@ public:
                                const bool enableQueueAttributesValidation,
                                TIntrusivePtr<TUserCounters> userCounters,
                                TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
-                               const TString& tagsJson);
+                               const TString& tagsJson,
+                               const TString& userSid);
 
     ~TCreateQueueSchemaActorV2();
 
@@ -132,12 +133,13 @@ private:
     TString ExistingQueueResourceId_;
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
+    const TString TagsJson_;
+    const TString UserSid_;
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;
     TVector<TTable> RequiredTables_;
     ui64 CreatedTablesCount_ = 0;
     TQueueAttributes ValidatedAttributes_;
-    TString TagsJson_;
 
     ui64 LeaderTabletId_ = 0;
     TActorId CreateTableWithLeaderTabletActorId_;
@@ -158,7 +160,9 @@ public:
                               ui32 tablesFormat,
                               const TActorId& sender,
                               const TString& requestId,
-                              TIntrusivePtr<TUserCounters> userCounters);
+                              TIntrusivePtr<TUserCounters> userCounters,
+                              const TString& tagsJson,
+                              const TString& userSid);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
                               bool isFifo,
@@ -168,7 +172,9 @@ public:
                               TIntrusivePtr<TUserCounters> userCounters,
                               const ui64 advisedQueueVersion,
                               const ui64 advisedShardCount,
-                              const bool advisedIsFifoFlag);
+                              const bool advisedIsFifoFlag,
+                              const TString& tagsJson,
+                              const TString& userSid);
 
     void Bootstrap();
 
@@ -223,6 +229,8 @@ private:
     TIntrusivePtr<TUserCounters> UserCounters_;
     ui64 Version_ = 0;
     TActorId DeleteQuoterResourceActor_;
+    const TString TagsJson_;
+    const TString UserSid_;
 };
 
 } // namespace NKikimr::NSQS

@@ -43,7 +43,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const bool enableQueueAttributesValidation,
                                                      TIntrusivePtr<TUserCounters> userCounters,
                                                      TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
-                                                     const TString& tagsJson)
+                                                     const TString& tagsJson,
+                                                     const TString& userSid)
     : QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
@@ -57,6 +58,7 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , UserCounters_(std::move(userCounters))
     , QuoterResources_(std::move(quoterResources))
     , TagsJson_(tagsJson)
+    , UserSid_(userSid)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -751,7 +753,7 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
                 (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
                 (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
-                (let cloudEventsUserSID                 (Parameter 'USER_NAME (DataType 'Utf8String)))
+                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
                 (let cloudEventsUserSanitizedToken      (Parameter 'CLOUD_EVENT_USER_SANITIZED_TOKEN (DataType 'Utf8String)))
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
@@ -1059,8 +1061,9 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("TAGS", TagsJson_)
             .Uint64("CLOUD_EVENT_ID", NCloudEvents::TEventIdGenerator::Generate())
             .Utf8("CLOUD_EVENT_TYPE", "CreateMessageQueue")
-            .Utf8("CLOUD_EVENT_CLOUD_ID", "default_value_of_cloud_id")
+            .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
             .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
+            .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
             .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "default_value_of_sanitized_token")
             .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_authtype")
             .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
@@ -1225,7 +1228,7 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                 RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " <<
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
                 Register(new TDeleteQueueSchemaActorV2(QueuePath_, IsFifo_, TablesFormat_, SelfId(), RequestId_, UserCounters_,
-                                                           Version_, RequiredShardsCount_, IsFifo_));
+                                                           Version_, RequiredShardsCount_, IsFifo_, TagsJson_, UserSid_));
             }
 
         } else {
@@ -1254,7 +1257,9 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      ui32 tablesFormat,
                                                      const TActorId& sender,
                                                      const TString& requestId,
-                                                     TIntrusivePtr<TUserCounters> userCounters)
+                                                     TIntrusivePtr<TUserCounters> userCounters,
+                                                     const TString& tagsJson,
+                                                     const TString& userSid)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1262,6 +1267,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , DeletionStep_(EDeleting::EraseQueueRecord)
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
+    , TagsJson_(tagsJson)
+    , UserSid_(userSid)
 {
 }
 
@@ -1273,7 +1280,9 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      TIntrusivePtr<TUserCounters> userCounters,
                                                      const ui64 advisedQueueVersion,
                                                      const ui64 advisedShardCount,
-                                                     const bool advisedIsFifoFlag)
+                                                     const bool advisedIsFifoFlag,
+                                                     const TString& tagsJson,
+                                                     const TString& userSid)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1281,6 +1290,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , DeletionStep_(tablesFormat == 0 ? EDeleting::RemoveTables : EDeleting::RemoveQueueVersionDirectory)
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
+    , TagsJson_(tagsJson)
+    , UserSid_(userSid)
 {
     Y_ABORT_UNLESS(advisedQueueVersion > 0);
 
@@ -1336,7 +1347,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                 (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
                 (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
                 (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
-                (let cloudEventsUserSID                 (Parameter 'USER_NAME (DataType 'Utf8String)))
+                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
                 (let cloudEventsUserSanitizedToken      (Parameter 'CLOUD_EVENT_USER_SANITIZED_TOKEN (DataType 'Utf8String)))
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
@@ -1544,11 +1555,12 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
                     .Utf8("USER_NAME", QueuePath_.UserName)
                     .Uint64("NOW", nowMs)
-                    .Utf8("CLOUD_EVENT_LABELS", "")
+                    .Utf8("CLOUD_EVENT_LABELS", TagsJson_)
                     .Uint64("CLOUD_EVENT_ID", NCloudEvents::TEventIdGenerator::Generate())
                     .Utf8("CLOUD_EVENT_TYPE", "DeleteMessageQueue")
-                    .Utf8("CLOUD_EVENT_CLOUD_ID", "default_value_of_cloud_id")
-                    .Utf8("CLOUD_EVENT_FOLDER_ID", "default_value_of_folder_id")
+                    .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
+                    .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
+                    .Utf8("CLOUD_EVENT_FOLDER_ID", TagsJson_)
                     .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", "default_value_of_sanitized_token")
                     .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_auth_type")
                     .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")

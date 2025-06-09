@@ -111,9 +111,7 @@ private:
         TString database = (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()? Cfg().GetRoot() : "");
 
         auto evId = NCloudEvents::TEventIdGenerator::Generate();
-        auto createdAt = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch()
-        ).count();
+        auto createdAt = TInstant::Now().MilliSeconds();
 
         TString query = TStringBuilder()
             << "UPSERT INTO `" << GetFullCloudEventsTablePath() << "`\n"
@@ -138,13 +136,13 @@ private:
                 << evId << ","
                 << "\"" << GetQueueName() << "\"" << ","
                 << "\"" << "UpdateMessageQueue" << "\"" << ","
-                << "\"" << "DEFAULT_CLOUD_ID" << "\"" << ","
-                << "\"" << "DEFAULT_FOLDER_ID" << "\"" << ","
-                << "\"" << "DEFAULT_UserSID" << "\"" << ","
+                << "\"" << UserName_ << "\"" << ","
+                << "\"" << FolderId_ << "\"" << ","
+                << "\"" << UserSID_ << "\"" << ","
                 << "\"" << "DEFAULT_UserSanitizedToken" << "\"" << ","
                 << "\"" << "DEFAULT_AuthType" << "\"" << ","
                 << "\"" << "DEFAULT_PeerName" << "\"" << ","
-                << "\"" << "DEFAULT_RequestId" << "\"" << ","
+                << "\"" << RequestId_ << "\"" << ","
                 << "\"" << "DEFAULT_IdempotencyId" << "\"" << ","
                 << "\"" << TagsToJson(*QueueTags_) << "\""
             << ");" << "\n";

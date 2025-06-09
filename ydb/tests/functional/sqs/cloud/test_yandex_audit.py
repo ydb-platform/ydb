@@ -115,6 +115,10 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
             # We are waiting because auditLogActor checks events once in a while
             time.sleep(10)
 
+        print("========================================", file=sys.stderr)
+        print(capture_audit.captured, file=sys.stderr)
+        print("========================================", file=sys.stderr)
+
         assert capture_audit.captured.count('"operation":"CreateMessageQueue"') == 1
         assert capture_audit.captured.count('"operation":"UpdateMessageQueue"') == 2
         assert capture_audit.captured.count('"operation":"DeleteMessageQueue"') == 1

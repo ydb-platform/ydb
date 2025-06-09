@@ -65,8 +65,10 @@ namespace NCloudEvents {
         TString GetInitDeleteQuery() const;
 
         TString SessionId = TString();
+        std::vector<TEventInfo> Events;
 
         void RunQuery(TString query, std::unique_ptr<NYdb::TParams> params = nullptr);
+        void MakeDeleteResponse();
         void UpdateSessionId(const NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
         void StopSession();
         void PutToSleep();

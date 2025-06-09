@@ -40,7 +40,7 @@ SHOW CREATE TABLE my_table;
 
 | Path            | PathType  | CreateQuery                 |
 |-----------------|-----------|-----------------------------|
-| my_table        | Table     | See below                   |
+| `my_table`        | `Table `    | `CREATE TABLE...` — see below                   |
 
 ```yql
 CREATE TABLE `my_table` (

@@ -21,7 +21,6 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts, ExecutionResult
 
-LOGGER = logging.getLogger(__name__)
 
 class LoadSuiteBase:
     class QuerySettings:
@@ -749,7 +748,84 @@ class LoadSuiteBase:
         
         # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
         if not result.success and result.error_message:
-            exc = pytest.fail.Exception(result.error_message)
+            # Создаем детальное сообщение об ошибке с контекстом
+            error_details = []
+            
+            # Основная ошибка
+            error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
+            error_details.append(f"Main error: {result.error_message}")
+            
+            # Информация о выполненных итерациях
+            if result.iterations:
+                error_details.append(f"\nExecution details:")
+                error_details.append(f"Total iterations attempted: {len(result.iterations)}")
+                
+                failed_iterations = []
+                successful_iterations = []
+                
+                for iter_num, iteration in result.iterations.items():
+                    if iteration.error_message:
+                        failed_iterations.append({
+                            'iteration': iter_num,
+                            'error': iteration.error_message,
+                            'time': iteration.time
+                        })
+                    else:
+                        successful_iterations.append({
+                            'iteration': iter_num, 
+                            'time': iteration.time
+                        })
+                
+                if failed_iterations:
+                    error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
+                    for fail_info in failed_iterations:
+                        error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
+                
+                if successful_iterations:
+                    error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
+                    for success_info in successful_iterations:
+                        error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
+            
+            # Добавляем stderr/stdout если есть полезная информация
+            if result.stderr and result.stderr.strip():
+                # Берем последние 500 символов stderr для контекста
+                stderr_preview = result.stderr.strip()
+                if len(stderr_preview) > 500:
+                    stderr_preview = "..." + stderr_preview[-500:]
+                error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
+            
+            if result.stdout and "error" in result.stdout.lower():
+                # Ищем строки с "error" в stdout
+                stdout_lines = result.stdout.split('\n')
+                error_lines = [line for line in stdout_lines if 'error' in line.lower()]
+                if error_lines:
+                    error_details.append(f"\nError lines from STDOUT:")
+                    for line in error_lines[:5]:  # Показываем максимум 5 строк
+                        error_details.append(f"  {line.strip()}")
+            
+            # Информация о статистике если есть
+            stats = result.get_stats(workload_name)
+            if stats:
+                if 'successful_runs' in stats and 'total_runs' in stats:
+                    error_details.append(f"\nRUN STATISTICS:")
+                    error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
+                    if 'failed_runs' in stats:
+                        error_details.append(f"  Failed runs: {stats['failed_runs']}")
+                    if 'success_rate' in stats:
+                        error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
+                
+                # Показываем информацию о deployment если есть
+                if any(key.startswith('deployment_') for key in stats.keys()):
+                    deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
+                    if deployment_info:
+                        error_details.append(f"\nDEPLOYMENT INFO:")
+                        for key, value in deployment_info.items():
+                            error_details.append(f"  {key}: {value}")
+            
+            # Финальное сообщение
+            detailed_error_message = "\n".join(error_details)
+            
+            exc = pytest.fail.Exception(detailed_error_message)
             if result.traceback is not None:
                 exc = exc.with_traceback(result.traceback)
             raise exc
@@ -859,11 +935,35 @@ def workload_executor():
             logging.info(f"Deployment result: {binary_result}")
             
             if not success:
-                error_msg = f"Binary deployment failed on node {node.host}. Result: {binary_result}"
-                logging.error(error_msg)
+                # Создаем детальное сообщение об ошибке деплоя
+                deploy_error_details = []
+                deploy_error_details.append(f"DEPLOYMENT FAILED: {binary_name}")
+                deploy_error_details.append(f"Target host: {node.host}")
+                deploy_error_details.append(f"Target directory: {target_dir}")
+                deploy_error_details.append(f"Binary environment variable: {binary_env_var}")
+                deploy_error_details.append(f"Local binary path: {binary_files[0]}")
+                
+                # Детали результата деплоя
+                if 'error' in binary_result:
+                    deploy_error_details.append(f"Deploy error: {binary_result['error']}")
+                
+                # Показываем полный результат деплоя для диагностики
+                deploy_error_details.append(f"\nFull deployment result:")
+                for key, value in binary_result.items():
+                    deploy_error_details.append(f"  {key}: {value}")
+                
+                # Информация о хосте
+                deploy_error_details.append(f"\nHost details:")
+                deploy_error_details.append(f"  Host: {node.host}")
+                deploy_error_details.append(f"  Role: {node.role}")
+                deploy_error_details.append(f"  Start time: {node.start_time}")
+                
+                detailed_deploy_error = "\n".join(deploy_error_details)
+                
+                logging.error(detailed_deploy_error)
                 if raise_on_error:
-                    raise Exception(error_msg)
-                return "", error_msg, False
+                    raise Exception(detailed_deploy_error)
+                return "", detailed_deploy_error, False
         
         # Формируем и выполняем команду
         with allure.step(f'Execute workload command'):
@@ -1342,9 +1442,33 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.info(f"Deployment result: {binary_result}")
                 
                 if not success:
-                    error_msg = f"Binary deployment failed on node {target_node.host}. Result: {binary_result}"
-                    logging.error(error_msg)
-                    raise Exception(error_msg)
+                    # Создаем детальное сообщение об ошибке деплоя
+                    deploy_error_details = []
+                    deploy_error_details.append(f"DEPLOYMENT FAILED: {self.workload_binary_name}")
+                    deploy_error_details.append(f"Target host: {target_node.host}")
+                    deploy_error_details.append(f"Target directory: {self.binaries_deploy_path}")
+                    deploy_error_details.append(f"Binary environment variable: {self.workload_env_var}")
+                    deploy_error_details.append(f"Local binary path: {binary_files[0]}")
+                    
+                    # Детали результата деплоя
+                    if 'error' in binary_result:
+                        deploy_error_details.append(f"Deploy error: {binary_result['error']}")
+                    
+                    # Показываем полный результат деплоя для диагностики
+                    deploy_error_details.append(f"\nFull deployment result:")
+                    for key, value in binary_result.items():
+                        deploy_error_details.append(f"  {key}: {value}")
+                    
+                    # Информация о хосте
+                    deploy_error_details.append(f"\nHost details:")
+                    deploy_error_details.append(f"  Host: {target_node.host}")
+                    deploy_error_details.append(f"  Role: {target_node.role}")
+                    deploy_error_details.append(f"  Start time: {target_node.start_time}")
+                    
+                    detailed_deploy_error = "\n".join(deploy_error_details)
+                    
+                    logging.error(detailed_deploy_error)
+                    raise Exception(detailed_deploy_error)
                 
                 deployed_binary_path = binary_result['path']
                 logging.info(f"Binary deployed successfully to: {deployed_binary_path}")

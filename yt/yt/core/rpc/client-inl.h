@@ -40,7 +40,7 @@ void IClientRequest::RequireServerFeature(E featureId)
 template <class... TArgs>
 void TClientRequest::SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args)
 {
-    RequestInfo_ = Format(format, std::forward<TArgs>(args)...);
+    SetRawRequestInfo(Format(format, std::forward<TArgs>(args)...));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

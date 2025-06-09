@@ -56,11 +56,15 @@ For each query, a file named `<path_to_diagnostics>` will be created with the fo
     - `query_text` — SQL query text.
 
       {% note info %}
+
       `meta` are collected when statistics gathering is enabled `--stats full`, as well as during execution of queries with `EXPLAIN` mode.
+
       {% endnote %}
 
       {% note warning %}
+
       This field may contain sensitive or personal data, including parameter values.
+
       {% endnote %}
 
     - `query_type` — query type;
@@ -68,7 +72,9 @@ For each query, a file named `<path_to_diagnostics>` will be created with the fo
 - `ast` — abstract syntax tree (AST) for the query.
 
 {% note tip %}
+
 The diagnostics file may contain confidential information, especially in the `meta.query_text`, `plan`, and `ast` fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
+
 {% endnote %}
 
 ### Working with parameterized queries {#parameterized-query}

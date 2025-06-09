@@ -23,7 +23,7 @@ The command always returns **exactly one row** with three columns:
 
 - **Path** — The path to the object (for example, `MyTable` or `MyView`).
 - **PathType** — The type of object: `Table` or `View`.
-- **CreateQuery** — The complete set of DDL statements needed to recreate the object:
+- **CreateQuery** — The complete set of DDL statements needed to create the object:
     - For tables: the main [CREATE TABLE](create_table/index.md) statement (with the path relative to the database root), plus any additional statements describing the current configuration, such as:
         - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index) — for index partitioning settings.
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md) — for adding a changefeed.
@@ -38,9 +38,9 @@ The command always returns **exactly one row** with three columns:
 SHOW CREATE TABLE my_table;
 ```
 
-| Path            | PathType  | CreateQuery                 |
-|-----------------|-----------|-----------------------------|
-| `my_table`        | `Table `    | `CREATE TABLE...` — see below                   |
+| Path            | PathType  | CreateQuery                     |
+|-----------------|-----------|---------------------------------|
+| `my_table`      | `Table`   | `CREATE TABLE...` — see below   |
 
 ```yql
 CREATE TABLE `my_table` (
@@ -76,9 +76,9 @@ ALTER TABLE `my_table`
 SHOW CREATE TABLE my_table;
 ```
 
-| Path            | PathType  | CreateQuery                 |
-|-----------------|-----------|-----------------------------|
-| my_table        | Table     | See below                   |
+| Path            | PathType  | CreateQuery                     |
+|-----------------|-----------|---------------------------------|
+| `my_table`      | `Table`   | `CREATE TABLE...` — see below   |
 
 ```yql
 CREATE TABLE `my_table` (
@@ -110,9 +110,9 @@ WITH (
 SHOW CREATE VIEW my_view;
 ```
 
-| Path            | PathType  | CreateQuery                 |
-|-----------------|-----------|-----------------------------|
-| my_view         | View      | See below                   |
+| Path            | PathType  | CreateQuery                               |
+|-----------------|-----------|-------------------------------------------|
+| `my_view`       | `View`    | `PRAGMA TablePathPrefix...` — see below   |
 
 ```yql
 PRAGMA TablePathPrefix = '/Root/DirA/DirB/DirC';

@@ -760,6 +760,19 @@ void InterruptHandler(int) {
 
 class TPCCLoader {
 public:
+    struct TCalculatedStatusData {
+        size_t CurrentDataSizeLoaded = 0;
+        double PercentLoaded = 0.0;
+        double InstantSpeedMiBs = 0.0;
+        double AvgSpeedMiBs = 0.0;
+        int ElapsedMinutes = 0;
+        int ElapsedSeconds = 0;
+        int EstimatedTimeLeftMinutes = 0;
+        int EstimatedTimeLeftSeconds = 0;
+        bool IsWaitingForIndices = false;
+        bool IsLoadingTablesAndBuildingIndices = false;
+    };
+
     TPCCLoader(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
         : ConnectionConfig(connectionConfig)
         , Config(runConfig)
@@ -934,78 +947,96 @@ private:
         LoadState.ApproximateDataSize = static_cast<size_t>(totalMB * 1024 * 1024);  // Convert to bytes
     }
 
-    void UpdateDisplayIfNeeded(Clock::time_point now) {
-        auto delta = now - LastDisplayUpdate;
-        if (delta >= TRunConfig::DisplayUpdateInterval) {
-            if (LoadState.IndexBuildStates.empty() || LoadState.State != TLoadState::EWAIT_INDICES) {
-                // data import is in progress
-                size_t currentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+    void UpdateDisplayTextMode(const TCalculatedStatusData& data) {
+        if (!data.IsWaitingForIndices) {
+            // data import is in progress
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
+                << "(" << GetFormattedSize(data.CurrentDataSizeLoaded) << ") "
+                << std::setprecision(1) << data.InstantSpeedMiBs << " MiB/s "
+                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) "
+                << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
+                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
+                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
 
-                // Calculate percentage
-                double percentLoaded = LoadState.ApproximateDataSize > 0 ?
-                    (static_cast<double>(currentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
-
-                // Calculate instantaneous upload speed (MiB/s)
-                auto deltaSeconds = std::chrono::duration<double>(delta).count();
-                double instantSpeedMiBs = deltaSeconds > 0 ?
-                    static_cast<double>(currentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
-
-                // Calculate average upload speed (MiB/s)
-                auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
-                double avgSpeedMiBs = totalElapsed > 0 ?
-                    static_cast<double>(currentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
-
-                // Calculate time estimates
-                auto elapsedMinutes = static_cast<int>(totalElapsed / 60);
-                auto elapsedSeconds = static_cast<int>(totalElapsed) % 60;
-
-                int estimatedTimeLeftMinutes = 0;
-                int estimatedTimeLeftSeconds = 0;
-                if (avgSpeedMiBs > 0 && currentDataSizeLoaded < LoadState.ApproximateDataSize) {
-                    double remainingBytes = LoadState.ApproximateDataSize - currentDataSizeLoaded;
-                    double remainingSeconds = remainingBytes / (1024 * 1024) / avgSpeedMiBs;
-                    estimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
-                    estimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
-                }
-
-                // Build progress message using string stream
-                std::stringstream ss;
-                ss << std::fixed << std::setprecision(1) << "Progress: " << percentLoaded << "% "
-                    << "(" << GetFormattedSize(currentDataSizeLoaded) << ") "
-                    << std::setprecision(1) << instantSpeedMiBs << " MiB/s "
-                    << "(avg: " << avgSpeedMiBs << " MiB/s) "
-                    << "elapsed: " << elapsedMinutes << ":" << std::setfill('0') << std::setw(2) << elapsedSeconds << " "
-                    << "ETA: " << estimatedTimeLeftMinutes << ":"
-                    << std::setfill('0') << std::setw(2) << estimatedTimeLeftSeconds;
-
-                // Add index progress information if indices are being built
-                if (!LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES) {
-                    ss << " | ";
-                    for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                        const auto& indexState = LoadState.IndexBuildStates[i];
-                        if (i > 0) ss << ", ";
-                        ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
-                    }
-                }
-
-                LOG_I(ss.str());
-                PreviousDataSizeLoaded = currentDataSizeLoaded;
-            } else {
-                // waiting for indices
-                if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
-                    std::stringstream ss;
-                    ss << "Waiting for indices ";
-                    for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                        const auto& indexState = LoadState.IndexBuildStates[i];
-                        if (i > 0) ss << ", ";
-                        ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
-                    }
-                    LOG_I(ss.str());
+            // Add index progress information if indices are being built
+            if (data.IsLoadingTablesAndBuildingIndices) {
+                ss << " | ";
+                for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                    const auto& indexState = LoadState.IndexBuildStates[i];
+                    if (i > 0) ss << ", ";
+                    ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
                 }
             }
 
-            LastDisplayUpdate = now;
+            LOG_I(ss.str());
+        } else {
+            // waiting for indices
+            if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
+                std::stringstream ss;
+                ss << "Waiting for indices ";
+                for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                    const auto& indexState = LoadState.IndexBuildStates[i];
+                    if (i > 0) ss << ", ";
+                    ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
+                }
+                LOG_I(ss.str());
+            }
         }
+    }
+
+    void UpdateDisplayIfNeeded(Clock::time_point now) {
+        auto delta = now - LastDisplayUpdate;
+        if (delta < TRunConfig::DisplayUpdateInterval) {
+            return;
+        }
+
+        // Calculate all status data
+        TCalculatedStatusData data;
+        data.IsWaitingForIndices = !LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::EWAIT_INDICES;
+        data.IsLoadingTablesAndBuildingIndices = !LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES;
+
+        if (!data.IsWaitingForIndices) {
+            // data import is in progress
+            data.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+
+            // Calculate percentage
+            data.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
+                (static_cast<double>(data.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
+
+            // Calculate instantaneous upload speed (MiB/s)
+            auto deltaSeconds = std::chrono::duration<double>(delta).count();
+            data.InstantSpeedMiBs = deltaSeconds > 0 ?
+                static_cast<double>(data.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
+
+            // Calculate average upload speed (MiB/s)
+            auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
+            data.AvgSpeedMiBs = totalElapsed > 0 ?
+                static_cast<double>(data.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
+
+            // Calculate time estimates
+            data.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
+            data.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
+
+            if (data.AvgSpeedMiBs > 0 && data.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
+                double remainingBytes = LoadState.ApproximateDataSize - data.CurrentDataSizeLoaded;
+                double remainingSeconds = remainingBytes / (1024 * 1024) / data.AvgSpeedMiBs;
+                data.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+                data.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
+            }
+
+            PreviousDataSizeLoaded = data.CurrentDataSizeLoaded;
+        }
+
+        switch (Config.DisplayMode) {
+        case TRunConfig::EDisplayMode::Text:
+            UpdateDisplayTextMode(data);
+            break;
+        default:
+            ;
+        }
+
+        LastDisplayUpdate = now;
     }
 
 private:

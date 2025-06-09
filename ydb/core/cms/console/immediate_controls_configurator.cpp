@@ -225,8 +225,12 @@ void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Messa
                 AddControl(board, fieldDesc, prefix, true);
             }
             auto controlId = board->GetStaticControlId(name);
-            Y_VERIFY_S(!!controlId, "Unknown Control Id for " << name);
-            if (reflection->HasField(cfg, fieldDesc) && controlId) {
+            if (!controlId) {
+                // unknown static control
+                // can't apply
+                continue;
+            }
+            if (reflection->HasField(cfg, fieldDesc)) {
                 TAtomicBase prev;
                 if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)
                     board->SetValue(*controlId, reflection->GetUInt64(cfg, fieldDesc), prev);

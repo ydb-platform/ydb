@@ -12,9 +12,11 @@
 По умолчанию генерируемые значения начинаются с единицы, увеличиваются на один при каждом новом значении и ограничены в соответствии с выбранным типом.
 
 {% note info %}
+
 Столбцы типа `Serial` поддерживаются как для колонок, входящих в состав первичного ключа, так и для неключевых колонок.
 
 Однако такие колонки нельзя [изменить](../syntax/alter_table/family#mod-column-groups) или [удалить](../syntax/alter_table/columns.md) из таблицы — при попытке выполнить эти операции будет возвращена ошибка.
+
 {% endnote %}
 
 | Тип           | Максимальное значение | Тип значения |
@@ -34,7 +36,9 @@ Error: Failed to get next val for sequence: /dev/test/users/_serial_column_user_
 ```
 
 {% note info %}
+
 Следующее значение выдаётся генератором до непосредственной вставки в таблицу и уже будет считаться использованным, даже если строка, содержащая это значение, не была успешно вставлена (например, при откате транзакции). Поэтому множество значений такой колонки может содержать пропуски и состоять из нескольких промежутков.
+
 {% endnote %}
 
 Для таблиц с автоинкрементными колонками поддержаны операции [copy](../../../reference/ydb-cli/tools-copy.md), [rename](../../../reference/ydb-cli/commands/tools/rename.md), [dump](../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../reference/ydb-cli/export-import/import-file.md) и [import](../../../reference/ydb-cli/export-import/import-s3.md)/[export](../../../reference/ydb-cli/export-import/export-s3.md).

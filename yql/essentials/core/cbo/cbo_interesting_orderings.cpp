@@ -533,7 +533,7 @@ void TOrderingsStateMachine::TLogicalOrderings::RemoveState() {
 }
 
 void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
-    if (orderingIdx < 0 || orderingIdx >= static_cast<i64>(DFSM->InitStateByOrderingIdx.size())) {
+    if (!IsInitialized() || orderingIdx < 0 || orderingIdx >= static_cast<i64>(DFSM->InitStateByOrderingIdx.size())) {
         RemoveState();
         return;
     }
@@ -816,7 +816,7 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
             if (Nodes[nodeIdx].Ordering.Items.empty()) {
                 continue;
             }
-            
+
             TFunctionalDependency fd = fds[fdIdx];
 
             auto applyFD = [this, &itemInfo, nodeIdx, maxInterestingOrderingSize](const TFunctionalDependency& fd, std::size_t fdIdx) {

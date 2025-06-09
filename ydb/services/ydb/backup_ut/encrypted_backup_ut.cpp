@@ -574,6 +574,52 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         UNIT_ASSERT_C(changeFeed2Describe.IsSuccess(), changeFeed2Describe.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(TopicEncryption) {
+        auto res = YdbQueryClient().ExecuteQuery(R"sql(
+            CREATE TOPIC `/Root/EncryptedExportAndImport/dir1/dir2/dir3/Topic` (
+                CONSUMER Consumer
+            );
+        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        {
+            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
+            settings
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/001/create_topic.pb.enc",
+                "/test_bucket/Prefix/001/metadata.json.enc",
+            });
+        }
+
+        // Topics can't restore to a new dir
+        // Create dir
+        // TODO: remove after fix
+        {
+            auto res = YdbSchemeClient().MakeDirectory("/Root/Restored").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
+            importSettings
+                .SymmetricKey("Cool random key!");
+
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+        }
+
+        auto topicDescribe = YdbSchemeClient().DescribePath("/Root/Restored/Topic").GetValueSync();
+        UNIT_ASSERT_C(topicDescribe.IsSuccess(), topicDescribe.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ViewEncryption) {
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);

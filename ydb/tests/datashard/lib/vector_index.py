@@ -40,6 +40,7 @@ to_binary_string_converters = {
     "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
 }
 
+
 class VectorIndexOperations:
     def __init__(self, query_object: Query):
         self.query_object = query_object

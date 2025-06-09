@@ -205,6 +205,7 @@ ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large sole chunk chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/tpc/medium test_workload_oltp.py.TestWorkloadSimpleQueue.test_workload_oltp
+ydb/tests/functional/tpc/medium test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue[row]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
 ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk

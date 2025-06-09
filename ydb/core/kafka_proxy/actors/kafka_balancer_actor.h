@@ -71,6 +71,11 @@ struct TGroupStatus {
     TString ProtocolType;
 };
 
+struct MemberTimeoutsMs {
+    ui32 RebalanceTimeoutMs;
+    TInstant HeartbeatDeadline;
+};
+
 class TKafkaBalancerActor : public NActors::TActorBootstrapped<TKafkaBalancerActor> {
 public:
     using TBase = NActors::TActorBootstrapped<TKafkaBalancerActor>;
@@ -309,7 +314,7 @@ private:
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);
     bool ParseWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::TWorkerState>& workerStates, TString& outLastMemberId);
-    bool ParseMembersAndRebalanceTimeouts(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, ui32>& membersAndRebalanceTimeouts, TString& lastMemberId);
+    bool ParseMembersAndRebalanceTimeouts(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::MemberTimeoutsMs>& membersAndRebalanceTimeouts, TString& lastMemberId);
     bool ParseDeadsAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& deadsCount, ui32& outSessionTimeoutMs);
     bool ParseGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& groupsCount);
     bool ParseMemberGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& generation);
@@ -363,7 +368,7 @@ private:
     TString Assignments;
     std::unordered_map<TString, TString> WorkerStates;
     std::unordered_map<TString, NKafka::TWorkerState> AllWorkerStates;
-    std::unordered_map<TString, ui32> WaitedMemberIdsAndTimeouts;
+    std::unordered_map<TString, MemberTimeoutsMs> WaitedMemberIdsAndTimeouts;
     TInstant RebalanceStartTime = TInstant::Now();
     TString Protocol;
     TString ProtocolType;

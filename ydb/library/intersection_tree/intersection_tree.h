@@ -252,25 +252,25 @@ namespace NKikimr {
         public:
             TFoundRange() = default;
 
-            TFoundRange(const TNode* leftKey, const TNode* rightKey, const TNode* last, bool lastLeft, i32 count)
-                : LeftKey(leftKey)
-                , RightKey(rightKey)
-                , Last(last)
-                , Count(count)
+            TFoundRange(const TNode* leftBorder, const TNode* rightBorder, i32 leftCount, i32 rightCount, bool lastLeft)
+                : LeftBorder(leftBorder)
+                , RightBorder(rightBorder)
+                , LeftCount(leftCount)
+                , RightCount(rightCount)
                 , LastLeft(lastLeft)
             {}
 
             explicit operator bool() const {
-                return LeftKey && RightKey;
+                return LeftBorder && RightBorder;
             }
 
             bool HasLeftKey() const {
-                return LeftKey != nullptr;
+                return LeftBorder != nullptr;
             }
 
             const TPartitionKey& GetLeftPartitionKey() const {
-                Y_ABORT_UNLESS(LeftKey);
-                return LeftKey->Key;
+                Y_ABORT_UNLESS(LeftBorder);
+                return LeftBorder->Key;
             }
 
             const TKey& GetLeftKey() const {
@@ -282,12 +282,12 @@ namespace NKikimr {
             }
 
             bool HasRightKey() const {
-                return RightKey != nullptr;
+                return RightBorder != nullptr;
             }
 
             const TPartitionKey& GetRightPartitionKey() const {
-                Y_ABORT_UNLESS(RightKey);
-                return RightKey->Key;
+                Y_ABORT_UNLESS(RightBorder);
+                return RightBorder->Key;
             }
 
             const TKey& GetRightKey() const {
@@ -299,15 +299,15 @@ namespace NKikimr {
             }
 
             i32 GetCount() const {
-                return Count;
+                return LastLeft ? (RightCount + RightBorder->LeftDelta) : (LeftCount + LeftBorder->RightDelta);
             }
 
             template<class TCallback>
             bool ForEachValue(const TCallback& callback) {
-                if (!Last) {
+                const TNode* node = LastLeft ? RightBorder : LeftBorder;
+                if (!node) {
                     return true;
                 }
-                const TNode* node = Last;
                 bool leftChild = LastLeft;
                 for (;;) {
                     const TValueSet& values = leftChild ? node->LeftValues : node->RightValues;
@@ -328,32 +328,132 @@ namespace NKikimr {
                 return true;
             }
 
+            TFoundRange Prev() const {
+                if (Y_UNLIKELY(!LeftBorder)) {
+                    return TFoundRange();
+                }
+                const TNode* newRight = LeftBorder;
+                i32 newRightCount = RightCount;
+                auto [newLeft, newLeftCount] = Predecessor(newRight, newRightCount);
+                if (newRight->Left) {
+                    return TFoundRange(newLeft, newRight, newLeftCount, newRightCount, false);
+                } else {
+                    return TFoundRange(newLeft, newRight, newLeftCount, newRightCount, true);
+                }
+            }
+
+            TFoundRange Next() const {
+                if (Y_UNLIKELY(!RightBorder)) {
+                    return TFoundRange();
+                }
+                const TNode* newLeft = RightBorder;
+                i32 newLeftCount = RightCount;
+                auto [newRight, newRightCount] = Successor(newLeft, newLeftCount);
+                if (newLeft->Right) {
+                    return TFoundRange(newLeft, newRight, newLeftCount, newRightCount, true);
+                } else {
+                    return TFoundRange(newLeft, newRight, newLeftCount, newRightCount, false);
+                }
+            }
+
         private:
-            const TNode* LeftKey = nullptr;
-            const TNode* RightKey = nullptr;
-            const TNode* Last = nullptr;
-            i32 Count = 0;
+            static std::pair<const TNode*, i32> Predecessor(const TNode* node, i32 count) {
+                if (node->Left) {
+                    count += node->LeftDelta;
+                    node = node->Left.get();
+                    while (node->Right) {
+                        count += node->RightDelta;
+                        node = node->Right.get();
+                    }
+                    return {node, count};
+                } else {
+                    while (const TNode* parent = node->Parent) {
+                        if (parent->Right.get() == node) {
+                            count -= parent->RightDelta;
+                            return {parent, count};
+                        }
+                        Y_ABORT_UNLESS(parent->Left.get() == node);
+                        count -= parent->RightDelta;
+                        node = parent;
+                    }
+                    return {nullptr, count};
+                }
+            }
+
+            static std::pair<const TNode*, i32> Successor(const TNode* node, i32 count) {
+                if (node->Right) {
+                    count += node->RightDelta;
+                    node = node->Right.get();
+                    while (node->Left) {
+                        count += node->LeftDelta;
+                        node = node->Left.get();
+                    }
+                    return {node, count};
+                } else {
+                    while (const TNode* parent = node->Parent) {
+                        if (parent->Left.get() == node) {
+                            count -= parent->LeftDelta;
+                            return {parent, count};
+                        }
+                        Y_ABORT_UNLESS(parent->Right.get() == node);
+                        count -= parent->RightDelta;
+                        node = parent;
+                    }
+                    return {nullptr, count};
+                }
+            }
+
+        private:
+            const TNode* LeftBorder = nullptr;
+            const TNode* RightBorder = nullptr;
+            i32 LeftCount = 0;
+            i32 RightCount = 0;
             bool LastLeft = false;
         };
+
+        TFoundRange FirstRange() const {
+            TFoundRange range;
+            const TNode* node = Root.get();
+            i32 count = 0;
+            while (node) {
+                if (node->Left || range.LeftBorder) {
+                    // We go left, truncating range on the right
+                    range.RightBorder = node;
+                    range.RightCount = count;
+                    range.LastLeft = true;
+                    count += node->LeftDelta;
+                    node = node->Left.get();
+                } else {
+                    // We go right, truncating range on the left
+                    range.LeftBorder = node;
+                    range.LeftCount = count;
+                    range.LastLeft = false;
+                    count += node->RightDelta;
+                    node = node->Right.get();
+                }
+            }
+            return range;
+        }
 
         TFoundRange FindRange(const TKey& key) const {
             TFoundRange range;
             const TNode* node = Root.get();
+            i32 count = 0;
             while (node) {
                 auto order = CompareKeys(*this, key, node->Key.Key);
                 if (order < 0 || order == 0 && node->Key.EqualGoesLeft) {
                     // We go left, truncating range on the right
-                    range.RightKey = node;
-                    range.Count += node->LeftDelta;
+                    range.RightBorder = node;
+                    range.RightCount = count;
                     range.LastLeft = true;
-                    range.Last = node;
+                    count += node->LeftDelta;
                     node = node->Left.get();
                 } else {
                     // We go right, truncating range on the left
-                    range.LeftKey = node;
-                    range.Count += node->RightDelta;
+                    range.LeftBorder = node;
+                    range.LeftCount = count;
                     range.LastLeft = false;
-                    range.Last = node;
+                    count += node->RightDelta;
                     node = node->Right.get();
                 }
             }
@@ -363,20 +463,21 @@ namespace NKikimr {
         TFoundRange GetMaxRange() const {
             TFoundRange range;
             const TNode* node = Root.get();
+            i32 count = 0;
             while (node) {
                 if (node->MaxLeftCount >= node->MaxRightCount) {
                     // We go left, truncating range on the right
-                    range.RightKey = node;
-                    range.Count += node->LeftDelta;
+                    range.RightBorder = node;
+                    range.RightCount = count;
                     range.LastLeft = true;
-                    range.Last = node;
+                    count += node->LeftDelta;
                     node = node->Left.get();
                 } else {
                     // We go right, truncating range on the left
-                    range.LeftKey = node;
-                    range.Count += node->RightDelta;
+                    range.LeftBorder = node;
+                    range.LeftCount = count;
                     range.LastLeft = false;
-                    range.Last = node;
+                    count += node->RightDelta;
                     node = node->Right.get();
                 }
             }
@@ -385,31 +486,12 @@ namespace NKikimr {
 
         template<class TCallback>
         bool ForEachRange(const TCallback& callback) const {
-            if (Root) {
-                return ForEachRangeImpl(Root.get(), nullptr, nullptr, 0, callback);
-            }
-            return true;
-        }
-
-    private:
-        template<class TCallback>
-        static bool ForEachRangeImpl(const TNode* node, const TNode* leftBorder, const TNode* rightBorder, i32 delta, const TCallback& callback) {
-            bool keepGoing = true;
-            if (node->Left) {
-                keepGoing = ForEachRangeImpl(node->Left.get(), leftBorder, node, delta + node->LeftDelta, callback);
-            } else if (leftBorder) {
-                keepGoing = callback(TFoundRange(leftBorder, node, node, /* left */ true, delta + node->LeftDelta));
-            }
-            if (!keepGoing) {
-                return false;
-            }
-            if (node->Right) {
-                keepGoing = ForEachRangeImpl(node->Right.get(), node, rightBorder, delta + node->RightDelta, callback);
-            } else if (rightBorder) {
-                keepGoing = callback(TFoundRange(node, rightBorder, node, /* left */ false, delta + node->RightDelta));
-            }
-            if (!keepGoing) {
-                return false;
+            auto range = FirstRange();
+            while (range) {
+                if (!callback((const TFoundRange&)range)) {
+                    return false;
+                }
+                range = range.Next();
             }
             return true;
         }

@@ -58,6 +58,33 @@ LWTRACE_USING(KQP_PROVIDER);
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions) {
+    for (const auto& [_, shardInfo] : partitions) {
+        if (!shardInfo.KeyReadRanges || shardInfo.KeyWriteRanges) {
+            return false;
+        }
+
+        const TShardKeyRanges& ranges = *shardInfo.KeyReadRanges;
+        if (ranges.FullRange) {
+            return false;
+        }
+
+        for (const TSerializedPointOrRange& range : ranges.Ranges) {
+            if (const auto* tableRange = std::get_if<TSerializedTableRange>(&range);
+                tableRange && !tableRange->Point)
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+} // anonymous namespace
+
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
@@ -178,6 +205,7 @@ public:
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
 
         CheckDuplicateRows = tableServiceConfig.GetEnableRowsDuplicationCheck();
+        EnableParallelPointReadConsolidation = tableServiceConfig.GetEnableParallelPointReadConsolidation();
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -1364,33 +1392,7 @@ protected:
             Counters->Counters->FullScansExecuted->Inc();
         }
 
-        bool isParallelPointRead = true;
-        for (const auto& [_, shardInfo] : partitions) {
-            if (!shardInfo.KeyReadRanges || shardInfo.KeyWriteRanges) {
-                isParallelPointRead = false;
-                break;
-            }
-
-            const auto& ranges = *shardInfo.KeyReadRanges;
-            if (ranges.FullRange) {
-                isParallelPointRead = false;
-                break;
-            }
-
-            for (const auto& range : ranges.Ranges) {
-                if (std::holds_alternative<TSerializedTableRange>(range)) {
-                    const auto& tableRange = std::get<TSerializedTableRange>(range);
-                    if (!tableRange.Point) {
-                        isParallelPointRead = false;
-                        break;
-                    }
-                }
-
-                if (!isParallelPointRead) {
-                    break;
-                }
-            }
-        }
+        bool isParallelPointRead = EnableParallelPointReadConsolidation && IsParallelPointReadPossible(partitions);
 
         bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
         if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
@@ -2320,6 +2322,8 @@ protected:
     ui64 StatFinishInflightBytes = 0;
 
     TMaybe<TBatchOperationSettings> BatchOperationSettings;
+
+    bool EnableParallelPointReadConsolidation = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

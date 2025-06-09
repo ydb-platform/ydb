@@ -20,10 +20,10 @@ add_subdirectory(kv)
 add_subdirectory(log)
 add_subdirectory(mixed)
 add_subdirectory(stock)
+add_subdirectory(tpcc)
 add_subdirectory(tpcds)
 add_subdirectory(tpc_base)
 add_subdirectory(tpch)
-add_subdirectory(tpcc)
 
 add_library(ydb-library-workload INTERFACE)
 
@@ -39,6 +39,7 @@ target_link_libraries(ydb-library-workload INTERFACE
   library-workload-log
   library-workload-mixed
   library-workload-stock
+  library-workload-tpcc
   library-workload-tpcds
   library-workload-tpch
 )

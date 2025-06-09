@@ -8,8 +8,8 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
     table_name = "batch_table"
-    pk_1 = list(range(0, 10))
-    pk_2 = ["NULL"] + list(range(0, 10))
+    pk_1 = list(range(0, 15))
+    pk_2 = list(range(0, 15))
     groups_cnt = 3
 
     @pytest.fixture(autouse=True, scope="function")
@@ -20,75 +20,81 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
         })
 
     def test_batch_update(self):
-        self._fill_table()
+        self.fill_table()
 
         value = 0
         for _ in self.roll():
-            self._assert_batch(
-                self._q_batch_update(set=[f"v1 = {value}", f"v2 = \"Value{value}\""], where_and=[], where_or=[]),
-                self._q_select(where_and=[], where_or=[f"v1 != {value}", f"v2 != \"Value{value}\""])
+            self.assert_batch(
+                self.q_batch_update(f"v1 = {value}, v2 = \"String_{value}\""),
+                self.q_select(f"v1 != {value} OR v2 != \"String_{value}\"")
             )
 
             value += 1
 
-            self._assert_batch(
-                self._q_batch_update(set=[f"v1 = {value}", f"v2 = \"Value{value}\""], where_and=[f"id = {value % self.groups_cnt}"], where_or=[]),
-                self._q_select(where_and=[f"id = {value % self.groups_cnt}"], where_or=[f"v1 != {value}", f"v2 != \"Value{value}\""])
+            where = f"id = {value % self.groups_cnt}"
+            self.assert_batch(
+                self.q_batch_update(f"v1 = {value}, v2 = \"String_{value}\"", where),
+                self.q_select(f"{where} AND (v1 != {value} OR v2 != \"String_{value}\")")
             )
 
             value += 1
 
-            self._assert_batch(
-                self._q_batch_update(set=[f"v1 = {value}", f"v2 = \"Value{value}\""], where_and=[], where_or=[f"id = {value % self.groups_cnt}", "k1 % 2 = 0"]),
-                self._q_select(where_and=[f"id = {value % self.groups_cnt} OR k1 % 2 = 0"], where_or=[f"v1 != {value}", f"v2 != \"Value{value}\""])
+            where = f"id = {value % self.groups_cnt} OR k1 % 2 = 0"
+            self.assert_batch(
+                self.q_batch_update(f"v1 = {value}, v2 = \"String_{value}\"", where),
+                self.q_select(f"{where} AND (v1 != {value} OR v2 != \"String_{value}\")")
             )
 
             value += 1
 
-            self._assert_batch(
-                self._q_batch_update(set=[f"v1 = {value}", f"v2 = \"Value{value}\""], where_and=[f"id = {value % self.groups_cnt}", f"k2 IS NOT NULL AND k2 <= {value % 5}"], where_or=[]),
-                self._q_select(where_and=[f"id = {value % self.groups_cnt}", f"k2 IS NOT NULL AND k2 <= {value % 5}"], where_or=[f"v1 != {value}", f"v2 != \"Value{value}\""])
+            where = f"id = {value % self.groups_cnt} AND k2 IS NOT NULL AND k2 <= {value % 5}"
+            self.assert_batch(
+                self.q_batch_update(f"v1 = {value}, v2 = \"String_{value}\"", where),
+                self.q_select(f"{where} AND (v1 != {value} OR v2 != \"String_{value}\")")
             )
 
             value += 1
 
     def test_batch_delete(self):
-        self._fill_table()
-
+        self.fill_table()
         value = 0
+
         for _ in self.roll():
-            self._assert_batch(
-                self._q_batch_delete(where_and=[f"id = {value % self.groups_cnt}"], where_or=[]),
-                self._q_select(where_and=[f"id = {value % self.groups_cnt}"], where_or=[])
+            where = f"id = {value % self.groups_cnt}"
+            self.assert_batch(
+                self.q_batch_delete(where),
+                self.q_select(where)
             )
 
             value += 1
 
-            self._assert_batch(
-                self._q_batch_delete(where_and=[f"id = {value % self.groups_cnt}", f"k2 IS NULL OR k2 >= {value % 5}"], where_or=[]),
-                self._q_select(where_and=[f"id = {value % self.groups_cnt}", f"k2 IS NULL OR k2 >= {value % 5}"], where_or=[])
+            where = f"id = {value % self.groups_cnt} AND (k2 IS NULL OR k2 >= {value % 5})"
+            self.assert_batch(
+                self.q_batch_delete(where),
+                self.q_select(where)
             )
 
             value += 1
 
-            self._assert_batch(
-                self._q_batch_delete(where_and=[], where_or=[f"id = {value % self.groups_cnt}", "k1 % 2 = 0"]),
-                self._q_select(where_and=[f"id = {value % self.groups_cnt} OR k1 % 2 = 0"], where_or=[])
+            where = f"id = {value % self.groups_cnt} OR k1 % 2 = 0"
+            self.assert_batch(
+                self.q_batch_delete(where),
+                self.q_select(where)
             )
 
             value += 1
 
-            self._assert_batch(
-                self._q_batch_delete(where_and=[]),
-                self._q_select(where_and=[], where_or=[])
+            self.assert_batch(
+                self.q_batch_delete(),
+                self.q_select()
             )
 
             value += 1
-            self._fill_table(False)
+            self.fill_table(False)
 
 
     # Create and fill the table
-    def _fill_table(self, create=True):
+    def fill_table(self, create=True):
         rows = []
         id_value = 0
 
@@ -100,12 +106,12 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             if create:
-                session_pool.execute_with_retries(self._q_create())
-            session_pool.execute_with_retries(self._q_upsert(rows))
+                session_pool.execute_with_retries(self.q_create())
+            session_pool.execute_with_retries(self.q_upsert(rows))
 
 
     # Execute BATCH query and check new updates
-    def _assert_batch(self, batch_query, select_query):
+    def assert_batch(self, batch_query, select_query):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(batch_query)
             result_sets = session_pool.execute_with_retries(select_query)
@@ -113,7 +119,7 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
 
 
     # Queries
-    def _q_create(self):
+    def q_create(self):
         return f"""
             CREATE TABLE `{self.table_name}` (
                 k1 Uint64 NOT NULL,
@@ -128,48 +134,24 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
             );
         """
 
-    def _q_upsert(self, rows):
+    def q_upsert(self, rows):
         return f"""
             UPSERT INTO `{self.table_name}` (k1, k2, v1, v2, id)
             VALUES {", ".join(["(" + ", ".join(map(str, row)) + ")" for row in rows])};
         """
 
-    def _q_batch_update(self, set, where_and, where_or):
-        where_list = []
-        if len(where_and) > 0:
-            where_list.append(" AND ".join(where_and))
-        if len(where_or) > 0:
-            where_list.append("(" + " OR ".join(where_or) + ")")
-        where = " AND ".join(where_list)
-
+    def q_batch_update(self, values, where=None):
         return f"""
             BATCH UPDATE `{self.table_name}`
-            SET {", ".join(set)}
-            {("WHERE " + where) if len(where) > 0 else ""};
+            SET {values}{(" WHERE " + where) if where else ""};
         """
 
-    def _q_batch_delete(self, where_and, where_or):
-        where_list = []
-        if len(where_and) > 0:
-            where_list.append(" AND ".join(where_and))
-        if len(where_or) > 0:
-            where_list.append("(" + " OR ".join(where_or) + ")")
-        where = " AND ".join(where_list)
-
+    def q_batch_delete(self, where=None):
         return f"""
-            BATCH DELETE FROM `{self.table_name}`
-            {("WHERE " + where) if len(where) > 0 else ""};
+            BATCH DELETE FROM `{self.table_name}`{(" WHERE " + where) if where else ""};
         """
 
-    def _q_select(self, where_and, where_or):
-        where_list = []
-        if len(where_and) > 0:
-            where_list.append(" AND ".join(where_and))
-        if len(where_or) > 0:
-            where_list.append("(" + " OR ".join(where_or) + ")")
-        where = " AND ".join(where_list)
-
+    def q_select(self, where=None):
         return f"""
-            SELECT COUNT(*) AS cnt FROM `{self.table_name}`
-            {("WHERE " + where) if len(where) > 0 else ""};
+            SELECT COUNT(*) AS cnt FROM `{self.table_name}`{(" WHERE " + where) if where else ""};
         """

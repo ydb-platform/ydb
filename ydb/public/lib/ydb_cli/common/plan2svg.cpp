@@ -677,7 +677,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     info = builder;
-                } else if (name == "TableFullScan") {
+                } else if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                     TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {
                         auto table = tableNode->GetStringSafe();
@@ -688,26 +688,24 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         builder << table;
                     }
                     builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
+
+                    if (name == "TableRangeScan") {
+                        builder << ": ";
+                        if (auto* readRangesNode = subNode.GetValueByPath("ReadRanges")) {
+                            bool firstRange = true;
+                            for (const auto& subNode : readRangesNode->GetArray()) {
+                                if (firstRange) {
+                                    firstRange = false;
+                                } else {
+                                    builder << ", ";
+                                }
+                                builder << subNode.GetStringSafe();
+                            }
+                        }
+                    }
+
                     info = builder;
                     externalOperator = true;
-                } else if (name == "TablePointLookup" || name == "TableRangeScan") {
-                    auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
-                    stage->Connections.push_back(connection);
-                    Stages.push_back(std::make_shared<TStage>(this, "External"));
-                    connection->FromStage = Stages.back();
-                    Stages.back()->External = true;
-                    TStringBuilder builder;
-                    if (auto* tableNode = subNode.GetValueByPath("Table")) {
-                        auto table = tableNode->GetStringSafe();
-                        auto n = table.find_last_of('/');
-                        if (n != table.npos) {
-                            table = table.substr(n + 1);
-                        }
-                        builder << table;
-                        info = table;
-                    }
-                    builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
-                    Stages.back()->Operators.emplace_back(name, builder);
                 } else if (name == "TopSort" || name == "Top") {
                     TStringBuilder builder;
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
@@ -790,7 +788,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
 
-                    if (name == "TableFullScan") {
+                    if (name == "TableFullScan" || name == "TableRangeScan") {
                         Y_ENSURE(externalOperator);
                         if (stage->IngressName) {
                             ythrow yexception() << "Plan stage already has Ingress [" << stage->IngressName << "]";

@@ -60,6 +60,7 @@ ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Ma
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
+ydb/core/viewer/tests test.py.test_scheme_directory
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_transfer_describe
 ydb/core/viewer/ut Viewer.TabletMerging

@@ -467,7 +467,7 @@ class LoadSuiteBase:
         """
         Собирает диагностическую информацию о нодах с кастомным временным интервалом.
         Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
-        
+
         Args:
             result: результат выполнения workload
             start_time: время начала интервала для диагностики
@@ -475,33 +475,33 @@ class LoadSuiteBase:
         """
         if cls.__nodes_state is None:
             return []
-        
+
         # Получаем все хосты из сохраненного состояния
         all_hosts = {node.host for node in cls.__nodes_state.values()}
-        
+
         # Собираем диагностическую информацию для всех хостов
         core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
         ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
-        
+
         # Создаем NodeErrors для каждой ноды с диагностической информацией
         node_errors = []
         for node in cls.__nodes_state.values():
             # Создаем NodeErrors только если есть coredump'ы или OOM
             has_cores = bool(core_hashes.get(node.slot, []))
             has_oom = node.host in ooms
-            
+
             if has_cores or has_oom:
                 node_error = NodeErrors(node, 'diagnostic info collected')
                 node_error.core_hashes = core_hashes.get(node.slot, [])
                 node_error.was_oom = has_oom
                 node_errors.append(node_error)
-                
+
                 # Добавляем ошибки в результат (cores и OOM - это errors)
                 if has_cores:
                     result.add_error(f'Node {node.slot} has {len(node_error.core_hashes)} coredump(s)')
                 if has_oom:
                     result.add_error(f'Node {node.slot} experienced OOM')
-        
+
         cls.__nodes_state = None
         return node_errors
 
@@ -538,27 +538,27 @@ class LoadSuiteBase:
 
         if result.stderr is not None:
             allure.attach(result.stderr, 'Workload stderr', attachment_type=allure.attachment_type.TEXT)
-        
+
         end_time = time()
-        
+
         # Собираем диагностическую информацию о нодах
         # Используем время начала workload (если доступно) для более точной диагностики
         diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
         node_errors = cls.check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
-        
+
         # Добавляем диагностическую информацию в статистику
         if node_errors:
             # Подсчитываем общую статистику по нодам
             total_coredumps = sum(len(node_error.core_hashes) for node_error in node_errors)
             nodes_with_oom = sum(1 for node_error in node_errors if node_error.was_oom)
             nodes_with_cores = sum(1 for node_error in node_errors if node_error.core_hashes)
-            
+
             # Добавляем в статистику результата
             result.add_stat(workload_name, "nodes_with_issues", len(node_errors))
             result.add_stat(workload_name, "total_coredumps", total_coredumps)
             result.add_stat(workload_name, "nodes_with_oom", nodes_with_oom)
             result.add_stat(workload_name, "nodes_with_coredumps", nodes_with_cores)
-            
+
             # Детальная информация по каждой ноде
             node_details = {}
             for node_error in node_errors:
@@ -569,7 +569,7 @@ class LoadSuiteBase:
                     "has_oom": node_error.was_oom,
                     "coredump_hashes": [core_hash for _, core_hash in node_error.core_hashes]
                 }
-            
+
             result.add_stat(workload_name, "node_diagnostics", node_details)
         else:
             # Если проблем не найдено, тоже добавляем в статистику
@@ -577,11 +577,11 @@ class LoadSuiteBase:
             result.add_stat(workload_name, "total_coredumps", 0)
             result.add_stat(workload_name, "nodes_with_oom", 0)
             result.add_stat(workload_name, "nodes_with_coredumps", 0)
-        
+
         # Собираем параметры workload из статистики
         stats = result.get_stats(workload_name)
         workload_params = {}
-        
+
         # Извлекаем полезные параметры из статистики
         if stats.get('total_runs'):
             workload_params['Total Runs'] = stats['total_runs']
@@ -595,33 +595,33 @@ class LoadSuiteBase:
             workload_params['Table Type'] = stats['table_type']
         if stats.get('path'):
             workload_params['Path'] = stats['path']
-        
+
         # Добавляем информацию в allure отчет с node_errors
         allure_test_description(
             cls.suite(), workload_name,
             start_time=result.start_time, end_time=end_time, node_errors=node_errors,
             workload_result=result, workload_params=workload_params
         )
-        
+
         # Логируем статистику для отладки
         logging.info(f"Workload {workload_name} statistics: {json.dumps(stats, indent=2)}")
-        
+
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
-        
+
         # Прикрепляем логи только при неуспешном выполнении
         if os.getenv('NO_KUBER_LOGS') is None and not result.success:
             cls.__attach_logs(start_time=result.start_time, attach_name='cluser', query_text='')
-        
+
         # Прикрепляем статистику
         allure.attach(json.dumps(stats, indent=2), 'Workload Stats', attachment_type=allure.attachment_type.JSON)
-        
+
         # Детальная информация об ошибках для диагностики
         if stats.get('errors') and any(stats['errors'].values()):
             error_details = []
             error_details.append(f"Error Summary from stats: {stats['errors']}")
-            
+
             if result.error_message:
                 error_details.append(f"Error Message: {result.error_message}")
             if result.warning_message:
@@ -630,21 +630,21 @@ class LoadSuiteBase:
                 error_details.append(f"Stderr: {result.stderr}")
             if result.stdout and "error" in result.stdout.lower():
                 error_details.append(f"Stdout (errors): {result.stdout}")
-                
+
             # Информация из iterations
             for iter_num, iteration in result.iterations.items():
                 if iteration.error_message:
                     error_details.append(f"Iteration {iter_num} error: {iteration.error_message}")
-            
+
             error_report = "\n\n".join(error_details)
             allure.attach(error_report, 'Detailed Error Information', attachment_type=allure.attachment_type.TEXT)
             logging.warning(f"Workload {workload_name} completed with errors: {error_report}")
-        
+
         # Дополнительная информация о диагностике нод
         if node_errors:
             node_diagnostics_details = []
             node_diagnostics_details.append(f"Found issues on {len(node_errors)} nodes:")
-            
+
             for node_error in node_errors:
                 node_info = [f"Node: {node_error.node.slot} (host: {node_error.node.host})"]
                 if node_error.core_hashes:
@@ -652,16 +652,16 @@ class LoadSuiteBase:
                     for core_id, core_hash in node_error.core_hashes:
                         node_info.append(f"    * ID: {core_id}, Hash: {core_hash}")
                 if node_error.was_oom:
-                    node_info.append(f"  - OOM detected")
+                    node_info.append("  - OOM detected")
                 node_diagnostics_details.append("\n".join(node_info))
-            
+
             diagnostics_report = "\n\n".join(node_diagnostics_details)
             allure.attach(diagnostics_report, 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
             logging.info(f"Node diagnostics for workload {workload_name}: {diagnostics_report}")
         else:
             allure.attach("No node issues detected during workload execution", 'Node Diagnostics Report', attachment_type=allure.attachment_type.TEXT)
             logging.info(f"No node issues detected for workload {workload_name}")
-        
+
         # Загружаем результаты если нужно
         if upload:
             ResultsProcessor.upload_results(
@@ -676,24 +676,24 @@ class LoadSuiteBase:
                 median_duration=_get_duraton(stats, 'Median'),
                 statistics=stats,
             )
-        
+
         # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
         if not result.success and result.error_message:
             # Создаем детальное сообщение об ошибке с контекстом
             error_details = []
-            
+
             # Основная ошибка
             error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
             error_details.append(f"Main error: {result.error_message}")
-            
+
             # Информация о выполненных итерациях
             if result.iterations:
-                error_details.append(f"\nExecution details:")
+                error_details.append("\nExecution details:")
                 error_details.append(f"Total iterations attempted: {len(result.iterations)}")
-                
+
                 failed_iterations = []
                 successful_iterations = []
-                
+
                 for iter_num, iteration in result.iterations.items():
                     if iteration.error_message:
                         failed_iterations.append({
@@ -703,20 +703,20 @@ class LoadSuiteBase:
                         })
                     else:
                         successful_iterations.append({
-                            'iteration': iter_num, 
+                            'iteration': iter_num,
                             'time': iteration.time
                         })
-                
+
                 if failed_iterations:
                     error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
                     for fail_info in failed_iterations:
                         error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
-                
+
                 if successful_iterations:
                     error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
                     for success_info in successful_iterations:
                         error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
-            
+
             # Добавляем stderr/stdout если есть полезная информация
             if result.stderr and result.stderr.strip():
                 # Берем последние 500 символов stderr для контекста
@@ -724,43 +724,43 @@ class LoadSuiteBase:
                 if len(stderr_preview) > 500:
                     stderr_preview = "..." + stderr_preview[-500:]
                 error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
-            
+
             if result.stdout and "error" in result.stdout.lower():
                 # Ищем строки с "error" в stdout
                 stdout_lines = result.stdout.split('\n')
                 error_lines = [line for line in stdout_lines if 'error' in line.lower()]
                 if error_lines:
-                    error_details.append(f"\nError lines from STDOUT:")
+                    error_details.append("\nError lines from STDOUT:")
                     for line in error_lines[:5]:  # Показываем максимум 5 строк
                         error_details.append(f"  {line.strip()}")
-            
+
             # Информация о статистике если есть
             stats = result.get_stats(workload_name)
             if stats:
                 if 'successful_runs' in stats and 'total_runs' in stats:
-                    error_details.append(f"\nRUN STATISTICS:")
+                    error_details.append("\nRUN STATISTICS:")
                     error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
                     if 'failed_runs' in stats:
                         error_details.append(f"  Failed runs: {stats['failed_runs']}")
                     if 'success_rate' in stats:
                         error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
-                
+
                 # Показываем информацию о deployment если есть
                 if any(key.startswith('deployment_') for key in stats.keys()):
                     deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
                     if deployment_info:
-                        error_details.append(f"\nDEPLOYMENT INFO:")
+                        error_details.append("\nDEPLOYMENT INFO:")
                         for key, value in deployment_info.items():
                             error_details.append(f"  {key}: {value}")
-            
+
             # Финальное сообщение
             detailed_error_message = "\n".join(error_details)
-            
+
             exc = pytest.fail.Exception(detailed_error_message)
             if result.traceback is not None:
                 exc = exc.with_traceback(result.traceback)
             raise exc
-        
+
         # Логируем предупреждения, но не падаем
         if result.warning_message:
             logging.warning(f"Workload completed with warnings: {result.warning_message}")

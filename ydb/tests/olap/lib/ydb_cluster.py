@@ -572,7 +572,6 @@ class YdbCluster:
                         for pid in pids_list:
                             check_cmd = f"kill -0 {pid}"
                             check_result = execute_command(node.host, check_cmd, raise_on_error=False)
-                            stdout_check = check_result.stdout
                             stderr_check = check_result.stderr
                             # kill -0 возвращает 0 если процесс существует
                             if "No such process" not in stderr_check:

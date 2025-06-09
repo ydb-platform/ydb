@@ -15,15 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 class ExecutionResult(NamedTuple):
-    """
-    Результат выполнения команды
-    
-    Attributes:
-        stdout: Стандартный вывод команды
-        stderr: Ошибки команды  
-        is_timeout: True если команда была прервана по таймауту
-        exit_code: Код завершения (если доступен)
-    """
+
     stdout: str
     stderr: str
     is_timeout: bool
@@ -68,8 +60,7 @@ class RemoteExecutor:
         filtered_lines = []
         for line in stderr.splitlines():
             if (
-                not line.startswith('Warning: Permanently added') and
-                not line.startswith('(!) New version of YDB CL')
+                not line.startswith('Warning: Permanently added') and not line.startswith('(!) New version of YDB CL')
             ):
                 filtered_lines.append(line)
 
@@ -267,12 +258,10 @@ class RemoteExecutor:
                           if hasattr(execution, 'std_err') and execution.std_err else "")
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-                
                 # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
                 if exit_code != 0 and not stderr.strip():
                     stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
                     LOGGER.warning(f"Local command failed with exit code {exit_code} but produced no stderr output on {host}")
-                
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
@@ -333,12 +322,10 @@ class RemoteExecutor:
                 stderr = cls._filter_ssh_warnings(stderr)
 
                 exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-                
                 # Если команда завершилась с ошибкой, но stderr пустой, добавляем синтетическое сообщение
                 if exit_code != 0 and not stderr.strip():
                     stderr = f"Command failed with exit code {exit_code}, but stderr is empty"
                     LOGGER.warning(f"SSH command failed with exit code {exit_code} but produced no stderr output on {host}")
-                
                 if exit_code != 0 and raise_on_error:
                     raise subprocess.CalledProcessError(exit_code, full_cmd, stdout, stderr)
 
@@ -398,7 +385,7 @@ def execute_command_legacy(
 ) -> Tuple[str, str]:
     """
     Backward compatibility функция для старого API
-    
+
     Args:
         host: имя хоста для выполнения команды
         cmd: команда для выполнения (строка или список)
@@ -489,7 +476,6 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
             import tempfile
             with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
                 temp_path = tmp_file.name
-            
             shutil.copy2(local_path, temp_path)
             execute_command("localhost", f"sudo mv {temp_path} {remote_path}")
             return f"Local copy with sudo successful: {remote_path}"
@@ -498,21 +484,21 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
         timestamp = int(time())
         filename = os.path.basename(local_path)
         tmp_path = f"/tmp/{filename}.{timestamp}.tmp"
-        
+
         # SCP в /tmp
         scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-        
+
         ssh_user = os.getenv('SSH_USER')
         scp_host = f"{ssh_user}@{host}" if ssh_user else host
-        
+
         ssh_key_file = os.getenv('SSH_KEY_FILE')
         if ssh_key_file:
             scp_cmd += ['-i', ssh_key_file]
-        
+
         scp_cmd += [local_path, f"{scp_host}:{tmp_path}"]
-        
-        execution = yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
-        
+
+        yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
+
         # Перемещаем из /tmp в целевое место
         execute_command(host, f"sudo mv {tmp_path} {remote_path}")
         return f"SCP copy successful: {remote_path}"
@@ -533,20 +519,20 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
     """
     binary_name = os.path.basename(local_path)
     target_path = os.path.join(target_dir, binary_name)
-    
+
     try:
         # Создаем директорию
         ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
-        
+
         # Копируем файл
         copy_result = copy_file(local_path, host, target_path)
         if copy_result is None:
             raise Exception("File copy failed")
-        
+
         # Делаем исполняемым
         if make_executable:
             execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=False)
-        
+
         return {
             'name': binary_name,
             'path': target_path,
@@ -580,24 +566,23 @@ def deploy_binaries_to_hosts(
         Dict: словарь с результатами деплоя по хостам
     """
     results = {}
-    
+
     for host in set(hosts):  # Автоматическое удаление дубликатов
         host_results = {}
-        
+
         # Создаем директорию на хосте один раз
         ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
-        
+
         # Копируем каждый бинарный файл
         for binary_file in binary_files:
             result = deploy_binary(binary_file, host, target_dir)
             host_results[os.path.basename(binary_file)] = result
-            
             # Логируем только критичные события
             if not result['success']:
                 LOGGER.error(f"Failed to deploy {result['name']} to {host}: {result.get('error', 'Unknown error')}")
-        
+
         results[host] = host_results
-    
+
     return results
 
 
@@ -606,7 +591,7 @@ def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp
     Исправляет права доступа к директории binaries на всех указанных хостах
     """
     results = {}
-    
+
     for host in hosts:
         try:
             success = ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
@@ -616,5 +601,5 @@ def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp
         except Exception as e:
             LOGGER.error(f"Error fixing permissions on {host}: {e}")
             results[host] = False
-    
+
     return results

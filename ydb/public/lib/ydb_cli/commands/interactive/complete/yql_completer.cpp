@@ -79,7 +79,9 @@ namespace NYdb::NConsoleClient {
         replxx::Replxx::Completion ReplxxCompletionOf(NSQLComplete::TCandidate candidate) const {
             const auto back = candidate.Content.back();
             if (
-                !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName || candidate.Kind == NSQLComplete::ECandidateKind::TableName) && (!IsLeftPunct(back) && back != '<' || IsQuotation(back))) {
+                !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName ||
+                  (candidate.Kind == NSQLComplete::ECandidateKind::TableName) &&
+                      (!IsLeftPunct(back) && back != '<' || IsQuotation(back)))) {
                 candidate.Content += ' ';
             }
 

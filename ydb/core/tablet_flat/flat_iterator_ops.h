@@ -13,16 +13,7 @@ struct TTableIterOps {
             TArrayRef<const TCell> a,
             TArrayRef<const TCell> b)
     {
-        if (int cmp = CompareTypedCellVectors(a.data(), b.data(), types.data(), Min(a.size(), b.size()))) {
-            return cmp;
-        }
-
-        if (a.size() != b.size()) {
-            // smaller key is filled with +inf => always bigger
-            return a.size() < b.size() ? +1 : -1;
-        }
-
-        return 0;
+        return NKikimr::CompareKeys(a, b, types);
     }
 
     static inline void MoveNext(TMemIter& it) {

@@ -4,4 +4,5 @@ END()
 
 RECURSE(
     global
+    local
 )

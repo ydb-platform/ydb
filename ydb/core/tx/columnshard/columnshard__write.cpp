@@ -14,7 +14,7 @@
 #include "transactions/operators/ev_write/sync.h"
 
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/data_events/events.h>
 
 namespace NKikimr::NColumnShard {
@@ -297,7 +297,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             Counters.GetCSCounters().WritingCounters, GetLastTxSnapshot(), std::make_shared<TAtomicCounter>(1), true,
             BufferizationInsertionWriteActorId, BufferizationPortionsWriteActorId);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
-        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
+        NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
     }
 }
 

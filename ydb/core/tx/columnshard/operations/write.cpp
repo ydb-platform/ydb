@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -31,14 +32,14 @@ void TWriteOperation::Start(
     TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
-    auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>((ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier(),
-        context.GetWritingCounters()->GetWriteFlowCounters());
+    auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>(
+        (ui64)WriteId, GetPathId(), source, GranuleShardingVersionId, GetIdentifier(), context.GetWritingCounters()->GetWriteFlowCounters());
     writeMeta->SetLockId(LockId);
     writeMeta->SetModificationType(ModificationType);
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
         owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR), WritePortions);
     std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
-    NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+    NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
 
     Status = EOperationStatus::Started;
 }
@@ -138,7 +139,8 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
         owner.InsertTable->Abort(dbTable, writeIds);
     } else {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(txc, i, owner.GetCurrentSnapshotForInternalModification());
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnExecute(
+                txc, i, owner.GetCurrentSnapshotForInternalModification());
         }
     }
 }

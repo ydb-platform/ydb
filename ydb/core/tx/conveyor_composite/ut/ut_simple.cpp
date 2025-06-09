@@ -105,14 +105,14 @@ private:
     }
     virtual void DoAddTask(NActors::TActorSystem& actorSystem, const NActors::TActorId distributorId) override {
         actorSystem.Send(distributorId,
-            new TEvExecution::TEvNewTask(std::make_shared<TSleepTask>(TDuration::MicroSeconds(40), Counter), Category, ScopeId, ProcessId));
+            new TEvExecution::TEvNewTask(std::make_shared<TSleepTask>(TDuration::MicroSeconds(40), Counter), Category, ProcessId));
         CounterTasks.Inc();
     }
     virtual bool DoCheckFinished() override {
         return CounterTasks.Val() == Counter.Val();
     }
     virtual void DoFinish(NActors::TActorSystem& actorSystem, const NActors::TActorId distributorId, const TDuration /*d*/) override {
-        actorSystem.Send(distributorId, new TEvExecution::TEvUnregisterProcess(Category, ScopeId, ProcessId));
+        actorSystem.Send(distributorId, new TEvExecution::TEvUnregisterProcess(Category, ProcessId));
     }
 
 public:
@@ -346,8 +346,8 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         }
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
             return { std::make_shared<TSimpleRequest>("1", ESpecialTaskCategory::Insert, "1", 1),
-                std::make_shared<TSimpleRequest>("2", ESpecialTaskCategory::Insert, "2", 1),
-                std::make_shared<TSimpleRequest>("3", ESpecialTaskCategory::Insert, "3", 1) };
+                std::make_shared<TSimpleRequest>("2", ESpecialTaskCategory::Insert, "2", 2),
+                std::make_shared<TSimpleRequest>("3", ESpecialTaskCategory::Insert, "3", 3) };
         }
 
     public:
@@ -396,23 +396,23 @@ Y_UNIT_TEST_SUITE(CompositeConveyorTests) {
         virtual std::vector<std::shared_ptr<IRequestProcessor>> GetRequests() override {
             return { 
                 std::make_shared<TSimpleRequest>("I_1_1", ESpecialTaskCategory::Insert, "1", 1),
-                std::make_shared<TSimpleRequest>("I_2_1", ESpecialTaskCategory::Insert, "2", 1),
-                std::make_shared<TSimpleRequest>("I_3_1", ESpecialTaskCategory::Insert, "3", 1),
-                std::make_shared<TSimpleRequest>("S_1_1", ESpecialTaskCategory::Scan, "1", 1),
-                std::make_shared<TSimpleRequest>("S_2_1", ESpecialTaskCategory::Scan, "2", 1),
-                std::make_shared<TSimpleRequest>("S_3_1", ESpecialTaskCategory::Scan, "3", 1),
-                std::make_shared<TSimpleRequest>("N_1_1", ESpecialTaskCategory::Normalizer, "1", 1),
-                std::make_shared<TSimpleRequest>("N_2_1", ESpecialTaskCategory::Normalizer, "2", 1),
-                std::make_shared<TSimpleRequest>("N_3_1", ESpecialTaskCategory::Normalizer, "3", 1),
-                std::make_shared<TSimpleRequest>("I_1_2", ESpecialTaskCategory::Insert, "1", 2),
-                std::make_shared<TSimpleRequest>("I_2_2", ESpecialTaskCategory::Insert, "2", 2),
-                std::make_shared<TSimpleRequest>("I_3_2", ESpecialTaskCategory::Insert, "3", 2),
-                std::make_shared<TSimpleRequest>("S_1_2", ESpecialTaskCategory::Scan, "1", 2),
-                std::make_shared<TSimpleRequest>("S_2_2", ESpecialTaskCategory::Scan, "2", 2),
-                std::make_shared<TSimpleRequest>("S_3_2", ESpecialTaskCategory::Scan, "3", 2),
-                std::make_shared<TSimpleRequest>("N_1_2", ESpecialTaskCategory::Normalizer, "1", 2),
-                std::make_shared<TSimpleRequest>("N_2_2", ESpecialTaskCategory::Normalizer, "2", 2),
-                std::make_shared<TSimpleRequest>("N_3_2", ESpecialTaskCategory::Normalizer, "3", 2)
+                std::make_shared<TSimpleRequest>("I_2_1", ESpecialTaskCategory::Insert, "2", 2),
+                std::make_shared<TSimpleRequest>("I_3_1", ESpecialTaskCategory::Insert, "3", 3),
+                std::make_shared<TSimpleRequest>("S_1_1", ESpecialTaskCategory::Scan, "1", 4),
+                std::make_shared<TSimpleRequest>("S_2_1", ESpecialTaskCategory::Scan, "2", 5),
+                std::make_shared<TSimpleRequest>("S_3_1", ESpecialTaskCategory::Scan, "3", 6),
+                std::make_shared<TSimpleRequest>("N_1_1", ESpecialTaskCategory::Normalizer, "1", 7),
+                std::make_shared<TSimpleRequest>("N_2_1", ESpecialTaskCategory::Normalizer, "2", 8),
+                std::make_shared<TSimpleRequest>("N_3_1", ESpecialTaskCategory::Normalizer, "3", 9),
+                std::make_shared<TSimpleRequest>("I_1_2", ESpecialTaskCategory::Insert, "1", 21),
+                std::make_shared<TSimpleRequest>("I_2_2", ESpecialTaskCategory::Insert, "2", 22),
+                std::make_shared<TSimpleRequest>("I_3_2", ESpecialTaskCategory::Insert, "3", 23),
+                std::make_shared<TSimpleRequest>("S_1_2", ESpecialTaskCategory::Scan, "1", 24),
+                std::make_shared<TSimpleRequest>("S_2_2", ESpecialTaskCategory::Scan, "2", 25),
+                std::make_shared<TSimpleRequest>("S_3_2", ESpecialTaskCategory::Scan, "3", 26),
+                std::make_shared<TSimpleRequest>("N_1_2", ESpecialTaskCategory::Normalizer, "1", 27),
+                std::make_shared<TSimpleRequest>("N_2_2", ESpecialTaskCategory::Normalizer, "2", 28),
+                std::make_shared<TSimpleRequest>("N_3_2", ESpecialTaskCategory::Normalizer, "3", 29)
             };
         }
 

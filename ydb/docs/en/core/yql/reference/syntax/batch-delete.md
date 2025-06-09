@@ -13,7 +13,7 @@ This query, like the standard `DELETE`, is executed synchronously and completes 
 The semantics are inherited from the standard `DELETE` with the following restrictions:
 
 * Supported only for [row-oriented tables](../../../concepts/glossary.md#row-oriented-table).
-* Supported only for transactions in the `NoTx` mode.
+* Supported only for the implicit transaction control.
 * The use of subqueries and multiple queries in a single expression, including `DELETE FROM ... ON`, is prohibited.
 * The `RETURNING` keyword is unavailable.
 

@@ -9,6 +9,9 @@ on:
       commit_sha:
         type: string
         default: ""
+  push:
+    tags:
+      - '[0-9]**'
 jobs:
   build_and_test:
     strategy:

@@ -4012,7 +4012,7 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 {
     auto hasWriteOperation = [](const auto& txBody) {
         for (const auto& o : txBody.GetOperations()) {
-            if (!IsWriteTxOperation(o)) {
+            if (IsWriteTxOperation(o)) {
                 return true;
             }
         }

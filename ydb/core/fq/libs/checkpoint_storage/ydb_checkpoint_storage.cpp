@@ -678,7 +678,9 @@ TCheckpointStorage::TCheckpointStorage(
     , EntityIdGenerator(entityIdGenerator)
 {
     TDuration ttl;
-    if (TDuration::TryParse(Config.GetCheckpointsTtl(), ttl)) {
+    if (!TDuration::TryParse(Config.GetCheckpointsTtl(), ttl)) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to parse CheckpointsTtl: '" << Config.GetCheckpointsTtl() << "'");
+    } else {
         CheckpointsTtl = ttl;
     }
 }

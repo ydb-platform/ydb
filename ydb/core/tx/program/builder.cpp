@@ -20,8 +20,8 @@ namespace NKikimr::NArrow::NSSA {
 TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const TColumnInfo& name,
     const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::shared_ptr<NArrow::NSSA::IKernelLogic>& kernelLogic,
     std::vector<TColumnChainInfo>& arguments) const {
-    if (func.GetKernelName()) {
-        kernelLogic.reset(IKernelLogic::TFactory::Construct(func.GetKernelName()));
+    if (const auto& kernelName = func.GetKernelName(); !kernelName.empty()) {
+        kernelLogic.reset(IKernelLogic::TFactory::Construct(kernelName));
     } else if (func.HasYqlOperationId()) {
         kernelLogic = std::make_shared<TSimpleKernelLogic>(func.GetYqlOperationId());
     } else {

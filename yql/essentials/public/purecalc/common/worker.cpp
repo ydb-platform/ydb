@@ -45,7 +45,8 @@ TWorkerGraph::TWorkerGraph(
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
-    TLangVersion langver
+    TLangVersion langver,
+    bool insideEvaluation
 )
     : ScopedAlloc_(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
     , Env_(ScopedAlloc_)
@@ -127,7 +128,7 @@ TWorkerGraph::TWorkerGraph(
     };
 
     NKikimr::NMiniKQL::TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), Env_);
+    explorer.Walk(rootNode.GetNode(), Env_.GetNodeStack());
 
     auto compositeNodeFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(
         {NKikimr::NMiniKQL::GetYqlFactory(), NYql::GetPgFactory()}
@@ -137,6 +138,10 @@ TWorkerGraph::TWorkerGraph(
         NKikimr::NMiniKQL::TCallable& callable, const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx
         ) -> NKikimr::NMiniKQL::IComputationNode* {
         if (selfCallableNames.contains(callable.GetType()->GetNameStr())) {
+            if (insideEvaluation) {
+                throw TErrorException(0) << "Inputs aren't available during evaluation";
+            }
+
             YQL_ENSURE(callable.GetInputsCount() == 1, "Self takes exactly 1 argument");
             const auto inputIndex = AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, callable.GetInput(0))->AsValue().Get<ui32>();
             YQL_ENSURE(inputIndex < inputsCount, "Self index is out of range");
@@ -206,7 +211,7 @@ TWorker<TBase>::TWorker(
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
          inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver)
+         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false)
 {
 }
 

@@ -158,6 +158,13 @@ void FillKqpTasksGraphStages(TKqpTasksGraph& tasksGraph, const TVector<IKqpGatew
                     if (settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
                         meta.TableId = MakeTableId(settings.GetTable());
                         meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
+
+                        for (const auto& indexSettings : settings.GetIndexes()) {
+                            meta.IndexMetas.emplace_back();
+                            meta.IndexMetas.back().TableId = MakeTableId(indexSettings.GetTable());
+                            meta.IndexMetas.back().TablePath = indexSettings.GetTable().GetPath();
+                            meta.IndexMetas.back().TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.IndexMetas.back().TableId);
+                        }
                     }
                 }
             }
@@ -493,6 +500,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                 break;
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
                 ui32 hashKind = NHashKind::EUndefined;
+                auto forceSpilling = input.GetHashShuffle().GetUseSpilling();
                 switch (input.GetHashShuffle().GetHashKindCase()) {
                     case NKqpProto::TKqpPhyCnHashShuffle::kHashV1: {
                         hashKind = NHashKind::EHashV1;
@@ -536,7 +544,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                     input.GetHashShuffle().GetKeyColumns(),
                     enableSpilling,
                     log,
-                    hashKind
+                    hashKind,
+                    forceSpilling
                 );
                 break;
             }
@@ -937,6 +946,9 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta protoTaskMeta;
 
         FillTableMeta(stageInfo, protoTaskMeta.MutableTable());
+        if (stageInfo.Meta.TableConstInfo->SysViewType) {
+            protoTaskMeta.MutableTable()->SetSysViewType(*stageInfo.Meta.TableConstInfo->SysViewType);
+        }
 
         const auto& tableInfo = stageInfo.Meta.TableConstInfo;
 

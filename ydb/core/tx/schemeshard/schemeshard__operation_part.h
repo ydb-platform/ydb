@@ -359,8 +359,8 @@ ISubOperation::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, co
 ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx,
-    const THashSet<TString>& localSequences = { });
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state);
+    const THashSet<TString>& localSequences = { }, TMaybe<TPathElement::EPathState> targetState = {});
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state);
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateAlterTable(TOperationId id, const TTxTransaction& tx);
@@ -675,6 +675,14 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+
+// SysView
+// Create
+ISubOperation::TPtr CreateNewSysView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewSysView(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropSysView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropSysView(TOperationId id, TTxState::ETxState state);
 
 }
 }

@@ -86,7 +86,10 @@ message TRequestHeader
      * allow_resolve_from_sequoia_object    118
      * resolve_depth                        119
      * ssl_credentials_ext                  120
+     * request_peer_kind_ext                121
      * caused_by_node_expiration            124
+     * multiproxy_target_ext                125
+     * target_master_peer_ext               126
      * req_execute_ext                      200
      * req_multiread_ext                    201
      */
@@ -135,6 +138,16 @@ message TCustomMetadataExt
     }
 
     map<string, bytes> entries = 1;
+}
+
+message TMultiproxyTargetExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TMultiproxyTargetExt multiproxy_target_ext = 125;
+    }
+
+    optional string cluster = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -42,22 +42,22 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
         for (auto& portionBuilder : AppendedPortions) {
             auto& portionInfo = portionBuilder.GetPortionResult();
             sb << portionInfo.GetPortionInfo().GetPortionId() << ",";
-            switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
-                case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
+            switch (portionInfo.GetPortionInfo().GetProduced()) {
+                case NOlap::NPortion::EProduced::UNSPECIFIED:
                     Y_ABORT_UNLESS(false);   // unexpected
-                case NOlap::TPortionMeta::EProduced::INSERTED:
+                case NOlap::NPortion::EProduced::INSERTED:
                     self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_INDEXING_PORTIONS_WRITTEN);
                     break;
-                case NOlap::TPortionMeta::EProduced::COMPACTED:
+                case NOlap::NPortion::EProduced::COMPACTED:
                     self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_COMPACTION_PORTIONS_WRITTEN);
                     break;
-                case NOlap::TPortionMeta::EProduced::SPLIT_COMPACTED:
+                case NOlap::NPortion::EProduced::SPLIT_COMPACTED:
                     self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SPLIT_COMPACTION_PORTIONS_WRITTEN);
                     break;
-                case NOlap::TPortionMeta::EProduced::EVICTED:
-                    Y_ABORT("Unexpected evicted case");
+                case NOlap::NPortion::EProduced::EVICTED:
+                    self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_EVICTION_PORTIONS_WRITTEN);
                     break;
-                case NOlap::TPortionMeta::EProduced::INACTIVE:
+                case NOlap::NPortion::EProduced::INACTIVE:
                     Y_ABORT("Unexpected inactive case");
                     break;
             }
@@ -79,15 +79,14 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     AFL_VERIFY(PortionsToRemove.GetSize() + PortionsToMove.GetSize() + AppendedPortions.size() || NoAppendIsCorrect);
     for (auto&& i : AppendedPortions) {
-        i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(context.NextPortionId());
-        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(PortionsToMove.GetTargetCompactionLevel().value_or(0));
+        auto& constructor = i.GetPortionConstructor().MutablePortionConstructor();
+        constructor.SetPortionId(context.NextPortionId());
+        constructor.MutableMeta().SetCompactionLevel(GetPortionsToMove().GetTargetCompactionLevel().value_or(0));
     }
 }
 
 void TChangesWithAppend::DoOnAfterCompile() {
     for (auto&& i : AppendedPortions) {
-        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(
-            PortionsToMove.GetTargetCompactionLevel().value_or(0));
         i.FinalizePortionConstructor();
     }
 }

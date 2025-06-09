@@ -1,11 +1,12 @@
 name: Create issues for muted tests
 
 on:
-  pull_request_target:
-    types: [review_submitted]
+  pull_request_review:
+    types:
+      - submitted
     branches:
       - main
-      - 'stable*'
+      - 'stable-*'
   workflow_dispatch:
     inputs:
         pr_number: 
@@ -21,7 +22,7 @@ jobs:
   create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
-        (github.event_name == 'pull_request_target' && 
+        (github.event_name == 'pull_request_review' && 
         github.event.review.state == 'approved' && 
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) || 
         github.event_name == 'workflow_dispatch'

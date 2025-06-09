@@ -90,19 +90,24 @@ class TestYdbWorkload(object):
     @link_test_case("#13529")
     def test(self):
         """As per https://github.com/ydb-platform/ydb/issues/13529"""
-        self.database_name = '/Root'
+        self.database_name = os.path.join('/Root', 'test')
+        self.cluster.create_database(
+            self.database_name,
+            storage_pool_units_count={
+                'hdd': 1
+            },
+        )
+        self.cluster.register_and_start_slots(self.database_name, count=1)
+        self.cluster.wait_tenant_up(self.database_name)
+        self.alter_database_quotas(self.cluster.nodes[1], self.database_name, """
+            data_size_hard_quota: 40000000
+            data_size_soft_quota: 40000000
+        """)
         session = self.make_session()
 
         # Overflow the database
         self.create_test_table(session, 'huge')
         self.upsert_until_overload(lambda i: self.upsert_test_chunk(session, 'huge', i, retries=0))
-
-        # Cleanup
-        session.execute_with_retries("""DROP TABLE huge""")
-
-        # Check database health after cleanup
-        self.create_test_table(session, 'small')
-        self.upsert_test_chunk(session, 'small', 0)
 
     def delete_test_chunk(self, session, table, chunk_id, retries=10):
         session.execute_with_retries(f"""
@@ -235,4 +240,4 @@ class TestYdbWorkload(object):
         # Overflow the database
         self.upsert_until_overload(lambda i: self.upsert_test_chunk(session, table_path, 0, retries=0), timeout_seconds=200)
 
-        assert self.wait_for(lambda: self.try_upsert_test_chunk(session, table_path, 1), 200), "can't write after overload by duplicates"
+        assert self.wait_for(lambda: self.try_upsert_test_chunk(session, table_path, 1), 300), "can't write after overload by duplicates"

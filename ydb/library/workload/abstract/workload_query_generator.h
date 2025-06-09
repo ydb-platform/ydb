@@ -29,6 +29,7 @@ struct TQueryInfo {
 
     std::string Query;
     std::string ExpectedResult;
+    std::string QueryName;
     NYdb::TParams Params;
     bool UseReadRows = false;
     bool UseStaleRO = false;
@@ -177,7 +178,11 @@ public:
         return {};
     }
     virtual TString GetWorkloadName() const = 0;
+    virtual TString GetDescription(ECommandType /*commandType*/, int /*workloadType*/) const {
+        return TString();
+    }
 
+    virtual void Validate(const ECommandType /*commandType*/, int /*workloadType*/) {};
 public:
     ui64 BulkSize = 10000;
     std::string DbPath;

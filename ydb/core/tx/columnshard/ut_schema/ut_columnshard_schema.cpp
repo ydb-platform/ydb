@@ -102,7 +102,7 @@ bool TriggerMetadata(
 }
 
 
-std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
+std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const std::optional<TString>& columnToUpdate,
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema) {
     UNIT_ASSERT(ts.size() > 0);
 
@@ -115,7 +115,9 @@ std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui3
     data.reserve(ts.size());
     for (size_t i = 0; i < ts.size(); ++i) {
         auto batch = testBatch->Slice((portionSize - overlapSize) * i, portionSize);
-        batch = UpdateColumn(batch, ttlColumnName, ts[i]);
+        if (columnToUpdate) {
+           batch = UpdateColumn(batch, *columnToUpdate, ts[i]);
+        }
         data.emplace_back(NArrow::SerializeBatchNoCompression(batch));
     }
 
@@ -183,7 +185,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool writ
     const auto ttlAllDataStale = TDuration::Seconds(now - lastTs) - TDuration::Days(1);
 
 
-    TTestSchema::TTableSpecials spec;
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(writePortionsOnInsert);
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = ttlAllDataFresh;
     auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk, spec, "/Root/olapStore"), ++txId);
@@ -650,7 +652,7 @@ public:
         TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
         TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
 
-        std::vector<TTestSchema::TTableSpecials> alters = { TTestSchema::TTableSpecials() };
+        std::vector<TTestSchema::TTableSpecials> alters = { TTestSchema::TTableSpecials().WithForcedCompaction(spec.GetUseForcedCompaction()) };
         AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
         return alters;
     }
@@ -745,7 +747,7 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
     TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
 
-    std::vector<TTestSchema::TTableSpecials> alters = { InitialSpec(init, allowBoth) };
+    std::vector<TTestSchema::TTableSpecials> alters = { InitialSpec(init, allowBoth).WithForcedCompaction(true) };
     size_t initialEviction = alters.size();
 
     TEvictionChanges changes;
@@ -769,11 +771,10 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     return rowsBytes;
 }
 
-std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec,
-                                                    const std::vector<TTestSchema::TTableSpecials>& alters,
+std::vector<std::pair<ui32, ui64>> TestOneTierExport(const std::optional<TString>& columnToUpdateWithTs, const std::vector<TTestSchema::TTableSpecials>& alters,
                                                     const std::vector<ui64>& ts, bool reboots, std::optional<ui32> loss, const bool buildTTL = true) {
     ui32 overlapSize = 0;
-    std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, spec.TtlColumn);
+    std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, columnToUpdateWithTs);
 
     auto rowsBytes = TestTiers(reboots, blobs, alters, loss, buildTTL);
     for (auto&& i : rowsBytes) {
@@ -821,7 +822,7 @@ void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial
 }
 
 void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
-    TTestSchema::TTableSpecials spec;
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(true);
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier1").SetTtlColumn("timestamp"));
@@ -836,7 +837,7 @@ struct TExportTestOpts {
 };
 
 void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
-    TTestSchema::TTableSpecials spec;
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(true);
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
@@ -859,7 +860,7 @@ void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
         alters[alterNo].Tiers.clear();
     }
 
-    auto rowsBytes = TestOneTierExport(spec, alters, ts, reboot, opts.Loss, !opts.Misconfig);
+    auto rowsBytes = TestOneTierExport(opts.Misconfig == 2 ? std::optional<TString>{} : spec.GetTtlColumn(), alters, ts, reboot, opts.Loss, !opts.Misconfig);
     if (!opts.Misconfig) {
         changes.Assert(spec, rowsBytes, 1);
     }

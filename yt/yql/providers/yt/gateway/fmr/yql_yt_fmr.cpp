@@ -134,6 +134,7 @@ public:
                 TString sessionId = options.SessionId();
                 auto config = options.Config();
                 TRunResult result;
+                YQL_ENSURE(fmrOperationResult.TablesStats.size() == outputTables.size());
                 for (size_t i = 0; i < outputTables.size(); ++i) {
                     auto outputTable = outputTables[i];
                     TFmrTableId fmrOutputTableId = {outputTable.Cluster, outputTable.Path};
@@ -268,7 +269,7 @@ private:
     }
 
     TString GetRealTablePath(const TString& sessionId, const TString& cluster, const TString& path, TYtSettings::TConstPtr& config) {
-        auto richPath = Slave_->GetWriteTable(sessionId, cluster, path, GetTablesTmpFolder(*config));
+        auto richPath = Slave_->GetWriteTable(sessionId, cluster, path, GetTablesTmpFolder(*config, cluster));
         return richPath.Path_;
     }
 

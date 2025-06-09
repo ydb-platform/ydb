@@ -77,12 +77,17 @@ YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 
 template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true>& setting, const TString& cluster) {
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::StaticPerCluster>& setting, const TString& cluster) {
     return setting.Get(cluster);
 }
 
 template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false>& setting, const TString& cluster) {
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::Dynamic>& setting, const TString& cluster) {
+    return setting.Get(cluster);
+}
+
+template<typename TType>
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>& setting, const TString& cluster) {
     Y_UNUSED(cluster);
     return setting.Get();
 }
@@ -120,20 +125,21 @@ public:
         virtual void FreezeDefault() = 0;
         virtual void Restore(const TString& cluster) = 0;
         virtual bool IsRuntime() const = 0;
+        virtual bool IsPerCluster() const = 0;
 
     protected:
         TString Name_;
     };
 
-    template <typename TType, bool RUNTIME>
-    class TSettingHandlerImpl: public TSettingHandler {
+    template <typename TType, EConfSettingType SettingType>
+    class TSettingHandlerImpl : public TSettingHandler {
     public:
         using TValueCallback = std::function<void(const TString&, TType)>;
 
     private:
         friend class TSettingDispatcher;
 
-        TSettingHandlerImpl(const TString& name, TConfSetting<TType, RUNTIME>& setting)
+        TSettingHandlerImpl(const TString& name, TConfSetting<TType, SettingType>& setting)
             : TSettingHandler(name)
             , Setting_(setting)
             , Parser_(::NYql::NPrivate::GetDefaultParser<TType>())
@@ -192,6 +198,10 @@ public:
     public:
         bool IsRuntime() const override {
             return Setting_.IsRuntime();
+        }
+
+        bool IsPerCluster() const override {
+            return Setting_.IsPerCluster();
         }
 
         TSettingHandlerImpl& Lower(TType lower) {
@@ -312,8 +322,8 @@ public:
         }
 
     private:
-        TConfSetting<TType, RUNTIME>& Setting_;
-        TMaybe<TConfSetting<TType, RUNTIME>> Defaul_;
+        TConfSetting<TType, SettingType>& Setting_;
+        TMaybe<TConfSetting<TType, SettingType>> Defaul_;
         ::NYql::NPrivate::TParser<TType> Parser_;
         TValueCallback ValueSetter_;
         TVector<TValueCallback> Validators_;
@@ -339,9 +349,9 @@ public:
         ValidClusters.insert(cluster);
     }
 
-    template <typename TType, bool RUNTIME>
-    TSettingHandlerImpl<TType, RUNTIME>& AddSetting(const TString& name, TConfSetting<TType, RUNTIME>& setting) {
-        TIntrusivePtr<TSettingHandlerImpl<TType, RUNTIME>> handler = new TSettingHandlerImpl<TType, RUNTIME>(name, setting);
+    template <typename TType, EConfSettingType SettingType>
+    TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
+        TIntrusivePtr<TSettingHandlerImpl<TType, SettingType>> handler = new TSettingHandlerImpl<TType, SettingType>(name, setting);
         if (!Handlers.insert({NormalizeName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }

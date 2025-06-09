@@ -460,3 +460,39 @@ def test_mem_only_metrics():
             bucket_count=5,
             base=2
         )
+
+
+def test_prometheus_conversion(request):
+    JSON_METRICS = """{
+      "sensors":
+        [
+          {
+            "kind":"GAUGE",
+            "labels":
+              {
+                "name":"gauge-metric"
+              },
+            "value":10
+          },
+          {
+            "kind":"RATE",
+            "labels":
+              {
+                "name":"rate-metric"
+              },
+            "value":20
+          }
+        ]
+    }"""
+    EXPECTED = "\n".join(
+        [
+            "# TYPE gauge_metric gauge",
+            "gauge_metric 10",
+            "# TYPE rate_metric counter",
+            "rate_metric 20",
+            "",
+            "",
+        ]
+    ).encode('utf-8')
+    result = loads(JSON_METRICS, from_format='json', to_format='prometheus', metric_name_label='name')
+    assert result == EXPECTED

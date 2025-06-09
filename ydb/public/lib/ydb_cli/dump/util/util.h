@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/cms/cms.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
@@ -41,6 +42,8 @@ inline TResult Result(const TString& path, TStatus&& status) {
 }
 
 TStatus DescribeTable(NTable::TTableClient& tableClient, const TString& path, TMaybe<NTable::TTableDescription>& out);
+TStatus DescribeExternalDataSource(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out);
+TStatus DescribeReplication(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TReplicationDescription>& out);
 
 NScheme::TDescribePathResult DescribePath(
     NScheme::TSchemeClient& schemeClient,

@@ -217,7 +217,7 @@ private:
         }
     }
 
-    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TString& path, const TString& statement) {
+    void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TString& path, const TString& createQuery) {
         TVector<TCell> cells;
         for (auto column : Columns) {
             switch (column.Tag) {
@@ -229,8 +229,8 @@ private:
                     cells.emplace_back(TCell(PathType.data(), PathType.size()));
                     break;
                 }
-                case Schema::ShowCreate::Statement::ColumnId: {
-                    cells.emplace_back(TCell(statement.data(), statement.size()));
+                case Schema::ShowCreate::CreateQuery::ColumnId: {
+                    cells.emplace_back(TCell(createQuery.data(), createQuery.size()));
                     break;
                 }
                 default:
@@ -249,7 +249,7 @@ private:
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         std::optional<TString> path;
-        std::optional<TString> statement;
+        std::optional<TString> createQuery;
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
@@ -292,7 +292,7 @@ private:
                         auto formatterResult = formatter.Format(tablePath, Path, tableDesc, temporary, {}, {});
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
-                            statement = formatterResult.ExtractOut();
+                            createQuery = formatterResult.ExtractOut();
                         } else {
                             ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                             return;
@@ -313,10 +313,10 @@ private:
                         }
 
                         TCreateTableFormatter formatter;
-                        auto formatterResult = formatter.Format(tablePath, columnTableDesc, temporary);
+                        auto formatterResult = formatter.Format(tablePath, Path, columnTableDesc, temporary);
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
-                            statement = formatterResult.ExtractOut();
+                            createQuery = formatterResult.ExtractOut();
                         } else {
                             ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                             return;
@@ -330,7 +330,7 @@ private:
                         TCreateViewFormatter formatter;
                         auto formatterResult = formatter.Format(*path, Path, description);
                         if (formatterResult.IsSuccess()) {
-                            statement = formatterResult.ExtractOut();
+                            createQuery = formatterResult.ExtractOut();
                         } else {
                             return ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                         }
@@ -364,11 +364,11 @@ private:
         }
 
         Y_ENSURE(path.has_value());
-        Y_ENSURE(statement.has_value());
+        Y_ENSURE(createQuery.has_value());
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
-        FillBatch(*batch, path.value(), statement.value());
+        FillBatch(*batch, path.value(), createQuery.value());
 
         SendBatch(std::move(batch));
     }
@@ -378,7 +378,7 @@ private:
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         std::optional<TString> path;
-        std::optional<TString> statement;
+        std::optional<TString> createQuery;
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 auto currentPath = record.GetPath();
@@ -419,7 +419,7 @@ private:
                         );
                         if (formatterResult.IsSuccess()) {
                             path = CollectTableSettingsState->TablePath;
-                            statement = formatterResult.ExtractOut();
+                            createQuery = formatterResult.ExtractOut();
                         } else {
                             ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                             return;
@@ -453,11 +453,11 @@ private:
         }
 
         Y_ENSURE(path.has_value());
-        Y_ENSURE(statement.has_value());
+        Y_ENSURE(createQuery.has_value());
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
-        FillBatch(*batch, path.value(), statement.value());
+        FillBatch(*batch, path.value(), createQuery.value());
 
         SendBatch(std::move(batch));
     }
@@ -494,21 +494,21 @@ private:
             CollectTableSettingsState->Sequences
         );
         std::optional<TString> path;
-        std::optional<TString> statement;
+        std::optional<TString> createQuery;
         if (formatterResult.IsSuccess()) {
             path = CollectTableSettingsState->TablePath;
-            statement = formatterResult.ExtractOut();
+            createQuery = formatterResult.ExtractOut();
         } else {
             ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
             return;
         }
 
         Y_ENSURE(path.has_value());
-        Y_ENSURE(statement.has_value());
+        Y_ENSURE(createQuery.has_value());
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
 
-        FillBatch(*batch, path.value(), statement.value());
+        FillBatch(*batch, path.value(), createQuery.value());
 
         SendBatch(std::move(batch));
     }

@@ -41,6 +41,7 @@ static constexpr ui32 CACHE_SIZE = 100_MB;
 static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
+static constexpr ui32 MAX_TXS = 1000;
 
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
@@ -699,16 +700,17 @@ void TPersQueue::HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp,
         (resp.ReadRangeResultSize() == 1) &&
         (resp.HasSetExecutorFastLogPolicyResult()) &&
         (resp.GetSetExecutorFastLogPolicyResult().GetStatus() == NKikimrProto::OK);
+    if (!ok) {
+        PQ_LOG_ERROR_AND_DIE("Transactions read error: " << resp.ShortDebugString());
+        return;
+    }
+
     const auto& result = resp.GetReadRangeResult(0);
     auto status = result.GetStatus();
     if (status != NKikimrProto::OVERRUN &&
         status != NKikimrProto::OK &&
         status != NKikimrProto::NODATA) {
         ok = false;
-    }
-    if (!ok) {
-        PQ_LOG_ERROR_AND_DIE("Transactions read error: " << resp.ShortDebugString());
-        return;
     }
 
     TransactionsReadResults.emplace_back(std::move(result));
@@ -1799,8 +1801,6 @@ void TPersQueue::ProcessStatusRequests(const TActorContext &ctx) {
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
     PQ_LOG_T("Handle TEvPersQueue::TEvStatus");
-
-    ReadBalancerActorId = ev->Sender;
 
     if (!ConfigInited || !AllOriginalPartitionsInited()) {
         PQ_LOG_D("Postpone the request." <<
@@ -2973,8 +2973,10 @@ void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
             continue;
         }
 
-        for (auto& message : tx->GetBindedMsgs(tabletId)) {
-            PipeClientCache->Send(ctx, tabletId, message.Type, message.Data);
+        for (const auto& message : tx->GetBindedMsgs(tabletId)) {
+            auto event = std::make_unique<TEvTxProcessing::TEvReadSet>();
+            event->Record = message;
+            PipeClientCache->Send(ctx, tabletId, event.release());
         }
     }
 }
@@ -3287,10 +3289,6 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-    //
-    // TODO(abcdef): сохранить пока инициализируемся. TEvPersQueue::TEvHasDataInfo::TPtr как образец. не только конфиг. Inited==true
-    //
-
     if (txBody.OperationsSize() <= 0) {
         PQ_LOG_D("TxId " << event.GetTxId() << " empty list of operations");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
@@ -3359,7 +3357,6 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-
     if (txBody.GetImmediate()) {
         PQ_LOG_D("immediate transaction");
         TPartitionId originalPartitionId(txBody.GetOperations(0).GetPartitionId());
@@ -3373,6 +3370,15 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
 
         ctx.Send(partition.Actor, ev.Release());
     } else {
+        if ((EvProposeTransactionQueue.size() + Txs.size()) >= MAX_TXS) {
+            SendProposeTransactionOverloaded(ActorIdFromProto(event.GetSourceActor()),
+                                             event.GetTxId(),
+                                             NKikimrPQ::TError::ERROR,
+                                             "too many transactions",
+                                             ctx);
+            return;
+        }
+
         PQ_LOG_D("distributed transaction");
         EvProposeTransactionQueue.emplace_back(ev.Release());
 
@@ -4160,7 +4166,7 @@ void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
 
 void TPersQueue::SendToPipe(ui64 tabletId,
                             TDistributedTransaction& tx,
-                            std::unique_ptr<IEventBase> event,
+                            std::unique_ptr<TEvTxProcessing::TEvReadSet> event,
                             const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(event);
@@ -4679,16 +4685,17 @@ bool TPersQueue::AllTransactionsHaveBeenProcessed() const
     return EvProposeTransactionQueue.empty() && Txs.empty();
 }
 
-void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
-                                             ui64 txId,
-                                             NKikimrPQ::TError::EKind kind,
-                                             const TString& reason,
-                                             const TActorContext& ctx)
+void TPersQueue::SendProposeTransactionResult(const TActorId& target,
+                                              ui64 txId,
+                                              NKikimrPQ::TEvProposeTransactionResult::EStatus status,
+                                              NKikimrPQ::TError::EKind kind,
+                                              const TString& reason,
+                                              const TActorContext& ctx)
 {
     auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
 
     event->Record.SetOrigin(TabletID());
-    event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::ABORTED);
+    event->Record.SetStatus(status);
     event->Record.SetTxId(txId);
 
     if (kind != NKikimrPQ::TError::OK) {
@@ -4702,6 +4709,34 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()) <<
              ")");
     ctx.Send(target, std::move(event));
+}
+
+void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
+                                             ui64 txId,
+                                             NKikimrPQ::TError::EKind kind,
+                                             const TString& reason,
+                                             const TActorContext& ctx)
+{
+    SendProposeTransactionResult(target,
+                                 txId,
+                                 NKikimrPQ::TEvProposeTransactionResult::ABORTED,
+                                 kind,
+                                 reason,
+                                 ctx);
+}
+
+void TPersQueue::SendProposeTransactionOverloaded(const TActorId& target,
+                                                  ui64 txId,
+                                                  NKikimrPQ::TError::EKind kind,
+                                                  const TString& reason,
+                                                  const TActorContext& ctx)
+{
+    SendProposeTransactionResult(target,
+                                 txId,
+                                 NKikimrPQ::TEvProposeTransactionResult::OVERLOADED,
+                                 kind,
+                                 reason,
+                                 ctx);
 }
 
 void TPersQueue::SendEvProposePartitionConfig(const TActorContext& ctx,

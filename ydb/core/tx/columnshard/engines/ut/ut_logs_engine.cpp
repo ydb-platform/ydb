@@ -118,7 +118,10 @@ public:
         const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
             if (!pathId || *pathId == i.second->GetPathId()) {
-                callback(i.second->BuildConstructor(false, false), i.second->GetMeta().SerializeToProto());
+                callback(i.second->BuildConstructor(false, false),
+                    i.second->GetMeta().SerializeToProto(i.second->GetPortionType() == NOlap::EPortionType::Compacted
+                                                             ? NPortion::EProduced::SPLIT_COMPACTED
+                                                             : NPortion::EProduced::INSERTED));
             }
         }
         return true;
@@ -127,7 +130,9 @@ public:
     void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override {
         auto rowProto = row.GetMeta().SerializeToProto();
         if (firstPKColumnId == row.GetColumnId() && row.GetChunkIdx() == 0) {
-            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
+            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto(portion.GetPortionType() == NOlap::EPortionType::Compacted
+                                                                                    ? NPortion::EProduced::SPLIT_COMPACTED
+                                                                                    : NPortion::EProduced::INSERTED);
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
@@ -388,7 +393,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
         auto request = changes->ExtractDataAccessorsRequest();
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
-        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+        engine.FetchDataAccessors(request);
     }
     changes->Blobs = std::move(blobs);
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"), NOlap::TSnapshot(step, 1));
@@ -478,7 +483,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
         auto request = changes->ExtractDataAccessorsRequest();
         request->RegisterSubscriber(
             std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
-        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+        engine.FetchDataAccessors(request);
     }
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));

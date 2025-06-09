@@ -443,7 +443,9 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
 
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
         .Handler1T<TString>([this](const TString& str) {
-            if (!ParseLangVersion(str, LangVer)) {
+            if (str == "unknown") {
+                LangVer = UnknownLangVersion;
+            } else if (!ParseLangVersion(str, LangVer)) {
                 throw yexception() << "Failed to parse language version: " << str;
             }
         });
@@ -468,7 +470,11 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             QPlayerStorage_ = MakeFileQStorage(".");
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            try {
+                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            } catch (...) {
+                throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
+            }
             ProgramFile = "-replay-";
             ProgramText = "";
         } else if (EQPlayerMode::Capture == QPlayerMode) {

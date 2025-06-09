@@ -13,9 +13,15 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<ISimpleSchema>;
 
-        virtual ~ISimpleSchema() = default;
+        ~ISimpleSchema() override = default;
+
         virtual TSplittedPath Split(TStringBuf path) const = 0;
-        virtual NThreading::TFuture<TVector<TFolderEntry>> List(TString folder) const = 0;
+
+        // TODO(YQL-19747): Deprecated, use List(cluster, folder) instead.
+        virtual NThreading::TFuture<TVector<TFolderEntry>> List(TString folder) const;
+
+        virtual NThreading::TFuture<TVector<TFolderEntry>>
+        List(TString cluster, TString folder) const;
     };
 
     ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple);

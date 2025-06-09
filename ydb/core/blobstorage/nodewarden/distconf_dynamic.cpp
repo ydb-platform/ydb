@@ -63,11 +63,14 @@ namespace NKikimr::NStorage {
             StaticNodeSessionId = {};
             ConnectToStaticNode();
         }
+        if (record.HasCacheUpdate()) {
+            ApplyCacheUpdates(record.MutableCacheUpdate(), 0);
+        }
     }
 
     void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes(bool drop) {
         for (const auto& [sessionId, actorId] : DynamicConfigSubscribers) {
-            PushConfigToDynamicNode(actorId, sessionId);
+            PushConfigToDynamicNode(actorId, sessionId, false);
         }
         if (drop) {
             Y_ABORT_UNLESS(!PartOfNodeQuorum());
@@ -89,7 +92,7 @@ namespace NKikimr::NStorage {
 
         const bool partOfNodeQuorum = PartOfNodeQuorum();
         if (!partOfNodeQuorum || StorageConfig) {
-            PushConfigToDynamicNode(ev->Sender, sessionId);
+            PushConfigToDynamicNode(ev->Sender, sessionId, true);
         }
         if (!partOfNodeQuorum) {
             return;
@@ -102,7 +105,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(inserted);
     }
 
-    void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId) {
+    void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache) {
         auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
         auto& record = ev->Record;
         if (!PartOfNodeQuorum()) { // this configuration is not reliable, don't push anything
@@ -112,7 +115,13 @@ namespace NKikimr::NStorage {
         } else if (auto *target = record.MutableConfig(); SelfManagementEnabled) {
             target->CopyFrom(*StorageConfig);
         } else {
-            target->CopyFrom(BaseConfig);
+            target->CopyFrom(*BaseConfig);
+        }
+        if (addCache) {
+            // push full cache to the dynamic node
+            for (auto it = Cache.begin(); it != Cache.end(); ++it) {
+                AddCacheUpdate(record.MutableCacheUpdate(), it, true);
+            }
         }
         auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);

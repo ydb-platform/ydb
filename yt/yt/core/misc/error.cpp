@@ -757,13 +757,13 @@ void TErrorCodicils::Set(std::string key, TGetter getter)
     if (getter) {
         Getters_.insert_or_assign(std::move(key), std::move(getter));
     } else {
-        Getters_.erase(std::move(key));
+        Getters_.erase(key);
     }
 }
 
 auto TErrorCodicils::Get(const std::string& key) const -> TGetter
 {
-    return GetOrDefault(Getters_, std::move(key));
+    return GetOrDefault(Getters_, key);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

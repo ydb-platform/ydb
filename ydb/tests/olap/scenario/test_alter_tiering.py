@@ -245,6 +245,7 @@ class TestAlterTiering(TieringTestBase):
             sth.execute_scan_query(
                 f'SELECT MIN(writer) FROM `{sth.get_full_path(table)}`',
                 expected_status=expected_scan_status,
+                timeout=duration.seconds
             )
 
     def _loop_set_ttl(

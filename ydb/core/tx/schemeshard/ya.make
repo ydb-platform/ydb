@@ -24,6 +24,7 @@ RECURSE_FOR_TESTS(
     ut_extsubdomain
     ut_extsubdomain_reboots
     ut_filestore_reboots
+    ut_incremental_restore
     ut_index
     ut_index_build
     ut_index_build_reboots
@@ -50,6 +51,8 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_subdomain
     ut_subdomain_reboots
+    ut_sysview
+    ut_sysview_reboots
     ut_topic_splitmerge
     ut_transfer
     ut_ttl
@@ -150,6 +153,7 @@ SRCS(
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
     schemeshard__operation_create_subdomain.cpp
+    schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
     schemeshard__operation_create_view.cpp
     schemeshard__operation_db_changes.cpp
@@ -171,6 +175,7 @@ SRCS(
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp
+    schemeshard__operation_drop_sysview.cpp
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp

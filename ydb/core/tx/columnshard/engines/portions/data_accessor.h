@@ -408,8 +408,8 @@ public:
     NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;
         for (auto&& i : GetRecordsVerified()) {
-            if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
-                result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
+            if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
+                result.AddStat(i.GetSerializationStat(col->name()));
             }
         }
         return result;

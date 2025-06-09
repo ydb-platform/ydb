@@ -1,51 +1,29 @@
 # -*- coding: utf-8 -*-
 import logging
 import time
-import yatest
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+import pytest
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
-from ydb.tests.library.common.types import Erasure, TabletStates, TabletTypes
+from ydb.tests.library.common.types import TabletStates, TabletTypes
 from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture
+
 
 logger = logging.getLogger(__name__)
 
 
-class TestFollowersCompatibility(object):
-    @classmethod
-    def setup_class(cls):
-        last_stable_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
-        binary_paths = [kikimr_driver_path(), last_stable_path]
-        cls.datacenters = [1, 2, 3]
-        cls.dc_map = {i : cls.datacenters[(i - 1) % 3] for i in range(1, 10)}
-        cls.dc_map[0] = "NO DC"
-        cls.cfg = KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC,
-                                        binary_paths=binary_paths,
-                                        dc_mapping=cls.dc_map,
-                                        additional_log_configs={'HIVE': LogLevels.DEBUG},
-                                        use_in_memory_pdisks=False)
-        cls.cluster = KiKiMR(cls.cfg)
-        cls.cluster.start()
-        cls.endpoint = "%s:%s" % (
-            cls.cluster.nodes[1].host, cls.cluster.nodes[1].port
+class TestFollowersCompatibility(MixedClusterFixture):
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.datacenters = [1, 2, 3]
+        self.dc_map = {i : self.datacenters[(i - 1) % 3] for i in range(1, 10)}
+        self.dc_map[0] = "NO DC"
+        yield from self.setup_cluster(
+            dc_mapping=self.dc_map,
+            additional_log_configs={'HIVE': LogLevels.DEBUG},
+            use_in_memory_pdisks=False
         )
-        cls.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=cls.endpoint
-            )
-        )
-        cls.driver.wait()
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'driver'):
-            cls.driver.stop()
-
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop(kill=True)
 
     def check_followers(self, node_idx=1):
         client = SwaggerClient(self.cluster.nodes[node_idx].host, self.cluster.nodes[node_idx].mon_port)
@@ -75,7 +53,7 @@ class TestFollowersCompatibility(object):
         if hive_node == 0:
             return False, "hive is down"
         for tablet_id, data_centers in tablet_to_dc.items():
-            if self.cfg.get_binary_path(hive_node) == kikimr_driver_path():
+            if self.config.get_binary_path(hive_node) == kikimr_driver_path():
                 if len(set(data_centers)) != len(self.datacenters) or len(data_centers) != len(self.datacenters):
                     msg = f"datacenters for tablet {tablet_id} are {data_centers}, hive on node {hive_node} - new version"
                     logger.info(msg)
@@ -152,3 +130,98 @@ class TestFollowersCompatibility(object):
                             break
                         time.sleep(backoff)
                         backoff *= 2
+
+
+class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
+    TABLE_NAME = "table"
+    INDEX_NAME = "idx"
+    ATTEMPT_COUNT = 10
+    ATTEMPT_INTERVAL = 5
+
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        if min(self.versions) < (25, 1):
+            pytest.skip("Only available since 25-1")
+
+        yield from self.setup_cluster(
+            extra_feature_flags={
+                "enable_follower_stats": True
+            }
+        )
+
+    def create_table(self, enable_followers):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            create_table_query = f"""
+                CREATE TABLE `{self.TABLE_NAME}` (
+                    key Int64 NOT NULL,
+                    subkey Int64 NOT NULL,
+                    value Utf8 NOT NULL,
+                    PRIMARY KEY (key)
+                );
+
+                ALTER TABLE `{self.TABLE_NAME}` ADD INDEX `{self.INDEX_NAME}` GLOBAL ASYNC ON (`subkey`) COVER (`value`);
+            """
+            session_pool.execute_with_retries(create_table_query)
+
+            if enable_followers:
+                alter_index_query = f"""
+                    ALTER TABLE `{self.TABLE_NAME}` ALTER INDEX `{self.INDEX_NAME}` SET READ_REPLICAS_SETTINGS "PER_AZ:1";
+                """
+                session_pool.execute_with_retries(alter_index_query)
+
+    def write_data(self):
+        def operation(session):
+            for key in range(100):
+                session.transaction().execute(
+                    f"""
+                    UPSERT INTO {self.TABLE_NAME} (key, subkey, value) VALUES ({key}, {key // 10}, 'Hello, YDB {key}!')
+                    """,
+                    commit_tx=True
+                )
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.retry_operation_sync(operation)
+
+    def read_data(self):
+        def operation(session):
+            for key in range(100):
+                session.transaction(ydb.QueryStaleReadOnly()).execute(
+                    f"""
+                    SELECT * FROM `{self.TABLE_NAME}` VIEW `{self.INDEX_NAME}` WHERE subkey == {key // 10};
+                    """,
+                    commit_tx=True
+                )
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.retry_operation_sync(operation)
+
+    def check_statistics(self, enable_followers):
+        queries = [
+            f"""
+                SELECT *
+                FROM `/Root/.sys/partition_stats`
+                WHERE
+                    FollowerId {"!=" if enable_followers else "=="} 0
+                    AND (RowReads != 0 OR RangeReads != 0)
+                    AND Path = '/Root/{self.TABLE_NAME}/{self.INDEX_NAME}/indexImplTable'
+            """
+        ]
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for _ in range(self.ATTEMPT_COUNT):
+                for query in queries:
+                    result_sets = session_pool.execute_with_retries(query)
+                    result_row_count = len(result_sets[0].rows)
+                    if result_row_count > 0:
+                        return
+                time.sleep(self.ATTEMPT_INTERVAL)
+            assert False, f"Expected reads but there is timeout waiting for read stats from '/Root/{self.TABLE_NAME}/{self.INDEX_NAME}/indexImplTable'"
+
+    @pytest.mark.parametrize("enable_followers", [True, False])
+    def test_secondary_index_followers(self, enable_followers):
+        self.create_table(enable_followers)
+
+        for _ in self.roll():
+            self.write_data()
+            self.read_data()
+            self.check_statistics(enable_followers)

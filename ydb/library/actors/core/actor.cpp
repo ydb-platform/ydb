@@ -278,12 +278,27 @@ namespace NActors {
 
         try {
             (this->*StateFunc_)(ev);
-        } catch(const std::exception& e) {
-            if (auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
-                !handler || !handler->OnUnhandledException(e))
-            {
+        } catch (const std::exception& exc) {
+            if (!OnUnhandledExceptionSafe(exc)) {
                 throw;
             }
+        }
+    }
+
+    bool IActor::OnUnhandledExceptionSafe(const std::exception& originalExc) {
+        auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
+        if (!handler) {
+            return false;
+        }
+
+        try {
+            return handler->OnUnhandledException(originalExc);
+        } catch (const std::exception& handleExc) {
+            Cerr << "OnUnhandledException throws unhandled exception " 
+                << TypeName(handleExc) << ": " << handleExc.what() << Endl
+                << TBackTrace::FromCurrentException().PrintToString()
+                << Endl;
+            return false;
         }
     }
 
@@ -551,4 +566,9 @@ namespace NActors {
     void TActivationContext::SetOverwrittenTimePerMailboxTs(ui64 value) {
         TlsActivationContext->ExecutorThread.SetOverwrittenTimePerMailboxTs(value);
     }
+}
+
+template <>
+void Out<NActors::TActorActivityType>(IOutputStream& o, const NActors::TActorActivityType& x) {
+    o << x.GetName();
 }

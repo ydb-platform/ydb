@@ -1,6 +1,7 @@
 #pragma once
 
 #include "c3i.h"
+#include "pipeline.h"
 
 #include <yql/essentials/sql/v1/complete/text/word.h>
 
@@ -15,14 +16,6 @@
 
 namespace NSQLComplete {
 
-    template <class Lexer, class Parser>
-    struct TAntlrGrammar {
-        using TLexer = Lexer;
-        using TParser = Parser;
-
-        TAntlrGrammar() = delete;
-    };
-
     template <class G>
     class TC3Engine: public IC3Engine {
     public:
@@ -32,12 +25,17 @@ namespace NSQLComplete {
             , Tokens_(&Lexer_)
             , Parser_(&Tokens_)
             , CompletionCore_(&Parser_)
+            , IgnoredRules_(std::move(config.IgnoredRules))
         {
             Lexer_.removeErrorListeners();
             Parser_.removeErrorListeners();
 
             CompletionCore_.ignoredTokens = std::move(config.IgnoredTokens);
             CompletionCore_.preferredRules = std::move(config.PreferredRules);
+
+            for (TRuleId rule : IgnoredRules_) {
+                CompletionCore_.preferredRules.emplace(rule);
+            }
         }
 
         TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) override {
@@ -54,16 +52,28 @@ namespace NSQLComplete {
             Tokens_.fill();
         }
 
-        static TC3Candidates Converted(c3::CandidatesCollection candidates) {
+        TC3Candidates Converted(c3::CandidatesCollection candidates) const {
             TC3Candidates converted;
+
             for (auto& [token, following] : candidates.tokens) {
                 converted.Tokens.emplace_back(token, std::move(following));
             }
+
             for (auto& [rule, data] : candidates.rules) {
+                if (IsIgnored(rule, data.ruleList)) {
+                    continue;
+                }
+
                 converted.Rules.emplace_back(rule, std::move(data.ruleList));
                 converted.Rules.back().ParserCallStack.emplace_back(rule);
             }
+
             return converted;
+        }
+
+        bool IsIgnored(TRuleId head, const std::vector<TRuleId> tail) const {
+            return IgnoredRules_.contains(head) ||
+                   AnyOf(tail, [this](TRuleId r) { return IgnoredRules_.contains(r); });
         }
 
         antlr4::ANTLRInputStream Chars_;
@@ -71,6 +81,7 @@ namespace NSQLComplete {
         antlr4::BufferedTokenStream Tokens_;
         G::TParser Parser_;
         c3::CodeCompletionCore CompletionCore_;
+        std::unordered_set<TRuleId> IgnoredRules_;
     };
 
 } // namespace NSQLComplete

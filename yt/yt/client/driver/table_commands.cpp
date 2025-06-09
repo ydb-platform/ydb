@@ -532,12 +532,6 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
         .ValueOrThrow();
 
-    for (auto& partition : partitions.Partitions) {
-        if (partition.Cookie) {
-            context->GetDriver()->GetSignatureGenerator()->Resign(partition.Cookie.Underlying());
-        }
-    }
-
     context->ProduceOutputValue(ConvertToYsonString(partitions));
 }
 

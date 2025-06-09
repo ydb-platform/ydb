@@ -51,8 +51,11 @@ public:
         auto version = GetProgramRevision();
         if (!version.empty()) {
             SystemStateInfo.SetVersion(version);
-            auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> utils = GetServiceCounters(AppData(ctx)->Counters, "utils");
+            TIntrusivePtr<NMonitoring::TDynamicCounters> versionCounter = utils->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
+            TIntrusivePtr<NMonitoring::TDynamicCounters> nodeCounter = utils->GetSubgroup("NodeCount", version);
+            *nodeCounter->GetCounter("NodeCount", false) = 1;
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());

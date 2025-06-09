@@ -1,38 +1,28 @@
 #pragma once
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
 #include <util/system/env.h>
 
 class TS3BackupTestFixture : public NUnitTest::TBaseFixture {
 protected:
-    TS3BackupTestFixture()
-        : S3Port(Server.GetPortManager().GetPort())
-        , S3Mock(NKikimr::NWrappers::NTestHelpers::TS3Mock::TSettings(S3Port))
-    {
-        UNIT_ASSERT_C(S3Mock.Start(), S3Mock.GetError());
-        auto& runtime = *Server.GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
-        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
-        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
-        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-        runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
-    }
+    TS3BackupTestFixture() = default;
 
-    TString YdbConnectionString() const {
-        return TStringBuilder() << "localhost:" << Server.GetPort() << "/?database=/Root";
+    TString YdbConnectionString() {
+        return TStringBuilder() << "localhost:" << Server().GetPort() << "/?database=/Root";
     }
 
     NYdb::TDriverConfig& YdbDriverConfig() {
@@ -67,8 +57,46 @@ protected:
     YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
     YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
     YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
+    YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
+    YDB_SDK_CLIENT(NYdb::NCoordination::TClient, YdbCoordinationClient);
+    YDB_SDK_CLIENT(NYdb::NRateLimiter::TRateLimiterClient, YdbRateLimiterClient);
 
 #undef YDB_SDK_CLIENT
+
+    NKikimr::NWrappers::NTestHelpers::TS3Mock& S3Mock() {
+        if (!S3Mock_) {
+            S3Port_ = Server().GetPortManager().GetPort();
+            S3Mock_.ConstructInPlace(NKikimr::NWrappers::NTestHelpers::TS3Mock::TSettings(S3Port_));
+            UNIT_ASSERT_C(S3Mock_->Start(), S3Mock_->GetError());
+        }
+        return *S3Mock_;
+    }
+
+    ui16 S3Port() {
+        S3Mock();
+        return S3Port_;
+    }
+
+    NKikimrConfig::TAppConfig& AppConfig() {
+        return AppConfig_;
+    }
+
+    NYdb::TKikimrWithGrpcAndRootSchema& Server() {
+        if (!Server_) {
+            Server_.ConstructInPlace(AppConfig());
+
+            auto& runtime = *Server_->GetRuntime();
+            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_TRACE);
+            runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+            runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+            runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+            runtime.GetAppData().DataShardExportFactory = &DataShardExportFactory;
+        }
+        return *Server_;
+    }
 
     template<typename TOp>
     void WaitOp(TMaybe<NYdb::TOperation>& op) {
@@ -84,27 +112,33 @@ protected:
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res) {
-        return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS);
+    TMaybe<NYdb::TOperation> WaitOpSuccess(const TResponseType& res, const TString& comments = {}) {
+        return WaitOpStatus<TResponseType>(res, NYdb::EStatus::SUCCESS, comments);
     }
 
     template <class TResponseType>
-    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status) {
+    TMaybe<NYdb::TOperation> WaitOpStatus(const TResponseType& res, NYdb::EStatus status, const TString& comments = {}) {
         if (res.Ready()) {
-            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), status, "Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), status, comments << ". Status: " << res.Status().GetStatus() << ". Issues: " << res.Status().GetIssues().ToString());
             return res;
         } else {
             TMaybe<NYdb::TOperation> op = res;
             WaitOp<TResponseType>(op);
-            UNIT_ASSERT_VALUES_EQUAL_C(op->Status().GetStatus(), status, "Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(op->Status().GetStatus(), status, comments << ". Status: " << op->Status().GetStatus() << ". Issues: " << op->Status().GetIssues().ToString());
             return op;
         }
+    }
+
+    template <class TResponseType>
+    void ForgetOp(const TResponseType& res) {
+        auto result = YdbOperationClient().Forget(res.Id()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), "Status: " << result.GetStatus() << ". Issues: " << result.GetIssues().ToString());
     }
 
     NYdb::NExport::TExportToS3Settings MakeExportSettings(const TString& sourcePath, const TString& destinationPrefix) {
         NYdb::NExport::TExportToS3Settings exportSettings;
         exportSettings
-            .Endpoint(TStringBuilder() << "localhost:" << S3Port)
+            .Endpoint(TStringBuilder() << "localhost:" << S3Port())
             .Bucket("test_bucket")
             .Scheme(NYdb::ES3Scheme::HTTP)
             .AccessKey("test_key")
@@ -121,7 +155,7 @@ protected:
     NYdb::NImport::TImportFromS3Settings MakeImportSettings(const TString& sourcePrefix, const TString& destinationPath) {
         NYdb::NImport::TImportFromS3Settings importSettings;
         importSettings
-            .Endpoint(TStringBuilder() << "localhost:" << S3Port)
+            .Endpoint(TStringBuilder() << "localhost:" << S3Port())
             .Bucket("test_bucket")
             .Scheme(NYdb::ES3Scheme::HTTP)
             .AccessKey("test_key")
@@ -135,9 +169,23 @@ protected:
         return importSettings;
     }
 
+    NYdb::NImport::TListObjectsInS3ExportSettings MakeListObjectsInS3ExportSettings(const TString& prefix) {
+        NYdb::NImport::TListObjectsInS3ExportSettings listSettings;
+        listSettings
+            .Endpoint(TStringBuilder() << "localhost:" << S3Port())
+            .Bucket("test_bucket")
+            .Scheme(NYdb::ES3Scheme::HTTP)
+            .AccessKey("test_key")
+            .SecretKey("test_secret");
+        if (prefix) {
+            listSettings.Prefix(prefix);
+        }
+        return listSettings;
+    }
+
     void ValidateS3FileList(const TSet<TString>& paths, const TString& prefix = {}) {
         TSet<TString> keys;
-        for (const auto& [key, _] : S3Mock.GetData()) {
+        for (const auto& [key, _] : S3Mock().GetData()) {
             if (!prefix || key.StartsWith(prefix)) {
                 keys.insert(key);
             }
@@ -161,6 +209,40 @@ protected:
         }
     }
 
+    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
+        auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
+
+        TSet<std::pair<TString, TString>> pathsInResponse;
+        for (const auto& item : res.GetItems()) {
+            bool inserted = pathsInResponse.emplace(item.Prefix, item.Path).second;
+            UNIT_ASSERT_C(inserted, "Duplicate item: {" << item.Prefix << ", " << item.Path << "}. Listing result: " << res);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pathsInResponse, paths, "Listing result: " << res);
+    }
+
+    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const TString& exportPrefix) {
+        ValidateListObjectInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
+    }
+
+    void ValidateListObjectPathsInS3Export(const TSet<TString>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
+        auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
+
+        TSet<TString> pathsInResponse;
+        for (const auto& item : res.GetItems()) {
+            bool inserted = pathsInResponse.emplace(item.Path).second;
+            UNIT_ASSERT_C(inserted, "Duplicate item: {" << item.Prefix << ", " << item.Path << "}. Listing result: " << res);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pathsInResponse, paths, "Listing result: " << res);
+    }
+
+    void ValidateListObjectPathsInS3Export(const TSet<TString>& paths, const TString& exportPrefix) {
+        ValidateListObjectPathsInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
+    }
+
     TString DebugListDir(const TString& path) { // Debug listing for specified dir
         auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
         TStringBuilder l;
@@ -177,11 +259,57 @@ protected:
         return l;
     }
 
-protected:
+    static TString ModifyHexEncodedString(TString value) {
+        UNIT_ASSERT_GT(value.size(), 0);
+        char c = value.front();
+        if (c == '9' || c == 'f' || c == 'F') {
+            --c;
+        } else {
+            ++c;
+        }
+        value[0] = c;
+        return value;
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        const auto checksumFileIt = S3Mock().GetData().find(checksumFile);
+        UNIT_ASSERT_C(checksumFileIt != S3Mock().GetData().end(), "No checksum file: " << checksumFile);
+
+        // Automatic return to the previous state
+        const TString checksumValue = checksumFileIt->second;
+        Y_DEFER {
+            S3Mock().GetData()[checksumFile] = checksumValue;
+        };
+
+        checksumFileIt->second = ModifyHexEncodedString(checksumValue);
+
+        auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+        WaitOpStatus(res, NYdb::EStatus::CANCELLED);
+    }
+
+    void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NYdb::NImport::TImportFromS3Settings& importSettings) {
+        auto copySettings = [&]() {
+            NYdb::NImport::TImportFromS3Settings settings = importSettings;
+            settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << RestoreAttempt++);
+            return settings;
+        };
+
+        // Check that settings are OK
+        auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+        WaitOpSuccess(res);
+
+        for (const TString& checksumFile : checksumFiles) {
+            ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
+        }
+    }
+
+private:
     TDataShardExportFactory DataShardExportFactory;
-    NYdb::TKikimrWithGrpcAndRootSchema Server;
-    const ui16 S3Port;
-    NKikimr::NWrappers::NTestHelpers::TS3Mock S3Mock;
+    NKikimrConfig::TAppConfig AppConfig_;
+    TMaybe<NYdb::TKikimrWithGrpcAndRootSchema> Server_;
+    ui16 S3Port_ = 0;
+    TMaybe<NKikimr::NWrappers::NTestHelpers::TS3Mock> S3Mock_;
     TMaybe<NYdb::TDriverConfig> DriverConfig;
     TMaybe<NYdb::TDriver> Driver;
+    size_t RestoreAttempt = 0;
 };

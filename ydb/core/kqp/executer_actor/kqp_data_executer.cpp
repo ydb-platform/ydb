@@ -266,10 +266,6 @@ public:
 
         if (TxManager) {
             TxManager->SetHasSnapshot(GetSnapshot().IsValid());
-
-            for (const ui64& shardId : TxManager->GetShards()) {
-                Stats->AffectedShards.insert(shardId);
-            }
         }
 
         if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
@@ -389,6 +385,12 @@ public:
             }
             if (!TxManager) {
                 BuildLocks(*ResponseEv->Record.MutableResponse()->MutableResult()->MutableLocks(), Locks);
+            }
+        }
+
+        if (TxManager) {
+            for (const ui64& shardId : TxManager->GetShards()) {
+                Stats->AffectedShards.insert(shardId);
             }
         }
 
@@ -2004,7 +2006,7 @@ private:
                 auto& stageInfo = TasksGraph.GetStageInfo(stageId);
                 AFL_ENSURE(stageInfo.Id == stageId);
 
-                if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
+                if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
 
                     if (stageInfo.Meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
@@ -2210,9 +2212,14 @@ private:
         if (!TBase::HandleResolve(ev)) return;
 
         if (TxManager) {
-            for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+            for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.ShardKey) {
                     TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                }
+                for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                    if (indexMeta.ShardKey) {
+                        TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
+                    }
                 }
             }
         }

@@ -53,7 +53,7 @@ def ensure_path_exists(path):
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
-                 binary_path=None, data_center=None):
+                 binary_path=None, data_center=None, use_config_store=False):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
@@ -63,6 +63,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__configurator = configurator
         self.__common_udfs_dir = udfs_dir
         self.__binary_path = binary_path
+        self.__use_config_store = use_config_store or self.__configurator.use_config_store
 
         self.__encryption_key = encryption_key
         self._tenant_affiliation = tenant_affiliation
@@ -154,6 +155,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def binary_path(self):
         return self.__binary_path
 
+    @binary_path.setter
+    def binary_path(self, value):
+        self.__binary_path = value
+
     @property
     def command(self):
         return self.__make_run_command()
@@ -176,7 +181,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
 
-        if self.__configurator.use_config_store:
+        if self.__use_config_store:
             command.append("--config-dir=%s" % self.__config_path)
         else:
             command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
@@ -277,6 +282,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def start(self):
         try:
+            self.update_command(self.__make_run_command())
             super(KiKiMRNode, self).start()
         finally:
             logger.info("Started node %s", self)
@@ -291,17 +297,17 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return config.get('metadata', {}).get('version', 0)
 
     def enable_config_dir(self):
-        self.__configurator.use_config_store = True
+        self.__use_config_store = True
         self.update_command(self.__make_run_command())
 
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
         if not os.path.exists(source_config_yaml_path):
-            raise FileNotFoundError(f"Source config file not found: {source_config_yaml_path}")
+            raise RuntimeError("Source config file not found: %s" % source_config_yaml_path)
 
         try:
             os.makedirs(target_config_dir_path, exist_ok=True)
         except Exception as e:
-            raise RuntimeError(f"Unexpected error initializing config for node {self.node_id}.") from e
+            raise RuntimeError("Unexpected error initializing config for node %s: %s" % (str(self.node_id), str(e)))
 
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
@@ -423,6 +429,19 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for _ in self.__configurator.all_node_ids():
             self.__register_node()
 
+    def _bootstrap_cluster(self, self_assembly_uuid="test-cluster", timeout=30, interval=2):
+        start_time = time.time()
+        last_exception = None
+        while time.time() - start_time < timeout:
+            try:
+                result = self.config_client.bootstrap_cluster(self_assembly_uuid=self_assembly_uuid)
+                logger.info("Successfully bootstrapped cluster")
+                return result
+            except Exception as e:
+                last_exception = e
+                time.sleep(interval)
+        raise last_exception
+
     def __run(self):
         self.prepare()
 
@@ -430,7 +449,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.__run_node(node_id)
 
         if self.__configurator.use_self_management:
-            self.__cluster_bootstrap()
+            self._bootstrap_cluster(self_assembly_uuid="test-cluster")
 
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
@@ -614,6 +633,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node in self.nodes.values():
             node.start()
 
+    def enable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = True
+        for node_id in node_ids:
+            self.nodes[node_id].enable_config_dir()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:
@@ -625,8 +651,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         node_config_path = ensure_path_exists(
             os.path.join(self.__config_base_path, "node_{}".format(node_id))
         )
-        logger.info("Writing node config to %s" % node_config_path)
-        logger.info("Config: %s" % configurator.yaml_config)
         configurator.write_proto_configs(node_config_path)
 
     def __write_configs(self):
@@ -639,11 +663,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def overwrite_configs(self, config):
         self.__configurator.full_config = config
         self.__write_configs()
-
-    def enable_config_dir(self):
-        self.__configurator.use_config_store = True
-        for node in self.nodes.values():
-            node.enable_config_dir()
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -747,30 +766,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         assert bs_controller_started
 
-    def __cluster_bootstrap(self):
-        timeout = 10
-        sleep = 2
-        retries, success = timeout / sleep, False
-        while retries > 0 and not success:
-            try:
-                self.__call_ydb_cli(
-                    [
-                        "admin",
-                        "cluster",
-                        "bootstrap",
-                        "--uuid", "test-cluster"
-                    ]
-                )
-                success = True
-
-            except Exception as e:
-                logger.error("Failed to execute, %s", str(e))
-                retries -= 1
-                time.sleep(sleep)
-
-                if retries == 0:
-                    raise
-
     def replace_config(self, config):
         timeout = 10
         sleep = 2
@@ -810,7 +805,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 return None
             return result.std_out.decode('utf-8')
         except Exception as e:
-            logger.error(f"Error fetching config: {e}", exc_info=True)
+            logger.error("Error fetching config: %s", str(e), exc_info=True)
             return None
 
     def generate_config(self):

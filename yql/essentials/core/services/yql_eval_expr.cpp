@@ -527,11 +527,8 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     IGraphTransformer::TStatus hasPendingEvaluations = IGraphTransformer::TStatus::Ok;
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
+    settings.TrackFrames = true;
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
-        TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()), TStringBuilder() << "At function: " << node->Content());
-        });
-
         if (node->IsCallable("EvaluateIf!")) {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
                 return nullptr;

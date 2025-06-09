@@ -72,11 +72,11 @@ class TJavascriptTypeChecker : public TExploringNodeVisitor {
 void EnsureScriptSpecificTypes(
         EScriptType scriptType,
         TCallableType* funcType,
-        const TTypeEnvironment& env)
+        std::vector<TNode*>& nodeStack)
 {
     switch (scriptType) {
         case EScriptType::Lua:
-            return TLuaTypeChecker().Walk(funcType, env);
+            return TLuaTypeChecker().Walk(funcType, nodeStack);
         case EScriptType::Python:
         case EScriptType::Python2:
         case EScriptType::Python3:
@@ -94,9 +94,9 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
-            return TPythonTypeChecker().Walk(funcType, env);
+            return TPythonTypeChecker().Walk(funcType, nodeStack);
         case EScriptType::Javascript:
-            return TJavascriptTypeChecker().Walk(funcType, env);
+            return TJavascriptTypeChecker().Walk(funcType, nodeStack);
     default:
         MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
     }
@@ -4101,6 +4101,13 @@ TRuntimeNode TProgramBuilder::Udf(
     TStatus status = FunctionRegistry.FindFunctionTypeInfo(
         LangVer, Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
+    if (funcInfo.MinLangVer != NYql::UnknownLangVersion && LangVer != NYql::UnknownLangVersion && LangVer < funcInfo.MinLangVer) {
+        throw yexception() << "UDF " << funcName << " is not available in given language version yet";
+    }
+
+    if (funcInfo.MaxLangVer != NYql::UnknownLangVersion && LangVer != NYql::UnknownLangVersion && LangVer > funcInfo.MaxLangVer) {
+        throw yexception() << "UDF " << funcName << " is not available in given language version anymore";
+    }
 
     auto runConfigType = funcInfo.RunConfigType;
     if (runConfig) {
@@ -4166,7 +4173,7 @@ TRuntimeNode TProgramBuilder::ScriptUdf(
     MKQL_ENSURE(funcType->IsCallable(), "type must be callable");
     auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
     MKQL_ENSURE(scriptType != EScriptType::Unknown, "unknown script type '" << moduleName << "'");
-    EnsureScriptSpecificTypes(scriptType, static_cast<TCallableType*>(funcType), Env);
+    EnsureScriptSpecificTypes(scriptType, static_cast<TCallableType*>(funcType), Env.GetNodeStack());
 
     auto scriptTypeStr = IsCustomPython(scriptType) ? moduleName : ScriptTypeAsStr(CanonizeScriptType(scriptType));
 
@@ -6148,7 +6155,7 @@ bool CanExportType(TType* type, const TTypeEnvironment& env) {
     }
 
     TExploringNodeVisitor explorer;
-    explorer.Walk(type, env);
+    explorer.Walk(type, env.GetNodeStack());
     bool canExport = true;
     for (auto& node : explorer.GetNodes()) {
         switch (static_cast<TType*>(node)->GetKind()) {

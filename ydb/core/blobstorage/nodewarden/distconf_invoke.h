@@ -83,6 +83,8 @@ namespace NKikimr::NStorage {
         // State Storage operation
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
+        void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
+        void GetStateStorageConfig();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
@@ -103,7 +105,7 @@ namespace NKikimr::NStorage {
             OTHER,
         } ControllerOp = EControllerOp::UNSET;
 
-        void FetchStorageConfig(bool manual, bool fetchMain, bool fetchStorage);
+        void FetchStorageConfig(bool fetchMain, bool fetchStorage, bool addExplicitMgmtSections, bool addV1);
         void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request);
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
@@ -115,6 +117,11 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvControllerDistconfResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev);
         void BootstrapCluster(const TString& selfAssemblyUUID);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge mode
+
+        void SwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition

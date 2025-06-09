@@ -2,6 +2,8 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
 #include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr {
@@ -219,6 +221,7 @@ public:
                                                    groups.GetValueOrDefault<T::MainKeyVersion>(),
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
+                                                   groups.GetValueOrDefault<T::GroupSizeInUnits>(),
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
@@ -537,6 +540,42 @@ public:
         }
         for (const auto& key : vdiskMetricsToDelete) {
             db.Table<Schema::VDiskMetrics>().Key(key).Delete();
+        }
+
+        // issue all sys view updates just after the start
+        for (const auto& [pdiskId, _] : Self->PDisks) {
+            Self->SysViewChangedPDisks.insert(pdiskId);
+        }
+        for (const auto& [vdiskId, _] : Self->VSlots) {
+            Self->SysViewChangedVSlots.insert(vdiskId);
+        }
+        for (const auto& [groupId, _] : Self->GroupMap) {
+            Self->SysViewChangedGroups.insert(groupId);
+        }
+
+        // send notification to node warden about new groups
+        {
+            NKikimrBlobStorage::TCacheUpdate m;
+            for (const auto& [groupId, groupInfo] : Self->GroupMap) {
+                auto *kvp = m.AddKeyValuePairs();
+                kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
+                kvp->SetGeneration(groupInfo->Generation);
+
+                TMaybe<TKikimrScopeId> scopeId;
+                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
+                if (info.SchemeshardId && info.PathItemId) {
+                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
+                } else {
+                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
+                }
+
+                NKikimrBlobStorage::TGroupInfo proto;
+                SerializeGroupInfo(&proto, *groupInfo, info.Name, scopeId);
+                const bool success = proto.SerializeToString(kvp->MutableValue());
+                Y_DEBUG_ABORT_UNLESS(success);
+            }
+            const auto& selfId = Self->SelfId();
+            selfId.Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), new NStorage::TEvNodeWardenUpdateCache(std::move(m)));
         }
 
         return true;

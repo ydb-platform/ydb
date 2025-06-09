@@ -18,6 +18,7 @@ DynamicSlot = namedtuple(
         'grpc',
         'mon',
         'ic',
+        'kafka_port',
     ]
 )
 
@@ -73,6 +74,7 @@ class ClusterDetails(ClusterDetailsProvider):
                 grpc_port = self.SLOTS_PORTS_START + 1
                 mon_port = self.SLOTS_PORTS_START + 2
                 ic_port = self.SLOTS_PORTS_START + 3
+                kafka_port = self.SLOTS_PORTS_START + 5
                 full_name = str(ic_port)
 
                 self.__dynamic_slots[full_name] = DynamicSlot(
@@ -82,6 +84,7 @@ class ClusterDetails(ClusterDetailsProvider):
                     grpc=grpc_port,
                     mon=mon_port,
                     ic=ic_port,
+                    kafka_port=kafka_port,
                 )
                 self.SLOTS_PORTS_START += self.PORTS_SHIFT
         return self.__dynamic_slots

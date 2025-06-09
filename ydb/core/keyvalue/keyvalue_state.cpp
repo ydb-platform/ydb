@@ -2122,7 +2122,7 @@ bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKe
         auto it = Index.find(request.GetKey());
         if (it == Index.end()) {
             response.Status = NKikimrProto::NODATA;
-            response.Message = "No such key Marker# KV48";
+            response.Message = "No such key Marker# KV48 (" + request.GetKey() + ")";
         } else {
             bool isOverrun = PrepareOneRead<NKikimrClient::TKeyValueRequest>(it->first, it->second, offset, size,
                     priority, 0, intermediate, response, outIsInlineOnly);

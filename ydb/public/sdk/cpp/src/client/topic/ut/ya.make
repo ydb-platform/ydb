@@ -49,3 +49,7 @@ RESOURCE(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    with_direct_read_ut
+)

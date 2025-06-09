@@ -619,6 +619,10 @@ namespace TEvDataShard {
         void SetStepOrderId(const std::pair<ui64, ui64>& stepOrderId) {
             Record.SetStep(stepOrderId.first);
             Record.SetOrderId(stepOrderId.second);
+            // Note: this method is used by schema operations where stepOrderId == commitVersion
+            auto* commitVersion = Record.MutableCommitVersion();
+            commitVersion->SetStep(stepOrderId.first);
+            commitVersion->SetTxId(stepOrderId.second);
         }
 
         void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {

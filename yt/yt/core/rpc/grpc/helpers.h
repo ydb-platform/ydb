@@ -165,7 +165,7 @@ class TGrpcMetadataArray
 public:
     TStringBuf Find(const char* key) const;
 
-    THashMap<std::string, TString> ToMap() const;
+    THashMap<std::string, std::string> ToMap() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -190,7 +190,7 @@ public:
     const ui8* Data() const;
     size_t Size() const;
 
-    TString AsString() const;
+    std::string AsString() const;
 
 private:
     grpc_slice Native_ = grpc_empty_slice();
@@ -201,7 +201,7 @@ private:
 class TGrpcMetadataArrayBuilder
 {
 public:
-    void Add(const char* key, TString value);
+    void Add(const char* key, std::string value);
     size_t GetSize() const;
 
     grpc_metadata* Unwrap();
@@ -255,14 +255,14 @@ class TGrpcPemKeyCertPair
 {
 public:
     TGrpcPemKeyCertPair(
-        TString privateKey,
-        TString certChain);
+        std::string privateKey,
+        std::string certChain);
 
     grpc_ssl_pem_key_cert_pair* Unwrap();
 
 private:
-    TString PrivateKey_;
-    TString CertChain_;
+    std::string PrivateKey_;
+    std::string CertChain_;
     grpc_ssl_pem_key_cert_pair Native_;
 };
 
@@ -288,15 +288,15 @@ TSharedRef ExtractMessageFromEnvelopedMessage(const TSharedRef& data);
 
 TErrorCode StatusCodeToErrorCode(grpc_status_code statusCode);
 
-TString SerializeError(const TError& error);
+std::string SerializeError(const TError& error);
 TError DeserializeError(TStringBuf serializedError);
 
 TGrpcPemKeyCertPair LoadPemKeyCertPair(const TSslPemKeyCertPairConfigPtr& config);
 TGrpcChannelCredentialsPtr LoadChannelCredentials(const TChannelCredentialsConfigPtr& config);
 TGrpcServerCredentialsPtr LoadServerCredentials(const TServerCredentialsConfigPtr& config);
 TX509Ptr ParsePemCertToX509(TStringBuf pemCert);
-std::optional<TString> ParseIssuerFromX509(const TX509Ptr& pemCertX509);
-std::optional<TString> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509);
+std::optional<std::string> ParseIssuerFromX509(const TX509Ptr& pemCertX509);
+std::optional<std::string> ParseSerialNumberFromX509(const TX509Ptr& pemCertX509);
 
 ////////////////////////////////////////////////////////////////////////////////
 

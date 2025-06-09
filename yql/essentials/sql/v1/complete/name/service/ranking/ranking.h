@@ -11,11 +11,11 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<IRanking>;
 
+        ~IRanking() override = default;
         virtual void CropToSortedPrefix(
             TVector<TGenericName>& names,
             const TNameConstraints& constraints,
             size_t limit) const = 0;
-        virtual ~IRanking() = default;
     };
 
     // TODO(YQL-19747): Migrate YDB CLI to MakeDefaultRanking(...)

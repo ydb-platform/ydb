@@ -436,7 +436,7 @@ public:
             // Note: any transaction (e.g. immediate or non-volatile) may decide to commit as volatile due to dependencies
             // Such transactions would have no participants and become immediately committed
             auto commitTxIds = userDb.GetVolatileCommitTxIds();
-            if (commitTxIds) {
+            if (commitTxIds || isArbiter) {
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                     userDb.GetVolatileTxId(),
@@ -449,6 +449,8 @@ public:
                     isArbiter,
                     txc
                 );
+            } else {
+                awaitingDecisions.clear();
             }
 
             if (userDb.GetPerformedUserReads()) {
@@ -470,6 +472,10 @@ public:
 
             // Note: may erase persistent locks, must be after we persist volatile tx
             AddLocksToResult(writeOp, ctx);
+
+            if (!guardLocks.LockTxId) {
+                writeVersion.ToProto(writeResult->Record.MutableCommitVersion());
+            }
 
             if (auto changes = std::move(userDb.GetCollectedChanges())) {
                 op->ChangeRecords() = std::move(changes);

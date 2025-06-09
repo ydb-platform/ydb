@@ -35,6 +35,10 @@ namespace {
     static constexpr TDuration OfflineFollowerWaitFirst = TDuration::Seconds(4);
     static constexpr TDuration OfflineFollowerWaitRetry = TDuration::Seconds(15);
 
+    constexpr ui64 GcErrorInitialBackoffMs = 1;
+    constexpr ui64 GcErrorMaxBackoffMs = 10000;
+    constexpr ui64 GcMaxErrors = 25;  // ~1.13 min in total
+
 }
 
 ui64 TTablet::TabletID() const {
@@ -78,7 +82,7 @@ void TTablet::PromoteToCandidate(ui32 gen) {
     }
 
     // todo: handle 'proxy not found' case
-    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvUpdate(TabletID(), 0, SelfId(), UserTablet, StateStorageInfo.KnownGeneration, 0, StateStorageInfo.Signature.Get(), StateStorageInfo.SignatureSz, TEvStateStorage::TProxyOptions::SigAsync));
+    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvUpdate(TabletID(), 0, SelfId(), UserTablet, StateStorageInfo.KnownGeneration, 0, StateStorageInfo.Signature, TEvStateStorage::TProxyOptions::SigAsync));
 
     Become(&TThis::StateBecomeCandidate);
     ReportTabletStateChange(TTabletStateInfo::Candidate);
@@ -286,7 +290,7 @@ void TTablet::TryFinishFollowerSync() {
 
 void TTablet::UpdateStateStorageSignature(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
     const TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
-    StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->Sz);
+    StateStorageInfo.Signature = msg->Signature;
 }
 
 void TTablet::HandlePingBoot(TEvTablet::TEvPing::TPtr &ev) {
@@ -305,11 +309,7 @@ void TTablet::HandlePingFollower(TEvTablet::TEvPing::TPtr &ev) {
 void TTablet::HandleStateStorageLeaderResolve(TEvStateStorage::TEvInfo::TPtr &ev) {
     TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    if (msg->SignatureSz) {
-        StateStorageInfo.SignatureSz = msg->SignatureSz;
-        StateStorageInfo.Signature.Reset(msg->Signature.Release());
-    }
-
+    StateStorageInfo.Signature = msg->Signature;
     StateStorageInfo.KnownGeneration = msg->CurrentGeneration;
     StateStorageInfo.KnownStep = msg->CurrentStep;
 
@@ -770,11 +770,7 @@ void TTablet::HandleByLeader(TEvTablet::TEvFollowerGcAck::TPtr &ev) {
 void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) {
     TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    if (msg->SignatureSz) {
-        StateStorageInfo.SignatureSz = msg->SignatureSz;
-        StateStorageInfo.Signature.Reset(msg->Signature.Release());
-    }
-
+    StateStorageInfo.Signature = msg->Signature;
     StateStorageInfo.KnownGeneration = msg->CurrentGeneration;
     StateStorageInfo.KnownStep = msg->CurrentStep;
 
@@ -786,7 +782,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
             MakeHolder<NTracing::TOnHandleStateStorageInfoResolve>(
                 StateStorageInfo.KnownGeneration
                 , StateStorageInfo.KnownStep
-                , StateStorageInfo.SignatureSz));
+                , StateStorageInfo.Signature.Size()));
     }
 
     switch (msg->Status) {
@@ -829,8 +825,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
 void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
     const TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz);
-
+    StateStorageInfo.Signature = msg->Signature;
     switch (msg->Status) {
     case NKikimrProto::OK:
         { // ok, we had successfully locked state storage for synthetic generation, now find actual one
@@ -840,7 +835,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TOnHandleStateStorageInfoLock>(
                     StateStorageInfo.KnownGeneration
                     , StateStorageInfo.KnownStep
-                    , StateStorageInfo.SignatureSz));
+                    , StateStorageInfo.Signature.Size()));
             }
 
             Register(CreateTabletFindLastEntry(SelfId(), false, Info.Get(), 0, Leader));
@@ -863,8 +858,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
 void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) {
     const TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz);
-
+    StateStorageInfo.Signature = msg->Signature;
     switch (msg->Status){
     case NKikimrProto::OK:
         { // ok, we marked ourselves as generation owner
@@ -1323,6 +1317,16 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
 
     TEvBlobStorage::TEvCollectGarbageResult *msg = ev->Get();
 
+    auto handleNextGcLogChannel = [&]() {
+        if (GcNextStep != 0) {
+            GcLogChannel(std::exchange(GcNextStep, 0));
+        } else if (GcFailCount > 0 && !GcPendingRetry && GcTryCounter < GcMaxErrors) {
+            ++GcTryCounter;
+            GcPendingRetry = true;
+            Schedule(TDuration::MilliSeconds(GcBackoffTimer.NextBackoffMs()), new TEvTabletBase::TEvLogGcRetry());
+        }
+    };
+
     switch (msg->Status) {
     case NKikimrProto::RACE:
     case NKikimrProto::BLOCKED:
@@ -1335,18 +1339,27 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         }
         break;
     case NKikimrProto::OK:
-        if (GcInFly == 0 && GcForStepAckRequest) {
-            const auto& req = *GcForStepAckRequest->Get();
-            const ui32 gen = StateStorageInfo.KnownGeneration;
-            if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
-                Send(GcForStepAckRequest->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcInFlyStep));
-                GcForStepAckRequest = nullptr;
+        if (GcInFly == 0) {
+            if (GcFailCount == 0) {
+                GcConfirmedStep = GcInFlyStep;
+                GcTryCounter = 0;
+                GcBackoffTimer.Reset();
+                if (GcForStepAckRequest) {
+                    const auto& req = *GcForStepAckRequest->Get();
+                    const ui32 gen = StateStorageInfo.KnownGeneration;
+                    if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcConfirmedStep)) {
+                        Send(GcForStepAckRequest->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcConfirmedStep));
+                        GcForStepAckRequest = nullptr;
+                    }
+                }
             }
+            handleNextGcLogChannel();
         }
-        [[fallthrough]];
-    default: // silently ignore unrecognized errors (assume temporary)
-        if (GcInFly == 0 && GcNextStep != 0) {
-            GcLogChannel(std::exchange(GcNextStep, 0));
+        return;
+    default:
+        ++GcFailCount;
+        if (GcInFly == 0) {
+            handleNextGcLogChannel();
         }
         return;
     }
@@ -1357,8 +1370,8 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
 void TTablet::Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev) {
     const auto& req = *ev->Get();
     const ui32 gen = StateStorageInfo.KnownGeneration;
-    if (GcInFly == 0 && std::tie(req.Generation, req.Step) <= std::tie(gen, GcInFlyStep)) {
-        Send(ev->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcInFlyStep));
+    if (GcInFly == 0 && std::tie(req.Generation, req.Step) <= std::tie(gen, GcConfirmedStep)) {
+        Send(ev->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcConfirmedStep));
     } else {
         GcForStepAckRequest = ev;
     }
@@ -1367,6 +1380,8 @@ void TTablet::Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev) {
 void TTablet::GcLogChannel(ui32 step) {
     const ui64 tabletid = TabletID();
     const ui32 gen = StateStorageInfo.KnownGeneration;
+    GcPendingRetry = false;
+    GcFailCount = 0;
 
     if (GcInFly != 0 || Graph.SyncCommit.SyncStep != 0 && Graph.SyncCommit.SyncStep <= step) {
         if (GcInFlyStep < step) {
@@ -1412,6 +1427,12 @@ void TTablet::GcLogChannel(ui32 step) {
     }
     GcInFlyStep = step;
     GcNextStep = 0;
+}
+
+void TTablet::RetryGcRequests() {
+    if (GcPendingRetry && GcInFly == 0 && GcInFlyStep > GcConfirmedStep) {
+        GcLogChannel(GcInFlyStep);
+    }
 }
 
 void TTablet::SpreadFollowerAuxUpdate(const TString& auxUpdate) {
@@ -1911,11 +1932,11 @@ void TTablet::LockedInitializationPath() {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnLockedInitializationPath>(
             StateStorageInfo.KnownGeneration
             , StateStorageInfo.KnownStep
-            , StateStorageInfo.SignatureSz));
+            , StateStorageInfo.Signature.Size()));
     }
 
     // lock => find latest => update => normal path
-    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLock(TabletID(), 0, SelfId(), StateStorageInfo.KnownGeneration + 1, StateStorageInfo.Signature.Get(), StateStorageInfo.SignatureSz, TEvStateStorage::TProxyOptions::SigAsync));
+    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLock(TabletID(), 0, SelfId(), StateStorageInfo.KnownGeneration + 1, StateStorageInfo.Signature, TEvStateStorage::TProxyOptions::SigAsync));
 
     NeedCleanupOnLockedPath = true;
     Become(&TThis::StateLock);
@@ -1938,7 +1959,12 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , DiscoveredLastBlocked(Max<ui32>())
     , GcInFly(0)
     , GcInFlyStep(0)
+    , GcConfirmedStep(0)
     , GcNextStep(0)
+    , GcTryCounter(0)
+    , GcBackoffTimer(GcErrorInitialBackoffMs, GcErrorMaxBackoffMs)
+    , GcPendingRetry(false)
+    , GcFailCount(0)
     , ResourceProfiles(profiles)
     , TxCacheQuota(txCacheQuota)
 {

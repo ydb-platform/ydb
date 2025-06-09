@@ -14,11 +14,13 @@ namespace NKikimr::NKqp {
 Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysView) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
         }
@@ -196,7 +198,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
         helper.GetVolumes(rawBytes3, bytes3, count3, false, { "field" });
         AFL_VERIFY(bytes2 * 10 < bytes1);
-        AFL_VERIFY(bytes3 * 2 < bytes1);
+        AFL_VERIFY(bytes3 * 90 < bytes1);
         AFL_VERIFY(rawBytes3 * 10 < rawBytes1);
         Cerr << rawBytes1 << "/" << bytes1 << "/" << count1 << Endl;
         Cerr << rawBytes2 << "/" << bytes2 << "/" << count2 << Endl;
@@ -633,13 +635,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewAggregation) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_3");
+        TLocalHelper helper(kikimr.GetTestServer());
+        helper.CreateTestOlapTable("olapTable_1");
+        helper.CreateTestOlapTable("olapTable_2");
+        helper.CreateTestOlapTable("olapTable_3");
+        helper.SetForcedCompaction();
 
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);

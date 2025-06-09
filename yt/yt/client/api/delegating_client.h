@@ -426,14 +426,14 @@ public:
 
     // Security
     DELEGATE_METHOD(TFuture<void>, AddMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TAddMemberOptions& options),
         (group, member, options))
 
     DELEGATE_METHOD(TFuture<void>, RemoveMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TRemoveMemberOptions& options),
         (group, member, options))
 
@@ -768,6 +768,10 @@ public:
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
 
+    DELEGATE_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+        const TGetCurrentUserOptions& options),
+        (options))
+
     // Query tracker
     DELEGATE_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
         NQueryTrackerClient::EQueryEngine engine,
@@ -895,7 +899,7 @@ public:
         (cookie, options))
 
     // Shuffle Service
-    DELEGATE_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
+    DELEGATE_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId transactionId,
@@ -903,16 +907,18 @@ public:
         (account, partitionCount, transactionId, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        const NTableClient::TTableReaderConfigPtr& config),
-        (shuffleHandle, partitionIndex, config))
+        std::optional<std::pair<int, int>> writerIndexRange,
+        const TShuffleReaderOptions& options),
+        (shuffleHandle, partitionIndex, writerIndexRange, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        const NTableClient::TTableWriterConfigPtr& config),
-        (shuffleHandle, partitionColumn, config))
+        std::optional<int> writerIndex,
+        const TShuffleWriterOptions& options),
+        (shuffleHandle, partitionColumn, writerIndex, options))
 
     #undef DELEGATE_METHOD
 

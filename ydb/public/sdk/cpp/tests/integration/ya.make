@@ -4,4 +4,5 @@ RECURSE(
     server_restart
     sessions
     sessions_pool
+    topic
 )

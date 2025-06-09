@@ -12,6 +12,7 @@ ENDIF()
 SRCS(
     backup_path_ut.cpp
     encrypted_backup_ut.cpp
+    list_objects_in_s3_export_ut.cpp
     ydb_backup_ut.cpp
 )
 
@@ -21,12 +22,14 @@ PEERDIR(
     ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/public/lib/ydb_cli/dump
+    ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/export
     ydb/public/sdk/cpp/src/client/import
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/value
     ydb/library/backup
 )

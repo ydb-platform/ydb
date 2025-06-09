@@ -38,7 +38,7 @@ namespace NSQLComplete {
 
     bool GetStatement(
         ILexer::TPtr& lexer,
-        TCompletionInput input,
+        const TMaterializedInput& input,
         TCompletionInput& output,
         size_t& output_position);
 

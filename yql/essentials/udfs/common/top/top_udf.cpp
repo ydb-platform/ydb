@@ -792,7 +792,7 @@ public:
             builder.UserType(userType);
 
             if (typeConfig.Size() != 2) {
-                builder.SetError(TStringBuilder() << "Invalid type config: " << typeConfig.Data());
+                builder.SetError(TStringBuilder() << "Invalid type config: " << TStringBuf(typeConfig));
                 return;
             }
 

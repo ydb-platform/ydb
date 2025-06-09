@@ -1053,7 +1053,7 @@ private:
 
         for (const auto& operation : queryBlock.Operations()) {
             auto& tableData = SessionCtx->Tables().ExistingTable(operation.Cluster(), operation.Table());
-            if (tableData.Metadata->IsOlap() || !tableData.Metadata->SysView.empty()) {
+            if (tableData.Metadata->IsOlap() || tableData.Metadata->Kind == EKikimrTableKind::SysView) {
                 // Always use ScanQuery for queries with OLAP and system tables.
                 return true;
             }
@@ -1172,6 +1172,7 @@ public:
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
+                                                                                 QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
                                                                                  std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
         }
     }
@@ -1535,7 +1536,7 @@ private:
             return nullptr;
         }
 
-        if (SessionCtx->Config().EnableNewRBO) {  
+        if (SessionCtx->Config().EnableNewRBO) {
             return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformerNewRBO, SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
         }
@@ -1647,7 +1648,13 @@ private:
 
         YQL_ENSURE(ExprCtxStorage);
 
-        auto prepareData = PrepareRewrite(compileResult.QueryExpr, *ExprCtxStorage, *TypesCtx, SessionCtx, Cluster);
+        auto prepareData = PrepareRewrite(
+            compileResult.QueryExpr,
+            *ExprCtxStorage,
+            *TypesCtx,
+            SessionCtx,
+            *FuncRegistry,
+            Cluster);
 
         return MakeIntrusive<TAsyncSplitQueryResult>(
             compileResult.QueryExpr,

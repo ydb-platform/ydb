@@ -72,14 +72,17 @@ class TJsonNodes : public TViewerPipeClient {
 
     std::optional<TRequestResponse<TEvInterconnect::TEvNodesInfo>> NodesInfoResponse;
     std::optional<TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
-    std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> DatabaseBoardInfoResponse;
-    std::optional<TRequestResponse<TEvStateStorage::TEvBoardInfo>> ResourceBoardInfoResponse;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> PathNavigateResponse;
     std::unordered_map<TTabletId, TRequestResponse<TEvHive::TEvResponseHiveNodeStats>> HiveNodeStats;
     bool HiveNodeStatsProcessed = false;
     std::vector<TTabletId> HivesToAsk;
     bool AskHiveAboutPaths = false;
     bool DatabaseNavigateProcessed = false;
+    bool ResourceNavigateProcessed = false;
+    bool PathNavigateProcessed = false;
+    bool DatabaseBoardInfoProcessed = false;
+    bool ResourceBoardInfoProcessed = false;
+    bool PDisksProcessed = false;
 
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
@@ -113,6 +116,7 @@ class TJsonNodes : public TViewerPipeClient {
     TString SharedDatabase;
     bool FilterDatabase = false;
     bool HasDatabaseNodes = false;
+    bool HasSharedNodes = false;
     TPathId FilterPathId;
     TSubDomainKey SubDomainKey;
     TSubDomainKey SharedSubDomainKey;
@@ -1090,7 +1094,7 @@ public:
             if (!DatabaseNavigateResponse) {
                 DatabaseNavigateResponse = MakeRequestSchemeCacheNavigate(Database, ENavigateRequestDatabase);
             }
-            if (!FieldsNeeded(FieldsHiveNodeStat) && !(FilterPath && FieldsNeeded(FieldsTablets))) {
+            if (!DatabaseBoardInfoResponse && !FieldsNeeded(FieldsHiveNodeStat) && !(FilterPath && FieldsNeeded(FieldsTablets))) {
                 DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(Database, EBoardInfoRequestDatabase);
             }
             if ((Type == EType::Storage || Type == EType::Static) && FilterStoragePools.empty() && FilterGroupIds.empty()) {
@@ -1106,10 +1110,11 @@ public:
             GroupsResponse = MakeCachedRequestBSControllerGroups();
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::Pools;
-        } else if (!FilterGroupIds.empty()) {
+        } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)) {
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
+
         if (With != EWith::Everything) {
             PDisksResponse = MakeCachedRequestBSControllerPDisks();
         }
@@ -1127,11 +1132,6 @@ public:
         if (FieldsRequired.test(+ENodeFields::PDisks)) {
             if (!PDisksResponse) {
                 PDisksResponse = MakeCachedRequestBSControllerPDisks();
-            }
-        }
-        if (FieldsRequired.test(+ENodeFields::VDisks)) {
-            if (!VSlotsResponse) {
-                VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             }
         }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
@@ -1165,11 +1165,11 @@ public:
     }
 
     bool PreFilterDone() const {
-        return !FilterDatabase && FilterStorageStage == EFilterStorageStage::None && FilterPeerRole != EPeerRole::Static  && FilterPeerRole != EPeerRole::Other;
+        return (!PDisksResponse || PDisksProcessed) && !FilterDatabase && FilterPeerRole != EPeerRole::Static && FilterPeerRole != EPeerRole::Other;
     }
 
     bool FilterDone() const {
-        return PreFilterDone() && !NeedFilter;
+        return PreFilterDone() && FilterStorageStage == EFilterStorageStage::None && !NeedFilter;
     }
 
     void ApplyFilter() {
@@ -1177,13 +1177,13 @@ public:
         if (FilterDatabase) {
             if (FilterSubDomainKey && FieldsAvailable.test(+ENodeFields::SubDomainKey)) {
                 TNodeView nodeView;
-                if (HasDatabaseNodes) {
+                if (HasDatabaseNodes || !HasSharedNodes) {
                     for (TNode* node : NodeView) {
                         if (node->HasSubDomainKey(SubDomainKey)) {
                             nodeView.push_back(node);
                         }
                     }
-                } else {
+                } else if (HasSharedNodes) {
                     for (TNode* node : NodeView) {
                         if (node->HasSubDomainKey(SharedSubDomainKey)) {
                             nodeView.push_back(node);
@@ -1194,16 +1194,16 @@ public:
                 FoundNodes = TotalNodes = NodeView.size();
                 InvalidateNodes();
                 FilterDatabase = false;
-                AddEvent("PreFilter Applied");
+                AddEvent("PreFilter SubDomain Applied");
             } else if (FieldsAvailable.test(+ENodeFields::Database)) {
                 TNodeView nodeView;
-                if (HasDatabaseNodes) {
+                if (HasDatabaseNodes || !HasSharedNodes) {
                     for (TNode* node : NodeView) {
                         if (node->HasDatabase(Database)) {
                             nodeView.push_back(node);
                         }
                     }
-                } else {
+                } else if (HasSharedNodes) {
                     for (TNode* node : NodeView) {
                         if (node->HasDatabase(SharedDatabase)) {
                             nodeView.push_back(node);
@@ -1214,13 +1214,16 @@ public:
                 FoundNodes = TotalNodes = NodeView.size();
                 InvalidateNodes();
                 FilterDatabase = false;
-                AddEvent("PreFilter Applied");
+                AddEvent("PreFilter Database Applied");
             } else {
                 return;
             }
         }
         // storage/nodes pre-filter, affects TotalNodes count
         if (FilterStorageStage != EFilterStorageStage::None) {
+            return;
+        }
+        if (PDisksResponse && !PDisksProcessed) {
             return;
         }
         if (FilterPeerRole == EPeerRole::Static || FilterPeerRole == EPeerRole::Other) {
@@ -1666,7 +1669,7 @@ public:
         if (PathNavigateResponse && !PathNavigateResponse->IsDone()) {
             return false;
         }
-        return CurrentTimeoutState < TimeoutTablets;
+        return true;
     }
 
     bool TimeToAskWhiteboard() {
@@ -1840,7 +1843,7 @@ public:
             DatabaseNavigateProcessed = true;
         }
 
-        if (ResourceNavigateResponse && ResourceNavigateResponse->IsDone()) { // database hive and subdomain key
+        if (ResourceNavigateResponse && ResourceNavigateResponse->IsDone() && !ResourceNavigateProcessed) { // database hive and subdomain key
             if (ResourceNavigateResponse->IsOk()) {
                 auto* ev = ResourceNavigateResponse->Get();
                 if (ev->Request->ResultSet.size() == 1 && ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -1862,17 +1865,19 @@ public:
                             }
                         }
                     } else {
-                        ResourceBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(path, EBoardInfoRequestResource);
+                        if (!ResourceBoardInfoResponse) {
+                            ResourceBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(path, EBoardInfoRequestResource);
+                        }
                     }
                 }
             } else {
                 NodeView.clear();
                 AddProblem("no-shared-database-info");
             }
-            ResourceNavigateResponse.reset();
+            ResourceNavigateProcessed = true;
         }
 
-        if (PathNavigateResponse && PathNavigateResponse->IsDone()) { // filter path id
+        if (PathNavigateResponse && PathNavigateResponse->IsDone() && !PathNavigateProcessed) { // filter path id
             if (PathNavigateResponse->IsOk()) {
                 auto* ev = PathNavigateResponse->Get();
                 if (ev->Request->ResultSet.size() == 1 && ev->Request->ResultSet.begin()->Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -1901,10 +1906,10 @@ public:
             } else {
                 AddProblem("no-path-info");
             }
-            PathNavigateResponse.reset();
+            PathNavigateProcessed = true;
         }
 
-        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsDone() && TotalNodes > 0) {
+        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsDone() && TotalNodes > 0 && !DatabaseBoardInfoProcessed) {
             if (DatabaseBoardInfoResponse->IsOk() && DatabaseBoardInfoResponse->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 TString database = GetDatabaseFromEndpointsBoardPath(DatabaseBoardInfoResponse->Get()->Path);
                 for (const auto& entry : DatabaseBoardInfoResponse->Get()->InfoEntries) {
@@ -1921,10 +1926,10 @@ public:
             } else {
                 AddProblem("no-database-board-info");
             }
-            DatabaseBoardInfoResponse.reset();
+            DatabaseBoardInfoProcessed = true;
         }
 
-        if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsDone() && TotalNodes > 0) {
+        if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsDone() && TotalNodes > 0 && !ResourceBoardInfoProcessed) {
             if (ResourceBoardInfoResponse->IsOk() && ResourceBoardInfoResponse->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 TString database = GetDatabaseFromEndpointsBoardPath(ResourceBoardInfoResponse->Get()->Path);
                 for (const auto& entry : ResourceBoardInfoResponse->Get()->InfoEntries) {
@@ -1933,6 +1938,7 @@ public:
                         if (node) {
                             node->Database = database;
                             node->GotDatabaseFromResourceBoardInfo = true;
+                            HasSharedNodes = true;
                         }
                     }
                 }
@@ -1940,7 +1946,7 @@ public:
             } else {
                 AddProblem("no-shared-database-board-info");
             }
-            ResourceBoardInfoResponse.reset();
+            ResourceBoardInfoProcessed = true;
         }
 
         if (!TimeToAskHive()) {
@@ -1949,8 +1955,8 @@ public:
 
         AddEvent("TimeToAskHive");
 
-        if (!HivesToAsk.empty()) {
-            AddEvent("HivesTokHive");
+        if (!HivesToAsk.empty() && CurrentTimeoutState < TimeoutTablets) {
+            AddEvent("HivesToAsk");
             std::sort(HivesToAsk.begin(), HivesToAsk.end());
             HivesToAsk.erase(std::unique(HivesToAsk.begin(), HivesToAsk.end()), HivesToAsk.end());
             for (TTabletId hiveId : HivesToAsk) {
@@ -2000,6 +2006,9 @@ public:
                                     if (node->SubDomainKey == SubDomainKey) {
                                         HasDatabaseNodes = true;
                                     }
+                                    if (node->SubDomainKey == SharedSubDomainKey) {
+                                        HasSharedNodes = true;
+                                    }
                                 }
                             }
                         }
@@ -2026,6 +2035,7 @@ public:
                 FilterStorageStage = EFilterStorageStage::Groups;
             } else {
                 AddProblem("bsc-storage-pools-no-data");
+                FilterStorageStage = EFilterStorageStage::None;
             }
             StoragePoolsResponse.reset();
         }
@@ -2042,10 +2052,10 @@ public:
                 FilterStorageStage = EFilterStorageStage::VSlots;
             } else {
                 AddProblem("bsc-storage-groups-no-data");
+                FilterStorageStage = EFilterStorageStage::None;
             }
-            GroupsResponse.reset();
         }
-        if ((FilterStorageStage == EFilterStorageStage::VSlots || FilterStorageStage == EFilterStorageStage::None) && VSlotsResponse && VSlotsResponse->IsDone()) {
+        if (FilterStorageStage == EFilterStorageStage::VSlots && VSlotsResponse && VSlotsResponse->IsDone()) {
             if (VSlotsResponse->IsOk()) {
                 std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
                 std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
@@ -2054,30 +2064,24 @@ public:
                         if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
                             FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
                         }
-                        TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
-                        if (node) {
-                            node->SysViewVDisks.emplace_back(slotEntry);
-                            node->HasDisks = true;
-                        }
-                    } else {
-                        TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
-                        if (node) {
-                            node->HasDisks = true;
-                        }
+                    }
+                    TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
+                    if (node) {
+                        node->SysViewVDisks.emplace_back(slotEntry);
+                        node->HasDisks = true;
                     }
                     auto& slots = slotsPerDisk[{slotEntry.GetKey().GetNodeId(), slotEntry.GetKey().GetPDiskId()}];
                     ++slots;
                     MaximumSlotsPerDisk = std::max(MaximumSlotsPerDisk.value_or(0), slots);
                 }
                 FieldsAvailable.set(+ENodeFields::HasDisks);
-                FilterStorageStage = EFilterStorageStage::None;
-                ApplyEverything();
             } else {
                 AddProblem("bsc-storage-slots-no-data");
             }
-            VSlotsResponse.reset();
+            FilterStorageStage = EFilterStorageStage::None;
+            ApplyEverything();
         }
-        if (PDisksResponse && PDisksResponse->IsDone()) {
+        if (PDisksResponse && PDisksResponse->IsDone() && !PDisksProcessed) {
             if (PDisksResponse->IsOk()) {
                 std::unordered_map<TNodeId, std::size_t> disksPerNode;
                 for (const auto& pdiskEntry : PDisksResponse->Get()->Record.GetEntries()) {
@@ -2099,7 +2103,8 @@ public:
             } else {
                 AddProblem("bsc-pdisks-no-data");
             }
-            PDisksResponse.reset();
+            PDisksProcessed = true;
+            ApplyEverything();
         }
 
         if (!TimeToAskWhiteboard()) {
@@ -3077,6 +3082,7 @@ public:
                 }
             }
             if (WaitingForResponse()) {
+                AddEvent("WaitingForSomethingOnTimeout");
                 ReplyAndPassAway();
             }
         }
@@ -3282,7 +3288,7 @@ public:
             get:
                 tags:
                   - viewer
-                summary: Nodes info
+                summary: To get information about nodes
                 description: Information about nodes
                 parameters:
                   - name: database
@@ -3318,12 +3324,6 @@ public:
                           * `dynamic`
                           * `storage`
                           * `any`
-                  - name: with
-                    in: query
-                    description: >
-                        filter groups by missing or space:
-                          * `missing`
-                          * `space`
                   - name: storage
                     in: query
                     description: return storage info

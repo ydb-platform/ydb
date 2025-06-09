@@ -45,7 +45,7 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
     TType* const boolType = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<bool>::Id);
     TType* const ui64Type = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui64>::Id);
     TType* const ui32Type = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
-    TType* const tupleTypeTables = ctx.ProgramBuilder.NewTupleType({strType, boolType, strType, ui64Type, ui64Type, boolType, ui32Type});
+    TType* const tupleTypeTables = ctx.ProgramBuilder.NewTupleType({strType, boolType, strType, ui64Type, ui64Type, boolType, ui32Type, ui64Type});
     TType* const listTypeGroup = ctx.ProgramBuilder.NewListType(tupleTypeTables);
 
     bool useBlocks = callName.EndsWith(TYtBlockTableContent::CallableName());
@@ -95,6 +95,7 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
                 ctx.ProgramBuilder.NewDataLiteral(outTableInfo.Stat->RecordsCount),
                 ctx.ProgramBuilder.NewDataLiteral(false),
                 ctx.ProgramBuilder.NewDataLiteral(ui32(0)),
+                ctx.ProgramBuilder.NewDataLiteral(outTableInfo.Stat->DataSize),
             })})
         );
     }
@@ -207,6 +208,7 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
                 tupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral(pathInfo.Table->Stat->RecordsCount));
                 tupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral(pathInfo.Table->IsAnonymous));
                 tupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral(pathInfo.Table->Epoch.GetOrElse(0)));
+                tupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral(pathInfo.Table->Stat->DataSize));
 
                 tableTuples.push_back(ctx.ProgramBuilder.NewTuple(tupleTypeTables, tupleItems));
             }
@@ -381,7 +383,7 @@ TRuntimeNode BuildDqYtInputCall(
             tablesNode.Add(refName);
             // TODO() Enable range indexes
             auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, !enableBlockReader, !enableBlockReader, false);
-            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration);
+            const auto tmpFolder = GetTablesTmpFolder(*state->Configuration, clusterName);
             auto tableName = pathInfo.Table->Name;
             if (pathInfo.Table->IsAnonymous && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo.Table->FromNode.Cast())) {
                 tableName = state->AnonymousLabels.Value(std::make_pair(clusterName, tableName), TString());

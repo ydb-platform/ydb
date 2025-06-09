@@ -4,6 +4,7 @@
 #include "bit_util.h"
 #include "block_io_buffer.h"
 #include "block_item.h"
+#include "block_type_helper.h"
 #include "dispatch_traits.h"
 
 #include <yql/essentials/public/udf/udf_value.h>
@@ -1188,7 +1189,7 @@ class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDat
 public:
     TTzDateArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
-        , DateBuilder_(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen, params)
+        , DateBuilder_(typeInfoHelper, MakeTzLayoutArrowType<DataSlot>(), pool, maxLen, params)
         , TimezoneBuilder_(typeInfoHelper, arrow::uint16(), pool, maxLen, params)
     {
     }

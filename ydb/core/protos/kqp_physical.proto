@@ -109,6 +109,7 @@ message TKqpPhyTable {
     EKqpPhyTableKind Kind = 2;
     map<uint32, TKqpPhyColumn> Columns = 3;
     repeated TKqpPhyColumnId KeyColumns = 4;
+    optional uint32 SysViewType = 5;           // NKikimrSysView::ESysViewType
 }
 
 message TKqpPhyParamValue {
@@ -261,6 +262,8 @@ message TKqpPhyCnHashShuffle {
         THashV1 HashV1 = 2;
         TColumnShardHashV1 ColumnShardHashV1 = 3;
     }
+
+    bool UseSpilling = 4;
 }
 
 message TKqpPhyCnBroadcast {

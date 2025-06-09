@@ -1,8 +1,12 @@
+import logging
+
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, targets, VectorIndexOperations
+from ydb.tests.datashard.lib.vector_index import targets, to_binary_string_converters, VectorIndexOperations
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name
+
+logger = logging.getLogger("VectorIndexLevelsAndClusters")
 
 
 class TestVectorIndexLargeLevelsAndClusters(VectorBase):
@@ -12,15 +16,6 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         self.index_name = "idx_vector_vec_String"
         self.rows_count = 1000
         self.count_prefix = 5
-        self.to_binary_string_converters = {
-            "float": BinaryStringConverter(
-                name="Knn::ToBinaryStringFloat", data_type="Float", vector_type="FloatVector"
-            ),
-            "uint8": BinaryStringConverter(
-                name="Knn::ToBinaryStringUint8", data_type="Uint8", vector_type="Uint8Vector"
-            ),
-            "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
-        }
 
     def test_vecot_index_large_levels_and_clusters(self):
         prefix_data = {"String": lambda i: f"{i}"}
@@ -53,7 +48,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         covers = [[], [f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()]]
         for vector_type in vector_type_data:
             for vector_dimension in vector_dimension_data:
-                print(f"vector_type: {vector_type}, vector_dimension: {vector_dimension}")
+                logger.info(f"vector_type: {vector_type}, vector_dimension: {vector_dimension}")
                 create_table_sql = create_table_sql_request(
                     table_name=self.table_name,
                     columns=columns,
@@ -70,7 +65,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     pk_types=pk_types,
                     vector_type=vector_type,
                     vector_dimension=vector_dimension,
-                    to_binary_string_converters=self.to_binary_string_converters,
+                    to_binary_string_converters=to_binary_string_converters,
                     rows_count=self.rows_count,
                     count_prefix=self.count_prefix,
                 )
@@ -177,7 +172,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     numb=1,
                     prefix=prefix,
                     vector_dimension=vector_dimension,
-                    to_binary_string_converters=self.to_binary_string_converters,
+                    to_binary_string_converters=to_binary_string_converters,
                     rows_count=self.rows_count,
                     count_prefix=self.count_prefix,
                 )
@@ -197,7 +192,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 numb=1,
                 prefix=prefix,
                 vector_dimension=vector_dimension,
-                to_binary_string_converters=self.to_binary_string_converters,
+                to_binary_string_converters=to_binary_string_converters,
                 rows_count=self.rows_count,
                 count_prefix=self.count_prefix,
             )
@@ -238,7 +233,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             numb=numb,
             prefix=prefix,
             vector_dimension=vector_dimension,
-            to_binary_string_converters=self.to_binary_string_converters,
+            to_binary_string_converters=to_binary_string_converters,
             rows_count=self.rows_count,
             count_prefix=self.count_prefix,
         )

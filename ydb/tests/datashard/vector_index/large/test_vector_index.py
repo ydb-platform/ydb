@@ -3,9 +3,9 @@ import random
 import time
 
 from ydb.tests.datashard.lib.vector_base import VectorBase
-from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, VectorIndexOperations
+from ydb.tests.datashard.lib.vector_index import VectorIndexOperations, targets, to_binary_string_converters
 
-logger = logging.getLogger("VectorIndexWorkload")
+logger = logging.getLogger("VectorIndex")
 
 
 class TestVectorIndex(VectorBase):
@@ -15,23 +15,6 @@ class TestVectorIndex(VectorBase):
         self.index_name = "vector_idx"
         self.rows_count = 100
         self.limit = 10
-        self.to_binary_string_converters = {
-            "float": BinaryStringConverter(
-                name="Knn::ToBinaryStringFloat", data_type="Float", vector_type="FloatVector"
-            ),
-            "uint8": BinaryStringConverter(
-                name="Knn::ToBinaryStringUint8", data_type="Uint8", vector_type="Uint8Vector"
-            ),
-            "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
-        }
-        self.targets = {
-            "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
-            "distance": {
-                "cosine": "Knn::CosineDistance",
-                "manhattan": "Knn::ManhattanDistance",
-                "euclidean": "Knn::EuclideanDistance",
-            },
-        }
 
     def _get_random_vector(self, type, size):
         if type == "float":
@@ -94,7 +77,7 @@ class TestVectorIndex(VectorBase):
 
     def _upsert_values(self, table_path, vector_type, vector_dimension):
         logger.info("Upsert values")
-        converter = self.to_binary_string_converters[vector_type]
+        converter = to_binary_string_converters[vector_type]
         values = []
 
         for key in range(self.rows_count):
@@ -111,12 +94,12 @@ class TestVectorIndex(VectorBase):
 
     def _select(self, table_path, vector_type, vector_dimension, distance, similarity):
         if distance is not None:
-            target = self.targets["distance"][distance]
+            target = targets["distance"][distance]
         else:
-            target = self.targets["similarity"][similarity]
+            target = targets["similarity"][similarity]
         order = "ASC" if distance is not None else "DESC"
         vector = self._get_random_vector(vector_type, vector_dimension)
-        converter = self.to_binary_string_converters[vector_type]
+        converter = to_binary_string_converters[vector_type]
         name = converter.name
         data_type = converter.data_type
         select_sql = f"""

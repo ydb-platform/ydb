@@ -30,6 +30,15 @@ targets = {
     },
 }
 
+to_binary_string_converters = {
+    "float": BinaryStringConverter(
+        name="Knn::ToBinaryStringFloat", data_type="Float", vector_type="FloatVector"
+    ),
+    "uint8": BinaryStringConverter(
+        name="Knn::ToBinaryStringUint8", data_type="Uint8", vector_type="Uint8Vector"
+    ),
+    "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
+}
 
 class VectorIndexOperations:
     def __init__(self, query_object: Query):

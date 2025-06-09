@@ -1,10 +1,12 @@
 #include "yql_completer.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/complete/dummy_name_service.h>
-#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
+#include "ydb_schema.h"
+
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
+#include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
@@ -125,34 +127,40 @@ namespace NYdb::NConsoleClient {
         };
     }
 
+    NSQLComplete::ISchemaListCache::TPtr MakeSchemaCache() {
+        using TKey = NSQLComplete::TSchemaListCacheKey;
+        using TValue = TVector<NSQLComplete::TFolderEntry>;
+
+        return NSQLComplete::MakeLocalCache<TKey, TValue>(
+            NMonotonic::CreateDefaultMonotonicTimeProvider(),
+            /* config = */ {});
+    }
+
     IYQLCompleter::TPtr MakeYQLCompleter(
         TColorSchema color, TDriver driver, TString database, bool isVerbose) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
         auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
 
-        auto statics = NSQLComplete::MakeStaticNameService(
-            NSQLComplete::LoadDefaultNameSet(), ranking);
+        TVector<NSQLComplete::INameService::TPtr> services = {
+            NSQLComplete::MakeStaticNameService(
+                NSQLComplete::LoadDefaultNameSet(), ranking),
 
-        TVector<NSQLComplete::INameService::TPtr> heavies = {
-            statics,
             NSQLComplete::MakeSchemaNameService(
                 NSQLComplete::MakeSimpleSchema(
-                    MakeYDBSchema(std::move(driver), std::move(database), isVerbose))),
-        };
-
-        TVector<NSQLComplete::INameService::TPtr> lighties = {
-            statics,
-            MakeDummyNameService(),
+                    NSQLComplete::MakeCachedSimpleSchema(
+                        MakeSchemaCache(),
+                        /* zone = */ "",
+                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose)))),
         };
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
             NSQLComplete::MakeSqlCompletionEngine(
                 lexer,
-                NSQLComplete::MakeUnionNameService(std::move(heavies), ranking)),
+                NSQLComplete::MakeUnionNameService(services, ranking)),
             NSQLComplete::MakeSqlCompletionEngine(
                 lexer,
-                NSQLComplete::MakeUnionNameService(std::move(lighties), ranking)),
+                NSQLComplete::MakeUnionNameService(services, ranking)),
             std::move(color)));
     }
 

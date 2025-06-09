@@ -263,7 +263,7 @@ class WorkloadVectorIndex(WorkloadBase):
                                 logger.info(f"ERRROR {ex}")
                                 raise str(ex)
                             if self.is_stop_requested():
-                                break
+                                return
 
                         for similarity in similarity_data:
                             logger.info(

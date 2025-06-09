@@ -68,6 +68,11 @@ inline bool Checker<bool>::Get(const ::Ydb::Value& value) {
 }
 
 template<>
+inline i8 Checker<i8>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
 inline ui32 Checker<ui32>::Get(const ::Ydb::Value& value) {
     return value.uint32_value();
 }

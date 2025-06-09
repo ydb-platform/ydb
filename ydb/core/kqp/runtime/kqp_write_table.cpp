@@ -1067,14 +1067,22 @@ public:
     IDataBatchPtr Project(const IDataBatchPtr& data) const override {
         auto* batch = dynamic_cast<TRowBatch*>(data.Get());
         AFL_ENSURE(batch);
-        return ProjectDataShard(*batch);
+        const auto& rows = batch->GetRows();
+        return ProjectDataShard(rows.begin(), rows.end());
     }
 
-    IDataBatchPtr ProjectDataShard(const TRowBatch& data) const {
+    IDataBatchPtr Project(const TRowsRef& data) const override {
+        return ProjectDataShard(data.begin(), data.end());
+    }
+
+    IDataBatchPtr ProjectDataShard(
+            TVector<TConstArrayRef<TCell>>::const_iterator begin,
+            TVector<TConstArrayRef<TCell>>::const_iterator end) const {
         const size_t columnsCount = ColumnsMapping.size();
         TRowsBatcher rowBatcher(columnsCount, std::nullopt, Alloc);
         std::vector<TCell> cells(columnsCount);
-        for (const auto& row : data.GetRows()) {
+        for (auto it = begin; it != end; ++it) {
+            const auto& row = *it;
             for (size_t index = 0; index < columnsCount; ++index) {
                 cells[index] = row[ColumnsMapping[index]];
             }
@@ -1101,6 +1109,47 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TDataBatchProjection>(
         inputColumns, inputWriteIndex, outputColumns, outputWriteIndex, std::move(alloc));
+}
+
+std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
+        const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
+        const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes) {
+    size_t totalRows = 0;
+    for (const auto& batch : batches) {
+        auto* data = dynamic_cast<TRowBatch*>(batch.Get());
+        AFL_ENSURE(data);
+        totalRows += data->GetRows().Size();
+    }
+
+    std::vector<TConstArrayRef<TCell>> rows;
+    rows.reserve(totalRows);
+
+    // We need only last written row for each key
+    for (auto it = batches.rbegin(); it != batches.rend(); ++it) {
+        auto* data = dynamic_cast<TRowBatch*>(it->Get());
+        AFL_ENSURE(data);
+        const auto& batchRows = data->GetRows();
+        rows.insert(rows.end(), batchRows.begin(), batchRows.end());
+    }
+
+    std::sort(
+        rows.begin(),
+        rows.end(),
+        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
+            AFL_ENSURE(lhs.size() == rhs.size());
+            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), lhs.size()) < 0;
+        });
+
+    auto rowsToEraseBegin = std::unique(
+        rows.begin(),
+        rows.end(),
+        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
+            AFL_ENSURE(lhs.size() == rhs.size());
+            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), lhs.size()) == 0;
+        });
+
+    rows.erase(rowsToEraseBegin, rows.end());
+    return rows;
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,

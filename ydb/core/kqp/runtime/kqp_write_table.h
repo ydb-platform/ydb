@@ -10,6 +10,8 @@
 namespace NKikimr {
 namespace NKqp {
 
+using TRowsRef = TConstArrayRef<TConstArrayRef<TCell>>;
+
 class IDataBatch : public TThrRefBase {
 public:
     virtual TString SerializeToString() const = 0;
@@ -51,6 +53,7 @@ IDataBatcherPtr CreateColumnDataBatcher(
 class IDataBatchProjection : public TThrRefBase {
 public:
     virtual IDataBatchPtr Project(const IDataBatchPtr& data) const = 0;
+    virtual IDataBatchPtr Project(const TRowsRef& data) const = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
@@ -61,6 +64,10 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
     const TConstArrayRef<ui32> outputWriteIndex,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+
+std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
+    const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
+    const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);
 
 class IShardedWriteController : public TThrRefBase {
 public:

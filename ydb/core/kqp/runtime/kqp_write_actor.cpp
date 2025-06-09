@@ -402,7 +402,6 @@ public:
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
         ShardedWriteController->Write(token, operationType, std::move(data));
-        //UpdateShards();
     }
 
     void Close(TWriteToken token) {
@@ -411,7 +410,6 @@ public:
         CA_LOG_D("Close: token=" << token);
 
         ShardedWriteController->Close(token);
-        //UpdateShards();
     }
 
     void Close() {
@@ -1560,11 +1558,10 @@ private:
             // At first, write to indexes
             if (PathId != actorPathId) {
                 if (oldBatch) {
-                    auto preparedOldBatch = actorInfo.Projection->Project(oldBatch);
                     actorInfo.WriteActor->Write(
                         Cookie,
                         NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
-                        preparedOldBatch);
+                        std::move(oldBatch));
                     actorInfo.WriteActor->FlushBuffer(Cookie);
                 }
                 auto preparedBatch = actorInfo.Projection->Project(newBatch);

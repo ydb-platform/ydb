@@ -58,7 +58,7 @@ inline void ShrinkToFit(TString& input) {
     X(BackupController)
 
 
-inline TMaybe<EStaticControlType> GetLogFlushDelayOverrideUsecTabletTypeControl(TTabletTypes::EType type) {
+inline TMaybe<EStaticControlType> GetLogFlushDelayOverrideUsecTabletTypeControl(NKikimrTabletBase::TTabletTypes::EType type) {
 #define CASE_TYPE_CONTROL(tablet)\
         case TTabletTypes::tablet: \
             return EStaticControlType::tablet ## LogFlushDelayOverrideUsec;

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import copy
+import os
 import pytest
 import yatest
 import time
@@ -8,15 +9,6 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
-
-
-current_binary_path = kikimr_driver_path()
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
-prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
-
-current_binary_version = (float("+inf"), )
-last_stable_version = None
-prelast_stable_version = None
 
 
 def string_version_to_tuple(s):
@@ -29,15 +21,31 @@ def string_version_to_tuple(s):
     return tuple(result)
 
 
-current_name = "current"
+try:
+    current_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target-stable")
+    current_name = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target-stable-name").read().strip()
+    current_binary_version = string_version_to_tuple(current_name)
+except Exception:
+    current_binary_path = kikimr_driver_path()
+    current_name = "current"
+    current_binary_version = (float("+inf"), )
+
+last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
+prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
+
+last_stable_version = None
+prelast_stable_version = None
+
 last_stable_name = "last"
 if last_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
-    last_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")).read().strip()
-    last_stable_version = string_version_to_tuple(last_stable_name)
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")) as f:
+        last_stable_name = f.read().strip()
+        last_stable_version = string_version_to_tuple(last_stable_name)
 prelast_stable_name = "prelast"
 if prelast_stable_binary_path:  # in import_test yatest.common.binary_path returns None
-    prelast_stable_name = open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")).read().strip()
-    prelast_stable_version = string_version_to_tuple(prelast_stable_name)
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")) as f:
+        prelast_stable_name = f.read().strip()
+        prelast_stable_version = string_version_to_tuple(prelast_stable_name)
 
 path_to_version = {
     current_binary_path: current_binary_version,

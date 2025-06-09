@@ -426,70 +426,16 @@ def is_localhost(hostname: str) -> bool:
     return RemoteExecutor._is_localhost(hostname)
 
 
-def mkdir(host: str, path: str, raise_on_error: bool = False, use_sudo: bool = True) -> str:
-    """
-    Создает директорию на хосте
-
-    Args:
-        host: имя хоста
-        path: путь к создаваемой директории
-        raise_on_error: вызывать ли исключение при ошибке
-        use_sudo: использовать ли sudo для создания директории
-
-    Returns:
-        str: вывод команды
-    """
-    cmd_prefix = "sudo " if use_sudo else ""
-    result = execute_command(host, f"{cmd_prefix}mkdir -p {path}", raise_on_error)
-    return result.stdout
-
-
-def chmod(host: str, path: str, mode: str = "+x", raise_on_error: bool = True, use_sudo: bool = True) -> str:
-    """
-    Изменяет права доступа к файлу на хосте
-
-    Args:
-        host: имя хоста
-        path: путь к файлу
-        mode: права доступа (по умолчанию +x)
-        raise_on_error: вызывать ли исключение при ошибке
-        use_sudo: использовать ли sudo для изменения прав
-
-    Returns:
-        str: вывод команды
-    """
-    cmd_prefix = "sudo " if use_sudo else ""
-    result = execute_command(host, f"{cmd_prefix}chmod {mode} {path}", raise_on_error)
-    return result.stdout
-
-
 def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool = True) -> bool:
     """
     Создает директорию и устанавливает права 777
-    
-    Args:
-        host: имя хоста
-        path: путь к директории
-        raise_on_error: вызывать ли исключение при ошибке
-        
-    Returns:
-        bool: успешность операции
     """
     try:
-        # Создаем директорию с sudo
-        mkdir(host, path, raise_on_error=False, use_sudo=True)
-        
-        # Устанавливаем права 777
-        execute_command(host, f"sudo chmod 777 {path}", raise_on_error=False)
-        
-        LOGGER.info(f"Created directory with 777 permissions: {path}")
+        execute_command(host, f"sudo mkdir -p {path} && sudo chmod 777 {path}", raise_on_error=False)
         return True
-            
     except Exception as e:
-        error_msg = f"Failed to ensure directory {path}: {e}"
-        LOGGER.error(error_msg)
         if raise_on_error:
-            raise RuntimeError(error_msg) from e
+            raise RuntimeError(f"Failed to ensure directory {path}: {e}") from e
         return False
 
 
@@ -504,191 +450,72 @@ def copy_file(local_path: str, host: str, remote_path: str, raise_on_error: bool
         raise_on_error: вызывать ли исключение при ошибке
 
     Returns:
-        str: вывод команды копирования
+        str: результат копирования или None при ошибке
     """
-    # Проверяем существование локального файла
     if not os.path.exists(local_path):
         error_msg = f"Local file does not exist: {local_path}"
-        LOGGER.error(error_msg)
         if raise_on_error:
             raise FileNotFoundError(error_msg)
         return None
 
-    # Проверяем, является ли хост localhost
-    if is_localhost(host):
-        return _copy_file_locally(local_path, remote_path, raise_on_error)
-    else:
-        return _copy_file_via_tmp_and_sudo(local_path, host, remote_path, raise_on_error)
-
-
-def _copy_file_locally(local_path: str, remote_path: str, raise_on_error: bool = True) -> str:
-    """
-    Копирует файл локально (упрощенная версия)
-    """
-    LOGGER.info(f"Copying file locally: {local_path} -> {remote_path}")
-
     try:
-        # Создаем директорию с правами 777
-        remote_dir = os.path.dirname(remote_path)
-        if remote_dir and remote_dir != '/':
-            ensure_directory_with_permissions("localhost", remote_dir, raise_on_error=False)
+        if is_localhost(host):
+            return _copy_file_unified(local_path, host, remote_path, is_local=True)
+        else:
+            return _copy_file_unified(local_path, host, remote_path, is_local=False)
+    except Exception as e:
+        if raise_on_error:
+            raise
+        LOGGER.error(f"Failed to copy {local_path} to {host}:{remote_path}: {e}")
+        return None
 
-        # Пытаемся скопировать файл напрямую
+
+def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: bool) -> str:
+    """
+    Единая логика копирования файлов для локального и удаленного хостов
+    """
+    # Создаем целевую директорию
+    remote_dir = os.path.dirname(remote_path)
+    if remote_dir and remote_dir != '/':
+        execute_command(host, f"sudo mkdir -p {remote_dir} && sudo chmod 777 {remote_dir}", raise_on_error=False)
+
+    if is_local:
+        # Локальное копирование
         try:
             shutil.copy2(local_path, remote_path)
-            LOGGER.info(f"Successfully copied file locally: {local_path} -> {remote_path}")
             return f"Local copy successful: {remote_path}"
         except PermissionError:
-            # Если нет прав - используем sudo
-            LOGGER.warning(f"Permission denied, trying with sudo")
+            # Используем временный файл и sudo
             import tempfile
             with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
                 temp_path = tmp_file.name
             
             shutil.copy2(local_path, temp_path)
-            result = execute_command("localhost", f"sudo mv {temp_path} {remote_path}", raise_on_error=False)
-            
-            if result.stderr:
-                error_msg = f"Failed to copy with sudo: {result.stderr}"
-                LOGGER.error(error_msg)
-                try:
-                    os.unlink(temp_path)
-                except:
-                    pass
-                if raise_on_error:
-                    raise PermissionError(error_msg)
-                return None
-            else:
-                LOGGER.info(f"Successfully copied with sudo: {local_path} -> {remote_path}")
-                return f"Local copy with sudo successful: {remote_path}"
-
-    except Exception as e:
-        error_msg = f"Failed to copy file locally: {e}"
-        LOGGER.error(error_msg)
-        if raise_on_error:
-            raise IOError(error_msg) from e
-        return None
-
-
-def _copy_file_via_tmp_and_sudo(local_path: str, host: str, remote_path: str, raise_on_error: bool = True) -> str:
-    """
-    Копирует файл через промежуточную стадию в /tmp с использованием sudo для финального перемещения
-    
-    Args:
-        local_path: путь к локальному файлу
-        host: имя хоста
-        remote_path: путь на хосте
-        raise_on_error: вызывать ли исключение при ошибке
+            execute_command("localhost", f"sudo mv {temp_path} {remote_path}")
+            return f"Local copy with sudo successful: {remote_path}"
+    else:
+        # Удаленное копирование через SCP + временный файл
+        timestamp = int(time())
+        filename = os.path.basename(local_path)
+        tmp_path = f"/tmp/{filename}.{timestamp}.tmp"
         
-    Returns:
-        str: вывод команды копирования
-    """
-    # Генерируем уникальное имя временного файла
-    timestamp = int(time())
-    filename = os.path.basename(local_path)
-    tmp_filename = f"{filename}.{timestamp}.tmp"
-    tmp_path = f"/tmp/{tmp_filename}"
-    
-    LOGGER.info(f"Copying {local_path} to {host} via /tmp staging: {tmp_path} -> {remote_path}")
-    
-    # Шаг 1: Копируем файл в /tmp через SCP
-    def _scp_to_tmp() -> Tuple[bool, str, str]:
-        """Копирует файл в /tmp на удаленном хосте"""
+        # SCP в /tmp
         scp_cmd = ['scp', "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null"]
-
-        # Добавляем SSH пользователя, если указан
+        
         ssh_user = os.getenv('SSH_USER')
-        scp_host = host
-        if ssh_user is not None:
-            scp_host = f"{ssh_user}@{scp_host}"
-
-        # Добавляем ключ SSH, если указан
+        scp_host = f"{ssh_user}@{host}" if ssh_user else host
+        
         ssh_key_file = os.getenv('SSH_KEY_FILE')
-        if ssh_key_file is not None:
+        if ssh_key_file:
             scp_cmd += ['-i', ssh_key_file]
-
-        # Добавляем источник и назначение
+        
         scp_cmd += [local_path, f"{scp_host}:{tmp_path}"]
-
-        LOGGER.info(f"Step 1: SCP to /tmp - {scp_cmd}")
-
-        try:
-            execution = yatest.common.execute(
-                scp_cmd,
-                wait=True,
-                check_exit_code=False
-            )
-
-            stdout = (RemoteExecutor._safe_decode(execution.std_out)
-                      if hasattr(execution, 'std_out') and execution.std_out else "")
-            stderr = (RemoteExecutor._safe_decode(execution.std_err)
-                      if hasattr(execution, 'std_err') and execution.std_err else "")
-
-            stderr_filtered = RemoteExecutor._filter_ssh_warnings(stderr)
-            exit_code = getattr(execution, 'exit_code', getattr(execution, 'returncode', 0))
-            
-            return exit_code == 0, stdout, stderr_filtered
-
-        except Exception as e:
-            LOGGER.error(f"SCP to /tmp failed: {e}")
-            return False, "", str(e)
-
-    # Выполняем копирование в /tmp
-    scp_success, scp_stdout, scp_stderr = _scp_to_tmp()
-    
-    if not scp_success:
-        error_msg = f"Failed to copy file to /tmp on {host}. Error: {scp_stderr}"
-        LOGGER.error(error_msg)
-        if raise_on_error:
-            raise subprocess.CalledProcessError(1, ['scp', local_path, f"{host}:{tmp_path}"], scp_stdout, scp_stderr)
-        return None
-
-    LOGGER.info(f"Step 1 completed: File copied to {tmp_path} on {host}")
-
-    # Шаг 2: Создаем целевую директорию и перемещаем файл с помощью sudo
-    try:
-        remote_dir = os.path.dirname(remote_path)
         
-        # Создаем целевую директорию с правами 777
-        if remote_dir and remote_dir != '/':
-            ensure_directory_with_permissions(host, remote_dir, raise_on_error=False)
+        execution = yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
         
-        # Перемещаем файл из /tmp в целевое место
-        mv_cmd = f"sudo mv {tmp_path} {remote_path}"
-        LOGGER.info(f"Step 2b: Moving file - {mv_cmd}")
-        result = execute_command(host, mv_cmd, raise_on_error=True)
-        
-        LOGGER.info(f"Step 2 completed: File moved to {remote_path}")
-        
-        # Шаг 3: Проверяем, что файл существует в целевом месте
-        check_cmd = f"ls -la {remote_path}"
-        LOGGER.info(f"Step 3: Verifying file - {check_cmd}")
-        check_result = execute_command(host, check_cmd, raise_on_error=False)
-        
-        if check_result.stderr.strip() and "No such file or directory" in check_result.stderr:
-            error_msg = f"File verification failed: {remote_path} does not exist after copy"
-            LOGGER.error(error_msg)
-            if raise_on_error:
-                raise IOError(error_msg)
-            return None
-        else:
-            LOGGER.info(f"File verification successful: {check_result.stdout.strip()}")
-            return f"Successfully copied via /tmp staging: {remote_path}"
-            
-    except Exception as e:
-        # Очищаем временный файл в случае ошибки
-        cleanup_cmd = f"rm -f {tmp_path}"
-        LOGGER.info(f"Cleanup: Removing temporary file - {cleanup_cmd}")
-        try:
-            execute_command(host, cleanup_cmd, raise_on_error=False)
-        except:
-            pass  # Игнорируем ошибки очистки
-            
-        error_msg = f"Failed to move file from /tmp to destination: {e}"
-        LOGGER.error(error_msg)
-        if raise_on_error:
-            raise IOError(error_msg) from e
-        return None
+        # Перемещаем из /tmp в целевое место
+        execute_command(host, f"sudo mv {tmp_path} {remote_path}")
+        return f"SCP copy successful: {remote_path}"
 
 
 def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: bool = True) -> dict:
@@ -706,36 +533,33 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
     """
     binary_name = os.path.basename(local_path)
     target_path = os.path.join(target_dir, binary_name)
-    result = {
-        'name': binary_name,
-        'path': target_path,
-        'success': False
-    }
-
+    
     try:
-        # Создаем директорию с правами 777
+        # Создаем директорию
         ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
-
+        
         # Копируем файл
         copy_result = copy_file(local_path, host, target_path)
         if copy_result is None:
             raise Exception("File copy failed")
-
-        # Делаем файл исполняемым если нужно
+        
+        # Делаем исполняемым
         if make_executable:
-            chmod(host, target_path, raise_on_error=False)
-
-        result.update({
+            execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=False)
+        
+        return {
+            'name': binary_name,
+            'path': target_path,
             'success': True,
             'output': f'Deployed {binary_name} to {target_path}'
-        })
-
-        return result
+        }
     except Exception as e:
-        result.update({
+        return {
+            'name': binary_name,
+            'path': target_path,
+            'success': False,
             'error': str(e)
-        })
-        return result
+        }
 
 
 @allure.step('Deploy binaries to hosts')
@@ -756,70 +580,30 @@ def deploy_binaries_to_hosts(
         Dict: словарь с результатами деплоя по хостам
     """
     results = {}
-    processed_hosts = set()
-
-    for host in hosts:
-        # Избегаем дублирования обработки одного хоста
-        if host in processed_hosts:
-            continue
-        processed_hosts.add(host)
-
+    
+    for host in set(hosts):  # Автоматическое удаление дубликатов
         host_results = {}
-        allure.attach(f"Host: {host}", "Host Info", attachment_type=allure.attachment_type.TEXT)
-
-        # Создаем директорию на хосте
-        mkdir(host, target_dir)
-
+        
+        # Создаем директорию на хосте один раз
+        ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
+        
         # Копируем каждый бинарный файл
         for binary_file in binary_files:
-            try:
-                result = deploy_binary(binary_file, host, target_dir)
-                host_results[os.path.basename(binary_file)] = result
-
-                if result['success']:
-                    allure.attach(
-                        f"Successfully deployed {result['name']} to {host}:"
-                        f"{result['path']}\n{result.get('output', '')}",
-                        f"Deploy {result['name']} to {host}",
-                        attachment_type=allure.attachment_type.TEXT
-                    )
-                else:
-                    allure.attach(
-                        f"Failed to deploy {result['name']} to {host}: "
-                        f"{result.get('error', 'Unknown error')}",
-                        f"Deploy {result['name']} to {host} failed",
-                        attachment_type=allure.attachment_type.TEXT
-                    )
-            except Exception as e:
-                error_msg = str(e)
-                host_results[os.path.basename(binary_file)] = {
-                    'success': False,
-                    'error': error_msg
-                }
-
-                allure.attach(
-                    f"Exception when deploying {os.path.basename(binary_file)} "
-                    f"to {host}: {error_msg}",
-                    f"Deploy {os.path.basename(binary_file)} to {host} failed",
-                    attachment_type=allure.attachment_type.TEXT
-                )
-
-        # Store the host results in the main results dictionary
+            result = deploy_binary(binary_file, host, target_dir)
+            host_results[os.path.basename(binary_file)] = result
+            
+            # Логируем только критичные события
+            if not result['success']:
+                LOGGER.error(f"Failed to deploy {result['name']} to {host}: {result.get('error', 'Unknown error')}")
+        
         results[host] = host_results
-
+    
     return results
 
 
 def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp/stress_binaries/') -> Dict[str, bool]:
     """
     Исправляет права доступа к директории binaries на всех указанных хостах
-    
-    Args:
-        hosts: список хостов
-        target_dir: путь к директории для исправления
-        
-    Returns:
-        Dict[str, bool]: результаты по хостам
     """
     results = {}
     
@@ -827,10 +611,8 @@ def fix_binaries_directory_permissions(hosts: List[str], target_dir: str = '/tmp
         try:
             success = ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
             results[host] = success
-            if success:
-                LOGGER.info(f"Fixed permissions for {target_dir} on {host}")
-            else:
-                LOGGER.warning(f"Failed to fix permissions for {target_dir} on {host}")
+            if not success:
+                LOGGER.error(f"Failed to fix permissions for {target_dir} on {host}")
         except Exception as e:
             LOGGER.error(f"Error fixing permissions on {host}: {e}")
             results[host] = False

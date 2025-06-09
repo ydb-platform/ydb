@@ -436,8 +436,8 @@ struct TPDiskConfig : public TThrRefBase {
     }
 
     static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
-        ui32 vu = groupSizeInUnits ?: 1;
-        ui32 pu = slotSizeInUnits ?: 1;
+        ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
+        ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
         return int(vu / pu) + !!(vu % pu);
     }
 };

@@ -63,7 +63,7 @@ public:
     }
 
     ui32 GetWeight() const {
-        return Weight ?: 1;
+        return Weight ? Weight : 1;
     }
 
     TString Print() const {

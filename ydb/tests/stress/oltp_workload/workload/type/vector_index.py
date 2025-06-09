@@ -287,15 +287,7 @@ class WorkloadVectorIndex(WorkloadBase):
                                 logger.info(f"ERRROR {ex}")
                                 raise str(ex)
                             if self.is_stop_requested():
-                                break
-                        if self.is_stop_requested():
-                            break
-                    if self.is_stop_requested():
-                        break
-                if self.is_stop_requested():
-                    break
-            if self.is_stop_requested():
-                break
+                                return
 
         self._drop_table(table_path)
 

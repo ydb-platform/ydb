@@ -226,8 +226,8 @@ class WorkloadVectorIndex(WorkloadBase):
 
     def _loop(self):
         table_path = self.get_table_path(self.table_name)
-        distance_data = ["cosine", "manhattan", "euclidean"]  # "cosine", "manhattan", "euclidean"
-        similarity_data = ["cosine", "inner_product"]  # "inner_product", "cosine"
+        distance_data = ["cosine", "manhattan", "euclidean"]
+        similarity_data = ["cosine", "inner_product"]
         vector_type_data = ["float", "int8", "uint8"]
         levels_data = [1, 3]
         clusters_data = [1, 17]

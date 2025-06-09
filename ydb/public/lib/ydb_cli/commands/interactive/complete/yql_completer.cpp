@@ -100,6 +100,8 @@ namespace NYdb::NConsoleClient {
                 case NSQLComplete::ECandidateKind::FolderName:
                 case NSQLComplete::ECandidateKind::TableName:
                     return Color.identifier.quoted;
+                case NSQLComplete::ECandidateKind::BindingName:
+                    return Color.identifier.variable;
                 default:
                     return replxx::Replxx::Color::DEFAULT;
             }

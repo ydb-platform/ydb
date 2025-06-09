@@ -53,7 +53,7 @@ struct TBackup {
         return TRUCalculator::ReadTable(bytes);
     }
 
-    static void FinishStats(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
+    static void Finish(const TOperationId& opId, TTxState& txState, TOperationContext& context) {
         if (txState.TxType != TTxState::TxBackup) {
             return;
         }

@@ -19,9 +19,6 @@ from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
-from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts, ExecutionResult
-# Импортируем фикстуру workload_executor из отдельного модуля  
-from ydb.tests.olap.load.lib.workload_executor import workload_executor
 
 
 class LoadSuiteBase:

@@ -18,140 +18,6 @@ from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 
 
-@pytest.fixture
-def workload_executor():
-    """
-    Фикстура для выполнения workload с общей логикой развертывания и запуска.
-    Возвращает функцию, которая принимает параметры workload и выполняет его.
-    """
-    def execute_workload(
-        binary_env_var: str,
-        binary_name: str,
-        command_args: str,
-        timeout: float,
-        target_dir: str = '/tmp/stress_binaries/',
-        raise_on_error: bool = False
-    ) -> tuple[str, str, bool]:
-        """
-        Выполняет workload на первой ноде кластера.
-        
-        Args:
-            binary_env_var: Переменная окружения с путем к бинарному файлу
-            binary_name: Имя бинарного файла
-            command_args: Аргументы командной строки для workload
-            timeout: Таймаут выполнения
-            target_dir: Директория для развертывания
-            raise_on_error: Бросать исключение при ошибке развертывания
-            
-        Returns:
-            tuple[stdout, stderr, success]: Результат выполнения
-        """
-        logging.info(f"Starting workload execution with binary_env_var={binary_env_var}, binary_name={binary_name}")
-        logging.info(f"Command args: {command_args}")
-        logging.info(f"Timeout: {timeout}s, target_dir: {target_dir}")
-        
-        # Получаем бинарный файл
-        with allure.step('Get workload binary'):
-            binary_files = [yatest.common.binary_path(os.getenv(binary_env_var))]
-            allure.attach(f"Environment variable: {binary_env_var}", 'Binary Configuration', attachment_type=allure.attachment_type.TEXT)
-            allure.attach(f"Binary path: {binary_files[0]}", 'Binary Path', attachment_type=allure.attachment_type.TEXT)
-            logging.info(f"Binary path resolved: {binary_files[0]}")
-        
-        # Получаем ноды кластера и выбираем первую
-        with allure.step('Select cluster node'):
-            nodes = YdbCluster.get_cluster_nodes()
-            if not nodes:
-                raise Exception("No cluster nodes found")
-            
-            node = nodes[0]
-            allure.attach(f"Selected node: {node.host}", 'Target Node', attachment_type=allure.attachment_type.TEXT)
-            logging.info(f"Selected target node: {node.host}")
-        
-        # Развертываем бинарный файл
-        with allure.step(f'Deploy {binary_name} to {node.host}'):
-            logging.info(f"Starting deployment to {node.host}")
-            deploy_results = deploy_binaries_to_hosts(
-                binary_files, [node.host], target_dir
-            )
-            
-            # Проверяем результат развертывания
-            binary_result = deploy_results.get(node.host, {}).get(binary_name, {})
-            success = binary_result.get('success', False)
-            
-            allure.attach(f"Deployment result: {binary_result}", 'Deployment Details', attachment_type=allure.attachment_type.TEXT)
-            logging.info(f"Deployment result: {binary_result}")
-            
-            if not success:
-                # Создаем детальное сообщение об ошибке деплоя
-                deploy_error_details = []
-                deploy_error_details.append(f"DEPLOYMENT FAILED: {binary_name}")
-                deploy_error_details.append(f"Target host: {node.host}")
-                deploy_error_details.append(f"Target directory: {target_dir}")
-                deploy_error_details.append(f"Binary environment variable: {binary_env_var}")
-                deploy_error_details.append(f"Local binary path: {binary_files[0]}")
-                
-                # Детали результата деплоя
-                if 'error' in binary_result:
-                    deploy_error_details.append(f"Deploy error: {binary_result['error']}")
-                
-                # Показываем полный результат деплоя для диагностики
-                deploy_error_details.append(f"\nFull deployment result:")
-                for key, value in binary_result.items():
-                    deploy_error_details.append(f"  {key}: {value}")
-                
-                # Информация о хосте
-                deploy_error_details.append(f"\nHost details:")
-                deploy_error_details.append(f"  Host: {node.host}")
-                deploy_error_details.append(f"  Role: {node.role}")
-                deploy_error_details.append(f"  Start time: {node.start_time}")
-                
-                detailed_deploy_error = "\n".join(deploy_error_details)
-                
-                logging.error(detailed_deploy_error)
-                if raise_on_error:
-                    raise Exception(detailed_deploy_error)
-                return "", detailed_deploy_error, False
-        
-        # Формируем и выполняем команду
-        with allure.step(f'Execute workload command'):
-            target_path = binary_result['path']
-            # Отключаем буферизацию для гарантии захвата вывода
-            cmd = f"stdbuf -o0 -e0 {target_path} {command_args}"
-            
-            allure.attach(cmd, 'Full Command', attachment_type=allure.attachment_type.TEXT)
-            allure.attach(f"Timeout: {int(timeout * 2)}s", 'Execution Timeout', attachment_type=allure.attachment_type.TEXT)
-            allure.attach(f"Target host: {node.host}", 'Execution Target', attachment_type=allure.attachment_type.TEXT)
-            
-            execution_result = execute_command(
-                node.host, cmd, 
-                raise_on_error=False,
-                timeout=int(timeout * 2), 
-                raise_on_timeout=False
-            )
-            
-            stdout = execution_result.stdout
-            stderr = execution_result.stderr
-            is_timeout = execution_result.is_timeout
-            
-            # Прикрепляем результаты выполнения команды
-            if stdout:
-                allure.attach(stdout, 'Command Stdout', attachment_type=allure.attachment_type.TEXT)
-            else:
-                allure.attach("(empty)", 'Command Stdout', attachment_type=allure.attachment_type.TEXT)
-                
-            if stderr:
-                allure.attach(stderr, 'Command Stderr', attachment_type=allure.attachment_type.TEXT)
-            else:
-                allure.attach("(empty)", 'Command Stderr', attachment_type=allure.attachment_type.TEXT)
-            
-            # success=True только если stderr пустой (исключая SSH warnings) И нет timeout
-            success = not bool(stderr.strip()) and not is_timeout
-            
-            return stdout, stderr, success
-    
-    return execute_workload
-
-
 class WorkloadTestBase(LoadSuiteBase):
     """
     Базовый класс для workload тестов с общей функциональностью
@@ -352,14 +218,13 @@ class WorkloadTestBase(LoadSuiteBase):
         
         return False
 
-    def execute_workload_test(self, workload_executor, workload_name: str, command_args: str, 
+    def execute_workload_test(self, workload_name: str, command_args: str, 
                              duration_value: float = None, additional_stats: dict = None,
                              use_chunks: bool = False, duration_param: str = "--duration"):
         """
         Выполняет полный цикл workload теста
         
         Args:
-            workload_executor: Фикстура для выполнения workload (не используется, для совместимости)
             workload_name: Имя workload для отчетов
             command_args: Аргументы командной строки (может быть шаблоном при use_chunks=True)
             duration_value: Время выполнения в секундах (если None, используется self.timeout)

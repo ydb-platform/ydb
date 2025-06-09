@@ -20,7 +20,7 @@ class SimpleQueueBase(WorkloadTestBase):
     workload_env_var = 'SIMPLE_QUEUE_BINARY'
 
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
-    def test_workload_simple_queue(self, table_type: str, workload_executor):
+    def test_workload_simple_queue(self, table_type: str):
         # Формируем аргументы команды (без --duration, он будет добавлен в чанках)
         command_args_template = (
             f"--endpoint {YdbCluster.ydb_endpoint} "
@@ -36,7 +36,6 @@ class SimpleQueueBase(WorkloadTestBase):
         
         # Запускаем тест с чанками
         self.execute_workload_test(
-            workload_executor=workload_executor,
             workload_name=f"SimpleQueue_{table_type}",
             command_args=command_args_template,
             duration_value=self.timeout,

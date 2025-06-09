@@ -85,7 +85,9 @@ TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node
         .Done().Ptr();
 }
 
-TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
+TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx,
+    TOptimizeContext& optCtx, TStringBuf logSuffix)
+{
     TCoFilterNullMembers filterNullMembers(node);
     if (!filterNullMembers.Input().Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
         return {};
@@ -154,13 +156,19 @@ TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& no
 
     YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
 
+    static const char optName[] = "MemberNthOverFlatMap";
+    YQL_ENSURE(optCtx.Types);
+    const bool keepAssume = !IsOptimizerDisabled<optName>(*optCtx.Types);
+
+    auto innerExtract = Build<TCoExtractMembers>(ctx, filterNullMembers.Pos())
+        .Input(input)
+        .Members(extendedMembers ? extendedMembers : members)
+        .Done().Ptr();
+
     if (extendedMembers) {
         return Build<TCoExtractMembers>(ctx, filterNullMembers.Pos())
             .Input<TCoFilterNullMembers>()
-                .Input<TCoExtractMembers>()
-                    .Input(input)
-                    .Members(extendedMembers)
-                .Build()
+                .Input(ctx.WrapByCallableIf(keepAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(innerExtract)))
                 .Members(filteredMembers)
             .Build()
             .Members(members)
@@ -168,10 +176,7 @@ TExprNode::TPtr ApplyExtractMembersToFilterNullMembers(const TExprNode::TPtr& no
     }
 
     return Build<TCoFilterNullMembers>(ctx, filterNullMembers.Pos())
-        .Input<TCoExtractMembers>()
-            .Input(input)
-            .Members(members)
-        .Build()
+        .Input(ctx.WrapByCallableIf(keepAssume, TCoAssumeAllMembersNullableAtOnce::CallableName(), std::move(innerExtract)))
         .Members(filteredMembers)
         .Done().Ptr();
 }

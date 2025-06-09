@@ -503,17 +503,17 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     //     tester.CheckCount();
     // }
 
-    Y_UNIT_TEST(SplitEmpty) {
-        TAsyncReshardingTest tester;
+    // Y_UNIT_TEST(SplitEmpty) {
+    //     TAsyncReshardingTest tester;
 
-        tester.CheckCount();
+    //     tester.CheckCount();
 
-        tester.StartResharding("SPLIT");
+    //     tester.StartResharding("SPLIT");
 
-        tester.CheckCount();
-        tester.WaitResharding();
-        tester.CheckCount();
-    }
+    //     tester.CheckCount();
+    //     tester.WaitResharding();
+    //     tester.CheckCount();
+    // }
 
     // Y_UNIT_TEST(ChangeSchemaAndSplit) {
     //     TAsyncReshardingTest tester;

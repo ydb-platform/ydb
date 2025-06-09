@@ -43,7 +43,7 @@ struct TStageInfoMeta {
 
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
-    NSchemeCache::TSchemeCacheRequest::EKind ShardKind = NSchemeCache::TSchemeCacheRequest::EKind::KindUnknown;
+    NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
 
     const NKqpProto::TKqpPhyStage& GetStage(const size_t idx) const {
         auto& txBody = Tx.Body;

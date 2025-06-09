@@ -697,6 +697,9 @@ public:
         const auto& buildOp = schemeOp.GetBuildOperation();
         SetSchemeShardId(domainInfo->ExtractSchemeShard());
         auto req = std::make_unique<NSchemeShard::TEvIndexBuilder::TEvCreateRequest>(TxId, Database, buildOp);
+        if (UserToken) {
+            req->Record.SetUserSID(UserToken->GetUserSID());
+        }
         ForwardToSchemeShard(std::move(req));
     }
 

@@ -370,11 +370,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
     template <typename FutureT>
     auto GetValue(TKikimrRunner& kikimr, FutureT&& future) {
-        while (!future.HasValue()) {
-            TDispatchOptions opts;
-            kikimr.GetTestServer().GetRuntime()->DispatchEvents(opts, TDuration::MilliSeconds(100));
-        }
-        return future.GetValue(TDuration::MilliSeconds(100));
+        return kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
     }
 
     Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, UseExtBlobsPrecharge) {

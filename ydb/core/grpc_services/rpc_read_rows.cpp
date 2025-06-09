@@ -463,7 +463,7 @@ public:
         }
     }
 
-    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
+    void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
         auto& resolvePartitionsResult = msg->Request;
 
@@ -763,7 +763,7 @@ public:
             << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec");
     }
 
-    void HandleForget(TRpcServices::TEvForgetOperation::TPtr &ev) {
+    void HandleForget(TRpcServices::TEvForgetOperation::TPtr& ev) {
         Y_UNUSED(ev);
 
         ReplyWithError(Ydb::StatusIds::CANCELLED, TStringBuilder() << "ReadRows from table " << GetTable()
@@ -782,7 +782,7 @@ public:
         return ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
     }
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev) {
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to connect to shard " << ev->Get()->TabletId);
     }
 

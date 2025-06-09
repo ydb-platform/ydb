@@ -82,7 +82,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         SendScanError("task_error:" + result.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
-        ACFL_DEBUG("event", "TEvTaskProcessedResult");
+        ACFL_ERROR("event", "TEvTaskProcessedResult");
         auto t = static_pointer_cast<IApplyAction>(result.GetResult());
         if (!ScanIterator->Finished()) {
             ScanIterator->Apply(t);
@@ -101,7 +101,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
 
     ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
     AFL_VERIFY(ev->Get()->MaxChunksCount == 1);
-    ACFL_DEBUG("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
+    ACFL_ERROR("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
     if (ScanIterator) {
         if (!!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
             ScanCountersPool.OnEmptyAck();
@@ -161,9 +161,14 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
             "scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)(
             "debug", ScanIterator ? ScanIterator->DebugString() : Default<TString>())("last", LastResultInstant);
     }
-    AFL_VERIFY(!!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)(
-                                             "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
-                                             "counters", ScanCountersPool.DebugString());
+    const bool ok = !!FinishInstant || !ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting();
+    AFL_VERIFY_DEBUG(ok)
+    ("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString())(
+        "counters", ScanCountersPool.DebugString());
+    if (!ok) {
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("error", "CheckHanging");
+        ScanCountersPool.OnHangingRequestDetected();
+    }
 }
 
 void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {

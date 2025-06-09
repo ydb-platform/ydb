@@ -30,6 +30,7 @@ TScanCounters::TScanCounters(const TString& module)
     , RecordsDeniedByIndex(TBase::GetDeriviative("Indexes/Denied/Records"))
     , RecordsAcceptedByHeader(TBase::GetDeriviative("Headers/Accepted/Records"))
     , RecordsDeniedByHeader(TBase::GetDeriviative("Headers/Denied/Records"))
+    , HangingRequests(TBase::GetDeriviative("HangingRequests"))
 
     , PortionBytes(TBase::GetDeriviative("PortionBytes"))
     , FilterBytes(TBase::GetDeriviative("FilterBytes"))

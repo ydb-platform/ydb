@@ -2033,7 +2033,8 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<
             OwnerShardIdx,
             LocalShardIdx,
-            Status
+            Status,
+            NeedDelete
         >;
     };
 

@@ -83,6 +83,11 @@ inline i32 Checker<i32>::Get(const ::Ydb::Value& value) {
 }
 
 template<>
+inline i64 Checker<i64>::Get(const ::Ydb::Value& value) {
+    return value.int64_value();
+}
+
+template<>
 inline ui32 Checker<ui32>::Get(const ::Ydb::Value& value) {
     return value.uint32_value();
 }

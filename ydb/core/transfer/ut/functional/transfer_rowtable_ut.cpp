@@ -77,6 +77,11 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
         ColumnType_Int32(TableType);
     }
 
+    Y_UNIT_TEST(ColumnType_Int64)
+    {
+        ColumnType_Int64(TableType);
+    }
+
     Y_UNIT_TEST(ColumnType_Utf8_LongValue)
     {
         ColumnType_Utf8_LongValue(TableType);

@@ -7,6 +7,7 @@
 ### Исправления ошибок
 
 * Исправлена ошибка, из-за которой сертификат не читался из файла, если путь к файлу указан в [профиле](./reference/ydb-cli/profile) в поле `ca-file`.
+* Исправлена ошибка, из-за которой [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload clickbench import files` в состоянии отображали количество строк вместо количества байт.
 
 ## Версия 2.22.0 {#2-22-0}
 

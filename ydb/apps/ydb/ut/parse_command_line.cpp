@@ -190,6 +190,10 @@ public:
         return TStringBuilder() << ConnectSchema << "://" << Address << ":" << Port;
     }
 
+    TString GetAddress() const {
+        return TStringBuilder() << Address << ":" << Port;
+    }
+
     TString GetDatabase() const {
         return TEST_DATABASE;
     }
@@ -325,7 +329,7 @@ public:
         Scheme.CheckExpectations();
     }
 
-    void RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
+    TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
         Auth.ClearFailures();
         Scheme.ClearFailures();
 
@@ -334,7 +338,7 @@ public:
             args.emplace_front(profileFile);
             args.emplace_front("--profile-file");
         }
-        RunYdb(
+        TString output = RunYdb(
             args,
             {},
             true,
@@ -347,6 +351,7 @@ public:
         ExpectedExitCode = 0;
         Scheme.ClearExpectations();
         Auth.ClearExpectations();
+        return output;
     }
 
 private:
@@ -1127,5 +1132,100 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             },
             profile
         );
+    }
+
+    Y_UNIT_TEST_F(PrintConnectionParams, TCliTestFixtureWithSsl) {
+        {
+            TString output = RunCli(
+                {
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "--ca-file", GetRootCAFile(),
+                    "--client-cert-file", GetClientCertFile(),
+                    "--client-cert-key-file", GetClientKeyFile(),
+                    "config", "info",
+                },
+                {}
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyFile() << Endl);
+        }
+
+        {
+            TString output = RunCli(
+                {
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "config", "info",
+                },
+                {
+                    {"YDB_CA_FILE", GetRootCAFile()},
+                    {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+                    {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+                }
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyFile() << Endl);
+        }
+
+        {
+            TString profile = fmt::format(R"yaml(
+            profiles:
+                active_test_profile:
+                    endpoint: {endpoint}
+                    database: {database}
+                    ca-file: {ca_file}
+                    client-cert-file: {client_cert_file}
+                    client-cert-key-file: {client_cert_key_with_password_file}
+                    client-cert-key-password-file: {client_cert_key_password_file}
+            active_profile: active_test_profile
+            )yaml",
+            "endpoint"_a = GetEndpoint(),
+            "database"_a = GetDatabase(),
+            "ca_file"_a = GetRootCAFile(),
+            "client_cert_file"_a = GetClientCertFile(),
+            "client_cert_key_with_password_file"_a = GetClientKeyWithPasswordFile(),
+            "client_cert_key_password_file"_a = GetClientKeyPasswordFile()
+            );
+
+            TString output = RunCli(
+                {
+                    "config", "info",
+                },
+                {},
+                profile
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyWithPasswordFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-password-file: " << GetClientKeyPasswordFile() << Endl);
+
+            output = RunCli(
+                {
+                    "-p", "active_test_profile",
+                    "config", "info",
+                },
+                {},
+                profile
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyWithPasswordFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-password-file: " << GetClientKeyPasswordFile() << Endl);
+        }
     }
 }

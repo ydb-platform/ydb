@@ -6,6 +6,8 @@
 
 #include <util/random/random.h>
 
+#include <string>
+
 namespace NYdb::NTPCC {
 
 // [from; to]
@@ -27,7 +29,7 @@ inline int GetRandomCustomerID() {
 
 // Get an item ID according to TPC-C spec
 inline int GetRandomItemID() {
-    return NonUniformRandom(8191, OL_I_ID_C, 1, ITEMS_COUNT);
+    return NonUniformRandom(8191, OL_I_ID_C, 1, ITEM_COUNT);
 }
 
 constexpr const char* const NameTokens[] = {"BAR", "OUGHT", "ABLE", "PRI",
@@ -47,12 +49,23 @@ inline TString GetNonUniformRandomLastNameForLoad() {
     return GetLastName(NonUniformRandom(255, C_LAST_LOAD_C, 0, 999));
 }
 
+// Format size in bytes to human-readable format
+std::string GetFormattedSize(size_t size);
+
 // Check if a status should cause program termination
 inline bool ShouldExit(const TStatus& status) {
     return status.GetStatus() == EStatus::NOT_FOUND ||
            status.GetStatus() == EStatus::BAD_REQUEST ||
            status.GetStatus() == EStatus::SCHEME_ERROR ||
            status.GetStatus() == EStatus::UNAUTHORIZED;
+}
+
+inline void QuickExit(int status) {
+#if !defined(__APPLE__)
+    std::quick_exit(status);
+#else
+    _exit(status);
+#endif
 }
 
 } // namespace NYdb::NTPCC

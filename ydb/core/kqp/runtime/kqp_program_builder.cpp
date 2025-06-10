@@ -354,5 +354,40 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TKqpProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
+    const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns, TType* returnType) {
+
+    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Unsupported join kind");
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+
+    // TODO (mfilitov): add validation like here:
+    // https://github.com/ydb-platform/ydb/blob/e8af538b05a1bd7bc4a3bcba2fdcbe430675f69c/yql/essentials/minikql/mkql_program_builder.cpp#L5849
+
+    TRuntimeNode::TList leftKeyColumnsNodes;
+    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
+    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(),
+        std::back_inserter(leftKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+    TRuntimeNode::TList rightKeyColumnsNodes;
+    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
+    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(),
+        std::back_inserter(rightKeyColumnsNodes), [this](const ui32 idx) {
+            return NewDataLiteral(idx);
+        });
+
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(leftStream);
+    callableBuilder.Add(rightStream);
+    callableBuilder.Add(NewDataLiteral((ui32)joinKind));
+    callableBuilder.Add(NewTuple(leftKeyColumnsNodes));
+    callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

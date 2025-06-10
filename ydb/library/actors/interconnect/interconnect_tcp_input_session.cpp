@@ -97,7 +97,7 @@ namespace NActors {
     TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
             TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
             TInterconnectProxyCommon::TPtr common, std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId,
-            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params)
+            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params, std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp)
         : SessionId(sessionId)
         , Socket(std::move(socket))
         , XdcSocket(std::move(xdcSocket))
@@ -105,6 +105,7 @@ namespace NActors {
         , Common(std::move(common))
         , NodeId(nodeId)
         , Params(std::move(params))
+        , RdmaQp(std::move(qp))
         , ConfirmedByInput(lastConfirmed)
         , Metrics(std::move(metrics))
         , DeadPeerTimeout(deadPeerTimeout)
@@ -140,7 +141,11 @@ namespace NActors {
     void TInputSessionTCP::Bootstrap() {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
         Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
-        LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
+        if (RdmaQp) {
+            LOG_ERROR_IC_SESSION("ICIS01", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
+        } else {
+            LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
+        }
         LastReceiveTimestamp = TActivationContext::Monotonic();
         TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
     }
@@ -1098,6 +1103,7 @@ namespace NActors {
 
                             MON_VAR(Context->LastProcessedSerial)
                             MON_VAR(ConfirmedByInput)
+                            MON_VAR(RdmaQp);
                         }
                     }
                 }

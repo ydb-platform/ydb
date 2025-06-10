@@ -65,7 +65,6 @@ public:
     const ibv_gid& GetGid() const {
         return Gid;
     }
-
     size_t GetDeviceIndex() const {
         return DeviceIndex;
     }

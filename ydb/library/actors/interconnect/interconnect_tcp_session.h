@@ -211,7 +211,8 @@ namespace NActors {
                          ui32 nodeId,
                          ui64 lastConfirmed,
                          TDuration deadPeerTimeout,
-                         TSessionParams params);
+                         TSessionParams params,
+                         std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp);
 
     private:
         friend class TActorBootstrapped<TInputSessionTCP>;
@@ -251,6 +252,7 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
+        std::unique_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
         XXH3_state_t XxhashState;
         XXH3_state_t XxhashXdcState;
 
@@ -604,6 +606,7 @@ namespace NActors {
 
         TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
+        std::unique_ptr<NInterconnect::NRdma::TQueuePair> Qp;
         TPollerToken::TPtr PollerToken;
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;

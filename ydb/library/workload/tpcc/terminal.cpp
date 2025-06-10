@@ -186,7 +186,8 @@ TTerminalTask TTerminal::Run() {
                 ss << ", backtrace: " << ex.BackTrace()->PrintToString();
             }
             LOG_E(ss.Str());
-            QuickExit(1);
+            RequestStop();
+            co_return;
         }
 
         // only here if exception cought

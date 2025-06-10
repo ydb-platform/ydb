@@ -1274,6 +1274,30 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         };
     }
 
+    template <typename TRowSet>
+    TSchemeLimits LoadAlterSchemeLimits(const TSchemeLimits& defaults, TRowSet& rowSet) {
+        return TSchemeLimits {
+            .MaxDepth = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::DepthLimit>(defaults.MaxDepth),
+            .MaxPaths = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PathsLimit>(defaults.MaxPaths),
+            .MaxChildrenInDir = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ChildrenLimit>(defaults.MaxChildrenInDir),
+            .MaxAclBytesSize = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::AclByteSizeLimit>(defaults.MaxAclBytesSize),
+            .MaxPathElementLength = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PathElementLength>(defaults.MaxPathElementLength),
+            .ExtraPathSymbolsAllowed = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ExtraPathSymbolsAllowed>(defaults.ExtraPathSymbolsAllowed),
+            .MaxTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableColumnsLimit>(defaults.MaxTableColumns),
+            .MaxColumnTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ColumnTableColumnsLimit>(defaults.MaxColumnTableColumns),
+            .MaxTableColumnNameLength = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableColumnNameLengthLimit>(defaults.MaxTableColumnNameLength),
+            .MaxTableKeyColumns = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableKeyColumnsLimit>(defaults.MaxTableKeyColumns),
+            .MaxTableIndices = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableIndicesLimit>(defaults.MaxTableIndices),
+            .MaxTableCdcStreams = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableCdcStreamsLimit>(defaults.MaxTableCdcStreams),
+            .MaxShards = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ShardsLimit>(defaults.MaxShards),
+            .MaxShardsInPath = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PathShardsLimit>(defaults.MaxShardsInPath),
+            .MaxConsistentCopyTargets = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ConsistentCopyingTargetsLimit>(defaults.MaxConsistentCopyTargets),
+            .MaxPQPartitions = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PQPartitionsLimit>(defaults.MaxPQPartitions),
+            .MaxExports = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ExportsLimit>(defaults.MaxExports),
+            .MaxImports = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ImportsLimit>(defaults.MaxImports),
+        };
+    }
+
     bool ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
         const TOwnerId selfId = Self->TabletID();
 
@@ -1639,8 +1663,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomainsAlterData::SharedHiveId>();
                     alter->SetSharedHive(sharedHiveId);
 
-                    alter->SetSchemeLimits(subdomainInfo->GetSchemeLimits()); // do not change SchemeLimits
-
                     if (Self->IsDomainSchemeShard && path->IsRoot()) {
                         alter->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
                     }
@@ -1656,6 +1678,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(databaseQuotas, rowset.GetValue<Schema::SubDomainsAlterData::DatabaseQuotas>()));
                         alter->SetDatabaseQuotas(databaseQuotas);
                     }
+
+                    alter->SetSchemeLimits(LoadAlterSchemeLimits(subdomainInfo->GetSchemeLimits(), rowset));
 
                     if (rowset.HaveValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()) {
                         alter->SetServerlessComputeResourcesMode(
@@ -4565,12 +4589,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 try {
                     fill(buildInfo);
                 } catch (const std::exception& exc) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
                         << " " << TypeName(exc) << ": " << exc.what() << Endl
                         << TBackTrace::FromCurrentException().PrintToString()
                         << ", TIndexBuildInfo: " << buildInfo);
-        
+
                     // in-memory volatile state:
                     buildInfo.IsBroken = true;
                     buildInfo.AddIssue(TStringBuilder() << "Init " << stepName << " unhandled exception " << exc.what());
@@ -4581,7 +4605,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                 Y_ASSERT(buildInfoPtr);
                 if (!buildInfoPtr) {
-                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX,
                         "Init " << stepName << " BuildInfo not found: id#" << id);
                     return;
                 }

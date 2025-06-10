@@ -1493,6 +1493,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         }
     }
 
+    void MergeSchemeLimits(const NKikimrSubDomains::TSchemeLimits& in, IQuotaCounters* counters = nullptr) {
+        SchemeLimits.MergeFromProto(in);
+        if (counters) {
+            if (in.HasMaxPaths()) {
+                counters->SetPathsQuota(SchemeLimits.MaxPaths);
+            }
+            if (in.HasMaxShards()) {
+                counters->SetShardsQuota(SchemeLimits.MaxShards);
+            }
+        }
+    }
+
     const TSchemeLimits& GetSchemeLimits() const {
         return SchemeLimits;
     }
@@ -3559,7 +3571,7 @@ public:
     template<class TRow>
     static void FillFromRow(const TRow& row, TIndexBuildInfo* indexInfo) {
         Y_ENSURE(indexInfo); // TODO: pass by ref
-        
+
         TIndexBuildId id = row.template GetValue<Schema::IndexBuild::Id>();
         TString uid = row.template GetValue<Schema::IndexBuild::Uid>();
 

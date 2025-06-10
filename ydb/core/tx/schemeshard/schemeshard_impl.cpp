@@ -2089,6 +2089,32 @@ void TSchemeShard::PersistSchemeLimit(NIceDb::TNiceDb &db, const TPathId &pathId
     );
 }
 
+void TSchemeShard::PersistSubDomainAlterSchemeLimits(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    const auto& limits = subDomain.GetSchemeLimits();
+
+    db.Table<Schema::SubDomainsAlterData>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::DepthLimit>(limits.MaxDepth),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::PathsLimit>(limits.MaxPaths),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::ChildrenLimit>(limits.MaxChildrenInDir),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::ShardsLimit>(limits.MaxShards),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::PathShardsLimit>(limits.MaxShardsInPath),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::TableColumnsLimit>(limits.MaxTableColumns),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::TableColumnNameLengthLimit>(limits.MaxTableColumnNameLength),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::TableKeyColumnsLimit>(limits.MaxTableKeyColumns),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::TableIndicesLimit>(limits.MaxTableIndices),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::AclByteSizeLimit>(limits.MaxAclBytesSize),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::ConsistentCopyingTargetsLimit>(limits.MaxConsistentCopyTargets),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::PathElementLength>(limits.MaxPathElementLength),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::ExtraPathSymbolsAllowed>(limits.ExtraPathSymbolsAllowed),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::PQPartitionsLimit>(limits.MaxPQPartitions),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::TableCdcStreamsLimit>(limits.MaxTableCdcStreams),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::ExportsLimit>(limits.MaxExports),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::ImportsLimit>(limits.MaxImports),
+        NIceDb::TUpdate<Schema::SubDomainsAlterData::ColumnTableColumnsLimit>(limits.MaxColumnTableColumns)
+    );
+}
+
 void TSchemeShard::PersistStoragePools(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -2141,6 +2167,7 @@ void TSchemeShard::PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pat
                 NIceDb::TNull<Schema::SubDomainsAlterData::DatabaseQuotas>());
     }
 
+    PersistSubDomainAlterSchemeLimits(db, pathId, subDomain);
     PersistSubDomainAuditSettingsAlter(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesModeAlter(db, pathId, subDomain);
 
@@ -2203,6 +2230,7 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
 
     PersistSubDomainDeclaredSchemeQuotas(db, pathId, subDomain);
     PersistSubDomainDatabaseQuotas(db, pathId, subDomain);
+    PersistSchemeLimit(db, pathId, subDomain);
     PersistSubDomainState(db, pathId, subDomain);
 
     PersistSubDomainAuditSettings(db, pathId, subDomain);

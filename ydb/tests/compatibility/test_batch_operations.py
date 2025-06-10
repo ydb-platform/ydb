@@ -92,8 +92,6 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
             value += 1
             self.fill_table(False)
 
-
-    # Create and fill the table
     def fill_table(self, create=True):
         rows = []
         id_value = 0
@@ -109,16 +107,12 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
                 session_pool.execute_with_retries(self.q_create())
             session_pool.execute_with_retries(self.q_upsert(rows))
 
-
-    # Execute BATCH query and check new updates
     def assert_batch(self, batch_query, select_query):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(batch_query)
             result_sets = session_pool.execute_with_retries(select_query)
             assert result_sets[0].rows[0]["cnt"] == 0
 
-
-    # Queries
     def q_create(self):
         return f"""
             CREATE TABLE `{self.table_name}` (

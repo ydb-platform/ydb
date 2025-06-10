@@ -26,7 +26,7 @@ tasks.withType<JavaExec> {
 
 {%- set test_jvm_args = jvm_args -%}
 {%- set extra_jvm_args = extra_targets|selectattr('jvm_args')|map(attribute='jvm_args')|sum -%}
-{%- if extra_jvm_args|length %}
+{%- if extra_jvm_args|length and test_jvm_args != extra_jvm_args %}
 {%-     set test_jvm_args = test_jvm_args + extra_jvm_args -%}
 {%- endif -%}
 {%- if test_jvm_args|length %}

@@ -166,6 +166,10 @@ public:
             ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
         }
 
+        if (tableServiceConfig.HasBufferPageAllocSize()) {
+            BufferPageAllocSize = tableServiceConfig.GetBufferPageAllocSize();
+        }
+
         EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -1670,6 +1674,7 @@ protected:
             .CaFactory_ = Request.CaFactory_,
             .BlockTrackingMode = BlockTrackingMode,
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
+            .BufferPageAllocSize = BufferPageAllocSize,
             .VerboseMemoryLimitException = VerboseMemoryLimitException,
         });
 
@@ -2281,6 +2286,7 @@ protected:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const bool VerboseMemoryLimitException;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMaybe<ui8> BufferPageAllocSize;
 
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;

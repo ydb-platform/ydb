@@ -4,9 +4,7 @@ import logging
 import subprocess
 from collections import deque, defaultdict
 from uuid import uuid4
-from ydb.tests.library.clients.kikimr_config_client import config_client_factory
-from ydb.public.api.protos import ydb_status_codes_pb2 as ydb_status_codes
-
+from ydb.tools.ydbd_slice import config_client
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +22,18 @@ class CalledProcessError(subprocess.CalledProcessError):
 
 
 class Slice:
-    def __init__(self, components, nodes, cluster_details, bin, compressed_bin, do_clear_logs, yav_version, walle_provider, configurator=None):
+    def __init__(
+        self,
+        components,
+        nodes,
+        cluster_details,
+        bin=None,
+        compressed_bin=None,
+        do_clear_logs=False,
+        yav_version=None,
+        walle_provider=None,
+        configurator=None,
+    ):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
         self.__slice_cfg_path = '/Berkanavt/kikimr/cfg'
         self.__slice_cfg_dir = '/Berkanavt/kikimr/config-dir'
@@ -38,8 +47,7 @@ class Slice:
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
         self.walle_provider = walle_provider
-
-        self.__config_client = config_client_factory(
+        self.__config_client = config_client.ConfigClient(
             self.cluster_details.hosts[0].hostname,
             self.cluster_details.grpc_config.get('port'),
             retry_count=10,
@@ -161,9 +169,10 @@ class Slice:
         )
 
     def __cluster_bootstrap(self):
-        response = self.__config_client.bootstrap_cluster(str(uuid4()))
-        if response.operation.status != ydb_status_codes.StatusIds.SUCCESS:
-            raise RuntimeError("Failed to bootstrap cluster: {}".format(response))
+        try:
+            self.__config_client.bootstrap_cluster(str(uuid4()))
+        except config_client.ConfigClientError as e:
+            raise RuntimeError(f"Failed to bootstrap cluster: {e}")
 
     def _dynamic_provision(self):
         self. __init_blobstorage_kikimr()
@@ -487,12 +496,10 @@ mon={mon}""".format(
 
         if 'kikimr' in self.components and 'cfg' in self.components.get('kikimr', []):
             if self.configurator.v2:
-                static = self.configurator.static_yaml
-
-                response = self.__config_client.replace_config(static)
-                if response.operation.status != ydb_status_codes.StatusIds.SUCCESS:
-                    raise RuntimeError("Failed to replace config: {}".format(response))
-                logger.info("Config replace response: %s", response)
+                try:
+                    self.__config_client.replace_config(self.configurator.static)
+                except config_client.ConfigClientError as e:
+                    raise RuntimeError(f"Failed to config replace cluster: {e}")
             else:
                 static = self.configurator.create_static_cfg()
                 self._upload_cfg(static)

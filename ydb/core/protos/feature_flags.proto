@@ -120,7 +120,7 @@ message TFeatureFlags {
     optional bool EnableTopicSplitMerge = 95 [default = true];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
-    optional bool EnableSubscriptionsInDiscovery = 98 [default = false, (RequireRestart) = true];
+    optional bool EnableSubscriptionsInDiscovery = 98 [default = true, (RequireRestart) = true];
     optional bool EnableGetNodeLabels = 99 [default = false];
     optional bool EnableTopicMessageMeta = 100 [default = true];
     optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];

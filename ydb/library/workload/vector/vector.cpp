@@ -9,17 +9,35 @@
 
 namespace NYdbWorkload {
 
-TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* params)
-    : TBase(params)
-    , Rd()
+TVectorGenerator::TVectorGenerator(size_t vectorDimension, size_t vectorCount) 
+    : Rd()
     , Gen(Rd())
-    , RandExpDistrib(1.6)
     , VectorValueGenerator(0.0, 1.0)
-    , PregeneratedIndexGenerator(0, params->VectorSelectCount - 1)
+    , PregeneratedIndexGenerator(0, vectorCount - 1)
 {
     Gen.seed(Now().MicroSeconds());
 
-    PregenerateSelectEmbeddings();
+    PregenerateSelectEmbeddings(vectorDimension, vectorCount);
+}
+
+void TVectorGenerator::PregenerateSelectEmbeddings(size_t vectorDimension, size_t vectorCount) {
+    SelectEmbeddings.reserve(vectorCount);
+    for (size_t i = 0; i < vectorCount; ++i) {
+        std::vector<float> vector(vectorDimension);
+        for (size_t j = 0; j < vectorDimension; ++j) {
+            vector[j] = VectorValueGenerator(Gen);
+        }
+        SelectEmbeddings.emplace_back(vector);
+    }
+}
+
+const std::vector<float>& TVectorGenerator::GetRandomSelectEmbedding() {
+    return SelectEmbeddings[PregeneratedIndexGenerator(Gen)];
+}
+
+TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* params)
+    : TBase(params)
+{
 }
 
 std::string TVectorWorkloadGenerator::GetDDLQueries() const {
@@ -48,10 +66,10 @@ TVector<std::string> TVectorWorkloadGenerator::GetCleanPaths() const {
 
 TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {
     switch (static_cast<EType>(type)) {
-        case EType::SelectScan:
-            return SelectScan();
-        case EType::SelectIndex:
-            return SelectIndex();
+        case EType::Upsert:
+            return Upsert();
+        case EType::Select:
+            return Select();
         default:
             return TQueryInfoList();
     }
@@ -59,20 +77,33 @@ TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TVectorWorkloadGenerator::GetSupportedWorkloadTypes() const {
     TVector<TWorkloadType> result;
-    result.emplace_back(static_cast<int>(EType::SelectScan), "select-scan", "Select top-K vector using brute force scan");
-    result.emplace_back(static_cast<int>(EType::SelectIndex), "select-index", "Select top-K vector using index");
+    result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert vector rows in the table");
+    result.emplace_back(static_cast<int>(EType::Select), "select", "Retrieve top-K vectors");
     return result;
 }
 
-TQueryInfoList TVectorWorkloadGenerator::SelectScan() {
-    return TQueryInfoList(1, SelectScanImpl());
+TQueryInfoList TVectorWorkloadGenerator::Upsert() {
+    // Not implemented yet
+    return {};
 }
 
-TQueryInfoList TVectorWorkloadGenerator::SelectIndex() {
-    //TODO check, where it is prefix index
-    //SelectPrefixIndexImpl();
+TQueryInfoList TVectorWorkloadGenerator::Select() {
+    // TODO Detect index existance
     return TQueryInfoList(1, SelectIndexImpl());
+}
+
+TQueryInfo TVectorWorkloadGenerator::SelectImpl(const std::string& query) {
+    NYdb::TParamsBuilder paramsBuilder;
     
+    auto& paramsList = paramsBuilder.AddParam("$EmbeddingList").BeginList();
+    for(float val: Params.GetRandomSelectEmbedding())
+        paramsList.AddListItem().Float(val);
+    paramsList.EndList().Build();
+
+    paramsBuilder
+        .AddParam("$K").Uint64(Params.TopK).Build();
+
+    return TQueryInfo(query, paramsBuilder.Build());
 }
 
 TQueryInfo TVectorWorkloadGenerator::SelectScanImpl() {
@@ -82,23 +113,11 @@ TQueryInfo TVectorWorkloadGenerator::SelectScanImpl() {
 
         SELECT id, Knn::CosineDistance(embedding, $EmbeddingString) AS similarity
         FROM {0}
-        WHERE id < $MaxId
         ORDER BY similarity
         LIMIT $K;
     )_", Params.TableName.c_str());
 
-    NYdb::TParamsBuilder paramsBuilder;
-    
-    auto& paramsList = paramsBuilder.AddParam("$EmbeddingList").BeginList();
-    for(float val: SelectEmbeddings[PregeneratedIndexGenerator(Gen)])
-        paramsList.AddListItem().Float(val);
-    paramsList.EndList().Build();
-
-    paramsBuilder
-        .AddParam("$MaxId").Uint64(Params.MaxId).Build()
-        .AddParam("$K").Uint64(Params.Limit).Build();
-
-    return TQueryInfo(query, paramsBuilder.Build());
+    return SelectImpl(query);
 }
 
 TQueryInfo TVectorWorkloadGenerator::SelectIndexImpl() {
@@ -113,18 +132,7 @@ TQueryInfo TVectorWorkloadGenerator::SelectIndexImpl() {
         LIMIT $K;
     )_", Params.TableName.c_str(), Params.IndexName.c_str());
 
-    NYdb::TParamsBuilder paramsBuilder;
-    
-    auto& paramsList = paramsBuilder.AddParam("$EmbeddingList").BeginList();
-    for(float val: SelectEmbeddings[PregeneratedIndexGenerator(Gen)])
-        paramsList.AddListItem().Float(val);
-    paramsList.EndList().Build();
-
-    paramsBuilder
-        .AddParam("$MaxId").Uint64(Params.MaxId).Build()
-        .AddParam("$K").Uint64(Params.Limit).Build();
-
-    return TQueryInfo(query, paramsBuilder.Build());
+    return SelectImpl(query);
 }
 
 TQueryInfo TVectorWorkloadGenerator::SelectPrefixIndexImpl() {
@@ -140,37 +148,15 @@ TQueryInfo TVectorWorkloadGenerator::SelectPrefixIndexImpl() {
         LIMIT $K;
     )_", Params.TableName.c_str(), Params.IndexName.c_str());
 
-    NYdb::TParamsBuilder paramsBuilder;
-    
-    auto& paramsList = paramsBuilder.AddParam("$EmbeddingList").BeginList();
-    for(float val: SelectEmbeddings[PregeneratedIndexGenerator(Gen)])
-        paramsList.AddListItem().Float(val);
-    paramsList.EndList().Build();
-
-    paramsBuilder
-        .AddParam("$MaxId").Uint64(Params.MaxId).Build()
-        .AddParam("$K").Uint64(Params.Limit).Build();
-
-    return TQueryInfo(query, paramsBuilder.Build());
-}
-
-void TVectorWorkloadGenerator::PregenerateSelectEmbeddings() {
-    SelectEmbeddings.reserve(Params.VectorSelectCount);
-    for (size_t i = 0; i < Params.VectorSelectCount; ++i) {
-        std::vector<float> vector(Params.VectorDimension);
-        for (size_t j = 0; j < Params.VectorDimension; ++j) {
-            vector[j] = VectorValueGenerator(Gen);
-        }
-        SelectEmbeddings.emplace_back(vector);
-    }
+    return SelectImpl(query);
 }
 
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     auto addCommonParam = [&]() {
         opts.AddLongOption(0, "table", "Table name.")
-            .Required().StoreResult(&TableName);
+            .DefaultValue("vector_index_workload").StoreResult(&TableName);
         opts.AddLongOption(0, "index", "Index name.")
-            .Required().StoreResult(&IndexName);
+            .DefaultValue("index").StoreResult(&IndexName);
     };
 
     auto addInitParam = [&]() {
@@ -186,15 +172,20 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .Required().StoreResult(&KmeansTreeLevels);
         opts.AddLongOption(0, "kmeans-tree-clusters", "Number of cluster in kmeans")
             .Required().StoreResult(&KmeansTreeClusters);
+        opts.AddLongOption(0, "vector-dimension", "Vector dimension.")
+            .Required().StoreResult(&VectorDimension);
+    };
+
+    auto addUpsertParam = [&]() {
     };
 
     auto addSelectParam = [&]() {
+        opts.AddLongOption(0, "targets", "Number of vectors to search as targets.")
+            .DefaultValue(1000).StoreResult(&Targets);
         opts.AddLongOption(0, "top-k", "Number of top vector to return.")
-            .DefaultValue(5).StoreResult(&Limit);
-        opts.AddLongOption(0, "vector-dimension", "Vector dimension.")
-            .Required().StoreResult(&VectorDimension);
-        opts.AddLongOption(0, "vector-count", "Number of pregenerated vectors to search as targets.")
-            .DefaultValue(1000).StoreResult(&VectorSelectCount);
+            .DefaultValue(5).StoreResult(&TopK);
+        opts.AddLongOption(0, "kmeans-tree-clusters", " Number of top clusters during search.")
+            .DefaultValue(1).StoreResult(&KmeansTreeSearchClusters);    
     };
 
     switch (commandType) {
@@ -205,21 +196,72 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     case TWorkloadParams::ECommandType::Run:
         addCommonParam();
         switch (static_cast<TVectorWorkloadGenerator::EType>(workloadType)) {
-        case TVectorWorkloadGenerator::EType::SelectScan:
-            addSelectParam();
-            opts.AddLongOption(0, "max-id", "Maximum id of vector to return. Only vectors lower than 'max-id' will be scanned.")
-                .DefaultValue(10).StoreResult(&MaxId);
+        case TVectorWorkloadGenerator::EType::Upsert:
+            addUpsertParam();
             break;
-        case TVectorWorkloadGenerator::EType::SelectIndex:
+        case TVectorWorkloadGenerator::EType::Select:
             addSelectParam();
-            opts.AddLongOption(0, "kmeans-tree-clusters", " Number of top clusters during search.")
-                .DefaultValue(1).StoreResult(&Limit);
             break;
         }
         break;
     default:
         break;
     }
+}
+
+size_t TVectorWorkloadParams::GetVectorDimension() {
+    return 768;
+//     std::string query = std::format(R"_(--!syntax_v1
+//         SELECT ListLength(Knn::FloatFromBinaryString(embedding)) FROM {0} LIMIT 1;
+//     )_", Params.TableName.c_str());
+
+
+//     auto driver = NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig);
+//     auto client = NQuery::TQueryClient(driver);
+
+//     std::optional<TResultSet> resultSet;
+//     NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&resultSet, &params](TSession session) {
+//         auto result = session.ExecuteQuery(
+//             QUERY,
+//             TTxControl::BeginTx(STALE_RO ? TTxSettings::StaleRO() : TTxSettings::TTxSettings::SerializableRW()).CommitTx(),
+//             params.Build()).GetValueSync();
+        
+//         if (!result.IsSuccess()) {
+//             return result;
+//         }
+//         resultSet = result.GetResultSet(0);
+//         return result;
+//     })); 
+
+//     return 0;
+}
+
+void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
+    switch (commandType) {
+        case TWorkloadParams::ECommandType::Init:
+            break;
+        case TWorkloadParams::ECommandType::Run:
+            switch (static_cast<TVectorWorkloadGenerator::EType>(workloadType)) {
+                case TVectorWorkloadGenerator::EType::Upsert:
+                    break;
+                case TVectorWorkloadGenerator::EType::Select:
+                    VectorDimension = GetVectorDimension();
+                    VectorGenerator = MakeHolder<TVectorGenerator>(VectorDimension, Targets);
+                    break;
+            }
+            break;
+        case TWorkloadParams::ECommandType::Clean:
+            break;
+        case TWorkloadParams::ECommandType::Root:
+            break;
+        case TWorkloadParams::ECommandType::Import:
+          break;
+    }
+    return;
+}
+
+const std::vector<float>& TVectorWorkloadParams::GetRandomSelectEmbedding() const {
+    return VectorGenerator->GetRandomSelectEmbedding();
 }
 
 THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {

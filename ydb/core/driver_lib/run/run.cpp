@@ -1918,7 +1918,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
                 break;
             }
 
-            Sleep(TDuration::MilliSeconds(DrainCheckIntervalMs));
+            Sleep(drainCheckInterval);
         }
 
         auto stillOnline = drainProgress->GetOnlineTabletsEstimate();

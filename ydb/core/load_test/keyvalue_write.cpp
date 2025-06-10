@@ -209,7 +209,7 @@ public:
         TestStartTime = TAppData::TimeProvider->Now();
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
         for (auto& worker : Workers) {
-            AppData(ctx)->DynamicControlBoard->RegisterLocalControl(worker->MaxInFlight,
+            AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
                     Sprintf("KeyValueWriteLoadActor_MaxInFlight_%04" PRIu64 "_%04" PRIu32, Tag, worker->Idx));
         }
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvKeyValueResult, "

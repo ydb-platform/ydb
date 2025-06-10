@@ -360,7 +360,7 @@ public:
         LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
         if (IsWardenlessTest) {
             for (auto& worker : Workers) {
-                AppData(ctx)->DynamicControlBoard->RegisterLocalControl(worker->MaxInFlight,
+                AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
                         Sprintf("PDiskWriteLoadActor_MaxInFlight_%04" PRIu64 "_%04" PRIu32, Tag, worker->Idx));
                 SendRequest(ctx, worker->GetYardInit(PDiskGuid));
             }

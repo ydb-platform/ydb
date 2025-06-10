@@ -313,6 +313,10 @@ private:
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
         }
 
+        if (!schedulerGroup.empty()) {
+            Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
+        }
+
         TCPULimits cpuLimits;
         if (msg.GetPoolMaxCpuShare() > 0) {
             // Share <= 0 means disabled limit

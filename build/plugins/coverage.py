@@ -65,3 +65,4 @@ def onset_cpp_coverage_flags(unit):
     if should_be_covered(unit, filters):
         add_cpp_coverage_cflags(unit)
         add_cpp_coverage_ldflags(unit)
+        unit.on_setup_clang_coverage_runtime()

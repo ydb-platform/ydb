@@ -27,6 +27,7 @@ add_library(library-workload-tpcc)
 target_link_libraries(library-workload-tpcc PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-ftxui
   api-grpc
   api-protos
   src-client-driver
@@ -43,6 +44,7 @@ target_sources(library-workload-tpcc PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/init.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/import.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/runner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/stderr_capture.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/task_queue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/terminal.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_delivery.cpp

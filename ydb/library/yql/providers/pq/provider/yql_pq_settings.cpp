@@ -64,7 +64,6 @@ void TPqConfiguration::AddCluster(
         clusterSettings.AddBearerToToken = cluster.GetAddBearerToToken();
         clusterSettings.SharedReading = cluster.GetSharedReading();
         clusterSettings.ReadGroup = cluster.GetReadGroup();
-        clusterSettings.ReadGroup = cluster.GetReadGroup();
 
         const TString authToken = credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
         clusterSettings.AuthToken = authToken;

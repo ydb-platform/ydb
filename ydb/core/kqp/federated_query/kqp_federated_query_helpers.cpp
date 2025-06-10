@@ -134,8 +134,8 @@ namespace NKikimr::NKqp {
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         Driver = std::make_shared<NYdb::TDriver>(cfg);
 
-        PqGatewayConfig = queryServiceConfig.GetPq();
-        PqGateway = MakePqGateway(Driver, PqGatewayConfig);
+        PqGatewayConfig = NYql::TPqGatewayConfig{};
+        PqGateway = MakePqGateway(Driver, NYql::TPqGatewayConfig{});
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -303,8 +303,7 @@ namespace NKikimr::NKqp {
         if (!federatedQuerySetup || !federatedQuerySetup->Driver) {
             return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
         }
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false/*config->GetAddBearerToToken()*/);
-
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;
         
         NYdb::TCommonClientSettings opts;
@@ -315,9 +314,10 @@ namespace NKikimr::NKqp {
             .CredentialsProviderFactory(credentialsProviderFactory);
         auto schemeClient = NYdb::NScheme::TSchemeClient(*driver, opts);
         return schemeClient.DescribePath(path)
-            .Apply([](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
+            .Apply([actorSystem = NActors::TActivationContext::ActorSystem()](const NThreading::TFuture<NYdb::NScheme::TDescribePathResult>& result) {
                 auto describePathResult = result.GetValue();
                 if (!describePathResult.IsSuccess()) {
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribePath failed, " << describePathResult.GetIssues().ToString());
                     return NThreading::MakeFuture<TGetSchemeEntryResult>(Nothing()); 
                 }
                 NYdb::NScheme::TSchemeEntry entry = describePathResult.GetEntry();

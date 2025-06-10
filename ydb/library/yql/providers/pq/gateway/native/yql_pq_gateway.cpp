@@ -104,8 +104,7 @@ void TPqNativeGateway::UpdateClusterConfigs(
 }
 
 void TPqNativeGateway::AddCluster(const NYql::TPqClusterConfig& cluster) {
-    auto& config = (*ClusterConfigs)[cluster.GetName()];
-    config = cluster;
+    (*ClusterConfigs)[cluster.GetName()] = cluster;
 }
 
 NThreading::TFuture<void> TPqNativeGateway::OpenSession(const TString& sessionId, const TString& username) {

@@ -4,7 +4,6 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
 SIZE(MEDIUM)
-TIMEOUT(120)
 
 SRCS(
     datastreams_ut.cpp

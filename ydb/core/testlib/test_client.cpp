@@ -1301,8 +1301,8 @@ namespace Tests {
                     Settings->ComputationFactory,
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
-                    queryServiceConfig.GetPq(),
-                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, queryServiceConfig.GetPq()),
+                    NYql::TPqGatewayConfig{},
+                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
                     std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr),
                     driver);
             }

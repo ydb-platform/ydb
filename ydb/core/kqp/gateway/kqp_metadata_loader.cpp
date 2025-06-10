@@ -1002,12 +1002,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
                             };
-                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
-                                THashMap<TString, TString> properties = {externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties().begin(), 
-                                    externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties().end()};
+                            auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
+                            if (source.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
+                                THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
                                     
-                                auto token = externalDataSourceMetadata.Metadata->ExternalSource.Token;
-                                auto secretName = externalDataSourceMetadata.Metadata->ExternalSource.DataSourceAuth.GetToken().GetTokenSecretName();
+                                auto token = source.Token;
+                                auto secretName = source.DataSourceAuth.GetToken().GetTokenSecretName();
                                 auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);
                                 auto databaseName = properties.Value("database_name", "");
                                 TString useTlsStr = properties.Value("use_tls", "false");
@@ -1018,15 +1018,15 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                                 GetSchemeEntryType(
                                     FederatedQuerySetup,
-                                    externalDataSourceMetadata.Metadata->ExternalSource.DataSourceLocation,
+                                    source.DataSourceLocation,
                                     databaseName,
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                    .Subscribe([source, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
                                         TGetSchemeEntryResult type = result.GetValue();
                                         if (type == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
+                                            source.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
                                         }
                                         f();
                                     });

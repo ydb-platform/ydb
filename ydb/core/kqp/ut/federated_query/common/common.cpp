@@ -88,8 +88,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             nullptr,
             NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
             nullptr,
-            appConfig->GetQueryServiceConfig().GetPq(),
-            NKqp::MakePqGateway(driver, appConfig->GetQueryServiceConfig().GetPq()),
+            NYql::TPqGatewayConfig{},
+            NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
             nullptr,
             driver);
 

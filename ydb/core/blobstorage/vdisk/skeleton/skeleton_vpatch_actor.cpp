@@ -236,7 +236,7 @@ namespace NKikimr::NPrivate {
             AddMark((FoundOriginalParts.size() ? "Found parts" : "Parts were not found"));
             CurrentEventTrace = nullptr;
 #endif
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, FoundPartsEvent.release(), Cookie, VCtx, {});
         }
 
         void PullOriginalPart(ui64 pullingPart) {
@@ -325,7 +325,7 @@ namespace NKikimr::NPrivate {
             if (forceEnd) {
                 ResultEvent->SetForceEndResponse();
             }
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, ResultEvent.release(), Cookie, VCtx, {});
         }
 
         void HandleVGetResult(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
@@ -653,7 +653,7 @@ namespace NKikimr::NPrivate {
                 ev->Get()->VDiskSkeletonTrace->AddMark("Error: HandleError TEvVPatchXorDiff");
             }
 #endif
-            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx, ev->Get()->Record.GetHandleClass());
         }
 
         void Handle(TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev) {
@@ -691,7 +691,7 @@ namespace NKikimr::NPrivate {
             }
 #endif
 
-            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx);
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie, VCtx, ev->Get()->Record.GetHandleClass());
 
             if (!CheckDiff(xorDiffs, "XorDiff from datapart")) {
                 AddMark("Error: Incorrect xor diff");

@@ -99,9 +99,9 @@ void TOperator::DoInitNewExternalOperator(const NWrappers::NExternalStorage::IEx
 }
 
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard,
-    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, std::shared_ptr<TErrorCollector> collector)
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
-    , Collector(std::move(collector))
+    , Collector(shard.Counters.GetEvictionCounters().TieringCollector)
     , TabletActorId(shard.SelfId())
     , Generation(shard.Executor()->Generation())
     , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {

@@ -5,6 +5,7 @@
 #include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/error_collector.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -18,6 +19,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionHugePartsCount;
 
 public:
+    std::shared_ptr<NOlap::NBlobOperations::NTier::TErrorCollector> TieringCollector = std::make_shared<NOlap::NBlobOperations::NTier::TErrorCollector>();
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 

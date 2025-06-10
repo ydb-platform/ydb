@@ -2,6 +2,7 @@ from __future__ import annotations
 import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from urllib.parse import urlencode
 from datetime import datetime
 from copy import deepcopy
@@ -102,7 +103,7 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
     test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
-def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload
 
@@ -228,7 +229,6 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
 
     # Получаем ноды для колонок (автоматически)
     try:
-        from ydb.tests.olap.lib.ydb_cluster import YdbCluster
         all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
         # Добавляем отладочную информацию о всех нодах
         logging.info(f"All nodes before filtering: {[(node.slot, node.role) for node in all_cluster_nodes]}")

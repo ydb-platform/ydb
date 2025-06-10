@@ -43,7 +43,7 @@ public:
     size_t KmeansTreeSearchClusters = 0;
     size_t TopK = 0;
 private:
-    size_t GetVectorDimension();
+    size_t GetVectorDimension() const;
 
     THolder<TVectorGenerator> VectorGenerator;
 };
@@ -69,6 +69,8 @@ public:
 private:
     TQueryInfoList Upsert();
     TQueryInfoList Select();
+
+    void RecallCallback(NYdb::NQuery::TExecuteQueryResult);
 
     TQueryInfo SelectImpl(const std::string& query);
     TQueryInfo SelectScanImpl();

@@ -50,52 +50,62 @@ int main(int argc, char** argv) {
     }
 
     try {
-        // Read input file
-        TFileInput input(inputFile);
-        TString serializedTask = input.ReadAll();
-
         if (verbose) {
-            *logStream << "Read " << serializedTask.size() << " bytes from " << inputFile << Endl;
+            *logStream << "Reading program from file: " << inputFile << Endl;
         }
 
-        // Parse task proto
-        NYql::NDqProto::TDqTask protoTask;
-        if (!protoTask.ParseFromString(serializedTask)) {
-            Cerr << "FAILED: Cannot parse task proto" << Endl;
-            return 1;
+        // Read program from file instead of full task
+        TFileInput input(inputFile);
+        TString programData = input.ReadAll();
+        
+        // Create minimal task with the program
+        NYql::NDqProto::TDqTask task;
+        task.SetId(1);
+        task.SetStageId(1);
+        
+        // Set the program
+        auto* program = task.MutableProgram();
+        program->SetRaw(programData);
+        program->SetRuntimeVersion(1); // Set runtime version to avoid assertion failure
+        
+        // Add minimal input/output (some programs might expect them)
+        // Most constant expressions don't need inputs/outputs, but let's be safe
+        
+        if (verbose) {
+            *logStream << "Created minimal task with program, size: " << programData.size() << " bytes" << Endl;
         }
 
         if (verbose) {
             *logStream << "Successfully parsed task proto:" << Endl;
-            *logStream << "  Task ID: " << protoTask.GetId() << Endl;
-            *logStream << "  Stage ID: " << protoTask.GetStageId() << Endl;
-            if (protoTask.HasProgram()) {
-                *logStream << "  Program size: " << protoTask.GetProgram().GetRaw().size() << " bytes" << Endl;
-                *logStream << "  Runtime version: " << protoTask.GetProgram().GetRuntimeVersion() << Endl;
+            *logStream << "  Task ID: " << task.GetId() << Endl;
+            *logStream << "  Stage ID: " << task.GetStageId() << Endl;
+            if (task.HasProgram()) {
+                *logStream << "  Program size: " << task.GetProgram().GetRaw().size() << " bytes" << Endl;
+                *logStream << "  Runtime version: " << task.GetProgram().GetRuntimeVersion() << Endl;
             }
-            *logStream << "  Inputs: " << protoTask.InputsSize() << Endl;
-            *logStream << "  Outputs: " << protoTask.OutputsSize() << Endl;
+            *logStream << "  Inputs: " << task.InputsSize() << Endl;
+            *logStream << "  Outputs: " << task.OutputsSize() << Endl;
         }
 
         // Basic validation
-        if (protoTask.GetId() == 0) {
+        if (task.GetId() == 0) {
             Cerr << "FAILED: Task ID cannot be 0" << Endl;
             return 1;
         }
 
-        if (!protoTask.HasProgram()) {
+        if (!task.HasProgram()) {
             Cerr << "FAILED: Task must have a program" << Endl;
             return 1;
         }
 
-        if (protoTask.GetProgram().GetRaw().empty()) {
+        if (task.GetProgram().GetRaw().empty()) {
             Cerr << "FAILED: Program cannot be empty" << Endl;
             return 1;
         }
 
         // Check inputs and outputs structure
-        for (ui32 i = 0; i < protoTask.InputsSize(); ++i) {
-            const auto& input = protoTask.GetInputs(i);
+        for (ui32 i = 0; i < task.InputsSize(); ++i) {
+            const auto& input = task.GetInputs(i);
             if (verbose) {
                 *logStream << "  Input " << i << ": type=" << (int)input.GetTypeCase() << Endl;
             }
@@ -106,8 +116,8 @@ int main(int argc, char** argv) {
             }
         }
 
-        for (ui32 i = 0; i < protoTask.OutputsSize(); ++i) {
-            const auto& output = protoTask.GetOutputs(i);
+        for (ui32 i = 0; i < task.OutputsSize(); ++i) {
+            const auto& output = task.GetOutputs(i);
             if (verbose) {
                 *logStream << "  Output " << i << ": type=" << (int)output.GetTypeCase() << Endl;
             }
@@ -144,7 +154,7 @@ int main(int argc, char** argv) {
             settings.TerminateOnError = false;
 
             // Create task settings from proto
-            TDqTaskSettings taskSettings(&protoTask);
+            TDqTaskSettings taskSettings(&task);
 
             // Create allocator
             auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__,

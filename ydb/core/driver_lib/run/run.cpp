@@ -1905,8 +1905,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     DisableActorCallstack();
 
     if (drainProgress) {
-        constexpr ui32 DrainCheckIntervalMs = 100;
-        ui32 maxTicks = DrainTimeout.MilliSeconds() / DrainCheckIntervalMs;
+        constexpr auto drainCheckInterval = TDuration::MilliSeconds(100);
+        ui32 maxTicks = DrainTimeout / drainCheckInterval;
         for (ui32 i = 0; i < maxTicks; i++) {
             auto cnt = drainProgress->GetOnlineTabletsEstimate();
             if (cnt > 0) {

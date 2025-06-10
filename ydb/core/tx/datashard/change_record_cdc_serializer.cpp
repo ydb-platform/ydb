@@ -388,7 +388,7 @@ protected:
         case TChangeRecord::EKind::CdcHeartbeat:
             return SerializeHeartbeat(json, record);
         case TChangeRecord::EKind::IncrementalRestore:
-            Y_ABORT("Unexpected");
+            Y_ENSURE(false, "Unexpected");
         }
     }
 

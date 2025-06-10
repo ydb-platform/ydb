@@ -103,7 +103,15 @@ TQueryInfo TVectorWorkloadGenerator::SelectImpl(const std::string& query) {
     paramsBuilder
         .AddParam("$K").Uint64(Params.TopK).Build();
 
-    return TQueryInfo(query, paramsBuilder.Build());
+    TQueryInfo queryInfo(query, paramsBuilder.Build());
+    queryInfo.GenericQueryResultCallback = std::bind(&TVectorWorkloadGenerator::RecallCallback, this, std::placeholders::_1);
+    return queryInfo;
+}
+
+void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult) {
+    if (queryResult.IsSuccess()) {
+        Cout << queryResult.GetResultSet(0).RowsCount() << Endl;
+    }
 }
 
 TQueryInfo TVectorWorkloadGenerator::SelectScanImpl() {
@@ -209,31 +217,36 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     }
 }
 
-size_t TVectorWorkloadParams::GetVectorDimension() {
-    return 768;
-//     std::string query = std::format(R"_(--!syntax_v1
-//         SELECT ListLength(Knn::FloatFromBinaryString(embedding)) FROM {0} LIMIT 1;
-//     )_", Params.TableName.c_str());
+size_t TVectorWorkloadParams::GetVectorDimension() const {
+    //return 768;
+
+    if (!QueryClient) {
+        return 0;
+    }
+
+    std::string query = std::format(R"_(--!syntax_v1
+        SELECT ListLength(Knn::FloatFromBinaryString(embedding)) FROM {0} LIMIT 1;
+    )_", TableName.c_str());
 
 
-//     auto driver = NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig);
-//     auto client = NQuery::TQueryClient(driver);
-
-//     std::optional<TResultSet> resultSet;
-//     NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&resultSet, &params](TSession session) {
-//         auto result = session.ExecuteQuery(
-//             QUERY,
-//             TTxControl::BeginTx(STALE_RO ? TTxSettings::StaleRO() : TTxSettings::TTxSettings::SerializableRW()).CommitTx(),
-//             params.Build()).GetValueSync();
+    std::optional<NYdb::TResultSet> resultSet;
+    NYdb::NStatusHelpers::ThrowOnError(QueryClient->RetryQuerySync([&query, &resultSet](NYdb::NQuery::TSession session) {
+        auto result = session.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::NoTx())
+            .GetValueSync();
         
-//         if (!result.IsSuccess()) {
-//             return result;
-//         }
-//         resultSet = result.GetResultSet(0);
-//         return result;
-//     })); 
+        if (!result.IsSuccess()) {
+            return result;
+        }
+        resultSet = result.GetResultSet(0);
+        return result;
+    })); 
 
-//     return 0;
+    NYdb::TResultSetParser parser(*resultSet);
+    Y_ABORT_UNLESS(parser.TryNextRow());
+    ui64 dimension = parser.ColumnParser(0).GetInt64();
+    return dimension;
 }
 
 void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloadType) {

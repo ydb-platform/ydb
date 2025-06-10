@@ -158,6 +158,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 }
 
 int TCommandTPCCRun::Run(TConfig& connectionConfig) {
+    RunConfig->SetFullPath(connectionConfig);
     NTPCC::RunSync(connectionConfig, *RunConfig);
     return 0;
 }

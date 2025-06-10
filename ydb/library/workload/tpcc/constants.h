@@ -72,6 +72,8 @@ constexpr const char* TABLE_HISTORY = "history";
 constexpr const char* INDEX_CUSTOMER_NAME = "idx_customer_name";
 constexpr const char* INDEX_ORDER = "idx_order";
 
+constexpr const size_t INDEX_COUNT = 2;
+
 // don't change order!
 enum class ETransactionType {
     NewOrder = 0,
@@ -80,5 +82,7 @@ enum class ETransactionType {
     Payment = 3,
     StockLevel = 4
 };
+
+constexpr const size_t TUI_LOG_LINES = 10;
 
 } // namespace NYdb::NTPCC

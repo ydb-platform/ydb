@@ -8,6 +8,7 @@ SRCS(
     init.cpp
     import.cpp
     runner.cpp
+    stderr_capture.cpp
     task_queue.cpp
     terminal.cpp
     transaction_delivery.cpp
@@ -20,6 +21,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/ftxui
     ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/driver

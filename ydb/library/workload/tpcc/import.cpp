@@ -3,6 +3,7 @@
 #include "constants.h"
 #include "data_splitter.h"
 #include "log.h"
+#include "stderr_capture.h"
 #include "util.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
@@ -16,6 +17,11 @@
 #include <util/random/random.h>
 #include <util/random/shuffle.h>
 #include <util/string/printf.h>
+
+#include <contrib/libs/ftxui/include/ftxui/component/component.hpp>
+#include <contrib/libs/ftxui/include/ftxui/component/component_base.hpp>
+#include <contrib/libs/ftxui/include/ftxui/component/screen_interactive.hpp>
+#include <contrib/libs/ftxui/include/ftxui/dom/elements.hpp>
 
 #include <atomic>
 #include <expected>
@@ -518,7 +524,8 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
         } else {
             LOG_E(operationName << " failed after " << MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
-            QuickExit(1);
+            RequestStop();
+            return;
         }
     }
 }
@@ -760,20 +767,42 @@ void InterruptHandler(int) {
 
 class TPCCLoader {
 public:
+    struct TCalculatedStatusData {
+        size_t CurrentDataSizeLoaded = 0;
+        double PercentLoaded = 0.0;
+        double InstantSpeedMiBs = 0.0;
+        double AvgSpeedMiBs = 0.0;
+        int ElapsedMinutes = 0;
+        int ElapsedSeconds = 0;
+        int EstimatedTimeLeftMinutes = 0;
+        int EstimatedTimeLeftSeconds = 0;
+        bool IsWaitingForIndices = false;
+        bool IsLoadingTablesAndBuildingIndices = false;
+    };
+
     TPCCLoader(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
         : ConnectionConfig(connectionConfig)
         , Config(runConfig)
         , Log(std::make_unique<TLog>(CreateLogBackend("cerr", runConfig.LogPriority, true)))
-        , LastDisplayUpdate(Clock::now())
         , PreviousDataSizeLoaded(0)
         , StartTime(Clock::now())
         , LoadState(StopByInterrupt.get_token())
+        , LogCapture(Config.DisplayMode == TRunConfig::EDisplayMode::Tui ?
+                     std::make_unique<TStdErrCapture>(TUI_LOG_LINES) : nullptr)
     {
     }
 
     void ImportSync() {
+        Config.SetDisplayUpdateInterval();
         CalculateApproximateDataSize();
 
+        // we want to switch buffers and draw UI ASAP to properly display logs
+        // produced after this point and before the first screen update
+        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
+            UpdateDisplayIfNeeded(Clock::now());
+        }
+
+        // in particular this log message
         LOG_I("Starting TPC-C data import for " << Config.WarehouseCount << " warehouses using " <<
                 Config.ThreadCount << " threads. Approximate data size: " << GetFormattedSize(LoadState.ApproximateDataSize));
 
@@ -781,19 +810,17 @@ public:
         size_t threadCount = std::min(Config.WarehouseCount, Config.ThreadCount );
         threadCount = std::max(threadCount, size_t(1));
 
-        // TODO
+        // TODO: calculate optimal number of drivers (but per thread looks good)
         size_t driverCount = threadCount;
 
-        // Create drivers
-        auto connectionConfigCopy = ConnectionConfig;
         std::vector<TDriver> drivers;
         drivers.reserve(driverCount);
         for (size_t i = 0; i < driverCount; ++i) {
-            drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(connectionConfigCopy));
+            drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
         }
 
         // we set handler as late as possible to overwrite
-        // any handlers set deeply inside
+        // any handlers set deeply inside (e.g. in)
         signal(SIGINT, InterruptHandler);
         signal(SIGTERM, InterruptHandler);
 
@@ -822,7 +849,6 @@ public:
 
         while (true) {
             if (StopByInterrupt.stop_requested()) {
-                LOG_I("Stop requested, waiting for threads to finish");
                 break;
             }
 
@@ -839,7 +865,7 @@ public:
                 size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
                 if (indexedRangesLoaded >= threadCount) {
                     CreateIndices(drivers[0], Config.Path, LoadState, Log.get());
-                    LOG_I("Indexed tables loaded, indices are being created. Continuing with remaining tables");
+                    LOG_I("Indexed tables loaded, indices are being built in background. Continuing with remaining tables");
                     LoadState.State = TLoadState::ELOAD_TABLES_BUILD_INDICES;
                     lastIndexProgressCheck = now;
                 }
@@ -867,7 +893,8 @@ public:
                     auto progress = GetIndexProgress(operationClient, indexState.Id);
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
-                        QuickExit(1);
+                        RequestStop();
+                        return;
                     }
                     indexState.Progress = *progress;
                     if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
@@ -890,12 +917,18 @@ public:
             now = Clock::now();
         }
 
-        // Wait for all threads to complete
+        if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
+            ExitTuiMode();
+        }
+
+        if (StopByInterrupt.stop_requested()) {
+            LOG_I("Stop requested, waiting for threads to finish");
+        }
+
         for (auto& thread : threads) {
             thread.join();
         }
 
-        // Stop all drivers
         for (auto& driver : drivers) {
             driver.Stop(true);
         }
@@ -910,7 +943,6 @@ public:
             double avgSpeedMiBs = totalElapsedSeconds > 0 ?
                 static_cast<double>(totalDataLoaded) / (1024 * 1024) / totalElapsedSeconds : 0.0;
 
-            // Build average speed string
             std::stringstream avgSpeedStream;
             avgSpeedStream << std::fixed << std::setprecision(1) << avgSpeedMiBs;
             std::string avgSpeedMiBsStr = avgSpeedStream.str();
@@ -922,7 +954,7 @@ public:
 
 private:
     void CalculateApproximateDataSize() {
-        // We calculate approximate data size based on heavy tables only
+        // Note, we calculate approximate data size based on heavy tables only
         double stockSize = TDataSplitter::GetPerWarehouseMB(TABLE_STOCK) * Config.WarehouseCount;
         double customerSize = TDataSplitter::GetPerWarehouseMB(TABLE_CUSTOMER) * Config.WarehouseCount;
         double historySize = TDataSplitter::GetPerWarehouseMB(TABLE_HISTORY) * Config.WarehouseCount;
@@ -936,86 +968,253 @@ private:
 
     void UpdateDisplayIfNeeded(Clock::time_point now) {
         auto delta = now - LastDisplayUpdate;
-        if (delta >= TRunConfig::DisplayUpdateInterval) {
-            if (LoadState.IndexBuildStates.empty() || LoadState.State != TLoadState::EWAIT_INDICES) {
-                // data import is in progress
-                size_t currentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+        if (delta < Config.DisplayUpdateInterval) {
+            return;
+        }
 
-                // Calculate percentage
-                double percentLoaded = LoadState.ApproximateDataSize > 0 ?
-                    (static_cast<double>(currentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
+        // Calculate all status data
+        TCalculatedStatusData data;
+        data.IsWaitingForIndices = !LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::EWAIT_INDICES;
+        data.IsLoadingTablesAndBuildingIndices = LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES;
 
-                // Calculate instantaneous upload speed (MiB/s)
-                auto deltaSeconds = std::chrono::duration<double>(delta).count();
-                double instantSpeedMiBs = deltaSeconds > 0 ?
-                    static_cast<double>(currentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
+        if (!data.IsWaitingForIndices) {
+            data.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
 
-                // Calculate average upload speed (MiB/s)
-                auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
-                double avgSpeedMiBs = totalElapsed > 0 ?
-                    static_cast<double>(currentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
+            data.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
+                (static_cast<double>(data.CurrentDataSizeLoaded) / LoadState.ApproximateDataSize) * 100.0 : 0.0;
 
-                // Calculate time estimates
-                auto elapsedMinutes = static_cast<int>(totalElapsed / 60);
-                auto elapsedSeconds = static_cast<int>(totalElapsed) % 60;
+            auto deltaSeconds = std::chrono::duration<double>(delta).count();
+            data.InstantSpeedMiBs = deltaSeconds > 0 ?
+                static_cast<double>(data.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
 
-                int estimatedTimeLeftMinutes = 0;
-                int estimatedTimeLeftSeconds = 0;
-                if (avgSpeedMiBs > 0 && currentDataSizeLoaded < LoadState.ApproximateDataSize) {
-                    double remainingBytes = LoadState.ApproximateDataSize - currentDataSizeLoaded;
-                    double remainingSeconds = remainingBytes / (1024 * 1024) / avgSpeedMiBs;
-                    estimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
-                    estimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
-                }
+            auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
+            data.AvgSpeedMiBs = totalElapsed > 0 ?
+                static_cast<double>(data.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
 
-                // Build progress message using string stream
-                std::stringstream ss;
-                ss << std::fixed << std::setprecision(1) << "Progress: " << percentLoaded << "% "
-                    << "(" << GetFormattedSize(currentDataSizeLoaded) << ") "
-                    << std::setprecision(1) << instantSpeedMiBs << " MiB/s "
-                    << "(avg: " << avgSpeedMiBs << " MiB/s) "
-                    << "elapsed: " << elapsedMinutes << ":" << std::setfill('0') << std::setw(2) << elapsedSeconds << " "
-                    << "ETA: " << estimatedTimeLeftMinutes << ":"
-                    << std::setfill('0') << std::setw(2) << estimatedTimeLeftSeconds;
+            data.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
+            data.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
 
-                // Add index progress information if indices are being built
-                if (!LoadState.IndexBuildStates.empty() && LoadState.State == TLoadState::ELOAD_TABLES_BUILD_INDICES) {
-                    ss << " | ";
-                    for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                        const auto& indexState = LoadState.IndexBuildStates[i];
-                        if (i > 0) ss << ", ";
-                        ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
-                    }
-                }
+            if (data.AvgSpeedMiBs > 0 && data.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
+                double remainingBytes = LoadState.ApproximateDataSize - data.CurrentDataSizeLoaded;
+                double remainingSeconds = remainingBytes / (1024 * 1024) / data.AvgSpeedMiBs;
+                data.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+                data.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
+            }
 
-                LOG_I(ss.str());
-                PreviousDataSizeLoaded = currentDataSizeLoaded;
-            } else {
-                // waiting for indices
-                if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
-                    std::stringstream ss;
-                    ss << "Waiting for indices ";
-                    for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                        const auto& indexState = LoadState.IndexBuildStates[i];
-                        if (i > 0) ss << ", ";
-                        ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
-                    }
-                    LOG_I(ss.str());
+            PreviousDataSizeLoaded = data.CurrentDataSizeLoaded;
+        }
+
+        switch (Config.DisplayMode) {
+        case TRunConfig::EDisplayMode::Text:
+            UpdateDisplayTextMode(data);
+            break;
+        case TRunConfig::EDisplayMode::Tui:
+            UpdateDisplayTuiMode(data);
+            break;
+        default:
+            ;
+        }
+
+        LastDisplayUpdate = now;
+    }
+
+    void UpdateDisplayTextMode(const TCalculatedStatusData& data) {
+        if (!data.IsWaitingForIndices) {
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
+                << "(" << GetFormattedSize(data.CurrentDataSizeLoaded) << ") "
+                << std::setprecision(1) << data.InstantSpeedMiBs << " MiB/s "
+                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) "
+                << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
+                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
+                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+
+            if (data.IsLoadingTablesAndBuildingIndices) {
+                ss << " | ";
+                for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                    const auto& indexState = LoadState.IndexBuildStates[i];
+                    if (i > 0) ss << ", ";
+                    ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
                 }
             }
 
-            LastDisplayUpdate = now;
+            LOG_I(ss.str());
+        } else {
+            // waiting for indices
+            if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
+                std::stringstream ss;
+                ss << "Waiting for indices ";
+                for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                    const auto& indexState = LoadState.IndexBuildStates[i];
+                    if (i > 0) ss << ", ";
+                    ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
+                }
+                LOG_I(ss.str());
+            }
         }
     }
 
+    void UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
+        using namespace ftxui;
+
+        // fist update is very special: we switch buffers and capture stderr to display live logs
+        static bool firstUpdate = true;
+        if (firstUpdate) {
+            if (LogCapture) {
+                LogCapture->StartCapture();
+            }
+
+            // Switch to alternate screen buffer (like htop)
+            std::cout << "\033[?1049h";
+            std::cout << "\033[2J\033[H"; // Clear screen and move to top
+            firstUpdate = false;
+        }
+
+        if (LogCapture) {
+            LogCapture->UpdateCapture();
+        }
+
+        // our header with main information
+
+        std::stringstream headerSs;
+        headerSs << "TPC-C Import: " << Config.WarehouseCount << " warehouses, "
+                 << Config.ThreadCount << " threads   Estimated size: "
+                 << GetFormattedSize(LoadState.ApproximateDataSize);
+
+        std::stringstream progressSs;
+        progressSs << std::fixed << std::setprecision(1) << data.PercentLoaded << "% ("
+                   << GetFormattedSize(data.CurrentDataSizeLoaded) << ")";
+
+        std::stringstream speedSs;
+        speedSs << std::fixed << std::setprecision(1)
+                << "Speed: " << data.InstantSpeedMiBs << " MiB/s   "
+                << "Avg: " << data.AvgSpeedMiBs << " MiB/s   "
+                << "Elapsed: " << data.ElapsedMinutes << ":"
+                << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << "   "
+                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
+                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+
+        // Calculate progress ratio for gauge
+        float progressRatio = static_cast<float>(data.PercentLoaded / 100.0);
+
+        // Left side: Import details
+        auto importDetails = vbox({
+            text(headerSs.str()),
+            hbox({
+                text("Progress: "),
+                gauge(progressRatio) | flex,
+                text("  " + progressSs.str())
+            }),
+            text(speedSs.str())
+        });
+
+        auto topRow = hbox({
+            importDetails | flex,
+            separator()
+        });
+
+        // Index progress section (always shown)
+
+        Elements indexElements;
+        TString indexText;
+        if (LoadState.IndexBuildStates.empty()) {
+            indexText = "Index Creation Progress didn't start";
+        } else {
+            indexText = "Index Creation Progress:";
+        }
+        indexElements.push_back(text(indexText));
+
+        if (LoadState.IndexBuildStates.empty()) {
+            // Index building not started yet, need to leave enough space
+            for (size_t i = 0; i < INDEX_COUNT; ++i) {
+                float indexRatio = static_cast<float>(0.0);
+
+                std::stringstream indexSs;
+                indexSs << std::fixed << std::setprecision(1) << 0.0 << "%";
+
+                indexElements.push_back(
+                    hbox({
+                        text("  [ index " + std::to_string(i + 1) + " ] "),
+                        gauge(indexRatio) | flex,
+                        text(" " + indexSs.str())
+                    })
+                );
+            }
+        } else {
+            // Show progress for each index
+            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                const auto& indexState = LoadState.IndexBuildStates[i];
+                float indexRatio = static_cast<float>(indexState.Progress / 100.0);
+
+                std::stringstream indexSs;
+                indexSs << std::fixed << std::setprecision(1) << indexState.Progress << "%";
+
+                indexElements.push_back(
+                    hbox({
+                        text("  [ index " + std::to_string(i + 1) + " ] "),
+                        gauge(indexRatio) | flex,
+                        text(" " + indexSs.str())
+                    })
+                );
+            }
+        }
+
+        // Create scrollable logs panel
+
+        Elements logElements;
+
+        const auto& capturedLines = LogCapture->GetLogLines();
+        size_t truncatedCount = LogCapture->GetTruncatedCount();
+        if (truncatedCount > 0) {
+            logElements.push_back(text("... logs truncated: " + std::to_string(truncatedCount) + " lines"));
+        }
+
+        for (const auto& line: capturedLines) {
+            logElements.push_back(text(line));
+        }
+
+        auto logsContent = vbox(logElements);
+        auto logsPanel = window(text(" Logs "), logsContent | vscroll_indicator | frame | flex);
+
+        // Main layout - fill the entire screen
+
+        auto layout = vbox({
+            topRow,
+            separator(),
+            vbox(indexElements),
+            separator(),
+            logsPanel | flex
+        });
+
+        // Render full screen
+
+        std::cout << "\033[H"; // Move cursor to top
+        auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
+        Render(screen, layout);
+        std::cout << screen.ToString();
+    }
+
+    void ExitTuiMode() {
+        // Restore stderr and flush captured logs
+        if (LogCapture) {
+            LogCapture->RestoreAndFlush();
+        }
+
+        // Switch back to main screen buffer (restore original content)
+        std::cout << "\033[?1049l";
+        std::cout.flush();
+    }
+
 private:
-    const NConsoleClient::TClientCommand::TConfig& ConnectionConfig;
-    const TRunConfig& Config;
+    NConsoleClient::TClientCommand::TConfig ConnectionConfig;
+    TRunConfig Config;
+
     std::unique_ptr<TLog> Log;
     Clock::time_point LastDisplayUpdate;
     size_t PreviousDataSizeLoaded;
     Clock::time_point StartTime;
     TLoadState LoadState;
+    std::unique_ptr<TStdErrCapture> LogCapture;
 };
 
 } // anonymous namespace

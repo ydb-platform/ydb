@@ -211,7 +211,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         saKeyAuth = &opts.AddAuthMethodOption("sa-key-file", TStringBuilder() << "Service account" << (Settings.MentionUserAccount.GetRef() ? " (or user account) key file" : " key file"));
         (*saKeyAuth)
             .AuthMethod("sa-key-file")
-            .SimpleProfileDataParam("", true)
+            .SimpleProfileDataParam("sa-key-file", true)
             .DocLink(TStringBuilder() << docsUrl << "/iam/operations/iam-token/create-for-sa")
             .LogToConnectionParams("sa-key-file")
             .Env("SA_KEY_FILE", true, "SA key file")
@@ -239,7 +239,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     }
 
     if (config.UseStaticCredentials) {
-        auto parser = [this](const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly) -> bool {
+        auto parser = [this](const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly) -> bool {
+            Y_UNUSED(isFileName);
             TString user, password;
             bool hasPasswordOption = false;
             if (authData["user"]) {

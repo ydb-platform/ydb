@@ -1,5 +1,4 @@
 #include "ydb_service_table.h"
-#include "ydb_table_infer.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
@@ -34,7 +33,6 @@ TCommandTable::TCommandTable()
     AddCommand(std::make_unique<TCommandIndex>());
     AddCommand(std::make_unique<TCommandTableQuery>());
     AddCommand(std::make_unique<TCommandReadTable>());
-    AddCommand(std::make_unique<TCommandTableInfer>());
     AddCommand(std::make_unique<TCommandTtl>());
 }
 

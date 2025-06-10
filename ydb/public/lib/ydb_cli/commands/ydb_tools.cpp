@@ -1,4 +1,5 @@
 #include "ydb_tools.h"
+#include "ydb_tools_infer.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
@@ -26,6 +27,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
     AddCommand(std::make_unique<TCommandPgConvert>());
+    AddCommand(std::make_unique<TCommandToolsInfer>());
 }
 
 TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

@@ -546,7 +546,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
             const auto& stats = LastStatisticsSnapshot->StatVec[i];
             double load = stats.ExecutingTime / stats.TotalTime;
             leftLine << std::left
-                     << std::setw(5) << i
+                     << std::setw(5) << (i + 1)
                      << std::setw(5) << std::fixed << std::setprecision(2) << load
                      << std::setw(10) << std::fixed << stats.QueriesPerSecond
                      << std::setw(10) << stats.TaskThreadStats->InternalTasksWaitingInflight
@@ -562,7 +562,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
             const auto& stats = LastStatisticsSnapshot->StatVec[rightIndex];
             double load = stats.ExecutingTime / stats.TotalTime;
             rightLine << std::left
-                      << std::setw(5) << rightIndex
+                      << std::setw(5) << (rightIndex + 1)
                       << std::setw(5) << std::fixed << std::setprecision(2) << load
                       << std::setw(10) << std::fixed << stats.QueriesPerSecond
                       << std::setw(10) << stats.TaskThreadStats->InternalTasksWaitingInflight
@@ -762,7 +762,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
         queueP90Ss << std::fixed << std::setprecision(1) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
 
         auto threadLine = hbox({
-            text(std::to_string(i)) | size(WIDTH, EQUAL, 4),
+            text(std::to_string(i + 1)) | size(WIDTH, EQUAL, 4),
             hbox({
                 text("["),
                 loadBar | size(WIDTH, EQUAL, 10),

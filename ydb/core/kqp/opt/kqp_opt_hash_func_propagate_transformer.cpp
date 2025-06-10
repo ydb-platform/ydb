@@ -70,8 +70,9 @@ TMaybeNode<TKqpPhysicalTx> PropogateHashFuncToHashShuffles(
             }
         );
 
+        bool enableShuffleElimination = config->OptShuffleElimination.Get().GetOrElse(config->DefaultEnableShuffleElimination);
         auto stageHashType = config->HashShuffleFuncType.Get().GetOrElse(config->DefaultHashShuffleFuncType);
-        if (isRead) {
+        if (isRead && enableShuffleElimination) {
             stageHashType =  config->ColumnShardHashShuffleFuncType.Get().GetOrElse(config->DefaultColumnShardHashShuffleFuncType);
         } else {
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {

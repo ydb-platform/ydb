@@ -16,7 +16,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-using NKikimr::Tests;
+using namespace NKikimr::Tests;
+
 namespace NSchemeShardUT_Private {
 
 void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordComplexity::TInitializer& initializer) {

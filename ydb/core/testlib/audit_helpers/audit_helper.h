@@ -1,11 +1,11 @@
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/log.h>
 #include <ydb/core/audit/audit_log_service.h>
-#include <util/generic/map.h>
-#include <util/generic/vector.h>
-#include <util/generic/ptr.h>
 
 namespace NKikimr {
 namespace Tests {

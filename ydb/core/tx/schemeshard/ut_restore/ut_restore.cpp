@@ -42,7 +42,7 @@ using namespace NKikimr;
 using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
-using NKikimr::Tests;
+using namespace NKikimr::Tests;
 
 namespace {
 

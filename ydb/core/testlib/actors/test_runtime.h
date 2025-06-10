@@ -13,13 +13,6 @@
 
 #include <ydb/core/protos/key.pb.h>
 
-#include <ydb/core/audit/audit_log_service.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/dnsresolver/dnsresolver.h>
-#include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
-#include <util/generic/xrange.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/core/testlib/audit_helpers/audit_helper.h>
 
 namespace NKikimr {

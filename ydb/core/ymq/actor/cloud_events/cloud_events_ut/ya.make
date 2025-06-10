@@ -6,7 +6,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut.cpp
+    cloud_events_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

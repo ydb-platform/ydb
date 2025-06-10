@@ -24,7 +24,8 @@ using namespace NKikimr::NWrappers::NTestHelpers;
 
 using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
 
-using NKikimr::Tests;
+using namespace NKikimr::Tests;
+
 namespace {
 
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {

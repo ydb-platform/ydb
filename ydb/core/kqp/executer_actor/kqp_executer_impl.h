@@ -58,33 +58,6 @@ LWTRACE_USING(KQP_PROVIDER);
 namespace NKikimr {
 namespace NKqp {
 
-namespace {
-
-bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions) {
-    for (const auto& [_, shardInfo] : partitions) {
-        if (!shardInfo.KeyReadRanges || shardInfo.KeyWriteRanges) {
-            return false;
-        }
-
-        const TShardKeyRanges& ranges = *shardInfo.KeyReadRanges;
-        if (ranges.FullRange) {
-            return false;
-        }
-
-        for (const TSerializedPointOrRange& range : ranges.Ranges) {
-            if (const auto* tableRange = std::get_if<TSerializedTableRange>(&range);
-                tableRange && !tableRange->Point)
-            {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-} // anonymous namespace
-
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
@@ -1393,8 +1366,8 @@ protected:
         }
 
         bool isParallelPointRead = EnableParallelPointReadConsolidation && IsParallelPointReadPossible(partitions);
-
         bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+
         if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
 

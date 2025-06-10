@@ -73,7 +73,7 @@ security_config:
 
 {% note tip %}
 
-Информацию о правах доступа к схемным объектам можно получить из системных представлений {{ ydb-short-name }}, см. [{#T}](../../dev/system-views#informaciya-o-pravah-dostupa).
+Информацию о правах доступа к схемным объектам можно получить из системных представлений {{ ydb-short-name }}, см. [{#T}](../../dev/system-views#access-rights).
 
 {% endnote %}
 

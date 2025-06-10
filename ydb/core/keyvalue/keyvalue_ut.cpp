@@ -176,7 +176,6 @@ void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
             write->SetStorageChannel(storageChannel);
             write->SetPriority(priority);
             if (idx < creationUnixTimes.size()) {
-                Cerr << "idx=" << idx << ", creationUnixTime=" << creationUnixTimes[idx] << Endl;
                 write->SetCreationUnixTime(creationUnixTimes[idx]);
             }
         }

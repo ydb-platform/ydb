@@ -1,6 +1,6 @@
 # Права доступа
 
-[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не к [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
+[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} хранятся не у [субъекта](../concepts/glossary.md#access-subject), а у [объекта доступа](../concepts/glossary.md#access-object).
 
 Для каждого объекта доступа ведется специальный список— [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
 

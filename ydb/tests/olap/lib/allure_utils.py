@@ -114,11 +114,11 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
     Returns:
         str: HTML таблица
     """
-    logging.info("_create_iterations_table called with result: %s", result)
+    logging.info(f"_create_iterations_table called with result: {result}")
     if result:
-        logging.info("result has iterations: %s", hasattr(result, 'iterations'))
+        logging.info(f"result has iterations: {hasattr(result, 'iterations')}")
         if hasattr(result, 'iterations'):
-            logging.info("iterations content: %s", result.iterations)
+            logging.info(f"iterations content: {result.iterations}")
 
     def _get_node_issue_info(node_error, show_details=True):
         """Возвращает информацию о проблемах ноды: (цвет, значение, критичность)"""
@@ -231,7 +231,7 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
         from ydb.tests.olap.lib.ydb_cluster import YdbCluster
         all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
         # Добавляем отладочную информацию о всех нодах
-        logging.info("All nodes before filtering: %s", [(node.slot, node.role) for node in all_cluster_nodes])
+        logging.info(f"All nodes before filtering: {[(node.slot, node.role) for node in all_cluster_nodes]}")
         # Для отладки - показываем все ноды кластера вместо фильтрации только storage
         # all_cluster_nodes = [node for node in all_cluster_nodes if node.role == YdbCluster.Node.Role.STORAGE]
 
@@ -251,14 +251,13 @@ def _create_iterations_table(result, node_errors: list[NodeErrors] = [], workloa
         unique_nodes = sorted(all_node_slots)
         all_cluster_nodes = list(host_representatives.values())  # Представители хостов
 
-        logging.info("Auto-discovered hosts (all roles): %d hosts from %d total nodes",
-                     len(unique_hosts), sum(len(nodes) for nodes in hosts_to_nodes.values()))
-        logging.info("Host to nodes mapping: %s", [(host, len(nodes)) for host, nodes in hosts_to_nodes.items()])
+        logging.info(f"Auto-discovered hosts (all roles): {len(unique_hosts)} hosts from {sum(len(nodes) for nodes in hosts_to_nodes.values())} total nodes")
+        logging.info(f"Host to nodes mapping: {[(host, len(nodes)) for host, nodes in hosts_to_nodes.items()]}")
     except Exception as e:
         # Если не можем получить ноды - показываем агрегированные колонки
         unique_nodes = []
         all_cluster_nodes = []
-        logging.warning("Failed to get cluster nodes, will show aggregated columns: %s", e)
+        logging.warning(f"Failed to get cluster nodes, will show aggregated columns: {e}")
 
     # Дополняем node_info_map пустыми записями для хостов без ошибок
     for node in all_cluster_nodes:
@@ -431,12 +430,12 @@ def allure_test_description(
     '''
 
     # Добавляем компактную таблицу итераций прямо в description
-    logging.info("allure_test_description called with workload_result: %s", workload_result)
+    logging.info(f"allure_test_description called with workload_result: {workload_result}")
 
     if workload_result:
         logging.info("workload_result is not None, calling _create_iterations_table")
         iterations_table = _create_iterations_table(workload_result, node_errors, workload_params)
-        logging.info("iterations_table created, length: %d", len(iterations_table) if iterations_table else 0)
+        logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
         if iterations_table:
             html += f'''
             <h3>Workload Iterations</h3>

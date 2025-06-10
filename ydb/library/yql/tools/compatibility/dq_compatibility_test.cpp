@@ -1,6 +1,8 @@
 #include <library/cpp/getopt/last_getopt.h>
 
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/dq/runtime/dq_compute.h>
+#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 
@@ -119,12 +121,26 @@ int main(int argc, char** argv) {
                 *logStream << "Starting task runner preparation and execution..." << Endl;
             }
 
-            // Create task runner context
+            // Create allocator
+            auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(TSourceLocation(__FILE__, __LINE__));
+            
+            // Create compute context
+            auto computeCtx = std::make_unique<TDqComputeContextBase>();
+
+            // Create task runner context with minimal setup
             TDqTaskRunnerContext context;
             context.TypeEnv = nullptr; // Will be created by task runner
             context.FuncRegistry = nullptr; // Will be created by task runner
             context.RandomProvider = nullptr; // Will be created by task runner
             context.TimeProvider = nullptr; // Will be created by task runner
+            context.ComputeCtx = computeCtx.get();
+            
+            // Initialize ComputationFactory to return nullptr (no custom computation nodes)
+            context.ComputationFactory = [](NKikimr::NMiniKQL::TCallable& callable, const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx) -> NKikimr::NMiniKQL::IComputationNode* {
+                Y_UNUSED(callable);
+                Y_UNUSED(ctx);
+                return nullptr;
+            };
 
             // Create task runner settings
             TDqTaskRunnerSettings settings;
@@ -141,7 +157,6 @@ int main(int argc, char** argv) {
             TDqTaskRunnerExecutionContextDefault execContext;
 
             // Create task runner
-            auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(TSourceLocation(__FILE__, __LINE__));
             auto taskRunner = MakeDqTaskRunner(alloc, context, settings, [&logStream, verbose](const TString& msg) {
                 if (verbose) {
                     *logStream << "[DQ_TASK_RUNNER]: " << msg << Endl;

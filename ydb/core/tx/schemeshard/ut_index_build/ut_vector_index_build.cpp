@@ -39,9 +39,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 0, 0, 50);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 1, 50, 150);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 2, 150, 200);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 2, 150, 200);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
                            {NLs::PathExist,
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB/Table", false, 0, 100, 300);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB/Table", false, false, 0, 100, 300);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
             NLs::PathExist,
@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
 
         const ui64 buildIndexTx = ++txId;
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", "embedding");
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
 
         runtime.WaitFor("block", [&]{ return blocked.size(); });
         blocked.Stop().Unblock();
@@ -687,7 +687,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         const ui64 buildIndexTx = ++txId;
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", "embedding");
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
 
         env.TestWaitNotification(runtime, buildIndexTx);
 
@@ -848,7 +848,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
 
         const ui64 buildIndexTx = ++txId;
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", "embedding");
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
 
         runtime.WaitFor("block", [&]{ return blocked.size(); });
         blocked.Stop().Unblock();

@@ -1023,7 +1023,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
-        csController->SetOverrideAllowMergeFull(true);
 
         // disable stats batching
         auto& appData = runtime.GetAppData();

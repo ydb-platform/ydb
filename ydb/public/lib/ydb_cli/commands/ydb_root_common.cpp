@@ -313,7 +313,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         oauth2TokenExchangeAuth = &opts.AddAuthMethodOption("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file");
         (*oauth2TokenExchangeAuth)
             .AuthMethod("oauth2-key-file")
-            .SimpleProfileDataParam()
+            .SimpleProfileDataParam("oauth2-key-file", true)
             .LogToConnectionParams("oauth2-key-file")
             .DocLink("ydb.tech/docs/en/reference/ydb-cli/connect")
             .Env("YDB_OAUTH2_KEY_FILE", true, "OAuth 2 key file")

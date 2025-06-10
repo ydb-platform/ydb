@@ -354,10 +354,15 @@ class ScenarioTestHelper:
 
             if error != None:
                 logger.error(f'DEBUG____: {repr(status)}: {error}')
+                if return_error:
+                    if "Conflict with existing key" in error:
+                        logger.error("DEBUG____: Conflict with existing key")
+                        return (result, error)
+                    elif "Transaction locks invalidated" in error:
+                        logger.error("DEBUG____: Transaction locks invalidated")
+                        return (result, error)
 
             if status in expected_status:
-                if return_error:
-                    return (result, error)
                 return result
             if status not in retriable_status:
                 if fail_on_error:

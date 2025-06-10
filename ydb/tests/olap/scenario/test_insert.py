@@ -58,7 +58,7 @@ class TestInsert(BaseTestSet):
                     # 2) Иначе, надо завести issue на Transaction locks invalidate и поправить тест чтобы эта ошибка не выстреливала
 
                     result = sth.execute_query(
-                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=10, fail_on_error=False, return_error=True
+                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=0, fail_on_error=True, return_error=True
                     )
                     if isinstance(result, tuple):
                         result_ = result[0]

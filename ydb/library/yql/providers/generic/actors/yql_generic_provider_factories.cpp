@@ -52,8 +52,8 @@ namespace NYql::NDq {
                  "MsSQLServerGeneric",
                  "OracleGeneric",
                  "LoggingGeneric"}) {
-            factory.RegisterSource<NGeneric::TSource>(name, readActorFactory);
-            factory.RegisterLookupSource<NGeneric::TLookupSource>(name, lookupActorFactory);
+            factory.RegisterSource<Generic::TSource>(name, readActorFactory);
+            factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }
     }
 

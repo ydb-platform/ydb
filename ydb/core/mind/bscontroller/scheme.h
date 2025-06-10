@@ -52,7 +52,7 @@ struct Schema : NIceDb::Schema {
     };
 
     struct Group : Table<4> {
-        struct ID : Column<1, NScheme::NTypeIds::Uint32> { using Type = TGroupId; static constexpr Type Default = TGroupId::Zero();}; // PK
+        struct ID : Column<1, NScheme::NTypeIds::Uint32> { using Type = TGroupId; static constexpr Type Default = TGroupId::Zero(); }; // PK
         struct Generation : Column<2, NScheme::NTypeIds::Uint32> {};
         struct ErasureSpecies : Column<3, NScheme::NTypeIds::Uint32> { using Type = TErasureType::EErasureSpecies; };
         struct Owner : Column<4, NScheme::NTypeIds::Uint64> {};
@@ -68,6 +68,7 @@ struct Schema : NIceDb::Schema {
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupDecommitStatus::E; };
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; };
 
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
@@ -79,12 +80,13 @@ struct Schema : NIceDb::Schema {
         struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
         struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
         struct Metrics           : Column<114, NScheme::NTypeIds::String> {}; // for virtual groups only
+        struct BridgeGroupInfo   : Column<121, NScheme::NTypeIds::String> {}; // bridged group protobuf
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, GroupSizeInUnits, VirtualGroupName, VirtualGroupState, HiveId, Database,
-              BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics>;
+              SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
+              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
     };
 
     struct State : Table<1> {
@@ -311,13 +313,16 @@ struct Schema : NIceDb::Schema {
         struct RandomizeGroupMapping : Column<25, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         // this value is only accounted when new groups are added to the pool
         struct DefaultGroupSizeInUnits : Column<26, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
+        // does this storage pool work in bridge mode?
+        struct BridgeMode : Column<27, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
           DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
           VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
-          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping, DefaultGroupSizeInUnits>;
+          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping,
+          DefaultGroupSizeInUnits, BridgeMode>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

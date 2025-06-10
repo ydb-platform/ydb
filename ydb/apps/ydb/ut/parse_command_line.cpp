@@ -5,6 +5,7 @@
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers/test_token_exchange_server.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -1362,5 +1363,93 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             profile
         );
         UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "sa-key-file: " << saKeyFile << Endl);
+    }
+
+    Y_UNIT_TEST_F(Oauth2KeyFile, TCliTestFixture) {
+        TStringBuilder oauth2KeyContent;
+        NJson::TJsonWriter oauth2KeyParamsWriter(&oauth2KeyContent.Out, true);
+        oauth2KeyParamsWriter.OpenMap();
+        oauth2KeyParamsWriter.Write("grant-type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        oauth2KeyParamsWriter.Write("requested-token-type", "urn:ietf:params:oauth:token-type:access_token");
+        oauth2KeyParamsWriter.WriteKey("subject-credentials");
+        oauth2KeyParamsWriter.OpenMap();
+        oauth2KeyParamsWriter.Write("type", "fixed");
+        oauth2KeyParamsWriter.Write("token", "fixed_test_token");
+        oauth2KeyParamsWriter.Write("token-type", "test_token_type");
+        oauth2KeyParamsWriter.CloseMap();
+        oauth2KeyParamsWriter.CloseMap();
+        oauth2KeyParamsWriter.Flush();
+
+        const TString oauth2KeyFile = EnvFile(oauth2KeyContent, "oauth2_key.json");
+
+        TTestTokenExchangeServer oauth2Server;
+        oauth2Server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        oauth2Server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+        oauth2Server.Check.ExpectedInputParams.emplace("subject_token", "fixed_test_token");
+        oauth2Server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
+        oauth2Server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": 42})";
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--oauth2-key-file", oauth2KeyFile,
+                "--iam-endpoint", oauth2Server.GetEndpoint(),
+                "scheme", "ls",
+            },
+            {}
+        );
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--iam-endpoint", oauth2Server.GetEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_OAUTH2_KEY_FILE", oauth2KeyFile},
+            }
+        );
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                iam-endpoint: {iam_endpoint}
+                authentication:
+                    method: oauth2-key-file
+                    data: {oauth2_key_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "oauth2_key_file"_a = oauth2KeyFile,
+        "iam_endpoint"_a = oauth2Server.GetEndpoint()
+        );
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+
+        TString output = RunCli(
+            {
+                "config", "info",
+            },
+            {},
+            profile
+        );
+        UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "oauth2-key-file: " << oauth2KeyFile << Endl);
     }
 }

@@ -2,29 +2,11 @@ import ydb
 
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
-from ydb.tests.datashard.lib.vector_index import targets
+from ydb.tests.datashard.lib.vector_index import targets, get_vector, BinaryStringConverter
 from ydb.tests.datashard.lib.types_of_variables import (
     cleanup_type_name,
     format_sql_value,
 )
-
-
-class BinaryStringConverter:
-    def __init__(self, name, data_type, vector_type):
-        self.name = name
-        self.data_type = data_type
-        self.vector_type = vector_type
-
-
-def get_vector(type, numb, size_vector):
-    if type == "Float":
-        values = [float(i) for i in range(size_vector - 1)]
-        values.append(float(numb))
-        return ",".join(f'{val}f' for val in values)
-
-    values = [i for i in range(size_vector - 1)]
-    values.append(numb)
-    return ",".join(str(val) for val in values)
 
 
 class TestVectorIndexNegative(VectorBase):

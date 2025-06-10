@@ -335,14 +335,14 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
         ui64 cookie = ++LastCookie;
         Send(
             Replica,
-            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate),
+            new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate, ClusterStateGeneration, ClusterStateGuid),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
             cookie);
         Become(&TThis::StateCalm);
     }
 
     void PassAway() override {
-        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->Follower));
+        Send(Replica, new TEvStateStorage::TEvReplicaUnregFollower(Info->TabletID, Info->Follower, ClusterStateGeneration, ClusterStateGuid));
         TBaseGuardian::PassAway();
     }
 

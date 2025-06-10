@@ -344,6 +344,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
     void Handle(TEvStateStorage::TEvReplicaRegFollower::TPtr &ev) {
         const NKikimrStateStorage::TEvRegisterFollower &record = ev->Get()->Record;
+        CheckConfigVersion(ev->Sender, ev->Get());
         const ui64 tabletId = record.GetTabletID();
         TEntry &x = Tablets[tabletId]; // could lead to creation of zombie entries when follower exist w/o leader so we must filter on info
 
@@ -382,6 +383,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaUnregFollower::TPtr &ev) {
         const TEvStateStorage::TEvReplicaUnregFollower *msg = ev->Get();
         const ui64 tabletId = msg->Record.GetTabletID();
+        CheckConfigVersion(ev->Sender, msg);
         ForgetFollower(tabletId, ev->Sender);
     }
 

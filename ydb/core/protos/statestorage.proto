@@ -69,11 +69,15 @@ message TEvRegisterFollower {
     optional NActorsProto.TActorId Follower = 2;
     optional NActorsProto.TActorId FollowerTablet = 3;
     optional bool Candidate = 4;
+    optional uint64 ClusterStateGeneration = 5;
+    optional uint64 ClusterStateGuid = 6;
 }
 
 message TEvUnregisterFollower {
     optional fixed64 TabletID = 1;
     optional NActorsProto.TActorId Follower = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional uint64 ClusterStateGuid = 4;
 }
 
 message TEvLock {

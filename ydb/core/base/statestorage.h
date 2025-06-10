@@ -405,9 +405,11 @@ struct TEvStateStorage {
         TEvReplicaRegFollower()
         {}
 
-        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
+        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
+            Record.SetClusterStateGeneration(clusterStateGeneration);
+            Record.SetClusterStateGuid(clusterStateGuid);
             ActorIdToProto(follower, Record.MutableFollower());
             ActorIdToProto(tablet, Record.MutableFollowerTablet());
             Record.SetCandidate(isCandidate);
@@ -418,9 +420,11 @@ struct TEvStateStorage {
         TEvReplicaUnregFollower()
         {}
 
-        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower)
+        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
+            Record.SetClusterStateGeneration(clusterStateGeneration);
+            Record.SetClusterStateGuid(clusterStateGuid);
             ActorIdToProto(follower, Record.MutableFollower());
         }
     };

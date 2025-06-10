@@ -388,11 +388,13 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
+        Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);
     if (!DryRun) {
+        Params.SetClients(nullptr, nullptr, nullptr, nullptr);
         TableClient->Stop().Wait();
         QueryClient.Reset();
         SchemeClient.Reset();

@@ -632,35 +632,95 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) override {
-        CHECK_PREPARED_DDL(AlterDatabase);
+    struct TRemoveLastPhyTxHelper {
+        TRemoveLastPhyTxHelper() = default;
 
-        if (IsPrepare()) {
-            auto alterDatabasePromise = NewPromise<TGenericResult>();
+        ~TRemoveLastPhyTxHelper() {
+            if (Query) {
+                Query->MutableTransactions()->RemoveLast();
+            }
+        }
 
-            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+        NKqpProto::TKqpPhyTx& Capture(NKqpProto::TKqpPhyQuery* query) {
+            Query = query;
+            return *Query->AddTransactions();
+        }
 
-            NKikimrSchemeOp::TModifyScheme schemeTx;
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
-            schemeTx.SetWorkingDir(dirname);
-            schemeTx.MutableModifyACL()->SetNewOwner(settings.Owner.value());
-            schemeTx.MutableModifyACL()->SetName(basename);
+        NKqpProto::TKqpPhyTx* GetCaptured() {
+            if (!Query || Query->TransactionsSize() == 0) {
+                return nullptr;
+            }
+            return Query->MutableTransactions(Query->TransactionsSize() - 1);
+        }
 
-            auto condition = schemeTx.AddApplyIf();
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
+        void Forget() {
+            Query = nullptr;
+        }
+    private:
+        NKqpProto::TKqpPhyQuery* Query = nullptr;
+    };
 
-            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            auto& phyTx = *phyQuery.AddTransactions();
-            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+    TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKqpProto::TKqpSchemeOperation& schemeOp) {
+        if (TIssue error; !NSchemeHelpers::Validate(settings, error)) {
+            TGenericResult result;
+            result.SetStatus(YqlStatusFromYdbStatus(error.GetCode()));
+            result.AddIssue(error);
+            return result;
+        }
 
-            phyTx.MutableSchemeOperation()->MutableModifyPermissions()->Swap(&schemeTx);
+        const auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+        if (settings.Owner) {
+            auto& modifyScheme = *schemeOp.MutableModifyPermissions();
+            modifyScheme.SetWorkingDir(dirname);
+            NSchemeHelpers::FillAlterDatabaseOwner(modifyScheme, basename, *settings.Owner);
+
             TGenericResult result;
             result.SetSuccess();
-            alterDatabasePromise.SetValue(result);
-            return alterDatabasePromise.GetFuture();
-        } else {
-            return Gateway->AlterDatabase(cluster, settings);
+            return result;
+        }
+
+        if (settings.SchemeLimits) {
+            auto& modifyScheme = *schemeOp.MutableAlterDatabase();
+            modifyScheme.SetWorkingDir(dirname);
+            NSchemeHelpers::FillAlterDatabaseSchemeLimits(modifyScheme, basename, *settings.SchemeLimits);
+
+            TGenericResult result;
+            result.SetSuccess();
+            return result;
+        }
+
+        TGenericResult result;
+        result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
+        result.AddIssue(TIssue("Cannot execute ALTER DATABASE with these settings.").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
+        return result;
+    }
+
+    TFuture<TGenericResult> AlterDatabase(const TAlterDatabaseSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterDatabase);
+        try {
+            TRemoveLastPhyTxHelper phyTxRemover;
+            auto& phyTx = phyTxRemover.Capture(SessionCtx->Query().PreparingQuery->MutablePhysicalQuery());
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            auto preparation = PrepareAlterDatabase(settings, *phyTx.MutableSchemeOperation());
+            if (!preparation.Success()) {
+                return MakeFuture<TGenericResult>(preparation);
+            }
+            // If preparation succeeded, keep the transaction.
+            phyTxRemover.Forget();
+            if (IsPrepare()) {
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            const auto& schemeOp = settings.Owner
+                ? phyTx.GetSchemeOperation().GetModifyPermissions()
+                : phyTx.GetSchemeOperation().GetAlterDatabase();
+
+            return Gateway->ModifyScheme(NKikimrSchemeOp::TModifyScheme(schemeOp));
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 
@@ -1628,27 +1688,6 @@ public:
             return Gateway->DropUser(cluster, settings);
         }
     }
-
-    struct TRemoveLastPhyTxHelper {
-        TRemoveLastPhyTxHelper() = default;
-
-        ~TRemoveLastPhyTxHelper() {
-            if (Query) {
-                Query->MutableTransactions()->RemoveLast();
-            }
-        }
-
-        NKqpProto::TKqpPhyTx& Capture(NKqpProto::TKqpPhyQuery* query) {
-            Query = query;
-            return *Query->AddTransactions();
-        }
-
-        void Forget() {
-            Query = nullptr;
-        }
-    private:
-        NKqpProto::TKqpPhyQuery* Query = nullptr;
-    };
 
     template <class TSettings>
     TGenericResult PrepareObjectOperation(const TString& cluster, const TSettings& settings,

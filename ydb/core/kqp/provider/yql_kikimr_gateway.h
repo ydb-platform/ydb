@@ -16,13 +16,14 @@
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/query_data/kqp_query_data.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -678,6 +679,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
 struct TAlterDatabaseSettings {
     TString DatabasePath;
     std::optional<TString> Owner;
+    std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 };
 
 struct TCreateUserSettings {
@@ -1160,7 +1162,7 @@ public:
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TAlterDatabaseSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 

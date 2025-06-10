@@ -1,10 +1,12 @@
 #include "run_ydb.h"
 
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -19,6 +21,7 @@
 #include <thread>
 
 using namespace fmt::literals;
+using namespace yandex::cloud::iam::v1;
 
 const TString TEST_DATABASE = "/test_database";
 
@@ -174,6 +177,40 @@ public:
     TString Token;
 };
 
+class TIamTokenServiceImpl : public IamTokenService::Service, public TChecker {
+public:
+    grpc::Status Create(grpc::ServerContext* context, const CreateIamTokenRequest* request, CreateIamTokenResponse* response) override {
+        Y_UNUSED(context);
+        Y_UNUSED(request);
+        // We don't test here the quality of credentials provider itself,
+        // but test that YDB CLI correctly chooses the credentials provider
+        ++Calls;
+        response->set_iam_token(Token);
+        return grpc::Status();
+    }
+
+    void SetToken(const TString& token) {
+        Token = token;
+    }
+
+    void ExpectCall() {
+        ++ExpectedCalls;
+    }
+
+    void CheckExpectations() {
+        CHECK_EXP(Calls == ExpectedCalls, "Expected " << ExpectedCalls << " calls, but got " << Calls);
+        TChecker::CheckExpectations();
+    }
+
+    void ClearExpectations() {
+        Calls = ExpectedCalls = 0;
+    }
+
+    size_t Calls = 0;
+    size_t ExpectedCalls = 0;
+    TString Token;
+};
+
 class TCliTestFixture : public NUnitTest::TBaseFixture {
 public:
     TCliTestFixture()
@@ -277,6 +314,7 @@ public:
         builder.RegisterService(&Discovery);
         builder.RegisterService(&Scheme);
         builder.RegisterService(&Auth);
+        builder.RegisterService(&IamTokenService);
         Server = builder.BuildAndStart();
         ServerThread = std::thread([this]{
             Server->Wait();
@@ -327,11 +365,13 @@ public:
     void CheckExpectations() {
         Auth.CheckExpectations();
         Scheme.CheckExpectations();
+        IamTokenService.CheckExpectations();
     }
 
     TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
         Auth.ClearFailures();
         Scheme.ClearFailures();
+        IamTokenService.ClearFailures();
 
         if (profileFileContent) {
             TString profileFile = EnvFile(profileFileContent, "profile.yaml");
@@ -351,7 +391,12 @@ public:
         ExpectedExitCode = 0;
         Scheme.ClearExpectations();
         Auth.ClearExpectations();
+        IamTokenService.ClearExpectations();
         return output;
+    }
+
+    TIamTokenServiceImpl& GetIamTokenService() {
+        return IamTokenService;
     }
 
 private:
@@ -362,6 +407,7 @@ private:
     TDiscoveryImpl Discovery;
     TAuthImpl Auth;
     TSchemeImpl Scheme;
+    TIamTokenServiceImpl IamTokenService;
     std::unique_ptr<grpc::Server> Server;
     std::thread ServerThread;
     int ExpectedExitCode = 0;
@@ -1227,5 +1273,94 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyWithPasswordFile() << Endl);
             UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-password-file: " << GetClientKeyPasswordFile() << Endl);
         }
+    }
+
+    Y_UNIT_TEST_F(SaKeyFile, TCliTestFixtureWithSsl) {
+        TStringBuilder saKeyContent;
+        NJson::TJsonWriter saKeyParamsWriter(&saKeyContent.Out, true);
+        saKeyParamsWriter.OpenMap();
+        saKeyParamsWriter.Write("id", "test-id");
+        saKeyParamsWriter.Write("user_account_id", "test-user-id");
+        saKeyParamsWriter.Write("public_key", GetClientCert()); // We need any certificate/key here
+        saKeyParamsWriter.Write("private_key", GetClientKey());
+        saKeyParamsWriter.CloseMap();
+        saKeyParamsWriter.Flush();
+
+        const TString saKeyFile = EnvFile(saKeyContent, "sa_key.json");
+
+        GetIamTokenService().SetToken("test-iam-token");
+        GetIamTokenService().ExpectCall();
+        ExpectToken("test-iam-token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--ca-file", GetRootCAFile(),
+                "--sa-key-file", saKeyFile,
+                "--iam-endpoint", GetIamEndpoint(),
+                "scheme", "ls",
+            },
+            {}
+        );
+
+        GetIamTokenService().SetToken("test-iam-token-2");
+        GetIamTokenService().ExpectCall();
+        ExpectToken("test-iam-token-2");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--ca-file", GetRootCAFile(),
+                "--sa-key-file", saKeyFile,
+                "--iam-endpoint", GetIamEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_CA_FILE", GetRootCAFile()},
+                {"SA_KEY_FILE", saKeyFile},
+            }
+        );
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                iam-endpoint: {iam_endpoint}
+                authentication:
+                    method: sa-key-file
+                    data: {sa_key_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile(),
+        "sa_key_file"_a = saKeyFile,
+        "iam_endpoint"_a = GetIamEndpoint()
+        );
+
+        GetIamTokenService().SetToken("test-iam-token-3");
+        GetIamTokenService().ExpectCall();
+        ExpectToken("test-iam-token-3");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+
+        TString output = RunCli(
+            {
+                "config", "info",
+            },
+            {},
+            profile
+        );
+        UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "sa-key-file: " << saKeyFile << Endl);
     }
 }

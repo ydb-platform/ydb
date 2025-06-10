@@ -90,7 +90,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 }
             }
         }
-        if(NotifyRingGroupProxy)
+        if (NotifyRingGroupProxy)
             Send(Source, new TEvStateStorage::TEvRingGroupPassAway());
         TActor::PassAway();
     }
@@ -185,16 +185,24 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         }
     }
 
-    void MergeReply(TEvStateStorage::TEvReplicaInfo *ev) {
+    void MergeReply(TActorId &sender, TEvStateStorage::TEvReplicaInfo *ev) {
         const auto &record = ev->Record;
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const ui64 cookie = record.GetCookie();
 
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
-        if (NotifyRingGroupProxy)
+        if (Info->ClusterStateGeneration != clusterStateGeneration || Info->ClusterStateGuid != clusterStateGuid) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), clusterStateGeneration, clusterStateGuid));
+        }
+        if (NotifyRingGroupProxy) {
             Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
-
+        }
+        if (Info->ClusterStateGeneration < clusterStateGeneration || 
+            (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
+            ReplyAndDie(NKikimrProto::ERROR);
+        }
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
         Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
@@ -372,7 +380,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void HandleLookup(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         BLOG_D("ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
-        MergeReply(msg);
+        MergeReply(ev->Sender, msg);
         CheckLookupReply();
     }
 
@@ -446,7 +454,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void HandleUpdate(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         BLOG_D("ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
-        MergeReply(msg);
+        MergeReply(ev->Sender, msg);
         CheckUpdateReply();
     }
 
@@ -722,11 +730,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
         TEvStateStorage::TEvConfigVersionInfo *msg = ev->Get();
-        if(Info->ClusterStateGeneration != msg->ClusterStateGeneration || Info->ClusterStateGuid != msg->ClusterStateGuid) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
-                new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), msg->ClusterStateGeneration, msg->ClusterStateGuid));
-        }
-        if(Info->ClusterStateGeneration < msg->ClusterStateGeneration || 
+        if (Info->ClusterStateGeneration < msg->ClusterStateGeneration || 
             (Info->ClusterStateGeneration == msg->ClusterStateGeneration && Info->ClusterStateGuid != msg->ClusterStateGuid)) {
             Reply(NKikimrProto::ERROR);
             PassAway();

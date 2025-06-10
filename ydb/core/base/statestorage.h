@@ -534,7 +534,9 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 RingGroupsSelectionSize() const;
 
     TStateStorageInfo()
-        : Hash(Max<ui64>())
+        : ClusterStateGeneration(0)
+        , ClusterStateGuid(0)
+        , Hash(Max<ui64>())
     {}
 
     TString ToString() const;

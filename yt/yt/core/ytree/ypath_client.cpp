@@ -77,9 +77,9 @@ std::string TYPathRequest::GetService() const
     return FromProto<std::string>(Header_.service());
 }
 
-const std::optional<std::string>& TYPathRequest::GetRequestInfo() const
+const std::string& TYPathRequest::GetRequestInfo() const
 {
-    static const std::optional<std::string> Empty = std::nullopt;
+    static const std::string Empty;
     return Empty;
 }
 

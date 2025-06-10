@@ -72,7 +72,7 @@ def _normalize_call(callspec, metafunc, used_keys):
         fixturenames_closure, arg2fixturedefs = _get_fixturenames_closure_and_arg2fixturedefs(fm, metafunc, value)
 
         if fixturenames_closure and arg2fixturedefs:
-            extra_fixturenames = [fname for fname in fixturenames_closure if fname not in params]
+            extra_fixturenames = [fname for fname in set(fixturenames_closure) if fname not in params]
 
             newmetafunc = _copy_metafunc(metafunc)
             newmetafunc.fixturenames = extra_fixturenames

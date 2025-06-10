@@ -889,7 +889,7 @@ private:
                 Bus_->GetEndpointDescription(),
                 GetMessageBodySize(requestMessage),
                 GetTotalMessageAttachmentSize(requestMessage),
-                request->GetRequestInfo() ? std::string(Format(", %v", *request->GetRequestInfo())) : std::string());
+                !request->GetRequestInfo().empty() ? std::string(Format(", %v", request->GetRequestInfo())) : std::string());
         }
 
 

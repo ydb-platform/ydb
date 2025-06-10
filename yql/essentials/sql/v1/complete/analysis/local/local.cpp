@@ -1,14 +1,15 @@
 #include "local.h"
 
-#include "ansi.h"
 #include "cursor_token_context.h"
-#include "format.h"
-#include "grammar.h"
 #include "parser_call_stack.h"
 
 #include <yql/essentials/sql/v1/complete/antlr4/c3i.h>
 #include <yql/essentials/sql/v1/complete/antlr4/c3t.h>
 #include <yql/essentials/sql/v1/complete/antlr4/vocabulary.h>
+
+#include <yql/essentials/sql/v1/complete/syntax/ansi.h>
+#include <yql/essentials/sql/v1/complete/syntax/format.h>
+#include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 

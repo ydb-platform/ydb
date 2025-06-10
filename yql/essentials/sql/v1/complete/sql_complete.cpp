@@ -6,9 +6,9 @@
 #include <yql/essentials/sql/v1/complete/name/service/binding/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
-#include <yql/essentials/sql/v1/complete/syntax/local.h>
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
 #include <yql/essentials/sql/v1/complete/analysis/global/global.h>
+#include <yql/essentials/sql/v1/complete/analysis/local/local.h>
 
 #include <util/generic/algorithm.h>
 #include <util/charset/utf8.h>

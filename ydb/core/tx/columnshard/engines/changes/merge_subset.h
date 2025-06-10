@@ -49,6 +49,7 @@ public:
 
 class TReadPortionToMerge: public ISubsetToMerge {
 private:
+    using TBase = ISubsetToMerge;
     TReadPortionInfoWithBlobs ReadPortion;
 
     virtual std::vector<TPortionToMerge> DoBuildPortionsToMerge(const TConstructionContext& context, const std::set<ui32>& seqDataColumnIds,
@@ -72,6 +73,7 @@ public:
 
 class TWritePortionsToMerge: public ISubsetToMerge {
 private:
+    using TBase = ISubsetToMerge;
     std::vector<TWritePortionInfoWithBlobsResult> WritePortions;
 
     virtual std::vector<TPortionToMerge> DoBuildPortionsToMerge(const TConstructionContext& context, const std::set<ui32>& seqDataColumnIds,

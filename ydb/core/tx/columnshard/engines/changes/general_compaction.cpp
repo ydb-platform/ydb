@@ -73,7 +73,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         const auto buildPortionsToMerge = [&](const std::vector<std::shared_ptr<ISubsetToMerge>>& toMerge, const bool useDeletion) {
             std::vector<TPortionToMerge> result;
             for (auto&& i : toMerge) {
-                auto mergePortions = i->BuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds);
+                auto mergePortions = i->BuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds, useDeletion);
                 result.insert(result.end(), mergePortions.begin(), mergePortions.end());
             }
             return result;
@@ -92,7 +92,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                     subsetsCount > 1) {
                     auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, false), resultFiltered, stats);
                     if (merged.size()) {
-                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
+                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
                     }
                     toMerge.clear();
                     sumMemory = 0;
@@ -107,7 +107,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
                 if (appendedToMerge.size()) {
                     if (merged.size()) {
-                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
+                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
                     }
                 } else {
                     context.Counters.OnCompactionCorrectMemory(totalSumMemory);

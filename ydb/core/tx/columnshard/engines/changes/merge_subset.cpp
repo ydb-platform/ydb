@@ -51,7 +51,8 @@ std::vector<TPortionToMerge> TReadPortionToMerge::DoBuildPortionsToMerge(const T
     auto blobsSchema = ReadPortion.GetPortionInfo().GetSchema(context.SchemaVersions);
     auto batch = ReadPortion.RestoreBatch(*blobsSchema, *resultFiltered, seqDataColumnIds, false).DetachResult();
     auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
-    std::shared_ptr<NArrow::TColumnFilter> filter = BuildPortionFilter(shardingActual, batch, ReadPortion.GetPortionInfo(), usedPortionIds);
+    std::shared_ptr<NArrow::TColumnFilter> filter =
+        BuildPortionFilter(shardingActual, batch, ReadPortion.GetPortionInfo(), usedPortionIds, useDeletionFilter);
     return { TPortionToMerge(batch, filter) };
 }
 

@@ -223,7 +223,7 @@ struct TAppData {
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
-    TIntrusivePtr<NKikimr::TDynamicControlBoard> DynamicControlBoard;
+    TIntrusivePtr<NKikimr::TDynamicControlBoard> Dcb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
     TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 

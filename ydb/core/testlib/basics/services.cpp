@@ -459,8 +459,8 @@ namespace NPDisk {
             app.Icb.emplace_back(new TControlBoard);
         }
 
-        while (app.DynamicControlBoard.size() < runtime.GetNodeCount()) {
-            app.DynamicControlBoard.emplace_back(new TDynamicControlBoard());
+        while (app.Dcb.size() < runtime.GetNodeCount()) {
+            app.Dcb.emplace_back(new TDynamicControlBoard());
         }
 
         NSharedCache::TSharedCacheConfig defaultSharedCacheConfig;
@@ -472,7 +472,7 @@ namespace NPDisk {
             if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
                 keyConfig = it->second;
             }
-            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex], app.DynamicControlBoard[nodeIndex]);
+            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex], app.Dcb[nodeIndex]);
             for (const auto& dsProxy : dsProxies) {
                 runtime.AddLocalService(
                     MakeBlobStorageProxyID(dsProxy->GetGroupId()),

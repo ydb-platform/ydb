@@ -210,7 +210,7 @@ public:
         Become(&TPDiskWriterLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
-        AppData(ctx)->DynamicControlBoard->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
+        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
             SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
         } else {

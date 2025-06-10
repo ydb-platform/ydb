@@ -7,13 +7,13 @@
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/wrappers/abstract.h>
 #include "gc_info.h"
-
+#include "error_collector.h"
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 class TOperator: public IBlobsStorageOperator {
 private:
     using TBase = IBlobsStorageOperator;
-    NKikimr::NColumnShard::TIndexationCounters& EvictionCounters;
+    std::shared_ptr<TErrorCollector> Collector;
     const NActors::TActorId TabletActorId;
     const ui64 Generation;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
@@ -44,11 +44,11 @@ protected:
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) override;
 
 public:
-    TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager);
+    TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, std::shared_ptr<TErrorCollector> collector);
     TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
         const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation);
     TOperator(const TString& storageId, const TActorId& shardActorId, const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
-        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation, NKikimr::NColumnShard::TIndexationCounters& evictionCounters);
+        const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation, std::shared_ptr<TErrorCollector> collector);
 
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         auto result = GCInfo->GetBlobsToDelete();

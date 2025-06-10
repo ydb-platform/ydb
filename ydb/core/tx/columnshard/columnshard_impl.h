@@ -7,6 +7,7 @@
 #include "defs.h"
 #include "inflight_request_tracker.h"
 #include "tables_manager.h"
+#include "blobs_action/tier/error_collector.h"
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
@@ -45,6 +46,7 @@
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/service.h>
+#include <memory>
 
 namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges;
@@ -482,6 +484,7 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
+    std::shared_ptr<NOlap::NBlobOperations::NTier::TErrorCollector> TieringErrorCollector = std::make_shared<NOlap::NBlobOperations::NTier::TErrorCollector>();
 
     ui64 PrioritizationClientId = 0;
 

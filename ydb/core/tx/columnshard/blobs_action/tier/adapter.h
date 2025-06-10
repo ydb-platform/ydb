@@ -1,17 +1,22 @@
 #pragma once
+
+#include <memory.h>
+
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
+
+#include "error_collector.h"
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 class TRepliesAdapter: public NWrappers::NExternalStorage::IReplyAdapter {
 private:
-    NKikimr::NColumnShard::TIndexationCounters& Counters;
+    std::shared_ptr<TErrorCollector> Collector;
     const TString StorageId;
 
 public:
-    TRepliesAdapter(NKikimr::NColumnShard::TIndexationCounters& counters, const TString& storageId)
-        : Counters(counters)
+    TRepliesAdapter(std::shared_ptr<TErrorCollector>& collector, const TString& storageId)
+        : Collector(std::move(collector))
         , StorageId(std::move(storageId))
     {
 

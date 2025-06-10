@@ -87,7 +87,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
 
     html << "<h3>Tiering Errors</h3>";
     // std::cout << "la-la-la4 " << Self->GetTieringErrors().size() << '\n';
-    const auto& errs = Self->Counters.GetEvictionCounters().TieringError;
+    const auto& errs = Self->TieringErrorCollector->GetAll();
 
     if (errs.empty()) {
         html << "No errors<br />";

@@ -2,9 +2,6 @@
 #include "splitter.h"
 #include "sub_columns.h"
 
-#include <util/generic/hash.h>
-#include <util/generic/string.h>
-
 #include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -50,8 +47,6 @@ public:
     NMonitoring::THistogramPtr CompactionDuration;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionExceptions;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionFails;
-
-    THashMap<TString, TString> TieringError;
 
     TIndexationCounters(const TString& module);
 

@@ -5,16 +5,14 @@
 #include "remove.h"
 #include "storage.h"
 #include "write.h"
+#include "error_collector.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/wrappers/unavailable_storage.h>
 
 namespace {
-    NKikimr::NColumnShard::TIndexationCounters& DummyEvictionCounters() {
-        static NKikimr::NColumnShard::TIndexationCounters dummy("Eviction");
-        return dummy;
-    }
+    static std::shared_ptr<NKikimr::NOlap::NBlobOperations::NTier::TErrorCollector> DummyCollector = std::make_shared<NKikimr::NOlap::NBlobOperations::NTier::TErrorCollector>();
 }
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
@@ -92,7 +90,7 @@ void TOperator::InitNewExternalOperator() {
 
 void TOperator::DoInitNewExternalOperator(const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator,
     const std::optional<NKikimrSchemeOp::TS3Settings>& settings) {
-    storageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(EvictionCounters, GetStorageId()));
+    storageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(Collector, GetStorageId()));
     {
         TGuard<TSpinLock> changeLock(ChangeOperatorLock);
         CurrentS3Settings = settings;
@@ -101,9 +99,9 @@ void TOperator::DoInitNewExternalOperator(const NWrappers::NExternalStorage::IEx
 }
 
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard,
-    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, std::shared_ptr<TErrorCollector> collector)
     : TBase(storageId, storageSharedBlobsManager)
-    , EvictionCounters(shard.Counters.GetEvictionCountersNC())
+    , Collector(std::move(collector))
     , TabletActorId(shard.SelfId())
     , Generation(shard.Executor()->Generation())
     , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
@@ -118,14 +116,14 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
               , storageConfig
               , storageSharedBlobsManager
               , generation
-              , DummyEvictionCounters()) {
+              , DummyCollector) {
 }
 
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
     const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
-    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation, NKikimr::NColumnShard::TIndexationCounters& evictionCounters)
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation, std::shared_ptr<TErrorCollector> collector)
     : TBase(storageId, storageSharedBlobsManager)
-    , EvictionCounters(evictionCounters)
+    , Collector(std::move(collector))
     , TabletActorId(shardActorId)
     , Generation(generation)
     , InitializationConfig(storageConfig)

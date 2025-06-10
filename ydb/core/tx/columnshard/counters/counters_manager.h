@@ -53,10 +53,6 @@ public:
         , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>()) {
     }
 
-    inline TIndexationCounters& GetEvictionCountersNC() const noexcept {
-        return const_cast<TIndexationCounters&>(static_cast<const TCountersManager *>(this)->EvictionCounters);
-    }
-
     void OnWriteOverloadDisk() const {
         TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
     }

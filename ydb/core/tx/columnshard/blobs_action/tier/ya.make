@@ -10,6 +10,7 @@ SRCS(
     storage.cpp
     remove.cpp
     common.cpp
+    error_collector.cpp
 )
 
 PEERDIR(

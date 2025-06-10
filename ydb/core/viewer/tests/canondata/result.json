@@ -3,6 +3,18 @@
         "status_code": 200,
         "text": "1\n"
     },
+    "test.test_operations_list": {
+        "next_page_token": "0",
+        "status": "SUCCESS"
+    },
+    "test.test_operations_list_page": {
+        "next_page_token": "0",
+        "status": "SUCCESS"
+    },
+    "test.test_operations_list_page_bad": {
+        "status_code": 400,
+        "text": "offset must be a multiple of limit"
+    },
     "test.test_pqrb_tablet": {
         "response_create_topic": {
             "version": "not-zero-number"

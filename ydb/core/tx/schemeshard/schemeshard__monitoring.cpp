@@ -818,7 +818,8 @@ private:
                     << "CancelRequested:               " << (info.CancelRequested ? "YES" : "NO") << Endl
 
                     << "State:                         " << info.State << Endl
-                    << "Issue:                         " << info.Issue << Endl
+                    << "IsBroken:                      " << info.IsBroken << Endl
+                    << "Issue:                         " << info.GetIssue() << Endl
 
                     << "Shards.size:                  " << info.Shards.size() << Endl
                     << "ToUploadShards.size:          " << info.ToUploadShards.size() << Endl

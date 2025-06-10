@@ -33,7 +33,7 @@ enum EDatashardState {
     Readonly = 3;
     Offline = 4;
     PreOffline = 5;     // Offline but waits for loaned snapshots to be returned and for SchemaChangedResult to be received
-    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbiden
+    Frozen = 6; // Read only transactions are allowed. Scheme modification is forbidden
 
     // Split/Merge Src states
     SplitSrcWaitForNoTxInFlight = 101;    // Temporary state: split src waits for all Tx to finish and then starts splitting
@@ -1427,35 +1427,36 @@ message TEvConditionalEraseRowsResponse {
 }
 
 message TEvBuildIndexCreateRequest {
-    optional uint64 BuildIndexId = 1;          // unique id of build index proccess
+    optional uint64 Id = 1;          // unique id of build index process
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
     optional uint64 PathId = 4;
 
     optional string TargetName = 5;
-    repeated string IndexColumns = 6;          // key columns that is needed to transer in terms of target table
+    repeated string IndexColumns = 6;          // key columns that is needed to transfer in terms of target table
 
     optional NKikimrTx.TKeyRange KeyRange = 7; // key range to transfer in term of source table
 
     optional uint64 SnapshotTxId = 8;
     optional uint64 SnapshotStep = 9;
 
-    optional uint32 MaxBatchRows = 10;
-    optional uint64 MaxBatchBytes = 11;
+    reserved 10; // MaxBatchRows
+    reserved 11; // MaxBatchBytes
 
     optional uint64 SeqNoGeneration = 12;       // monotonically increasing sequence, first part
     optional uint64 SeqNoRound = 13;            // monotonically increasing sequence, second part
-
-    optional uint64 MaxRetries = 14;
+    reserved 14; // MaxRetries
 
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
+    
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
 }
 
 message TEvBuildIndexProgressResponse {
-    optional uint64 BuildIndexId = 1;
+    optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;
     optional uint64 OwnerId = 3;
@@ -1483,9 +1484,10 @@ message TEvSampleKRequest {
     optional NKikimrProto.TPathID PathId = 3;
 
     optional uint64 K = 4;
-    // For now we use tablet id as seed value, but it's not convinient for tests
+
     optional uint64 Seed = 5;
-    // We want to sample small instead of large probabilites
+
+    // We want to sample small instead of large probabilities
     // because size of message will be smaller (varint)
     optional uint64 MaxProbability = 6;
 
@@ -1518,6 +1520,17 @@ message TEvSampleKResponse {
     repeated bytes Rows = 11;
 }
 
+enum EKMeansState {
+    UNSPECIFIED = 0;
+    SAMPLE = 1;
+    KMEANS = 2;
+    UPLOAD_MAIN_TO_BUILD = 3;
+    UPLOAD_MAIN_TO_POSTING = 4;
+    UPLOAD_BUILD_TO_BUILD = 5;
+    UPLOAD_BUILD_TO_POSTING = 6;
+    DONE = 7;
+};
+
 message TEvLocalKMeansRequest {
     optional uint64 Id = 1;
 
@@ -1533,36 +1546,23 @@ message TEvLocalKMeansRequest {
     optional Ydb.Table.VectorIndexSettings Settings = 8;
 
     optional uint64 Seed = 9;
-    optional uint32 K = 10;
 
-    enum EState {
-        UNSPECIFIED = 0;
-        SAMPLE = 1;
-        KMEANS = 2;
-        UPLOAD_MAIN_TO_BUILD = 3;
-        UPLOAD_MAIN_TO_POSTING = 4;
-        UPLOAD_BUILD_TO_BUILD = 5;
-        UPLOAD_BUILD_TO_POSTING = 6;
-        DONE = 7;
-    };
-    optional EState Upload = 11;
-    // State != DONE
-    optional EState State = 12;
-    // State != KMEANS || DoneRounds < NeedsRounds
-    optional uint32 DoneRounds = 13;
+    optional EKMeansState Upload = 11;
+    
+    optional uint32 K = 10;
     optional uint32 NeedsRounds = 14;
 
-    // id of parent cluster
     optional uint64 ParentFrom = 15;
     optional uint64 ParentTo = 21;
-    // [Child ... Child + K * (ParentFrom - ParentTo + 1)) ids reserved for this kmeans clusters
     optional uint64 Child = 16;
 
     optional string LevelName = 17;
-    optional string PostingName = 18;
+    optional string OutputName = 18;
 
     optional string EmbeddingColumn = 19;
     repeated string DataColumns = 20;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
 }
 
 message TEvLocalKMeansResponse {
@@ -1581,10 +1581,6 @@ message TEvLocalKMeansResponse {
     optional uint64 UploadBytes = 9;
     optional uint64 ReadRows = 10;
     optional uint64 ReadBytes = 11;
-
-    // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional TEvLocalKMeansRequest.EState State
-    // optional uint32 DoneRounds
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1601,7 +1597,7 @@ message TEvReshuffleKMeansRequest {
 
     optional Ydb.Table.VectorIndexSettings Settings = 8;
 
-    optional TEvLocalKMeansRequest.EState Upload = 9;
+    optional EKMeansState Upload = 9;
 
     // id of parent cluster
     optional uint64 Parent = 10;
@@ -1610,10 +1606,12 @@ message TEvReshuffleKMeansRequest {
     // centroids of clusters
     repeated string Clusters = 12;
 
-    optional string PostingName = 13;
+    optional string OutputName = 13;
 
     optional string EmbeddingColumn = 14;
     repeated string DataColumns = 15;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1632,9 +1630,58 @@ message TEvReshuffleKMeansResponse {
     optional uint64 UploadBytes = 9;
     optional uint64 ReadRows = 10;
     optional uint64 ReadBytes = 11;
+}
 
-    // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional last written primary key
+message TEvPrefixKMeansRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+    
+    optional uint64 SeqNoGeneration = 4;
+    optional uint64 SeqNoRound = 5;
+
+    optional Ydb.Table.VectorIndexSettings Settings = 6;
+
+    optional uint64 Seed = 7;
+
+    optional EKMeansState Upload = 8;
+
+    optional uint32 K = 9;
+    optional uint32 NeedsRounds = 10;
+
+    // [Child ... Child + (1 + TableSize) * ShardIndex]
+    optional uint64 Child = 11;
+
+    optional string LevelName = 12;
+    optional string OutputName = 13;
+    optional string PrefixName = 14;
+
+    optional string EmbeddingColumn = 15;
+    repeated string DataColumns = 16;
+    optional uint32 PrefixColumns = 17;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
+
+    repeated string SourcePrimaryKeyColumns = 19;
+}
+
+message TEvPrefixKMeansResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    optional uint64 UploadRows = 8;
+    optional uint64 UploadBytes = 9;
+    optional uint64 ReadRows = 10;
+    optional uint64 ReadBytes = 11;
 }
 
 message TEvCdcStreamScanRequest {

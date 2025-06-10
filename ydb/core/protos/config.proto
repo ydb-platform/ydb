@@ -2223,6 +2223,7 @@ message TMetadataCacheConfig {
 
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
+    optional uint32 DrainTimeoutSeconds = 2;
 }
 
 message TLabel {

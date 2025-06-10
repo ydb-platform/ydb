@@ -40,6 +40,10 @@ void TSchemeShard::Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const 
     Execute(CreateTxReply(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxReply(ev), ctx);
+}
+
 void TSchemeShard::Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxReply(ev), ctx);
 }
@@ -49,7 +53,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const
 }
 
 void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
-    Y_ABORT_UNLESS(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
+    Y_ENSURE(info.BuildKind != TIndexBuildInfo::EBuildKind::BuildKindUnspecified);
     auto persistedBuildIndex = db.Table<Schema::IndexBuild>().Key(info.Id);
     persistedBuildIndex.Update(
         NIceDb::TUpdate<Schema::IndexBuild::Uid>(info.Uid),
@@ -59,12 +63,18 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::TableLocalId>(info.TablePathId.LocalPathId),
         NIceDb::TUpdate<Schema::IndexBuild::IndexName>(info.IndexName),
         NIceDb::TUpdate<Schema::IndexBuild::IndexType>(info.IndexType),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchRows>(info.Limits.MaxBatchRows),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.Limits.MaxBatchBytes),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.Limits.MaxShards),
-        NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.Limits.MaxRetries),
-        NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind))
+        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchRows>(info.ScanSettings.GetMaxBatchRows()),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.ScanSettings.GetMaxBatchBytes()),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.MaxInProgressShards),
+        NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.ScanSettings.GetMaxBatchRetries()),
+        NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind)),
+        NIceDb::TUpdate<Schema::IndexBuild::StartTime>(info.StartTime.Seconds())
     );
+    if (info.UserSID) {
+        persistedBuildIndex.Update(
+            NIceDb::TUpdate<Schema::IndexBuild::UserSID>(*info.UserSID)
+        );
+    }
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.
     // We have chosen TIndexCreationConfig's string representation as the serialization format.
     if (bool hasSpecializedDescription = !std::holds_alternative<std::monostate>(info.SpecializedIndexDescription);
@@ -115,7 +125,11 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)));
+        NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)),
+        NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.GetIssue()),
+        NIceDb::TUpdate<Schema::IndexBuild::StartTime>(indexInfo.StartTime.Seconds()),
+        NIceDb::TUpdate<Schema::IndexBuild::EndTime>(indexInfo.EndTime.Seconds())
+    );
 }
 
 void TSchemeShard::PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
@@ -123,9 +137,11 @@ void TSchemeShard::PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIn
         NIceDb::TUpdate<Schema::IndexBuild::CancelRequest>(indexInfo.CancelRequested));
 }
 
-void TSchemeShard::PersistBuildIndexIssue(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
-    db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.Issue));
+void TSchemeShard::PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue) {
+    if (indexInfo.AddIssue(issue)) {
+        db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
+            NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.GetIssue()));
+    }
 }
 
 void TSchemeShard::PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
@@ -300,9 +316,12 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorContext& ctx) {
     for (const auto& id : indexIds) {
-        if (IndexBuilds.contains(id)) {
-            Execute(CreateTxProgress(id), ctx);
+        const auto* buildInfoPtr = IndexBuilds.FindPtr(id);
+        if (!buildInfoPtr || buildInfoPtr->Get()->IsBroken) {
+            continue;
         }
+
+        Execute(CreateTxProgress(id), ctx);
     }
 }
 
@@ -317,7 +336,7 @@ void TSchemeShard::SetupRouting(const TDeque<TIndexBuildId>& indexIds, const TAc
         auto handle = [&] (auto txId) {
             if (txId) {
                 auto [it, emplaced] = TxIdToIndexBuilds.try_emplace(txId, buildInfo.Id);
-                Y_ABORT_UNLESS(it->second == buildInfo.Id);
+                Y_ENSURE(it->second == buildInfo.Id);
             }
         };
 

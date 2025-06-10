@@ -103,7 +103,7 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
     test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
-def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None,node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload
 
@@ -115,13 +115,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
     Returns:
         str: HTML таблица
     """
-    logging.info(f"_create_iterations_table called with result: {result}")
-    if result:
-        logging.info(f"result has iterations: {hasattr(result, 'iterations')}")
-        if hasattr(result, 'iterations'):
-            logging.info(f"iterations content: {result.iterations}")
-
-    def _get_node_issue_info(node_error, show_details=True):
+    def __get_node_issue_info(node_error: NodeErrors) -> tuple[str, str, bool]:
         """Возвращает информацию о проблемах ноды: (цвет, значение, критичность)"""
         issues = []
         has_issues = False
@@ -129,23 +123,15 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
 
         # Проверяем основные проблемы (рестарт, падение)
         if node_error.message and node_error.message not in ['diagnostic info collected']:
-            if show_details:
-                issues.append(node_error.message.replace('was ', '').replace('is ', ''))
-            has_issues = True
-
+            issues.append(node_error.message.replace('was ', '').replace('is ', ''))
         # Добавляем cores если есть (критичная проблема)
         if node_error.core_hashes:
-            if show_details:
-                issues.append(f"cores:{len(node_error.core_hashes)}")
-            has_issues = True
-            has_critical_issues = True
-
+            issues.append(f"cores:{len(node_error.core_hashes)}")
         # Добавляем oom если есть (критичная проблема)
         if node_error.was_oom:
-            if show_details:
-                issues.append("oom")
-            has_issues = True
-            has_critical_issues = True
+            issues.append("oom")
+        has_critical_issues = node_error.was_oom or node_error.core_hashes
+        has_issues = len(issues) > 0
 
         if has_issues:
             # Красный только для критичных проблем (cores/oom)
@@ -158,7 +144,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
 
         return color, value, has_critical_issues
 
-    def _get_aggregated_cores_oom():
+    def __get_aggregated_cores_oom():
         """Возвращает агрегированную информацию по cores и oom"""
         total_cores = sum(len(node_error.core_hashes) for node_error in node_errors)
         total_ooms = sum(1 for node_error in node_errors if node_error.was_oom)
@@ -173,7 +159,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
 
         return cores_color, cores_value, oom_color, oom_value
 
-    def _add_node_columns(unique_nodes, node_info_map, nodes_shown=None, is_first_iteration=True):
+    def __add_node_columns(unique_nodes, node_info_map, nodes_shown=None, is_first_iteration=True) -> str:
         """Добавляет колонки для хостов в строку таблицы"""
         columns_html = ""
 
@@ -190,7 +176,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
                 show_node_issues = (nodes_shown is None or host not in nodes_shown or is_first_iteration)
 
                 if show_node_issues and is_first_iteration:
-                    color, value, _ = _get_node_issue_info(node_error, show_details=True)
+                    color, value, _ = __get_node_issue_info(node_error)
                     if nodes_shown is not None:
                         nodes_shown.add(host)
                 else:
@@ -199,7 +185,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
                 columns_html += f"<td style='background-color: {color};'>{value}</td>"
         else:
             # Показываем агрегированные колонки Cores и OOM
-            cores_color, cores_value, oom_color, oom_value = _get_aggregated_cores_oom()
+            cores_color, cores_value, oom_color, oom_value = __get_aggregated_cores_oom()
             columns_html += f"<td style='background-color: {cores_color};'>{cores_value}</td>"
             columns_html += f"<td style='background-color: {oom_color};'>{oom_value}</td>"
 
@@ -304,7 +290,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
     """
 
     # Если result None или нет iterations, создаем пустую таблицу с информацией
-    if not result or not hasattr(result, 'iterations') or not result.iterations:
+    if not result or not result.iterations:
         # Создаем строку с placeholder
         table_html += """
             <tr>
@@ -313,7 +299,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
                 <td style='background-color: #f0f0f0;'>N/A</td>"""
 
         # Добавляем колонки для хостов
-        table_html += _add_node_columns(unique_nodes, node_info_map, is_first_iteration=True)
+        table_html += __add_node_columns(unique_nodes, node_info_map, is_first_iteration=True)
 
         table_html += """
             </tr>
@@ -361,7 +347,7 @@ def _create_iterations_table(result: YdbCliHelper.WorkloadRunResult, node_errors
                 <td style='background-color: {duration_color};'>{duration_str}</td>"""
 
         # Добавляем колонки для хостов
-        table_html += _add_node_columns(unique_nodes, node_info_map, nodes_shown, is_first_iteration)
+        table_html += __add_node_columns(unique_nodes, node_info_map, nodes_shown, is_first_iteration)
 
         table_html += """
             </tr>"""
@@ -428,34 +414,17 @@ def allure_test_description(
         {table_strings}
         </tbody></table>
     '''
-
-    # Добавляем компактную таблицу итераций прямо в description
-    logging.info(f"allure_test_description called with workload_result: {workload_result}")
-
-    if workload_result:
-        logging.info("workload_result is not None, calling _create_iterations_table")
-        iterations_table = _create_iterations_table(workload_result, node_errors, workload_params)
-        logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
-        if iterations_table:
-            html += f'''
-            <h3>Workload Iterations</h3>
-            {iterations_table}
-            '''
-            logging.info("Added iterations table to description HTML")
-        else:
-            logging.warning("iterations_table is empty, not adding to HTML")
+    
+    iterations_table = __create_iterations_table(workload_result, node_errors, workload_params)
+    logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
+    if iterations_table:
+        html += f'''
+        <h3>Workload Iterations</h3>
+        {iterations_table}
+        '''
+        logging.info("Added iterations table to description HTML")
     else:
-        logging.warning("workload_result is None, not creating iterations table")
-        # Для отладки - показываем таблицу с параметрами, даже если нет workload_result
-        if workload_params:
-            logging.info("Creating empty table with just workload_params for debugging")
-            empty_table = _create_iterations_table(None, node_errors, workload_params)
-            if empty_table:
-                html += f'''
-                <h3>Workload Iterations (Debug)</h3>
-                {empty_table}
-                '''
-                logging.info("Added debug iterations table to HTML")
+        logging.warning("iterations_table is empty, not adding to HTML")
 
     allure.dynamic.description_html(html)
     allure.attach(html, "description.html", allure.attachment_type.HTML)

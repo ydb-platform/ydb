@@ -24,17 +24,12 @@ class WorkloadTestBase(LoadSuiteBase):
     timeout: float = 1800.  # Таймаут по умолчанию
 
     @classmethod
-    def do_setup_class(cls) -> None:
-        """Сохраняем время начала setup для использования в start_time"""
-        cls._setup_start_time = time()
-
-    @classmethod
     def do_teardown_class(cls):
         """
         Общая очистка для workload тестов.
         Останавливает процессы workload на всех нодах кластера.
         """
-        if cls.workload_binary_name is None:
+        if not cls.workload_binary_name:
             logging.warning(f"workload_binary_name not set for {cls.__name__}, skipping process cleanup")
             return
 

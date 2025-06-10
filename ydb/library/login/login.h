@@ -68,7 +68,7 @@ public:
         TString ExternalAuth;
     };
 
-    struct TLoginUserResponse : TBasicResponse {
+    struct TPassportCheckResult : TBasicResponse {
         enum class EStatus {
             UNSPECIFIED,
             SUCCESS,
@@ -77,9 +77,12 @@ public:
             UNAVAILABLE_KEY
         };
 
+        EStatus Status = EStatus::UNSPECIFIED;
+    };
+
+    struct TLoginUserResponse : TPassportCheckResult {
         TString Token;
         TString SanitizedToken; // Token for audit logs
-        EStatus Status = EStatus::UNSPECIFIED;
     };
 
     struct TValidateTokenRequest : TBasicRequest {
@@ -201,10 +204,10 @@ public:
     // Login
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
     // The next four methods are used (all together combined) when it's needed to separate hash verification which is quite cpu-intensive
-    bool NeedVerifyHash(const TLoginUserRequest& request, TLoginUserResponse* response, TString* passwordHash);
+    bool NeedVerifyHash(const TLoginUserRequest& request, TPassportCheckResult* passportCheckResult, TString* passwordHash);
     static bool VerifyHash(const TLoginUserRequest& request, const TString& passwordHash); // it's made static to be thread-safe
     void UpdateCache(const TLoginUserRequest& request, const TString& passwordHash, const bool isSuccessVerifying);
-    void LoginUser(const TLoginUserRequest& request, TLoginUserResponse* response);
+    TLoginProvider::TLoginUserResponse LoginUser(const TLoginUserRequest& request, const TPassportCheckResult& passportCheckResult);
 
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);
 
@@ -252,8 +255,8 @@ private:
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
     bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
     TSidRecord* GetUserSid(const TString& user);
-    bool FillNoKeys(TLoginUserResponse* response) const;
-    bool FillInvalidUser(const TSidRecord* sid, TLoginUserResponse* response) const;
+    bool FillNoKeys(TPassportCheckResult* result) const;
+    bool FillInvalidUser(const TSidRecord* sid, TPassportCheckResult* result) const;
 
 private:
     struct TImpl;

@@ -38,7 +38,7 @@ public:
     TString GenerateHash(const TString& password) const;
     static bool VerifyHash(const TString& password, const TString& hash);
     bool VerifyHashWithCache(const TLruCache::TKey& key);
-    bool NeedVerifyHash(const TLruCache::TKey& key, TLoginUserResponse* response);
+    bool NeedVerifyHash(const TLruCache::TKey& key, TPassportCheckResult* passportCheckResult);
     void UpdateCache(const TLruCache::TKey& key, const bool isSuccessVerifying);
 
     void UpdateCacheSettings(const TLoginProvider::TCacheSettings& cacheSettings);
@@ -470,22 +470,22 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
     return response;
 }
 
-bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TLoginUserResponse* response, TString* passwordHash) {
-    Y_ENSURE(response);
+bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPassportCheckResult* passportCheckResult, TString* passwordHash) {
+    Y_ENSURE(passportCheckResult);
     Y_ENSURE(passwordHash);
 
-    if (FillNoKeys(response)) {
+    if (FillNoKeys(passportCheckResult)) {
         return false;
     }
 
     if (!request.ExternalAuth) {
         const auto* sid = GetUserSid(request.User);
-        if (FillInvalidUser(sid, response)) {
+        if (FillInvalidUser(sid, passportCheckResult)) {
             return false;
         }
 
         *passwordHash = sid->PasswordHash;
-        return Impl->NeedVerifyHash({.User = request.User, .Password = request.Password, .Hash = sid->PasswordHash}, response);
+        return Impl->NeedVerifyHash({.User = request.User, .Password = request.Password, .Hash = sid->PasswordHash}, passportCheckResult);
     }
 
     return false;
@@ -499,10 +499,10 @@ void TLoginProvider::UpdateCache(const TLoginUserRequest& request, const TString
     Impl->UpdateCache({.User = request.User, .Password = request.Password, .Hash = passwordHash}, isSuccessVerifying);
 }
 
-    bool TLoginProvider::FillNoKeys(TLoginUserResponse* response) const {
+bool TLoginProvider::FillNoKeys(TPassportCheckResult* result) const {
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
-        response->Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
-        response->Error = "No key to generate token";
+        result->Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
+        result->Error = "No key to generate token";
         return true;
     }
     return false;
@@ -516,33 +516,34 @@ TLoginProvider::TSidRecord* TLoginProvider::GetUserSid(const TString& user) {
     return &(itUser->second);
 }
 
-bool TLoginProvider::FillInvalidUser(const TSidRecord* sid, TLoginUserResponse* response) const {
+bool TLoginProvider::FillInvalidUser(const TSidRecord* sid, TPassportCheckResult* result) const {
     if (!sid) {
-        response->Status = TLoginUserResponse::EStatus::INVALID_USER;
-        response->Error = "Invalid user";
+        result->Status = TLoginUserResponse::EStatus::INVALID_USER;
+        result->Error = "Invalid user";
         return true;
     }
     return false;
 }
 
-void TLoginProvider::LoginUser(const TLoginUserRequest& request, TLoginUserResponse* response) {
-    Y_ENSURE(response);
-
-    if (FillNoKeys(response)) {
-        return;
+TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request, const TPassportCheckResult& passportCheckResult) {
+    TLoginUserResponse response;
+    if (FillNoKeys(&response)) {
+        return response;
     }
 
     TSidRecord* sid = nullptr;
     if (!request.ExternalAuth) {
         sid = GetUserSid(request.User);
-        if (FillInvalidUser(sid, response)) {
-            return;
+        if (FillInvalidUser(sid, &response)) {
+            return response;
         }
 
-        if (response->Status == TLoginUserResponse::EStatus::INVALID_PASSWORD) {
+        if (passportCheckResult.Status == TLoginUserResponse::EStatus::INVALID_PASSWORD) {
+            response.Status = passportCheckResult.Status;
+            response.Error = passportCheckResult.Error;
             sid->LastFailedLogin = std::chrono::system_clock::now();
             sid->FailedLoginAttemptCount++;
-            return;
+            return response;
         }
     }
 
@@ -580,29 +581,29 @@ void TLoginProvider::LoginUser(const TLoginUserRequest& request, TLoginUserRespo
 
     auto encoded_token = token.sign(algorithm);
 
-    response->Token = TString(encoded_token);
-    response->SanitizedToken = SanitizeJwtToken(response->Token);
-    response->Status = TLoginUserResponse::EStatus::SUCCESS;
+    response.Token = TString(encoded_token);
+    response.SanitizedToken = SanitizeJwtToken(response.Token);
+    response.Status = TLoginUserResponse::EStatus::SUCCESS;
 
     if (sid) {
         sid->LastSuccessfulLogin = now;
         sid->FailedLoginAttemptCount = 0;
     }
+    return response;
 }
 
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
-    TLoginUserResponse response;
+    TPassportCheckResult passportCheckResult;
     TString passwordHash;
-    if (NeedVerifyHash(request, &response, &passwordHash)) {
+    if (NeedVerifyHash(request, &passportCheckResult, &passwordHash)) {
         const auto isSuccessVerifying = VerifyHash(request, passwordHash);
         UpdateCache(request, passwordHash, isSuccessVerifying);
         if (!isSuccessVerifying) {
-            response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
-            response.Error = "Invalid password";
+            passportCheckResult.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
+            passportCheckResult.Error = "Invalid password";
         }
     }
-    LoginUser(request, &response);
-    return response;
+    return LoginUser(request, passportCheckResult);
 }
 
 std::deque<TLoginProvider::TKeyRecord>::iterator TLoginProvider::FindKeyIterator(ui64 keyId) {
@@ -832,8 +833,8 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
         hash.size());
 }
 
-bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TLoginUserResponse* response) {
-    Y_ENSURE(response);
+bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TPassportCheckResult* passportCheckResult) {
+    Y_ENSURE(passportCheckResult);
 
     if (!IsCacheUsed()) {
         ClearPasswordsCache();
@@ -841,13 +842,13 @@ bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TLoginUse
     }
 
     if (SuccessPasswordsCache.Find(key) != SuccessPasswordsCache.End()) {
-        response->Status = TLoginUserResponse::EStatus::SUCCESS;
+        passportCheckResult->Status = TLoginUserResponse::EStatus::SUCCESS;
         return false;
     }
 
     if (WrongPasswordsCache.Find(key) != WrongPasswordsCache.End()) {
-        response->Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
-        response->Error = "Invalid password";
+        passportCheckResult->Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
+        passportCheckResult->Error = "Invalid password";
         return false;
     }
 

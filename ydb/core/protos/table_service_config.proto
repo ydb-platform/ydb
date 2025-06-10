@@ -344,7 +344,7 @@ message TTableServiceConfig {
         optional double UnsertaintyRatio = 6 [ default = 0.5 ];
         optional double Multiplier = 7 [ default = 2.0 ];
 
-        optional uint64 MaxWriteAttempts = 8 [ default = 100 ];
+        optional uint64 MaxWriteAttempts = 8 [ default = 5 ];
         optional uint64 MaxResolveAttempts = 9 [ default = 5 ];
     }
 

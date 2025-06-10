@@ -16,10 +16,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-using TMemoryLogBackend = NKikimr::Tests::TMemoryLogBackend;
-using NKikimr::Tests::CreateTestAuditLogBackends;
-using NKikimr::Tests::FindAuditLine;
-
+using NKikimr::Tests;
 namespace NSchemeShardUT_Private {
 
 void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordComplexity::TInitializer& initializer) {

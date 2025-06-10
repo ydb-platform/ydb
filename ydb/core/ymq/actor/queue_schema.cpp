@@ -45,7 +45,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
-                                                     const TString& sanitizedToken)
+                                                     const TString& maskedToken,
+                                                     const TString& authType)
     : QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
@@ -60,7 +61,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , QuoterResources_(std::move(quoterResources))
     , TagsJson_(tagsJson)
     , UserSid_(userSid)
-    , SanitizedToken_(sanitizedToken)
+    , MaskedToken_(maskedToken)
+    , AuthType_(authType)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -756,7 +758,7 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
                 (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
                 (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
-                (let cloudEventsUserSanitizedToken      (Parameter 'CLOUD_EVENT_USER_SANITIZED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken      (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
@@ -777,7 +779,7 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                     '('CloudId cloudEventsCloudId)
                     '('FolderId cloudEventsFolderId)
                     '('UserSID cloudEventsUserSID)
-                    '('UserSanitizedToken cloudEventsUserSanitizedToken)
+                    '('MaskedToken cloudEventsMaskedToken)
                     '('AuthType cloudEventsAuthType)
                     '('PeerName cloudEventsPeerName)
                     '('RequestId cloudEventsRequestId)
@@ -1066,8 +1068,8 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
             .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
             .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
-            .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", SanitizedToken_)
-            .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_authtype")
+            .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
+            .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
             .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
             .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
             .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "default_value_of_idempotency_id");
@@ -1231,7 +1233,7 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
                 Register(new TDeleteQueueSchemaActorV2(QueuePath_, IsFifo_, TablesFormat_, SelfId(), RequestId_, UserCounters_,
                                                            Version_, RequiredShardsCount_, IsFifo_,
-                                                           FolderId_, TagsJson_, UserSid_, SanitizedToken_));
+                                                           FolderId_, TagsJson_, UserSid_, MaskedToken_, AuthType_));
             }
 
         } else {
@@ -1264,7 +1266,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& folderId,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
-                                                     const TString& sanitizedToken)
+                                                     const TString& maskedToken,
+                                                     const TString& authType)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1274,7 +1277,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , UserCounters_(std::move(userCounters))
     , TagsJson_(tagsJson)
     , UserSid_(userSid)
-    , SanitizedToken_(sanitizedToken)
+    , MaskedToken_(maskedToken)
+    , AuthType_(authType)
     , FolderId_(folderId)
 {
 }
@@ -1291,7 +1295,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& folderId,
                                                      const TString& tagsJson,
                                                      const TString& userSid,
-                                                     const TString& sanitizedToken)
+                                                     const TString& maskedToken,
+                                                     const TString& authType)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1301,7 +1306,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , UserCounters_(std::move(userCounters))
     , TagsJson_(tagsJson)
     , UserSid_(userSid)
-    , SanitizedToken_(sanitizedToken)
+    , MaskedToken_(maskedToken)
+    , AuthType_(authType)
     , FolderId_(folderId)
 {
     Y_ABORT_UNLESS(advisedQueueVersion > 0);
@@ -1359,7 +1365,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                 (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
                 (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
                 (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
-                (let cloudEventsUserSanitizedToken      (Parameter 'CLOUD_EVENT_USER_SANITIZED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
@@ -1380,7 +1386,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                     '('CloudId cloudEventsCloudId)
                     '('FolderId cloudEventsFolderId)
                     '('UserSID cloudEventsUserSID)
-                    '('UserSanitizedToken cloudEventsUserSanitizedToken)
+                    '('MaskedToken cloudEventsMaskedToken)
                     '('AuthType cloudEventsAuthType)
                     '('PeerName cloudEventsPeerName)
                     '('RequestId cloudEventsRequestId)
@@ -1572,8 +1578,8 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
                     .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
                     .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
-                    .Utf8("CLOUD_EVENT_USER_SANITIZED_TOKEN", SanitizedToken_)
-                    .Utf8("CLOUD_EVENT_AUTHTYPE", "default_value_of_auth_type")
+                    .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
+                    .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
                     .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
                     .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
                     .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "default_value_of_idempotency_id");

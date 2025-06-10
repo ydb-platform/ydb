@@ -42,9 +42,7 @@ using namespace NKikimr;
 using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
-using TMemoryLogBackend = NKikimr::Tests::TMemoryLogBackend;
-using NKikimr::Tests::CreateTestAuditLogBackends;
-using NKikimr::Tests::FindAuditLine;
+using NKikimr::Tests;
 
 namespace {
 

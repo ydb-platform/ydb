@@ -139,7 +139,7 @@ protected:
     TString FolderId_;
     TString CloudId_;
     TString UserSID_;
-    TString SanitizedToken_;
+    TString AuthType_;
     TString ResourceId_;
     ui32 RequestsToWait_ = 0;
     EActionClass ActionClass_ = EActionClass::QueueSpecified;

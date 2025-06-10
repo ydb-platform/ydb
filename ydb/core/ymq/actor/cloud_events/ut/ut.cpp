@@ -84,7 +84,7 @@ private:
                 .AddNullableColumn("CloudId", EPrimitiveType::Utf8)
                 .AddNullableColumn("FolderId", EPrimitiveType::Utf8)
                 .AddNullableColumn("UserSID", EPrimitiveType::Utf8)
-                .AddNullableColumn("UserSanitizedToken", EPrimitiveType::Utf8)
+                .AddNullableColumn("MaskedToken", EPrimitiveType::Utf8)
                 .AddNullableColumn("AuthType", EPrimitiveType::Utf8)
                 .AddNullableColumn("PeerName", EPrimitiveType::Utf8)
                 .AddNullableColumn("RequestId", EPrimitiveType::Utf8)
@@ -150,7 +150,7 @@ private:
                     << "CloudId,"
                     << "FolderId,"
                     << "UserSID,"
-                    << "UserSanitizedToken,"
+                    << "MaskedToken,"
                     << "AuthType,"
                     << "PeerName,"
                     << "RequestId,"
@@ -203,7 +203,7 @@ private:
         TString cloudId = "cloud1";
         TString folderId = "folder1";
         TString sid = "username";
-        TString token = "sanitizedToken123";
+        TString token = "maskedToken123";
         TString authType = "authtype";
         TString peerName = "localhost:8000";
         TString requestId = "req1";

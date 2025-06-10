@@ -24,10 +24,7 @@ using namespace NKikimr::NWrappers::NTestHelpers;
 
 using TTablesWithAttrs = TVector<std::pair<TString, TMap<TString, TString>>>;
 
-using TMemoryLogBackend = NKikimr::Tests::TMemoryLogBackend;
-using NKikimr::Tests::CreateTestAuditLogBackends;
-using NKikimr::Tests::FindAuditLine;
-
+using NKikimr::Tests;
 namespace {
 
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {

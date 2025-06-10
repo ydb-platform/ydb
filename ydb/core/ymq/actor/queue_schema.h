@@ -33,7 +33,8 @@ public:
                                TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
                                const TString& tagsJson,
                                const TString& userSid,
-                               const TString& sanitizedToken);
+                               const TString& maskedToken,
+                               const TString& authType);
 
     ~TCreateQueueSchemaActorV2();
 
@@ -136,7 +137,8 @@ private:
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     const TString TagsJson_;
     const TString UserSid_;
-    const TString SanitizedToken_;
+    const TString MaskedToken_;
+    const TString AuthType_;
 
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;
@@ -167,7 +169,8 @@ public:
                               const TString& folderId,
                               const TString& tagsJson,
                               const TString& userSid,
-                              const TString& sanitizedToken);
+                              const TString& maskedToken,
+                              const TString& authType);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
                               bool isFifo,
@@ -181,7 +184,8 @@ public:
                               const TString& folderId,
                               const TString& tagsJson,
                               const TString& userSid,
-                              const TString& sanitizedToken);
+                              const TString& maskedToken,
+                              const TString& authType);
 
     void Bootstrap();
 
@@ -238,7 +242,8 @@ private:
     TActorId DeleteQuoterResourceActor_;
     const TString TagsJson_;
     const TString UserSid_;
-    const TString SanitizedToken_;
+    const TString MaskedToken_;
+    const TString AuthType_;
     const TString FolderId_;
 };
 

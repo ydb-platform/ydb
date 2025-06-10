@@ -575,11 +575,8 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
-        SanitizedToken_ = request.GetAuth().GetUserMaskedToken();
-
-        if (SanitizedToken_.empty()) {
-            SanitizedToken_ = NKikimr::MaskTicket(SecurityToken_);
-        }
+        MaskedToken_ = NKikimr::MaskTicket(SecurityToken_);
+        AuthType_ = request.GetAuth().GetAuthType();
 
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);
@@ -889,7 +886,8 @@ protected:
     TIntrusivePtr<TSecurityObject> SecurityObject_;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken_;
     TString UserSID_; // identifies the client who sent this request
-    TString SanitizedToken_;
+    TString MaskedToken_;
+    TString AuthType_;
 
     bool UserExists_ = false;
     bool QueueExists_ = false;

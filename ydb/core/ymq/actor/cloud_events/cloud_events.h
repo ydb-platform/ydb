@@ -20,7 +20,7 @@ namespace NCloudEvents {
 
     struct TEventInfo {
         TString UserSID;
-        TString UserSanitizedToken;
+        TString MaskedToken;
         TString AuthType;
 
         ui64 OriginalId;
@@ -38,6 +38,8 @@ namespace NCloudEvents {
 
         TString QueueName;
         TString Labels;
+
+        TString Permission;
     };
 
     class TAuditSender {

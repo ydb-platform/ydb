@@ -20,7 +20,6 @@ namespace NCloudEvents {
     void TAuditSender::Send(const TEventInfo& evInfo) {
         static constexpr TStringBuf componentName = "ymq";
         static const     TString emptyValue = "{none}";
-        static constexpr TStringBuf permission = "ymq.queues.list";
 
         AUDIT_LOG(
             AUDIT_PART("component", componentName)
@@ -30,16 +29,16 @@ namespace NCloudEvents {
             AUDIT_PART("reason", evInfo.Issue, !evInfo.Issue.empty())
             AUDIT_PART("remote_address", evInfo.RemoteAddress)
             AUDIT_PART("subject", evInfo.UserSID)
-            AUDIT_PART("sanitized_token", (!evInfo.UserSanitizedToken.empty() ? evInfo.UserSanitizedToken : emptyValue))
+            AUDIT_PART("masked_token", (!evInfo.MaskedToken.empty() ? evInfo.MaskedToken : emptyValue))
             AUDIT_PART("auth_type", (!evInfo.AuthType.empty() ? evInfo.AuthType : emptyValue))
-            AUDIT_PART("permission", permission)
+            AUDIT_PART("permission", evInfo.Permission)
             AUDIT_PART("created_at", ::ToString(evInfo.CreatedAt))
             AUDIT_PART("cloud_id", (!evInfo.CloudId.empty() ? evInfo.CloudId : emptyValue))
             AUDIT_PART("folder_id", (!evInfo.FolderId.empty() ? evInfo.FolderId : emptyValue))
-            AUDIT_PART("request_id", (!evInfo.RequestId.empty() ? evInfo.RequestId : emptyValue))
+            AUDIT_PART("request_id", evInfo.RequestId)
             AUDIT_PART("idempotency_id", (!evInfo.IdempotencyId.empty() ? evInfo.IdempotencyId : emptyValue))
             AUDIT_PART("issue", (!evInfo.Issue.empty() ? evInfo.Issue : emptyValue))
-            AUDIT_PART("queue", (!evInfo.QueueName.empty() ? evInfo.QueueName : emptyValue))
+            AUDIT_PART("queue", evInfo.QueueName)
             AUDIT_PART("labels", evInfo.Labels)
         );
     }
@@ -63,7 +62,7 @@ namespace NCloudEvents {
             << "CloudId,"
             << "FolderId,"
             << "UserSID,"
-            << "UserSanitizedToken,"
+            << "MaskedToken,"
             << "AuthType,"
             << "PeerName,"
             << "RequestId,"
@@ -204,12 +203,20 @@ namespace NCloudEvents {
             cloudEvent.QueueName = *parser.ColumnParser(2).GetOptionalUtf8();
             cloudEvent.Type = *parser.ColumnParser(3).GetOptionalUtf8();
 
+            if (cloudEvent.Type == "CreateMessageQueue") {
+                cloudEvent.Permission = "ymq.queues.create";
+            } else if (cloudEvent.Type == "UpdateMessageQueue") {
+                cloudEvent.Permission = "ymq.queues.setAttributes";
+            } else if (cloudEvent.Type == "DeleteMessageQueue") {
+                cloudEvent.Permission = "ymq.queues.delete";
+            }
+
             cloudEvent.Id = convertId(cloudEvent.OriginalId, cloudEvent.Type, cloudEvent.CreatedAt);
 
             cloudEvent.CloudId = *parser.ColumnParser(4).GetOptionalUtf8();
             cloudEvent.FolderId = *parser.ColumnParser(5).GetOptionalUtf8();
             cloudEvent.UserSID = *parser.ColumnParser(6).GetOptionalUtf8();
-            cloudEvent.UserSanitizedToken = *parser.ColumnParser(7).GetOptionalUtf8();
+            cloudEvent.MaskedToken = *parser.ColumnParser(7).GetOptionalUtf8();
             cloudEvent.AuthType = *parser.ColumnParser(8).GetOptionalUtf8();
             cloudEvent.RemoteAddress = *parser.ColumnParser(9).GetOptionalUtf8();
             cloudEvent.RequestId = *parser.ColumnParser(10).GetOptionalUtf8();

@@ -49,7 +49,8 @@ private:
                 FolderId_,
                 tagsJson,
                 UserSID_,
-                SanitizedToken_
+                MaskedToken_,
+                AuthType_
             )
         );
     }

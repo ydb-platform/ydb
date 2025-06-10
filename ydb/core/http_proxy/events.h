@@ -167,16 +167,16 @@ namespace NKikimr::NHttpProxy {
         TString CloudId;
         TString FolderId;
         TString Sid;
-        TString MaskedToken;
+        TString AuthType;
 
         TMaybe<TError> Error;
 
-        TEvYmqCloudAuthResponse(const TString& cloudId, const TString& folderId, const TString& sid, const TString& maskedToken)
+        TEvYmqCloudAuthResponse(const TString& cloudId, const TString& folderId, const TString& sid, const TString& authType)
             : IsSuccess(true)
             , CloudId(cloudId)
             , FolderId(folderId)
             , Sid(sid)
-            , MaskedToken(maskedToken)
+            , AuthType(authType)
             , Error(Nothing())
             {}
 

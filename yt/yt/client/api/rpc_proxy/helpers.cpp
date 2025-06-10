@@ -22,6 +22,8 @@
 
 #include <yt/yt/client/ypath/rich.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 using namespace NTableClient;
@@ -618,36 +620,36 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.BriefSpec) {
-        protoOperation->set_brief_spec(operation.BriefSpec.ToString());
+        protoOperation->set_brief_spec(ToProto(operation.BriefSpec));
     }
     if (operation.Spec) {
-        protoOperation->set_spec(operation.Spec.ToString());
+        protoOperation->set_spec(ToProto(operation.Spec));
     }
     if (operation.ProvidedSpec) {
-        protoOperation->set_provided_spec(operation.ProvidedSpec.ToString());
+        protoOperation->set_provided_spec(ToProto(operation.ProvidedSpec));
     }
     if (operation.ExperimentAssignments) {
-        protoOperation->set_experiment_assignments(operation.ExperimentAssignments.ToString());
+        protoOperation->set_experiment_assignments(ToProto(operation.ExperimentAssignments));
     }
     if (operation.ExperimentAssignmentNames) {
-        protoOperation->set_experiment_assignment_names(operation.ExperimentAssignmentNames.ToString());
+        protoOperation->set_experiment_assignment_names(ToProto(operation.ExperimentAssignmentNames));
     }
     if (operation.FullSpec) {
-        protoOperation->set_full_spec(operation.FullSpec.ToString());
+        protoOperation->set_full_spec(ToProto(operation.FullSpec));
     }
     if (operation.UnrecognizedSpec) {
-        protoOperation->set_unrecognized_spec(operation.UnrecognizedSpec.ToString());
+        protoOperation->set_unrecognized_spec(ToProto(operation.UnrecognizedSpec));
     }
 
     if (operation.BriefProgress) {
-        protoOperation->set_brief_progress(operation.BriefProgress.ToString());
+        protoOperation->set_brief_progress(ToProto(operation.BriefProgress));
     }
     if (operation.Progress) {
-        protoOperation->set_progress(operation.Progress.ToString());
+        protoOperation->set_progress(ToProto(operation.Progress));
     }
 
     if (operation.RuntimeParameters) {
-        protoOperation->set_runtime_parameters(operation.RuntimeParameters.ToString());
+        protoOperation->set_runtime_parameters(ToProto(operation.RuntimeParameters));
     }
 
     if (operation.Suspended) {
@@ -659,37 +661,37 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.Events) {
-        protoOperation->set_events(operation.Events.ToString());
+        protoOperation->set_events(ToProto(operation.Events));
     }
     if (operation.Result) {
-        protoOperation->set_result(operation.Result.ToString());
+        protoOperation->set_result(ToProto(operation.Result));
     }
 
     if (operation.SlotIndexPerPoolTree) {
-        protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
+        protoOperation->set_slot_index_per_pool_tree(ToProto(operation.SlotIndexPerPoolTree));
     }
 
     if (operation.SchedulingAttributesPerPoolTree) {
-        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
+        protoOperation->set_scheduling_attributes_per_pool_tree(ToProto(operation.SchedulingAttributesPerPoolTree));
     }
 
     if (operation.TaskNames) {
-        protoOperation->set_task_names(operation.TaskNames.ToString());
+        protoOperation->set_task_names(ToProto(operation.TaskNames));
     }
 
     if (operation.Alerts) {
-        protoOperation->set_alerts(operation.Alerts.ToString());
+        protoOperation->set_alerts(ToProto(operation.Alerts));
     }
     if (operation.AlertEvents) {
-        protoOperation->set_alert_events(operation.AlertEvents.ToString());
+        protoOperation->set_alert_events(ToProto(operation.AlertEvents));
     }
 
     if (operation.ControllerFeatures) {
-        protoOperation->set_controller_features(operation.ControllerFeatures.ToString());
+        protoOperation->set_controller_features(ToProto(operation.ControllerFeatures));
     }
 
     if (operation.OtherAttributes) {
-        protoOperation->set_other_attributes(ConvertToYsonString(operation.OtherAttributes).ToString());
+        protoOperation->set_other_attributes(ToProto(ConvertToYsonString(operation.OtherAttributes)));
     }
 }
 
@@ -849,20 +851,20 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_SET_PROTO(protoJob, has_spec, job.HasSpec);
 
     if (job.Error) {
-        protoJob->set_error(job.Error.ToString());
+        protoJob->set_error(ToProto(job.Error));
     }
     if (job.InterruptionInfo) {
-        protoJob->set_interruption_info(job.InterruptionInfo.ToString());
+        protoJob->set_interruption_info(ToProto(job.InterruptionInfo));
     }
 
     if (job.BriefStatistics) {
-        protoJob->set_brief_statistics(job.BriefStatistics.ToString());
+        protoJob->set_brief_statistics(ToProto(job.BriefStatistics));
     }
     if (job.InputPaths) {
-        protoJob->set_input_paths(job.InputPaths.ToString());
+        protoJob->set_input_paths(ToProto(job.InputPaths));
     }
     if (job.CoreInfos) {
-        protoJob->set_core_infos(job.CoreInfos.ToString());
+        protoJob->set_core_infos(ToProto(job.CoreInfos));
     }
     if (job.JobCompetitionId) {
         ToProto(protoJob->mutable_job_competition_id(), job.JobCompetitionId);
@@ -874,23 +876,23 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_SET_PROTO(protoJob, has_probing_competitors, job.HasProbingCompetitors);
     YT_OPTIONAL_SET_PROTO(protoJob, is_stale, job.IsStale);
     if (job.ExecAttributes) {
-        protoJob->set_exec_attributes(job.ExecAttributes.ToString());
+        protoJob->set_exec_attributes(ToProto(job.ExecAttributes));
     }
     YT_OPTIONAL_TO_PROTO(protoJob, task_name, job.TaskName);
     YT_OPTIONAL_TO_PROTO(protoJob, pool_tree, job.PoolTree);
     YT_OPTIONAL_TO_PROTO(protoJob, pool, job.Pool);
     YT_OPTIONAL_SET_PROTO(protoJob, job_cookie, job.JobCookie);
     if (job.ArchiveFeatures) {
-        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+        protoJob->set_archive_features(ToProto(job.ArchiveFeatures));
     }
     YT_OPTIONAL_TO_PROTO(protoJob, monitoring_descriptor, job.MonitoringDescriptor);
     YT_OPTIONAL_SET_PROTO(protoJob, operation_incarnation, job.OperationIncarnation);
     YT_OPTIONAL_TO_PROTO(protoJob, allocation_id, job.AllocationId);
     if (job.Events) {
-        protoJob->set_events(job.Events.ToString());
+        protoJob->set_events(ToProto(job.Events));
     }
     if (job.Statistics) {
-        protoJob->set_statistics(job.Statistics.ToString());
+        protoJob->set_statistics(ToProto(job.Statistics));
     }
 }
 
@@ -1260,29 +1262,29 @@ void ToProto(
     }
     YT_OPTIONAL_TO_PROTO(protoQuery, query, query.Query);
     if (query.Files) {
-        protoQuery->set_files(query.Files->ToString());
+        protoQuery->set_files(ToProto(*query.Files));
     }
     YT_OPTIONAL_SET_PROTO(protoQuery, start_time, query.StartTime);
     YT_OPTIONAL_SET_PROTO(protoQuery, finish_time, query.FinishTime);
     if (query.Settings) {
-        protoQuery->set_settings(query.Settings.ToString());
+        protoQuery->set_settings(ToProto(query.Settings));
     }
     YT_OPTIONAL_TO_PROTO(protoQuery, user, query.User);
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
-    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+    protoQuery->set_access_control_objects(ToProto(*query.AccessControlObjects));
 
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
     YT_OPTIONAL_SET_PROTO(protoQuery, result_count, query.ResultCount);
     if (query.Progress) {
-        protoQuery->set_progress(query.Progress.ToString());
+        protoQuery->set_progress(ToProto(query.Progress));
     }
     YT_OPTIONAL_TO_PROTO(protoQuery, error, query.Error);
     if (query.Annotations) {
-        protoQuery->set_annotations(query.Annotations.ToString());
+        protoQuery->set_annotations(ToProto(query.Annotations));
     }
     if (query.OtherAttributes) {
         ToProto(protoQuery->mutable_other_attributes(), *query.OtherAttributes);
@@ -1772,7 +1774,7 @@ void FillRequest(
 {
     YT_VERIFY(sessionWithResults.Session);
 
-    req->set_signed_session(ConvertToYsonString(sessionWithResults.Session).ToString());
+    req->set_signed_session(ToProto(ConvertToYsonString(sessionWithResults.Session)));
     for (const auto& writeResult : sessionWithResults.Results) {
         YT_VERIFY(writeResult);
         req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
@@ -1802,10 +1804,10 @@ void FillRequest(
     const TSignedWriteFragmentCookiePtr& cookie,
     const TTableFragmentWriterOptions& options)
 {
-    req->set_signed_cookie(ConvertToYsonString(cookie).ToString());
+    req->set_signed_cookie(ToProto(ConvertToYsonString(cookie)));
 
     if (options.Config) {
-        req->set_config(ConvertToYsonString(*options.Config).ToString());
+        req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
 }
 

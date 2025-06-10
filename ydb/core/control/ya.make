@@ -5,8 +5,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/control/lib
     ydb/core/mon
-    ydb/library/actors/core
     ydb/core/node_whiteboard
+    ydb/library/actors/core
 )
 
 SRCS(

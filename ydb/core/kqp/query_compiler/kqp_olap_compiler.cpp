@@ -125,6 +125,7 @@ public:
             const auto& rightCleanType = RemoveOptionality(*rightItemType);
             resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
         }
+        YQL_ENSURE(resultItemType);
 
         if ((ETypeAnnotationKind::Optional == leftItemType->GetKind() && !optionalityFromRight) || ETypeAnnotationKind::Optional == rightItemType->GetKind()) {
             resultItemType = ExprContext.MakeType<TOptionalExprType>(resultItemType);
@@ -202,7 +203,9 @@ public:
     bool CheckYqlCompatibleArgType(const TExprBase& expression) const {
         if (const auto maybe = expression.Maybe<TCoAtom>()) {
             if (const auto type = GetColumnTypeByName(maybe.Cast().Value()); type->GetKind() == ETypeAnnotationKind::Data) {
-                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType))) {
+                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot());
+                    !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::DateType |
+                                       NUdf::EDataTypeFeatures::TimeIntervalType))) {
                     return false;
                 }
             }
@@ -294,7 +297,8 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
         ssaValue->MutableConstant()->SetInt16(FromString<i16>(nodeValue));
     } else if (value.Maybe<TCoInt32>() || value.Maybe<TCoDate32>()) {
         ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
-    } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>()) {
+    } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>() ||
+               value.Maybe<TCoInterval>()) {
         ssaValue->MutableConstant()->SetInt64(FromString<i64>(nodeValue));
     } else if (value.Maybe<TCoUint8>()) {
         ssaValue->MutableConstant()->SetUint8(FromString<ui8>(nodeValue));
@@ -305,9 +309,11 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
     } else if (value.Maybe<TCoUint64>()) {
         ssaValue->MutableConstant()->SetUint64(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoTimestamp>()) {
-        ssaValue->MutableConstant()->SetTimestamp(FromString<ui64>(nodeValue));
+        ssaValue->MutableConstant()->SetUint64(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoDate>()) {
-        ssaValue->MutableConstant()->SetTimestamp(FromString<ui16>(nodeValue));
+        ssaValue->MutableConstant()->SetUint16(FromString<ui16>(nodeValue));
+    } else if (value.Maybe<TCoDatetime>()) {
+        ssaValue->MutableConstant()->SetUint32(FromString<ui32>(nodeValue));
     } else {
         YQL_ENSURE(false, "Unsupported content: " << value.Ref().Content());
     }

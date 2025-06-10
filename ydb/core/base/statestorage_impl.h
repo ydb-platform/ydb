@@ -16,16 +16,20 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
     TEvReplicaInfo()
     {}
 
-    TEvReplicaInfo(ui64 tabletId, NKikimrProto::EReplyStatus status)
+    TEvReplicaInfo(ui64 tabletId, NKikimrProto::EReplyStatus status, ui64 configVersion, ui64 configId)
     {
         Record.SetTabletID(tabletId);
         Record.SetStatus(status);
+        Record.SetConfigVersion(configVersion);
+        Record.SetConfigId(configId);
     }
 
-    TEvReplicaInfo(ui64 tabletId, const TActorId &currentLeader, const TActorId &currentLeaderTablet, ui32 currentGeneration, ui32 currentStep, bool locked, ui64 lockedFor)
+    TEvReplicaInfo(ui64 tabletId, const TActorId &currentLeader, const TActorId &currentLeaderTablet, ui32 currentGeneration
+        , ui32 currentStep, bool locked, ui64 lockedFor, ui64 configVersion, ui64 configId)
     {
         Record.SetStatus(NKikimrProto::OK);
-
+        Record.SetConfigVersion(configVersion);
+        Record.SetConfigId(configId);
         Record.SetTabletID(tabletId);
         ActorIdToProto(currentLeader, Record.MutableCurrentLeader());
         ActorIdToProto(currentLeaderTablet, Record.MutableCurrentLeaderTablet());
@@ -41,6 +45,8 @@ struct TEvStateStorage::TEvReplicaInfo : public TEventPB<TEvStateStorage::TEvRep
         TStringStream str;
         str << "{EvReplicaInfo Status: " << (ui32)Record.GetStatus();
         str << " TabletID: " << Record.GetTabletID();
+        str << " ConfigVersion: " << Record.GetConfigVersion();
+        str << " ConfigId: " << Record.GetConfigId();
         if (Record.HasCurrentLeader()) {
             str << " CurrentLeader: " << ActorIdFromProto(Record.GetCurrentLeader()).ToString();
         }
@@ -132,6 +138,7 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
     struct TReplicaGroup {
         TVector<TActorId> Replicas;
         bool WriteOnly;
+        TRingGroupState State;
     };
     
     TVector<TReplicaGroup> ReplicaGroups;

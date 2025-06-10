@@ -89,7 +89,8 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
             auto now = TActivationContext::Now();
 
             const ui64 lockedFor = (locked && (now.MicroSeconds() > entry->LockedFrom)) ? (now.MicroSeconds() - entry->LockedFrom) : 0;
-            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, entry->CurrentLeader, entry->CurrentLeaderTablet, entry->CurrentGeneration, entry->CurrentStep, locked, lockedFor));
+            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, entry->CurrentLeader, entry->CurrentLeaderTablet, entry->CurrentGeneration
+                , entry->CurrentStep, locked, lockedFor, Info ? Info->ConfigVersion : 0, Info ? Info->ConfigId : 0));
             if (entry->Followers.size()) {
                 msg->Record.MutableFollowerTablet()->Reserve(entry->Followers.size());
                 msg->Record.MutableFollower()->Reserve(entry->Followers.size());
@@ -105,7 +106,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
             }
         } else {
             // FIXME: change to NODATA in a future version
-            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, NKikimrProto::ERROR));
+            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, NKikimrProto::ERROR, Info ? Info->ConfigVersion : 0, Info ? Info->ConfigId : 0));
         }
         msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
@@ -114,7 +115,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     }
 
     void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status) {
-        THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status));
+        THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status, Info ? Info->ConfigVersion : 0, Info ? Info->ConfigId : 0));
         msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
         msg->Record.SetConfigContentHash(Info->ContentHash());

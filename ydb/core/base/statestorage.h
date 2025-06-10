@@ -29,6 +29,7 @@ struct TEvStateStorage {
         EvBoardInfoUpdate,
         EvPublishActorGone,
         EvRingGroupPassAway,
+        EvConfigVersionInfo,
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -267,6 +268,16 @@ struct TEvStateStorage {
         }
     };
 
+    struct TEvConfigVersionInfo : public TEventLocal<TEvConfigVersionInfo, EvConfigVersionInfo> {
+        const ui64 ConfigVersion;
+        const ui64 ConfigId;
+
+        TEvConfigVersionInfo(ui64 configVersion, ui64 configId)
+            : ConfigVersion(configVersion)
+            , ConfigId(configId)
+        {}
+    };
+
     struct TEvInfo : public TEventLocal<TEvInfo, EvInfo> {
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletID;
@@ -455,6 +466,13 @@ struct TEvStateStorage {
     };
 };
 
+enum TRingGroupState {
+    PRIMARY,
+    SECONDARY,
+    NOT_SYNCHRONIZED,
+    DISCONNECTED
+};
+
 struct TStateStorageInfo : public TThrRefBase {
     struct TSelection {
         enum EStatus {
@@ -489,6 +507,8 @@ struct TStateStorageInfo : public TThrRefBase {
     };
 
     struct TRingGroup {
+        ui32 BridgePileId = 0;
+        TRingGroupState State;
         bool WriteOnly = false;
         ui32 NToSelect = 0;
         TVector<TRing> Rings;
@@ -499,6 +519,8 @@ struct TStateStorageInfo : public TThrRefBase {
 
     TVector<TRingGroup> RingGroups;
 
+    ui32 ConfigVersion;
+    ui32 ConfigId;
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 

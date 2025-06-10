@@ -26,6 +26,8 @@ message TEvInfo {
     repeated NActorsProto.TActorId FollowerTablet = 12;
     repeated NActorsProto.TActorId FollowerCandidates = 13;
     optional fixed32 ConfigContentHash = 14;
+    optional uint64 ConfigVersion = 15;
+    optional uint64 ConfigId = 16;
 };
 
 message TEvReplicaShutdown {

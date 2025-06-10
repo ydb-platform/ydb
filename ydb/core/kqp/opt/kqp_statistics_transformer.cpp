@@ -141,10 +141,10 @@ void InferStatisticsForKqpTable(
     }
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
-    if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
-        YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for table: " << path.Value();
-        return;
-    }
+    // if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
+    //     YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for table: " << path.Value();
+    //     return;
+    // }
 
     TSimpleSharedPtr<THashSet<TString>> aliases;
     if (auto tablePrevStats = typeCtx->GetStats(inputNode.Raw())) {

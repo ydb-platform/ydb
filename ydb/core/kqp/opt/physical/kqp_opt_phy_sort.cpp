@@ -73,6 +73,12 @@ TExprBase KqpRemoveRedundantSortByPk(
     auto settings = GetReadTableSettings(input, isReadTableRanges);
     auto table = GetTable(input, isReadTableRanges);
 
+    if (!tableDesc.Metadata->KeyColumnNames.empty()) {
+        Cout << "YES" << Endl;
+    } else {
+        Cout << "NO" << Endl;
+    }
+
     bool isReversed = false;
     auto isSorted = [&](){
         auto tableStats = typeCtx.GetStats(table.Raw());

@@ -1,30 +1,9 @@
 #include "dq_block_hash_join.h"
 
-#include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/minikql/computation/mkql_block_builder.h>
-#include <yql/essentials/minikql/computation/mkql_block_reader.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl.h>
-#include <yql/essentials/minikql/computation/block_layout_converter.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
-#include <yql/essentials/minikql/computation/mkql_resource_meter.h>
-
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/mkql_block_grace_join_policy.h>
-
-#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/robin_hood_table.h>
-#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/neumann_hash_table.h>
-#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/cardinality.h>
-
-#include <util/generic/serialized_enum.h>
-#include <util/digest/numeric.h>
-
-#include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/public/udf/arrow/block_item_hasher.h>
-
-#include <arrow/array/data.h>
-#include <arrow/datum.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -58,9 +37,44 @@ public:
     { }
 
 private:
-    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
+        // Пробуем читать с левого потока, если он еще не завершен
+        if (!LeftFinished_) {
+            auto status = LeftStream_.WideFetch(output, width);
+            if (status == NUdf::EFetchStatus::Ok) {
+                return NUdf::EFetchStatus::Ok;  // Есть данные, возвращаем
+            } else if (status == NUdf::EFetchStatus::Finish) {
+                LeftFinished_ = true;  // Левый поток завершен
+                // Продолжаем к правому потоку
+            } else if (status == NUdf::EFetchStatus::Yield) {
+                // Левый поток заблокирован, пробуем правый
+            }
+        }
 
+        // Пробуем читать с правого потока, если он еще не завершен
+        if (!RightFinished_) {
+            auto status = RightStream_.WideFetch(output, width);
+            if (status == NUdf::EFetchStatus::Ok) {
+                return NUdf::EFetchStatus::Ok;  // Есть данные, возвращаем
+            } else if (status == NUdf::EFetchStatus::Finish) {
+                RightFinished_ = true;  // Правый поток завершен
+            } else if (status == NUdf::EFetchStatus::Yield) {
+                return NUdf::EFetchStatus::Yield;  // Оба потока заблокированы
+            }
+        }
+
+        // Если оба потока завершены
+        if (LeftFinished_ && RightFinished_) {
+            return NUdf::EFetchStatus::Finish;
+        }
+
+        // Если дошли сюда, значит один из потоков дал Yield, а другой Finish
+        return NUdf::EFetchStatus::Yield;
     }
+
+private:
+    bool LeftFinished_ = false;
+    bool RightFinished_ = false;
 
 private:
     TComputationContext&    Ctx_;
@@ -99,8 +113,8 @@ public:
         , LeftKeyColumns_(std::move(leftKeyColumns))
         , RightItemTypes_(std::move(rightItemTypes))
         , RightKeyColumns_(std::move(rightKeyColumns))
-        , LeftStream_(std::move(leftStream))
-        , RightStream_(std::move(rightStream))
+        , LeftStream_(leftStream)
+        , RightStream_(rightStream)
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {

@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 } // NKikimr
 } // NMiniKQL

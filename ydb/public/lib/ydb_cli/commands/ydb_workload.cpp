@@ -346,7 +346,9 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
     : TWorkloadCommand(workload.CommandName, std::initializer_list<TString>(), workload.Description)
     , Params(params)
     , Type(workload.Type)
-{}
+{
+    Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
+}
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);

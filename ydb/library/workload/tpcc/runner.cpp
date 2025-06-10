@@ -495,7 +495,7 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
 
 void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     std::stringstream ss;
-    ss << data.Phase << " - " << data.ElapsedMinutes << ":"
+    ss << "\n\n\n" << data.Phase << " - " << data.ElapsedMinutes << ":"
        << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " elapsed";
 
     if (data.ProgressPercent > 0) {
@@ -504,43 +504,76 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
            << data.RemainingSeconds << " remaining)";
     }
 
-    ss << " | Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
+    ss << std::endl << "Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
        << "tpmC: " << std::setprecision(1) << LastStatisticsSnapshot->Tpmc << " | "
        << "Running: " << data.RunningTransactions << " transactions";
 
-    LOG_I(ss.str());
+    std::cout << ss.str();
 
-    // Per thread statistics
+    // Per thread statistics (two columns)
     std::cout << "\nPer thread statistics:" << std::endl;
-    std::stringstream headerStream;
-    headerStream << std::left
-                 << std::setw(5) << "Thr"
-                 << std::setw(5) << "Load"
-                 << std::setw(15) << "terminals/s"
-                 << std::setw(15) << "queries/s"
-                 << std::setw(20) << "inflight queue"
-                 << std::setw(20) << "queue p50, ms"
-                 << std::setw(20) << "queue p90, ms";
 
-    std::string header = headerStream.str();
-    size_t tableWidth = header.length();
+    size_t threadCount = LastStatisticsSnapshot->StatVec.size();
+    size_t halfCount = (threadCount + 1) / 2;
 
-    std::cout << header << std::endl;
-    std::cout << std::string(tableWidth, '-') << std::endl;
-    for (size_t i = 0; i < LastStatisticsSnapshot->StatVec.size(); ++i) {
-        const auto& stats = LastStatisticsSnapshot->StatVec[i];
-        double load = stats.ExecutingTime / stats.TotalTime;
-        std::cout << std::left
-                  << std::setw(5) << i
-                  << std::setw(5) << std::fixed << std::setprecision(2) << load
-                  << std::setw(15) << std::fixed << std::setprecision(2) << stats.TerminalsPerSecond
-                  << std::setw(15) << std::fixed << stats.QueriesPerSecond
-                  << std::setw(20) << stats.TaskThreadStats->InternalTasksWaitingInflight
-                  << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(50)
-                  << std::setw(20) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90)
-                  << std::endl;
+    // Headers for both columns
+    std::stringstream leftHeader, rightHeader;
+    leftHeader << std::left
+               << std::setw(5) << "Thr"
+               << std::setw(5) << "Load"
+               << std::setw(10) << "QPS"
+               << std::setw(10) << "Queue"
+               << std::setw(15) << "queue p90, ms";
+
+    rightHeader << std::left
+                << std::setw(5) << "Thr"
+                << std::setw(5) << "Load"
+                << std::setw(10) << "QPS"
+                << std::setw(10) << "Queue"
+                << std::setw(15) << "queue p90, ms";
+
+    // Print headers side by side
+    std::cout << leftHeader.str() << " | " << rightHeader.str() << std::endl;
+
+    size_t totalWidth = leftHeader.str().length() + 3 + rightHeader.str().length();
+    std::cout << std::string(totalWidth, '-') << std::endl;
+
+    // Print thread data in two columns
+    for (size_t i = 0; i < halfCount; ++i) {
+        // Left column
+        std::stringstream leftLine;
+        if (i < threadCount) {
+            const auto& stats = LastStatisticsSnapshot->StatVec[i];
+            double load = stats.ExecutingTime / stats.TotalTime;
+            leftLine << std::left
+                     << std::setw(5) << i
+                     << std::setw(5) << std::fixed << std::setprecision(2) << load
+                     << std::setw(10) << std::fixed << stats.QueriesPerSecond
+                     << std::setw(10) << stats.TaskThreadStats->InternalTasksWaitingInflight
+                     << std::setw(15) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
+        } else {
+            leftLine << std::string(leftHeader.str().length(), ' ');
+        }
+
+        // Right column
+        std::stringstream rightLine;
+        size_t rightIndex = i + halfCount;
+        if (rightIndex < threadCount) {
+            const auto& stats = LastStatisticsSnapshot->StatVec[rightIndex];
+            double load = stats.ExecutingTime / stats.TotalTime;
+            rightLine << std::left
+                      << std::setw(5) << rightIndex
+                      << std::setw(5) << std::fixed << std::setprecision(2) << load
+                      << std::setw(10) << std::fixed << stats.QueriesPerSecond
+                      << std::setw(10) << stats.TaskThreadStats->InternalTasksWaitingInflight
+                      << std::setw(15) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
+        } else {
+            rightLine << std::string(rightHeader.str().length(), ' ');
+        }
+
+        std::cout << leftLine.str() << " | " << rightLine.str() << std::endl;
     }
-    std::cout << std::string(tableWidth, '-') << std::endl;
+    std::cout << std::string(totalWidth, '-') << std::endl;
 
     // Transaction statistics
     std::cout << "\n\nTransaction Statistics:\n";

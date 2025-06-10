@@ -7,19 +7,14 @@
 
 namespace NYdb::NConsoleClient {
 
-class TCommandTableInfer : public TClientCommandTree {
+class TCommandToolsInfer : public TClientCommandTree {
 public:
-    TCommandTableInfer();
+    TCommandToolsInfer();
 };
 
-class TCommandTableInferFile : public TClientCommandTree {
+class TCommandToolsInferCsv : public TYdbCommand, public TCommandWithPath, public TCommandWithInput {
 public:
-    TCommandTableInferFile();
-};
-
-class TCommandTableInferCsv : public TYdbCommand, public TCommandWithPath, public TCommandWithInput {
-public:
-    TCommandTableInferCsv();
+    TCommandToolsInferCsv();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

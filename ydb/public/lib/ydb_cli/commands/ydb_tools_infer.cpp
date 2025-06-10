@@ -1,4 +1,4 @@
-#include "ydb_table_infer.h"
+#include "ydb_tools_infer.h"
 
 #include <ydb/library/arrow_inference/arrow_inference.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
@@ -13,25 +13,19 @@
 
 namespace NYdb::NConsoleClient {
 
-TCommandTableInfer::TCommandTableInfer()
+TCommandToolsInfer::TCommandToolsInfer()
     : TClientCommandTree("infer", {}, "Infer table schema")
 {
-    AddCommand(std::make_unique<TCommandTableInferFile>());
+    AddCommand(std::make_unique<TCommandToolsInferCsv>());
 }
 
-TCommandTableInferFile::TCommandTableInferFile()
-    : TClientCommandTree("file", {}, "Infer table schema from file")
-{
-    AddCommand(std::make_unique<TCommandTableInferCsv>());
-}
-
-TCommandTableInferCsv::TCommandTableInferCsv()
+TCommandToolsInferCsv::TCommandToolsInferCsv()
     : TYdbCommand("csv", {}, "Generate CREATE TABLE SQL query from CSV file"
         "\n\nBy default, the command attempts to use the first row of the CSV as column names if possible."
         " Use the \"--columns\", \"--gen-names\" or \"--header\" options to set the column names source explicitly.")
 {}
 
-void TCommandTableInferCsv::Config(TConfig& config) {
+void TCommandToolsInferCsv::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->SetTrailingArgTitle("<input files...>",
@@ -53,7 +47,7 @@ void TCommandTableInferCsv::Config(TConfig& config) {
         .NoArgument().SetFlag(&Execute);
 }
 
-void TCommandTableInferCsv::Parse(TConfig& config) {
+void TCommandToolsInferCsv::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
     for (const auto& filePath : config.ParseResult->GetFreeArgs()) {
@@ -79,7 +73,7 @@ void TCommandTableInferCsv::Parse(TConfig& config) {
     }
 }
 
-int TCommandTableInferCsv::Run(TConfig& config) {
+int TCommandToolsInferCsv::Run(TConfig& config) {
     Y_UNUSED(config);
     std::vector<std::shared_ptr<arrow::io::InputStream>> inputs;
     if (ReadingFromStdin) {

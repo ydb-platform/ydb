@@ -90,9 +90,6 @@ target_link_libraries(core-tx-datashard PUBLIC
   monlib-service-pages
   cpp-string_utils-base64
   cpp-string_utils-quote
-  library-cpp-dot_product
-  library-cpp-l1_distance
-  library-cpp-l2_distance
   ydb-core-actorlib_impl
   core-backup-common
   ydb-core-base
@@ -430,9 +427,6 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   monlib-service-pages
   cpp-string_utils-base64
   cpp-string_utils-quote
-  library-cpp-dot_product
-  library-cpp-l1_distance
-  library-cpp-l2_distance
   ydb-core-actorlib_impl
   core-backup-common
   ydb-core-base

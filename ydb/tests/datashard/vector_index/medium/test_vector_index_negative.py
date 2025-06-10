@@ -2,6 +2,7 @@ import ydb
 
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
+from ydb.tests.datashard.lib.vector_index import targets
 from ydb.tests.datashard.lib.types_of_variables import (
     cleanup_type_name,
     format_sql_value,
@@ -24,16 +25,6 @@ def get_vector(type, numb, size_vector):
     values = [i for i in range(size_vector - 1)]
     values.append(numb)
     return ",".join(str(val) for val in values)
-
-
-targets = {
-    "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
-    "distance": {
-        "cosine": "Knn::CosineDistance",
-        "manhattan": "Knn::ManhattanDistance",
-        "euclidean": "Knn::EuclideanDistance",
-    },
-}
 
 
 class TestVectorIndexNegative(VectorBase):
@@ -157,7 +148,6 @@ class TestVectorIndexNegative(VectorBase):
             clusters=clusters,
             cover=cover,
         )
-        print(vector_index_sql_request)
         self.query(vector_index_sql_request)
 
     def _upsert_values(
@@ -194,7 +184,6 @@ class TestVectorIndexNegative(VectorBase):
             )
             VALUES {",".join(values)};
         """
-        print(upsert_sql)
         self.query(upsert_sql)
 
     def _select(
@@ -217,7 +206,6 @@ class TestVectorIndexNegative(VectorBase):
                                         order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                         limit 10;
                                         """
-        print(select_sql)
         return self.query(select_sql)
 
     def drop_index(self):

@@ -14,7 +14,7 @@
 
 namespace NKikimr::NDataShard::NKMeans {
 
-using NKikimr::NKMeans::TClusters;
+using NKikimr::NKMeans::IClusters;
 
 TTableRange CreateRangeFrom(const TUserTable& table, TClusterId parent, TCell& from, TCell& to);
 

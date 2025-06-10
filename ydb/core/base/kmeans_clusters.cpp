@@ -117,7 +117,7 @@ struct TMaxInnerProductSimilarity : TMetric<TCoord> {
 };
 
 template <typename TMetric>
-class TClustersImpl: public TClusters {
+class TClusters: public IClusters {
     // If less than 1% of vectors are reassigned to new clusters we want to stop
     static constexpr double MinVectorsNeedsReassigned = 0.01;
 
@@ -142,7 +142,7 @@ class TClustersImpl: public TClusters {
     ui32 MaxRounds = 0;
 
 public:
-    TClustersImpl(ui32 dimensions)
+    TClusters(ui32 dimensions)
         : Dimensions(dimensions)
     {
     }
@@ -302,7 +302,7 @@ private:
     }
 };
 
-std::unique_ptr<TClusters> TClusters::Create(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
+std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
     if (settings.vector_dimension() < 1) {
         error = "Dimension of vector should be at least one";
         return nullptr;
@@ -310,19 +310,19 @@ std::unique_ptr<TClusters> TClusters::Create(const Ydb::Table::VectorIndexSettin
 
     const ui32 dim = settings.vector_dimension();
 
-    auto handleMetric = [&]<typename T>() -> std::unique_ptr<TClusters> {
+    auto handleMetric = [&]<typename T>() -> std::unique_ptr<IClusters> {
         switch (settings.metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return std::make_unique<TClustersImpl<TMaxInnerProductSimilarity<T>>>(dim);
+                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim);
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClustersImpl<TCosineSimilarity<T>>>(dim);
+                return std::make_unique<TClusters<TCosineSimilarity<T>>>(dim);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return std::make_unique<TClustersImpl<TL1Distance<T>>>(dim);
+                return std::make_unique<TClusters<TL1Distance<T>>>(dim);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return std::make_unique<TClustersImpl<TL2Distance<T>>>(dim);
+                return std::make_unique<TClusters<TL2Distance<T>>>(dim);
             default:
                 error = "Wrong similarity";
                 break;

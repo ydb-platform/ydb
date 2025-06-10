@@ -103,7 +103,7 @@ protected:
 
     bool IsExhausted = false;
 
-    std::unique_ptr<TClusters> Clusters;
+    std::unique_ptr<IClusters> Clusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -113,7 +113,7 @@ public:
 
     TPrefixKMeansScan(ui64 tabletId, const TUserTable& table, const NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
         const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response,
-        std::unique_ptr<TClusters>&& clusters)
+        std::unique_ptr<IClusters>&& clusters)
         : TActor{&TThis::StateWork}
         , Parent{request.GetChild()}
         , Child{Parent + 1}
@@ -639,7 +639,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = TClusters::Create(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
         if (!clusters) {
             badRequest(error);
             auto sent = trySendBadRequest();

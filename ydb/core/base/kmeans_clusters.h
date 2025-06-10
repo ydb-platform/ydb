@@ -7,11 +7,9 @@
 
 namespace NKikimr::NKMeans {
 
-class TClusters {
+class IClusters {
 public:
-    static std::unique_ptr<TClusters> Create(const Ydb::Table::VectorIndexSettings& settings, TString& error);
-
-    virtual ~TClusters() = default;
+    virtual ~IClusters() = default;
 
     virtual void Init(ui32 k, ui32 maxRounds) = 0;
 
@@ -35,5 +33,7 @@ public:
 
     virtual bool IsExpectedSize(TArrayRef<const char> data) = 0;
 };
+
+std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings& settings, TString& error);
 
 }

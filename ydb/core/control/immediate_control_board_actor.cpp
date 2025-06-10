@@ -36,7 +36,7 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
     };
 
     TIntrusivePtr<TControlBoard> Icb;
-    TIntrusivePtr<TDynamicControlBoard> DynamicControlBoard;
+    TIntrusivePtr<TDynamicControlBoard> Dcb;
     TVector<TLogRecord> HistoryLog;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
@@ -49,10 +49,10 @@ public:
 
     TImmediateControlActor(
                             TIntrusivePtr<TControlBoard> board,
-                            TIntrusivePtr<TDynamicControlBoard> dynamicControlBoard,
+                            TIntrusivePtr<TDynamicControlBoard> dcb,
                             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Icb(board)
-        , DynamicControlBoard(dynamicControlBoard)
+        , Dcb(dcb)
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
         HasChanged = IcbGroup->GetCounter("Icb/HasChangedContol");
@@ -74,7 +74,7 @@ private:
     void HandlePostParams(const TCgiParameters &cgi) {
         if (cgi.Has("restoreDefaults")) {
             Icb->RestoreDefaults();
-            DynamicControlBoard->RestoreDefaults();
+            Dcb->RestoreDefaults();
             HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
             *HasChanged = 0;
             *ChangedCount = 0;
@@ -86,7 +86,7 @@ private:
             if (auto controlId = Icb->GetStaticControlId(paramName)) {
                 isDefault = Icb->SetValue(*controlId, newValue, prevValue);
             } else {
-                isDefault = DynamicControlBoard->SetValue(paramName, newValue, prevValue);
+                isDefault = Dcb->SetValue(paramName, newValue, prevValue);
             }
             if (prevValue != newValue) {
                 HistoryLog.emplace_back(TInstant::Now(), paramName, prevValue, newValue);
@@ -111,7 +111,7 @@ private:
         renderer.AddNewTable("Static Controls");
         Icb->RenderAsHtml(renderer);
         renderer.AddNewTable("Dynamic Controls");
-        DynamicControlBoard->RenderAsHtml(renderer);
+        Dcb->RenderAsHtml(renderer);
 
         str << renderer.GetHtml();
         HTML(str) {
@@ -148,10 +148,10 @@ private:
 };
 
 NActors::IActor* CreateImmediateControlActor(
-                    TIntrusivePtr<TControlBoard> board,
-                    TIntrusivePtr<TDynamicControlBoard> dynamicControlBoard,
+                    TIntrusivePtr<TControlBoard> icb,
+                    TIntrusivePtr<TDynamicControlBoard> dcb,
                      const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
-    return new NKikimr::TImmediateControlActor(board, dynamicControlBoard, counters);
+    return new NKikimr::TImmediateControlActor(icb, dcb, counters);
 }
 
 };

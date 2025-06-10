@@ -239,7 +239,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     , Config(runConfig)
     , Log(std::make_shared<TLog>(CreateLogBackend("cerr", Config.LogPriority, true)))
     , LogCapture(Config.DisplayMode == TRunConfig::EDisplayMode::Tui ?
-                 std::make_unique<TStdErrCapture>(50) : nullptr)
+                 std::make_unique<TStdErrCapture>(TUI_LOG_LINES) : nullptr)
 {
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;
@@ -583,9 +583,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
 
     // First update is special: we switch buffers and capture stderr to display live logs
     static bool firstUpdate = true;
-
     if (firstUpdate) {
-        // Start log capture and switch to alternate screen buffer
         if (LogCapture) {
             LogCapture->StartCapture();
         }
@@ -596,12 +594,12 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
         firstUpdate = false;
     }
 
-    // Update log capture
     if (LogCapture) {
         LogCapture->UpdateCapture();
     }
 
     // Left side of header: runner info, efficiency, phase, progress
+
     std::stringstream headerSs;
     headerSs << "TPC-C Runner: " << Config.WarehouseCount << " warehouses, "
              << Config.ThreadCount << " threads";
@@ -639,6 +637,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     });
 
     // Right side of header: Transaction statistics table (without header)
+
     Elements txRows;
     // Add header row for transaction table
     txRows.push_back(hbox({
@@ -670,18 +669,19 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     auto rightHeader = vbox(txRows);
 
     // Top section: left header + right transaction table (50/50 split)
+
     auto topSection = hbox({
         leftHeader | flex,
         separator(),
         rightHeader | flex
     }) | border;
 
-        // Per-thread statistics in two columns with header
+    // Per-thread statistics in two columns with header
+
     Elements leftThreadElements, rightThreadElements;
     size_t threadCount = LastStatisticsSnapshot->StatVec.size();
     size_t halfCount = (threadCount + 1) / 2;
 
-        // Add header row
     auto headerRow = hbox({
         text("Thr") | size(WIDTH, EQUAL, 4),
         text("    Load") | size(WIDTH, EQUAL, 24),
@@ -765,6 +765,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     }) | border;
 
     // Logs section (last 10 lines, full width)
+
     Elements logElements;
     logElements.push_back(text("Logs"));
     if (LogCapture) {
@@ -789,6 +790,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     auto logsSection = vbox(logElements) | border | size(HEIGHT, EQUAL, 12);
 
     // Main layout
+
     auto layout = vbox({
         topSection,
         threadSection,
@@ -796,6 +798,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     });
 
     // Render full screen
+
     std::cout << "\033[H"; // Move cursor to top
     auto screen = Screen::Create(Dimension::Full(), Dimension::Full());
     Render(screen, layout);

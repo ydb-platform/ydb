@@ -83,4 +83,6 @@ enum class ETransactionType {
     StockLevel = 4
 };
 
+constexpr const size_t TUI_LOG_LINES = 10;
+
 } // namespace NYdb::NTPCC

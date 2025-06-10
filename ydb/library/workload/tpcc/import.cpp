@@ -787,7 +787,7 @@ public:
         , StartTime(Clock::now())
         , LoadState(StopByInterrupt.get_token())
         , LogCapture(Config.DisplayMode == TRunConfig::EDisplayMode::Tui ?
-                     std::make_unique<TStdErrCapture>(50) : nullptr)
+                     std::make_unique<TStdErrCapture>(TUI_LOG_LINES) : nullptr)
     {
     }
 
@@ -1057,9 +1057,7 @@ private:
 
         // fist update is very special: we switch buffers and capture stderr to display live logs
         static bool firstUpdate = true;
-
         if (firstUpdate) {
-            // Start log capture and switch to alternate screen buffer
             if (LogCapture) {
                 LogCapture->StartCapture();
             }
@@ -1070,12 +1068,11 @@ private:
             firstUpdate = false;
         }
 
-        // Update log capture
         if (LogCapture) {
             LogCapture->UpdateCapture();
         }
 
-        // our header with main informatino
+        // our header with main information
 
         std::stringstream headerSs;
         headerSs << "TPC-C Import: " << Config.WarehouseCount << " warehouses, "

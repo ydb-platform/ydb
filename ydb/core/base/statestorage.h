@@ -269,12 +269,12 @@ struct TEvStateStorage {
     };
 
     struct TEvConfigVersionInfo : public TEventLocal<TEvConfigVersionInfo, EvConfigVersionInfo> {
-        const ui64 ConfigVersion;
-        const ui64 ConfigId;
+        const ui64 ClusterStateGeneration;
+        const ui64 ClusterStateGuid;
 
-        TEvConfigVersionInfo(ui64 configVersion, ui64 configId)
-            : ConfigVersion(configVersion)
-            , ConfigId(configId)
+        TEvConfigVersionInfo(ui64 clusterStateGeneration, ui64 clusterStateGuid)
+            : ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
         {}
     };
 
@@ -519,8 +519,8 @@ struct TStateStorageInfo : public TThrRefBase {
 
     TVector<TRingGroup> RingGroups;
 
-    ui32 ConfigVersion;
-    ui32 ConfigId;
+    ui32 ClusterStateGeneration;
+    ui32 ClusterStateGuid;
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 

@@ -7,6 +7,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/digest/city.h>
 #include <util/generic/xrange.h>
@@ -59,7 +60,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     TMap<TActorId, TActorId> Followers;
 
     const ui32 RingGroupIndex;
-    bool NotifyPassAway;
+    bool NotifyRingGroupProxy;
 
     void SelectRequestReplicas(TStateStorageInfo *info) {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
@@ -89,7 +90,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
                 }
             }
         }
-        if(NotifyPassAway)
+        if(NotifyRingGroupProxy)
             Send(Source, new TEvStateStorage::TEvRingGroupPassAway());
         TActor::PassAway();
     }
@@ -114,16 +115,22 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     struct TCloneUpdateEventOp {
         const TEvStateStorage::TEvUpdate * const Ev;
         const bool UpdateLeaderTablet;
+        ui64 ClusterStateGeneration;
+        ui64 ClusterStateGuid;
 
-        TCloneUpdateEventOp(const TEvStateStorage::TEvUpdate *ev)
+        TCloneUpdateEventOp(const TEvStateStorage::TEvUpdate *ev, ui64 clusterStateGeneration, ui64 clusterStateGuid)
             : Ev(ev)
             , UpdateLeaderTablet(!!ev->ProposedLeaderTablet)
+            , ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
         {}
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
             req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
+            req->Record.SetClusterStateGeneration(ClusterStateGeneration);
+            req->Record.SetClusterStateGuid(ClusterStateGuid);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
 
             if (UpdateLeaderTablet)
@@ -138,15 +145,21 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     struct TCloneLockEventOp {
         const TEvStateStorage::TEvLock * const Ev;
+        ui64 ClusterStateGeneration;
+        ui64 ClusterStateGuid;
 
-        TCloneLockEventOp(const TEvStateStorage::TEvLock *ev)
+        TCloneLockEventOp(const TEvStateStorage::TEvLock *ev, ui64 clusterStateGeneration, ui64 clusterStateGuid)
             : Ev(ev)
+            , ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
         {}
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaLock> req(new TEvStateStorage::TEvReplicaLock());
             req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
+            req->Record.SetClusterStateGeneration(ClusterStateGeneration);
+            req->Record.SetClusterStateGuid(ClusterStateGuid);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
             req->Record.SetProposedGeneration(Ev->ProposedGeneration);
             req->Record.SetCookie(cookie);
@@ -177,9 +190,10 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         const ui64 cookie = record.GetCookie();
 
-        const ui64 configVersion = record.GetConfigVersion();
-        const ui64 configId = record.GetConfigId();
-        Send(Source, new TEvStateStorage::TEvConfigVersionInfo(configVersion, configId));
+        const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
+        const ui64 clusterStateGuid = record.GetClusterStateGuid();
+        if (NotifyRingGroupProxy)
+            Send(Source, new TEvStateStorage::TEvConfigVersionInfo(clusterStateGeneration, clusterStateGuid));
 
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
@@ -251,7 +265,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Source = ev->Sender;
 
         PrepareInit(msg);
-        SendRequest([this](ui64 cookie, TActorId /*replica*/) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie); });
+        SendRequest([this](ui64 cookie, TActorId /*replica*/) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie, Info->ClusterStateGeneration, Info->ClusterStateGuid); });
 
         Become(&TThis::StateLookup, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
     }
@@ -268,9 +282,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = msg->ProposedStep;
 
-            TCloneUpdateEventOp op(msg);
-            SendRequest(op);
-            Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
+        TCloneUpdateEventOp op(msg, Info->ClusterStateGeneration, Info->ClusterStateGuid);
+        SendRequest(op);
+        Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
     }
 
     void HandleInit(TEvStateStorage::TEvLock::TPtr &ev) {
@@ -284,9 +298,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = 0;
 
-            TCloneLockEventOp op(msg);
-            SendRequest(op);
-            Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
+        TCloneLockEventOp op(msg, Info->ClusterStateGeneration, Info->ClusterStateGuid);
+        SendRequest(op);
+        Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
     }
 
     // lookup handling
@@ -505,7 +519,7 @@ public:
         return NKikimrServices::TActivity::SS_PROXY_REQUEST;
     }
 
-    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, ui32 ringGroupIndex, bool notifyPassAway = true)
+    TStateStorageProxyRequest(const TIntrusivePtr<TStateStorageInfo> &info, ui32 ringGroupIndex, bool notifyRingGroupProxy = true)
         : TActor(&TThis::StateInit)
         , Info(info)
         , UseInterconnectSubscribes(true)
@@ -523,7 +537,7 @@ public:
         , ReplyLocked(false)
         , ReplyLockedFor(0)
         , RingGroupIndex(ringGroupIndex)
-        , NotifyPassAway(notifyPassAway)
+        , NotifyRingGroupProxy(notifyRingGroupProxy)
     {}
 
     STATEFN(StateInit) {
@@ -708,8 +722,12 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
         TEvStateStorage::TEvConfigVersionInfo *msg = ev->Get();
-        if(Info->ConfigVersion != msg->ConfigVersion || Info->ConfigId != msg->ConfigId) {
-            //TODO notify smth to update config
+        if(Info->ClusterStateGeneration != msg->ClusterStateGeneration || Info->ClusterStateGuid != msg->ClusterStateGuid) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), msg->ClusterStateGeneration, msg->ClusterStateGuid));
+        }
+        if(Info->ClusterStateGeneration < msg->ClusterStateGeneration || 
+            (Info->ClusterStateGeneration == msg->ClusterStateGeneration && Info->ClusterStateGuid != msg->ClusterStateGuid)) {
             Reply(NKikimrProto::ERROR);
             PassAway();
         }
@@ -1014,6 +1032,8 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         TAutoPtr<TEvStateStorage::TEvResolveReplicasList> reply(new TEvStateStorage::TEvResolveReplicasList());
+        reply->ClusterStateGeneration = info->ClusterStateGeneration;
+        reply->ClusterStateGuid = info->ClusterStateGuid;
         reply->ReplicaGroups.reserve(info->RingGroups.size());
         for (ui32 ringGroupIndex : xrange(info->RingGroups.size())) {
             if (info->RingGroups[ringGroupIndex].State == TRingGroupState::DISCONNECTED) {

@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
@@ -90,7 +91,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
 
             const ui64 lockedFor = (locked && (now.MicroSeconds() > entry->LockedFrom)) ? (now.MicroSeconds() - entry->LockedFrom) : 0;
             msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, entry->CurrentLeader, entry->CurrentLeaderTablet, entry->CurrentGeneration
-                , entry->CurrentStep, locked, lockedFor, Info ? Info->ConfigVersion : 0, Info ? Info->ConfigId : 0));
+                , entry->CurrentStep, locked, lockedFor, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
             if (entry->Followers.size()) {
                 msg->Record.MutableFollowerTablet()->Reserve(entry->Followers.size());
                 msg->Record.MutableFollower()->Reserve(entry->Followers.size());
@@ -106,7 +107,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
             }
         } else {
             // FIXME: change to NODATA in a future version
-            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, NKikimrProto::ERROR, Info ? Info->ConfigVersion : 0, Info ? Info->ConfigId : 0));
+            msg.Reset(new TEvStateStorage::TEvReplicaInfo(tabletId, NKikimrProto::ERROR, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
         }
         msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
@@ -115,7 +116,7 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     }
 
     void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status) {
-        THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status, Info ? Info->ConfigVersion : 0, Info ? Info->ConfigId : 0));
+        THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status, Info ? Info->ClusterStateGeneration : 0, Info ? Info->ClusterStateGuid : 0));
         msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
         msg->Record.SetConfigContentHash(Info->ContentHash());
@@ -182,6 +183,9 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaLookup::TPtr &ev) {
         TEvStateStorage::TEvReplicaLookup *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
+        
+        CheckConfigVersion(ev->Sender, msg);
+
         const ui64 tabletId = msg->Record.GetTabletID();
         TTablets::const_iterator it = Tablets.find(msg->Record.GetTabletID());
         if (it != Tablets.end())
@@ -209,8 +213,10 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
     void Handle(TEvStateStorage::TEvReplicaUpdate::TPtr &ev) {
         TEvStateStorage::TEvReplicaUpdate *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
-        const ui64 tabletId = msg->Record.GetTabletID();
 
+        CheckConfigVersion(ev->Sender, msg);
+
+        const ui64 tabletId = msg->Record.GetTabletID();
         TEntry *x = nullptr;
         auto tabletIt = Tablets.find(tabletId);
         if (tabletIt != Tablets.end())
@@ -291,11 +297,22 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         ReplyWithStatus(ev->Sender, tabletId, 0/*msg->Record.GetCookie()*/, NKikimrProto::OK);
     }
 
+    void CheckConfigVersion(const TActorId &sender, const auto *msg) {
+        ui64 msgGeneration = msg->Record.GetClusterStateGeneration();
+        ui64 msgGuid = msg->Record.GetClusterStateGuid();
+        if (Info && (Info->ClusterStateGeneration != msgGeneration || Info->ClusterStateGuid != msgGuid)) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
+        }
+    }
+
     void Handle(TEvStateStorage::TEvReplicaLock::TPtr &ev) {
         TEvStateStorage::TEvReplicaLock *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
         const ui64 tabletId = msg->Record.GetTabletID();
         const TActorId &sender = ev->Sender;
+
+        CheckConfigVersion(sender, msg);
 
         if (CheckSignature(msg)) {
             TEntry &x = Tablets[tabletId];

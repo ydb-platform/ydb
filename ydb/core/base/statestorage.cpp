@@ -228,7 +228,7 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
 }
 
 bool TStateStorageInfo::TRingGroup::SameConfiguration(const TStateStorageInfo::TRingGroup& rg) {
-    return NToSelect == rg.NToSelect && Rings == rg.Rings;
+    return NToSelect == rg.NToSelect && Rings == rg.Rings && State == rg.State;
 }
 
 bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) {
@@ -236,7 +236,8 @@ bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TR
 }
 
 bool operator==(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs) {
-    return lhs.WriteOnly == rhs.WriteOnly && lhs.NToSelect == rhs.NToSelect && lhs.Rings == rhs.Rings;
+    return lhs.WriteOnly == rhs.WriteOnly && lhs.NToSelect == rhs.NToSelect && lhs.Rings == rhs.Rings 
+        && lhs.BridgePileId == rhs.BridgePileId && lhs.State == rhs.State;
 }
 
 bool operator!=(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) { 
@@ -329,12 +330,12 @@ TRingGroupState GetRingGroupState(const NKikimrConfig::TDomainsConfig::TStateSto
     }
 }
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefix, 
-        const NKikimrConfig::TDomainsConfig::TStateStorage& config, ui64 configVersion, ui64 configId) {
+        const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     char name[TActorId::MaxServiceIDLength];
     strcpy(name, namePrefix);
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
-    info->ConfigVersion = configVersion;
-    info->ConfigId = configId;
+    info->ClusterStateGeneration = config.HasClusterStateGeneration() ? config.GetClusterStateGeneration() : 0;
+    info->ClusterStateGuid = config.HasClusterStateGuid() ? config.GetClusterStateGuid() : 0;
     Y_ABORT_UNLESS(config.GetSSId() == 1);
     Y_ABORT_UNLESS(config.HasRing() != (config.RingGroupsSize() > 0));
     info->StateStorageVersion = config.GetStateStorageVersion();
@@ -366,15 +367,15 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefi
 }
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
-    return BuildStateStorageInfoImpl("ssr", config, 0, 0);
+    return BuildStateStorageInfoImpl("ssr", config);
 } 
 
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
-    return BuildStateStorageInfoImpl("ssb", config, 0, 0);
+    return BuildStateStorageInfoImpl("ssb", config);
 } 
 
 TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
-    return BuildStateStorageInfoImpl("sbr", config, 0, 0);
+    return BuildStateStorageInfoImpl("sbr", config);
 } 
 
 void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,

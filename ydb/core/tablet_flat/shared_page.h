@@ -27,6 +27,7 @@ struct TPage
     ui32 CacheId : 4 = 0;
     ui32 CacheFlags1 : 4 = 0;
     ui32 CacheFlags2 : 4 = 0;
+    ui32 InMemoryCache : 1 = 0;
 
     const TPageId PageId;
     const size_t Size;

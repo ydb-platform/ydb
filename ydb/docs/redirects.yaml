@@ -444,10 +444,6 @@ ru:
   - from: /cluster/system-requirements.md
     to: /devops/concepts/system-requirements.md
 
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1
-
 en:
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
@@ -469,7 +465,3 @@ en:
     to: /devops/deployment-options/manual/change-actorsystem-configs.md
   - from: /maintenance/manual/cms.md
     to: /devops/deployment-options/manual/cms.md
-
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1

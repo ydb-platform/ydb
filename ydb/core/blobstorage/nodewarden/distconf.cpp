@@ -281,11 +281,12 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
         if (Scepter) {
-            Y_ABORT_UNLESS(HasQuorum());
+            Y_ABORT_UNLESS(StorageConfig && HasQuorum(*StorageConfig));
             Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
             Y_ABORT_UNLESS(!Binding);
         } else {
-            Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT);
+            Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
+                ScepterlessOperationInProgress);
 
             // we can't have connection to the Console without being the root node
             Y_ABORT_UNLESS(!ConsolePipeId);

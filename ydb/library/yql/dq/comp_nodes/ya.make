@@ -19,8 +19,12 @@ SRCS(
     dq_block_hash_join.cpp
 )
 
+
 YQL_LAST_ABI_VERSION()
 
 
 END()
 
+RECURSE_FOR_TESTS(
+    ut
+)

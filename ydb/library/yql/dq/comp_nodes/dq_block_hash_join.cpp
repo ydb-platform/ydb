@@ -88,8 +88,8 @@ private:
     const TVector<TType*>&  RightItemTypes_;
     const TVector<ui32>&    RightKeyColumns_;
 
-    NUdf::TUnboxedValue     TempStorage_;
-    NUdf::TUnboxedValue     Join_;
+    [[maybe_unused]] NUdf::TUnboxedValue     TempStorage_;
+    [[maybe_unused]] NUdf::TUnboxedValue     Join_;
 };
 
 class TBlockHashJoinWraper : public TMutableComputationNode<TBlockHashJoinWraper> {
@@ -141,11 +141,11 @@ private:
 
     const TVector<TType*>   LeftItemTypes_;
     const TVector<ui32>     LeftKeyColumns_;
-    const TVector<ui32>     LeftIOMap_;
+    [[maybe_unused]] const TVector<ui32>     LeftIOMap_;
 
     const TVector<TType*>   RightItemTypes_;
     const TVector<ui32>     RightKeyColumns_;
-    const TVector<ui32>     RightIOMap_;
+    [[maybe_unused]] const TVector<ui32>     RightIOMap_;
 
     IComputationNode*       LeftStream_;
     IComputationNode*       RightStream_;

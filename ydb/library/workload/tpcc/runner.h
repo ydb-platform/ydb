@@ -4,6 +4,8 @@
 
 #include <library/cpp/logger/priority.h>
 
+#include <stop_token>
+
 namespace NYdb::NTPCC {
 
 constexpr int DEFAULT_WAREHOUSE_COUNT = 1;
@@ -78,5 +80,7 @@ struct TRunConfig {
 };
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig);
+
+std::stop_source GetGlobalInterruptSource();
 
 } // namespace NYdb::NTPCC

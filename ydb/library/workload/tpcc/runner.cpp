@@ -164,10 +164,8 @@ struct TAllStatistics {
 
 //-----------------------------------------------------------------------------
 
-std::stop_source StopByInterrupt;
-
 void InterruptHandler(int) {
-    StopByInterrupt.request_stop();
+    GetGlobalInterruptSource().request_stop();
 }
 
 //-----------------------------------------------------------------------------
@@ -427,7 +425,7 @@ void TPCCRunner::RunSync() {
     LOG_I("Starting warmup for " << warmupMinutes << " minutes");
 
     size_t startedTerminalId = 0;
-    for (; startedTerminalId < Terminals.size() && !StopByInterrupt.stop_requested(); ++startedTerminalId) {
+    for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
         if (now >= WarmupStopDeadline) {
             break;
         }
@@ -440,7 +438,7 @@ void TPCCRunner::RunSync() {
     ++startedTerminalId;
 
     // start the rest of terminals (if any)
-    for (; startedTerminalId < Terminals.size() && !StopByInterrupt.stop_requested(); ++startedTerminalId) {
+    for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
         Terminals[startedTerminalId]->Start();
     }
 
@@ -458,7 +456,7 @@ void TPCCRunner::RunSync() {
     LastStatisticsSnapshot->Ts = MeasurementsStartTs;
 
     StopDeadline = MeasurementsStartTs + std::chrono::minutes(Config.RunMinutes);
-    while (!StopByInterrupt.stop_requested()) {
+    while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
             break;
         }
@@ -967,6 +965,11 @@ void TPCCRunner::DumpFinalStats() {
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
     TPCCRunner runner(connectionConfig, runConfig);
     runner.RunSync();
+}
+
+std::stop_source GetGlobalInterruptSource() {
+    static std::stop_source StopByInterrupt;
+    return StopByInterrupt;
 }
 
 } // namespace NYdb::NTPCC

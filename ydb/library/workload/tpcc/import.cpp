@@ -524,7 +524,8 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log
         } else {
             LOG_E(operationName << " failed after " << MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
-            QuickExit(1);
+            RequestStop();
+            return;
         }
     }
 }
@@ -892,7 +893,8 @@ public:
                     auto progress = GetIndexProgress(operationClient, indexState.Id);
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
-                        QuickExit(1);
+                        RequestStop();
+                        return;
                     }
                     indexState.Progress = *progress;
                     if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {

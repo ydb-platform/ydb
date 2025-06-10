@@ -2204,7 +2204,7 @@ void TPDisk::Slay(TSlay &evSlay) {
         for (auto& pendingInit : PendingYardInits) {
             if (vDiskId == pendingInit->VDiskIdWOGeneration()) {
                 TStringStream str;
-                str << PCtx->PDiskLogPrefix << "Can't slay VDiskId# " << evSlay.VDiskId
+                str << "PDiskId# " << PCtx->PDiskId << " Can't slay VDiskId# " << evSlay.VDiskId
                     << " as it has pending YardInit Marker# BPD48";
                 P_LOG(PRI_ERROR, BPD48, str.Str());
                 THolder<NPDisk::TEvSlayResult> result(new NPDisk::TEvSlayResult(

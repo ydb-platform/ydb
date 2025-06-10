@@ -16,6 +16,7 @@ SRCS(
     dq_hash_operator_common.cpp
     dq_hash_operator_serdes.cpp
     dq_program_builder.cpp
+    dq_block_hash_join.cpp
 )
 
 YQL_LAST_ABI_VERSION()

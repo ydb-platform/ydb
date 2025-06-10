@@ -48,8 +48,8 @@ Y_UNIT_TEST_SUITE(TLangVerTests) {
     }
 
     Y_UNIT_TEST(Available) {
-        UNIT_ASSERT(IsAvalableLangVersion(MakeLangVersion(2025,2),MakeLangVersion(2025,2)));
-        UNIT_ASSERT(!IsAvalableLangVersion(MakeLangVersion(2025,3),MakeLangVersion(2025,2)));
+        UNIT_ASSERT(IsAvailableLangVersion(MakeLangVersion(2025,2),MakeLangVersion(2025,2)));
+        UNIT_ASSERT(!IsAvailableLangVersion(MakeLangVersion(2025,3),MakeLangVersion(2025,2)));
     }
 
     Y_UNIT_TEST(MaxReleasedLangVersionIsValid) {
@@ -62,6 +62,33 @@ Y_UNIT_TEST_SUITE(TLangVerTests) {
 
     Y_UNIT_TEST(MaxVersionIsAboveThanReleased) {
         UNIT_ASSERT(GetMaxLangVersion() > GetMaxReleasedLangVersion());
+    }
+
+    Y_UNIT_TEST(BackwardCompatibleFeatureAvailable_All) {
+        UNIT_ASSERT(IsBackwardCompatibleFeatureAvailable(MinLangVersion, MinLangVersion,
+            EBackportCompatibleFeaturesMode::All));
+        UNIT_ASSERT(IsBackwardCompatibleFeatureAvailable(MinLangVersion, GetMaxReleasedLangVersion(),
+            EBackportCompatibleFeaturesMode::All));
+        UNIT_ASSERT(IsBackwardCompatibleFeatureAvailable(MinLangVersion, GetMaxLangVersion(),
+            EBackportCompatibleFeaturesMode::All));
+    }
+
+    Y_UNIT_TEST(BackwardCompatibleFeatureAvailable_Released) {
+        UNIT_ASSERT(IsBackwardCompatibleFeatureAvailable(MinLangVersion, MinLangVersion,
+            EBackportCompatibleFeaturesMode::Released));
+        UNIT_ASSERT(IsBackwardCompatibleFeatureAvailable(MinLangVersion, GetMaxReleasedLangVersion(),
+            EBackportCompatibleFeaturesMode::Released));
+        UNIT_ASSERT(!IsBackwardCompatibleFeatureAvailable(MinLangVersion, GetMaxLangVersion(),
+            EBackportCompatibleFeaturesMode::Released));
+    }
+
+    Y_UNIT_TEST(BackwardCompatibleFeatureAvailable_None) {
+        UNIT_ASSERT(IsBackwardCompatibleFeatureAvailable(MinLangVersion, MinLangVersion,
+            EBackportCompatibleFeaturesMode::None));
+        UNIT_ASSERT(!IsBackwardCompatibleFeatureAvailable(MinLangVersion, GetMaxReleasedLangVersion(),
+            EBackportCompatibleFeaturesMode::None));
+        UNIT_ASSERT(!IsBackwardCompatibleFeatureAvailable(MinLangVersion, GetMaxLangVersion(),
+            EBackportCompatibleFeaturesMode::None));
     }
 }
 

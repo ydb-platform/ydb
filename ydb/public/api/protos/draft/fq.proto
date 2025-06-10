@@ -459,8 +459,6 @@ message Monitoring {
     string project = 1 [(Ydb.length).le = 200];
     string cluster = 2 [(Ydb.length).le = 200];
     IamAuth auth = 3;
-
-    bool use_tls = 4;
 }
 
 message YdbDatabase {

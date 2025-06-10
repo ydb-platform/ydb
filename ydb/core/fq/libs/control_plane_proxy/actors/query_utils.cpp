@@ -289,11 +289,11 @@ TString MakeCreateExternalDataSourceQuery(
                     PROJECT="{project}",
                     CLUSTER="{cluster}"
                 )",
-                "http_location"_a = common.GetMonitoringReadHttpEndpoint(),
-                "grpc_location"_a = common.GetMonitoringReadGrpcEndpoint(),
+                                "http_location"_a = EncloseAndEscapeString(common.GetMonitoringReadHttpEndpoint(), '"'),
+                "grpc_location"_a = EncloseAndEscapeString(common.GetMonitoringReadGrpcEndpoint(), '"'),
                 "use_tls"_a = "true",
-                "project"_a = project,
-                "cluster"_a = cluster
+                "project"_a = EncloseAndEscapeString(project, '"'),
+                "cluster"_a = EncloseAndEscapeString(cluster, '"')
             );
             break;
         }

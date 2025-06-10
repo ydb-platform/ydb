@@ -59,7 +59,14 @@ public:
         State_->Gateway->AddCluster(cluster);
 
         State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+
+        auto authMethod = properties.Value("authMethod", "");
+        if (authMethod == "SERVICE_ACCOUNT") {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+        } else {
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
+
         State_->Configuration->ClusterConfigs[name] = cluster;
     }
 

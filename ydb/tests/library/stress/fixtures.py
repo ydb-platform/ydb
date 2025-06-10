@@ -11,9 +11,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 class StressFixture:
     @pytest.fixture(autouse=True)
     def base_setup(self):
-
         self.all_binary_paths = [kikimr_driver_path()]
-        pass
 
     def setup_cluster(self, **kwargs):
         self.config = KikimrConfigGenerator(

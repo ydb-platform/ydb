@@ -102,6 +102,19 @@ public:
         return *DoWithRetry<NThreading::TFuture<TGetFmrTableInfoResponse>, yexception>(getFmrTableInfoRequestFunc, RetryPolicy_, true, OnFail_);
     }
 
+    NThreading::TFuture<void> ClearSession(const TClearSessionRequest& request) override {
+        NProto::TClearSessionRequest protoClearSessionRequest = ClearSessionRequestToProto(request);
+        TString clearSessionUrl = "/clear_session";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+        auto clearSessionFunc = [&]() {
+            httpClient.DoPost(clearSessionUrl, protoClearSessionRequest.SerializeAsStringOrThrow(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            return NThreading::MakeFuture();
+        };
+        return *DoWithRetry<NThreading::TFuture<void>, yexception>(clearSessionFunc, RetryPolicy_, true, OnFail_);
+    };
+
+
 private:
     TString Host_;
     ui16 Port_;

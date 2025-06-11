@@ -32,5 +32,8 @@
             "max_data_weight_per_part" = 104857600;
             "max_parts" = 100;
         };
-    }
+    };
+    "generic" = {
+        "max_failed_tasks" = 5;
+    };
 }

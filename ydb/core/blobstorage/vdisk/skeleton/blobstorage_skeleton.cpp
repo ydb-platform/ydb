@@ -99,6 +99,7 @@ namespace NKikimr {
             }
             ctx.Send(*SkeletonFrontIDPtr, ev.release());
             // send VDisk's metric to NodeWarden
+            const bool enableThrottlingReport = AppData()->FeatureFlags.GetEnableThrottlingReport();
             ctx.Send(NodeWardenServiceId,
                      new TEvBlobStorage::TEvControllerUpdateDiskStatus(
                          SelfVDiskId,
@@ -109,8 +110,8 @@ namespace NKikimr {
                          state,
                          replicated,
                          outOfSpaceFlags,
-                         OverloadHandler ? OverloadHandler->IsThrottling() : false,
-                         OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0));
+                         enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->IsThrottling() : false) : std::nullopt,
+                         enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0) : std::nullopt));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }
@@ -2472,6 +2473,9 @@ namespace NKikimr {
 
         void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
+            if (ev->Sender == ShredActorId) {
+                ShredActorId = {};
+            }
             ActiveActors.Erase(ev->Sender);
         }
 

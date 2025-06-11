@@ -277,6 +277,7 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
     library/cpp/json
+    library/cpp/protobuf/json
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
@@ -288,6 +289,8 @@ PEERDIR(
     ydb/core/external_sources
     ydb/core/filestore/core
     ydb/core/kesus/tablet
+    ydb/core/keyvalue
+    ydb/core/keyvalue/protos
     ydb/core/metering
     ydb/core/persqueue
     ydb/core/persqueue/config

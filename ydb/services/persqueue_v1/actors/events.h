@@ -89,6 +89,7 @@ struct TEvPQProxy {
         EvReadingStarted,
         EvReadingFinished,
         EvAlterTopicResponse,
+        EvParentCommitedToFinish,
         EvEnd
     };
 
@@ -407,17 +408,29 @@ struct TEvPQProxy {
 
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
-        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset)
+        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset, const bool readingFinishedSent)
             : AssignId(assignId)
             , StartCookie(startCookie)
             , LastCookie(lastCookie)
             , Offset(offset)
+            , EndOffset(endOffset)
+            , ReadingFinishedSent(readingFinishedSent)
         { }
 
         ui64 AssignId;
         ui64 StartCookie;
         ui64 LastCookie;
         ui64 Offset;
+        ui64 EndOffset;
+        bool ReadingFinishedSent;
+    };
+
+    struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {
+        explicit TEvParentCommitedToFinish(ui64 parentPartitionId)
+            : ParentPartitionId(parentPartitionId)
+        { }
+
+        ui64 ParentPartitionId;
     };
 
     struct TEvReleasePartition : public NActors::TEventLocal<TEvReleasePartition, EvReleasePartition> {
@@ -474,11 +487,12 @@ struct TEvPQProxy {
     };
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
-        TEvPartitionStatus(const TPartitionId& partition, const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
+        TEvPartitionStatus(const TPartitionId& partition, const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation, bool clientHasAnyCommits,
                            bool init = true)
             : Partition(partition)
             , Offset(offset)
             , EndOffset(endOffset)
+            , ClientHasAnyCommits(clientHasAnyCommits)
             , WriteTimestampEstimateMs(writeTimestampEstimateMs)
             , NodeId(nodeId)
             , Generation(generation)
@@ -488,6 +502,7 @@ struct TEvPQProxy {
         TPartitionId Partition;
         ui64 Offset;
         ui64 EndOffset;
+        bool ClientHasAnyCommits;
         ui64 WriteTimestampEstimateMs;
         ui64 NodeId;
         ui64 Generation;
@@ -585,6 +600,11 @@ struct TEvPQProxy {
     };
 
     struct TEvDirectReadDestroyPartitionSession : public TEventLocal<TEvDirectReadDestroyPartitionSession, EvDirectReadDestroyPartitionSession> {
+
+        TEvDirectReadDestroyPartitionSession(const TString& sessionId, ui64 partitionSessionId)
+            : ReadKey(sessionId, partitionSessionId)
+        {}
+
         TEvDirectReadDestroyPartitionSession(const NKikimr::NPQ::TReadSessionKey& sessionKey,
                                              Ydb::PersQueue::ErrorCode::ErrorCode code, const TString& reason)
             : ReadKey(sessionKey)
@@ -627,12 +647,13 @@ struct TEvPQProxy {
     };
 
     struct TEvReadingFinished : public TEventLocal<TEvReadingFinished, EvReadingFinished> {
-        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds)
+        TEvReadingFinished(const TString& topic, ui32 partitionId, bool first, std::vector<ui32>&& adjacentPartitionIds, std::vector<ui32> childPartitionIds, ui64 endOffset)
             : Topic(topic)
             , PartitionId(partitionId)
             , FirstMessage(first)
             , AdjacentPartitionIds(std::move(adjacentPartitionIds))
             , ChildPartitionIds(std::move(childPartitionIds))
+            , EndOffset(endOffset)
         {}
 
         TString Topic;
@@ -641,6 +662,8 @@ struct TEvPQProxy {
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;
+
+        ui64 EndOffset;
     };
 
     struct TEvAlterTopicResponse : public TEventLocal<TEvAlterTopicResponse, EvAlterTopicResponse>

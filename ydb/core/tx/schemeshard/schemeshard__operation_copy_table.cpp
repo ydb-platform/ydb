@@ -578,10 +578,12 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        // Copy table should not check feature flags for columns types.
+        // If the types in original table are created then they should be allowed in destination table.
         const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
-            .EnableTablePgTypes = context.SS->EnableTablePgTypes,
-            .EnableTableDatetime64 = context.SS->EnableTableDatetime64,
-            .EnableParameterizedDecimal = context.SS->EnableParameterizedDecimal,
+            .EnableTablePgTypes = true,
+            .EnableTableDatetime64 = true,
+            .EnableParameterizedDecimal = true,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);

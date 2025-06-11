@@ -47,6 +47,10 @@ message TPartitionStats {
 
     optional uint64 ByKeyFilterSize = 21;
     optional uint32 FollowerId = 22;
+
+    optional uint64 LocksAcquired = 23;
+    optional uint64 LocksWholeShard = 24;
+    optional uint64 LocksBroken = 25;
 }
 
 message TPartitionStatsResult {
@@ -127,8 +131,10 @@ enum EStatsType {
     METRICS_ONE_HOUR = 8;
     TOP_REQUEST_UNITS_ONE_MINUTE = 9;
     TOP_REQUEST_UNITS_ONE_HOUR = 10;
-    TOP_PARTITIONS_ONE_MINUTE = 11;
-    TOP_PARTITIONS_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_CPU_ONE_MINUTE = 11;
+    TOP_PARTITIONS_BY_CPU_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_TLI_ONE_MINUTE = 13;
+    TOP_PARTITIONS_BY_TLI_ONE_HOUR = 14;
 }
 
 message TEvGetQueryStats {
@@ -602,6 +608,9 @@ message TTopPartitionsInfo {
     optional uint64 IndexSize = 8;
     optional uint32 InFlightTxCount = 9;
     optional uint32 FollowerId = 10;
+    optional uint64 LocksAcquired = 11;
+    optional uint64 LocksWholeShard = 12;
+    optional uint64 LocksBroken = 13;
 }
 
 message TTopPartitionsEntry {
@@ -628,6 +637,7 @@ message TEvGetTopPartitionsResponse {
 
 // partitions stats collector -> SVP
 message TEvSendTopPartitions {
-    repeated TTopPartitionsInfo Partitions = 1;
+    repeated TTopPartitionsInfo PartitionsByCpu = 1;
+    repeated TTopPartitionsInfo PartitionsByTli = 3;
     optional uint64 TimeUs = 2;
 }

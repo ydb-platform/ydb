@@ -286,6 +286,7 @@ public:
             const ui64 allocatedSizeBefore = Metrics.GetAllocatedSize();
             const ui32 prevStatusFlags = Metrics.GetStatusFlags();
             Metrics.MergeFrom(vDiskMetrics);
+            Metrics.DiscardUnknownFields();
             MetricsDirty = true;
             UpdateVDiskMetrics();
             *allocatedSizeIncrementPtr = Metrics.GetAllocatedSize() - allocatedSizeBefore;
@@ -1986,12 +1987,18 @@ private:
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
+
+    struct TAuditLogInfo {
+        TString PeerName;
+        const NACLib::TUserToken UserToken;
+    };
+
     ITransaction* CreateTxCommitConfig(std::optional<TYamlConfig>&& yamlConfig,
         std::optional<std::optional<TString>>&& storageYamlConfig,
         std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
         std::optional<ui64> expectedStorageYamlConfigVersion,
         std::unique_ptr<IEventHandle> handle,
-        std::optional<bool> switchEnableConfigV2);
+        std::optional<bool> switchEnableConfigV2, std::optional<TAuditLogInfo>&& auditLogInfo);
 
     struct TVDiskAvailabilityTiming {
         TVSlotId VSlotId;

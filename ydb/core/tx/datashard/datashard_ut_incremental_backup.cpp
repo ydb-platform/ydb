@@ -464,12 +464,16 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     Y_UNIT_TEST_TWIN(SimpleBackupBackupCollection, WithIncremental) {
         TPortManager portManager;
-        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+        auto settings = TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
             .SetEnableBackupService(true)
-        );
+            .SetEnableResourcePools(true);
+
+        settings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        TServer::TPtr server = new TServer(settings);
 
         auto& runtime = *server->GetRuntime();
         const auto edgeActor = runtime.AllocateEdgeActor();

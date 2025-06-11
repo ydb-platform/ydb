@@ -766,6 +766,8 @@ struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePar
 };
 
 // Settings for commit offset request.
-struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {};
+struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {
+    FLUENT_SETTING_OPTIONAL(std::string, ReadSessionId);
+};
 
 }  // namespace NYdb::V3::NTopic

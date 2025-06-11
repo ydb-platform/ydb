@@ -2469,6 +2469,12 @@ public:
                 auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
                     static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            } else if (const auto& paused = settings.Settings.StatePaused) {
+                auto& state = *op.MutableState();
+                state.MutablePaused();
+            } else if (const auto& standBy = settings.Settings.StateStandBy) {
+                auto& state = *op.MutableState();
+                state.MutableStandBy();
             }
 
             if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
@@ -2601,12 +2607,21 @@ public:
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
 
-            auto& targets = *config.MutableTransferSpecific();
-            for (const auto& [src, dst, lambda] : settings.Targets) {
-                auto& target = *targets.AddTargets();
+            {
+                const auto& [src, dst, lambda] = settings.Target;
+                auto& target = *config.MutableTransferSpecific()->MutableTarget();
                 target.SetSrcPath(AdjustPath(src, params.GetDatabase()));
                 target.SetDstPath(AdjustPath(dst, GetDatabase()));
                 target.SetTransformLambda(lambda);
+                if (settings.Settings.Batching && settings.Settings.Batching->BatchSizeBytes) {
+                    config.MutableTransferSpecific()->MutableBatching()->SetBatchSizeBytes(settings.Settings.Batching->BatchSizeBytes.value());
+                }
+                if (settings.Settings.Batching && settings.Settings.Batching->FlushInterval) {
+                    config.MutableTransferSpecific()->MutableBatching()->SetFlushIntervalMilliSeconds(settings.Settings.Batching->FlushInterval.MilliSeconds());
+                }
+                if (settings.Settings.ConsumerName) {
+                    target.SetConsumerName(*settings.Settings.ConsumerName);
+                }
             }
 
             if (IsPrepare()) {
@@ -2650,13 +2665,27 @@ public:
             auto& op = *tx.MutableAlterReplication();
             op.SetName(pathPair.second);
             if (!settings.TranformLambda.empty()) {
-                op.SetTransferTransformLambda(settings.TranformLambda);
+                op.MutableAlterTransfer()->SetTransformLambda(settings.TranformLambda);
+            }
+            if (auto& batching = settings.Settings.Batching) {
+                if (batching->FlushInterval) {
+                    op.MutableAlterTransfer()->SetFlushIntervalMilliSeconds(batching->FlushInterval.MilliSeconds());
+                }
+                if (batching->BatchSizeBytes) {
+                    op.MutableAlterTransfer()->SetBatchSizeBytes(batching->BatchSizeBytes.value());
+                }
             }
 
             if (const auto& done = settings.Settings.StateDone) {
                 auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
                     static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            } else if (const auto& paused = settings.Settings.StatePaused) {
+                auto& state = *op.MutableState();
+                state.MutablePaused();
+            } else if (const auto& standBy = settings.Settings.StateStandBy) {
+                auto& state = *op.MutableState();
+                state.MutableStandBy();
             }
 
             if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||

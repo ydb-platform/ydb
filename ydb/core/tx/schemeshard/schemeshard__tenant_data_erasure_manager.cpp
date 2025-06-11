@@ -1,6 +1,7 @@
 #include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -60,7 +61,7 @@ void TTenantDataErasureManager::UpdateConfig(const NKikimrConfig::TDataErasureCo
 void TTenantDataErasureManager::Start() {
     TDataErasureManager::Start();
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Start: Status# " << static_cast<ui32>(Status));
 
     Queue->Start();
@@ -75,7 +76,7 @@ void TTenantDataErasureManager::Start() {
 void TTenantDataErasureManager::Stop() {
     TDataErasureManager::Stop();
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Stop");
 
     Queue->Stop();
@@ -111,12 +112,20 @@ void TTenantDataErasureManager::ClearWaitingDataErasureRequests() {
 }
 
 void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
+    CounterDataErasureOk = 0;
+    CounterDataErasureTimeout = 0;
     Status = EDataErasureStatus::IN_PROGRESS;
     for (const auto& [shardIdx, shardInfo] : SchemeShard->ShardInfos) {
-        if (shardInfo.TabletType == ETabletType::DataShard) {
+        switch (shardInfo.TabletType) {
+        case NKikimr::NSchemeShard::ETabletType::DataShard:
+        case NKikimr::NSchemeShard::ETabletType::PersQueue: {
             Enqueue(shardIdx);
             WaitingDataErasureShards[shardIdx] = EDataErasureStatus::IN_PROGRESS;
             db.Table<Schema::WaitingDataErasureShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Update<Schema::WaitingDataErasureShards::Status>(WaitingDataErasureShards[shardIdx]);
+            break;
+        }
+        default:
+            break;
         }
     }
     if (WaitingDataErasureShards.empty()) {
@@ -125,7 +134,7 @@ void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
     db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
 
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Run: Queue.Size# " << Queue->Size()
         << ", WaitingDataErasureShards.size# " << WaitingDataErasureShards.size()
         << ", Status# " << static_cast<ui32>(Status));
@@ -157,31 +166,44 @@ NOperationQueue::EStartStatus TTenantDataErasureManager::StartDataErasure(const 
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
 
-    const auto& datashardId = it->second.TabletID;
+    const auto& tabletId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasureManager] [Start] Data erasure "
-        "for pathId# " << pathId << ", datashard# " << datashardId
+        "for pathId# " << pathId << ", tabletId# " << tabletId
         << ", next wakeup# " << Queue->GetWakeupDelta()
         << ", rate# " << Queue->GetRate()
         << ", in queue# " << Queue->Size() << " shards"
         << ", running# " << Queue->RunningSize() << " shards"
         << " at schemeshard " << SchemeShard->TabletID());
 
-    std::unique_ptr<TEvDataShard::TEvForceDataCleanup> request(
-        new TEvDataShard::TEvForceDataCleanup(Generation));
+    std::unique_ptr<IEventBase> request = nullptr;
+    switch (it->second.TabletType) {
+    case NKikimr::NSchemeShard::ETabletType::DataShard: {
+        request.reset(new TEvDataShard::TEvForceDataCleanup(Generation));
+        break;
+    }
+    case NKikimr::NSchemeShard::ETabletType::PersQueue: {
+        request.reset(new TEvKeyValue::TEvCleanUpDataRequest(Generation));
+        break;
+    }
+    default:
+        return NOperationQueue::EStartStatus::EOperationRemove;
+    }
+
+
 
     ActivePipes[shardIdx] = SchemeShard->PipeClientCache->Send(
         ctx,
-        ui64(datashardId),
+        ui64(tabletId),
         request.release());
 
     return NOperationQueue::EStartStatus::EOperationRunning;
 }
 
 void TTenantDataErasureManager::OnTimeout(const TShardIdx& shardIdx) {
+    CounterDataErasureTimeout++;
     UpdateMetrics();
-    SchemeShard->TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_TIMEOUT].Increment(1);
 
     ActivePipes.erase(shardIdx);
 
@@ -194,11 +216,11 @@ void TTenantDataErasureManager::OnTimeout(const TShardIdx& shardIdx) {
         return;
     }
 
-    const auto& datashardId = it->second.TabletID;
+    const auto& tabletId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasureManager] [Timeout] Data erasure timeout "
-        "for pathId# " << pathId << ", datashard# " << datashardId
+        "for pathId# " << pathId << ", tabletId# " << tabletId
         << ", next wakeup# " << Queue->GetWakeupDelta()
         << ", in queue# " << Queue->Size() << " shards"
         << ", running# " << Queue->RunningSize() << " shards"
@@ -268,7 +290,7 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
     auto ctx = SchemeShard->ActorContext();
     if (shardIdx == InvalidShardIdx) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasureManager] [Finished] Failed to resolve shard info "
-            "for pathId# " << (it != SchemeShard->ShardInfos.end() ? it->second.PathId.ToString() : "") << ", datashard# " << tabletId
+            "for pathId# " << (it != SchemeShard->ShardInfos.end() ? it->second.PathId.ToString() : "") << ", tabletId# " << tabletId
             << " in# " << duration.MilliSeconds() << " ms"
             << ", next wakeup in# " << Queue->GetWakeupDelta()
             << ", rate# " << Queue->GetRate()
@@ -277,7 +299,7 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
             << " at schemeshard " << SchemeShard->TabletID());
     } else {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[TenantDataErasureManager] [Finished] Data erasure is completed "
-            "for pathId# " << (it != SchemeShard->ShardInfos.end() ? it->second.PathId.ToString() : "") << ", datashard# " << tabletId
+            "for pathId# " << (it != SchemeShard->ShardInfos.end() ? it->second.PathId.ToString() : "") << ", tabletId# " << tabletId
             << ", shardIdx# " << shardIdx
             << " in# " << duration.MilliSeconds() << " ms"
             << ", next wakeup in# " << Queue->GetWakeupDelta()
@@ -296,11 +318,11 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
         }
     }
 
-    SchemeShard->TabletCounters->Cumulative()[COUNTER_TENANT_DATA_ERASURE_OK].Increment(1);
+    CounterDataErasureOk++;
     UpdateMetrics();
 
     if (WaitingDataErasureShards.empty()) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantDataErasureManager] Data erasure in shards is completed. Send response to root schemeshard");
         Complete();
         db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
@@ -323,7 +345,7 @@ void TTenantDataErasureManager::Complete() {
     Status = EDataErasureStatus::COMPLETED;
 
     auto ctx = SchemeShard->ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Complete: Generation# " << Generation);
 }
 
@@ -426,6 +448,8 @@ void TTenantDataErasureManager::HandleNewPartitioning(const std::vector<TShardId
 void TTenantDataErasureManager::UpdateMetrics() {
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE].Set(Queue->Size());
     SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING].Set(Queue->RunningSize());
+    SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_OK].Set(CounterDataErasureOk);
+    SchemeShard->TabletCounters->Simple()[COUNTER_TENANT_DATA_ERASURE_TIMEOUT].Set(CounterDataErasureTimeout);
 }
 
 void TTenantDataErasureManager::SendResponseToRootSchemeShard() {
@@ -499,32 +523,29 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxRunTenantDataErasure(TE
     return new TTxRunTenantDataErasure(this, ev);
 }
 
+template <typename TEvType>
 struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBase {
-    TEvDataShard::TEvForceDataCleanupResult::TPtr Ev;
+    TEvType Ev;
     bool NeedResponseComplete = false;
 
-    TTxCompleteDataErasureShard(TSelf *self, TEvDataShard::TEvForceDataCleanupResult::TPtr& ev)
+    TTxCompleteDataErasureShard(TSelf *self, TEvType& ev)
         : TRwTxBase(self)
         , Ev(std::move(ev))
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_RUN_DATA_ERASURE_TENANT ; }
+    TTxType GetTxType() const override { return TXTYPE_COMPLETE_DATA_ERASURE_SHARD; }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxCompleteDataErasureShard Execute at schemestard: " << Self->TabletID());
-        const auto& record = Ev->Get()->Record;
 
-        if (record.GetStatus() != NKikimrTxDataShard::TEvForceDataCleanupResult::OK) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxCompleteDataErasureShard: data erasure failed at DataShard #" << record.GetTabletId()
-                    << " with status: " << NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus_Name(record.GetStatus())
-                    << ", schemestard: " << Self->TabletID());
-            return; // will be retried after timout in the queue in TTenantDataErasureManager::OnTimeout()
+        if (!IsSuccess(Ev)) {
+            HandleBadStatus(Ev, ctx);
+            return; // will be retried after timeout in the queue in TTenantDataErasureManager::OnTimeout()
         }
 
+        const ui64 cleanupGeneration = GetCleanupGeneration(Ev);
         auto& manager = Self->DataErasureManager;
-        const ui64 cleanupGeneration = record.GetDataCleanupGeneration();
         if (cleanupGeneration != manager->GetGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxCompleteDataErasureShard: Unknown generation#" << cleanupGeneration
@@ -532,7 +553,7 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
             return;
         }
         NIceDb::TNiceDb db(txc.DB);
-        manager->OnDone(TTabletId(record.GetTabletId()), db);
+        manager->OnDone(TTabletId(GetTabletId(Ev)), db);
         if (Self->DataErasureManager->GetStatus() == EDataErasureStatus::COMPLETED) {
             NeedResponseComplete = true;
         }
@@ -547,11 +568,62 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
             NKikimr::NSchemeShard::SendResponseToRootSchemeShard(Self, ctx);
         }
     }
+
+private:
+    bool IsSuccess(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.GetStatus() == NKikimrTxDataShard::TEvForceDataCleanupResult::OK;
+    }
+
+    void HandleBadStatus(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx) const {
+        const auto& record = ev->Get()->Record;
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxCompleteDataErasureShard: data erasure failed at DataShard#" << record.GetTabletId()
+            << " with status: " << NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus_Name(record.GetStatus())
+            << ", schemestard: " << Self->TabletID());
+    }
+
+    ui64 GetCleanupGeneration(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.GetDataCleanupGeneration();
+    }
+
+    ui64 GetTabletId(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.GetTabletId();
+    }
+
+    bool IsSuccess(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        return record.status() == NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS;
+    }
+
+    void HandleBadStatus(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) const {
+        const auto& record = ev->Get()->Record;
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TTxCompleteDataErasureShard: data erasure failed at KeyValue#" << record.tablet_id()
+            << " with status: " << NKikimrKeyValue::CleanUpDataResponse::Status_Name(record.status())
+            << ", schemestard: " << Self->TabletID());
+    }
+
+    ui64 GetCleanupGeneration(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.actual_generation();
+    }
+
+    ui64 GetTabletId(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) const {
+        const auto& record = ev->Get()->Record;
+        return record.tablet_id();
+    }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev) {
+template <typename TEvType>
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard(TEvType& ev) {
     return new TTxCompleteDataErasureShard(this, ev);
 }
+
+template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard<TEvDataShard::TEvForceDataCleanupResult::TPtr>(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev);
+template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard<TEvKeyValue::TEvCleanUpDataResponse::TPtr>(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev);
 
 struct TSchemeShard::TTxAddEntryToDataErasure : public TSchemeShard::TRwTxBase {
     const std::vector<TShardIdx> DataErasureShards;

@@ -1,5 +1,6 @@
 #include "impl.h"
 #include "console_interaction.h"
+#include "bsc_audit.h"
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
@@ -16,6 +17,7 @@ namespace NKikimr::NBsController {
         std::optional<ui64> ExpectedStorageYamlConfigVersion;
         std::unique_ptr<IEventHandle> Handle;
         std::optional<bool> SwitchEnableConfigV2;
+        std::optional<TAuditLogInfo> AuditLogInfo;
 
         ui64 GenerationOnStart = 0;
         TString FingerprintOnStart;
@@ -25,7 +27,7 @@ namespace NKikimr::NBsController {
                 std::optional<std::optional<TString>>&& storageYamlConfig,
                 std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
                 std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle,
-                std::optional<bool> switchEnableConfigV2)
+                std::optional<bool> switchEnableConfigV2, std::optional<TAuditLogInfo>&& auditLogInfo)
             : TTransactionBase(controller)
             , YamlConfig(std::move(yamlConfig))
             , StorageYamlConfig(std::move(storageYamlConfig))
@@ -33,6 +35,7 @@ namespace NKikimr::NBsController {
             , ExpectedStorageYamlConfigVersion(expectedStorageYamlConfigVersion)
             , Handle(std::move(handle))
             , SwitchEnableConfigV2(switchEnableConfigV2)
+            , AuditLogInfo(std::move(auditLogInfo))
         {}
 
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_COMMIT_CONFIG; }
@@ -68,6 +71,34 @@ namespace NKikimr::NBsController {
                 LOG_ALERT_S(ctx, NKikimrServices::BS_CONTROLLER, "Storage config changed");
                 Y_DEBUG_ABORT("Storage config changed");
             }
+
+            if (AuditLogInfo) {
+                TStringBuilder oldConfig;
+                if (Self->YamlConfig) {
+                    oldConfig << GetSingleConfigYaml(*Self->YamlConfig);
+                }
+                if (Self->StorageYamlConfig) {
+                    oldConfig << *Self->StorageYamlConfig;
+                }
+
+                TStringBuilder newConfig;
+                if (YamlConfig) {
+                    newConfig << GetSingleConfigYaml(*YamlConfig);
+                }
+                if (StorageYamlConfig && *StorageYamlConfig) {
+                    newConfig << **StorageYamlConfig;
+                }
+
+                AuditLogCommitConfigTransaction(
+                    /* peer = */ AuditLogInfo->PeerName,
+                    /* userSID = */ AuditLogInfo->UserToken.GetUserSID(),
+                    /* sanitizedToken = */ AuditLogInfo->UserToken.GetSanitizedToken(),
+                    /* oldConfig = */ oldConfig,
+                    /* newConfig = */ newConfig,
+                    /* reason = */ {},
+                    /* success = */ true);
+            }
+
             if (StorageConfig) {
                 Self->StorageConfig = std::move(*StorageConfig);
                 Self->ApplyStorageConfig(true);
@@ -136,9 +167,9 @@ namespace NKikimr::NBsController {
             std::optional<std::optional<TString>>&& storageYamlConfig,
             std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
             std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle,
-            std::optional<bool> switchEnableConfigV2) {
+            std::optional<bool> switchEnableConfigV2, std::optional<TAuditLogInfo>&& auditLogInfo) {
         return new TTxCommitConfig(this, std::move(yamlConfig), std::move(storageYamlConfig), std::move(storageConfig),
-            expectedStorageYamlConfigVersion, std::move(handle), switchEnableConfigV2);
+            expectedStorageYamlConfigVersion, std::move(handle), switchEnableConfigV2, std::move(auditLogInfo));
     }
 
 } // namespace NKikimr::NBsController

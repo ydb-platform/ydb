@@ -297,7 +297,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (source) {
         for (const auto& col : source->Columns) {
-            Y_ABORT_UNLESS(col.first == col.second.Id);
+            Y_ENSURE(col.first == col.second.Id);
             // There could be columns with same name. Only one of them can be active.
             if (col.second.IsDropped())
                 continue;
@@ -596,7 +596,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         const auto& ttl = op.GetTTLSettings();
 
-        if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
+        if (!ValidateTtlSettings(ttl, source ? source->Columns : TMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
             return nullptr;
         }
 
@@ -717,7 +717,7 @@ void TTableInfo::ResetDescriptionCache() {
 }
 
 TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
-    Y_ABORT_UNLESS(pathInfo && pathInfo->IsTable());
+    Y_ENSURE(pathInfo && pathInfo->IsTable());
 
     TVector<ui32> keyColumnIds;
     for (auto& col : Columns) {
@@ -765,7 +765,7 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
     const TGetId& getId,
     const TPreferred& preferred)
 {
-    Y_ABORT_UNLESS(items, "Unexpected nullptr items");
+    Y_ENSURE(items, "Unexpected nullptr items");
 
     int size = items->size();
     THashMap<ui32, size_t> posById;
@@ -1381,7 +1381,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     }
 
     if (wasStorageConfig) {
-        Y_ABORT_UNLESS(isStorageConfig); // by inherit logic
+        Y_ENSURE(isStorageConfig); // by inherit logic
 
         auto& srcStorage = *wasStorageConfig;
         auto& cfgStorage = *isStorageConfig;
@@ -1430,7 +1430,7 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         const auto* srcFamily = srcFamilies.Value(family.GetId(), nullptr);
 
         if (srcFamily && srcFamily->HasStorageConfig()) {
-            Y_ABORT_UNLESS(family.HasStorageConfig()); // by inherit logic
+            Y_ENSURE(family.HasStorageConfig()); // by inherit logic
 
             const auto& srcStorage = srcFamily->GetStorageConfig();
             const auto& dstStorage = family.GetStorageConfig();
@@ -1504,7 +1504,7 @@ bool TPartitionConfigMerger::VerifyCommandOnFrozenTable(const NKikimrSchemeOp::T
 }
 
 void TTableInfo::FinishAlter() {
-    Y_ABORT_UNLESS(AlterData, "No alter data at Alter complete");
+    Y_ENSURE(AlterData, "No alter data at Alter complete");
     AlterVersion = AlterData->AlterVersion;
     NextColumnId = AlterData->NextColumnId;
     for (const auto& col : AlterData->Columns) {
@@ -1614,20 +1614,20 @@ void TTableInfo::FinishAlter() {
 
 #if 1 // legacy
 TString TTableInfo::SerializeAlterExtraData() const {
-    Y_ABORT_UNLESS(AlterData);
+    Y_ENSURE(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     alterExtraData.MutablePartitionConfig()->CopyFrom(AlterData->PartitionConfigDiff());
     TString str;
     bool serializeRes = alterExtraData.SerializeToString(&str);
-    Y_ABORT_UNLESS(serializeRes);
+    Y_ENSURE(serializeRes);
     return str;
 }
 
 void TTableInfo::DeserializeAlterExtraData(const TString& str) {
-    Y_ABORT_UNLESS(AlterData);
+    Y_ENSURE(AlterData);
     NKikimrSchemeOp::TAlterExtraData alterExtraData;
     bool deserializeRes = ParseFromStringNoSizeLimit(alterExtraData, str);
-    Y_ABORT_UNLESS(deserializeRes);
+    Y_ENSURE(deserializeRes);
     AlterData->PartitionConfigDiff().Swap(alterExtraData.MutablePartitionConfig());
 }
 #endif
@@ -1681,12 +1681,16 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     newAggregatedStats.RangeReads = Stats.Aggregated.RangeReads;
     newAggregatedStats.RangeReadRows = Stats.Aggregated.RangeReadRows;
 
+    newAggregatedStats.LocksAcquired = Stats.Aggregated.LocksAcquired;
+    newAggregatedStats.LocksWholeShard = Stats.Aggregated.LocksWholeShard;
+    newAggregatedStats.LocksBroken = Stats.Aggregated.LocksBroken;
+
     if (SplitOpsInFlight.empty()) {
         ExpectedPartitionCount = newPartitioning.size();
     }
 
     if (Partitions.empty()) {
-        Y_ABORT_UNLESS(SplitOpsInFlight.empty());
+        Y_ENSURE(SplitOpsInFlight.empty());
     }
 
     Stats.PartitionStats.swap(newPartitionStats);
@@ -1785,6 +1789,10 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops);
     Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops);
 
+    Aggregated.LocksAcquired += (newStats.LocksAcquired - oldStats.LocksAcquired);
+    Aggregated.LocksWholeShard += (newStats.LocksWholeShard - oldStats.LocksWholeShard);
+    Aggregated.LocksBroken += (newStats.LocksBroken - oldStats.LocksBroken);
+
     auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
     oldStats = newStats;
     oldStats.TopUsage = std::move(topUsage);
@@ -1809,11 +1817,11 @@ void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathI
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
-    Y_ABORT_UNLESS(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
-    Y_ABORT_UNLESS(txState.SplitDescription);
+    Y_ENSURE(txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition);
+    Y_ENSURE(txState.SplitDescription);
 
     if (SplitOpsInFlight.empty()) {
-        Y_VERIFY_S(Partitions.size() == ExpectedPartitionCount,
+        Y_ENSURE(Partitions.size() == ExpectedPartitionCount,
                    "info "
                        << "ExpectedPartitionCount: " << ExpectedPartitionCount
                        << " Partitions.size(): " << Partitions.size());
@@ -1826,7 +1834,7 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
         ExpectedPartitionCount -= srcCount;
     }
 
-    Y_ABORT_UNLESS(!SplitOpsInFlight.contains(opId));
+    Y_ENSURE(!SplitOpsInFlight.contains(opId));
     SplitOpsInFlight.emplace(opId);
     ShardsInSplitMergeByOpId.emplace(opId, TVector<TShardIdx>());
 
@@ -1839,8 +1847,8 @@ void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState
 bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
     if (ShardsInSplitMergeByShards.contains(idx)) {
         TOperationId opId = ShardsInSplitMergeByShards.at(idx);
-        Y_ABORT_UNLESS(ShardsInSplitMergeByOpId.contains(opId));
-        Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
+        Y_ENSURE(ShardsInSplitMergeByOpId.contains(opId));
+        Y_ENSURE(SplitOpsInFlight.contains(opId));
     }
 
     return ShardsInSplitMergeByShards.contains(idx);
@@ -1848,7 +1856,7 @@ bool TTableInfo::IsShardInSplitMergeOp(TShardIdx idx) const {
 
 
 void TTableInfo::AbortSplitMergeOp(TOperationId opId) {
-    Y_ABORT_UNLESS(SplitOpsInFlight.contains(opId));
+    Y_ENSURE(SplitOpsInFlight.contains(opId));
     for (const auto& shardIdx: ShardsInSplitMergeByOpId.at(opId)) {
         ShardsInSplitMergeByShards.erase(shardIdx);
     }
@@ -1860,7 +1868,7 @@ void TTableInfo::FinishSplitMergeOp(TOperationId opId) {
     AbortSplitMergeOp(opId);
 
     if (SplitOpsInFlight.empty()) {
-        Y_VERIFY_S(Partitions.size() == ExpectedPartitionCount,
+        Y_ENSURE(Partitions.size() == ExpectedPartitionCount,
                    "info "
                        << "ExpectedPartitionCount: " << ExpectedPartitionCount
                        << " Partitions.size(): " << Partitions.size());
@@ -2122,7 +2130,7 @@ bool TExportInfo::AllItemsAreDropped() const {
 }
 
 void TExportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_ABORT_UNLESS(!IsFinished());
+    Y_ENSURE(!IsFinished());
     Subscribers.insert(actorId);
 }
 
@@ -2160,17 +2168,18 @@ bool TImportInfo::IsFinished() const {
 }
 
 void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
-    Y_ABORT_UNLESS(!IsFinished());
+    Y_ENSURE(!IsFinished());
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
+    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
-    Y_ABORT_UNLESS(IsBuildIndex());
+    Y_ENSURE(IsBuildIndex());
     result->SetTable(TPath::Init(TablePathId, ss).PathString());
 
     auto& index = *result->MutableIndex();
@@ -2198,7 +2207,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
 }
 
 void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
-    Y_ABORT_UNLESS(IsBuildColumns());
+    Y_ENSURE(IsBuildColumns());
     Y_ASSERT(!TargetName.empty());
     result->SetTable(TargetName);
     for(const auto& column : BuildColumns) {
@@ -2208,7 +2217,6 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
 
 void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
     if (KMeans.Parent == 0) {
-        Y_ASSERT(KMeans.ParentEnd == 0);
         // For Parent == 0 only single kmeans needed, so there is only two options:
         // 1. It fits entirely in the single shard => local kmeans for single shard
         // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
@@ -2217,14 +2225,14 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
     // TODO(mbkkt) We can make it more granular
 
-    // if new range is not intersect with other ranges, it's local
+    // the new range does not intersect with other ranges, just add it with 1 shard
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
     if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
-        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Local = shard});
+        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
         return;
     }
 
-    // otherwise, this range is global and we need to merge all intersecting ranges
+    // otherwise, this range has multiple shards and we need to merge all intersecting ranges
     auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
     if (itTo == Cluster2Shards.end()) {
         itTo = Cluster2Shards.rbegin().base();
@@ -2236,25 +2244,16 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
         itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
         itFrom = needsToReplaceFrom ? itTo : itFrom;
     }
-    auto& [toFrom, toLocal, toGlobal] = itTo->second;
+    auto& [toFrom, toShards] = itTo->second;
 
     toFrom = std::min(toFrom, parentFrom);
-    if (toLocal != InvalidShardIdx) {
-        toGlobal.emplace_back(toLocal);
-        toLocal = InvalidShardIdx;
-    }
-    toGlobal.emplace_back(shard);
+    toShards.emplace_back(shard);
 
     while (itFrom != itTo) {
-        const auto& [fromFrom, fromLocal, fromGlobal] = itFrom->second;
+        const auto& [fromFrom, fromShards] = itFrom->second;
         toFrom = std::min(toFrom, fromFrom);
-        if (fromLocal != InvalidShardIdx) {
-            Y_ASSERT(fromGlobal.empty());
-            toGlobal.emplace_back(fromLocal);
-        } else {
-            Y_ASSERT(!fromGlobal.empty());
-            toGlobal.insert(toGlobal.end(), fromGlobal.begin(), fromGlobal.end());
-        }
+        Y_ASSERT(!fromShards.empty());
+        toShards.insert(toShards.end(), fromShards.begin(), fromShards.end());
         itFrom = Cluster2Shards.erase(itFrom);
     }
 }
@@ -2436,10 +2435,10 @@ TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui6
 }
 
 TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ABORT_UNLESS(UploadRows >= other.UploadRows);
-    Y_ABORT_UNLESS(UploadBytes >= other.UploadBytes);
-    Y_ABORT_UNLESS(ReadRows >= other.ReadRows);
-    Y_ABORT_UNLESS(ReadBytes >= other.ReadBytes);
+    Y_ENSURE(UploadRows >= other.UploadRows);
+    Y_ENSURE(UploadBytes >= other.UploadBytes);
+    Y_ENSURE(ReadRows >= other.ReadRows);
+    Y_ENSURE(ReadBytes >= other.ReadBytes);
 
     return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
             ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
@@ -2578,6 +2577,13 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
     }
 
     return {{dataTypeMinValue, dataTypeMaxValue}};
+}
+
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
+    NProtoBuf::Timestamp timestamp;
+    timestamp.set_seconds((i64)(sec));
+    timestamp.set_nanos(0);
+    return timestamp;
 }
 
 } // namespace NSchemeShard

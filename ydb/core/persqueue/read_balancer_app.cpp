@@ -77,7 +77,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                         for (auto& [partitionId, partitionInfo] : PartitionsInfo) {
                             const auto& stats = AggregatedStats.Stats[partitionId];
                             const auto* node = PartitionGraph.GetPartition(partitionId);
-                            TString style = node && node->Children.empty() ? "text-success" : "text-muted";
+                            TString style = node && node->DirectChildren.empty() ? "text-success" : "text-muted";
 
                             TABLER() {
                                 TABLED() {
@@ -87,7 +87,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                 }
                                 TABLED() {
                                     if (node) {
-                                        str << (node->Children.empty() ? "Active" : "Inactive");
+                                        str << (node->DirectChildren.empty() ? "Active" : "Inactive");
                                         if (node->IsRoot()) {
                                             str << " (root)";
                                         }
@@ -96,7 +96,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                 TABLED() { HREF(TStringBuilder() << "?TabletID=" << partitionInfo.TabletId) { str << partitionInfo.TabletId; } }
                                 TABLED() {
                                     if (node) {
-                                        for (auto* parent : node->Parents) {
+                                        for (auto* parent : node->DirectParents) {
                                             HREF("#" + partitionAnchor(parent->Id)) { str << parent->Id; }
                                             str << ", ";
                                         }
@@ -104,7 +104,7 @@ TString TPersQueueReadBalancer::GenerateStat() {
                                 }
                                 TABLED() {
                                     if (node) {
-                                        for (auto* child : node->Children) {
+                                        for (auto* child : node->DirectChildren) {
                                             HREF("#" + partitionAnchor(child->Id)) { str << child->Id; }
                                             str << ", ";
                                         }

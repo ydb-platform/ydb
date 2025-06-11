@@ -26,7 +26,6 @@ SRCS(
     service.cpp
     table_writer.cpp
     topic_reader.cpp
-    transfer_writer.cpp
     worker.cpp
 )
 
@@ -46,7 +45,6 @@ RECURSE_FOR_TESTS(
     ut_json_change_record
     ut_table_writer
     ut_topic_reader
-    ut_transfer_writer
     ut_worker
 )
 

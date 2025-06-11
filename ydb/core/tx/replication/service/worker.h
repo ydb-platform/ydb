@@ -8,7 +8,11 @@
 
 #include <functional>
 
-namespace NKikimr::NReplication::NService {
+namespace NKikimr::NReplication {
+
+class TTopicMessage;
+
+namespace NService {
 
 struct TEvWorker {
     enum EEv {
@@ -20,6 +24,7 @@ struct TEvWorker {
         EvGone,
         EvStatus,
         EvDataEnd,
+        EvCommit,
 
         EvEnd,
     };
@@ -27,24 +32,28 @@ struct TEvWorker {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
-    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {};
+
+    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {
+        bool SkipCommit;
+
+        explicit TEvPoll(bool skipCommit = false);
+        TString ToString() const override;
+    };
+
+    struct TEvCommit: public TEventLocal<TEvCommit, EvCommit> {
+        size_t Offset;
+
+        explicit TEvCommit(size_t offset);
+        TString ToString() const override;
+    };
 
     struct TEvData: public TEventLocal<TEvData, EvData> {
-        struct TRecord {
-            ui64 Offset;
-            TString Data;
-            TInstant CreateTime;
-
-            explicit TRecord(ui64 offset, const TString& data, TInstant createTime = TInstant::Zero());
-            explicit TRecord(ui64 offset, TString&& data, TInstant createTime = TInstant::Zero());
-            void Out(IOutputStream& out) const;
-        };
-
+        ui32 PartitionId;
         TString Source;
-        TVector<TRecord> Records;
+        TVector<TTopicMessage> Records;
 
-        explicit TEvData(const TString& source, const TVector<TRecord>& records);
-        explicit TEvData(const TString& source, TVector<TRecord>&& records);
+        explicit TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records);
+        explicit TEvData(ui32 partitionId, const TString& source, TVector<TTopicMessage>&& records);
         TString ToString() const override;
     };
 
@@ -85,8 +94,5 @@ IActor* CreateWorker(
     std::function<IActor*(void)>&& createReaderFn,
     std::function<IActor*(void)>&& createWriterFn);
 
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TEvWorker::TEvData::TRecord, o, x) {
-    return x.Out(o);
-}
+} // NService
+} // NKikimr::NReplication

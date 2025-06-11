@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
+#include <ydb/core/tx/data_events/events.h>
 
 #include <ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb-cpp-sdk/client/table/table.h>
@@ -244,6 +245,85 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             auto resultSecond = runtime.WaitFuture(future);
             // select must be successful. no transaction locks invalidated issues.
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TestNoWrite) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
+        settings.SetUseRealThreads(false);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto deleteSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        
+        kikimr.RunCall([&]{ CreateSampleTablesWithIndex(session, false /* no need in table data */); return true; });
+
+        {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            const TString query(Q1_(R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Key = 3u;
+
+                UPDATE `/Root/KeyValue` SET Value = "Test" WHERE Key = 3u AND Value = "Not exists";
+            )"));
+
+            std::vector<std::unique_ptr<IEventHandle>> writes;
+            bool blockWrites = true;
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (blockWrites && ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                    auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                    UNIT_ASSERT(evWrite->Record.OperationsSize() == 0);
+                    UNIT_ASSERT(evWrite->Record.GetLocks().GetLocks().size() != 0);
+                    writes.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&writes](IEventHandle&) {
+                return writes.size() > 0;
+            });
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            runtime.DispatchEvents(opts);
+            UNIT_ASSERT(writes.size() > 0);
+
+            blockWrites = false;
+
+            const TString deleteQuery(Q1_(R"(
+                DELETE FROM `/Root/KeyValue` WHERE Key = 3u;
+            )"));
+
+            auto deleteResult = kikimr.RunCall([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+                return deleteSession.ExecuteDataQuery(deleteQuery, txc, execSettings).ExtractValueSync();
+            });
+
+            UNIT_ASSERT(deleteResult.IsSuccess());
+
+            for(auto& ev: writes) {
+                runtime.Send(ev.release());
+            }
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
         }
     }
 }

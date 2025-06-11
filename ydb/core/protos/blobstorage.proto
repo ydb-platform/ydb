@@ -1449,6 +1449,8 @@ message TEvControllerReplaceConfigRequest {
     optional bool SwitchDedicatedStorageSection = 6;
     optional bool DedicatedConfigMode = 7;
     optional bool SwitchEnableConfigV2 = 10; // if set, overrides EnableConfigV2 field in BSC
+    optional string PeerName = 11;
+    optional bytes UserToken = 12;
     // console flags
     optional bool AllowUnknownFields = 8;
     optional bool BypassMetadataChecks = 9;
@@ -1530,6 +1532,8 @@ message TEvControllerDistconfRequest {
     optional bytes CompressedStorageConfig = 3; // if used has provided storage config
     optional bool DedicatedConfigMode = 4; // as provided in used command
     optional uint64 ExpectedStorageConfigVersion = 5;
+    optional string PeerName = 6;
+    optional bytes UserToken = 7;
 }
 
 message TEvControllerDistconfResponse {

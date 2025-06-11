@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 
-import argparse
 import configparser
-import datetime
 import os
 import posixpath
-import traceback
 import time
 import ydb
 from collections import Counter
@@ -95,6 +92,9 @@ def main():
             and job_name in (
                 'Nightly-run',
                 'Regression-run',
+                'Regression-run_Large',
+                'Regression-run_Small_and_Medium',
+                'Regression-run_compatibility',
                 'Regression-whitelist-run',
                 'Postcommit_relwithdebinfo', 
                 'Postcommit_asan'

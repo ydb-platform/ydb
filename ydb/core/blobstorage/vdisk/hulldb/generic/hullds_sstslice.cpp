@@ -20,6 +20,7 @@ namespace NKikimr {
                         TABLEH() {str << NHullComp::TSstRatio::MonHeader();}
                         TABLEH() {str << "Origin";}
                         TABLEH() {str << "CTime";}
+                        TABLEH() {str << "Location";}
                     }
                 }
                 TABLEBODY() {
@@ -39,7 +40,7 @@ namespace NKikimr {
                     // total
                     TABLER() {
                         TABLED() {SMALL() {str << "index";}}
-                        TABLED() {SMALL() {str << "total";}}
+                        TABLED() {SMALL() {str << "level";}}
                         TABLED() {SMALL() {str << "lsns";}}
                         TABLED() {SMALL() {str << sum.IdxTotalSize << " / " << sum.InplaceDataTotalSize << " / "
                                            << sum.HugeDataTotalSize;}}
@@ -48,7 +49,9 @@ namespace NKikimr {
                                            << sum.ItemsWithHugeData;}}
                         TABLED() {SMALL() {str << "keys";}}
                         TABLED() {SMALL() {str << "ratio";}}
+                        TABLED() {SMALL() {str << "origin";}}
                         TABLED() {SMALL() {str << "time";}}
+                        TABLED() {SMALL() {str << "chunks";}}
                     }
                 }
             }

@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(DataErasureReboots) {
 
             ui64 txId = 100;
 
-            auto tenantSS = CreateTestSubdomain(runtime, *(t.TestEnv), &txId, "Database1");
+            auto tenantSS = CreateTestExtSubdomain(runtime, *(t.TestEnv), &txId, "Database1");
             auto sender = runtime.AllocateEdgeActor();
             RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
             RebootTablet(runtime, tenantSS, sender);

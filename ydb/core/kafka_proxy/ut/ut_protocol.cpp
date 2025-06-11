@@ -1,3 +1,5 @@
+#include "kafka_test_client.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/kafka_proxy/kafka_messages.h>
@@ -19,8 +21,10 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/system/tempfile.h>
+#include <random>
 
 using namespace NKafka;
 using namespace NYdb;
@@ -32,6 +36,8 @@ static constexpr const char NON_CHARGEABLE_USER_Y[] = "superuser_y@builtin";
 
 static constexpr const char DEFAULT_CLOUD_ID[] = "somecloud";
 static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
+
+static constexpr TKafkaUint16 ASSIGNMENT_VERSION = 3;
 
 static constexpr const ui64 FirstTopicOffset = -2;
 static constexpr const ui64 LastTopicOffset = -1;
@@ -60,18 +66,12 @@ void Print(const TBuffer& buffer) {
     Cerr << ">>>>> Packet sent: " << sb << Endl;
 }
 
-struct TReadInfo {
-    std::vector<TConsumerProtocolAssignment::TopicPartition> Partitions;
-    TString MemberId;
-    i32 GenerationId;
-};
-
 template <class TKikimr, bool secure>
 class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false) {
+    TTestServer(const TString& kafkaApiMode = "1", bool serverless = false, bool enableNativeKafkaBalancing = false) {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -147,6 +147,10 @@ public:
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
 
+        if (enableNativeKafkaBalancing) {
+            KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(true);
+        }
+
         TClient client(*(KikimrServer->ServerSettings));
         if (secure) {
             client.SetSecurityToken("root@builtin");
@@ -214,6 +218,103 @@ class TInsecureTestServer : public TTestServer<TKikimrWithGrpcAndRootSchema, fal
 class TSecureTestServer : public TTestServer<TKikimrWithGrpcAndRootSchemaSecure, true> {
     using TTestServer::TTestServer;
 };
+
+void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics) {
+    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
+
+    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
+    TKafkaReadable readable(buffer);
+
+    TConsumerProtocolSubscription result;
+    result.Read(readable, version);
+
+    for (auto topic: result.Topics) {
+        if (topic.has_value()) {
+            topics.emplace(topic.value());
+        }
+    }
+}
+
+std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> MakeRangeAssignment(
+    TMessagePtr<TJoinGroupResponseData>& joinResponse,
+    int totalPartitionsCount)
+{
+
+    std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments;
+
+    std::unordered_map<TString, THashSet<TString>> memberToTopics;
+
+    for (auto& member : joinResponse->Members) {
+        THashSet<TString> memberTopics;
+        FillTopicsFromJoinGroupMetadata(member.Metadata, memberTopics);
+        memberToTopics[member.MemberId.value()] = std::move(memberTopics);
+    }
+
+    THashSet<TString> allTopics;
+    for (auto& kv : memberToTopics) {
+        for (auto& t : kv.second) {
+            allTopics.insert(t);
+        }
+    }
+
+    std::unordered_map<TString, std::vector<TString>> topicToMembers;
+    for (auto& t : allTopics) {
+        for (auto& [mId, topicsSet] : memberToTopics) {
+            if (topicsSet.contains(t)) {
+                topicToMembers[t].push_back(mId);
+            }
+        }
+    }
+
+    for (const auto& member : joinResponse->Members) {
+        TConsumerProtocolAssignment consumerAssignment;
+
+        const auto& requestedTopics = memberToTopics[member.MemberId.value()];
+        for (auto& topicName : requestedTopics) {
+
+            auto& interestedMembers = topicToMembers[topicName];
+            auto it = std::find(interestedMembers.begin(), interestedMembers.end(), member.MemberId);
+            if (it == interestedMembers.end()) {
+                continue;
+            }
+
+            int idx = static_cast<int>(std::distance(interestedMembers.begin(), it));
+            int totalInterested = static_cast<int>(interestedMembers.size());
+
+            const int totalPartitions = totalPartitionsCount;
+
+            int baseCount = totalPartitions / totalInterested;
+            int remainder = totalPartitions % totalInterested;
+
+            int start = idx * baseCount + std::min<int>(idx, remainder);
+            int length = baseCount + (idx < remainder ? 1 : 0);
+
+
+            TConsumerProtocolAssignment::TopicPartition topicPartition;
+            topicPartition.Topic = topicName;
+            for (int p = start; p < start + length; ++p) {
+                topicPartition.Partitions.push_back(p);
+            }
+            consumerAssignment.AssignedPartitions.push_back(topicPartition);
+        }
+
+        {
+            TWritableBuf buf(nullptr, consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+            TKafkaWritable writable(buf);
+
+            writable << ASSIGNMENT_VERSION;
+            consumerAssignment.Write(writable, ASSIGNMENT_VERSION);
+            NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment syncAssignment;
+            syncAssignment.MemberId = member.MemberId;
+            syncAssignment.AssignmentStr = TString(buf.GetBuffer().data(), buf.GetBuffer().size());
+            syncAssignment.Assignment = syncAssignment.AssignmentStr;
+
+            assignments.push_back(std::move(syncAssignment));
+        }
+    }
+
+    return assignments;
+}
 
 void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version) {
     TWritableBuf sb(nullptr, request->Size(version) + 1000);
@@ -339,503 +440,35 @@ void CreateTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, ui32 
 
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
 }
 
-struct TTopicConfig {
-    inline static const std::map<TString, TString> DummyMap;
+void AlterTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, std::vector<TString> consumers) {
+    auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
 
-    TTopicConfig(
-            TString name,
-            ui32 partionsNumber,
-            std::optional<TString> retentionMs = std::nullopt,
-            std::optional<TString> retentionBytes = std::nullopt,
-            const std::map<TString, TString>& configs = DummyMap)
-        : Name(name)
-        , PartitionsNumber(partionsNumber)
-        , RetentionMs(retentionMs)
-        , RetentionBytes(retentionBytes)
-        , Configs(configs)
-    {
+    for (auto& consumer : consumers) {
+        topicSettings.BeginAddConsumer(consumer).EndAddConsumer();
     }
 
-    TString Name;
-    ui32 PartitionsNumber;
-    std::optional<TString> RetentionMs;
-    std::optional<TString> RetentionBytes;
-    std::map<TString, TString> Configs;
-};
+    auto result = pqClient
+                                .AlterTopic(topicName, topicSettings)
+                                .ExtractValueSync();
 
-class TTestClient {
-public:
-    TTestClient(ui16 port, const TString clientName = "TestClient")
-        : Addr("localhost", port)
-        , Socket(Addr)
-        , So(Socket)
-        , Si(Socket)
-        , Correlation(0)
-        , ClientName(clientName) {
-    }
+    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-    TMessagePtr<TApiVersionsResponseData> ApiVersions() {
-        Cerr << ">>>>> ApiVersionsRequest\n";
+}
 
-        TRequestHeaderData header = Header(NKafka::EApiKey::API_VERSIONS, 2);
+TConsumerProtocolAssignment GetAssignments(NKafka::TSyncGroupResponseData::AssignmentMeta::Type metadata) {
+    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
+    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
+    TKafkaReadable readable(buffer);
 
-        TApiVersionsRequestData request;
-        request.ClientSoftwareName = "SuperTest";
-        request.ClientSoftwareVersion = "3100.7.13";
+    TConsumerProtocolAssignment result;
+    result.Read(readable, version);
 
-        return WriteAndRead<TApiVersionsResponseData>(header, request);
-    }
-
-    TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}) {
-        Cerr << ">>>>> MetadataRequest\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 9);
-
-        TMetadataRequestData request;
-        request.Topics.reserve(topics.size());
-        for (auto topicName : topics) {
-            NKafka::TMetadataRequestData::TMetadataRequestTopic topic;
-            topic.Name = topicName;
-            request.Topics.push_back(topic);
-        }
-
-        return WriteAndRead<TMetadataResponseData>(header, request);
-    }
-
-    TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN") {
-        Cerr << ">>>>> SaslHandshakeRequest\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::SASL_HANDSHAKE, 1);
-
-        TSaslHandshakeRequestData request;
-        request.Mechanism = mechanism;
-
-        return WriteAndRead<TSaslHandshakeResponseData>(header, request);
-    }
-
-    TMessagePtr<TSaslAuthenticateResponseData> SaslAuthenticate(const TString& user, const TString& password) {
-        Cerr << ">>>>> SaslAuthenticateRequestData\n";
-
-        TStringBuilder authBytes;
-        authBytes << "ignored" << '\0' << user << '\0' << password;
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::SASL_AUTHENTICATE, 2);
-
-        TSaslAuthenticateRequestData request;
-        request.AuthBytes = TKafkaRawBytes(authBytes.data(), authBytes.size());
-
-        return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
-    }
-
-    TMessagePtr<TInitProducerIdResponseData> InitProducerId() {
-        Cerr << ">>>>> TInitProducerIdRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::INIT_PRODUCER_ID, 4);
-
-        TInitProducerIdRequestData request;
-        request.TransactionTimeoutMs = 5000;
-
-        return WriteAndRead<TInitProducerIdResponseData>(header, request);
-    }
-
-    TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> topicsToPartions) {
-        Cerr << ">>>>> TOffsetCommitRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_COMMIT, 1);
-
-        TOffsetCommitRequestData request;
-        request.GroupId = groupId;
-
-        for (const auto& topicToPartitions : topicsToPartions) {
-            NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic topic;
-            topic.Name = topicToPartitions.first;
-
-            for (auto partitionAndOffset : topicToPartitions.second) {
-                NKafka::TOffsetCommitRequestData::TOffsetCommitRequestTopic::TOffsetCommitRequestPartition partition;
-                partition.PartitionIndex = partitionAndOffset.first;
-                partition.CommittedOffset = partitionAndOffset.second;
-                topic.Partitions.push_back(partition);
-            }
-            request.Topics.push_back(topic);
-        }
-
-        return WriteAndRead<TOffsetCommitResponseData>(header, request);
-    }
-
-    TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch) {
-        std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs;
-        msgs.emplace_back(partition, batch);
-        return Produce(topicName, msgs);
-    }
-
-    TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs) {
-        Cerr << ">>>>> TProduceRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
-
-        TProduceRequestData request;
-        request.TopicData.resize(1);
-        request.TopicData[0].Name = topicName;
-        request.TopicData[0].PartitionData.resize(msgs.size());
-        for(size_t i = 0 ; i < msgs.size(); ++i) {
-            request.TopicData[0].PartitionData[i].Index = msgs[i].first;
-            request.TopicData[0].PartitionData[i].Records = msgs[i].second;
-        }
-
-        return WriteAndRead<TProduceResponseData>(header, request);
-    }
-
-    TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic) {
-        Cerr << ">>>>> TListOffsetsRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::LIST_OFFSETS, 4);
-
-        TListOffsetsRequestData request;
-        request.IsolationLevel = 0;
-        request.ReplicaId = 0;
-        NKafka::TListOffsetsRequestData::TListOffsetsTopic newTopic{};
-        newTopic.Name = topic;
-        for(auto partition: partitions) {
-            NKafka::TListOffsetsRequestData::TListOffsetsTopic::TListOffsetsPartition newPartition{};
-            newPartition.PartitionIndex = partition.first;
-            newPartition.Timestamp = partition.second;
-            newTopic.Partitions.emplace_back(newPartition);
-        }
-        request.Topics.emplace_back(newTopic);
-        return WriteAndRead<TListOffsetsResponseData>(header, request);
-    }
-
-    TMessagePtr<TJoinGroupResponseData> JoinGroup(std::vector<TString>& topics, TString& groupId, i32 heartbeatTimeout = 1000000) {
-        Cerr << ">>>>> TJoinGroupRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::JOIN_GROUP, 9);
-
-        TJoinGroupRequestData request;
-        request.GroupId = groupId;
-        request.ProtocolType = "consumer";
-        request.SessionTimeoutMs = heartbeatTimeout;
-
-        NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
-        protocol.Name = "roundrobin";
-
-        TConsumerProtocolSubscription subscribtion;
-
-        for (auto& topic: topics) {
-            subscribtion.Topics.push_back(topic);
-        }
-
-        TKafkaVersion version = 3;
-
-        TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
-        TKafkaWritable writable(buf);
-        writable << version;
-        subscribtion.Write(writable, version);
-
-        protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
-
-        request.Protocols.push_back(protocol);
-        return WriteAndRead<TJoinGroupResponseData>(header, request);
-    }
-
-    TMessagePtr<TSyncGroupResponseData> SyncGroup(TString& memberId, ui64 generationId, TString& groupId) {
-        Cerr << ">>>>> TSyncGroupRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::SYNC_GROUP, 5);
-
-        TSyncGroupRequestData request;
-        request.GroupId = groupId;
-        request.ProtocolType = "consumer";
-        request.ProtocolName = "roundrobin";
-        request.GenerationId = generationId;
-        request.GroupId = groupId;
-        request.MemberId = memberId;
-
-        return WriteAndRead<TSyncGroupResponseData>(header, request);
-    }
-
-    TReadInfo JoinAndSyncGroup(std::vector<TString>& topics, TString& groupId, i32 heartbeatTimeout = 1000000) {
-        auto joinResponse = JoinGroup(topics, groupId, heartbeatTimeout);
-        auto memberId = joinResponse->MemberId;
-        auto generationId =  joinResponse->GenerationId;
-        auto balanceStrategy =  joinResponse->ProtocolName;
-        UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-
-
-        auto syncResponse = SyncGroup(memberId.value(), generationId, groupId);
-        UNIT_ASSERT_VALUES_EQUAL(syncResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-
-        TReadInfo readInfo;
-        readInfo.GenerationId = generationId;
-        readInfo.MemberId = memberId.value();
-        readInfo.Partitions = syncResponse->Assignment.AssignedPartitions;
-
-        return readInfo;
-    }
-
-    TMessagePtr<THeartbeatResponseData> Heartbeat(TString& memberId, ui64 generationId, TString& groupId) {
-        Cerr << ">>>>> THeartbeatRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::HEARTBEAT, 4);
-
-        THeartbeatRequestData request;
-        request.GroupId = groupId;
-        request.MemberId = memberId;
-        request.GenerationId = generationId;
-
-        return WriteAndRead<THeartbeatResponseData>(header, request);
-    }
-
-    void WaitRebalance(TString& memberId, ui64 generationId, TString& groupId) {
-        TKafkaInt16 heartbeatStatus;
-        do {
-            heartbeatStatus = Heartbeat(memberId, generationId, groupId)->ErrorCode;
-        } while (heartbeatStatus == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-
-        UNIT_ASSERT_VALUES_EQUAL(heartbeatStatus, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS));
-    }
-
-    TReadInfo JoinAndSyncGroupAndWaitPartitions(std::vector<TString>& topics, TString& groupId, ui32 expectedPartitionsCount) {
-        TReadInfo readInfo;
-        for (;;) {
-            readInfo = JoinAndSyncGroup(topics, groupId);
-            ui32 partitionsCount = 0;
-            for (auto topicPartitions: readInfo.Partitions) {
-                partitionsCount += topicPartitions.Partitions.size();
-            }
-
-            if (partitionsCount == expectedPartitionsCount) {
-                break;
-            }
-            WaitRebalance(readInfo.MemberId, readInfo.GenerationId, groupId);
-        }
-        return readInfo;
-    }
-
-    TMessagePtr<TLeaveGroupResponseData> LeaveGroup(TString& memberId, TString& groupId) {
-        Cerr << ">>>>> TLeaveGroupRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::LEAVE_GROUP, 5);
-
-        TLeaveGroupRequestData request;
-        request.GroupId = groupId;
-        request.MemberId = memberId;
-
-        return WriteAndRead<TLeaveGroupResponseData>(header, request);
-    }
-
-    TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TString groupId, std::map<TString, std::vector<i32>> topicsToPartions) {
-        Cerr << ">>>>> TOffsetFetchRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
-
-        TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
-        group.GroupId = groupId;
-
-        for (const auto& [topicName, partitions] : topicsToPartions) {
-            TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topic;
-            topic.Name = topicName;
-            topic.PartitionIndexes = partitions;
-            group.Topics.push_back(topic);
-        }
-
-        TOffsetFetchRequestData request;
-        request.Groups.push_back(group);
-
-        return WriteAndRead<TOffsetFetchResponseData>(header, request);
-    }
-
-    TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData request) {
-        Cerr << ">>>>> TOffsetFetchRequestData\n";
-        TRequestHeaderData header = Header(NKafka::EApiKey::OFFSET_FETCH, 8);
-        return WriteAndRead<TOffsetFetchResponseData>(header, request);
-    }
-
-    TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0) {
-        Cerr << ">>>>> TFetchRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 3);
-
-        TFetchRequestData request;
-        request.MaxBytes = 1024;
-        request.MinBytes = 1;
-
-        for (auto& topic: topics) {
-            NKafka::TFetchRequestData::TFetchTopic topicReq {};
-            topicReq.Topic = topic.first;
-            for (auto& partition: topic.second) {
-                NKafka::TFetchRequestData::TFetchTopic::TFetchPartition partitionReq {};
-                partitionReq.FetchOffset = offset;
-                partitionReq.Partition = partition;
-                partitionReq.PartitionMaxBytes = 1024;
-                topicReq.Partitions.push_back(partitionReq);
-            }
-            request.Topics.push_back(topicReq);
-        }
-
-        return WriteAndRead<TFetchResponseData>(header, request);
-    }
-
-    TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false) {
-        Cerr << ">>>>> TCreateTopicsRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_TOPICS, 7);
-        TCreateTopicsRequestData request;
-        request.ValidateOnly = validateOnly;
-
-        for (auto& topicToCreate : topicsToCreate) {
-            NKafka::TCreateTopicsRequestData::TCreatableTopic topic;
-            topic.Name = topicToCreate.Name;
-            topic.NumPartitions = topicToCreate.PartitionsNumber;
-
-            auto addConfig = [&topic](std::optional<TString> configValue, TString configName) {
-                if (configValue.has_value()) {
-                    NKafka::TCreateTopicsRequestData::TCreatableTopic::TCreateableTopicConfig config;
-                    config.Name = configName;
-                    config.Value = configValue.value();
-                    topic.Configs.push_back(config);
-                }
-            };
-
-            addConfig(topicToCreate.RetentionMs, "retention.ms");
-            addConfig(topicToCreate.RetentionBytes, "retention.bytes");
-
-            for (auto const& [name, value] : topicToCreate.Configs) {
-                NKafka::TCreateTopicsRequestData::TCreatableTopic::TCreateableTopicConfig config;
-                config.Name = name;
-                config.Value = value;
-                topic.Configs.push_back(config);
-            }
-
-            request.Topics.push_back(topic);
-        }
-
-        return WriteAndRead<TCreateTopicsResponseData>(header, request);
-    }
-
-    TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false) {
-        Cerr << ">>>>> TCreateTopicsRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_PARTITIONS, 3);
-        TCreatePartitionsRequestData request;
-        request.ValidateOnly = validateOnly;
-        request.TimeoutMs = 100;
-
-        for (auto& topicToCreate : topicsToCreate) {
-            NKafka::TCreatePartitionsRequestData::TCreatePartitionsTopic topic;
-            topic.Name = topicToCreate.Name;
-            topic.Count = topicToCreate.PartitionsNumber;
-
-            request.Topics.push_back(topic);
-        }
-
-        return WriteAndRead<TCreatePartitionsResponseData>(header, request);
-    }
-
-    TMessagePtr<TAlterConfigsResponseData> AlterConfigs(std::vector<TTopicConfig> topicsToModify, bool validateOnly = false) {
-        Cerr << ">>>>> TAlterConfigsRequestData\n";
-
-        TRequestHeaderData header = Header(NKafka::EApiKey::ALTER_CONFIGS, 2);
-        TAlterConfigsRequestData request;
-        request.ValidateOnly = validateOnly;
-
-        for (auto& topicToModify : topicsToModify) {
-            NKafka::TAlterConfigsRequestData::TAlterConfigsResource resource;
-            resource.ResourceType = TOPIC_RESOURCE_TYPE;
-            resource.ResourceName = topicToModify.Name;
-
-            auto addConfig = [&resource](std::optional<TString> configValue, TString configName) {
-                if (configValue.has_value()) {
-                    NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;
-                    config.Name = configName;
-                    config.Value = configValue.value();
-                    resource.Configs.push_back(config);
-                }
-            };
-
-            addConfig(topicToModify.RetentionMs, "retention.ms");
-            addConfig(topicToModify.RetentionBytes, "retention.bytes");
-
-            for (auto const& [name, value] : topicToModify.Configs) {
-                NKafka::TAlterConfigsRequestData::TAlterConfigsResource::TAlterableConfig config;
-                config.Name = name;
-                config.Value = value;
-                resource.Configs.push_back(config);
-            }
-            request.Resources.push_back(resource);
-        }
-
-        return WriteAndRead<TAlterConfigsResponseData>(header, request);
-    }
-
-    void UnknownApiKey() {
-        Cerr << ">>>>> Unknown apiKey\n";
-
-        TRequestHeaderData header;
-        header.RequestApiKey = 7654;
-        header.RequestApiVersion = 1;
-        header.CorrelationId = NextCorrelation();
-        header.ClientId = ClientName;
-
-        TApiVersionsRequestData request;
-        request.ClientSoftwareName = "SuperTest";
-        request.ClientSoftwareVersion = "3100.7.13";
-
-        Write(So, &header, &request);
-    }
-
-    void AuthenticateToKafka() {
-    {
-            auto msg = ApiVersions();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
-        }
-
-        {
-            auto msg = SaslHandshake();
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
-            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
-        }
-
-        {
-            auto msg = SaslAuthenticate("ouruser@/Root", "ourUserPassword");
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        }
-    }
-
-protected:
-    ui32 NextCorrelation() {
-        return Correlation++;
-    }
-
-    template <std::derived_from<TApiMessage> T>
-    TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request) {
-        Write(So, &header, &request);
-        return Read<T>(Si, &header);
-    }
-
-    TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version) {
-        TRequestHeaderData header;
-        header.RequestApiKey = apiKey;
-        header.RequestApiVersion = version;
-        header.CorrelationId = NextCorrelation();
-        header.ClientId = ClientName;
-        return header;
-    }
-
-private:
-    TNetworkAddress Addr;
-    TSocket Socket;
-    TSocketOutput So;
-    TSocketInput Si;
-
-    ui32 Correlation;
-    TString ClientName;
-};
+    return result;
+}
 
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
     // this test imitates kafka producer behaviour:
@@ -857,7 +490,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                             .ConsumerName("consumer-0");
         auto topicReader = pqClient.CreateReadSession(settings);
 
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         {
             auto msg = client.ApiVersions();
@@ -949,6 +582,24 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_STRINGS_EQUAL(readMessage.GetData(), value);
             AssertMessageMeta(readMessage, "__key", key);
             AssertMessageMeta(readMessage, headerKey, headerValue);
+        }
+
+        // send empty produce message
+        {
+            TKafkaRecordBatch batch;
+            batch.BaseOffset = 3;
+            batch.BaseSequence = 5;
+            batch.Magic = 2; // Current supported
+            batch.Records.resize(1);
+            batch.Records[0].Key = TKafkaBytes{};
+            batch.Records[0].Value = TKafkaBytes{};
+
+            auto msg = client.Produce(topicName, 0, batch);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
+                                     static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 
         {
@@ -1067,7 +718,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topicName, minActivePartitions, {});
 
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         client.AuthenticateToKafka();
 
@@ -1302,7 +953,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(FetchScenario)
 
-    Y_UNIT_TEST(BalanceScenario) {
+    void RunBalanceScenarionTest(bool forFederation) {
+        TString protocolName = "roundrobin";
         TInsecureTestServer testServer("2");
 
         TString topicName = "/Root/topic-0-test";
@@ -1321,10 +973,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         CreateTopic(pqClient, topicName, minActivePartitions, {group});
         CreateTopic(pqClient, secondTopicName, minActivePartitions, {group});
 
-        TTestClient clientA(testServer.Port);
-        TTestClient clientB(testServer.Port);
-        TTestClient clientC(testServer.Port);
-        TTestClient clientD(testServer.Port);
+        if (forFederation) {
+            testServer.KikimrServer->GetServer().GetRuntime()->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        }
+        TKafkaTestClient clientA(testServer.Port);
+        TKafkaTestClient clientB(testServer.Port);
+        TKafkaTestClient clientC(testServer.Port);
+        TKafkaTestClient clientD(testServer.Port);
 
         {
             auto msg = clientA.ApiVersions();
@@ -1352,25 +1007,26 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             topics.push_back(topicName);
 
             // clientA join group, and get all partitions
-            auto readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions);
+            auto readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(readInfoA.Partitions[0].Topic, topicName);
 
             // clientB join group, and get 0 partitions, becouse it's all at clientA
             UNIT_ASSERT_VALUES_EQUAL(clientB.SaslHandshake()->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientB.SaslAuthenticate("ouruser@/Root", "ourUserPassword")->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            auto readInfoB = clientB.JoinAndSyncGroup(topics, group);
+            auto readInfoB = clientB.JoinAndSyncGroup(topics, group, protocolName, 1000000, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(readInfoB.Partitions.size(), 0);
 
             // clientA gets RABALANCE status, because of new reader. We need to release some partitions for new client
             clientA.WaitRebalance(readInfoA.MemberId, readInfoA.GenerationId, group);
 
             // clientA now gets half of partitions
-            readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/2);
+            readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/2, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
             // some partitions now released, and we can give them to clientB. clientB now gets half of partitions
             clientB.WaitRebalance(readInfoB.MemberId, readInfoB.GenerationId, group);
-            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/2);
+            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/2, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientB.Heartbeat(readInfoB.MemberId, readInfoB.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
             AssertPartitionsIsUniqueAndCountIsExpected({readInfoA, readInfoB}, minActivePartitions, topicName);
@@ -1378,7 +1034,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // clientC join group, and get 0 partitions, becouse it's all at clientA and clientB
             UNIT_ASSERT_VALUES_EQUAL(clientC.SaslHandshake()->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientC.SaslAuthenticate("ouruser@/Root", "ourUserPassword")->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            auto readInfoC = clientC.JoinAndSyncGroup(topics, group);
+            auto readInfoC = clientC.JoinAndSyncGroup(topics, group, protocolName, 1000000, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(readInfoC.Partitions.size(), 0);
 
             // all clients gets RABALANCE status, because of new reader. We need to release some partitions for new client
@@ -1386,13 +1042,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             clientB.WaitRebalance(readInfoB.MemberId, readInfoB.GenerationId, group);
 
             // all clients now gets minActivePartitions/3 partitions
-            readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3);
+            readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3);
+            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientB.Heartbeat(readInfoB.MemberId, readInfoB.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            readInfoC = clientC.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3);
+            readInfoC = clientC.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientC.Heartbeat(readInfoC.MemberId, readInfoC.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
             AssertPartitionsIsUniqueAndCountIsExpected({readInfoA, readInfoB, readInfoC}, minActivePartitions, topicName);
@@ -1400,7 +1056,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             // clientD join group, and get 0 partitions, becouse it's all at clientA, clientB and clientC
             UNIT_ASSERT_VALUES_EQUAL(clientD.SaslHandshake()->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientD.SaslAuthenticate("ouruser@/Root", "ourUserPassword")->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            auto readInfoD = clientD.JoinAndSyncGroup(topics, group);
+            auto readInfoD = clientD.JoinAndSyncGroup(topics, group, protocolName, 1000000, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(readInfoD.Partitions.size(), 0);
 
             // all clients gets RABALANCE status, because of new reader. We need to release some partitions
@@ -1409,16 +1065,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             clientC.WaitRebalance(readInfoC.MemberId, readInfoC.GenerationId, group);
 
             // all clients now gets minActivePartitions/4 partitions
-            readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4);
+            readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4);
+            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientB.Heartbeat(readInfoB.MemberId, readInfoB.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            readInfoC = clientC.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4);
+            readInfoC = clientC.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientC.Heartbeat(readInfoC.MemberId, readInfoC.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            readInfoD = clientD.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4);
+            readInfoD = clientD.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/4, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientD.Heartbeat(readInfoD.MemberId, readInfoD.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
             AssertPartitionsIsUniqueAndCountIsExpected({readInfoA, readInfoB, readInfoC, readInfoD}, minActivePartitions, topicName);
@@ -1433,13 +1089,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             clientD.WaitRebalance(readInfoD.MemberId, readInfoD.GenerationId, group);
 
             // all other clients now gets minActivePartitions/3 partitions
-            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3);
+            readInfoB = clientB.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientB.Heartbeat(readInfoB.MemberId, readInfoB.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            readInfoC = clientC.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3);
+            readInfoC = clientC.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientC.Heartbeat(readInfoC.MemberId, readInfoC.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-            readInfoD = clientD.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3);
+            readInfoD = clientD.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions/3, protocolName, minActivePartitions);
             UNIT_ASSERT_VALUES_EQUAL(clientD.Heartbeat(readInfoD.MemberId, readInfoD.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
             AssertPartitionsIsUniqueAndCountIsExpected({readInfoB, readInfoC, readInfoD}, minActivePartitions, topicName);
@@ -1456,9 +1112,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(topicName);
 
-            auto readInfoA = clientA.JoinGroup(topics, group);
+            auto readInfoA = clientA.JoinGroup(topics, group, protocolName);
             Sleep(TDuration::MilliSeconds(200));
-            auto readInfoB = clientB.JoinGroup(topics, group);
+            auto readInfoB = clientB.JoinGroup(topics, group, protocolName);
             Sleep(TDuration::MilliSeconds(200));
 
             UNIT_ASSERT_VALUES_EQUAL(clientA.LeaveGroup(readInfoA->MemberId.value(), group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -1470,7 +1126,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(shortTopicName);
 
-            auto joinResponse = clientA.JoinGroup(topics, group);
+            auto joinResponse = clientA.JoinGroup(topics, group, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(clientA.LeaveGroup(joinResponse->MemberId.value(), group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
@@ -1480,7 +1136,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(topicName);
 
-            auto joinResponse = clientA.JoinGroup(topics, notExistsGroup);
+            auto joinResponse = clientA.JoinGroup(topics, notExistsGroup, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
         }
 
@@ -1489,7 +1145,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<TString> topics;
             topics.push_back(notExistsTopicName);
 
-            auto joinResponse = clientA.JoinGroup(topics, group);
+            auto joinResponse = clientA.JoinGroup(topics, group, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
         }
 
@@ -1499,7 +1155,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             topics.push_back(topicName);
             topics.push_back(secondTopicName);
 
-            auto readInfo = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions * 2);
+            auto readInfo = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, minActivePartitions * 2, protocolName, minActivePartitions);
 
             std::unordered_set<TString> topicsSet;
             for (auto partition: readInfo.Partitions) {
@@ -1510,11 +1166,109 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             // Check change topics list
             topics.pop_back();
-            auto joinResponse = clientA.JoinGroup(topics, group);
+            auto joinResponse = clientA.JoinGroup(topics, group, protocolName);
             UNIT_ASSERT_VALUES_EQUAL(joinResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)); // tell client to rejoin
         }
 
-    } // Y_UNIT_TEST(BalanceScenario)
+    } // RunBalanceScenarionTest()
+
+    Y_UNIT_TEST(BalanceScenario) {
+        RunBalanceScenarionTest(false);
+    }
+
+    Y_UNIT_TEST(BalanceScenarioForFederation) {
+        RunBalanceScenarionTest(true);
+    }
+
+    Y_UNIT_TEST(BalanceScenarioCdc) {
+
+        TString protocolName = "roundrobin";
+        TInsecureTestServer testServer("2");
+
+
+        TString tableName = "/Root/table-0-test";
+        TString feedName = "feed";
+        TString feedPath = tableName + "/" + feedName;
+        TString tableShortName = "table-0-test";
+        TString feedShortPath = tableShortName + "/" + feedName;
+
+        TString group = "consumer-0";
+        TString notExistsGroup = "consumer-not-exists";
+
+        // create table and init cdc for it
+        {
+            NYdb::NTable::TTableClient tableClient(*testServer.Driver);
+            tableClient.RetryOperationSync([&](TSession session)
+                {
+                    NYdb::NTable::TTableBuilder builder;
+                    builder.AddNonNullableColumn("key", NYdb::EPrimitiveType::Int64).SetPrimaryKeyColumn("key");
+                    builder.AddNonNullableColumn("value", NYdb::EPrimitiveType::Int64);
+
+                    auto createResult = session.CreateTable(tableName, builder.Build()).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL(createResult.IsTransportError(), false);
+                    Cerr << createResult.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT_VALUES_EQUAL(createResult.GetStatus(), EStatus::SUCCESS);
+
+                    auto alterResult = session.AlterTable(tableName, NYdb::NTable::TAlterTableSettings()
+                                    .AppendAddChangefeeds(NYdb::NTable::TChangefeedDescription(feedName,
+                                                                                            NYdb::NTable::EChangefeedMode::Updates,
+                                                                                            NYdb::NTable::EChangefeedFormat::Json))
+                                                        ).ExtractValueSync();
+                    Cerr << alterResult.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT_VALUES_EQUAL(alterResult.IsTransportError(), false);
+                    UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), EStatus::SUCCESS);
+                    return alterResult;
+                }
+            );
+
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Int64(1)
+                    .AddMember("value").Int64(2)
+                .EndStruct();
+            rows.EndList();
+
+            auto upsertResult = tableClient.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            UNIT_ASSERT_EQUAL(upsertResult.GetStatus(), EStatus::SUCCESS);
+        }
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        AlterTopic(pqClient, feedPath, {group});
+
+        for(auto name : {feedPath, feedShortPath} ) {
+            TKafkaTestClient clientA(testServer.Port);
+            {
+                auto msg = clientA.ApiVersions();
+                UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+            }
+            {
+                auto msg = clientA.SaslHandshake();
+                UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+            }
+            {
+                auto msg = clientA.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
+                UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            }
+
+            {
+                // Check partitions balance
+                std::vector<TString> topics;
+                topics.push_back(name);
+
+                // clientA join group, and get all partitions
+                auto readInfoA = clientA.JoinAndSyncGroupAndWaitPartitions(topics, group, 1, protocolName, 1);
+                UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(readInfoA.MemberId, readInfoA.GenerationId, group)->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+                UNIT_ASSERT_VALUES_EQUAL(readInfoA.Partitions.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(readInfoA.Partitions[0].Topic, name);
+            }
+        }
+    } // Y_UNIT_TEST(BalanceScenarioCdc)
 
     Y_UNIT_TEST(OffsetCommitAndFetchScenario) {
         TInsecureTestServer testServer("2");
@@ -1538,7 +1292,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         CreateTopic(pqClient, firstTopicName, minActivePartitions, {firstConsumerName, secondConsumerName});
         CreateTopic(pqClient, secondTopicName, minActivePartitions, {firstConsumerName, secondConsumerName});
 
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         client.AuthenticateToKafka();
 
@@ -1724,7 +1478,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(OffsetFetchScenario)
 
-    void RunCreateTopicsScenario(TInsecureTestServer& testServer, TTestClient& client) {
+    void RunCreateTopicsScenario(TInsecureTestServer& testServer, TKafkaTestClient& client) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
         auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
@@ -1925,7 +1679,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(CreateTopicsScenarioWithKafkaAuth) {
         TInsecureTestServer testServer("2");
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
         client.AuthenticateToKafka();
 
         RunCreateTopicsScenario(testServer, client);
@@ -1933,7 +1687,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(CreateTopicsScenarioWithoutKafkaAuth) {
         TInsecureTestServer testServer("2");
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         RunCreateTopicsScenario(testServer, client);
     } // Y_UNIT_TEST(CreateTopicsScenarioWithoutKafkaAuth)
@@ -1957,7 +1711,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         CreateTopic(pqClient, topic1Name, 10, {});
         CreateTopic(pqClient, topic2Name, 20, {});
 
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         client.AuthenticateToKafka();
 
@@ -2048,6 +1802,72 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(CreatePartitionsScenario)
 
+    Y_UNIT_TEST(DescribeConfigsScenario) {
+        TInsecureTestServer testServer("2");
+
+        TString topic0Name = "/Root/topic-0-test";
+        TString shortTopic0Name = "topic-0-test";
+        TString topic1Name = "/Root/topic-1-test";
+        TString shortTopic1Name = "topic-1-test";
+        TString notExistsTopicName = "/Root/not-exists";
+        //ui64 minActivePartitions = 10;
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        {
+            auto result0 = pqClient.CreateTopic(
+                topic0Name,
+                NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(5, 5).RetentionPeriod(TDuration::Hours(10))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result0.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result0.GetStatus(), EStatus::SUCCESS, result0.GetIssues().ToString());
+
+            auto result1 = pqClient.CreateTopic(
+                topic1Name,
+                NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(10, 10).RetentionStorageMb(51200)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result1.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+        }
+
+        TKafkaTestClient client(testServer.Port);
+
+        client.AuthenticateToKafka();
+
+        auto getConfigsMap = [&](const auto& describeResult) {
+            THashMap<TString, TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult> configs;
+            for (const auto& config : describeResult.Configs) {
+                configs[TString(config.Name->data())] = config;
+            }
+            return configs;
+        };
+        {
+            auto msg = client.DescribeConfigs({ shortTopic0Name, notExistsTopicName, shortTopic1Name});
+            const auto& res0 = msg->Results[0];
+            UNIT_ASSERT_VALUES_EQUAL(res0.ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(res0.ErrorCode, NONE_ERROR);
+            auto configs0 = getConfigsMap(res0);
+            UNIT_ASSERT_VALUES_EQUAL(configs0.size(), 33);
+            UNIT_ASSERT_VALUES_EQUAL(FromString<ui64>(configs0.find("retention.ms")->second.Value->data()), TDuration::Hours(10).MilliSeconds());
+            UNIT_ASSERT_VALUES_EQUAL(configs0.find("cleanup.policy")->second.Value->data(), "delete");
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ResourceName.value(), notExistsTopicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, UNKNOWN_TOPIC_OR_PARTITION);
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[2].ResourceName.value(), shortTopic1Name);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[2].ErrorCode, NONE_ERROR);
+            auto configs1 = getConfigsMap(msg->Results[2]);
+            UNIT_ASSERT_VALUES_EQUAL(FromString<ui64>(configs1.find("retention.bytes")->second.Value->data()), 51200 * 1_MB);
+            UNIT_ASSERT_VALUES_EQUAL(FromString<ui64>(configs1.find("max.message.bytes")->second.Value->data()), 1_KB);
+        }
+        {
+            auto msg = client.DescribeConfigs({ shortTopic0Name, shortTopic0Name});
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), 1);
+            const auto& res0 = msg->Results[0];
+            UNIT_ASSERT_VALUES_EQUAL(res0.ResourceName.value(), shortTopic0Name);
+            UNIT_ASSERT_VALUES_EQUAL(res0.ErrorCode, NONE_ERROR);
+        }
+    }
+
     Y_UNIT_TEST(AlterConfigsScenario) {
         TInsecureTestServer testServer("2");
 
@@ -2075,7 +1895,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(result1.GetStatus(), EStatus::SUCCESS);
         }
 
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         client.AuthenticateToKafka();
 
@@ -2224,7 +2044,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                             .ConsumerName("consumer-0");
         auto topicReader = pqClient.CreateReadSession(settings);
 
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         {
             auto msg = client.ApiVersions();
@@ -2263,7 +2083,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                             .ConsumerName("consumer-0");
         auto topicReader = pqClient.CreateReadSession(settings);
 
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         {
             auto msg = client.ApiVersions();
@@ -2291,7 +2111,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(MetadataScenario) {
         TInsecureTestServer testServer;
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         auto metadataResponse = client.Metadata({});
 
@@ -2306,7 +2126,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(MetadataInServerlessScenario) {
         TInsecureTestServer testServer("1", true);
-        TTestClient client(testServer.Port);
+        TKafkaTestClient client(testServer.Port);
 
         auto metadataResponse = client.Metadata({});
 
@@ -2318,4 +2138,333 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Host, "localhost");
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, FAKE_SERVERLESS_KAFKA_PROXY_PORT);
     }
+
+    Y_UNIT_TEST(NativeKafkaBalanceScenario) {
+        TInsecureTestServer testServer("1", false, true);
+
+        TString topicName = "/Root/topic-0";
+        ui64 totalPartitions = 24;
+        TString groupId = "consumer-0";
+
+        TString protocolType = "consumer";
+        TString protocolName = "range";
+
+        {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto result = pqClient
+                .CreateTopic(
+                    topicName,
+                    NYdb::NTopic::TCreateTopicSettings()
+                        .PartitioningSettings(totalPartitions, 100)
+                        .BeginAddConsumer(groupId).EndAddConsumer()
+                )
+                .ExtractValueSync();
+            UNIT_ASSERT_C(
+                result.IsSuccess(),
+                "CreateTopic failed, issues: " << result.GetIssues().ToString()
+            );
+        }
+
+        TKafkaTestClient clientA(testServer.Port, "ClientA");
+        TKafkaTestClient clientB(testServer.Port, "ClientB");
+        TKafkaTestClient clientC(testServer.Port, "ClientC");
+
+        {
+            auto rA = clientA.ApiVersions();
+            auto rB = clientB.ApiVersions();
+            auto rC = clientC.ApiVersions();
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(rB->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(rC->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+        {
+            auto rA = clientA.SaslHandshake("PLAIN");
+            auto rB = clientB.SaslHandshake("PLAIN");
+            auto rC = clientC.SaslHandshake("PLAIN");
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(rB->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(rC->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+        {
+            TString user = "ouruser@/Root";
+            TString pass = "ourUserPassword";
+            auto rA = clientA.SaslAuthenticate(user, pass);
+            auto rB = clientB.SaslAuthenticate(user, pass);
+            auto rC = clientC.SaslAuthenticate(user, pass);
+            UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(rB->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(rC->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        std::vector<TString> topics = {topicName};
+        i32 heartbeatTimeout = 15000;
+        i32 rebalanceTimeout = 5000;
+
+        // CHECK THREE READERS GETS 1/3 OF PARTITIONS
+
+        TRequestHeaderData headerAJoin = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TRequestHeaderData headerBJoin = clientB.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TRequestHeaderData headerCJoin = clientC.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+
+        TJoinGroupRequestData joinReq;
+        joinReq.GroupId = groupId;
+        joinReq.ProtocolType = protocolType;
+        joinReq.SessionTimeoutMs = heartbeatTimeout;
+        joinReq.RebalanceTimeoutMs = rebalanceTimeout;
+
+        NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
+        protocol.Name = protocolName;
+
+        TConsumerProtocolSubscription subscribtion;
+        for (auto& topic : topics) {
+            subscribtion.Topics.push_back(topic);
+        }
+        TKafkaVersion version = 3;
+        TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+        TKafkaWritable writable(buf);
+        writable << version;
+        subscribtion.Write(writable, version);
+        protocol.Metadata = TKafkaRawBytes(buf.GetBuffer().data(), buf.GetBuffer().size());
+
+        joinReq.Protocols.push_back(protocol);
+
+        TJoinGroupRequestData joinReqA = joinReq;
+        joinReqA.GroupInstanceId = "instanceA";
+        TJoinGroupRequestData joinReqB = joinReq;
+        joinReqB.GroupInstanceId = "instanceB";
+        TJoinGroupRequestData joinReqC = joinReq;
+        joinReqC.GroupInstanceId = "instanceC";
+
+        clientA.WriteToSocket(headerAJoin, joinReqA);
+        clientB.WriteToSocket(headerBJoin, joinReqB);
+        clientC.WriteToSocket(headerCJoin, joinReqC);
+
+        auto joinRespA = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin);
+        auto joinRespB = clientB.ReadResponse<TJoinGroupResponseData>(headerBJoin);
+        auto joinRespC = clientC.ReadResponse<TJoinGroupResponseData>(headerCJoin);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinRespA->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(joinRespB->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(joinRespC->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        bool isLeaderA = (joinRespA->Leader == joinRespA->MemberId);
+        bool isLeaderB = (joinRespB->Leader == joinRespB->MemberId);
+
+        TMessagePtr<TJoinGroupResponseData> leaderResp = isLeaderA ? joinRespA
+                                    : isLeaderB ? joinRespB
+                                    : joinRespC;
+
+        std::vector<TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments = MakeRangeAssignment(leaderResp, totalPartitions);
+
+        TRequestHeaderData syncHeaderA = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+        TRequestHeaderData syncHeaderB = clientB.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+        TRequestHeaderData syncHeaderC = clientC.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+
+        TSyncGroupRequestData syncReqA;
+        syncReqA.GroupId = groupId;
+        syncReqA.ProtocolType = protocolType;
+        syncReqA.ProtocolName = protocolName;
+        syncReqA.GenerationId = joinRespA->GenerationId;
+        syncReqA.MemberId = joinRespA->MemberId.value();
+
+        TSyncGroupRequestData syncReqB = syncReqA;
+        syncReqB.GenerationId = joinRespB->GenerationId;
+        syncReqB.MemberId = joinRespB->MemberId.value();
+
+        TSyncGroupRequestData syncReqC = syncReqA;
+        syncReqC.GenerationId = joinRespC->GenerationId;
+        syncReqC.MemberId = joinRespC->MemberId.value();
+
+        if (isLeaderA) {
+            syncReqA.Assignments = assignments;
+        } else if (isLeaderB) {
+            syncReqB.Assignments = assignments;
+        } else {
+            syncReqC.Assignments = assignments;
+        }
+
+        clientA.WriteToSocket(syncHeaderA, syncReqA);
+        clientB.WriteToSocket(syncHeaderB, syncReqB);
+        clientC.WriteToSocket(syncHeaderC, syncReqC);
+
+        auto syncRespA = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderA);
+        auto syncRespB = clientB.ReadResponse<TSyncGroupResponseData>(syncHeaderB);
+        auto syncRespC = clientC.ReadResponse<TSyncGroupResponseData>(syncHeaderC);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncRespA->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(syncRespB->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(syncRespC->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        auto countPartitions = [topicName](const TConsumerProtocolAssignment& assignment) {
+            size_t sum = 0;
+            for (auto& ta : assignment.AssignedPartitions) {
+                UNIT_ASSERT_VALUES_EQUAL(ta.Topic, topicName);
+                sum += ta.Partitions.size();
+            }
+            return sum;
+        };
+
+        size_t countA = countPartitions(GetAssignments(syncRespA->Assignment));
+        size_t countB = countPartitions(GetAssignments(syncRespB->Assignment));
+        size_t countC = countPartitions(GetAssignments(syncRespC->Assignment));
+
+        UNIT_ASSERT_VALUES_EQUAL(countA, size_t(totalPartitions / 3));
+        UNIT_ASSERT_VALUES_EQUAL(countB, size_t(totalPartitions / 3));
+        UNIT_ASSERT_VALUES_EQUAL(countC, size_t(totalPartitions / 3));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(joinRespA->MemberId.value(), joinRespA->GenerationId, groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientB.Heartbeat(joinRespB->MemberId.value(), joinRespB->GenerationId, groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientC.Heartbeat(joinRespC->MemberId.value(), joinRespC->GenerationId, groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
+
+        // CHECK ONE CLIENT LEAVE, AND OTHERS GETS 1/2 OF PARTITIONS
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientC.LeaveGroup(joinRespC->MemberId.value(), groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
+
+        clientA.WaitRebalance(joinRespA->MemberId.value(), joinRespA->GenerationId, groupId);
+        clientB.WaitRebalance(joinRespB->MemberId.value(), joinRespB->GenerationId, groupId);
+
+        TRequestHeaderData headerAJoin2 = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TRequestHeaderData headerBJoin2 = clientB.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+
+        joinReqA.MemberId = joinRespA->MemberId.value();
+        joinReqB.MemberId = joinRespB->MemberId.value();
+
+        TJoinGroupRequestData joinReqA2 = joinReqA;
+        TJoinGroupRequestData joinReqB2 = joinReqB;
+
+        clientA.WriteToSocket(headerAJoin2, joinReqA2);
+        clientB.WriteToSocket(headerBJoin2, joinReqB2);
+
+        auto joinRespA2 = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin2);
+        auto joinRespB2 = clientB.ReadResponse<TJoinGroupResponseData>(headerBJoin2);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinRespA2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(joinRespB2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        bool isLeaderA2 = (joinRespA2->Leader == joinRespA2->MemberId);
+
+        TMessagePtr<TJoinGroupResponseData> leaderResp2 = isLeaderA2 ? joinRespA2 : joinRespB2;
+
+        std::vector<TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments2 = MakeRangeAssignment(leaderResp2, totalPartitions);
+
+        TRequestHeaderData syncHeaderA2 = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+        TRequestHeaderData syncHeaderB2 = clientB.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+
+        TSyncGroupRequestData syncReqA2;
+        syncReqA2.GroupId = groupId;
+        syncReqA2.ProtocolType = protocolType;
+        syncReqA2.ProtocolName = protocolName;
+        syncReqA2.GenerationId = joinRespA2->GenerationId;
+        syncReqA2.MemberId = joinRespA2->MemberId.value();
+
+        TSyncGroupRequestData syncReqB2 = syncReqA2;
+        syncReqB2.GenerationId = joinRespB2->GenerationId;
+        syncReqB2.MemberId = joinRespB2->MemberId.value();
+
+        if (isLeaderA2) {
+            syncReqA2.Assignments = assignments2;
+        } else {
+            syncReqB2.Assignments = assignments2;
+        }
+
+        clientA.WriteToSocket(syncHeaderA2, syncReqA2);
+        clientB.WriteToSocket(syncHeaderB2, syncReqB2);
+
+        auto syncRespA2 = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderA2);
+        auto syncRespB2 = clientB.ReadResponse<TSyncGroupResponseData>(syncHeaderB2);
+
+        UNIT_ASSERT_VALUES_EQUAL(syncRespA2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(syncRespB2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        size_t countA2 = countPartitions(GetAssignments(syncRespA2->Assignment));
+        size_t countB2 = countPartitions(GetAssignments(syncRespB2->Assignment));
+
+        UNIT_ASSERT_VALUES_EQUAL(countA2, size_t(totalPartitions / 2));
+        UNIT_ASSERT_VALUES_EQUAL(countB2, size_t(totalPartitions / 2));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientB.Heartbeat(joinRespB2->MemberId.value(), joinRespB2->GenerationId, groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
+
+        // CHECK ONE READER DEAD (NO HEARTBEAT)
+
+        Sleep(TDuration::Seconds(5));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)
+        );
+
+        Sleep(TDuration::Seconds(25));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS)
+        );
+
+        // LAST READER GETS ALL PARTITIONS
+        clientA.JoinAndSyncGroupAndWaitPartitions(topics, groupId, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
+
+
+        // CHECK IF MASTER DIE AFTER JOIN
+
+        TRequestHeaderData headerAJoin3 = clientA.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+        TRequestHeaderData headerBJoin3 = clientB.Header(NKafka::EApiKey::JOIN_GROUP, 9);
+
+        TJoinGroupRequestData joinReqA3 = joinReqA;
+        TJoinGroupRequestData joinReqB3 = joinReqB;
+
+        clientA.WriteToSocket(headerAJoin2, joinReqA2);
+        clientB.WriteToSocket(headerBJoin2, joinReqB2);
+
+        auto joinRespA3 = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin2);
+        auto joinRespB3 = clientB.ReadResponse<TJoinGroupResponseData>(headerBJoin2);
+
+        UNIT_ASSERT_VALUES_EQUAL(joinRespA2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(joinRespB2->ErrorCode, (TKafkaInt16)EKafkaErrors::NONE_ERROR);
+
+        bool isLeaderA3 = (joinRespA3->Leader == joinRespA3->MemberId);
+
+        TSyncGroupRequestData syncReqNotMaster;
+        syncReqNotMaster.GroupId = groupId;
+        syncReqNotMaster.ProtocolType = protocolType;
+        syncReqNotMaster.ProtocolName = protocolName;
+
+        TRequestHeaderData syncHeaderNotMaster;
+        if (isLeaderA3) {
+            syncReqNotMaster.GenerationId = joinRespB3->GenerationId;
+            syncReqNotMaster.MemberId = joinRespB3->MemberId.value();
+            syncHeaderNotMaster = clientB.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+            clientB.WriteToSocket(syncHeaderNotMaster, syncReqNotMaster);
+            auto noMasterSyncResponse = clientB.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
+            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
+        } else {
+            syncReqNotMaster.GenerationId = joinRespA3->GenerationId;
+            syncReqNotMaster.MemberId = joinRespA3->MemberId.value();
+            syncHeaderNotMaster = clientA.Header(NKafka::EApiKey::SYNC_GROUP, 5);
+            clientA.WriteToSocket(syncHeaderNotMaster, syncReqNotMaster);
+            auto noMasterSyncResponse = clientA.ReadResponse<TSyncGroupResponseData>(syncHeaderNotMaster);
+            UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
+        }
+
+    }
+
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

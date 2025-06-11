@@ -25,7 +25,6 @@ inline auto DefaultRetryableErrors() {
         EStatus::ABORTED,
         EStatus::UNAVAILABLE,
         EStatus::OVERLOADED,
-        EStatus::GENERIC_ERROR,
         EStatus::TIMEOUT,
         EStatus::BAD_SESSION,
         EStatus::SESSION_EXPIRED,
@@ -42,6 +41,13 @@ inline bool IsRetryableError(const NYdb::TStatus status, const TVector<NYdb::ESt
     case NYdb::EStatus::CLIENT_UNAUTHENTICATED:
     case NYdb::EStatus::CLIENT_CALL_UNIMPLEMENTED:
         return false;
+    case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
+        for (const auto& issue : status.GetIssues()) {
+            if (issue.GetMessage().contains("Misformatted domain name") || issue.GetMessage().contains("Domain name not found") || issue.GetMessage().contains("DNS resolution failed")) {
+                return false;
+            }
+        }
+        return true;
     default:
         return status.IsTransportError() || Find(retryable, status.GetStatus()) != retryable.end();
     }

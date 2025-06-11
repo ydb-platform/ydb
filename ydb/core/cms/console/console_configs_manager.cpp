@@ -213,7 +213,7 @@ void TConfigsManager::Bootstrap(const TActorContext &ctx)
                                                          ctx,
                                                          false,
                                                          NKikimrServices::CMS_CONFIGS);
-    ConfigsProvider = ctx.Register(new TConfigsProvider(ctx.SelfID));
+    ConfigsProvider = ctx.Register(new TConfigsProvider(ctx.SelfID, Counters));
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),

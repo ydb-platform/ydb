@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/engine
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/common/simple
+    ydb/core/kqp/common/batch
     ydb/core/kqp/common/compilation
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
@@ -58,6 +59,7 @@ GENERATE_ENUM_SERIALIZATION(kqp_yql.h)
 END()
 
 RECURSE(
+    batch
     compilation
     events
     simple

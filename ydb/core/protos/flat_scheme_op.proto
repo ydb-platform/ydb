@@ -547,6 +547,7 @@ message TColumnTableSchema {
     repeated TOlapColumnDescription Columns = 1;
     repeated string KeyColumnNames = 2;
 
+    optional EColumnTableEngine Engine = 3;
     // Internal fields
     optional uint32 NextColumnId = 4;
 
@@ -1470,6 +1471,7 @@ message TSplitMergeTablePartitions {
     repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
+    optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
 }
 
 message TUserAttribute {
@@ -1527,7 +1529,14 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
-    optional string TransferTransformLambda = 7;
+
+    message TAlterTransfer {
+        optional string TransformLambda = 1;
+        optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
+        optional uint64 BatchSizeBytes = 3 [default = 8388608];
+    }
+
+    optional TAlterTransfer AlterTransfer = 10;
 }
 
 message TBlobDepotDescription {
@@ -1571,6 +1580,7 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
+    optional uint64 LockTxId = 2; // if missing, current tx id is used
 }
 
 message TLockGuard {

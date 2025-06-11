@@ -8,6 +8,7 @@
 #include <ydb/core/change_exchange/util.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -433,7 +434,10 @@ class TLocalTableWriter
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
         TSet<TRowVersion> versionsWithoutTxId;
 
-        for (auto& [offset, data, _] : ev->Get()->Records) {
+        for (auto& r : ev->Get()->Records) {
+            auto offset = r.GetOffset();
+            auto& data = r.GetData();
+
             auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
 
             if (Mode == EWriteMode::Consistent) {

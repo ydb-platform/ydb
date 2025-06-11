@@ -13,7 +13,7 @@ namespace NKeyValue {
     struct TIntermediate;
 };
 
-struct TEvKeyValue {
+namespace TEvKeyValue {
     enum EEv {
         EvRequest = EventSpaceBegin(TKikimrEvents::ES_KEYVALUE),
         EvIntermediate,
@@ -208,7 +208,7 @@ struct TEvKeyValue {
         using TResponse = TEvCleanUpDataResponse;
 
         TEvCleanUpDataRequest() = default;
-        
+
         TEvCleanUpDataRequest(ui64 generation, bool reset=false) {
             Record.set_generation(generation);
             Record.set_reset_actual_generation(reset);
@@ -221,27 +221,28 @@ struct TEvKeyValue {
 
         TEvCleanUpDataResponse() = default;
 
-        TEvCleanUpDataResponse(ui64 generation, NKikimrKeyValue::CleanUpDataResponse::Status status, const TString& errorReason, ui64 actualGeneration) {
+        TEvCleanUpDataResponse(ui64 generation, NKikimrKeyValue::CleanUpDataResponse::Status status, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
             Record.set_generation(generation);
             Record.set_status(status);
             Record.set_error_reason(errorReason);
             Record.set_actual_generation(actualGeneration);
+            Record.set_tablet_id(tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeSuccess(ui64 generation) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS, "", generation);
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeSuccess(ui64 generation, ui64 tabletId) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS, "", generation, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ABORTED, errorReason, actualGeneration);
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeAborted(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ABORTED, errorReason, actualGeneration, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration);
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeAlreadyCompleted(ui64 generation, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ALREADY_COMPLETED, "", actualGeneration, tabletId);
         }
 
-        static std::unique_ptr<TEvCleanUpDataResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration) {
-            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ERROR, errorReason, actualGeneration);
+        static std::unique_ptr<TEvCleanUpDataResponse> MakeError(ui64 generation, const TString& errorReason, ui64 actualGeneration, ui64 tabletId) {
+            return std::make_unique<TEvCleanUpDataResponse>(generation, NKikimrKeyValue::CleanUpDataResponse::STATUS_ERROR, errorReason, actualGeneration, tabletId);
         }
     };
 
@@ -253,6 +254,6 @@ struct TEvKeyValue {
         {}
     };
 
-};
+}
 
 } // NKikimr

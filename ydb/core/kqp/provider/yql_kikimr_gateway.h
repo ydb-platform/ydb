@@ -203,7 +203,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return true;
+                return false;
         }
     }
 
@@ -487,6 +487,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
     EStoreType StoreType = EStoreType::Row;
+    bool IsIndexImplTable = false;
 
     ui64 RecordsCount = 0;
     ui64 DataSize = 0;
@@ -835,6 +836,8 @@ struct TReplicationSettingsBase {
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
+    bool StatePaused = false;
+    bool StateStandBy = false;
 
     using EFailoverMode = TStateDone::EFailoverMode;
     TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
@@ -911,11 +914,27 @@ struct TDropReplicationSettings {
 };
 
 struct TTransferSettings : public TReplicationSettingsBase {
+
+    struct TBatching {
+        TDuration FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+    };
+
+    TMaybe<TString> ConsumerName;
+    TMaybe<TBatching> Batching;
+
+    TBatching& EnsureBatching() {
+        if (!Batching) {
+            Batching = TBatching();
+        }
+
+        return *Batching;
+    }
 };
 
 struct TCreateTransferSettings {
     TString Name;
-    TVector<std::tuple<TString, TString, TString>> Targets;
+    std::tuple<TString, TString, TString> Target;
     TTransferSettings Settings;
 };
 

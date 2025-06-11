@@ -147,7 +147,7 @@ bool TKeyValueState::StartCleanupData(ui64 generation, TActorId sender) {
     if (CompletedCleanupGeneration >= generation) {
         STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC243, "StartCleanupData already completed",
             (TabletId, TabletId), (generation, generation), (sender, sender));
-        ctx.Send(sender, TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation, CompletedCleanupGeneration));
+        ctx.Send(sender, TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation, CompletedCleanupGeneration, TabletId));
         return false;
     }
 
@@ -174,7 +174,7 @@ void TKeyValueState::ResetCleanupGeneration(const TActorContext &ctx, ui64 gener
     TrashForCleanup.clear();
     for (const auto& [requestedGeneration, recipients] : CleanupGenerationToSender) {
         for (const auto& recipient : recipients) {
-            ctx.Send(recipient, TEvKeyValue::TEvCleanUpDataResponse::MakeAborted(requestedGeneration, "Cleanup generation was reset", generation));
+            ctx.Send(recipient, TEvKeyValue::TEvCleanUpDataResponse::MakeAborted(requestedGeneration, "Cleanup generation was reset", generation, TabletId));
         }
     }
     CleanupGenerationToSender.clear();
@@ -216,15 +216,15 @@ void TKeyValueState::CompleteCleanupDataComplete(const TActorContext& /*ctx*/, c
         for (const auto& sender : recipients) {
             std::unique_ptr<TEvKeyValue::TEvCleanUpDataResponse> response;
             if (last) {
-                response = TEvKeyValue::TEvCleanUpDataResponse::MakeSuccess(generation);
+                response = TEvKeyValue::TEvCleanUpDataResponse::MakeSuccess(generation, TabletId);
             } else {
-                response = TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation, CompletedCleanupGeneration);
+                response = TEvKeyValue::TEvCleanUpDataResponse::MakeAlreadyCompleted(generation, CompletedCleanupGeneration, TabletId);
             }
             TActivationContext::AsActorContext().Send(sender, response.release());
         }
         CleanupGenerationToSender.erase(CleanupGenerationToSender.begin());
     }
-        
+
     STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KVC249, "CompleteCleanupDataComplete",
         (CompletedCleanupGeneration, CompletedCleanupGeneration),
         (CompletedCleanupTrashGeneration, CompletedCleanupTrashGeneration),

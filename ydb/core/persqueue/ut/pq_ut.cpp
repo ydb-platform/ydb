@@ -20,6 +20,75 @@ const static TString TOPIC_NAME = "rt3.dc1--topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 
+Y_UNIT_TEST(TestCmdReadWithLastOffset) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->RegisterService(MakePQDReadCacheServiceActorId(), tc.Runtime->Register(
+                CreatePQDReadCacheService(new NMonitoring::TDynamicCounters()))
+        );
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"user1", true}}, tc);
+        TVector<std::pair<ui64, TString>> data;
+        i64 messageCount = 100;
+        for (i64 i = 1; i <= messageCount; ++i) {
+            data.push_back({i, TString(100_KB, 'a')});
+        }
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+        TString sessionId = "session1";
+        TString user = "user1";
+        TPQCmdSettings sessionSettings{0, user, sessionId};
+        sessionSettings.PartitionSessionId = 1;
+        sessionSettings.KeepPipe = true;
+        TPQCmdReadSettings readSettings{
+            /*session=*/ sessionId,
+            /*partition=*/ 0,
+            /*offset=*/ 0,
+            /*count=*/ static_cast<ui32>(messageCount),
+            /*size=*/ 16_MB,
+            /*resCount=*/ 0,
+        };
+        readSettings.PartitionSessionId = 1;
+        readSettings.User = user;
+
+        activeZone = false;
+        Cerr << "Create session\n";
+        auto pipe = CmdCreateSession(sessionSettings, tc);
+        readSettings.Pipe = pipe;
+
+        for (i64 offset = 0; offset < messageCount; offset += 10) {
+            for (i64 lastOffset = 0; lastOffset <= messageCount; lastOffset += 10) {
+                readSettings.Offset = offset;
+                readSettings.LastOffset = lastOffset;
+                readSettings.ResCount = lastOffset < offset ? 0 : static_cast<ui32>(lastOffset - offset);
+                BeginCmdRead(readSettings, tc);
+
+                TAutoPtr<IEventHandle> handle;
+                auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
+
+                UNIT_ASSERT_C(result->Record.GetPartitionResponse().HasCmdReadResult(), result->Record.GetPartitionResponse().DebugString());
+                auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
+
+                if (lastOffset) {
+                    UNIT_ASSERT_VALUES_EQUAL(readSettings.ResCount, res.ResultSize());
+                }
+
+                for (size_t i = 0; i < res.ResultSize(); ++i) {
+                    UNIT_ASSERT_EQUAL(res.GetResult(i).GetOffset(), offset + i);
+                    UNIT_ASSERT_EQUAL(res.GetResult(i).GetData(), data[offset + i].second);
+                }
+            }
+        }
+    });
+}
+
 Y_UNIT_TEST(TestDirectReadHappyWay) {
     TTestContext tc;
     tc.EnableDetailedPQLog = true;

@@ -1,5 +1,8 @@
 #include "distconf_invoke.h"
 
+#include <ydb/core/audit/audit_log.h>
+#include <ydb/core/util/address_classifier.h>
+
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
@@ -186,11 +189,46 @@ namespace NKikimr::NStorage {
             UpdateFingerprint(config);
         }
 
-        if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "StartProposition config validation failed", (SelfId, SelfId()),
-                (Error, *error), (Config, config));
-            return FinishWithError(TResult::ERROR, TStringBuilder()
-                << "StartProposition config validation failed: " << *error);
+        if (!CheckConfigUpdate(*config)) {
+            return;
+        }
+
+        if (const auto& record = Event->Get()->Record; record.HasReplaceStorageConfig()) {
+            AUDIT_LOG(
+                const auto& replaceConfig = record.GetReplaceStorageConfig();
+
+                const TString oldConfig = TStringBuilder()
+                    << Self->MainConfigYaml
+                    << Self->StorageConfigYaml.value_or("");
+
+                TStringBuilder newConfig;
+                if (replaceConfig.HasYAML()) {
+                    newConfig << replaceConfig.GetYAML();
+                } else {
+                    newConfig << Self->MainConfigYaml;
+                }
+                if (replaceConfig.HasStorageYAML()) {
+                    newConfig << replaceConfig.GetStorageYAML();
+                } else if (replaceConfig.HasSwitchDedicatedStorageSection() && !replaceConfig.GetSwitchDedicatedStorageSection()) {
+                    // dedicated storage YAML is switched off by this operation -- no storage config will be set
+                } else if (Self->StorageConfigYaml) {
+                    newConfig << *Self->StorageConfigYaml;
+                }
+
+                NACLib::TUserToken userToken(replaceConfig.GetUserToken());
+
+                auto wrapEmpty = [](const TString& value) { return value ? value : TString("{none}"); };
+
+                AUDIT_PART("component", TString("distconf"))
+                AUDIT_PART("remote_address", wrapEmpty(NKikimr::NAddressClassifier::ExtractAddress(replaceConfig.GetPeerName())))
+                AUDIT_PART("subject", wrapEmpty(userToken.GetUserSID()))
+                AUDIT_PART("sanitized_token", wrapEmpty(userToken.GetSanitizedToken()))
+                AUDIT_PART("status", TString("SUCCESS"))
+                AUDIT_PART("reason", TString(), false)
+                AUDIT_PART("operation", TString("REPLACE CONFIG"))
+                AUDIT_PART("old_config", oldConfig)
+                AUDIT_PART("new_config", newConfig)
+            );
         }
 
         Self->CurrentProposedStorageConfig.emplace(std::move(*config));
@@ -215,6 +253,16 @@ namespace NKikimr::NStorage {
         IssueScatterTask(std::move(task), done);
 
         Self->RootState = ERootState::IN_PROGRESS; // forbid any concurrent activity
+    }
+
+    bool TInvokeRequestHandlerActor::CheckConfigUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) {
+        if (auto error = ValidateConfigUpdate(*Self->StorageConfig, proposed)) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
+                (Error, *error), (ProposedConfig, proposed));
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
+            return false;
+        }
+        return true;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -31,12 +31,14 @@ SRCS(
     replication.cpp
     secret_resolver.cpp
     session_info.cpp
+    stream_consumer_remover.cpp
     stream_creator.cpp
     stream_remover.cpp
     sys_params.cpp
     target_base.cpp
     target_discoverer.cpp
     target_table.cpp
+    target_transfer.cpp
     target_with_stream.cpp
     tenant_resolver.cpp
     tx_assign_tx_id.cpp

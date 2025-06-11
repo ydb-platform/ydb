@@ -21,6 +21,11 @@
 
 #include "make_config.h"
 
+template<>
+void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
+    out << NKikimrPQ::TEvProposeTransactionResult::EStatus_Name(v);
+}
+
 namespace NKikimr::NPQ {
 
 namespace NHelpers {
@@ -309,6 +314,15 @@ protected:
     void WaitForQuotaConsumed();
     void WaitForWriteError(ui64 cookie, NPersQueue::NErrorCode::EErrorCode errorCode);
     void WaitForDeletePartitionDone();
+
+    void SendCalcPredicate(ui64 step,
+                           ui64 txId,
+                           const TActorId& suppPartitionId);
+    void WaitForGetWriteInfoRequest();
+    void SendGetWriteInfoError(ui32 internalPartitionId,
+                               TString message,
+                               const TActorId& suppPartitionId);
+    void WaitForCalcPredicateResult(ui64 txId, bool predicate);
 
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
@@ -978,8 +992,8 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
     auto* body = event->Record.MutableData();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);
-    operation->SetBegin(begin);
-    operation->SetEnd(end);
+    operation->SetCommitOffsetsBegin(begin);
+    operation->SetCommitOffsetsEnd(end);
     operation->SetConsumer(client);
     operation->SetPath(topic);
     body->SetImmediate(immediate);
@@ -1000,7 +1014,7 @@ void TPartitionFixture::WaitProposeTransactionResponse(const TProposeTransaction
 
     if (matcher.Status) {
         UNIT_ASSERT(event->Record.HasStatus());
-        UNIT_ASSERT(*matcher.Status == event->Record.GetStatus());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Status, event->Record.GetStatus());
     }
 }
 
@@ -2500,6 +2514,47 @@ void TPartitionFixture::CmdChangeOwner(ui64 cookie, const TString& sourceId, TDu
     ownerCookie = event->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 }
 
+void TPartitionFixture::SendCalcPredicate(ui64 step,
+                                          ui64 txId,
+                                          const TActorId& suppPartitionId)
+{
+    SendCalcPredicate(step, txId, "", 0, 0, suppPartitionId);
+}
+
+void TPartitionFixture::WaitForGetWriteInfoRequest()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoRequest>();
+    UNIT_ASSERT(event != nullptr);
+    //UNIT_ASSERT_VALUES_EQUAL(event->OriginalPartition, ActorId);
+}
+
+void TPartitionFixture::SendGetWriteInfoError(ui32 internalPartitionId,
+                                              TString message,
+                                              const TActorId& suppPartitionId)
+{
+    auto event = MakeHolder<TEvPQ::TEvGetWriteInfoError>(internalPartitionId,
+                                                         std::move(message));
+    //event->SupportivePartition = suppPartitionId;
+
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, suppPartitionId, event.Release()));
+}
+
+void TPartitionFixture::WaitForCalcPredicateResult(ui64 txId, bool predicate)
+{
+    while (true) {
+        TAutoPtr<IEventHandle> handle;
+        auto events =
+            Ctx->Runtime->GrabEdgeEvents<TEvPQ::TEvTxCalcPredicateResult, TEvKeyValue::TEvRequest>(handle,
+                                                                                                   TDuration::Seconds(1));
+        if (std::get<TEvKeyValue::TEvRequest*>(events)) {
+            SendDiskStatusResponse(nullptr);
+        } else if (auto* event = std::get<TEvPQ::TEvTxCalcPredicateResult*>(events)) {
+            UNIT_ASSERT_VALUES_EQUAL(event->TxId, txId);
+            UNIT_ASSERT_VALUES_EQUAL(event->Predicate, predicate);
+            break;
+        }
+    }
+}
 
 Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 {
@@ -3600,6 +3655,20 @@ Y_UNIT_TEST_F(The_DeletePartition_Message_Arrives_Before_The_ApproveWriteQuota_M
     WaitForWriteError(1, NPersQueue::NErrorCode::ERROR);
     WaitForDeletePartitionDone();
     WaitForWriteError(2, NPersQueue::NErrorCode::ERROR);
+}
+
+Y_UNIT_TEST_F(After_TEvGetWriteInfoError_Comes_TEvTxCalcPredicateResult, TPartitionFixture)
+{
+    const TPartitionId partitionId{1};
+    const ui64 step = 12345;
+    const ui64 txId = 67890;
+
+    CreatePartition({.Partition=partitionId});
+
+    SendCalcPredicate(step, txId, Ctx->Edge);
+    WaitForGetWriteInfoRequest();
+    SendGetWriteInfoError(31415, "error", Ctx->Edge);
+    WaitForCalcPredicateResult(txId, false);
 }
 
 } // End of suite

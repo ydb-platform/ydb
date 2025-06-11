@@ -14,7 +14,7 @@ class TPartitionEndWatcher {
             return;
         }
 
-        ActorOps->Send(client, new TEvYdbProxy::TEvTopicEndPartition(*EndPartitionSessionEvent));
+        ActorOps->Send(client, new TEvYdbProxy::TEvEndTopicPartition(*EndPartitionSessionEvent));
     }
 
 public:
@@ -43,9 +43,9 @@ public:
         MaybeSendPartitionEnd(client);
     }
 
-    inline void Clear() {
-        PendingCommittedOffset = 0;
-        CommittedOffset = 0;
+    inline void Clear(ui64 committedOffset) {
+        PendingCommittedOffset = committedOffset;
+        CommittedOffset = committedOffset;
         EndPartitionSessionEvent.Clear();
     }
 

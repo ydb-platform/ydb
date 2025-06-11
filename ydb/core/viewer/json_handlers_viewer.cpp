@@ -10,8 +10,10 @@
 #include "viewer_counters.h"
 #include "viewer_describe_consumer.h"
 #include "viewer_describe.h"
+#include "viewer_describe_replication.h"
 #include "viewer_describe_topic.h"
 #include "viewer_feature_flags.h"
+#include "viewer_topic_data.h"
 #include "viewer_graph.h"
 #include "viewer_healthcheck.h"
 #include "viewer_hiveinfo.h"
@@ -155,6 +157,10 @@ void InitViewerDescribeJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/describe", new TJsonHandler<TJsonDescribe>(TJsonDescribe::GetSwagger()));
 }
 
+void InitViewerDescribeReplicationJsonHandler(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/describe_replication", new TJsonHandler<TJsonDescribeReplication>(TJsonDescribeReplication::GetSwagger()));
+}
+
 void InitViewerDescribeTopicJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/describe_topic", new TJsonHandler<TJsonDescribeTopic>(TJsonDescribeTopic::GetSwagger()));
 }
@@ -187,6 +193,10 @@ void InitViewerCountersJsonHandler(TJsonHandlers& handlers) {
 
 void InitViewerTopicInfoJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/topicinfo", new TJsonHandler<TJsonTopicInfo>(TJsonTopicInfo::GetSwagger()));
+}
+
+void InitViewerTopicDataJsonHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/topic_data", new TJsonHandler<TTopicData>(TTopicData::GetSwagger()));
 }
 
 void InitViewerPQConsumerInfoJsonHandler(TJsonHandlers& handlers) {
@@ -246,7 +256,7 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 14);
+    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 15);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {
@@ -294,6 +304,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerPDiskInfoJsonHandler(jsonHandlers);
     InitViewerTabletInfoJsonHandler(jsonHandlers);
     InitViewerDescribeJsonHandler(jsonHandlers);
+    InitViewerDescribeReplicationJsonHandler(jsonHandlers);
     InitViewerDescribeTopicJsonHandler(jsonHandlers);
     InitViewerDescribeConsumerJsonHandler(jsonHandlers);
     InitViewerHotkeysJsonHandler(jsonHandlers);
@@ -303,6 +314,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerConfigJsonHandler(jsonHandlers);
     InitViewerCountersJsonHandler(jsonHandlers);
     InitViewerTopicInfoJsonHandler(jsonHandlers);
+    InitViewerTopicDataJsonHandler(jsonHandlers);
     InitViewerPQConsumerInfoJsonHandler(jsonHandlers);
     InitViewerTabletCountersJsonHandler(jsonHandlers);
     InitViewerStorageJsonHandler(jsonHandlers);

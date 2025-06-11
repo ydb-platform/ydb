@@ -44,6 +44,7 @@ namespace {
 
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType GetOperation(NKikimrKqp::TKqpTableSinkSettings::EType type) {
         switch (type) {
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_FILL:
         case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:
             return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
         case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
@@ -239,9 +240,6 @@ public:
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
-                .MemoryLimitPerMessage = std::min(
-                    MessageSettings.InFlightMemoryLimitPerActorBytes,
-                    MessageSettings.MemoryLimitPerMessageBytes),
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -291,6 +289,10 @@ public:
 
     bool IsEmpty() const {
         return ShardedWriteController->IsEmpty();
+    }
+
+    const TTableId& GetTableId() const {
+        return TableId;
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const {
@@ -352,20 +354,13 @@ public:
         ShardedWriteController->Close();
     }
 
-    void SetParentTraceId(NWilson::TTraceId traceId) {
-        ParentTraceId = std::move(traceId);
+    void CleanupClosedTokens() {
+        YQL_ENSURE(ShardedWriteController);
+        ShardedWriteController->CleanupClosedTokens();
     }
 
-    void UpdateShards() {
-        // TODO: Maybe there are better ways to initialize new shards...
-        for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
-            IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
-            if (shardInfo.HasRead) {
-                flags |= IKqpTransactionManager::EAction::READ;
-            }
-            TxManager->AddAction(shardInfo.ShardId, flags);
-        }
+    void SetParentTraceId(NWilson::TTraceId traceId) {
+        ParentTraceId = std::move(traceId);
     }
 
     bool IsClosed() const {
@@ -777,6 +772,8 @@ public:
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         YQL_ENSURE(Mode == EMode::PREPARE);
         const auto& record = ev->Get()->Record;
+        AFL_ENSURE(record.GetTxLocks().empty());
+
         IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
         preparedInfo.MinStep = record.GetMinStep();
@@ -819,10 +816,7 @@ public:
                     issues.AddIssue(*TxManager->GetLockIssue());
                     RuntimeError(
                         NYql::NDqProto::StatusIds::ABORTED,
-                        NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-                        TStringBuilder() << "Transaction locks invalidated. Table `"
-                            << TablePath << "`.",
-                        issues);
+                        std::move(issues));
                     return;
                 }
             }
@@ -839,6 +833,7 @@ public:
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
+            AFL_ENSURE(Mode == EMode::WRITE);
             Callbacks->OnMessageAcknowledged(result->DataSize);
         }
     }
@@ -876,18 +871,30 @@ public:
         }
     }
 
+    void UpdateShards() {
+        for (const auto& shardInfo : ShardedWriteController->ExtractShardUpdates()) {
+            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+            IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
+            if (shardInfo.HasRead) {
+                flags |= IKqpTransactionManager::EAction::READ;
+            }
+            TxManager->AddAction(shardInfo.ShardId, flags);
+        }
+    }
+
     void FlushBuffers() {
         ShardedWriteController->FlushBuffers();
         UpdateShards();
     }
 
-    bool Flush() {
-        for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
-            if (!SendDataToShard(shardInfo.ShardId)) {
-                return false;
+    bool FlushToShards() {
+        bool ok = true;
+        ShardedWriteController->ForEachPendingShard([&](const auto& shardInfo) {
+            if (ok && !SendDataToShard(shardInfo.ShardId)) {
+                ok = false;
             }
-        }
-        return true;
+        });
+        return ok;
     }
 
     bool SendDataToShard(const ui64 shardId) {
@@ -957,6 +964,15 @@ public:
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
             Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
 
+            for (const auto& operation : evWrite->Record.GetOperations()) {
+                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                       || operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                    Counters->WriteActorReadWriteOperations->Inc();
+                } else {
+                    Counters->WriteActorWriteOnlyOperations->Inc();
+                }
+            }
+
             SendTime[shardId] = TInstant::Now();
         } else {
             YQL_ENSURE(!isPrepare);
@@ -976,7 +992,11 @@ public:
             }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
-            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
+            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode)
+            << ", BufferMemory=" << GetMemory());
+
+        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
@@ -1023,10 +1043,11 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
         if (InconsistentTx) {
             RetryShard(ev->Get()->TabletId, std::nullopt);
-        } else if ((TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::PREPARED
-                    || TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING)
+        } else if ((state == IKqpTransactionManager::PREPARED
+                    || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
             // Disconnected while waiting for other shards to prepare
             auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
@@ -1034,28 +1055,30 @@ public:
                         << reattachState.ReattachInfo.Delay << ")");
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
+        } else if (state == IKqpTransactionManager::EXECUTING) {
+            TxManager->SetError(ev->Get()->TabletId);
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNDETERMINED,
+                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                TStringBuilder()
+                    << "State of operation is unknown. "
+                    << "Error writing to table `" << TablePath << "`"
+                    << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
+            return;
+        } else if (state == IKqpTransactionManager::PROCESSING
+                || state == IKqpTransactionManager::PREPARING
+                || state == IKqpTransactionManager::PREPARED) {
+            TxManager->SetError(ev->Get()->TabletId);
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Kikimr cluster or one of its subsystems was unavailable. "
+                    << "Error writing to table `" << TablePath << "`"
+                    << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
+            return;
         } else {
-            if (TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING) {
-                TxManager->SetError(ev->Get()->TabletId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNDETERMINED,
-                    NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                    TStringBuilder()
-                        << "State of operation is unknown. "
-                        << "Error writing to table `" << TablePath << "`"
-                        << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
-                return;
-            } else {
-                TxManager->SetError(ev->Get()->TabletId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder()
-                        << "Kikimr cluster or one of its subsystems was unavailable. "
-                        << "Error writing to table `" << TablePath << "`"
-                        << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
-                return;
-            }
+            AFL_ENSURE(state == IKqpTransactionManager::FINISHED || state == IKqpTransactionManager::ERROR);
         }
     }
 
@@ -1253,6 +1276,7 @@ public:
         Stats.AffectedPartitions.clear();
     }
 
+private:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
     TString LogPrefix;
@@ -1324,6 +1348,7 @@ public:
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
 
+        TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
@@ -1489,13 +1514,14 @@ private:
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << "Stream write can't be used for this query.",
+                    TStringBuilder() << "Out of buffer memory. Used " << GetMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                     {});
                 return;
             }
 
             if (Closed || outOfMemory) {
-                if (!WriteTableActor->Flush()) {
+                if (!WriteTableActor->FlushToShards()) {
                     return;
                 }
             }
@@ -1618,11 +1644,11 @@ private:
 namespace {
 
 struct TWriteToken {
-    TTableId TableId;
+    TPathId PathId;
     ui64 Cookie;
 
     bool IsEmpty() const {
-        return !TableId;
+        return !PathId;
     }
 };
 
@@ -1745,7 +1771,6 @@ public:
 
     void Handle(TEvBufferWrite::TPtr& ev) {
         Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - ev->Get()->SendTime).MicroSeconds());
-
         TWriteToken token;
         if (!ev->Get()->Token) {
             AFL_ENSURE(ev->Get()->Settings);
@@ -1760,7 +1785,7 @@ public:
                 InconsistentTx = settings.TransactionSettings.InconsistentTx;
             }
 
-            auto& writeInfo = WriteInfos[settings.TableId];
+            auto& writeInfo = WriteInfos[settings.TableId.PathId];
             if (!writeInfo.WriteTableActor) {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;
                 keyColumnTypes.reserve(settings.KeyColumns.size());
@@ -1789,19 +1814,33 @@ public:
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
+            if (writeInfo.WriteTableActor->GetTableId().SchemaVersion != settings.TableId.SchemaVersion) {
+                CA_LOG_E("Scheme changed for table `"
+                    << settings.TablePath << "`.");
+                ReplyErrorAndDie(
+                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                    NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
+                    TStringBuilder() << "Scheme changed. Table: `"
+                        << settings.TablePath << "`.",
+                    {});
+                return;
+            }
+            AFL_ENSURE(writeInfo.WriteTableActor->GetTableId() == settings.TableId);
+
             EnableStreamWrite &= settings.EnableStreamWrite;
+
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
-            token = TWriteToken{settings.TableId, cookie};
+            token = TWriteToken{settings.TableId.PathId, cookie};
         } else {
             token = *ev->Get()->Token;
         }
 
-        auto& queue = DataQueues[token.TableId];
+        auto& queue = DataQueues[token.PathId];
         queue.emplace();
         auto& message = queue.back();
 
@@ -1833,11 +1872,11 @@ public:
     }
 
     void ProcessRequestQueue() {
-        for (auto& [tableId, queue] : DataQueues) {
-            auto& writeInfo = WriteInfos.at(tableId);
+        for (auto& [pathId, queue] : DataQueues) {
+            auto& writeInfo = WriteInfos.at(pathId);
 
             if (!writeInfo.WriteTableActor->IsReady()) {
-                CA_LOG_D("ProcessRequestQueue " << tableId << " NOT READY queue=" << queue.size());
+                CA_LOG_D("ProcessRequestQueue " << pathId << " NOT READY queue=" << queue.size());
                 return;
             }
 
@@ -1889,7 +1928,8 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Stream write queries aren't allowed.",
+                TStringBuilder() << "Out of buffer memory. Used " << GetTotalMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                 {});
             return false;
         }
@@ -1898,7 +1938,7 @@ public:
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
                 if (info.WriteTableActor->IsReady()) {
-                    if (!info.WriteTableActor->Flush()) {
+                    if (!info.WriteTableActor->FlushToShards()) {
                         return false;
                     }
                 }
@@ -1921,19 +1961,20 @@ public:
         return Process();
     }
 
-    bool Prepare(const ui64 txId, NWilson::TTraceId traceId) {
+    bool Prepare(std::optional<NWilson::TTraceId> traceId) {
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
         YQL_ENSURE(State == EState::WRITING);
+        YQL_ENSURE(!NeedToFlushBeforeCommit);
         State = EState::PREPARING;
         for (auto& [_, queue] : DataQueues) {
             YQL_ENSURE(queue.empty());
         }
-        TxId = txId;
+        YQL_ENSURE(TxId);
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetPrepare(txId);
+            info.WriteTableActor->SetPrepare(*TxId);
         }
         Close();
         if (!Process()) {
@@ -1990,7 +2031,6 @@ public:
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
-        SendToTopics(true);
     }
 
     void SendToExternalShards(bool isRollback) {
@@ -2147,7 +2187,7 @@ public:
     }
 
     i64 GetFreeSpace(TWriteToken token) const {
-        auto& info = WriteInfos.at(token.TableId);
+        auto& info = WriteInfos.at(token.PathId);
         return info.WriteTableActor->IsReady()
             ? MessageSettings.InFlightMemoryLimitPerActorBytes - info.WriteTableActor->GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
@@ -2374,12 +2414,25 @@ public:
 
         if (!TxManager->NeedCommit()) {
             RollbackAndDie(std::move(ev->TraceId));
+        } else if (TxManager->BrokenLocks()) {
+            NYql::TIssues issues;
+            issues.AddIssue(*TxManager->GetLockIssue());
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::ABORTED,
+                std::move(issues));
+            return;
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
             ImmediateCommit(std::move(ev->TraceId));
         } else {
-            TxManager->StartPrepare();
-            Prepare(ev->Get()->TxId, std::move(ev->TraceId));
+            AFL_ENSURE(ev->Get()->TxId);
+            TxId = ev->Get()->TxId;
+            if (NeedToFlushBeforeCommit) {
+                Flush(std::move(ev->TraceId));
+            } else {
+                TxManager->StartPrepare();
+                Prepare(std::move(ev->TraceId));
+            }
         }
     }
 
@@ -2513,7 +2566,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
-                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. " << getPathes() << ".",
+                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << "(" << getPathes() << ")" << " is out of space.",
                 getIssues());
             return;
         }
@@ -2759,6 +2812,14 @@ public:
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
         State = EState::WRITING;
+        AFL_ENSURE(!TxId || NeedToFlushBeforeCommit); // TxId => NeedToFlushBeforeCommit
+        NeedToFlushBeforeCommit = false;
+        if (TxId) {
+            TxManager->StartPrepare();
+            Prepare(std::nullopt);
+            return;
+        }
+
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
             BuildStats()
         });
@@ -2766,6 +2827,7 @@ public:
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
 
         for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->CleanupClosedTokens();
             info.WriteTableActor->Unlink();
         }
     }
@@ -2799,8 +2861,11 @@ public:
         ReplyErrorAndDieImpl(statusCode, std::move(issues));
     }
 
-    void UpdateTracingState(const char* name, NWilson::TTraceId traceId) {
-        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(traceId),
+    void UpdateTracingState(const char* name, std::optional<NWilson::TTraceId> traceId) {
+        if (!traceId) {
+            return;
+        }
+        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(*traceId),
             name, NWilson::EFlags::AUTO_END);
         if (BufferWriteActorStateSpan.GetTraceId() != BufferWriteActorSpan.GetTraceId()) {
             BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
@@ -2878,11 +2943,12 @@ private:
         TActorId WriteTableActorId;
     };
 
-    THashMap<TTableId, TWriteInfo> WriteInfos;
+    THashMap<TPathId, TWriteInfo> WriteInfos;
 
     EState State;
     bool HasError = false;
-    THashMap<TTableId, std::queue<TBufferWriteMessage>> DataQueues;
+    bool NeedToFlushBeforeCommit = false;
+    THashMap<TPathId, std::queue<TBufferWriteMessage>> DataQueues;
 
     struct TAckMessage {
         TActorId ForwardActorId;
@@ -2921,7 +2987,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
-        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "TKqpForwardWriteActor")
+        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor")
     {
         EgressStats.Level = args.StatsLevel;
 
@@ -2931,6 +2997,7 @@ public:
         std::vector<ui32> writeIndex(
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
+        TGuard guard(*Alloc);
         if (Settings.GetIsOlap()) {
             Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
@@ -2965,6 +3032,12 @@ private:
 
     void Handle(TEvBufferWriteResult::TPtr& result) {
         CA_LOG_D("TKqpForwardWriteActor recieve EvBufferWriteResult from " << BufferActorId);
+
+        WriteToken = result->Get()->Token;
+        OnFlushed();
+    }
+
+    void OnFlushed() {
         InFlight = false;
 
         EgressStats.Bytes += DataSize;
@@ -2973,8 +3046,6 @@ private:
         EgressStats.Resume();
 
         Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
-
-        WriteToken = result->Get()->Token;
         DataSize = 0;
 
         if (Closed) {
@@ -3029,6 +3100,12 @@ private:
         }
 
         ev->SendTime = TInstant::Now();
+
+        if (ev->Data->IsEmpty() && ev->Close && WriteToken.IsEmpty()) {
+            // Nothing was written
+            OnFlushed();
+            return;
+        }
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));

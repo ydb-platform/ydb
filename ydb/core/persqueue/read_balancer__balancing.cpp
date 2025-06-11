@@ -552,6 +552,7 @@ std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvRelea
     auto& r = res->Record;
 
     r.SetSession(Session->SessionName);
+    r.SetCount(1);
     r.SetTopic(Topic());
     r.SetPath(TopicPath());
     r.SetGeneration(TabletGeneration());
@@ -681,7 +682,7 @@ bool IsRoot(const TPartitionGraph::Node* node, const std::unordered_set<ui32>& p
     if (node->IsRoot()) {
         return true;
     }
-    for (auto* p : node->Parents) {
+    for (auto* p : node->DirectParents) {
         if (partitions.contains(p->Id)) {
             return false;
         }
@@ -966,10 +967,10 @@ bool TConsumer::IsReadable(ui32 partitionId) {
     }
 
     if (Partitions.empty()) {
-        return node->Parents.empty();
+        return node->DirectParents.empty();
     }
 
-    for(auto* parent : node->HierarhicalParents) {
+    for(auto* parent : node->AllParents) {
         if (!IsInactive(parent->Id)) {
             return false;
         }
@@ -1035,9 +1036,9 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
             if (family->CanAttach(std::vector{id})) {
                 auto* node = GetPartitionGraph().GetPartition(id);
                 bool allParentsMerged = true;
-                if (node->Parents.size() > 1) {
+                if (node->DirectParents.size() > 1) {
                     // The partition was obtained as a result of the merge.
-                    for (auto* c : node->Parents) {
+                    for (auto* c : node->DirectParents) {
                         auto* other = FindFamily(c->Id);
                         if (!other) {
                             allParentsMerged = false;

@@ -391,6 +391,10 @@ struct Schema : NIceDb::Schema {
 
         struct ByKeyFilterSize : Column<34, NScheme::NTypeIds::Uint64> {};
 
+        struct LocksAcquired : Column<35, NScheme::NTypeIds::Uint64> {};
+        struct LocksWholeShard : Column<36, NScheme::NTypeIds::Uint64> {};
+        struct LocksBroken : Column<37, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
         using TColumns = TableColumns<
             TableOwnerId,
@@ -426,7 +430,10 @@ struct Schema : NIceDb::Schema {
             FullCompactionTs,
             MemDataSize,
             StoragePoolsStats,
-            ByKeyFilterSize
+            ByKeyFilterSize,
+            LocksAcquired,
+            LocksWholeShard,
+            LocksBroken
         >;
     };
 
@@ -1367,6 +1374,10 @@ struct Schema : NIceDb::Schema {
         struct ReadRowsProcessed : Column<39, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<40, NScheme::NTypeIds::Uint64> {};
 
+        struct StartTime : Column<41, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<42, NScheme::NTypeIds::Uint64> {};
+        struct UserSID : Column<43, NScheme::NTypeIds::Utf8> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1408,7 +1419,10 @@ struct Schema : NIceDb::Schema {
             UploadRowsProcessed,
             UploadBytesProcessed,
             ReadRowsProcessed,
-            ReadBytesProcessed
+            ReadBytesProcessed,
+            StartTime,
+            EndTime,
+            UserSID
         >;
     };
 
@@ -1919,13 +1933,24 @@ struct Schema : NIceDb::Schema {
         struct Level : Column<2, NScheme::NTypeIds::Uint32> {};
         struct State : Column<3, NScheme::NTypeIds::Uint32> {};
         struct Parent : Column<4, ClusterIdTypeId> {};
+        struct ParentBegin : Column<5, ClusterIdTypeId> {};
+        struct Child : Column<6, ClusterIdTypeId> {};
+        struct ChildBegin : Column<7, ClusterIdTypeId> {};
+        struct TableSize : Column<8, NScheme::NTypeIds::Uint64> {};
+        // TableSize required for prefixed kmeans tree
+        // But can be filled and used for other kmeans tree for "auto" settings choice
+        // Also for "auto" settings will needs to save K
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             Level,
             State,
-            Parent
+            Parent,
+            ParentBegin,
+            Child,
+            ChildBegin,
+            TableSize
         >;
     };
 

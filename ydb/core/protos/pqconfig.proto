@@ -653,7 +653,7 @@ message TReleasePartition {
     optional uint64 Generation = 2;
     optional string Session = 3;
     optional string ClientId = 4;
-    reserved 5; // optional uint32 Count = 5;
+    optional uint32 Count = 5;
     optional NActorsProto.TActorId PipeClient = 6;
     optional uint32 Group = 7;
     optional string Path = 8;
@@ -904,7 +904,7 @@ message TUserInfo {
     optional uint64 OffsetRewindSum = 5;
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
-
+    optional bool AnyCommits = 8;
 }
 
 message TPartitionClientInfo {
@@ -952,11 +952,15 @@ message TYdsShardIterator {
 
 message TPartitionOperation {
     optional uint32 PartitionId = 1;
-    optional uint64 Begin = 2;
-    optional uint64 End = 3;
+    optional uint64 CommitOffsetsBegin = 2;
+    optional uint64 CommitOffsetsEnd = 3;
     optional string Consumer = 4;
     optional string Path = 5; // topic path
     optional uint32 SupportivePartition = 6;
+    optional bool ForceCommit = 7;
+    optional bool KillReadSession = 8;
+    optional bool OnlyCheckCommitedToFinish = 9;
+    optional string ReadSessionId = 10;
 };
 
 message TWriteId {

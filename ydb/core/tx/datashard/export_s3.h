@@ -29,28 +29,15 @@ public:
         const ui64 maxBytes = scanSettings.GetBytesBatchSize();
         const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
 
-        TS3ExportBufferSettings bufferSettings;
-        bufferSettings
-            .WithColumns(Columns)
-            .WithMaxRows(maxRows)
-            .WithMaxBytes(maxBytes);
-        if (Task.GetEnableChecksums()) {
-            bufferSettings.WithChecksum(TS3ExportBufferSettings::Sha256Checksum());
-        }
-
         switch (CodecFromTask(Task)) {
         case ECompressionCodec::None:
-            break;
+            return CreateS3ExportBufferRaw(Columns, maxRows, maxBytes, Task.GetEnableChecksums());
         case ECompressionCodec::Zstd:
-            bufferSettings
-                .WithMinBytes(minBytes)
-                .WithCompression(TS3ExportBufferSettings::ZstdCompression(Task.GetCompression().GetLevel()));
-            break;
+            return CreateS3ExportBufferZstd(Task.GetCompression().GetLevel(), Columns, maxRows,
+                maxBytes, minBytes, Task.GetEnableChecksums());
         case ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
         }
-
-        return CreateS3ExportBuffer(std::move(bufferSettings));
     }
 
     void Shutdown() const override {}

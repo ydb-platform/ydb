@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class TestFollowersCompatibility(object):
     @classmethod
     def setup_class(cls):
-        last_stable_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+        last_stable_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-24-4")
         binary_paths = [kikimr_driver_path(), last_stable_path]
         cls.datacenters = [1, 2, 3]
         cls.dc_map = {i : cls.datacenters[(i - 1) % 3] for i in range(1, 10)}

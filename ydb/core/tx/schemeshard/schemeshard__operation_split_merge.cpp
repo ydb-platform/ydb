@@ -705,6 +705,75 @@ public:
         return true;
     }
 
+    bool AllocateDstForOneToOne(
+            const NKikimrSchemeOp::TSplitMergeTablePartitions& info,
+            TTxId txId,
+            const TPathId& pathId,
+            const TVector<ui64>& srcPartitionIdxs,
+            const TTableInfo::TCPtr tableInfo,
+            TTxState& op,
+            const TChannelsBindings& channels,
+            TString& errStr,
+            TOperationContext& context)
+    {
+        Y_UNUSED(errStr);
+
+        // 1 source shard is split/merged into 1 shard
+        Y_ABORT_UNLESS(srcPartitionIdxs.size() == 1);
+        Y_ABORT_UNLESS(info.SplitBoundarySize() == 0);
+
+        TString firstRangeBegin;
+        if (srcPartitionIdxs[0] != 0) {
+            // Take the end of previous shard
+            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0]-1].EndOfRange;
+        } else {
+            TVector<TCell> firstKey;
+            ui32 keyColCount = 0;
+            for (const auto& col : tableInfo->Columns) {
+                if (col.second.IsKey()) {
+                    ++keyColCount;
+                }
+            }
+            // Or start from (NULL, NULL, .., NULL)
+            firstKey.resize(keyColCount);
+            firstRangeBegin = TSerializedCellVec::Serialize(firstKey);
+        }
+
+        op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
+        // Fill src shards
+        TString prevRangeEnd = firstRangeBegin;
+        for (ui64 pi : srcPartitionIdxs) {
+            auto* srcRange = op.SplitDescription->AddSourceRanges();
+            auto shardIdx = tableInfo->GetPartitions()[pi].ShardIdx;
+            srcRange->SetShardIdx(ui64(shardIdx.GetLocalId()));
+            srcRange->SetTabletID(ui64(context.SS->ShardInfos[shardIdx].TabletID));
+            srcRange->SetKeyRangeBegin(prevRangeEnd);
+            TString rangeEnd = tableInfo->GetPartitions()[pi].EndOfRange;
+            srcRange->SetKeyRangeEnd(rangeEnd);
+            prevRangeEnd = rangeEnd;
+        }
+
+        // Fill dst shard
+        TShardInfo datashardInfo = TShardInfo::DataShardInfo(txId, pathId);
+        datashardInfo.BindedChannels = channels;
+
+        auto idx = context.SS->RegisterShardInfo(datashardInfo);
+
+        ui64 lastSrcPartition = srcPartitionIdxs.back();
+        TString lastRangeEnd = tableInfo->GetPartitions()[lastSrcPartition].EndOfRange;
+
+        TTxState::TShardOperation dstShardOp(idx, ETabletType::DataShard, TTxState::CreateParts);
+        dstShardOp.RangeEnd = lastRangeEnd;
+        op.Shards.push_back(dstShardOp);
+
+        auto* dstRange = op.SplitDescription->AddDestinationRanges();
+        dstRange->SetShardIdx(ui64(idx.GetLocalId()));
+        dstRange->SetKeyRangeBegin(firstRangeBegin);
+        dstRange->SetKeyRangeEnd(lastRangeEnd);
+
+        return true;
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -926,6 +995,12 @@ public:
         } else if (dstCount == 1 && srcPartitionIdxs.size() > 1) {
             // This is merge, allocate 1 Dst shard
             if (!AllocateDstForMerge(info, OperationId.GetTxId(), path.Base()->PathId, srcPartitionIdxs, tableInfo, op, channelsBinding, errStr, context)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+        } else if (srcPartitionIdxs.size() == 1 && dstCount == 1 && info.GetAllowOneToOneSplitMerge()) {
+            // This is one-to-one split/merge
+            if (!AllocateDstForOneToOne(info, OperationId.GetTxId(), path.Base()->PathId, srcPartitionIdxs, tableInfo, op, channelsBinding, errStr, context)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }

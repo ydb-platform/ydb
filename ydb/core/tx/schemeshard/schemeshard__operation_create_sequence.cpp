@@ -508,7 +508,7 @@ public:
         TSequenceInfo::TPtr alterData = sequenceInfo->CreateNextVersion();
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = FillSequenceDescription(
-            descr, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+            descr, *typeRegistry, AppData()->FeatureFlags.GetEnableTablePgTypes(), errStr);
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);

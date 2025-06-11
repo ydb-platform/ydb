@@ -359,11 +359,22 @@ private:
     void EndWriteTabletState(const NKikimrClient::TResponse& resp,
                              const TActorContext& ctx);
 
+    void SendProposeTransactionResult(const TActorId& target,
+                                      ui64 txId,
+                                      NKikimrPQ::TEvProposeTransactionResult::EStatus status,
+                                      NKikimrPQ::TError::EKind kind,
+                                      const TString& reason,
+                                      const TActorContext& ctx);
     void SendProposeTransactionAbort(const TActorId& target,
                                      ui64 txId,
                                      NKikimrPQ::TError::EKind kind,
                                      const TString& reason,
                                      const TActorContext& ctx);
+    void SendProposeTransactionOverloaded(const TActorId& target,
+                                          ui64 txId,
+                                          NKikimrPQ::TError::EKind kind,
+                                          const TString& reason,
+                                          const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvProposePartitionConfigResult::TPtr& ev, const TActorContext& ctx);
     void HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransaction> event,
@@ -407,7 +418,7 @@ private:
 
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,
-                    std::unique_ptr<IEventBase> event,
+                    std::unique_ptr<TEvTxProcessing::TEvReadSet> event,
                     const TActorContext& ctx);
 
     void InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,
@@ -561,6 +572,13 @@ private:
     void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);
 
     void DeleteSupportivePartitions(const TActorContext& ctx);
+
+    TDeque<TAutoPtr<IEventHandle>> PendingEvents;
+
+    void AddPendingEvent(IEventHandle* ev);
+    void ProcessPendingEvents();
+
+    void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
 };
 
 

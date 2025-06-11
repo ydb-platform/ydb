@@ -24,14 +24,6 @@ using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
 
-void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
-    out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " Codec: " << Codec
-    << " }";
-}
-
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
         << " PartitionId: " << PartitionId
@@ -44,6 +36,12 @@ void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
         << " PartitionId: " << PartitionId
         << " AdjacentPartitionsIds [" << JoinSeq(",", AdjacentPartitionsIds) << "]"
         << " ChildPartitionsIds [" << JoinSeq(",", ChildPartitionsIds) << "]"
+    << " }";
+}
+
+void TEvYdbProxy::TStartTopicReadingSessionResult::Out(IOutputStream& out) const {
+    out << "{"
+        << " ReadSessionId: " << ReadSessionId
     << " }";
 }
 
@@ -185,10 +183,23 @@ private:
 
 class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        if (AutoCommit) {
+        auto args = std::move(ev->Get()->GetArgs());
+        const auto& settings = std::get<TEvYdbProxy::TReadTopicSettings>(args);
+        if (AutoCommit && !settings.SkipCommit_) {
             DeferredCommit.Commit();
         }
         WaitEvent(ev->Sender, ev->Cookie);
+    }
+
+    void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
+        auto [path, partitionId, consumerName, offset, settings]  = std::move(ev->Get()->GetArgs());
+
+        Y_UNUSED(path);
+        Y_UNUSED(partitionId);
+        Y_UNUSED(consumerName);
+        Y_UNUSED(settings);
+
+        PartitionEndWatcher.SetCommittedOffset(offset - 1, ev->Sender);
     }
 
     void WaitEvent(const TActorId& sender, ui64 cookie) {
@@ -209,8 +220,9 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         }
 
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-            PartitionEndWatcher.Clear();
+            PartitionEndWatcher.Clear(x->GetCommittedOffset());
             x->Confirm();
+            Send(ev->Get()->Sender, new TEvYdbProxy::TEvStartTopicReadingSession(*x), 0, ev->Get()->Cookie);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();
@@ -262,6 +274,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
+            hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
 
         default:
             return StateBase(ev);
@@ -512,10 +525,6 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
     return new TYdbProxy(endpoint, database, ssl, credentials);
 }
 
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult::TMessage, o, x) {
-    return x.Out(o);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult, o, x) {

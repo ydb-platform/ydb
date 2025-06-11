@@ -45,6 +45,7 @@ struct TUserInfoBase {
     ui32 Generation = 0;
     ui32 Step = 0;
     i64 Offset = 0;
+    bool AnyCommits = false;
 
     bool Important = false;
     TInstant ReadFromTimestamp;
@@ -170,9 +171,9 @@ struct TUserInfo: public TUserInfoBase {
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& dbPath, bool meterRead, const TActorId& pipeClient
+        const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits
     )
-        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, important,
+        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
                         readFromTimestamp, partitionSession, pipeClient}
         , WriteTimestamp(TAppData::TimeProvider->Now())
         , CreateTimestamp(TAppData::TimeProvider->Now())
@@ -388,7 +389,7 @@ public:
     TUserInfo& Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-        TInstant readFromTimestamp, const TActorId& pipeClient
+        TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits
     );
 
     void Clear(const TActorContext& ctx);
@@ -404,7 +405,7 @@ private:
                              const TString& session,
                              ui64 partitionSessionId,
                              ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-                             TInstant readFromTimestamp, const TActorId& pipeClient) const;
+                             TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits) const;
 
 private:
     THashMap<TString, TUserInfo> UsersInfo;

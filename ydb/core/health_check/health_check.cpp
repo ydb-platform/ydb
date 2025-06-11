@@ -1108,20 +1108,28 @@ public:
         auto nodeId = ev->Get()->NodeId;
         switch (eventId) {
             case TEvWhiteboard::EvSystemStateRequest:
-                NodeSystemState.erase(nodeId);
-                NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+                if (!NodeSystemState[nodeId].IsDone()) {
+                    NodeSystemState.erase(nodeId);
+                    NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1});
+                }
                 break;
             case TEvWhiteboard::EvVDiskStateRequest:
-                NodeVDiskState.erase(nodeId);
-                NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                if (!NodeVDiskState[nodeId].IsDone()) {
+                    NodeVDiskState.erase(nodeId);
+                    NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                }
                 break;
             case TEvWhiteboard::EvPDiskStateRequest:
-                NodePDiskState.erase(nodeId);
-                NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                if (!NodePDiskState[nodeId].IsDone()) {
+                    NodePDiskState.erase(nodeId);
+                    NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                }
                 break;
             case TEvWhiteboard::EvBSGroupStateRequest:
-                NodeBSGroupState.erase(nodeId);
-                NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                if (!NodeBSGroupState[nodeId].IsDone()) {
+                    NodeBSGroupState.erase(nodeId);
+                    NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                }
                 break;
             default:
                 RequestDone("unsupported event scheduled");
@@ -1409,10 +1417,13 @@ public:
             FilterDomainKey[TSubDomainKey(domainInfo->DomainKey.OwnerId, domainInfo->DomainKey.LocalPathId)] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
-            if (hiveId && NeedToAskHive(hiveId)) {
+            if (hiveId) {
                 DatabaseState[path].HiveId = hiveId;
-                AskHive(path, hiveId);
+                if (NeedToAskHive(hiveId)) {
+                    AskHive(path, hiveId);
+                }
             } else if (RootHiveId && NeedToAskHive(RootHiveId)) {
+                DatabaseState[DomainPath].HiveId = RootHiveId;
                 AskHive(DomainPath, RootHiveId);
             }
 
@@ -1507,23 +1518,31 @@ public:
 
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
-        for (const auto& [hiveId, hiveResponse] : HiveInfo) {
+        for (auto& [dbPath, dbState] : DatabaseState) {
+            const auto& hiveResponse = HiveInfo[dbState.HiveId];
             if (hiveResponse.IsOk()) {
                 settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
                 settings.MaxRestartsPerPeriod = HealthCheckConfig.GetThresholds().GetTabletsRestartsOrange();
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
+                    TDatabaseState* database = nullptr;
                     if (itDomain == FilterDomainKey.end()) {
-                        continue;
+                        if (!FilterDatabase || FilterDatabase == dbPath) {
+                            database = &dbState;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        auto itDatabase = DatabaseState.find(itDomain->second);
+                        if (itDatabase != DatabaseState.end()) {
+                            database = &itDatabase->second;
+                        } else {
+                            continue;
+                        }
                     }
-                    auto itDatabase = DatabaseState.find(itDomain->second);
-                    if (itDatabase == DatabaseState.end()) {
-                        continue;
-                    }
-                    TDatabaseState& database = itDatabase->second;
                     auto tabletId = std::make_pair(hiveTablet.GetTabletID(), hiveTablet.GetFollowerID());
-                    database.MergedTabletState.emplace(tabletId, &hiveTablet);
+                    database->MergedTabletState.emplace(tabletId, &hiveTablet);
                     TNodeId nodeId = hiveTablet.GetNodeID();
                     switch (hiveTablet.GetVolatileState()) {
                         case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_STARTING:
@@ -1533,7 +1552,7 @@ public:
                             nodeId = 0;
                             break;
                     }
-                    database.MergedNodeTabletState[nodeId].AddTablet(hiveTablet, settings);
+                    database->MergedNodeTabletState[nodeId].AddTablet(hiveTablet, settings);
                 }
             }
         }

@@ -75,6 +75,12 @@ namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
 }
 
+namespace NKikimr::TEvKeyValue {
+    struct TEvCleanUpDataResponse;
+    using TEvCleanUpDataResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvCleanUpDataResponse>>;
+}
+
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -334,16 +340,13 @@ public:
     bool EnableAlterDatabaseCreateHiveFirst = false;
     bool EnablePQConfigTransactionsAtSchemeShard = false;
     bool EnableStatistics = false;
-    bool EnableTablePgTypes = false;
     bool EnableServerlessExclusiveDynamicNodes = false;
     bool EnableAddColumsWithDefaults = false;
     bool EnableReplaceIfExistsForExternalEntities = false;
     bool EnableTempTables = false;
-    bool EnableTableDatetime64 = false;
     bool EnableResourcePoolsOnServerless = false;
     bool EnableVectorIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
-    bool EnableParameterizedDecimal = false;
     bool EnableDataErasure = false;
 
     TShardDeleter ShardDeleter;
@@ -1054,8 +1057,11 @@ public:
     struct TTxRunTenantDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunTenantDataErasure(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev);
 
+    template <typename TEvType>
     struct TTxCompleteDataErasureShard;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev);
+
+    template <typename TEvType>
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureShard(TEvType& ev);
 
     struct TTxCompleteDataErasureTenant;
     NTabletFlatExecutor::ITransaction* CreateTxCompleteDataErasureTenant(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev);
@@ -1171,6 +1177,7 @@ public:
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKeyValue::TEvCleanUpDataResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
@@ -1243,7 +1250,7 @@ public:
     // } // NLongRunningCommon
 
     // namespace NExport {
-    THashMap<ui64, TExportInfo::TPtr> Exports;
+    TMap<ui64, TExportInfo::TPtr> Exports;
     THashMap<TString, TExportInfo::TPtr> ExportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToExport;
     THashMap<TTxId, THashSet<ui64>> TxIdToDependentExport;
@@ -1294,7 +1301,7 @@ public:
     // } // NExport
 
     // namespace NImport {
-    THashMap<ui64, TImportInfo::TPtr> Imports;
+    TMap<ui64, TImportInfo::TPtr> Imports;
     THashMap<TString, TImportInfo::TPtr> ImportsByUid;
     THashMap<TTxId, std::pair<ui64, ui32>> TxIdToImport;
     THashSet<TActorId> RunningImportSchemeGetters;
@@ -1362,7 +1369,7 @@ public:
     // namespace NIndexBuilder {
     TControlWrapper AllowDataColumnForIndexTable;
 
-    THashMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
+    TMap<TIndexBuildId, TIndexBuildInfo::TPtr> IndexBuilds;
     THashMap<TString, TIndexBuildInfo::TPtr> IndexBuildsByUid;
     THashMap<TTxId, TIndexBuildId> TxIdToIndexBuilds;
 
@@ -1372,7 +1379,7 @@ public:
 
     void PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexIssue(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue);
     void PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1427,7 +1434,8 @@ public:
         struct TTxReplySampleK;
         struct TTxReplyReshuffleKMeans;
         struct TTxReplyLocalKMeans;
-        struct TTxReplyUpload;
+        struct TTxReplyPrefixKMeans;
+        struct TTxReplyUploadSample;
 
         struct TTxPipeReset;
         struct TTxBilling;
@@ -1446,6 +1454,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
@@ -1460,6 +1469,7 @@ public:
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);

@@ -234,6 +234,7 @@ namespace NActors {
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
         TMailbox* GetReadyActivationCommon(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationLocalQueue(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -241,7 +242,7 @@ namespace NActors {
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
+        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
         void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);

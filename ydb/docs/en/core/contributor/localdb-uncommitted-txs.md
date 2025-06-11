@@ -29,7 +29,7 @@ Redo log (see [flat_redo_writer.h](https://github.com/ydb-platform/ydb/blob/main
 [MemTable](../concepts/glossary.md#memtable) in LocalDB is a relatively small in-memory sorted tree that maps table keys to values. MemTable value is a chain of MVCC (partial) rows, each tagged with a row version (a pair of Step and TxId which is a global timestamp). Rows are normally pre-merged across the given MemTable. For example, let's suppose there have been the following operations for some key K:
 
 | Version | Operation |
---- | ---
+| --- | --- |
 | `v1000/10` | `UPDATE ... SET A = 1` |
 | `v2000/11` | `UPDATE ... SET B = 2` |
 | `v3000/12` | `UPDATE ... SET C = 3` |
@@ -37,7 +37,7 @@ Redo log (see [flat_redo_writer.h](https://github.com/ydb-platform/ydb/blob/main
 Then the chain of rows for key K in a single MemTable will look like this:
 
 | Version | Row |
---- | ---
+| --- | --- |
 | `v3000/12` | `SET A = 1, B = 2, C = 3` |
 | `v2000/11` | `SET A = 1, B = 2` |
 | `v1000/10` | `SET A = 1` |
@@ -45,7 +45,7 @@ Then the chain of rows for key K in a single MemTable will look like this:
 However, if the MemTable was split between updates, it may look like this:
 
 | MemTable | Version | Row |
---- | --- | ---
+| --- | --- | --- |
 | Epoch 2 | `v3000/12` | `SET B = 2, C = 3` |
 | Epoch 2 | `v2000/11` | `SET B = 2` |
 | Epoch 1 | `v1000/10` | `SET A = 1` |
@@ -53,14 +53,14 @@ However, if the MemTable was split between updates, it may look like this:
 Changes are applied to the current MemTable, and uncommitted changes are no exception. However, they are tagged with a special version (where Step is the maximum possible number, as if they are in some "distant" future, and TxId is their uncommitted TxId), without any pre-merging. For example, let's suppose we additionally performed the following operations:
 
 | TxId | Operation |
---- | ---
+| --- | --- |
 | 15 | `UPDATE ... SET C = 10` |
 | 13 | `UPDATE ... SET B = 20` |
 
 The update chain for our key K will look like this:
 
 | Version | Row |
---- | ---
+| --- | --- |
 | `v{max}/13` | `SET B = 20` |
 | `v{max}/15` | `SET C = 10` |
 | `v3000/12` | `SET A = 1, B = 2, C = 3` |
@@ -74,7 +74,7 @@ Let's suppose we commit tx 13 at `v4000/20`. At that point transaction map is up
 Let's suppose we now perform an `UPDATE ... SET A = 30` at version `v5000/21`, the resulting chain will look as follows:
 
 | Version | Row |
---- | ---
+| --- | --- |
 | `v5000/21` | `SET A = 30, B = 20, C = 3` |
 | `v{max}/13` | `SET B = 20` |
 | `v{max}/15` | `SET C = 10` |
@@ -93,7 +93,7 @@ Data pages (see [flat_page_data.h](https://github.com/ydb-platform/ydb/blob/main
 One key may have several uncommitted delta records, as well as (optionally) the latest committed record data. Historically, data pages could only have one record (and one record pointer) per key, so the record pointer leads to the top of the delta chain, and other records are available via additional per-record offset table for other records:
 
 | Offset | Description |
---- | ---
+| --- | --- |
 | -X*8 | offset of Main |
 | ... | ... |
 | -16 | offset of Delta 2 |
@@ -109,7 +109,7 @@ Having a pointer to Delta 0, other records for the same key are available with t
 Let's suppose that after writing tx 13 above the MemTable was compacted. Entry for the 32-bit key K may look like this (offsets are relative to the record pointer on the table):
 
 | Offset | Value | Description |
---- | --- | ---
+| --- | --- | --- |
 | -16 | 58 | offset of Main |
 | -8 | 29 | offset of Delta 1 |
 | 0 | 0x21 | Delta 0: IsDelta + ERowOp::Upsert |

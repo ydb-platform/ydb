@@ -41,6 +41,7 @@ SRCS(
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    self_heal.cpp
     shred.cpp
     snapshots.cpp
     space_check.cpp

@@ -605,6 +605,7 @@ public:
     template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
     TPartitionStreamImpl(ui64 partitionStreamId,
                          std::string topicPath,
+                         std::string readSessionId,
                          i64 partitionId,
                          i64 assignId,
                          i64 readOffset,
@@ -617,6 +618,7 @@ public:
     {
         TAPartitionStream<false>::PartitionSessionId = partitionStreamId;
         TAPartitionStream<false>::TopicPath = std::move(topicPath);
+        TAPartitionStream<false>::ReadSessionId = std::move(readSessionId);
         TAPartitionStream<false>::PartitionId = static_cast<ui64>(partitionId);
         MaxCommittedOffset = static_cast<ui64>(readOffset);
     }
@@ -1333,6 +1335,7 @@ private:
     const std::string Database;
     const std::string SessionId;
     const std::string ClusterName;
+    std::string ReadSessionId;
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;

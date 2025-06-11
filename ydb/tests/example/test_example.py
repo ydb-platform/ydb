@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import pytest
+
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
@@ -12,7 +14,7 @@ class TestExample:
     Example for python test
     TODO: change description to yours
     """
-    @classmethod
+    @pytest.fixture(autouse=True)
     def setup_class(cls):
         # TODO: remove comment below
         # This cluster will be initialized before all tests in current suite and will be stopped after all tests
@@ -31,8 +33,8 @@ class TestExample:
         )
         cls.driver.wait()
 
-    @classmethod
-    def teardown_class(cls):
+        yield
+
         cls.driver.stop()
         cls.cluster.stop()
 

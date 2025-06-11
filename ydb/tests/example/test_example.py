@@ -15,7 +15,7 @@ class TestExample:
     TODO: change description to yours
     """
     @pytest.fixture(autouse=True)
-    def setup_class(cls):
+    def setup(cls):
         # TODO: remove comment below
         # This cluster will be initialized before all tests in current suite and will be stopped after all tests
         # See KikimrConfigGenerator for full possibilities (feature flags, configs, erasure, etc.)

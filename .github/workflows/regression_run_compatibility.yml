@@ -5,23 +5,18 @@ on:
     - cron: "0 23 * * *"  # At 23:00 every day
   workflow_dispatch:
     inputs:
-      use_default_branches:
-        description: 'If true, start main and all current stable branches. If false, start only the selected branch.'
-        type: boolean
-        required: false
-        default: true
       initial_version_ref:
-        description: Initial(oldest) version (ex. stable-24-4/25.1.1.18/24.4.4.12, "current" - compiles binary from the chosen branch)
+        description: Initial(oldest) version (ex. stable-24-4/25.1.1.18, should exist on S3)
         type: string
         required: false
-        default: 24.4.4.12
+        default: stable-24-4
       inter_version_ref:
         description: Intermediate version
         type: string
         required: false
-        default: stable-25-1
+        default: stable-25-1-2
       target_version_ref:
-        description: Target(newest) version
+        description: Target(newest) version ("current" - compiles binary from the chosen branch)
         type: string
         required: false
         default: current
@@ -36,6 +31,6 @@ jobs:
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/compatibility/
-      branches: ${{ (inputs.use_default_branches == true || github.event_name == 'schedule') && '["main", "stable-25-1", "stable-25-1-analytics"]' || github.ref_name }}
+      branches: ${{ github.ref_name }}
       build_preset: ${{ matrix.build_preset }}
       additional_ya_make_args: "-DCOMPAT_INIT_REF=\"${{inputs.initial_version_ref}}\" -DCOMPAT_INTER_REF=\"${{inputs.inter_version_ref}}\" -DCOMPAT_TARGET_REF=\"${{inputs.target_version_ref}}\""

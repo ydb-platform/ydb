@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import copy
-import os
 import pytest
 import yatest
 import time

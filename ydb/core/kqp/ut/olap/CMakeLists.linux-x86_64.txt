@@ -88,7 +88,7 @@ set_property(
   ydb-core-kqp-ut-olap
   PROPERTY
   SPLIT_FACTOR
-  200
+  1000
 )
 
 add_yunittest(

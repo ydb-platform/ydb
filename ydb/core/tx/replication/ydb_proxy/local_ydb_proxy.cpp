@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/service_scheme.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -534,7 +536,217 @@ private:
     const NYdb::NTopic::TAlterTopicSettings Settings;
 };
 
-class TLocalProxyActor: public TActorBootstrapped<TLocalProxyActor> {
+class TLocalProxyRequest : public NKikimr::NGRpcService::IRequestOpCtx {
+public:
+    using TRequest = TLocalProxyRequest;
+
+    TLocalProxyRequest(
+           // TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+            TString path,
+            TString databaseName,
+            std::unique_ptr<google::protobuf::Message>&& request,
+            const std::function<void(Ydb::StatusIds::StatusCode, const google::protobuf::Message*)> sendResultCallback)
+        : //UserToken(userToken)
+         Path(path)
+        , DatabaseName(databaseName)
+        , Request(std::move(request))
+        , SendResultCallback(sendResultCallback)
+    {
+    };
+
+    const TString path() const {
+        return Path;
+    }
+
+    TMaybe<TString> GetTraceId() const override {
+        return Nothing();
+    }
+
+    const TMaybe<TString> GetDatabaseName() const override {
+        return DatabaseName;
+    }
+
+    const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
+        return UserToken;
+    }
+
+    const TString& GetSerializedToken() const override {
+        return DummyString;
+    }
+
+    bool IsClientLost() const override {
+        return false;
+    };
+
+    const google::protobuf::Message* GetRequest() const override {
+        return Request.get();
+    };
+
+    const TMaybe<TString> GetRequestType() const override {
+        return Nothing();
+    };
+
+    void SetFinishAction(std::function<void()>&& cb) override {
+        Y_UNUSED(cb);
+    };
+
+    google::protobuf::Arena* GetArena() override {
+        return nullptr;
+    };
+
+    bool HasClientCapability(const TString& capability) const override {
+        Y_UNUSED(capability);
+        return false;
+    };
+
+    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
+        ProcessYdbStatusCode(status, NULL);
+    };
+
+    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") override {
+        Y_UNUSED(code);
+        Y_UNUSED(msg);
+        Y_UNUSED(details);
+    }
+
+    TString GetPeerName() const override {
+        return "";
+    }
+
+    TInstant GetDeadline() const override {
+        return TInstant();
+    }
+
+    const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
+        return Nothing();
+    }
+
+    TVector<TStringBuf> FindClientCert() const override {
+        return TVector<TStringBuf>();
+    }
+
+    TMaybe<NKikimr::NRpcService::TRlPath> GetRlPath() const override {
+        return Nothing();
+    }
+
+    void RaiseIssue(const NYql::TIssue& issue) override{
+        Issue = issue;
+    }
+
+    void RaiseIssues(const NYql::TIssues& issues) override {
+        Y_UNUSED(issues);
+    };
+
+    const TString& GetRequestName() const override {
+        return DummyString;
+    };
+
+    bool GetDiskQuotaExceeded() const override {
+        return false;
+    };
+
+    void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
+        Y_UNUSED(name);
+        Y_UNUSED(value);
+    };
+
+    const NKikimr::NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
+        return DummyAuditLogParts;
+    };
+
+    void SetRuHeader(ui64 ru) override {
+        Y_UNUSED(ru);
+    };
+
+    void AddServerHint(const TString& hint) override {
+        Y_UNUSED(hint);
+    };
+
+    void SetCostInfo(float consumed_units) override {
+        Y_UNUSED(consumed_units);
+    };
+
+    void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&& cb) override {
+        Y_UNUSED(cb);
+    };
+
+    void FinishStream(ui32 status) override {
+        Y_UNUSED(status);
+    };
+
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl) override {
+        Y_UNUSED(in);
+        Y_UNUSED(status);
+    };
+
+    void Reply(NProtoBuf::Message* resp, ui32 status = 0) override {
+        Y_UNUSED(resp);
+        Y_UNUSED(status);
+    };
+
+    void SendOperation(const Ydb::Operations::Operation& operation) override {
+        Y_UNUSED(operation);
+    };
+
+    NWilson::TTraceId GetWilsonTraceId() const override {
+        return {};
+    }
+
+    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
+        Y_UNUSED(result);
+        ProcessYdbStatusCode(status, &result);
+    };
+
+    void SendResult(
+            const google::protobuf::Message& result,
+            Ydb::StatusIds::StatusCode status,
+            const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
+
+        Y_UNUSED(result);
+        Y_UNUSED(message);
+        ProcessYdbStatusCode(status, NULL);
+    };
+
+    const Ydb::Operations::OperationParams& operation_params() const {
+        return DummyParams;
+    }
+
+    static TLocalProxyRequest* GetProtoRequest(std::shared_ptr<IRequestOpCtx> request) {
+        return static_cast<TLocalProxyRequest*>(&(*request));
+    }
+
+protected:
+    void FinishRequest() override {
+    };
+
+private:
+    const Ydb::Operations::OperationParams DummyParams;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const TString DummyString;
+    const NKikimr::NGRpcService::TAuditLogParts DummyAuditLogParts;
+    const TString Path;
+    const TString DatabaseName;
+    std::unique_ptr<google::protobuf::Message> Request;
+    const std::function<void(Ydb::StatusIds::StatusCode, const google::protobuf::Message*)> SendResultCallback;
+    NYql::TIssue Issue;
+
+    void ProcessYdbStatusCode(Ydb::StatusIds::StatusCode& status, const google::protobuf::Message* result) {
+        SendResultCallback(status, result);
+    }
+};
+
+class TLocalProxyActor: public TActorBootstrapped<TLocalProxyActor>
+                      , public NGRpcService::IFacilityProvider {
+public:
+    ui64 GetChannelBufferSize() const override {
+        return Max<ui32>();
+    }
+
+    // Registers new actor using method chosen by grpc proxy
+    TActorId RegisterActor(IActor* actor) const override {
+        return TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+    }
+
 private:
     void Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
         auto args = std::move(ev->Get()->GetArgs());
@@ -567,7 +779,49 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
-        Y_UNUSED(ev);
+        auto args = std::move(ev->Get()->GetArgs());
+        auto& path = std::get<TString>(args);
+        auto& settings = std::get<NYdb::NTopic::TDescribeTopicSettings>(args);
+        Y_UNUSED(settings);
+
+        Cerr << ">>>>> TEvDescribeTopicRequest" << path << Endl << Flush;
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
+        auto args = std::move(ev->Get()->GetArgs());
+        auto& path = std::get<TString>(args);
+        auto& settings = std::get<NYdb::NScheme::TDescribePathSettings>(args);
+        Y_UNUSED(settings);
+
+        Cerr << ">>>>> TEvDescribePathRequest " <<  "/" << Database << path << Endl << Flush;
+
+        auto request = std::make_unique<Ydb::Scheme::DescribePathRequest>();
+        request.get()->set_path(TStringBuilder() << "/" << Database << path);
+
+        auto callback = [&, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+            Y_UNUSED(statusCode);
+            Y_UNUSED(result);
+            Y_UNUSED(this);
+            Cerr << ">>>>> TEvDescribePathRequest RESPONSE " << path << " : " << statusCode << " : " << (result ? result->DebugString() : "null")<< Endl << Flush;
+
+            NYdb::NScheme::TSchemeEntry entry;
+            if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
+                const Ydb::Scheme::DescribePathResponse* v = dynamic_cast<const Ydb::Scheme::DescribePathResponse*>(result);
+                    auto deferred = v->operation();
+                    Ydb::Scheme::DescribePathResult r;
+                    deferred.result().UnpackTo(&r);
+
+                entry.Name = r.self().name();
+                entry.Type = static_cast<NYdb::NScheme::ESchemeEntryType>(r.self().type());
+            }
+
+            NYdb::NIssue::TIssues issues;
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            NYdb::NScheme::TDescribePathResult r(std::move(status), entry);
+            Send(ev->Sender, new TEvYdbProxy::TEvDescribePathResponse(r));
+        };
+
+        NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
     }
 
     STATEFN(StateWork) {
@@ -576,8 +830,10 @@ private:
             hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
+            hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         default:
+            Cerr << ">>>>> Unknown " << ev->GetTypeName() << Endl << Flush;
             Y_UNREACHABLE();
         }
     }

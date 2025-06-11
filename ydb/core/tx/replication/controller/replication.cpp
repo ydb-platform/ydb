@@ -142,7 +142,7 @@ public:
             const bool ssl = params.GetEnableSsl();
 
             if (endpoint.empty()) {
-                ydbProxy.Reset(CreateLocalYdbProxy(database));
+                ydbProxy.Reset(CreateLocalYdbProxy("local" /*database TODO */));
             } else {
                 switch (params.GetCredentialsCase()) {
                 case NKikimrReplication::TConnectionParams::kStaticCredentials:

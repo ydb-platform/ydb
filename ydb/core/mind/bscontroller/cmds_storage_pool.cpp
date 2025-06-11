@@ -465,7 +465,7 @@ namespace NKikimr::NBsController {
         const auto& m = cmd.GetGroupId();
         TVector<TGroupId> groups;
         std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
-        if (!groups) {
+        if (groups.empty()) {
             for (auto it = storagePoolGroups.lower_bound(poolId); it != storagePoolGroups.end() && it->first == poolId; ++it) {
                 groups.push_back(it->second);
             }

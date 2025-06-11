@@ -2,11 +2,15 @@
 
 #include "task_queue.h"
 
+#include "constants.h"
 #include "histogram.h"
 #include "transactions.h"
 
+#include <ydb/library/workload/tpcc/constants.h_serialized.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
+#include <util/generic/serialized_enum.h>
 #include <util/system/spinlock.h>
 
 #include <atomic>
@@ -22,15 +26,6 @@ namespace NYdb::NTPCC {
 
 class TTerminalStats {
 public:
-    // don't change the order
-    enum ETransactionType {
-        E_NEW_ORDER = 0,
-        E_DELIVERY = 1,
-        E_ORDER_STATUS = 2,
-        E_PAYMENT = 3,
-        E_STOCK_LEVEL = 4
-    };
-
     struct TStats {
         // assumes that dst doesn't requre lock
         void Collect(TStats& dst) const {
@@ -40,8 +35,8 @@ public:
 
             TGuard guard(HistLock);
             dst.LatencyHistogramMs.Add(LatencyHistogramMs);
-            dst.LatencyHistogramFullMs.Add(LatencyHistogramMs);
-            dst.LatencyHistogramPure.Add(LatencyHistogramMs);
+            dst.LatencyHistogramFullMs.Add(LatencyHistogramFullMs);
+            dst.LatencyHistogramPure.Add(LatencyHistogramPure);
         }
 
         void Clear() {
@@ -78,7 +73,7 @@ public:
     TTerminalStats() = default;
 
     const TStats& GetStats(ETransactionType type) const {
-        return Stats[type];
+        return Stats[static_cast<size_t>(type)];
     }
 
     void AddOK(
@@ -87,7 +82,7 @@ public:
         std::chrono::milliseconds latencyFull,
         TDuration latencyPure)
     {
-        auto& stats = Stats[type];
+        auto& stats = Stats[static_cast<size_t>(type)];
         stats.OK.fetch_add(1, std::memory_order_relaxed);
         {
             TGuard guard(stats.HistLock);
@@ -98,11 +93,11 @@ public:
     }
 
     void IncFailed(ETransactionType type) {
-        Stats[type].Failed.fetch_add(1, std::memory_order_relaxed);
+        Stats[static_cast<size_t>(type)].Failed.fetch_add(1, std::memory_order_relaxed);
     }
 
     void IncUserAborted(ETransactionType type) {
-        Stats[type].UserAborted.fetch_add(1, std::memory_order_relaxed);
+        Stats[static_cast<size_t>(type)].UserAborted.fetch_add(1, std::memory_order_relaxed);
     }
 
     // assumes that dst doesn't requre lock
@@ -127,7 +122,7 @@ public:
     }
 
 private:
-    std::array<TStats, 5> Stats;
+    std::array<TStats, GetEnumItemsCount<ETransactionType>()> Stats;
     std::atomic<bool> WasCleared{false};
 };
 
@@ -144,7 +139,7 @@ public:
         ITaskQueue& taskQueue,
         std::shared_ptr<NQuery::TQueryClient>& client,
         const TString& path,
-        bool noSleep,
+        bool noDelays,
         int simulateTransactionMs,
         int simulateTransactionSelect1Count,
         std::stop_token stopToken,
@@ -172,7 +167,7 @@ private:
 private:
     ITaskQueue& TaskQueue;
     TTransactionContext Context;
-    bool NoSleep;
+    bool NoDelays;
     std::stop_token StopToken;
     std::atomic<bool>& StopWarmup;
     std::shared_ptr<TTerminalStats> Stats;

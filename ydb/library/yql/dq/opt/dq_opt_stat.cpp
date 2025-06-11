@@ -221,6 +221,19 @@ bool IsConstantExprPg(const TExprNode::TPtr& input) {
     return false;
 }
 
+bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
+    if (!TCoFlatMap::Match(input.Get())) {
+        return false;
+    }
+
+    if (auto maybeApply = TMaybeNode<TCoApply>(input->Child(0))) {
+        auto apply = maybeApply.Cast();
+        return IsConstantUdf(apply.Callable().Ptr());
+    }
+
+    return false;
+}
+
 /***
  * Check if the expression is a constant expression
  * Its type annotation need to specify that its a data type, and then we check:
@@ -251,7 +264,7 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
         return true;
     }
 
-    else if (foldUdfs && TCoApply::Match(input.Get()) && IsConstantUdf(input)) {
+    else if (foldUdfs && ((TCoApply::Match(input.Get()) && IsConstantUdf(input)) || IsSuitableToFoldFlatMap(input))) {
         return true;
     }
 

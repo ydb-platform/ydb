@@ -131,7 +131,6 @@ void InferStatisticsForKqpTable(
     TKqpOptimizeContext& kqpCtx
 ) {
     auto inputNode = TExprBase(input);
-
     auto readTable = inputNode.Cast<TKqpTable>();
     auto path = readTable.Path();
 

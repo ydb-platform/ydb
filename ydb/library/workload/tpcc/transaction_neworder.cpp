@@ -591,7 +591,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(customerResult)) {
             LOG_E("Terminal " << context.TerminalID << " customer query failed: " << customerResult.GetStatus() << ", "
                 << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " customer query failed: " << customerResult.GetStatus() << ", "
             << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -609,7 +610,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(warehouseResult)) {
             LOG_E("Terminal " << context.TerminalID << " warehouse query failed: "
                 << warehouseResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " warehouse query failed: "
             << warehouseResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -624,7 +626,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(districtResult)) {
             LOG_E("Terminal " << context.TerminalID << " district query (neworder) failed: "
                 << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " district query (neworder) failed: "
             << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -635,7 +638,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!districtParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID
             << ", warehouseId " << warehouseID << ", districtId " <<  districtID << " not found");
-        std::quick_exit(1);
+        RequestStop();
+        co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
     }
     int nextOrderID = *districtParser.ColumnParser("D_NEXT_O_ID").GetOptionalInt32();
 
@@ -647,7 +651,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(updateDistrictResult)) {
             LOG_E("Terminal " << context.TerminalID << " district update failed: "
                 << updateDistrictResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " district update failed: "
             << updateDistrictResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -662,7 +667,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(newOrderResult)) {
             LOG_E("Terminal " << context.TerminalID << " new order insert failed: "
                 << newOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " new order insert failed: "
             << newOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -678,7 +684,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(openOrderResult)) {
             LOG_E("Terminal " << context.TerminalID << " open order insert failed: "
                 << openOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " open order insert failed: "
             << openOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -693,7 +700,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(itemsResult)) {
             LOG_E("Terminal " << context.TerminalID << " items query failed: "
                 << itemsResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " items query failed: "
             << itemsResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -727,7 +735,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(stocksResult)) {
             LOG_E("Terminal " << context.TerminalID << " stocks query failed: "
                 << stocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " stocks query failed: "
             << stocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -777,7 +786,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         auto itemIter = itemPrices.find(ol_i_id);
         if (itemIter == itemPrices.end()) {
             LOG_E("Terminal " << context.TerminalID << " item not found: " << ol_i_id);
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         double i_price = itemIter->second;
         double ol_amount = ol_quantity * i_price;
@@ -787,7 +797,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (stockIter == stocks.end()) {
             LOG_E("Terminal " << context.TerminalID << " stock not found: W_ID=" << ol_supply_w_id
                     << ", I_ID=" << ol_i_id);
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         Stock& stock = stockIter->second;
 
@@ -832,7 +843,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(updateStocksResult)) {
             LOG_E("Terminal " << context.TerminalID << " stocks update failed: "
                 << updateStocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " stocks update failed: "
             << updateStocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -847,7 +859,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (ShouldExit(orderLinesResult)) {
             LOG_E("Terminal " << context.TerminalID << " order lines insert failed: "
                 << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " order lines insert failed: "
             << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());

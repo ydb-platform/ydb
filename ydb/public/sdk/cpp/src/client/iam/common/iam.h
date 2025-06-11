@@ -45,6 +45,9 @@ private:
             NYdbGrpc::TGRpcClientConfig grpcConf;
             grpcConf.Locator = IamEndpoint_.Endpoint;
             grpcConf.EnableSsl = IamEndpoint_.EnableSsl;
+            if (!IamEndpoint_.CaCerts.empty()) {
+                grpcConf.SslCredentials.pem_root_certs = IamEndpoint_.CaCerts;
+            }
             Connection_ = std::unique_ptr<NYdbGrpc::TServiceConnection<TService>>(Client->CreateGRpcServiceConnection<TService>(grpcConf).release());
         }
 

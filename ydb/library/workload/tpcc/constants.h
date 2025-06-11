@@ -19,7 +19,7 @@ constexpr int C_ID_C = 259; // in range [0, 1023]
 constexpr int CUSTOMERS_PER_DISTRICT = 3000;
 
 constexpr int OL_I_ID_C = 7911; // in range [0, 8191]
-constexpr int ITEMS_COUNT = 100000;
+constexpr int ITEM_COUNT = 100000;
 
 constexpr int INVALID_ITEM_ID = -12345;
 
@@ -29,6 +29,8 @@ constexpr int MAX_ITEMS = 15;
 
 constexpr int C_LAST_LOAD_C = 157; // in range [0, 255]
 constexpr int C_LAST_RUN_C = 223; // in range [0, 255]
+
+constexpr int FIRST_UNPROCESSED_O_ID = 2101;
 
 // Transaction weights (percentage of mix)
 constexpr double NEW_ORDER_WEIGHT = 45.0;
@@ -69,5 +71,18 @@ constexpr const char* TABLE_HISTORY = "history";
 // Index/View names
 constexpr const char* INDEX_CUSTOMER_NAME = "idx_customer_name";
 constexpr const char* INDEX_ORDER = "idx_order";
+
+constexpr const size_t INDEX_COUNT = 2;
+
+// don't change order!
+enum class ETransactionType {
+    NewOrder = 0,
+    Delivery = 1,
+    OrderStatus = 2,
+    Payment = 3,
+    StockLevel = 4
+};
+
+constexpr const size_t TUI_LOG_LINES = 10;
 
 } // namespace NYdb::NTPCC

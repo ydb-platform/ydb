@@ -123,14 +123,8 @@ void TInsertTable::EraseAbortedOnComplete(const TInsertedData& data) {
 bool TInsertTable::Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant loadTime) {
     Y_ABORT_UNLESS(!Loaded);
     Loaded = true;
-    LastWriteId = (TInsertWriteId)0;
     {
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = Summary.GetCounters().LoadCounters.StartGuard();
-        if (!NColumnShard::Schema::GetSpecialValueOpt(db, NColumnShard::Schema::EValueIds::LastWriteId, LastWriteId)) {
-            timer.AddLoadingFail();
-            return false;
-        }
-
         if (!dbTable.Load(*this, loadTime)) {
             timer.AddLoadingFail();
             return false;
@@ -175,17 +169,6 @@ std::vector<TCommittedBlob> TInsertTable::Read(TInternalPathId pathId, const std
         }
     }
     return result;
-}
-
-TInsertWriteId TInsertTable::BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc) {
-    NIceDb::TNiceDb db(txc.DB);
-    return BuildNextWriteId(db);
-}
-
-TInsertWriteId TInsertTable::BuildNextWriteId(NIceDb::TNiceDb& db) {
-    TInsertWriteId writeId = ++LastWriteId;
-    NColumnShard::Schema::SaveSpecialValue(db, NColumnShard::Schema::EValueIds::LastWriteId, (ui64)writeId);
-    return writeId;
 }
 
 bool TInsertTableAccessor::RemoveBlobLinkOnExecute(

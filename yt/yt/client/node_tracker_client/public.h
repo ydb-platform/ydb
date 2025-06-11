@@ -45,6 +45,10 @@ YT_DEFINE_STRONG_TYPEDEF(TNodeId, ui32);
 constexpr TNodeId InvalidNodeId = TNodeId(0);
 constexpr TNodeId MaxNodeId = TNodeId((1 << 24) - 1); // TNodeId must fit into 24 bits (see TChunkReplica)
 
+YT_DEFINE_STRONG_TYPEDEF(TChunkLocationIndex, ui32);
+constexpr TChunkLocationIndex InvalidChunkLocationIndex = TChunkLocationIndex(0);
+constexpr TChunkLocationIndex MaxChunkLocationIndex = TChunkLocationIndex(std::numeric_limits<ui32>::max());
+
 using THostId = NObjectClient::TObjectId;
 using TRackId = NObjectClient::TObjectId;
 using TDataCenterId = NObjectClient::TObjectId;

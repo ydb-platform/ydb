@@ -56,6 +56,7 @@ enum EServiceKikimr {
     BS_PROXY_GETBLOCK = 2601;
     BS_SHRED = 2602;
     BS_PROXY_CHECKINTEGRITY = 2603;
+    BS_PROXY_BRIDGE = 2604;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -1088,5 +1089,6 @@ message TActivity {
         TENANT_DATA_ERASURE = 659;
         BS_SYNC_BROKER = 660;
         BS_PROXY_CHECKINTEGRITY_ACTOR = 661;
+        CMS_CONFIG_INFO_COLLECTOR = 662;
     };
 };

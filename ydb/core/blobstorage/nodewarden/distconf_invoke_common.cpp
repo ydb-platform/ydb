@@ -12,6 +12,7 @@ namespace NKikimr::NStorage {
         : Self(self)
         , LifetimeToken(Self->LifetimeToken)
         , Scepter(Self->Scepter)
+        , ScepterCounter(Self->ScepterCounter)
         , Event(std::move(ev))
         , Sender(Event->Sender)
         , Cookie(Event->Cookie)
@@ -29,19 +30,30 @@ namespace NKikimr::NStorage {
         ParentId = parentId;
         Become(&TThis::StateFunc);
 
-        if (auto scepter = Scepter.lock()) {
+        if (Self->ScepterlessOperationInProgress) {
+            FinishWithError(TResult::ERROR, "an operation is already in progress");
+        } else if (Self->Binding) {
+            if (RequestSessionId) {
+                FinishWithError(TResult::ERROR, "no double-hop invokes allowed");
+            } else {
+                const ui32 root = Self->Binding->RootNodeId;
+                Send(MakeBlobStorageNodeWardenID(root), Event->Release(), IEventHandle::FlagSubscribeOnSession);
+                const auto [it, inserted] = Subscriptions.try_emplace(root);
+                Y_ABORT_UNLESS(inserted);
+                WaitingReplyFromNode = root;
+            }
+        } else if (!Scepter.expired() || CheckSwitchBridgeCommand()) {
+            if (Scepter.expired()) {
+                Self->ScepterlessOperationInProgress = IsScepterlessOperation = true;
+            }
             ExecuteQuery();
-        } else if (!Self->Binding) {
-            FinishWithError(TResult::NO_QUORUM, "no quorum obtained");
-        } else if (RequestSessionId) {
-            FinishWithError(TResult::ERROR, "no double-hop invokes allowed");
         } else {
-            const ui32 root = Self->Binding->RootNodeId;
-            Send(MakeBlobStorageNodeWardenID(root), Event->Release(), IEventHandle::FlagSubscribeOnSession);
-            const auto [it, inserted] = Subscriptions.try_emplace(root);
-            Y_ABORT_UNLESS(inserted);
-            WaitingReplyFromNode = root;
+            FinishWithError(TResult::NO_QUORUM, "no quorum obtained");
         }
+    }
+
+    bool TInvokeRequestHandlerActor::IsScepterExpired() const {
+        return Self->ScepterCounter != ScepterCounter;
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
@@ -194,6 +206,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields) {
         if (updateFields) {
+            if (auto error = UpdateClusterState(config)) {
+                return FinishWithError(TResult::ERROR, *error);
+            }
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
             config->MutablePrevConfig()->ClearPrevConfig();
             UpdateFingerprint(config);
@@ -247,7 +262,9 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(res->HasProposeStorageConfig());
             std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
 
-            const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
+            const ERootState prevState = std::exchange(Self->RootState, Self->Scepter
+                ? ERootState::RELAX
+                : ERootState::INITIAL);
             Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
 
             if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
@@ -283,11 +300,11 @@ namespace NKikimr::NStorage {
             FinishWithError(TResult::ERROR, "no agreed StorageConfig");
         } else if (Self->CurrentProposedStorageConfig) {
             FinishWithError(TResult::ERROR, "config proposition request in flight");
-        } else if (Self->RootState != ERootState::RELAX) {
+        } else if (Self->RootState != (IsScepterlessOperation ? ERootState::INITIAL : ERootState::RELAX)) {
             FinishWithError(TResult::ERROR, "something going on with default FSM");
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
-        } else if (Scepter.expired()) {
+        } else if (IsScepterExpired()) {
             FinishWithError(TResult::ERROR, "scepter lost during query execution");
         } else {
             return true;
@@ -316,6 +333,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
+        if (IsScepterlessOperation && !IsScepterExpired()) {
+            Self->ScepterlessOperationInProgress = false;
+        }
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0, ParentId, SelfId(), nullptr, 0));
         if (ControllerPipeId) {
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);

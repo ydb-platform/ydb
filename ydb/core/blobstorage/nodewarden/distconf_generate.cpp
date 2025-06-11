@@ -120,6 +120,28 @@ namespace NKikimr::NStorage {
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
 
+        // generate initial cluster state, if needed
+        if (Cfg->BridgeConfig) {
+            auto *state = config->MutableClusterState();
+            state->SetGeneration(1);
+            auto *piles = state->MutablePerPileState();
+            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
+                piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
+            }
+
+            auto *history = config->MutableClusterStateHistory();
+            auto *entry = history->AddUnsyncedEntries();
+            entry->MutableClusterState()->CopyFrom(*state);
+            entry->SetOperationGuid(RandomNumber<ui64>());
+            for (size_t i = 0; i < Cfg->BridgeConfig->PilesSize(); ++i) {
+                entry->AddUnsyncedPiles(i);
+            }
+        }
+
+        if (auto error = UpdateClusterState(config)) {
+            return error;
+        }
+
         return std::nullopt;
     }
 
@@ -420,11 +442,13 @@ namespace NKikimr::NStorage {
             }
 
             ui32 maxSlots = defaultMaxSlots;
+            ui32 slotSizeInUnits = 0;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
                 }
+                slotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
             }
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
@@ -435,6 +459,7 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable && pileFilter,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
+                .SlotSizeInUnits = slotSizeInUnits,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,
@@ -561,11 +586,15 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig) {
-        THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>> nodesByDataCenter;
+        std::map<std::optional<TBridgePileId>, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
 
         for (const auto& node : baseConfig.GetAllNodes()) {
+            std::optional<TBridgePileId> pileId = node.HasBridgePileId()
+                ? std::make_optional(TBridgePileId::FromProto(&node, &NKikimrBlobStorage::TNodeIdentifier::GetBridgePileId))
+                : std::nullopt;
+
             TNodeLocation location(node.GetLocation());
-            nodesByDataCenter[location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
+            nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
 
         auto pickNodes = [](std::vector<std::tuple<ui32, TNodeLocation>>& nodes, size_t count) {
@@ -595,20 +624,22 @@ namespace NKikimr::NStorage {
             return result;
         };
 
-        std::vector<ui32> nodes;
-
-        const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
-        for (auto& [_, v] : nodesByDataCenter) {
-            auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
-            nodes.insert(nodes.end(), r.begin(), r.end());
+        for (auto& [pileId, nodesByDataCenter] : nodes) {
+            std::vector<ui32> nodes;
+            const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
+            for (auto& [_, v] : nodesByDataCenter) {
+                auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
+                nodes.insert(nodes.end(), r.begin(), r.end());
+            }
+            auto *rg = ss->AddRingGroups();
+            if (pileId) {
+                pileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
+            }
+            rg->SetNToSelect(nodes.size() / 2 + 1);
+            for (ui32 nodeId : nodes) {
+                rg->AddRing()->AddNode(nodeId);
+            }
         }
-        auto *ring = ss->MutableRing();
-        ring->SetNToSelect(nodes.size() / 2 + 1);
-
-        for (ui32 nodeId : nodes) {
-            ring->AddNode(nodeId);
-        }
-
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {

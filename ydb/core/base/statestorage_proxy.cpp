@@ -993,10 +993,12 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
     template<typename TEventPtr>
     void ResolveReplicas(const TEventPtr &ev, ui64 tabletId, const TIntrusivePtr<TStateStorageInfo> &info) const {
         TAutoPtr<TEvStateStorage::TEvResolveReplicasList> reply(new TEvStateStorage::TEvResolveReplicasList());
-        for (size_t ringGroupIdx = 0; ringGroupIdx < info->RingGroups.size(); ++ringGroupIdx) {
+        reply->ReplicaGroups.resize(info->RingGroups.size());
+        for (ui32 ringGroupIndex : xrange(info->RingGroups.size())) {
             THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
-            info->SelectReplicas(tabletId, selection.Get(), ringGroupIdx);
-            reply->Replicas.insert(reply->Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
+            info->SelectReplicas(tabletId, selection.Get(), ringGroupIndex);
+            reply->ReplicaGroups[ringGroupIndex].WriteOnly = info->RingGroups[ringGroupIndex].WriteOnly;
+            reply->ReplicaGroups[ringGroupIndex].Replicas.insert(reply->ReplicaGroups[ringGroupIndex].Replicas.end(), selection->SelectedReplicas.Get(), selection->SelectedReplicas.Get() + selection->Sz);
         }
         reply->ConfigContentHash = info->ContentHash();
         Send(ev->Sender, reply.Release(), 0, ev->Cookie);

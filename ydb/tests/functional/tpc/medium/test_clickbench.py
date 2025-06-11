@@ -15,7 +15,7 @@ class TestClickbench(clickbench.TestClickbench, FunctionalTestBase):
         super().setup_class()
 
 
-class TestClickbenchParallel(clickbench.TestClickbenchParallel, FunctionalTestBase):
+class TestClickbenchParallel(clickbench.TestClickbenchParallel8, FunctionalTestBase):
     verify_data: bool = False
     iterations: int = 2
 

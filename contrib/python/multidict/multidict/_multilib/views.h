@@ -1006,7 +1006,16 @@ static PyMethodDef multidict_itemsview_methods[] = {
     {NULL, NULL}   /* sentinel */
 };
 
+static inline PyObject *
+multidict_view_forbidden_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    PyErr_Format(PyExc_TypeError,
+                 "cannot create '%s' instances directly", type->tp_name);
+    return NULL;
+}
+
 static PyType_Slot multidict_itemsview_slots[] = {
+    {Py_tp_new, multidict_view_forbidden_new},
     {Py_tp_dealloc, multidict_view_dealloc},
     {Py_tp_repr, multidict_itemsview_repr},
 
@@ -1561,6 +1570,7 @@ static PyMethodDef multidict_keysview_methods[] = {
 };
 
 static PyType_Slot multidict_keysview_slots[] = {
+    {Py_tp_new, multidict_view_forbidden_new},
     {Py_tp_dealloc, multidict_view_dealloc},
     {Py_tp_repr, multidict_keysview_repr},
 
@@ -1635,6 +1645,7 @@ multidict_valuesview_repr(_Multidict_ViewObject *self)
 }
 
 static PyType_Slot multidict_valuesview_slots[] = {
+    {Py_tp_new, multidict_view_forbidden_new},
     {Py_tp_dealloc, multidict_view_dealloc},
     {Py_tp_repr, multidict_valuesview_repr},
 

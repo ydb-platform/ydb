@@ -273,10 +273,6 @@ namespace types
   {
   }
   template <class T>
-  list<T>::list(T const &value, single_value, size_type sz) : _data(sz, value)
-  {
-  }
-  template <class T>
   list<T>::list(std::initializer_list<T> l) : _data(std::move(l))
   {
   }
@@ -642,7 +638,9 @@ namespace types
   list<T> list<T>::operator*(long n) const
   {
     if (size() == 1) {
-      return list<T>(fast(0), single_value{}, n);
+      list<T> r(size() * n);
+      std::fill(r.begin(), r.end(), fast(0));
+      return r;
     } else {
       list<T> r(size() * n);
       auto start = r.begin();

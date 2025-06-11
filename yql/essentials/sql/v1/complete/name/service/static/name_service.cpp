@@ -8,23 +8,6 @@
 
 namespace NSQLComplete {
 
-    const TVector<TStringBuf> FilteredByPrefix(const TString& prefix, const TNameIndex& index Y_LIFETIME_BOUND) {
-        TNameIndexEntry normalized = {
-            .Normalized = NormalizeName(prefix),
-            .Original = "",
-        };
-
-        auto range = std::ranges::equal_range(
-            std::begin(index), std::end(index),
-            normalized, NameIndexCompareLimit(normalized.Normalized.size()));
-
-        TVector<TStringBuf> filtered;
-        for (const TNameIndexEntry& entry : range) {
-            filtered.emplace_back(TStringBuf(entry.Original));
-        }
-        return filtered;
-    }
-
     const TVector<TStringBuf> FilteredByPrefix(
         const TString& prefix,
         const TVector<TString>& sorted Y_LIFETIME_BOUND) {
@@ -51,7 +34,7 @@ namespace NSQLComplete {
         name.Indentifier = prefix;
         name = std::get<T>(constraints.Qualified(std::move(name)));
 
-        AppendAs<T>(out, FilteredByPrefix(name.Indentifier, index));
+        AppendAs<T>(out, FilteredByPrefix(name.Indentifier, index, NormalizeName));
         out = constraints.Unqualified(std::move(out));
     }
 
@@ -103,7 +86,7 @@ namespace NSQLComplete {
 
     class TPragmaNameService: public IRankingNameService {
     public:
-        explicit TPragmaNameService(IRanking::TPtr ranking, TVector<TString> pragmas)
+        TPragmaNameService(IRanking::TPtr ranking, TVector<TString> pragmas)
             : IRankingNameService(std::move(ranking))
             , Pragmas_(BuildNameIndex(std::move(pragmas), NormalizeName))
         {
@@ -127,7 +110,7 @@ namespace NSQLComplete {
 
     class TTypeNameService: public IRankingNameService {
     public:
-        explicit TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
+        TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
             : IRankingNameService(std::move(ranking))
             , Types_(BuildNameIndex(std::move(types), NormalizeName))
         {
@@ -151,7 +134,7 @@ namespace NSQLComplete {
 
     class TFunctionNameService: public IRankingNameService {
     public:
-        explicit TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
+        TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
             : IRankingNameService(std::move(ranking))
             , Functions_(BuildNameIndex(std::move(functions), NormalizeName))
         {
@@ -175,7 +158,7 @@ namespace NSQLComplete {
 
     class THintNameService: public IRankingNameService {
     public:
-        explicit THintNameService(
+        THintNameService(
             IRanking::TPtr ranking,
             THashMap<EStatementKind, TVector<TString>> hints)
             : IRankingNameService(std::move(ranking))

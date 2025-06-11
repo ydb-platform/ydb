@@ -31,6 +31,7 @@ def do(args):
         'Guid',
         'NumStaticSlots',
         'ExpectedSlotCount',
+        'SlotSizeInUnits',
         'PDiskConfig',
         'Usage',
         'UsedSize',
@@ -46,6 +47,7 @@ def do(args):
         'FQDN',
         'Path',
         'Type',
+        'SlotSizeInUnits',
         'Status',
         'DecommitStatus',
     ]
@@ -89,6 +91,7 @@ def do(args):
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
         row['ExpectedSlotCount'] = pdisk.ExpectedSlotCount
+        row['SlotSizeInUnits'] = pdisk.PDiskConfig.SlotSizeInUnits
         row['PDiskConfig'] = text_format.MessageToString(pdisk.PDiskConfig, as_one_line=True)
         row['AvailableSize'] = pdisk.PDiskMetrics.AvailableSize
         row['TotalSize'] = pdisk.PDiskMetrics.TotalSize

@@ -47,6 +47,7 @@ class SyntaxChecker(ast.NodeVisitor):
     def __init__(self):
         """ Gather attributes from MODULES content. """
         self.attributes = set()
+        self.functions = []
 
         def save_attribute(module):
             """ Recursively save Pythonic keywords as possible attributes. """
@@ -131,7 +132,9 @@ class SyntaxChecker(ast.NodeVisitor):
         if node.args.kwarg:
             raise PythranSyntaxError("Keyword arguments not supported",
                                      node)
+        self.functions.append(node)
         self.generic_visit(node)
+        self.functions.pop()
 
     def visit_Raise(self, node):
         self.generic_visit(node)
@@ -206,6 +209,12 @@ class SyntaxChecker(ast.NodeVisitor):
 
     def visit_Global(self, node):
         raise PythranSyntaxError("'global' statements are not supported", node)
+
+    def visit_Nonlocal(self, node):
+        if len(self.functions) < 2:
+            raise PythranSyntaxError(
+                "nonlocal keyword is only valid on nested functions",
+                node)
 
 
 def check_syntax(node):

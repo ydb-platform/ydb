@@ -69,6 +69,26 @@ inline bool Checker<bool>::Get(const ::Ydb::Value& value) {
 }
 
 template<>
+inline i8 Checker<i8>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i16 Checker<i16>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i32 Checker<i32>::Get(const ::Ydb::Value& value) {
+    return value.int32_value();
+}
+
+template<>
+inline i64 Checker<i64>::Get(const ::Ydb::Value& value) {
+    return value.int64_value();
+}
+
+template<>
 inline ui32 Checker<ui32>::Get(const ::Ydb::Value& value) {
     return value.uint32_value();
 }
@@ -169,7 +189,7 @@ struct MainTestCase {
         if (user) {
             config.SetAuthToken(TStringBuilder() << user.value() << "@builtin");
         }
-        // config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_INFO).Release()))
+        // config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         return config;
     }
 
@@ -185,7 +205,6 @@ struct MainTestCase {
         , TransferName(TStringBuilder() << "Transfer_" << Id)
         , Driver(CreateDriverConfig(ConnectionString, user))
         , TableClient(Driver)
-        , Session(TableClient.GetSession().GetValueSync().GetSession())
         , TopicClient(Driver)
     {
     }
@@ -194,9 +213,13 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
+    auto Session() {
+        return TableClient.GetSession().GetValueSync().GetSession();
+    }
+
     void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::optional<std::string> expectedMessage = std::nullopt) {
         Cerr << "DDL: " << ddl << Endl << Flush;
-        auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
+        auto res = Session().ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         if (checkResult) {
             if (expectedMessage) {
                 UNIT_ASSERT(!res.IsSuccess());
@@ -212,7 +235,7 @@ struct MainTestCase {
     auto ExecuteQuery(const std::string& query, bool retry = true) {
         for (size_t i = 10; i--;) {
             Cerr << ">>>>> Query: " << query << Endl << Flush;
-            auto res = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            auto res = Session().ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             if (!res.IsSuccess()) {
                 Cerr << ">>>>> Query error: " << res.GetIssues().ToString() << Endl << Flush;
             }
@@ -283,13 +306,41 @@ struct MainTestCase {
         )", SourceTableName.data(), ChangefeedName.data()));
     }
 
+    struct CreatTopicSettings {
+        size_t MinPartitionCount = 1;
+        size_t MaxPartitionCount = 100;
+        bool AutoPartitioningEnabled = false;
+    };
+
     void CreateTopic(size_t partitionCount = 10) {
-        ExecuteDDL(Sprintf(R"(
-            CREATE TOPIC `%s`
-            WITH (
-                min_active_partitions = %d
-            );
-        )", TopicName.data(), partitionCount));
+        CreateTopic({
+            .MinPartitionCount = partitionCount
+        });
+    }
+
+    void CreateTopic(const CreatTopicSettings& settings) {
+        if (settings.AutoPartitioningEnabled) {
+            ExecuteDDL(Sprintf(R"(
+                CREATE TOPIC `%s`
+                WITH (
+                    MIN_ACTIVE_PARTITIONS = %d,
+                    MAX_ACTIVE_PARTITIONS = %d,
+                    AUTO_PARTITIONING_STRATEGY = 'UP',
+                    auto_partitioning_down_utilization_percent = 1,
+                    auto_partitioning_up_utilization_percent=2,
+                    auto_partitioning_stabilization_window = Interval('PT1S'),
+                    partition_write_speed_bytes_per_second = 3
+                );
+            )", TopicName.data(), settings.MinPartitionCount, settings.MaxPartitionCount));
+        } else {
+            ExecuteDDL(Sprintf(R"(
+                CREATE TOPIC `%s`
+                WITH (
+                    MIN_ACTIVE_PARTITIONS = %d
+
+                );
+            )", TopicName.data(), settings.MinPartitionCount));
+        }
     }
 
     void DropTopic() {
@@ -438,7 +489,7 @@ struct MainTestCase {
             setOptions = TStringBuilder() << "SET (" << sb << " )";
         }
 
-        auto res = Session.ExecuteQuery(Sprintf(R"(
+        auto res = Session().ExecuteQuery(Sprintf(R"(
             %s;
 
             ALTER TRANSFER `%s`
@@ -485,7 +536,7 @@ struct MainTestCase {
         settings.IncludeStats(true);
 
         auto c = TopicClient.DescribeConsumer(TopicName, consumerName, settings).GetValueSync();
-        UNIT_ASSERT(c.IsSuccess());
+        UNIT_ASSERT_C(c.IsSuccess(), c.GetIssues().ToOneLineString());
         return c;
     }
 
@@ -565,7 +616,9 @@ struct MainTestCase {
         settings.IncludeLocation(true);
         settings.IncludeStats(true);
 
-        return TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
+        auto result = TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        return result;
     }
 
     void CreateUser(const std::string& username) {
@@ -715,7 +768,6 @@ struct MainTestCase {
 
     TDriver Driver;
     TQueryClient TableClient;
-    TSession Session;
     TTopicClient TopicClient;
 };
 

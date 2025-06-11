@@ -954,6 +954,12 @@ TCheckFunc StreamResolvedTimestamps(const TDuration& value) {
     };
 }
 
+TCheckFunc StreamSchemaChanges(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetSchemaChanges(), value);
+    };
+}
+
 TCheckFunc StreamAwsRegion(const TString& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetAwsRegion(), value);
@@ -1472,6 +1478,19 @@ TCheckFunc IncrementalBackup(bool flag) {
         } else {
             UNIT_ASSERT(!attrsMap.contains("__incremental_backup") || attrsMap["__incremental_backup"] == "null");
         }
+    };
+}
+
+TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT(record.HasPathDescription());
+        NKikimrSchemeOp::TPathDescription descr = record.GetPathDescription();
+
+        UNIT_ASSERT(descr.HasSelf());
+        auto self = descr.GetSelf();
+        UNIT_ASSERT(self.HasCreateFinished());
+        ui32 curPathState = self.GetPathState();
+        UNIT_ASSERT_VALUES_EQUAL(curPathState, (ui32)pathState);
     };
 }
 

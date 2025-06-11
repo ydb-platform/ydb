@@ -1842,6 +1842,8 @@ public:
                             const auto type = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
                             if (type == "syncGlobal") {
                                 add_index->mutable_global_index();
+                            } else if (type == "syncGlobalUnique") {
+                                add_index->mutable_global_unique_index();
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
                             } else if (type == "globalVectorKmeansTree") {
@@ -2064,6 +2066,12 @@ public:
                                     const auto interval = TDuration::FromValue(value);
                                     auto& resolvedTimestamps = *add_changefeed->mutable_resolved_timestamps_interval();
                                     resolvedTimestamps.set_seconds(interval.Seconds());
+                                } else if (name == "schema_changes") {
+                                    auto value = TString(
+                                        setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
+                                    );
+
+                                    add_changefeed->set_schema_changes(FromString<bool>(to_lower(value)));
                                 } else if (name == "retention_period") {
                                     YQL_ENSURE(setting.Value().Maybe<TCoInterval>());
                                     const auto value = FromString<i64>(

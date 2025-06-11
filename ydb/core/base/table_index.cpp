@@ -1,6 +1,7 @@
 #include "table_index.h"
 
 #include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
 
 namespace NKikimr::NTableIndex {
 namespace {
@@ -199,6 +200,26 @@ void EnsureNoPostingParentFlag(TClusterId parent) {
 TClusterId SetPostingParentFlag(TClusterId parent) {
     EnsureNoPostingParentFlag(parent);
     return (parent | PostingParentFlag);
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // rows are not human readable and can be large like 100Kb+
+    copy.ClearRows();
+    result << copy.ShortDebugString();
+    result << " Rows: " << record.RowsSize();
+    return result;
 }
 
 }

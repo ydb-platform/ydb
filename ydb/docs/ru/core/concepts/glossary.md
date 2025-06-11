@@ -568,13 +568,21 @@ SID идентифицирует индивидуального [пользов�
 
 **SysViewProcessor** — это таблетка, которая хранит данные некоторых из [системных представлений](../dev/system-views.md).
 
+{% if feature_serial %}
+
 #### SequenceShard {#sequence-shard}
 
 **SequenceShard** — это таблетка, обслуживающая объекты Sequence, которые используются для реализации [серийных типов данных](../yql/reference/types/serial.md).
 
+{% endif %}
+
+{% if feature_async_replication %}
+
 #### ReplicationController {#replication-controller}
 
 **ReplicationController** — это таблетка, отвечающая за процесс [асинхронной репликации](async-replication.md).
+
+{% endif %}
 
 #### StatisticsAggregator {#statistics-aggregator}
 

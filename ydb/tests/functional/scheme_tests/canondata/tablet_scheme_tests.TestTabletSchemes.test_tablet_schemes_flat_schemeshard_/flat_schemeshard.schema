@@ -6894,6 +6894,11 @@
                 "ColumnId": 9,
                 "ColumnName": "ResolvedTimestampsIntervalMs",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "SchemaChanges",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6908,7 +6913,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6981,6 +6987,11 @@
                 "ColumnId": 9,
                 "ColumnName": "ResolvedTimestampsIntervalMs",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "SchemaChanges",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6995,7 +7006,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,

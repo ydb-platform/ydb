@@ -521,9 +521,13 @@ static TString ReadFile(const TString& fileName) {
 
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
     GracefulShutdownSupported = true;
+    DrainTimeout = TDuration::Seconds(30);
     const auto& config = runConfig.AppConfig.GetShutdownConfig();
     if (config.HasMinDelayBeforeShutdownSeconds()) {
         MinDelayBeforeShutdown = TDuration::Seconds(config.GetMinDelayBeforeShutdownSeconds());
+    }
+    if (config.HasDrainTimeoutSeconds()) {
+        DrainTimeout = TDuration::Seconds(config.GetDrainTimeoutSeconds());
     }
 }
 
@@ -1258,6 +1262,12 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
     }
 
+    if (runConfig.AppConfig.HasBridgeConfig()) {
+        AppData->BridgeConfig->CopyFrom(runConfig.AppConfig.GetBridgeConfig());
+    } else {
+        AppData->BridgeConfig = nullptr;
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1701,20 +1711,12 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGroupedMemoryLimiterInitializer(runConfig));
     }
 
-    if (serviceMask.EnableScanConveyor) {
-        sil->AddServiceInitializer(new TScanConveyorInitializer(runConfig));
-    }
-
     if (serviceMask.EnableCompPriorities) {
         sil->AddServiceInitializer(new TCompPrioritiesInitializer(runConfig));
     }
 
-    if (serviceMask.EnableCompConveyor) {
-        sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
-    }
-
-    if (serviceMask.EnableInsertConveyor) {
-        sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
+    if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor || serviceMask.EnableScanConveyor) {
+        sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {
@@ -1903,7 +1905,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     DisableActorCallstack();
 
     if (drainProgress) {
-        for (ui32 i = 0; i < 300; i++) {
+        ui32 maxTicks = DrainTimeout.MilliSeconds() / 100;
+        for (ui32 i = 0; i < maxTicks; i++) {
             auto cnt = drainProgress->GetOnlineTabletsEstimate();
             if (cnt > 0) {
                 Cerr << "Waiting for drain to complete: " << cnt << " tablets are online on node." << Endl;

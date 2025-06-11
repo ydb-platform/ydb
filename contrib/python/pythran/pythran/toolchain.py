@@ -52,8 +52,8 @@ def _extract_specs_dependencies(specs):
         # for each argument
         for t in signature:
             deps.update(pytype_to_deps(t))
-    # Keep "include" first
-    return sorted(deps, key=lambda x: "include" not in x)
+
+    return sorted(deps)
 
 
 def _parse_optimization(optimization):

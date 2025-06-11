@@ -1,6 +1,21 @@
-* Added object names completion in interactive mode
+## 2.22.1 ##
 
+* Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.
+* Fixed bug with parsing certificate files from profile.
+
+## 2.22.0 ##
+
+* Ignore empty directories in dumps when restoring it with `ydb tools restore`. Empty directories are created for unknown scheme objects when dumping with `ydb tools dump`.
+* Added support of check canonical results in `ydb workload query run` command.
+* Added support of parquet format to `ydb workload query import` and `ydb workload clickbench import files` commands.
+* `ydb workload query` deep reworked. Now it can be used for user defined full cycle load testing.
+* Fixed an issue where the `ydb workload * clean` commands were deleting all contents from the target directory, instead of just the tables created by the init command.
+* Switched highlighting engine
+* Added `ydb admin cluster config verion` command to show configuration version (V1/V2) on nodes.
+* Removed `--executor` option from `ydb workload run` commands. Use always `generic`.
+* Added object names completion in interactive mode
 * Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.
+
 ## 2.21.0 ##
 
 * Fixed a bug where ydb cli was trying to read parameters from stdin even if it had no data.

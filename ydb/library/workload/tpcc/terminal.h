@@ -2,11 +2,15 @@
 
 #include "task_queue.h"
 
+#include "constants.h"
 #include "histogram.h"
 #include "transactions.h"
 
+#include <ydb/library/workload/tpcc/constants.h_serialized.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
+#include <util/generic/serialized_enum.h>
 #include <util/system/spinlock.h>
 
 #include <atomic>
@@ -22,15 +26,6 @@ namespace NYdb::NTPCC {
 
 class TTerminalStats {
 public:
-    // don't change the order
-    enum ETransactionType {
-        E_NEW_ORDER = 0,
-        E_DELIVERY = 1,
-        E_ORDER_STATUS = 2,
-        E_PAYMENT = 3,
-        E_STOCK_LEVEL = 4
-    };
-
     struct TStats {
         // assumes that dst doesn't requre lock
         void Collect(TStats& dst) const {
@@ -40,6 +35,8 @@ public:
 
             TGuard guard(HistLock);
             dst.LatencyHistogramMs.Add(LatencyHistogramMs);
+            dst.LatencyHistogramFullMs.Add(LatencyHistogramFullMs);
+            dst.LatencyHistogramPure.Add(LatencyHistogramPure);
         }
 
         void Clear() {
@@ -48,38 +45,59 @@ public:
             UserAborted.store(0, std::memory_order_relaxed);
             TGuard guard(HistLock);
             LatencyHistogramMs.Reset();
+            LatencyHistogramFullMs.Reset();
+            LatencyHistogramPure.Reset();
         }
 
         std::atomic<size_t> OK = 0;
         std::atomic<size_t> Failed = 0;
         std::atomic<size_t> UserAborted = 0;
 
+        // histograms protected by lock
+
         mutable TSpinLock HistLock;
-        THistogram LatencyHistogramMs{256, 8192};
+
+        // Transaction latency observed by the terminal, i.e., includes session acquisition
+        // and retries performed by the SDK
+        THistogram LatencyHistogramMs{256, 32768};
+
+        // As LatencyHistogramMs plus inflight wait time in the terminal
+        THistogram LatencyHistogramFullMs{256, 32768};
+
+        // Latency of a successful transaction measured directly in the transaction code,
+        // when there is nothing to wait for except the queries
+        THistogram LatencyHistogramPure{256, 32768};
     };
 
 public:
     TTerminalStats() = default;
 
     const TStats& GetStats(ETransactionType type) const {
-        return Stats[type];
+        return Stats[static_cast<size_t>(type)];
     }
 
-    void AddOK(ETransactionType type, std::chrono::milliseconds latency) {
-        auto& stats = Stats[type];
+    void AddOK(
+        ETransactionType type,
+        std::chrono::milliseconds latency,
+        std::chrono::milliseconds latencyFull,
+        TDuration latencyPure)
+    {
+        auto& stats = Stats[static_cast<size_t>(type)];
         stats.OK.fetch_add(1, std::memory_order_relaxed);
         {
             TGuard guard(stats.HistLock);
             stats.LatencyHistogramMs.RecordValue(latency.count());
+            stats.LatencyHistogramFullMs.RecordValue(latencyFull.count());
+            stats.LatencyHistogramPure.RecordValue(latencyPure.MilliSeconds());
         }
     }
 
     void IncFailed(ETransactionType type) {
-        Stats[type].Failed.fetch_add(1, std::memory_order_relaxed);
+        Stats[static_cast<size_t>(type)].Failed.fetch_add(1, std::memory_order_relaxed);
     }
 
     void IncUserAborted(ETransactionType type) {
-        Stats[type].UserAborted.fetch_add(1, std::memory_order_relaxed);
+        Stats[static_cast<size_t>(type)].UserAborted.fetch_add(1, std::memory_order_relaxed);
     }
 
     // assumes that dst doesn't requre lock
@@ -104,7 +122,7 @@ public:
     }
 
 private:
-    std::array<TStats, 5> Stats;
+    std::array<TStats, GetEnumItemsCount<ETransactionType>()> Stats;
     std::atomic<bool> WasCleared{false};
 };
 
@@ -119,9 +137,11 @@ public:
         size_t warehouseID,
         size_t warehouseCount,
         ITaskQueue& taskQueue,
-        TDriver& driver,
+        std::shared_ptr<NQuery::TQueryClient>& client,
         const TString& path,
-        bool noSleep,
+        bool noDelays,
+        int simulateTransactionMs,
+        int simulateTransactionSelect1Count,
         std::stop_token stopToken,
         std::atomic<bool>& stopWarmup,
         std::shared_ptr<TTerminalStats>& stats,
@@ -133,6 +153,10 @@ public:
     TTerminal(TTerminal&&) = delete;
     TTerminal& operator=(TTerminal&&) = delete;
 
+    size_t GetID() const {
+        return Context.TerminalID;
+    }
+
     void Start();
 
     bool IsDone() const;
@@ -142,15 +166,15 @@ private:
 
 private:
     ITaskQueue& TaskQueue;
-    TDriver Driver;
     TTransactionContext Context;
-    bool NoSleep;
+    bool NoDelays;
     std::stop_token StopToken;
     std::atomic<bool>& StopWarmup;
     std::shared_ptr<TTerminalStats> Stats;
 
     TTerminalTask Task;
 
+    bool Started = false;
     bool WarmupWasStopped = false;
 };
 

@@ -132,9 +132,11 @@ public:
         resourcesRequest.Memory = memoryLimits.MkqlLightProgramMemoryLimit;
 
         auto&& schedulableOptions = args.SchedulableOptions;
+#if defined(USE_HDRF_SCHEDULER)
         if (/* TODO: check if actor is eligible for scheduling */ true) {
             schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
         }
+#endif
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);
 

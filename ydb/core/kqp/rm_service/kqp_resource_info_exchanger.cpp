@@ -75,8 +75,8 @@ class TKqpResourceInfoExchangerActor : public TActorBootstrapped<TKqpResourceInf
     };
 
     struct TDelaySettings {
-        TDuration StartDelayMs = TDuration::MilliSeconds(500);
-        TDuration MaxDelayMs = TDuration::MilliSeconds(2000);
+        TDuration StartDelay = TDuration::MilliSeconds(500);
+        TDuration MaxDelay = TDuration::MilliSeconds(2000);
     };
 
     struct TNodeState {
@@ -110,10 +110,10 @@ public:
         UpdateBoardRetrySettings(subscriberSettings, SubscriberSettings);
 
         if (exchangerSettings.HasStartDelayMs()) {
-            ExchangerSettings.StartDelayMs = TDuration::MilliSeconds(exchangerSettings.GetStartDelayMs());
+            ExchangerSettings.StartDelay = TDuration::MilliSeconds(exchangerSettings.GetStartDelayMs());
         }
         if (exchangerSettings.HasMaxDelayMs()) {
-            ExchangerSettings.MaxDelayMs = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
+            ExchangerSettings.MaxDelay = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
         }
     }
 
@@ -138,12 +138,18 @@ private:
             TBoardRetrySettings& retrySetting) {
         bool ret = false;
         if (settings.HasStartDelayMs()) {
-            ret = true;
-            retrySetting.StartDelayMs = TDuration::MilliSeconds(settings.GetStartDelayMs());
+            auto startDelay = TDuration::MilliSeconds(settings.GetStartDelayMs());
+            if (startDelay != retrySetting.StartDelay) {
+                retrySetting.StartDelay = startDelay;
+                ret = true;
+            }
         }
         if (settings.HasMaxDelayMs()) {
-            ret = true;
-            retrySetting.MaxDelayMs = TDuration::MilliSeconds(settings.GetMaxDelayMs());
+            auto maxDelay = TDuration::MilliSeconds(settings.GetMaxDelayMs());
+            if (maxDelay == retrySetting.MaxDelay) {
+                retrySetting.MaxDelay = maxDelay;
+                ret = true;
+            }
         }
         return ret;
     }
@@ -387,18 +393,22 @@ private:
         const auto& exchangerSettings = infoExchangerSettings.GetExchangerSettings();
 
         if (UpdateBoardRetrySettings(publisherSettings, PublisherSettings)) {
-            CreatePublisher();
+            if (UlidString) {
+                CreatePublisher();
+            }
         }
 
         if (UpdateBoardRetrySettings(subscriberSettings, SubscriberSettings)) {
-            CreateSubscriber();
+            if (UlidString) {
+                CreateSubscriber();
+            }
         }
 
         if (exchangerSettings.HasStartDelayMs()) {
-            ExchangerSettings.StartDelayMs = TDuration::MilliSeconds(exchangerSettings.GetStartDelayMs());
+            ExchangerSettings.StartDelay = TDuration::MilliSeconds(exchangerSettings.GetStartDelayMs());
         }
         if (exchangerSettings.HasMaxDelayMs()) {
-            ExchangerSettings.MaxDelayMs = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
+            ExchangerSettings.MaxDelay = TDuration::MilliSeconds(exchangerSettings.GetMaxDelayMs());
         }
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -632,8 +642,8 @@ private:
     }
 
     const TDuration& GetCurrentDelay(TDelayState& state) {
-        if (state.CurrentDelay < ExchangerSettings.StartDelayMs) {
-            state.CurrentDelay = ExchangerSettings.StartDelayMs;
+        if (state.CurrentDelay < ExchangerSettings.StartDelay) {
+            state.CurrentDelay = ExchangerSettings.StartDelay;
         }
         return state.CurrentDelay;
     }
@@ -641,8 +651,8 @@ private:
     TDuration GetDelay(TDelayState& state) {
         auto newDelay = state.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > ExchangerSettings.MaxDelayMs) {
-            newDelay = ExchangerSettings.MaxDelayMs;
+        if (newDelay > ExchangerSettings.MaxDelay) {
+            newDelay = ExchangerSettings.MaxDelay;
         }
         newDelay *= AppData()->RandomProvider->Uniform(50, 200);
         newDelay /= 100;

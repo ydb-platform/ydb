@@ -30,6 +30,7 @@ SRCS(
     scheduler/new/kqp_schedulable_actor.cpp
     scheduler/new/tree/dynamic.cpp
     scheduler/new/tree/snapshot.cpp
+    scheduler/old/kqp_compute_scheduler.cpp
 )
 
 PEERDIR(

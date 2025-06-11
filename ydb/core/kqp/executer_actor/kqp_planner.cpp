@@ -259,6 +259,16 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+
+#if !defined(USE_HDRF_SCHEDULER)
+        request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
+        if (UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode >= 0) {
+            request.SetQueryCpuShare(UserRequestContext->PoolConfig->QueryCpuLimitPercentPerNode / 100.0);
+        }
+        if (UserRequestContext->PoolConfig->ResourceWeight >= 0) {
+            request.SetResourceWeight(UserRequestContext->PoolConfig->ResourceWeight);
+        }
+#endif
     }
 
     if (UserToken) {

@@ -610,6 +610,12 @@ message TEvStartKqpTasksRequest {
     optional uint64 LockTxId = 13;
     optional uint32 LockNodeId = 14;
 
+    // TODO(scheduler): only for old scheduler.
+    optional double PoolMaxCpuShare = 12;
+    optional double QueryCpuShare = 16;
+    optional double ResourceWeight = 18;
+    // TODO(scheduler): end.
+
     optional NKikimrDataEvents.ELockMode LockMode = 19;
 
     optional string UserToken = 20;

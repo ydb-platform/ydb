@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_actor.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/actors/core/actor.h>
@@ -128,7 +128,7 @@ public:
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
-        NScheduler::TSchedulableActorHelper::TOptions SchedulableOptions;
+        TSchedulableOptions SchedulableOptions;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
     };

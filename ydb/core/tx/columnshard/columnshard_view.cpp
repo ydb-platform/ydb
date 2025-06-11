@@ -40,6 +40,28 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }
 
+template<typename T>
+void TPrintErrorTable(TStringStream& html, std::queue<T> errors, const std::string& errorType) {
+    if (errors.empty()) {
+        html << "No " << errorType << " errors<br />";
+    } else {
+        html << "<b>" << errorType << " errors:</b><br />";
+        html << "<table>"
+                "<tr><th>Tier</th><th>Time</th><th>Error</th></tr>";
+        while (!errors.empty()) {
+            const auto& element = errors.front();
+            html << "<tr>"
+                 << "<td>" << EscapeHtml(element.Tier) << "</td>"
+                 << "<td>" << element.Time.ToString() << "</td>"
+                 << "<td>" << EscapeHtml(element.ErrorReason) << "</td>"
+                 << "</tr>";
+            errors.pop();
+        }
+
+        html << "</table><br />";
+    }
+}
+
 void TTxMonitoring::Complete(const TActorContext& ctx) {
     const auto& cgi = HttpInfoEvent->Get()->Cgi();
     std::map<std::pair<ui64, ui64>, NJson::TJsonValue> schemaVersions;
@@ -87,23 +109,11 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
 
     html << "<h3>Tiering Errors</h3>";
     // std::cout << "la-la-la4 " << Self->GetTieringErrors().size() << '\n';
-    const auto& errs = Self->TieringErrorCollector->GetAll();
+    auto readErrors = Self->TieringErrorCollector->GetAllReadErrors();
+    auto writeErrors = Self->TieringErrorCollector->GetAllWriteErrors();
 
-    if (errs.empty()) {
-        html << "No errors<br />";
-    } else {
-        html << "<table class='table'>"
-                "<tr><th>Tier</th><th>Time</th><th>Error</th></tr>";
-        for (const auto& [tierName, info] : errs) {
-            html << "<tr>"
-                 << "<td>" << EscapeHtml(tierName) << "</td>"
-                //  << "<td>" << info.Time.ToString() << "</td>"
-                 << "<td>" << EscapeHtml(info) << "</td>"
-                 << "</tr>";
-        }
-
-        html << "</table><br />";
-    }
+    TPrintErrorTable(html, readErrors, "read");
+    TPrintErrorTable(html, writeErrors, "write");
 
     ctx.Send(HttpInfoEvent->Sender, new NMon::TEvRemoteHttpInfoRes(html.Str()));
 }

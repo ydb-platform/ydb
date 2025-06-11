@@ -14,7 +14,7 @@ private:
     const TString StorageId;
 
 public:
-    TRepliesAdapter(std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector, const TString& storageId)
+    TRepliesAdapter(const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector, const TString& storageId)
         : ErrorCollector(std::move(errorCollector))
         , StorageId(std::move(storageId))
     {

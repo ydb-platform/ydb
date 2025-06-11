@@ -23,7 +23,9 @@ public:
         auto grpcPort = portManager.GetPort(2135);
         auto settings = TServerSettings(mbusPort);
         settings.SetDomainName("Root");
-        settings.SetAuditLogBackendLines(AuditLines);
+
+        AuditLinesPtr = std::make_shared<std::vector<std::string>>();
+        settings.SetAuditLogBackendLines(AuditLinesPtr);
 
         Server = MakeHolder<TServer>(settings);
         Server->EnableGRpc(NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort));
@@ -190,7 +192,7 @@ private:
     TSimpleSharedPtr<NYdb::NTable::TTableClient> TableClient;
     THolder<TServer> Server;
     TString Root = "/Root/SQS";
-    std::vector<std::string> AuditLines;
+    std::shared_ptr<std::vector<std::string>> AuditLinesPtr;
 
     UNIT_TEST_SUITE(TCloudEventsProcessorTests)
     UNIT_TEST(TestCreateCloudEventProcessor)
@@ -269,7 +271,7 @@ private:
         [[maybe_unused]] int updateCount = 0;
         [[maybe_unused]] int deleteCount = 0;
 
-        for (const auto& line : AuditLines) {
+        for (const auto& line : *AuditLinesPtr) {
             std::cerr << line << std::endl;
             bool isCreate = line.contains("CreateMessageQueue");
             bool isUpdate = line.contains("UpdateMessageQueue");

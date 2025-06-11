@@ -446,7 +446,7 @@ namespace Tests {
             Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, 
                                                     Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
                                                     Settings->UseRealThreads,
-                                                    CreateTestAuditLogBackends(Settings->AuditLogBackendLines.value()));
+                                                    CreateTestAuditLogBackends(*Settings->AuditLogBackendLines));
         } else {
             Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
                                                     Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,

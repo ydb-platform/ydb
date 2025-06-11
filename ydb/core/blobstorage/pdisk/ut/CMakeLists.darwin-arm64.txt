@@ -57,6 +57,7 @@ target_sources(ydb-core-blobstorage-pdisk-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_run.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_sectormap.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_pdisk_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_chunk_tracker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/mock/pdisk_mock.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_yard.cpp

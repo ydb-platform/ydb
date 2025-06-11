@@ -73,12 +73,6 @@ TExprBase KqpRemoveRedundantSortByPk(
     auto settings = GetReadTableSettings(input, isReadTableRanges);
     auto table = GetTable(input, isReadTableRanges);
 
-    if (!tableDesc.Metadata->KeyColumnNames.empty()) {
-        Cout << "YES" << Endl;
-    } else {
-        Cout << "NO" << Endl;
-    }
-
     bool isReversed = false;
     auto isSorted = [&](){
         auto tableStats = typeCtx.GetStats(table.Raw());
@@ -86,6 +80,9 @@ TExprBase KqpRemoveRedundantSortByPk(
         if (!tableStats || !sortStats || !typeCtx.SortingsFSM) {
             return false;
         }
+
+        YQL_CLOG(TRACE, CoreDq) << "Statistics of the input of the sort: " << tableStats->ToString();
+        YQL_CLOG(TRACE, CoreDq) << "Statistics of the sort: " << sortStats->ToString();
 
         auto sortingIdx = sortStats->SortingOrderingIdx;
 
@@ -154,10 +151,6 @@ TExprBase KqpBuildTopStageRemoveSort(
     if (!ruleEnabled) {
         return node;
     }
-
-    bool ok = node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>().IsValid();
-    bool cock = node.Maybe<TCoSort>().Input().Maybe<TDqCnUnionAll>().IsValid();
-    YQL_CLOG(TRACE, CoreDq) << "OKsperm: " << cock << " " << ok;
 
     if (!node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>() && !node.Maybe<TCoSort>().Input().Maybe<TDqCnUnionAll>()) {
         return node;

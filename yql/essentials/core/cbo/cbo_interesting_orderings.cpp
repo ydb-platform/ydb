@@ -788,7 +788,13 @@ void TOrderingsStateMachine::TNFSM::PrefixClosure() {
                     AddEdge(i, j, TNFSM::TEdge::EPSILON);
                 }
 
-                if (Nodes[i].Ordering.Type == TOrdering::ESorting) {
+                Y_ENSURE(Nodes[i].Ordering.Directions.size() <= Nodes[j].Ordering.Directions.size());
+                bool areDirsCompitable = std::equal(
+                    Nodes[i].Ordering.Directions.begin(),
+                    Nodes[i].Ordering.Directions.end(),
+                    Nodes[j].Ordering.Directions.begin()
+                );
+                if (Nodes[i].Ordering.Type == TOrdering::ESorting && areDirsCompitable) {
                     AddEdge(j, i, TNFSM::TEdge::EPSILON);
                 }
             }

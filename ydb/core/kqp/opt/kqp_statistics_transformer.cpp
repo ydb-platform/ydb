@@ -208,7 +208,6 @@ void InferStatisticsForKqpTable(
             }
         }
         std::int64_t orderingIdx = orderingsFSM->FDStorage.FindInterestingOrderingIdx(shuffledBy, TOrdering::EShuffle, nullptr);
-        Y_ENSURE(orderingIdx >= 0, TStringBuilder{} << "Ordering wasn't found: " << NYql::TOptimizerStatistics::TShuffledByColumns(shuffledBy).ToString());
         stats->LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
     }
 
@@ -966,8 +965,8 @@ private:
         bool Collect(const TExprNode::TPtr& node) {
             if (auto equiJoin = TMaybeNode<TCoEquiJoin>(node)) {
                 CollectEquiJoin(equiJoin.Cast());
-            } else if (auto kqpTable = TMaybeNode<TKqpTable>(node)) {
-                CollectKqpTable<GetAscDirections>(kqpTable.Cast());
+            } else if (TMaybeNode<TKqlReadTableRangesBase>(node) || TMaybeNode<TKqlReadTableBase>(node)) {
+                CollectKqpReadTable<GetAscDirections>(TExprBase(node));
             } else if (auto aggregateBase = TMaybeNode<TCoAggregateBase>(node)) {
                 CollectAggregateBase(aggregateBase.Cast());
             } else if (auto topBase = TMaybeNode<TCoTopBase>(node)) {
@@ -975,7 +974,7 @@ private:
             } else if (auto sort = TMaybeNode<TCoSortBase>(node)) {
                 CollectSort<TCoSortBase>(sort.Cast());
             } else if (auto kqlReadTableIndexRanges = TMaybeNode<TKqlReadTableIndexRanges>(node)) {
-                CollectKqlReadTableIndexRanges(kqlReadTableIndexRanges.Cast());
+                CollectKqlReadTableIndexRanges<GetAscDirections>(kqlReadTableIndexRanges.Cast());
             } else if (auto flatMapBase = TMaybeNode<TCoFlatMapBase>(node)) {
                 CollectFlatMapBase(flatMapBase.Cast());
             }
@@ -994,8 +993,10 @@ private:
 
     private:
         template <auto GetDirs>
-        void CollectKqpTable(const TKqpTable& table) {
-            auto stats = TypeCtx.GetStats(table.Raw());
+        void CollectKqpReadTable(const TExprBase& readTable) {
+            Y_ENSURE(readTable.Maybe<TKqlReadTableRangesBase>() || readTable.Maybe<TKqlReadTableBase>());
+
+            auto stats = TypeCtx.GetStats(readTable.Raw());
             if (!stats) {
                 return;
             }
@@ -1028,8 +1029,13 @@ private:
                 sortingsOrderingIdxes.push_back(std::move(idx));
             }
 
+            TKqpTable table =
+                readTable.Maybe<TKqlReadTableRangesBase>().IsValid()?
+                    readTable.Maybe<TKqlReadTableRangesBase>().Cast().Table() :
+                    readTable.Maybe<TKqlReadTableBase>().Cast().Table();
+
             std::stringstream ss;
-                ss << "Collected KqpTable interesting ordering idx,"
+                ss << "Collected KqpReadTable interesting ordering idx,"
                    << "shufflings: " << "[" << JoinSeq(", ", shufflingOrderingIdxes) << "]" << ", "
                    << "sortings: " << "[" << JoinSeq(", ", sortingsOrderingIdxes) << "]" << ", "
                    << "Path: " << table.Path().StringValue() << ", ";
@@ -1081,10 +1087,11 @@ private:
                     );
 
             if (!ascOnly) { // we may have desc direction in topsort - so we will consider two cases : asc and desc table reads
-                if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(sortCallable.Input().Raw())) {
-                    if (auto maybeTable = GetTable(maybeFlatMapBase.Cast().Input().Raw())) {
-                        CollectKqpTable<GetDescDirections>(*maybeTable);
-                    }
+                if (auto maybeReadTable = GetReadTable(sortCallable.Input().Raw())) {
+                    Cout << "OK" << Endl;
+                    CollectKqpReadTable<GetDescDirections>(*maybeReadTable);
+                } else {
+                    Cout << "Kal" << Endl;
                 }
             }
 
@@ -1093,23 +1100,28 @@ private:
             YQL_CLOG(TRACE, CoreDq) << "Collected " << sortCallable.CallableName() << " interesting ordering idx: " << sortingsOrderingIdx << ", TableAliases: " << TableAliasToString(tableAliases);
         }
 
-        TMaybe<TKqpTable> GetTable(const TExprNode* const input) {
+        TMaybe<TExprBase> GetReadTable(const TExprNode* const input) {
+            if (auto maybeFlatMapBase = TMaybeNode<TCoFlatMapBase>(input)) {
+                return GetReadTable(maybeFlatMapBase.Cast().Input().Raw());
+            }
+
             if (auto maybeExtractMembers = TMaybeNode<TCoExtractMembers>(input)) {
-                return GetTable(maybeExtractMembers.Input().Raw());
+                return GetReadTable(maybeExtractMembers.Input().Raw());
             }
 
             if (auto maybeKqlReadTableRangesBase = TMaybeNode<TKqlReadTableRangesBase>(input)) {
-                return maybeKqlReadTableRangesBase.Cast().Table();
+                return maybeKqlReadTableRangesBase.Cast();
             }
 
             if (auto maybeKqlReadTableBase = TMaybeNode<TKqlReadTableBase>(input)) {
-                return maybeKqlReadTableBase.Cast().Table();
+                return maybeKqlReadTableBase.Cast();
             }
 
             return Nothing();
         }
 
     private:
+        template <auto GetDirs>
         void CollectKqlReadTableIndexRanges(const TKqlReadTableIndexRanges& readTableIndexRanges) {
             auto stats = TypeCtx.GetStats(readTableIndexRanges.Raw());
             if (!stats) {
@@ -1122,7 +1134,7 @@ private:
             }
 
             auto sortedBy = stats->KeyColumns->ToJoinColumns(alias);
-            std::size_t orderingIdx = FDStorage.AddSorting(sortedBy, GetAscDirections(sortedBy.size()), nullptr);
+            std::size_t orderingIdx = FDStorage.AddSorting(sortedBy, GetDirs(sortedBy.size()), nullptr);
             YQL_CLOG(TRACE, CoreDq) << "Collected KqlReadTableIndexRanges interesting ordering idx: " << orderingIdx;
         }
     private:

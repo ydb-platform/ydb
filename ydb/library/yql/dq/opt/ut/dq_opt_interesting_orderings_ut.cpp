@@ -492,4 +492,30 @@ Y_UNIT_TEST_SUITE(InterestingOrderingsSorting) {
 
         auto fsm = MakeFSM(fds, interesting, TOrdering::ESorting);
     }
+
+    Y_UNIT_TEST(IncompatibleDirsSortingsPrefixClosure) {
+        std::vector<TOrdering> interesting = {
+            Sorting(ASC(1)),
+            Sorting(DESC(1), DESC(0))
+        };
+
+        auto fsm = MakeFSM({}, interesting, TOrdering::ESorting);
+
+        {
+            auto orderings = fsm.CreateState();
+            orderings.SetOrdering(0);
+
+            UNIT_ASSERT(orderings.ContainsSorting(0));
+            UNIT_ASSERT(!orderings.ContainsSorting(1));
+        }
+
+
+        {
+            auto orderings = fsm.CreateState();
+            orderings.SetOrdering(1);
+
+            UNIT_ASSERT(!orderings.ContainsSorting(0));
+            UNIT_ASSERT(orderings.ContainsSorting(1));
+        }
+    }
 }

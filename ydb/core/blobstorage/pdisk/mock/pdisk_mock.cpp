@@ -129,7 +129,7 @@ struct TPDiskMockState::TImpl {
             to.ReservedChunks.insert(FreeChunks.extract(it));
         }
 
-        Y_ABORT_UNLESS(chunkIdx != TotalChunks);
+        Y_VERIFY(chunkIdx != TotalChunks);
         return chunkIdx;
     }
 
@@ -138,7 +138,7 @@ struct TPDiskMockState::TImpl {
             for (auto& [chunkIdx, chunk] : owner.ChunkData) {
                 for (auto& [blockIdx, ref] : chunk.Blocks) {
                     const auto it = Blocks.find(*ref);
-                    Y_ABORT_UNLESS(it != Blocks.end());
+                    Y_VERIFY(it != Blocks.end());
                     ref = &it->first;
                 }
             }
@@ -185,7 +185,7 @@ struct TPDiskMockState::TImpl {
         for (auto& [ownerId, owner] : Owners) {
             if (slotIsValid) {
                 if (slotId == owner.SlotId) {
-                    Y_ABORT_UNLESS(owner.VDiskId.SameExceptGeneration(vdiskId));
+                    Y_VERIFY(owner.VDiskId.SameExceptGeneration(vdiskId));
                     *created = false;
                     return std::make_tuple(ownerId, &owner);
                 }
@@ -201,7 +201,7 @@ struct TPDiskMockState::TImpl {
         std::map<ui8, TOwner>::iterator it;
         for (it = Owners.begin(); it != Owners.end() && it->first == ownerId; ++it, ++ownerId)
         {}
-        Y_ABORT_UNLESS(ownerId);
+        Y_VERIFY(ownerId);
         it = Owners.emplace_hint(it, ownerId, TOwner());
         it->second.VDiskId = vdiskId;
         it->second.SlotId = slotId;
@@ -220,17 +220,17 @@ struct TPDiskMockState::TImpl {
 
     void CommitChunk(TOwner& owner, TChunkIdx chunkIdx) {
         const ui32 num = owner.ReservedChunks.erase(chunkIdx) + owner.CommittedChunks.erase(chunkIdx);
-        Y_ABORT_UNLESS(num);
+        Y_VERIFY(num);
         const bool inserted = owner.CommittedChunks.insert(chunkIdx).second;
-        Y_ABORT_UNLESS(inserted);
+        Y_VERIFY(inserted);
     }
 
     void DeleteChunk(TOwner& owner, TChunkIdx chunkIdx) {
         const ui32 num = owner.ReservedChunks.erase(chunkIdx) + owner.CommittedChunks.erase(chunkIdx);
-        Y_ABORT_UNLESS(num);
+        Y_VERIFY(num);
         owner.ChunkData.erase(chunkIdx);
         const bool inserted = FreeChunks.insert(chunkIdx).second;
-        Y_ABORT_UNLESS(inserted);
+        Y_VERIFY(inserted);
         AdjustFreeChunks();
     }
 
@@ -264,7 +264,7 @@ struct TPDiskMockState::TImpl {
         for (auto& [ownerId, owner] : Owners) {
             for (auto& [chunkIdx, data] : owner.ChunkData) {
                 const bool inserted = res.insert(chunkIdx).second;
-                Y_ABORT_UNLESS(inserted);
+                Y_VERIFY(inserted);
             }
         }
         return res;
@@ -431,7 +431,7 @@ public:
         for (const auto& [ownerId, owner] : Impl.Owners) {
             usedChunks += owner.CommittedChunks.size() + owner.ReservedChunks.size();
         }
-        Y_ABORT_UNLESS(usedChunks <= Impl.TotalChunks);
+        Y_VERIFY(usedChunks <= Impl.TotalChunks);
 
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
         auto& record = ev->Record;
@@ -449,7 +449,7 @@ public:
         // report message and validate PDisk guid
         auto *msg = ev->Get();
         PDISK_MOCK_LOG(NOTICE, PDM01, "received TEvYardInit", (Msg, msg->ToString()));
-        Y_ABORT_UNLESS(msg->PDiskGuid == Impl.PDiskGuid, "PDiskGuid mismatch");
+        Y_VERIFY(msg->PDiskGuid == Impl.PDiskGuid, "PDiskGuid mismatch");
 
         // find matching owner or create a new one
         ui8 ownerId;
@@ -543,7 +543,7 @@ public:
     std::deque<std::tuple<TActorId, THolder<NPDisk::TEvLog>>> LogQ;
 
     void Handle(NPDisk::TEvLog::TPtr ev) {
-        Y_ABORT_UNLESS(!Impl.CheckIsReadOnlyOwner(ev->Get()));
+        Y_VERIFY(!Impl.CheckIsReadOnlyOwner(ev->Get()));
         if (LogQ.empty()) {
             TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
@@ -555,7 +555,7 @@ public:
             TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
         for (auto& [msg, _] : ev->Get()->Logs) {
-            Y_ABORT_UNLESS(!Impl.CheckIsReadOnlyOwner(msg.Get()));
+            Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg.Get()));
             LogQ.emplace_back(ev->Sender, std::move(msg));
         }
     }
@@ -582,7 +582,7 @@ public:
                 TImpl::TOwner& owner = it->second;
                 PDISK_MOCK_LOG(DEBUG, PDM11, "received TEvLog", (Msg, msg->ToString()), (VDiskId, owner.VDiskId));
 
-                Y_ABORT_UNLESS(msg->Lsn > std::exchange(owner.LastLsn, msg->Lsn));
+                Y_VERIFY(msg->Lsn > std::exchange(owner.LastLsn, msg->Lsn));
 
                 // add successful result to the actor's result queue if there is no such last one
                 if (!results.empty() && results.back()->Recipient == recipient) {
@@ -629,7 +629,7 @@ public:
                     owner.StartingPoints[msg->Signature.GetUnmasked()] = owner.Log.back();
                 }
             }
-            Y_ABORT_UNLESS(res);
+            Y_VERIFY(res);
             if (auto&& cb = std::move(msg->LogCallback)) { // register callback in the queue if there is one
                 callbacks.emplace_back(std::move(cb), res);
             }
@@ -689,7 +689,7 @@ public:
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             PDISK_MOCK_LOG(INFO, PDM05, "received TEvReadLog", (Msg, msg->ToString()), (VDiskId, owner->VDiskId));
             ui64 size = 0;
-            Y_ABORT_UNLESS(msg->Position.OffsetInChunk <= owner->Log.size());
+            Y_VERIFY(msg->Position.OffsetInChunk <= owner->Log.size());
             for (auto it = owner->Log.begin() + msg->Position.OffsetInChunk; it != owner->Log.end(); ++it) {
                 res->Results.push_back(*it);
                 res->IsEndOfLog = ++res->NextPosition.OffsetInChunk == owner->Log.size();
@@ -707,7 +707,7 @@ public:
 
     void Handle(NPDisk::TEvChunkReserve::TPtr ev) {
         auto *msg = ev->Get();
-        Y_ABORT_UNLESS(!Impl.CheckIsReadOnlyOwner(msg));
+        Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg));
         auto res = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, GetStatusFlags());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
@@ -737,7 +737,7 @@ public:
                 "VDiskId# " << owner->VDiskId << " ChunkIdx# " << msg->ChunkIdx);
             ui32 offset = msg->Offset;
             ui32 size = msg->Size;
-            Y_ABORT_UNLESS(offset < Impl.ChunkSize && offset + size <= Impl.ChunkSize && size);
+            Y_VERIFY(offset < Impl.ChunkSize && offset + size <= Impl.ChunkSize && size);
             auto data = TRcBuf::Uninitialized(size);
 
             const auto chunkIt = owner->ChunkData.find(msg->ChunkIdx);
@@ -778,7 +778,7 @@ public:
     }
 
     void Handle(NPDisk::TEvChunkWrite::TPtr ev) {
-        Y_ABORT_UNLESS(!Impl.CheckIsReadOnlyOwner(ev->Get()));
+        Y_VERIFY(!Impl.CheckIsReadOnlyOwner(ev->Get()));
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::OK, msg->ChunkIdx, msg->Cookie,
             GetStatusFlags(), TString());
@@ -796,12 +796,12 @@ public:
             }
             if (msg->ChunkIdx) {
                 // allow reads only from owned chunks
-                Y_ABORT_UNLESS(owner->ReservedChunks.count(msg->ChunkIdx) || owner->CommittedChunks.count(msg->ChunkIdx));
+                Y_VERIFY(owner->ReservedChunks.count(msg->ChunkIdx) || owner->CommittedChunks.count(msg->ChunkIdx));
                 // ensure offset and write sizes are granular
-                Y_ABORT_UNLESS(msg->Offset % Impl.AppendBlockSize == 0);
-                Y_ABORT_UNLESS(msg->PartsPtr);
-                Y_ABORT_UNLESS(msg->PartsPtr->ByteSize() % Impl.AppendBlockSize == 0);
-                Y_ABORT_UNLESS(msg->Offset + msg->PartsPtr->ByteSize() <= Impl.ChunkSize);
+                Y_VERIFY(msg->Offset % Impl.AppendBlockSize == 0);
+                Y_VERIFY(msg->PartsPtr);
+                Y_VERIFY(msg->PartsPtr->ByteSize() % Impl.AppendBlockSize == 0);
+                Y_VERIFY(msg->Offset + msg->PartsPtr->ByteSize() <= Impl.ChunkSize);
                 // issue write
                 const ui32 offset = msg->Offset;
                 TImpl::TChunkData& chunk = owner->ChunkData[msg->ChunkIdx];
@@ -835,7 +835,7 @@ public:
                             ++it->second;
                             if (const TString *prev = std::exchange(chunk.Blocks[blockIdx++], &it->first)) {
                                 const auto it = Impl.Blocks.find(*prev);
-                                Y_ABORT_UNLESS(it != Impl.Blocks.end());
+                                Y_VERIFY(it != Impl.Blocks.end());
                                 if (!--it->second) {
                                     Impl.Blocks.erase(it);
                                 }

@@ -27,7 +27,7 @@ public:
 
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters,
                     const TString& group, const TString& subgroup, const TString& name,
-                    const TVector<float> &thresholds, 
+                    const TVector<float> &thresholds,
                     NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public) {
         Tracker.Initialize(counters, group, subgroup, name, thresholds, visibility);
     }
@@ -404,6 +404,8 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadPayload;
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadSectorFooter;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteBufferCompactedBytes;
+
     struct TIoCounters {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
         ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
@@ -521,4 +523,3 @@ struct TPDiskMon {
 };
 
 } // NKikimr
-

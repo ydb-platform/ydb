@@ -125,7 +125,7 @@ public:
     }
 
     void PushFreeOwnerChunk(TOwner owner, TChunkIdx chunkIdx) {
-        Y_ABORT_UNLESS(chunkIdx != 0);
+        Y_VERIFY(chunkIdx != 0);
         UntrimmedFreeChunks.Push(chunkIdx);
         ChunkTracker.Release(owner, 1);
     }

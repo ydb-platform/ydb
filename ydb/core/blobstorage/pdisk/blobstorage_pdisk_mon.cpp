@@ -215,6 +215,8 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkReadPayload, Bandwidth/PDisk/ChunkRead/Payload);
     NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkReadSectorFooter, Bandwidth/PDisk/ChunkRead/SectorFooter);
 
+    COUNTER_INIT_IF_EXTENDED(PDiskGroup, WriteBufferCompactedBytes, true);
+
     // pdisk (interface)
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardInit, YardInit);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, CheckSpace, YardCheckSpace);
@@ -464,4 +466,3 @@ TPDiskMon::TIoCounters *TPDiskMon::GetReadCounter(ui8 priority) {
 }
 
 } // NKikimr
-

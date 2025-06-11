@@ -167,6 +167,8 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 CompletionThreadsCount = 1;
     bool UseNoopScheduler = false;
 
+    bool PlainDataChunks = false;
+
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
@@ -229,8 +231,8 @@ struct TPDiskConfig : public TThrRefBase {
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
-        Y_ABORT_UNLESS(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
-                "SPDK NVMe driver can be used only with NVMe devices!");
+        Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
+                "PDiskId# " << PDiskId << " SPDK NVMe driver can be used only with NVMe devices!");
     }
 
     TString GetDevicePath() {
@@ -325,6 +327,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " PlainDataChunks# " << PlainDataChunks << x;
         str << "}";
         return str.Str();
     }
@@ -416,6 +419,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
+        }
+        if (cfg->HasPlainDataChunks()) {
+            PlainDataChunks = cfg->GetPlainDataChunks();
         }
     }
 };

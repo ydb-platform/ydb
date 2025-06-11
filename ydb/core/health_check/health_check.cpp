@@ -818,6 +818,10 @@ public:
             RequestBsController();
         }
 
+        if (!IsSpecificDatabaseFilter()) {
+            NodeWardenStorageConfig = RequestStorageConfig();
+        }
+
 
         NodesInfo = TRequestResponse<TEvInterconnect::TEvNodesInfo>(Span.CreateChild(TComponentTracingLevels::TTablet::Detailed, "TEvInterconnect::TEvListNodes"));
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(), 0/*flags*/, 0/*cookie*/, Span.GetTraceId());
@@ -838,7 +842,17 @@ public:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         NodeWardenStorageConfig->Set(std::move(ev));
-        if (const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config; config.HasBlobStorageConfig()) {
+        const NKikimrBlobStorage::TStorageConfig& config = *NodeWardenStorageConfig->Get()->Config;
+        if (config.GetSelfManagementConfig().GetEnabled() && config.GetGeneration() == 0) {
+            auto result = MakeHolder<TEvSelfCheckResult>();
+            result->Result.set_self_check_result(Ydb::Monitoring::SelfCheck_Result::SelfCheck_Result_MAINTENANCE_REQUIRED);
+            auto* issue = result->Result.add_issue_log();
+            issue->set_id("0");
+            issue->set_status(Ydb::Monitoring::StatusFlag::RED);
+            issue->set_message("Cluster is not bootstrapped");
+            ReplyAndPassAway(std::move(result));
+        }
+        if (config.HasBlobStorageConfig()) {
             if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                 const auto& staticConfig = bsConfig.GetServiceSet();
                 for (const NKikimrBlobStorage::TNodeWardenServiceSet_TPDisk& pDisk : staticConfig.pdisks()) {
@@ -3217,6 +3231,12 @@ public:
 
         FillResult({&result});
         RemoveUnrequestedEntries(result, Request->Request);
+
+        ReplyAndPassAway(std::move(response));
+    }
+
+    void ReplyAndPassAway(THolder<TEvSelfCheckResult> response) {
+        Ydb::Monitoring::SelfCheckResult& result = response->Result;
 
         FillNodeInfo(SelfId().NodeId(), result.mutable_location());
 

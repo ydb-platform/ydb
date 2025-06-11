@@ -1002,8 +1002,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
                             };
-                            auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
-                            if (source.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
+                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
+                                auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
                                 THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
                                     
                                 auto token = source.Token;
@@ -1023,10 +1023,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([source, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
                                         TGetSchemeEntryResult type = result.GetValue();
                                         if (type == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            source.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
+                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NKikimr::NExternalSource::YdbTopicsType);
                                         }
                                         f();
                                     });

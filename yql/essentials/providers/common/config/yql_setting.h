@@ -18,7 +18,6 @@ enum class EConfSettingType {
     Dynamic,
 };
 
-#define YQL_BETTER_CONF_SETTING_API
 template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynamic>
 class TConfSetting {
 public:

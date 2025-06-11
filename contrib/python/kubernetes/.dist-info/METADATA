@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.2
 Name: kubernetes
-Version: 31.0.0
+Version: 32.0.1
 Summary: Kubernetes python client
 Home-page: https://github.com/kubernetes-client/python
 Author: Kubernetes
@@ -36,5 +36,15 @@ Requires-Dist: urllib3>=1.24.2
 Requires-Dist: durationpy>=0.7
 Provides-Extra: adal
 Requires-Dist: adal>=1.0.2; extra == "adal"
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 Python client for kubernetes http://kubernetes.io/

@@ -2218,7 +2218,9 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
 
     PersistSubDomainDeclaredSchemeQuotas(db, pathId, subDomain);
     PersistSubDomainDatabaseQuotas(db, pathId, subDomain);
-    PersistSchemeLimits(db, pathId, subDomain);
+    if (subDomain.GetTenantSchemeShardID()) {
+        PersistSchemeLimits(db, pathId, subDomain);
+    }
     PersistSubDomainState(db, pathId, subDomain);
 
     PersistSubDomainAuditSettings(db, pathId, subDomain);

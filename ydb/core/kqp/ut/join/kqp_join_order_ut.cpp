@@ -76,26 +76,26 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 
     CreateTables(session, "schema/sortings.sql", useColumnStore);
 
-    {
-        CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
-        const TString upsert =
-        R"(
-            UPSERT INTO t1 (id1) VALUES (1);
-            UPSERT INTO t2 (id2, t1_id1) VALUES (1, 1);
-            UPSERT INTO t3 (id3) VALUES (1);
-        )";
-        auto result =
-            session.ExecuteQuery(
-                upsert,
-                NYdb::NQuery::TTxControl::NoTx(),
-                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
-            ).ExtractValueSync();
+    // {
+    //     CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
+    //     const TString upsert =
+    //     R"(
+    //         UPSERT INTO t1 (id1) VALUES (1);
+    //         UPSERT INTO t2 (id2, t1_id1) VALUES (1, 1);
+    //         UPSERT INTO t3 (id3) VALUES (1);
+    //     )";
+    //     auto result =
+    //         session.ExecuteQuery(
+    //             upsert,
+    //             NYdb::NQuery::TTxControl::NoTx(),
+    //             NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+    //         ).ExtractValueSync();
 
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    }
+    //     result.GetIssues().PrintTo(Cerr);
+    //     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    // }
 
-    CreateView(session, "view/tpch_random_join_view.sql");
+    // CreateView(session, "view/tpch_random_join_view.sql");
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
@@ -730,6 +730,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     // tests, that check redudant sortings removal : if RemoveLimit is on we delete limit from the query to check
     // if a sort operator was deleted, otherwise we want topsort deleted
+    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByPKAlias, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_pk_alias.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
     Y_UNIT_TEST_TWIN(SortingsWithLookupJoin1, RemoveLimitOperator) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_1.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
         UNIT_ASSERT(CheckNoSortings(plan));

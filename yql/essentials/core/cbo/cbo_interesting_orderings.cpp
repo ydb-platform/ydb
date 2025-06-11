@@ -119,6 +119,8 @@ void TTableAliasMap::AddRename(const TString& from, const TString& to) {
 
     if (BaseColumnByRename.contains(from)) {
         BaseColumnByRename[to] = BaseColumnByRename[from];
+    } else {
+        BaseColumnByRename[to] = BaseColumnByRename[from] = TBaseColumn("", from);
     }
 }
 

@@ -11,7 +11,7 @@ ALTER TRANSFER <name> [SET USING lambda] [SET (option = value [, ...])]
 где:
 
 * `name` — имя экземпляра трансфера.
-* `lambda` — lambda функция преобразования сообщения.
+* `lambda` — lambda-функция преобразования сообщения.
 * `SET (option = value [, ...])` — [параметры](#params) трансфера.
 
 ### Параметры {#params}

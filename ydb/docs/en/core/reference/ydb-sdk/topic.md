@@ -2345,14 +2345,13 @@ In case of a _hard interruption_, the client receives a notification that it is 
         AutoPartitioningWriteSpeedStrategy: topictypes.AutoPartitioningWriteSpeedStrategy{
           StabilizationWindow:    time.Minute,
           UpUtilizationPercent:   80,
-          DownUtilizationPercent: 10,
         },
       },
     ),
   )
   ```
 
-  Changes to an existing topic can be made using the `topicoptions.AlterWithAutoPartitioningStrategy` option with `AlterTopic`:
+  Changes to an existing topic can be made using the `topicoptions.AlterWithAutoPartitioningStrategy` option with `.Topic().Alter`:
 
   ```go
   import (
@@ -2379,11 +2378,13 @@ In case of a _hard interruption_, the client receives a notification that it is 
     ),
     topicoptions.AlterWithAutoPartitioningWriteSpeedStabilizationWindow(time.Minute),
     topicoptions.AlterWithAutoPartitioningWriteSpeedUpUtilizationPercent(80),
-    topicoptions.AlterWithAutoPartitioningWriteSpeedDownUtilizationPercent(10),
   )
   ```
 
   The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode is set using the `topicoptions.WithReaderSupportSplitMergePartitions` option when creating the reader. Full support mode is used by default (`true`).
+
+  From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
+
 
   ```go
   import (
@@ -2407,8 +2408,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
     topicoptions.WithReaderSupportSplitMergePartitions(false),
   )
   ```
-
-  From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
 
 - Python
 

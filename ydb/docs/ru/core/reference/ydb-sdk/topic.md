@@ -2361,7 +2361,6 @@
   Включение автомасштабирования топика во время его создания производится с помощью опции `topicoptions.CreateWithAutoPartitioningSettings`:
 
   ```go
-
   import (
     ...
 
@@ -2390,14 +2389,13 @@
         AutoPartitioningWriteSpeedStrategy: topictypes.AutoPartitioningWriteSpeedStrategy{
           StabilizationWindow:    time.Minute,
           UpUtilizationPercent:   80,
-          DownUtilizationPercent: 10,
         },
       },
     ),
   )
   ```
 
-    Включение автомасштабирования у существующего топика производится с помощью опции `topicoptions.AlterWithAutoPartitioningStrategy` у `AlterTopic`:
+    Включение автомасштабирования у существующего топика производится с помощью опции `topicoptions.AlterWithAutoPartitioningStrategy` у `.Topic().Alter`:
 
   ```go
   import (
@@ -2424,7 +2422,6 @@
     ),
     topicoptions.AlterWithAutoPartitioningWriteSpeedStabilizationWindow(time.Minute),
     topicoptions.AlterWithAutoPartitioningWriteSpeedUpUtilizationPercent(80),
-    topicoptions.AlterWithAutoPartitioningWriteSpeedDownUtilizationPercent(10),
   )
   ```
 
@@ -2452,8 +2449,6 @@
     topicoptions.WithReaderSupportSplitMergePartitions(false),
   )
   ```
-
-  С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
 
 - Python
 

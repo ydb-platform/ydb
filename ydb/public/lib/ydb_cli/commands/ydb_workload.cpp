@@ -347,11 +347,11 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
     , Params(params)
     , Type(workload.Type)
 {
-    Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
 }
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
+    Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);

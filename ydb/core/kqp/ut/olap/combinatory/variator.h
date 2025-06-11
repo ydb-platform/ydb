@@ -30,7 +30,7 @@ TString ToString(const Script& script);
             , Name(TString(#NAME) + "[" + name + "]")                                      \
         {                                                                                  \
             Name_ = Name.c_str();                                                          \
-            ForceFork_ = true;                                                             \
+            ForceFork_ = false;                                                             \
         }                                                                                  \
                                                                                            \
         static THolder<NUnitTest::TBaseTestCase> Create(TString script, TString name) {    \

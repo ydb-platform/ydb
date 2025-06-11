@@ -12,6 +12,7 @@ RECURSE(
     folder_service
     formats
     fyamlcpp
+    global_plugins
     grpc
     http_proxy
     keys

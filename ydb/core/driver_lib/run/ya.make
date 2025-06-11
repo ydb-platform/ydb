@@ -135,6 +135,7 @@ PEERDIR(
     ydb/library/actors/util
     ydb/library/folder_service
     ydb/library/folder_service/proto
+    ydb/library/global_plugins
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
     ydb/library/pdisk_io

@@ -234,6 +234,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--data-center=%s" % self.data_center
             )
 
+        if self.__configurator.breakpad_minidumps_path:
+            command.extend(["--breakpad-minidumps-path", self.__configurator.breakpad_minidumps_path])
+        if self.__configurator.breakpad_minidumps_script:
+            command.extend(["--breakpad-minidumps-script", self.__configurator.breakpad_minidumps_script])
+
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command

@@ -39,7 +39,7 @@ namespace NKikimr::NEvWrite {
     }
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
-        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType,
+        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
         const std::optional<TDuration> timeout
     )
         : ShardId(shardId)
@@ -51,7 +51,6 @@ namespace NKikimr::NEvWrite {
         , ExternalController(externalController)
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
-        , ModificationType(mType)
         , Timeout(timeout)
     {
     }

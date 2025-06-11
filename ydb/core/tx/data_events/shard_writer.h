@@ -171,7 +171,6 @@ private:
     TWritersController::TPtr ExternalController;
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
-    EModificationType ModificationType;
     const std::optional<TDuration> Timeout;
 
     void SendWriteRequest();
@@ -190,7 +189,7 @@ private:
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const EModificationType mType, const std::optional<TDuration> timeout = std::nullopt);
+        const std::optional<TDuration> timeout = std::nullopt);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {

@@ -152,15 +152,6 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             Counters.GetCSCounters().OnWritePutBlobsFail(TMonotonic::Now() - writeMeta.GetWriteStartInstant());
             Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
 
-            auto errCode = NKikimrTxColumnShard::EResultStatus::STORAGE_ERROR;
-            if (putResult.GetPutStatus() == NKikimrProto::TIMEOUT || putResult.GetPutStatus() == NKikimrProto::DEADLINE) {
-                errCode = NKikimrTxColumnShard::EResultStatus::TIMEOUT;
-            } else if (putResult.GetPutStatus() == NKikimrProto::TRYLATER || putResult.GetPutStatus() == NKikimrProto::OUT_OF_SPACE) {
-                errCode = NKikimrTxColumnShard::EResultStatus::OVERLOADED;
-            } else if (putResult.GetPutStatus() == NKikimrProto::CORRUPTED) {
-                errCode = NKikimrTxColumnShard::EResultStatus::ERROR;
-            }
-
             AFL_VERIFY(!writeMeta.HasLongTxId());
             auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(),

@@ -1,14 +1,14 @@
 #pragma once
 
 #include "events.h"
-#include "shards_splitter.h"
 #include "payload_helper.h"
+#include "shards_splitter.h"
 
-#include <ydb/core/tx/sharding/sharding.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -18,13 +18,12 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
         const TString SchemaData;
         const TString Data;
         const ui32 RowsCount;
-        const ui32 GranuleShardingVersion;
+
     public:
-        TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount, const ui32 granuleShardingVersion)
+        TShardInfo(const TString& schemaData, const TString& data, const ui32 rowsCount)
             : SchemaData(schemaData)
             , Data(data)
-            , RowsCount(rowsCount)
-            , GranuleShardingVersion(granuleShardingVersion) {
+            , RowsCount(rowsCount) {
         }
 
         virtual ui64 GetBytes() const override {
@@ -62,4 +61,4 @@ private:
 
     std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);
 };
-}
+}   // namespace NKikimr::NEvWrite

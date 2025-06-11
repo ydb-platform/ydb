@@ -364,7 +364,7 @@ namespace NKikimr::NStorage {
                 return "incorrect CollectConfigs response";
             } else if (Self->CurrentProposedStorageConfig) {
                 FinishWithError(TResult::RACE, "config proposition request in flight");
-            } else if (Scepter.expired()) {
+            } else if (IsScepterExpired()) {
                 return "scepter lost during query execution";
             } else {
                 auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt);

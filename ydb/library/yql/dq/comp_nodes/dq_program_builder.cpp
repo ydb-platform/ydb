@@ -1,0 +1,112 @@
+#include "dq_program_builder.h"
+
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
+    : TProgramBuilder(env, functionRegistry) {}
+
+TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
+    const TStringBuf operatorName,
+    const TRuntimeNode operatorParams,
+    const TRuntimeNode flow,
+    const TProgramBuilder::TWideLambda& keyExtractor,
+    const TProgramBuilder::TBinaryWideLambda& init,
+    const TProgramBuilder::TTernaryWideLambda& update,
+    const TProgramBuilder::TBinaryWideLambda& finish)
+{
+    const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
+
+    TRuntimeNode::TList itemArgs;
+    itemArgs.reserve(wideComponents.size());
+
+    auto i = 0U;
+    std::generate_n(std::back_inserter(itemArgs), wideComponents.size(), [&](){ return Arg(wideComponents[i++]); });
+
+    const auto keys = keyExtractor(itemArgs);
+
+    TRuntimeNode::TList keyArgs;
+    keyArgs.reserve(keys.size());
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(keyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+
+    const auto first = init(keyArgs, itemArgs);
+
+    TRuntimeNode::TList stateArgs;
+    stateArgs.reserve(first.size());
+    std::transform(first.cbegin(), first.cend(), std::back_inserter(stateArgs), [&](TRuntimeNode state){ return Arg(state.GetStaticType()); }  );
+
+    const auto next = update(keyArgs, itemArgs, stateArgs);
+    MKQL_ENSURE(next.size() == first.size(), "Mismatch init and update state size.");
+
+    TRuntimeNode::TList finishKeyArgs;
+    finishKeyArgs.reserve(keys.size());
+    std::transform(keys.cbegin(), keys.cend(), std::back_inserter(finishKeyArgs), [&](TRuntimeNode key){ return Arg(key.GetStaticType()); }  );
+
+    TRuntimeNode::TList finishStateArgs;
+    finishStateArgs.reserve(next.size());
+    std::transform(next.cbegin(), next.cend(), std::back_inserter(finishStateArgs), [&](TRuntimeNode state){ return Arg(state.GetStaticType()); }  );
+
+    const auto output = finish(finishKeyArgs, finishStateArgs);
+
+    std::vector<TType*> tupleItems;
+    tupleItems.reserve(output.size());
+    std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
+
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewFlowType(NewMultiType(tupleItems)));
+
+    callableBuilder.Add(flow);
+    callableBuilder.Add(operatorParams);
+    callableBuilder.Add(NewTuple(keyArgs));
+    callableBuilder.Add(NewTuple(stateArgs));
+    callableBuilder.Add(NewTuple(itemArgs));
+    callableBuilder.Add(NewTuple(keys));
+    callableBuilder.Add(NewTuple(first));
+    callableBuilder.Add(NewTuple(next));
+    callableBuilder.Add(NewTuple(finishKeyArgs));
+    callableBuilder.Add(NewTuple(finishStateArgs));
+    callableBuilder.Add(NewTuple(output));
+
+    return callableBuilder;
+}
+
+TRuntimeNode TDqProgramBuilder::DqHashCombine(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish)
+{
+    TRuntimeNode::TList operatorParamsList;
+    operatorParamsList.push_back(NewDataLiteral<ui64>(memLimit));
+    TRuntimeNode operatorParams = NewTuple(operatorParamsList);
+
+    TCallableBuilder callableBuilder = BuildCommonCombinerParams(
+        "DqHashCombine"sv,
+        operatorParams,
+        flow,
+        keyExtractor,
+        init,
+        update,
+        finish);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TDqProgramBuilder::DqHashAggregate(TRuntimeNode flow, const bool spilling, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish)
+{
+    TRuntimeNode::TList operatorParamsList;
+    operatorParamsList.push_back(NewDataLiteral<bool>(spilling));
+    TRuntimeNode operatorParams = NewTuple(operatorParamsList);
+
+    TCallableBuilder callableBuilder = BuildCommonCombinerParams(
+        "DqHashAggregate"sv,
+        operatorParams,
+        flow,
+        keyExtractor,
+        init,
+        update,
+        finish);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+}
+}

@@ -149,7 +149,7 @@ bool RightJoinSideOptional(const TString& joinType) {
 } // namespace
 
 TKqpProgramBuilder::TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
-    : TProgramBuilder(env, functionRegistry) {}
+    : TDqProgramBuilder(env, functionRegistry) {}
 
 TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
     const TArrayRef<TKqpTableColumn>& columns)

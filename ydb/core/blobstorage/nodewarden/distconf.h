@@ -160,7 +160,7 @@ namespace NKikimr::NStorage {
 
         struct TScatterTask {
             const std::optional<TBinding> Origin;
-            const std::weak_ptr<TScepter> Scepter;
+            const ui64 ScepterCounter;
             const TActorId ActorId;
 
             THashSet<ui32> PendingNodes;
@@ -170,9 +170,9 @@ namespace NKikimr::NStorage {
             std::vector<TEvGather> CollectedResponses; // from bound nodes
 
             TScatterTask(const std::optional<TBinding>& origin, TEvScatter&& request,
-                    const std::shared_ptr<TScepter>& scepter, TActorId actorId)
+                    ui64 scepterCounter, TActorId actorId)
                 : Origin(origin)
-                , Scepter(scepter)
+                , ScepterCounter(scepterCounter)
                 , ActorId(actorId)
             {
                 Request.Swap(&request);
@@ -257,6 +257,8 @@ namespace NKikimr::NStorage {
         ERootState RootState = ERootState::INITIAL;
         std::optional<NKikimrBlobStorage::TStorageConfig> CurrentProposedStorageConfig;
         std::shared_ptr<TScepter> Scepter;
+        ui64 ScepterCounter = 0; // increased every time Scepter gets changed
+        bool ScepterlessOperationInProgress = false; // when a leader operation is running while no Scepter is acquired
         TString ErrorReason;
         std::optional<TString> CurrentSelfAssemblyUUID;
 
@@ -368,7 +370,7 @@ namespace NKikimr::NStorage {
         void UnbecomeRoot();
         void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
-        bool HasQuorum() const;
+        bool HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
 
         struct TProcessCollectConfigsResult {

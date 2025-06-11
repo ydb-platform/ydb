@@ -1,5 +1,6 @@
 #include "ydb_workload.h"
 #include "ydb_workload_import.h"
+#include "ydb_workload_tpcc.h"
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"

@@ -97,7 +97,6 @@ public:
 class TCPUGroup {
     YDB_ACCESSOR_DEF(double, CPUThreadsLimit);
     YDB_ACCESSOR(double, Weight, 1);
-    TPositiveControlInteger ProcessesCount;
 
 public:
     using TPtr = std::shared_ptr<TCPUGroup>;
@@ -108,20 +107,6 @@ public:
     {
     }
 
-    ~TCPUGroup();
-
-    ui32 GetProcessesCount() const {
-        return ProcessesCount.Val();
-    }
-
-    bool DecProcesses() {
-        --ProcessesCount;
-        return ProcessesCount == 0;
-    }
-
-    void IncProcesses() {
-        ++ProcessesCount;
-    }
 };
 
 }   // namespace NKikimr::NConveyorComposite

@@ -2,7 +2,7 @@
 
 #include <ydb/core/scheme_types/scheme_type_info.h>
 
-#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
 
 namespace NKikimr {
 
@@ -44,7 +44,7 @@ struct TKqpKeyRanges {
     bool Reverse = false;
 };
 
-class TKqpProgramBuilder: public TProgramBuilder {
+class TKqpProgramBuilder: public TDqProgramBuilder {
 public:
     TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
 

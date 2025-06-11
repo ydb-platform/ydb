@@ -6,6 +6,7 @@
 #include <ydb/core/tx/conveyor/usage/config.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NConveyorComposite::NConfig {
@@ -38,15 +39,38 @@ public:
     }
 };
 
+class TThreadsCountInfo {
+private:
+    YDB_READONLY_DEF(std::optional<double>, Count);
+    YDB_READONLY(std::optional<double>, Fraction, 0.33);
+
+public:
+    TThreadsCountInfo() = default;
+    TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction);
+
+    TString DebugString() const;
+
+    ui32 GetThreadsCount(const ui32 totalThreadsCount) const {
+        return std::ceil(GetCPUUsageDouble(totalThreadsCount));
+    }
+
+    double GetCPUUsageDouble(const ui32 totalThreadsCount) const;
+
+    TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo);
+};
+
 class TWorkersPool {
 private:
+    TString PoolName;
     YDB_READONLY(ui32, WorkersPoolId, 0);
-    YDB_READONLY(double, WorkersCountDouble, 0);
+    YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
 
 public:
-    double GetWorkerCPUUsage(const ui32 workerIdx) const;
-    ui32 GetWorkersCount() const;
+    const TString& GetName() const;
+
+    double GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const;
+    ui32 GetWorkersCount(const ui32 totalThreadsCount) const;
 
     bool AddLink(const ESpecialTaskCategory cat) {
         for (auto&& i : Links) {
@@ -62,12 +86,12 @@ public:
 
     TWorkersPool(const ui32 wpId)
         : WorkersPoolId(wpId) {
+        PoolName = "WP::DEFAULT";
     }
 
-    TWorkersPool(const ui32 wpId, const double workersCountDouble);
+    TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction);
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(
-        const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto, const ui64 usableThreadsCount);
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto);
 };
 
 class TCategory {
@@ -75,7 +99,6 @@ private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
     YDB_READONLY(ui32, QueueSizeLimit, 256 * 1024);
     YDB_READONLY_DEF(std::vector<ui32>, WorkerPools);
-    YDB_READONLY_FLAG(Default, true);
 
 public:
     TString DebugString() const;
@@ -97,7 +120,6 @@ public:
         if (proto.HasQueueSizeLimit()) {
             QueueSizeLimit = proto.GetQueueSizeLimit();
         }
-        DefaultFlag = false;
         return TConclusionStatus::Success();
     }
 
@@ -112,10 +134,22 @@ private:
     YDB_READONLY_DEF(std::vector<TWorkersPool>, WorkerPools);
     YDB_READONLY_FLAG(Enabled, true);
 
-public:
-    const TCategory& GetCategoryConfig(const ESpecialTaskCategory cat) const;
+    TConfig() = default;
+    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
 
-    [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config, const ui64 usableThreadsCount);
+public:
+    static TConfig BuildDefault();
+
+    static TConclusion<TConfig> BuildFromProto(const NKikimrConfig::TCompositeConveyorConfig& protoConfig) {
+        TConfig config;
+        auto conclusion = config.DeserializeFromProto(protoConfig);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        return config;
+    }
+
+    const TCategory& GetCategoryConfig(const ESpecialTaskCategory cat) const;
 
     TString DebugString() const;
 };
@@ -135,4 +169,4 @@ public:
     TString DebugString() const;
 };
 
-}
+}   // namespace NKikimr::NConveyorComposite

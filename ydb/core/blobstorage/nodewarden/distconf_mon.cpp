@@ -139,7 +139,7 @@ namespace NKikimr::NStorage {
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
                 {"error_reason", ErrorReason},
-                {"has_quorum", HasQuorum()},
+                {"has_quorum", StorageConfig && HasQuorum(*StorageConfig)},
                 {"scepter", Scepter ? NJson::TJsonMap{
                     {"id", Scepter->Id},
                 } : NJson::TJsonValue{NJson::JSON_NULL}},
@@ -224,7 +224,7 @@ namespace NKikimr::NStorage {
                         if (ErrorReason) {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
-                        out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
+                        out << "Quorum: " << (StorageConfig && HasQuorum(*StorageConfig) ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
                     }
                 }

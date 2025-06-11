@@ -3,6 +3,7 @@
 
 namespace NKikimr::NConveyorComposite {
 using ITask = NConveyor::ITask;
+class TCPULimitsConfig;
 
 enum class ESpecialTaskCategory {
     Insert = 0 /* "insert" */,
@@ -15,22 +16,19 @@ class TProcessGuard: TNonCopyable {
 private:
     const ESpecialTaskCategory Category;
     const TString ScopeId;
-    const ui64 ProcessId;
+    const ui64 ExternalProcessId;
+    static inline TAtomicCounter InternalCounter = 0;
+    const ui64 InternalProcessId = InternalCounter.Inc();
     bool Finished = false;
     const std::optional<NActors::TActorId> ServiceActorId;
 
 public:
-    ui64 GetProcessId() const {
-        return ProcessId;
+    ui64 GetInternalProcessId() const {
+        return InternalProcessId;
     }
 
-    explicit TProcessGuard(
-        const ESpecialTaskCategory category, const TString& scopeId, const ui64 processId, const std::optional<NActors::TActorId>& actorId)
-        : Category(category)
-        , ScopeId(scopeId)
-        , ProcessId(processId)
-        , ServiceActorId(actorId) {
-    }
+    explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
+        const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
 
     void Finish();
 

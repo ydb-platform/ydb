@@ -1,6 +1,7 @@
 import pytest
 
 from ydb.tests.datashard.lib.vector_base import VectorBase
+from ydb.tests.datashard.lib.vector_index import get_vector, targets
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.datashard.lib.create_table import create_vector_index_sql_request
@@ -23,14 +24,6 @@ class TestVectorIndex(VectorBase):
         self.dimensions = [{"levels": 2, "cluster": 50}, {"levels": 1, "cluster": 100}]
         self.size_vector = 10
         self.knn_type = {"Float": "ToBinaryStringFloat", "Uint8": "ToBinaryStringUint8", "Int8": "ToBinaryStringInt8"}
-        self.targets = {
-            "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
-            "distance": {
-                "cosine": "Knn::CosineDistance",
-                "manhattan": "Knn::ManhattanDistance",
-                "euclidean": "Knn::EuclideanDistance",
-            },
-        }
 
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, vector_type",
@@ -78,7 +71,7 @@ class TestVectorIndex(VectorBase):
             if type_name != "String":
                 cover.append("col_" + cleanup_type_name(type_name))
         for dimension in self.dimensions:
-            for target, distances in self.targets.items():
+            for target, distances in targets.items():
                 for distance, knn_func in distances.items():
                     sql_create_vector_index = create_vector_index_sql_request(
                         table_name,
@@ -108,16 +101,6 @@ class TestVectorIndex(VectorBase):
                         dml,
                     )
 
-    def get_vector(self, type, numb):
-        if type == "Float":
-            values = [float(i) for i in range(self.size_vector - 1)]
-            values.append(float(numb))
-            return ",".join(f'{val}f' for val in values)
-
-        values = [i for i in range(self.size_vector - 1)]
-        values.append(numb)
-        return ",".join(str(val) for val in values)
-
     def upsert(
         self,
         table_name: str,
@@ -144,7 +127,7 @@ class TestVectorIndex(VectorBase):
         ttl: str,
         vector_type: str,
     ):
-        vector = self.get_vector(vector_type, value)
+        vector = get_vector(vector_type, value, self.size_vector)
         statements_all_type = []
         statements_all_type_value = []
         for type_name in all_types.keys():
@@ -185,12 +168,12 @@ class TestVectorIndex(VectorBase):
         statements = dml.create_statements(pk_types, all_types, index, ttl)
         statements.remove("col_String")
         statements.append(f"{knn_func}(col_String, $Target)")
-        vector = self.get_vector(vector_type, 1)
+        vector = get_vector(vector_type, 1, self.size_vector)
         sql_select_request = f"""
                                     $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
                                     select {", ".join(statements)}
                                     from {table_name} view {vector_name}
-                                    order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in self.targets["similarity"].values() else "ASC"}
+                                    order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                     limit 100;
                                     """
         wait_for(self.wait_create_vector_index(sql_select_request, dml), timeout_seconds=150)
@@ -234,7 +217,7 @@ class TestVectorIndex(VectorBase):
                 dml.assert_type(ttl_types, ttl, i + 1, rows[i][count])
             count += 1
         for i in range(len(rows)):
-            if i != 0 or knn_func in self.targets["similarity"].values():
+            if i != 0 or knn_func in targets["similarity"].values():
                 assert rows[i][count] != 0, f"faild in {knn_func} == 0, rows = {i}"
             else:
                 assert rows[i][count] == 0, f"faild in {knn_func} != 0, rows{i} = {rows[i][count]}"
@@ -287,7 +270,7 @@ class TestVectorIndex(VectorBase):
             if type_name != "String":
                 cover.append("col_" + cleanup_type_name(type_name))
         for dimension in self.dimensions:
-            for target, distances in self.targets.items():
+            for target, distances in targets.items():
                 for distance, knn_func in distances.items():
                     sql_create_vector_index = create_vector_index_sql_request(
                         table_name,
@@ -342,7 +325,7 @@ class TestVectorIndex(VectorBase):
     ):
         if value_for_prefix == 0:
             value_for_prefix = 5
-        vector = self.get_vector(vector_type, value)
+        vector = get_vector(vector_type, value, self.size_vector)
         statements_all_type = []
         statements_all_type_value = []
         for type_name in all_types.keys():
@@ -391,13 +374,13 @@ class TestVectorIndex(VectorBase):
         statements.remove("col_index_String")
         statements.append(f"{knn_func}(col_String, $Target)")
         for i in range(1, 6):
-            vector = self.get_vector(vector_type, i)
+            vector = get_vector(vector_type, i, self.size_vector)
             sql_select_request = f"""
                                     $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
                                     select {", ".join(statements)}
                                     from {table_name} view {vector_name}
                                     WHERE col_index_String = {format_sql_value(pk_types["String"](i), "String")}
-                                    order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in self.targets["similarity"].values() else "ASC"}
+                                    order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                     limit 5;
                                     """
             wait_for(self.wait_create_vector_index(sql_select_request, dml), timeout_seconds=100)
@@ -442,7 +425,7 @@ class TestVectorIndex(VectorBase):
                     dml.assert_type(ttl_types, ttl, i + j * 5, rows[j][count])
                 count += 1
             for j in range(len(rows)):
-                if j != 0 or knn_func in self.targets["similarity"].values():
+                if j != 0 or knn_func in targets["similarity"].values():
                     assert rows[j][count] != 0, f"faild in {knn_func} == 0, rows{j}"
                 else:
                     assert rows[j][count] == 0, f"faild in {knn_func} != 0, rows{j} = {rows[j][count]}"

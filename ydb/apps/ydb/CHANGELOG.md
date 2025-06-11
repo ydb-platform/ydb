@@ -1,5 +1,9 @@
 * Added named expressions completion in interactive mode, cache schema responses.
+
+## 2.22.1 ##
+
 * Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.
+* Fixed bug with parsing certificate files from profile.
 
 ## 2.22.0 ##
 

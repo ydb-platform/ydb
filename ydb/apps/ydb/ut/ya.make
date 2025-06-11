@@ -29,6 +29,7 @@ SRCS(
 PEERDIR(
     contrib/libs/grpc
     contrib/libs/fmt
+    ydb/core/security/certificate_check
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/table
     ydb/public/lib/ydb_cli/commands/topic_workload

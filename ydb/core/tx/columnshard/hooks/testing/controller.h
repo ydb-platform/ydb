@@ -27,7 +27,6 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideMaxReadStaleness);
-    YDB_ACCESSOR_DEF(std::optional<bool>, OverrideAllowMergeFull);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     YDB_ACCESSOR(std::optional<ui64>, OverrideLimitForPortionsMetadataAsk, 1);
     YDB_ACCESSOR(std::optional<NOlap::NSplitter::TSplitSettings>, OverrideBlobSplitSettings, NOlap::NSplitter::TSplitSettings::BuildForTests());
@@ -242,9 +241,6 @@ protected:
 
 public:
     virtual bool CheckPortionsToMergeOnCompaction(const ui64 /*memoryAfterAdd*/, const ui32 currentSubsetsCount) override {
-        if (OverrideAllowMergeFull && *OverrideAllowMergeFull) {
-            return false;
-        }
         return currentSubsetsCount > 1;
     }
 

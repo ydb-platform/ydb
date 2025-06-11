@@ -11,8 +11,8 @@ namespace NKikimr::NStorage {
             (Binding, Binding), (Scepter, Scepter ? std::make_optional(Scepter->Id) : std::nullopt));
         Y_ABORT_UNLESS(!actorId && Binding && !Scepter // just forwarding what we got from binding
             || !actorId && !Binding && Scepter // initiating scatter task as a root node
-            || actorId && !Binding && Scepter); // query issued by InvokeOnRootNode machinery
-        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, Binding, std::move(request), Scepter,
+            || actorId && !Binding && (Scepter || ScepterlessOperationInProgress)); // query issued by InvokeOnRootNode machinery
+        const auto [it, inserted] = ScatterTasks.try_emplace(cookie, Binding, std::move(request), ScepterCounter,
             actorId.value_or(TActorId()));
         Y_ABORT_UNLESS(inserted);
         TScatterTask& task = it->second;
@@ -70,7 +70,7 @@ namespace NKikimr::NStorage {
             task.Response.Swap(&ev->Record);
             Send(task.ActorId, ev.release());
         } else {
-            ProcessGather(task.Scepter.lock() == Scepter ? &task.Response : nullptr);
+            ProcessGather(task.ScepterCounter == ScepterCounter ? &task.Response : nullptr);
         }
     }
 

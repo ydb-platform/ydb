@@ -68,6 +68,16 @@ bool IsKeyLengthValid(const TString& key) {
     return key.length() <= MaxKeySize;
 }
 
+template <class R, class I>
+void PrepareCreationUnixTime(const R& request, I& interm)
+{
+    if (request.HasCreationUnixTime()) {
+        interm.CreationUnixTime = request.GetCreationUnixTime();
+    } else {
+        interm.CreationUnixTime = TAppData::TimeProvider->Now().Seconds();
+    }
+}
+
 // Guideline:
 // Check SetError calls: there must be no changes made to the DB before SetError call (!)
 
@@ -1073,7 +1083,7 @@ NKikimrKeyValue::StorageChannel::StatusFlag GetStatusFlag(const TStorageStatusFl
 void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
         NKikimrClient::TKeyValueResponse::TWriteResult *legacyResponse,
         NKikimrKeyValue::StorageChannel *response,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate* /*intermediate*/)
 {
     TIndexRecord& record = Index[request.Key];
@@ -1108,7 +1118,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
         ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
     }
 
-    record.CreationUnixTime = unixTime;
+    record.CreationUnixTime = request.CreationUnixTime;
     UpdateKeyValue(request.Key, record, db, ctx);
 
     if (legacyResponse) {
@@ -1176,7 +1186,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TDelete &request,
 void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
         NKikimrClient::TKeyValueResponse::TRenameResult *legacyResponse,
         NKikimrKeyValue::StorageChannel */*response*/,
-        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 unixTime,
+        ISimpleDb &db, const TActorContext &ctx, TRequestStat &/*stat*/, ui64 /*unixTime*/,
         TIntermediate* /*intermediate*/)
 {
     auto oldIter = Index.find(request.OldKey);
@@ -1186,7 +1196,7 @@ void TKeyValueState::ProcessCmd(const TIntermediate::TRename &request,
     TIndexRecord& dest = Index[request.NewKey];
     Dereference(dest, db);
     dest.Chain = std::move(source.Chain);
-    dest.CreationUnixTime = unixTime;
+    dest.CreationUnixTime = request.CreationUnixTime;
 
     THelpers::DbEraseUserKey(oldIter->first, db);
     Index.erase(oldIter);
@@ -1318,11 +1328,10 @@ void TKeyValueState::CmdReadRange(THolder<TIntermediate> &intermediate, ISimpleD
 }
 
 void TKeyValueState::CmdRename(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
-    ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
     for (ui32 i = 0; i < intermediate->Renames.size(); ++i) {
         auto& request = intermediate->Renames[i];
         auto *response = intermediate->Response.AddRenameResult();
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime, intermediate.Get());
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, request.CreationUnixTime, intermediate.Get());
     }
 }
 
@@ -1335,11 +1344,10 @@ void TKeyValueState::CmdDelete(THolder<TIntermediate> &intermediate, ISimpleDb &
 }
 
 void TKeyValueState::CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
-    ui64 unixTime = TAppData::TimeProvider->Now().Seconds();
     for (ui32 i = 0; i < intermediate->Writes.size(); ++i) {
         auto& request = intermediate->Writes[i];
         auto *response = intermediate->Response.AddWriteResult();
-        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime, intermediate.Get());
+        ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, request.CreationUnixTime, intermediate.Get());
     }
     ResourceMetrics->TryUpdate(ctx);
 }
@@ -2243,6 +2251,7 @@ bool TKeyValueState::PrepareCmdRename(const TActorContext &ctx, NKikimrClient::T
 
         interm.OldKey = request.GetOldKey();
         interm.NewKey = request.GetNewKey();
+        PrepareCreationUnixTime(request, interm);
     }
     return false;
 }
@@ -2365,6 +2374,7 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
         }
 
         interm.Key = request.GetKey();
+        PrepareCreationUnixTime(request, interm);
 
         switch (request.GetDataCase()) {
             case NKikimrClient::TKeyValueRequest::TCmdWrite::kValue:

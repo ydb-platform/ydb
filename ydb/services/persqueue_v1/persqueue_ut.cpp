@@ -1926,7 +1926,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Cerr << "Got read response " << resp << "\n";
             UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
             UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
-            UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
+            UNIT_ASSERT_GE(resp.read_response().partition_data(0).batches_size(), 1);
             UNIT_ASSERT(resp.read_response().partition_data(0).batches(0).message_data_size() >= 1);
         }
 

@@ -162,7 +162,15 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     }
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
-    Server->EnableGRpc(grpcPort);
+
+    if (settings.GrpcServerOptions) {
+        auto options = settings.GrpcServerOptions;
+        options->SetPort(grpcPort);
+        options->SetHost("localhost");
+        Server->EnableGRpc(*options);
+    } else {
+        Server->EnableGRpc(grpcPort);
+    }
 
     RunCall([this, domain = settings.DomainRoot] {
         this->Server->SetupDefaultProfiles();

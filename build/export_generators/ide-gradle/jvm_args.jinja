@@ -1,9 +1,25 @@
 {%- macro JvmArgs(jvm_args) -%}
 {%-     if jvm_args|length %}
     jvmArgs = mutableListOf(
-{%-         for jvm_arg in jvm_args %}
+{%-         set jnis_args = jvm_args|select('startsWith', 'jnis=') %}
+{%-         if jnis_args|length -%}
+{#-             Increase heap, else happened java.lang.OutOfMemoryError #}
+        "-Xmx2048m",
+{%-             for jnis_arg in jnis_args -%}
+{%-                 set jnis = split(jnis_arg|replace('jnis=', ''), ',') -%}
+{#-                 Put paths to JNI libraries direct to JVM args -#}
+{%-                 for jni in jnis -%}
+{%-                     set path_and_name = rsplit(jni, "/", 2) %}
+        "-Djava.library.path=$arcadia_root/{{ path_and_name[0] }}",
+{%-                 endfor -%}
+{%-             endfor -%}
+{%-         endif -%}
+{%-         set other_jvm_args = jvm_args|reject('startsWith', 'jnis=') %}
+{%-         if other_jvm_args|length -%}
+{%-             for jvm_arg in other_jvm_args %}
         "{{ jvm_arg }}",
-{%-         endfor %}
+{%-             endfor -%}
+{%-         endif %}
     )
 {%      endif -%}
 {%- endmacro -%}
@@ -12,6 +28,9 @@
 {%- if target.enable_preview -%}
 {%-     set jvm_args = jvm_args + ["--enable-preview"] -%}
 {%- endif -%}
+{%- if jnis|length -%}
+{%-     set jvm_args = jvm_args + ["jnis=" + jnis|join(",")] -%}
+{%- endif %}
 {%- if target.jvm_args|length %}
 {%-     set jvm_args = jvm_args + target.jvm_args -%}
 {%- endif -%}

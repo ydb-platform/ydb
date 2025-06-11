@@ -28,9 +28,7 @@
 {%- macro AddNonFileDeps(libraries, file_classpaths, implementationFunc, apiFunc) -%}
 {%-     for library in libraries -%}
 {%-         set classpath = library.classpath -%}
-{%-         if library.type == "dll" %}
-    // JNI DLL {{ library.jar }}
-{%-         elif library.type == "ejlibrary" or library.type == "swigdll" %}
+{%-         if library.type == "ejlibrary" or library.type == "swigdll" %}
 {#-             External java library or DLL_JAVA #}
     {{ implementationFunc }}(files("$output_root/{{ library.jar }}"))
 {%-         elif classpath and file_classpaths|select('eq', classpath)|length == 0 -%}

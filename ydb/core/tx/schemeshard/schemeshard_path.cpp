@@ -1,4 +1,5 @@
 #include "schemeshard_path.h"
+#include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -687,13 +688,13 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(TPathElement::EPathType expe
     return FailOnExist(TSet<TPathElement::EPathType>{expectedType}, acceptAlreadyExist);
 }
 
-const TPath::TChecker& TPath::TChecker::IsValidLeafName(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsValidLeafName(const NACLib::TUserToken* userToken, EStatus status) const {
     if (Failed) {
         return *this;
     }
 
     TString error;
-    if (Path.IsValidLeafName(error)) {
+    if (Path.IsValidLeafName(userToken, error)) {
         return *this;
     }
 
@@ -1812,8 +1813,15 @@ const TString& TPath::LeafName() const {
     return NameParts.back();
 }
 
-bool TPath::IsValidLeafName(TString& explain) const {
+bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explain) const {
     Y_ABORT_UNLESS(!IsEmpty());
+
+    if (!SS->IsSchemeShardConfigured()) {
+        explain += TStringBuilder()
+            << (SS->IsDomainSchemeShard ? "cluster" : "database")
+            << " schema root is not initialized yet";
+        return false;
+    }
 
     const auto& leaf = NameParts.back();
     if (leaf.empty()) {
@@ -1828,19 +1836,14 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (!SS->IsSchemeShardConfigured()) {
-        explain += "cluster don't have initialized root yet";
+    const bool protectSystemNames = AppData()->FeatureFlags.GetEnableSystemNamesProtection();
+    if (protectSystemNames && !CheckReservedName(leaf, AppData(), userToken, explain)) {
         return false;
     }
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && !isSysDirCreateAllowed &&
-        leaf == NSysView::SysPathName) {
-        explain += TStringBuilder()
-            << "path part '" << NSysView::SysPathName << "' is reserved by the system";
-        return false;
-    }
-
-    if (IsPathPartContainsOnlyDots(leaf)) {
+    // IsPathPartContainsOnlyDots check is redundant if system names protection is enabled,
+    // in that case its covered by reserved prefix check of CheckReservedName.
+    if (!protectSystemNames && IsPathPartContainsOnlyDots(leaf)) {
         explain += TStringBuilder()
             << "is not allowed path part contains only dots '" << leaf << "'";
         return false;

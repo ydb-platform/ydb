@@ -116,7 +116,8 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    //FIXME: check if index name is using reserved prefix
+                    .IsValidLeafName(/*context.UserToken.Get()*/)
                     .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
 

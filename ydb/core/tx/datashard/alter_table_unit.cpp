@@ -107,7 +107,6 @@ public:
                   const TActorContext &ctx) override;
 
 private:
-    TVector<IDataShardChangeCollector::TChange> ChangeRecords;
 };
 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
@@ -190,7 +189,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
             const auto& record = *recordPtr;
             DataShard.PersistChangeRecord(db, record);
 
-            ChangeRecords.push_back(IDataShardChangeCollector::TChange{
+            op->ChangeRecords().push_back(IDataShardChangeCollector::TChange{
                 .Order = record.GetOrder(),
                 .Group = record.GetGroup(),
                 .Step = record.GetStep(),
@@ -209,10 +208,10 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TAlterTableUnit::Complete(TOperation::TPtr,
+void TAlterTableUnit::Complete(TOperation::TPtr op,
                                const TActorContext &)
 {
-    DataShard.EnqueueChangeRecords(std::move(ChangeRecords));
+    DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
 }
 
 THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,

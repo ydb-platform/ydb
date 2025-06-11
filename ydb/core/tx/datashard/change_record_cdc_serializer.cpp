@@ -380,8 +380,8 @@ protected:
 
     void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) override {
         switch (record.GetKind()) {
-        case TChangeRecord::EKind::CdcDataChange:
         case TChangeRecord::EKind::AsyncIndex:
+        case TChangeRecord::EKind::CdcDataChange:
             return SerializeDataChange(json, record);
         case TChangeRecord::EKind::CdcSchemaChange:
             return SerializeSchemaChange(json, record);

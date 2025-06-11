@@ -66,6 +66,19 @@ namespace NKikimr::NStorage {
         : TEventLocal<TEvNodeWardenQueryBaseConfig, TEvBlobStorage::EvNodeWardenQueryBaseConfig>
     {};
 
+    struct TEvNodeWardenNotifyConfigMismatch
+        : TEventLocal<TEvNodeWardenNotifyConfigMismatch, TEvBlobStorage::EvNodeWardenNotifyConfigMismatch> {
+        ui32 NodeId;
+        ui64 ClusterStateGeneration;
+        ui64 ClusterStateGuid;
+
+        TEvNodeWardenNotifyConfigMismatch(ui32 nodeId, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+            : NodeId(nodeId)
+            , ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
+        {}
+    };
+
     struct TEvNodeWardenBaseConfig
         : TEventLocal<TEvNodeWardenBaseConfig, TEvBlobStorage::EvNodeWardenBaseConfig>
     {

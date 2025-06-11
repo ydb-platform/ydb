@@ -139,16 +139,24 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     TActorId CutLogID; // ask this actor about log cut
     TActorId WhiteboardProxyId;
     ui32 SlotId;
+    ui32 GroupSizeInUnits;
 
-    TEvYardInit(TOwnerRound ownerRound, const TVDiskID &vdisk, ui64 pDiskGuid,
-            const TActorId &cutLogID = TActorId(), const TActorId& whiteboardProxyId = {},
-            ui32 slotId = Max<ui32>())
+    TEvYardInit(
+            TOwnerRound ownerRound,
+            const TVDiskID &vdisk,
+            ui64 pDiskGuid,
+            const TActorId &cutLogID = TActorId(),
+            const TActorId& whiteboardProxyId = {},
+            ui32 slotId = Max<ui32>(),
+            ui32 groupSizeInUnits = 0
+        )
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
         , PDiskGuid(pDiskGuid)
         , CutLogID(cutLogID)
         , WhiteboardProxyId(whiteboardProxyId)
         , SlotId(slotId)
+        , GroupSizeInUnits(groupSizeInUnits)
     {}
 
     TString ToString() const {
@@ -162,6 +170,8 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         str << " PDiskGuid# " << record.PDiskGuid;
         str << " CutLogID# " << record.CutLogID;
         str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
+        str << " SlotId# " << record.SlotId;
+        str << " GroupSizeInUnits# " << record.GroupSizeInUnits;
         str << "}";
         return str.Str();
     }
@@ -239,11 +249,12 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     }
 };
 
-struct TEvLogResult;
 
 ////////////////////////////////////////////////////////////////////////////
 // LOG
 ////////////////////////////////////////////////////////////////////////////
+struct TEvLogResult;
+
 struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     struct ICallback {
         virtual ~ICallback() = default;

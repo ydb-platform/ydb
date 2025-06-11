@@ -77,16 +77,16 @@ private:
     bool RightFinished_ = false;
 
 private:
-    TComputationContext&    Ctx_;
-    const TVector<TType*>&  ResultItemTypes_;
+    [[maybe_unused]] TComputationContext&    Ctx_;
+    [[maybe_unused]] const TVector<TType*>&  ResultItemTypes_;
 
     NUdf::TUnboxedValue     LeftStream_;
-    const TVector<TType*>&  LeftItemTypes_;
-    const TVector<ui32>&    LeftKeyColumns_;
+    [[maybe_unused]] const TVector<TType*>&  LeftItemTypes_;
+    [[maybe_unused]] const TVector<ui32>&    LeftKeyColumns_;
 
     NUdf::TUnboxedValue     RightStream_;
-    const TVector<TType*>&  RightItemTypes_;
-    const TVector<ui32>&    RightKeyColumns_;
+    [[maybe_unused]] const TVector<TType*>&  RightItemTypes_;
+    [[maybe_unused]] const TVector<ui32>&    RightKeyColumns_;
 
     [[maybe_unused]] NUdf::TUnboxedValue     TempStorage_;
     [[maybe_unused]] NUdf::TUnboxedValue     Join_;
@@ -153,7 +153,7 @@ private:
 
 } // namespace
 
-IComputationNode* WrapBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 6, "Expected 6 args");
 
     const auto joinType = callable.GetType()->GetReturnType();

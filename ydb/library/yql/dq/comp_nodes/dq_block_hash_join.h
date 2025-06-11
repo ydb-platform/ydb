@@ -1,10 +1,12 @@
 #pragma once
-#include <ydb/library/yql/dq/runtime/dq_compute.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NYql {
+namespace NDq {
 
-IComputationNode* WrapBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+using namespace NKikimr::NMiniKQL;
 
-} // NKikimr
-} // NMiniKQL
+IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+
+} // namespace NDq
+} // namespace NYql

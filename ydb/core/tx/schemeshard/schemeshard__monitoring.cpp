@@ -818,13 +818,15 @@ private:
                     << "CancelRequested:               " << (info.CancelRequested ? "YES" : "NO") << Endl
 
                     << "State:                         " << info.State << Endl
+                    << "KMeans:                        " << info.KMeans.DebugString() << Endl
+                    << "Sample:                        " << info.Sample.DebugString() << Endl
                     << "IsBroken:                      " << info.IsBroken << Endl
                     << "Issue:                         " << info.GetIssue() << Endl
 
-                    << "Shards.size:                  " << info.Shards.size() << Endl
-                    << "ToUploadShards.size:          " << info.ToUploadShards.size() << Endl
-                    << "DoneShards.size:              " << info.DoneShards.size() << Endl
-                    << "InProgressShards.size:        " << info.InProgressShards.size() << Endl
+                    << "Shards.size:                   " << info.Shards.size() << Endl
+                    << "ToUploadShards.size:           " << info.ToUploadShards.size() << Endl
+                    << "DoneShards.size:               " << info.DoneShards.size() << Endl
+                    << "InProgressShards.size:         " << info.InProgressShards.size() << Endl
 
                     << "DomainPathId:                  " << LinkToPathInfo(info.DomainPathId) << Endl
                     << "DomainPath:                    " << TPath::Init(info.DomainPathId, Self).PathString() << Endl
@@ -836,11 +838,11 @@ private:
 
                     << "IndexName:                     " << info.IndexName << Endl;
 
-                    for (const auto& column: info.IndexColumns) {
-                        str << "IndexColumns:          " << column << Endl;
-                    }
+            for (const auto& column: info.IndexColumns) {
+                str << "IndexColumns:                  " << column << Endl;
+            }
 
-                str << "Subscribers.size:             " << info.Subscribers.size() << Endl
+                str << "Subscribers.size:              " << info.Subscribers.size() << Endl
 
                     << "AlterMainTableTxId:            " << info.AlterMainTableTxId << Endl
                     << "AlterMainTableTxStatus:        " << NKikimrScheme::EStatus_Name(info.AlterMainTableTxStatus) << Endl

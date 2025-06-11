@@ -3176,7 +3176,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         ui64 TableSize = 0;
 
-
         ui64 ParentEnd() const noexcept {  // included
             return ChildBegin - 1;
         }
@@ -3193,11 +3192,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ K = " << K
+                << "{ " 
+                << "State = " << State
                 << ", Level = " << Level << " / " << Levels
-                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd()
-                << "], Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd()
-                << "], State = " << State << " }";
+                << ", K = " << K
+                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
+                << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
+                << ", TableSize = " << TableSize
+                << " }";
         }
 
         bool NeedsAnotherLevel() const noexcept {
@@ -3442,6 +3444,15 @@ public:
             Done,
         };
         EState State = EState::Collect;
+
+        TString DebugString() const {
+            return TStringBuilder()
+                << "{ " 
+                << "State = " << State
+                << ", Rows = " << Rows.size()
+                << ", MaxProbability = " << MaxProbability
+                << " }";
+        }
 
         bool MakeWeakTop(ui64 k) {
             // 2 * k is needed to make it linear, 2 * N at all.

@@ -42,7 +42,7 @@ class WorkloadRW(WorkloadBase):
 
     def get_workload_thread_funcs(self):
         count = self.KEY_COUNT
-        return [lambda: self._loop(x, self._generate_select_keys(x, count)) for x in range(count)]
+        return [lambda x=x: self._loop(x, self._generate_select_keys(x, count)) for x in range(count)]
 
 
 class WorkloadAlterTable(WorkloadBase):
@@ -89,7 +89,7 @@ class WorkloadRunner:
     def __init__(self, client, duration):
         self.client = client
         self.duration = duration
-        self.table_path = '/'.join([self.client.database, "table"])
+        self.table_path = '/'.join([self.client.database, "table", str(random.randint(100, 999))])
         ydb.interceptor.monkey_patch_event_handler()
 
     def __enter__(self):

@@ -15,8 +15,8 @@
 
 namespace NKikimr::NKqp {
 
-class TKqpComputeActor : public NScheduler::TSchedulableComputeActorBase<TKqpComputeActor> {
-    using TBase = NScheduler::TSchedulableComputeActorBase<TKqpComputeActor>;
+class TKqpComputeActor : public TSchedulableComputeActorBase<TKqpComputeActor> {
+    using TBase = TSchedulableComputeActorBase<TKqpComputeActor>;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -28,7 +28,7 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-        NScheduler::TSchedulableActorHelper::TOptions schedulableOptions,
+        TSchedulableOptions schedulableOptions,
         NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         const TString& database);

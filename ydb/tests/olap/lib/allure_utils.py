@@ -103,7 +103,7 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
     test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
-def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None,node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload
 
@@ -414,7 +414,7 @@ def allure_test_description(
         {table_strings}
         </tbody></table>
     '''
-    
+
     iterations_table = __create_iterations_table(workload_result, node_errors, workload_params)
     logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
     if iterations_table:

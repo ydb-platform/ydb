@@ -38,7 +38,7 @@ class LoadSuiteBase:
     query_prefix: str = get_external_param('query-prefix', '')
     verify_data: bool = True
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
-    
+
     @classmethod
     def do_setup_class(cls) -> None:
         """Сохраняем время начала setup для использования в start_time"""

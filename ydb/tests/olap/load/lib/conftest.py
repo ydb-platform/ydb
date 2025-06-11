@@ -40,11 +40,6 @@ class LoadSuiteBase:
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
 
     @classmethod
-    def do_setup_class(cls) -> None:
-        """Сохраняем время начала setup для использования в start_time"""
-        cls._setup_start_time = time()
-
-    @classmethod
     def get_external_path(cls) -> str:
         if not hasattr(cls, 'external_folder'):
             return ''
@@ -348,6 +343,7 @@ class LoadSuiteBase:
     @classmethod
     def setup_class(cls) -> None:
         start_time = time()
+        cls._setup_start_time = start_time
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
         result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))

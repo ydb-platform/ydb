@@ -2295,7 +2295,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         if (DataErasureManager->Remove(pathId)) {
-            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(EDataErasureStatus::COMPLETED);
+            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -7123,32 +7123,27 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        std::vector<TShardIdx> newDataErasureShards;
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
 
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
-            std::vector<TShardIdx> dataErasureShards;
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second);
-                dataErasureShards.push_back(p.ShardIdx);
-            }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
+                newDataErasureShards.push_back(p.ShardIdx);
             }
         }
+        if (EnableDataErasure && DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            Execute(CreateTxAddEntryToDataErasure(newDataErasureShards), this->ActorContext());
+        }
 
-        std::vector<TShardIdx> cancelDataErasureShards;
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
                 // note that queues might not contain the shard
                 OnShardRemoved(p.ShardIdx);
-                cancelDataErasureShards.push_back(p.ShardIdx);
-            }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
             }
         }
     }

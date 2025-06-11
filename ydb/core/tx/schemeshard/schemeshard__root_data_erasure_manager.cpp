@@ -313,22 +313,14 @@ void TRootDataErasureManager::OnDone(const TPathId& pathId, NIceDb::TNiceDb& db)
     ActivePipes.erase(pathId);
     auto it = WaitingDataErasureTenants.find(pathId);
     if (it != WaitingDataErasureTenants.end()) {
-        it->second = EDataErasureStatus::COMPLETED;
-        db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(it->second);
+        db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+        WaitingDataErasureTenants.erase(it);
     }
 
     SchemeShard->TabletCounters->Cumulative()[COUNTER_DATA_ERASURE_OK].Increment(1);
     UpdateMetrics();
 
-    bool isDataErasureCompleted = true;
-    for (const auto& [pathId, status] : WaitingDataErasureTenants) {
-        if (status == EDataErasureStatus::IN_PROGRESS) {
-            isDataErasureCompleted = false;
-            break;
-        }
-    }
-
-    if (isDataErasureCompleted) {
+    if (WaitingDataErasureTenants.empty()) {
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[RootDataErasureManager] Data erasure in tenants is completed. Send request to BS controller");
         Status = EDataErasureStatus::IN_PROGRESS_BSC;
@@ -465,16 +457,10 @@ bool TRootDataErasureManager::Remove(const TPathId& pathId) {
     if (it != WaitingDataErasureTenants.end()) {
         Queue->Remove(pathId);
         ActivePipes.erase(pathId);
-        WaitingDataErasureTenants[pathId] = EDataErasureStatus::COMPLETED;
-        bool isDataErasureCompleted = true;
-        for (const auto& [pathId, status] : WaitingDataErasureTenants) {
-            if (status == EDataErasureStatus::IN_PROGRESS) {
-                isDataErasureCompleted = false;
-                break;
-            }
-        }
+        WaitingDataErasureTenants.erase(it);
 
-        if (isDataErasureCompleted) {
+        if (WaitingDataErasureTenants.empty()) {
+            Status = EDataErasureStatus::IN_PROGRESS_BSC;
             SendRequestToBSC();
         }
         return true;

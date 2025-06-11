@@ -508,7 +508,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuil
 private:
     TIndexBuildId BuildId;
 
-    TDeque<std::tuple<TTabletId, ui64, THolder<IEventBase>>> ToTabletSend;
+    TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
     template <bool WithSnapshot = true, typename Record>
     TTabletId CommonFillRecord(Record& record, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -562,9 +562,9 @@ private:
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
-        LOG_D("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -606,9 +606,9 @@ private:
             r.ClearClusters();
             return r.ShortDebugString();
         };
-        LOG_D("TTxBuildProgress: TEvReshuffleKMeansRequest: " << toDebugStr(ev->Record));
+        LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << toDebugStr(ev->Record));
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendKMeansLocalRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -657,9 +657,9 @@ private:
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
-        LOG_D("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendPrefixKMeansRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -750,9 +750,9 @@ private:
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
 
-        LOG_D("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
@@ -774,6 +774,7 @@ private:
         buildInfo.InProgressShards = {};
         buildInfo.ToUploadShards = {};
 
+        ToTabletSend.clear();
         Self->IndexBuildPipes.CloseAll(BuildId, ctx);
     }
 
@@ -1079,8 +1080,8 @@ public:
         Y_ABORT_UNLESS(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
 
-        LOG_I("TTxBuildProgress: Resume: id# " << BuildId);
-        LOG_D("TTxBuildProgress: Resume: " << buildInfo);
+        LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
+        LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
 
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:
@@ -1334,8 +1335,8 @@ public:
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        for (auto& x: ToTabletSend) {
-            Self->IndexBuildPipes.Create(BuildId, std::get<0>(x), std::move(std::get<2>(x)), ctx);
+        for (auto& [shardId, ev]: ToTabletSend) {
+            Self->IndexBuildPipes.Send(BuildId, shardId, std::move(ev), ctx);
         }
         ToTabletSend.clear();
     }
@@ -1410,7 +1411,7 @@ public:
         const auto& tabletId = PipeRetry.TabletId;
         const auto& shardIdx = Self->GetShardIdx(tabletId);
 
-        LOG_I("TTxReply : PipeRetry, id# " << buildId
+        LOG_N("TTxReply : PipeRetry, id# " << buildId
               << ", tabletId# " << tabletId
               << ", shardIdx# " << shardIdx);
 
@@ -2352,8 +2353,8 @@ public:
               << ", BuildIndexId: " << buildInfo.Id
               << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
               << ", error: " << buildInfo.Issue
-              << ", replyTo: " << buildInfo.CreateSender.ToString());
-        LOG_D("Message:\n" << responseEv->Record.ShortDebugString());
+              << ", replyTo: " << buildInfo.CreateSender.ToString()
+              << ", message: " << responseEv->Record.ShortDebugString());
 
         Send(buildInfo.CreateSender, std::move(responseEv), 0, buildInfo.SenderCookie);
     }

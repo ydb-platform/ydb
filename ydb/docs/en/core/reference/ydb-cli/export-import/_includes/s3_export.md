@@ -29,7 +29,7 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 ### List of exported items {#items}
 
-`--destination-prefix PREFIX`: Destination prefix for export in bucket. Required for encrypted exports.
+`--destination-prefix PREFIX`: Destination prefix for export into bucket. Required for encrypted exports.
 
 `--source-path PATH`: Root folder for the objects being exported, database root if not provided.
 

@@ -15,10 +15,6 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/llvm16
-    yql/essentials/minikql/codegen/llvm16
-    yql/essentials/minikql/invoke_builtins/llvm16
 
     ydb/library/yql/dq/comp_nodes
     yql/essentials/public/udf
@@ -26,8 +22,6 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
 
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/minikql/codegen/llvm16
     yql/essentials/minikql/invoke_builtins/llvm16
 
@@ -35,7 +29,6 @@ PEERDIR(
 
     ydb/core/kqp/runtime
 
-    ydb/library/yql/dq/comp_nodes
 
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT

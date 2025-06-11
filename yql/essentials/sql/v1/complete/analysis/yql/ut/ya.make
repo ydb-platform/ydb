@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    yql/essentials/minikql/invoke_builtins/no_llvm
     yql/essentials/providers/common/provider
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub

@@ -2,7 +2,6 @@
 
 #include "cluster.h"
 
-#define USE_CURRENT_UDF_ABI_VERSION
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NSQLComplete {

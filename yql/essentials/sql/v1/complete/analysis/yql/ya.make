@@ -9,10 +9,9 @@ SRCS(
 PEERDIR(
     yql/essentials/ast
     yql/essentials/core
-    yql/essentials/core/services
-    yql/essentials/minikql
-    yql/essentials/minikql/invoke_builtins
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()
 

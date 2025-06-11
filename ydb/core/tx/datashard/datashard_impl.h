@@ -250,6 +250,7 @@ class TDataShard
     class TTxHandleSafeBuildIndexScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
+    class TTxHandleSafePrefixKMeansScan;
     class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeStatisticsScan;
 
@@ -1335,6 +1336,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -3204,6 +3207,7 @@ protected:
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);

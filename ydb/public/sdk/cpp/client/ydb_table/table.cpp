@@ -2505,6 +2505,10 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         const auto &vectorProto = proto.global_vector_kmeans_tree_index();
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.level_table_settings()));
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings()));
+        const bool prefixVectorIndex = indexColumns.size() > 1;
+        if (prefixVectorIndex) {
+            globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings()));
+        }
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }

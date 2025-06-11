@@ -93,28 +93,6 @@ namespace NKikimr::NEvWrite {
         ExternalController->OnSuccess(ShardId, 0, WritePartIdx);
     }
 
-    void TShardWriter::Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) {
-        const auto* msg = ev->Get();
-        Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
-
-        const auto ydbStatus = msg->GetYdbStatus();
-        if (ydbStatus == Ydb::StatusIds::OVERLOADED) {
-            if (RetryWriteRequest(true)) {
-                return;
-            }
-        }
-
-        auto gPassAway = PassAwayGuard();
-        if (ydbStatus != Ydb::StatusIds::SUCCESS) {
-            ExternalController->OnFail(ydbStatus,
-                TStringBuilder() << "Cannot write data into shard " << ShardId << " in longTx " <<
-                ExternalController->GetLongTxId().ToString());
-            return;
-        }
-
-        ExternalController->OnSuccess(ShardId, msg->Record.GetWriteId(), WritePartIdx);
-    }
-
     void TShardWriter::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "DeliveryProblem");
         const auto* msg = ev->Get();

@@ -39,10 +39,6 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
             return Data;
         }
 
-        virtual void Serialize(TEvColumnShard::TEvWrite& evWrite) const override {
-            evWrite.SetArrowData(SchemaData, Data);
-            evWrite.Record.SetGranuleShardingVersion(GranuleShardingVersion);
-        }
         virtual void Serialize(NEvents::TDataEvents::TEvWrite& evWrite, const ui64 tableId, const ui64 schemaVersion) const override {
             TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(evWrite);
             TString data = Data;

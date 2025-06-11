@@ -508,9 +508,10 @@ private:
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
 
-    ui64 OwnerPathId = 0;
     ui64 StatsReportRound = 0;
-    TString OwnerPath;
+    //Path, the shard is responsible for. It may be either a store or a standalone table
+    ui64 PathId;
+    TString Path;
 
     TMediatorTimecastEntry::TCPtr MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;

@@ -435,7 +435,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 void TColumnShard::SendPeriodicStats() {
     LOG_S_DEBUG("Send periodic stats.");
 
-    if (!CurrentSchemeShardId || !OwnerPathId) {
+    if (!CurrentSchemeShardId || !PathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
@@ -455,7 +455,7 @@ void TColumnShard::SendPeriodicStats() {
         StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
     }
 
-    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), OwnerPathId);
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), PathId);
 
     FillOlapStats(ctx, ev);
     FillColumnTableStats(ctx, ev);

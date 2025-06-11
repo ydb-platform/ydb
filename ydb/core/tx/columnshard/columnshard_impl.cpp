@@ -359,16 +359,14 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
 
     NIceDb::TNiceDb db(txc.DB);
 
-    if (proto.HasOwnerPathId()) {
-        OwnerPathId = proto.GetOwnerPathId();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
-        TablesManager.SetSchemaObjectsCache(NOlap::TSchemaCachesManager::GetCache(OwnerPathId, Info()->TenantPathId));
-    }
+    AFL_VERIFY(proto.HasPathId());
+    PathId = proto.GetPathId();
+    Schema::SaveSpecialValue(db, Schema::EValueIds::PathId, PathId);
+    AFL_VERIFY(proto.HasPath());
+    Path = proto.GetPath();
+    Schema::SaveSpecialValue(db, Schema::EValueIds::Path, Path);
 
-    if (proto.HasOwnerPath()) {
-        OwnerPath = proto.GetOwnerPath();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
-    }
+    TablesManager.SetSchemaObjectsCache(NOlap::TSchemaCachesManager::GetCache(PathId, Info()->TenantPathId));
 
     for (auto& createTable : proto.GetTables()) {
         RunEnsureTable(createTable, version, txc);
@@ -491,10 +489,9 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    if (proto.HasStorePathId()) {
-        OwnerPathId = proto.GetStorePathId();
-        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPathId, OwnerPathId);
-    }
+    AFL_VERIFY(proto.HasStorePathId());
+    PathId = proto.GetStorePathId();
+    Schema::SaveSpecialValue(db, Schema::EValueIds::PathId, PathId);
 
     for (ui32 id : proto.GetDroppedSchemaPresets()) {
         if (!TablesManager.HasPreset(id)) {

@@ -259,8 +259,8 @@ public:
 
                 auto* init = tx.MutableInitShard();
                 init->SetDataChannelCount(tableInfo->Description.GetStorageConfig().GetDataChannelCount());
-                init->SetOwnerPathId(pathId.LocalPathId);
-                init->SetOwnerPath(path.PathString());
+                init->SetPathId(pathId.LocalPathId);
+                init->SetPath(path.PathString());
 
                 create = init->AddTables();
                 create->MutableSchema()->CopyFrom(tableInfo->Description.GetSchema());

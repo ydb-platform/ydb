@@ -38,8 +38,7 @@ private:
     void InitOwner(const TActorId& owner);
 
 public:
-    void GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources,
-        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroup, const TEvRequestFilter::TPtr& originalRequest);
+    void GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const TEvRequestFilter::TPtr& originalRequest);
 
     TSourceCache(const std::shared_ptr<TReadContext>& readContext)
         : Counters(readContext->GetDuplicateFilteringCounters())

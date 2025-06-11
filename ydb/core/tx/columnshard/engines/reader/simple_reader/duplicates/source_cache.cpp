@@ -132,8 +132,7 @@ void TSourceCache::OnFetchingResult(const ui64 sourceId, TConclusion<TColumnsDat
     }
 }
 
-void TSourceCache::GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources,
-    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& memoryGroup, const TEvRequestFilter::TPtr& originalRequest) {
+void TSourceCache::GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const TEvRequestFilter::TPtr& originalRequest) {
     std::shared_ptr<TResponseConstructor> response =
         std::make_shared<TResponseConstructor>(sources, TCallback(FetchingContext->GetOwnerVerified(), originalRequest));
     ui64 cacheHits = 0;
@@ -154,11 +153,9 @@ void TSourceCache::GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo
 
         findFetching->AddCallback(response);
         // TODO: change resource management
-        if (findFetching->GetStatus()->SetStartAllocation(memoryGroup->GetGroupId())) {
-            std::shared_ptr<TColumnFetchingContext> fetchingContext =
-                std::make_shared<TColumnFetchingContext>(FetchingContext, source, findFetching->GetStatus(), memoryGroup);
-            TColumnFetchingContext::StartAllocation(fetchingContext);
-        }
+        std::shared_ptr<TColumnFetchingContext> fetchingContext =
+            std::make_shared<TColumnFetchingContext>(FetchingContext, source, findFetching->GetStatus());
+        TColumnFetchingContext::StartAllocation(fetchingContext);
     }
 
     Counters.OnSourceCacheRequest(cacheHits, sources.size() - cacheHits);

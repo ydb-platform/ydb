@@ -104,8 +104,14 @@ class WorkloadRunner:
                 key Int32,
                 value Int32,
                 PRIMARY KEY (key)
-            )
-        """, True);
+            );
+        """, True)
+        self.client.query(f"""
+            ALTER TABLE `{self.table_path}` ADD CHANGEFEED `updates` WITH (
+                MODE = 'UPDATES',
+                FORMAT = 'JSON'
+            );
+        """, True)
 
         stop = threading.Event()
         workloads = [

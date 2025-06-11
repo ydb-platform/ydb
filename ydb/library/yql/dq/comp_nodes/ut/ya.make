@@ -52,7 +52,6 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     dq_block_hash_join_ut.cpp
-    dq_block_hash_join_ut_utils.cpp
 )
 
 END() 

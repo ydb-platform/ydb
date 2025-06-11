@@ -260,7 +260,7 @@ void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/acl", new TJsonHandler<TJsonACL>(TJsonACL::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/acl", new TJsonHandler<TJsonACL>(TJsonACL::GetSwagger()), 2);
 }
 
 void InitViewerGraphJsonHandler(TJsonHandlers &handlers) {

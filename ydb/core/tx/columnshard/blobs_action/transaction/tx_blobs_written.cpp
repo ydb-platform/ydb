@@ -36,12 +36,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         AFL_VERIFY(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetType() == NOlap::EPortionType::Written);
         auto* constructor =
             static_cast<NOlap::TWrittenPortionInfoConstructor*>(&portion.GetPortionInfoConstructor()->MutablePortionConstructor());
-        if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
-            static TAtomicCounter Counter = 0;
-            constructor->SetInsertWriteId((TInsertWriteId)Counter.Inc());
-        } else {
-            constructor->SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
-        }
+        constructor->SetInsertWriteId(granule.BuildNextInsertWriteId());
         InsertWriteIds.emplace_back(constructor->GetInsertWriteIdVerified());
         portion.Finalize(Self, txc);
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {

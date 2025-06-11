@@ -25,8 +25,8 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
-Y_UNIT_TEST(EmptyVariants) {
-    TString script = R"(
+
+    TString scriptEmptyVariants = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -60,11 +60,11 @@ Y_UNIT_TEST(EmptyVariants) {
         EXPECTED: [[1u;#];[2u;#];[3u;#];[4u;#];[11u;#];[12u;#];[13u;#];[14u;#]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(EmptyVariants, scriptEmptyVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(EmptyStringVariants) {
-    TString script = R"(
+    TString scriptEmptyStringVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -87,11 +87,11 @@ Y_UNIT_TEST(EmptyStringVariants) {
         EXPECTED: [[1u;["{\"a\":\"\",\"b\":\"\",\"c\":\"\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(EmptyStringVariants, scriptEmptyStringVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(QuotedFilterVariants) {
-    TString script = R"(
+    TString scriptQuotedFilterVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -116,11 +116,11 @@ Y_UNIT_TEST(QuotedFilterVariants) {
         EXPECTED: [[2u;["{\"a.b.c\":\"a2\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(QuotedFilterVariants, scriptQuotedFilterVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(FilterVariants) {
-    TString script = R"(
+    TString scriptFilterVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -155,11 +155,11 @@ Y_UNIT_TEST(FilterVariants) {
         EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(FilterVariants, scriptFilterVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(RestoreFirstLevelVariants) {
-    TString script = R"(
+    TString scriptRestoreFirstLevelVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -185,11 +185,11 @@ Y_UNIT_TEST(RestoreFirstLevelVariants) {
         EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":\"{\\\"c\\\":1,\\\"e\\\":{\\\"c.a\\\":2}}\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\",\"e\":\"[\\\"a\\\",{\\\"v\\\":[\\\"c\\\",5]}]\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(RestoreFirstLevelVariants, scriptRestoreFirstLevelVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(RestoreFullJsonVariants) {
-    TString script = R"(
+    TString scriptRestoreFullJsonVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -215,16 +215,11 @@ Y_UNIT_TEST(RestoreFullJsonVariants) {
         EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\",\"e\":[\"a\",{\"v\":[\"c\",\"5\"]}]}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(RestoreFullJsonVariants, scriptRestoreFullJsonVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(BrokenJsonWriting) {
-    NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
-        { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
-    updates.AddRow().Add<int64_t>(1).Add("{\"a\" : \"c}");
-    auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
-
-    TString script = Sprintf(R"(
+    TString scriptBrokenJsonWriting= R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -242,17 +237,24 @@ Y_UNIT_TEST(BrokenJsonWriting) {
                     `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
                     `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
         ------
-        BULK_UPSERT:
-            /Root/ColumnTable
-            %s
-            EXPECT_STATUS:BAD_REQUEST
-    )",
-        arrowString.data());
-    TScriptVariator(script).Execute();
-}
+        %s
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(BrokenJsonWriting, scriptBrokenJsonWriting) {
+        NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
+        updates.AddRow().Add<int64_t>(1).Add("{\"a\" : \"c}");
+        auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+        TString injection = Sprintf(R"(
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                EXPECT_STATUS:BAD_REQUEST
+        )",
+            arrowString.data());
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
+    }
 
-Y_UNIT_TEST(RestoreJsonArrayVariants) {
-    TString script = R"(
+    TString scriptRestoreJsonArrayVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -277,11 +279,11 @@ Y_UNIT_TEST(RestoreJsonArrayVariants) {
         EXPECTED: [[1u;["[\"a\",{\"v\":\"4\"},\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"11\",\"12\"]"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(RestoreJsonArrayVariants, scriptRestoreJsonArrayVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(DoubleFilterVariants) {
-    TString script = R"(
+    TString scriptDoubleFilterVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -309,11 +311,11 @@ Y_UNIT_TEST(DoubleFilterVariants) {
         EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(DoubleFilterVariants, scriptDoubleFilterVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(OrFilterVariants) {
-    TString script = R"(
+    TString scriptOrFilterVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -338,11 +340,11 @@ Y_UNIT_TEST(OrFilterVariants) {
         EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(OrFilterVariants, scriptOrFilterVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(DoubleFilterReduceScopeVariants) {
-    TString script = R"(
+    TString scriptDoubleFilterReduceScopeVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -368,11 +370,11 @@ Y_UNIT_TEST(DoubleFilterReduceScopeVariants) {
         EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"];["value2"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(DoubleFilterReduceScopeVariants, scriptDoubleFilterReduceScopeVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(DoubleFilterReduceScopeWithPredicateVariants) {
-    TString script = R"(
+    TString scriptDoubleFilterReduceScopeWithPredicateVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -398,11 +400,12 @@ Y_UNIT_TEST(DoubleFilterReduceScopeWithPredicateVariants) {
         EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"];["value2"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
 
-Y_UNIT_TEST(DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst) {
-    TString script = R"(
+    Y_UNIT_TEST_STRING_VARIATOR(DoubleFilterReduceScopeWithPredicateVariants, scriptDoubleFilterReduceScopeWithPredicateVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
+    TString scriptDoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -428,11 +431,11 @@ Y_UNIT_TEST(DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFir
         EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"];["value2"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst, scriptDoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(FilterVariantsCount) {
-    TString script = R"(
+    TString scriptFilterVariantsCount = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -457,11 +460,11 @@ Y_UNIT_TEST(FilterVariantsCount) {
         EXPECTED: [[1u]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(FilterVariantsCount, scriptFilterVariantsCount) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(SimpleVariants) {
-    TString script = R"(
+    TString scriptSimpleVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -486,11 +489,11 @@ Y_UNIT_TEST(SimpleVariants) {
         EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(SimpleVariants, scriptSimpleVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(SimpleExistsVariants) {
-    TString script = R"(
+    TString scriptSimpleExistsVariants = R"(
         SCHEMA:
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
@@ -515,11 +518,11 @@ Y_UNIT_TEST(SimpleExistsVariants) {
         EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(SimpleExistsVariants, scriptSimpleExistsVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(CompactionVariants) {
-    TString script = R"(
+    TString scriptCompactionVariants = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -559,11 +562,11 @@ Y_UNIT_TEST(CompactionVariants) {
                                 [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(CompactionVariants, scriptCompactionVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(BloomMixIndexesVariants) {
-    TString script = R"(
+    TString scriptBloomMixIndexesVariants = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -658,7 +661,6 @@ Y_UNIT_TEST(BloomMixIndexesVariants) {
         EXPECTED: [[4u;["{\"a\":\"a4\",\"b.c.d\":\"b4\"}"]];[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
         IDX_ND_SKIP_APPROVE: 0, 3, 2
         ------
-
         READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d111\"") = "1b5" ORDER BY Col1;
         EXPECTED: []
         IDX_ND_SKIP_APPROVE: 0, 5, 0
@@ -672,11 +674,11 @@ Y_UNIT_TEST(BloomMixIndexesVariants) {
         IDX_ND_SKIP_APPROVE: 0, 5, 0
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(BloomMixIndexesVariants, scriptBloomMixIndexesVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(BloomCategoryIndexesVariants) {
-    TString script = R"(
+    TString scriptBloomCategoryIndexesVariants = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -746,11 +748,11 @@ Y_UNIT_TEST(BloomCategoryIndexesVariants) {
         IDX_ND_SKIP_APPROVE: 0, 5, 0
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(BloomCategoryIndexesVariants, scriptBloomCategoryIndexesVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(BloomNGrammIndexesVariants) {
-    TString script = R"(
+    TString scriptBloomNGrammIndexesVariants = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -838,11 +840,11 @@ Y_UNIT_TEST(BloomNGrammIndexesVariants) {
         EXPECTED: []
         IDX_ND_SKIP_APPROVE: 0, 4, 1
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(BloomNGrammIndexesVariants, scriptBloomNGrammIndexesVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(SwitchAccessorCompactionVariants) {
-    TString script = R"(
+    TString scriptSwitchAccessorCompactionVariants = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -882,11 +884,11 @@ Y_UNIT_TEST(SwitchAccessorCompactionVariants) {
                                 [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(SwitchAccessorCompactionVariants, scriptSwitchAccessorCompactionVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 
-Y_UNIT_TEST(DuplicationCompactionVariants) {
-    TString script = R"(
+    TString scriptDuplicationCompactionVariants = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -925,8 +927,9 @@ Y_UNIT_TEST(DuplicationCompactionVariants) {
         EXPECTED: [[1u;["{\"a\":\"1a1\"}"]];[2u;#];[3u;["{\"b\":\"1b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]]]
 
     )";
-    TScriptVariator(script).Execute();
-}
+    Y_UNIT_TEST_STRING_VARIATOR(DuplicationCompactionVariants, scriptDuplicationCompactionVariants) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
 }
 
 }   // namespace NKikimr::NKqp

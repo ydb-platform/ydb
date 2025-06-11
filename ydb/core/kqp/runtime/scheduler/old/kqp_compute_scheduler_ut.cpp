@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NKikimr::NKqp;
+using namespace NKikimr::NKqp::NSchedulerOld;
 
 Y_UNIT_TEST_SUITE(TComputeScheduler) {
 

@@ -193,6 +193,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
         if (Info->ClusterStateGeneration != clusterStateGeneration || Info->ClusterStateGuid != clusterStateGuid) {
+            BLOG_D("StateStorageProxy TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << Info->ClusterStateGeneration << " clusterStateGeneration=" << clusterStateGeneration <<" Info->ClusterStateGuid=" << Info->ClusterStateGuid << " clusterStateGuid=" << clusterStateGuid);
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), clusterStateGeneration, clusterStateGuid));
         }
@@ -202,6 +203,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         if (Info->ClusterStateGeneration < clusterStateGeneration || 
             (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
             ReplyAndDie(NKikimrProto::ERROR);
+            return;
         }
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];

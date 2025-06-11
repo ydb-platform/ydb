@@ -6,18 +6,19 @@
 
 Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
     class StateStorageTest {
+        public:
         TEnvironmentSetup Env;
         TTestActorSystem& Runtime;
         ui64 TabletId;
 
-        public:
         StateStorageTest()
             : Env{{
-                    .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+                    .Erasure = TBlobStorageGroupType::ErasureMirror3dc,
                     .SelfManagementConfig = true,
                 }}
             , Runtime(*Env.Runtime)
         {
+            Runtime.SetLogPriority(NKikimrServices::STATESTORAGE, NLog::PRI_DEBUG);
             Runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
             Env.Sim(TDuration::Seconds(10));
             TabletId = Env.TabletId;
@@ -79,29 +80,73 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
 
     };
 
-    Y_UNIT_TEST(TestProxyNotifyReplicaConfigChanged) {
+    Y_UNIT_TEST(TestProxyNotifyReplicaConfigChanged1) {
         StateStorageTest test;
 
         auto res = test.ResolveReplicas();
         const auto &replicas = res->Get()->GetPlainReplicas();
         UNIT_ASSERT(test.Lookup()->Get()->Status == NKikimrProto::EReplyStatus::OK);
-        for(auto [gen, guid, res] : std::initializer_list<std::tuple<ui64, ui64, NKikimrProto::EReplyStatus>> {
+
+        for (auto [gen, guid, res] : std::initializer_list<std::tuple<ui64, ui64, NKikimrProto::EReplyStatus>> {
             {0, 0, NKikimrProto::EReplyStatus::OK}
             , {0, 2, NKikimrProto::EReplyStatus::ERROR}
             , {0, 0, NKikimrProto::EReplyStatus::OK}
             , {1, 0, NKikimrProto::EReplyStatus::ERROR}
         }) {
-            test.ChangeReplicaConfig(replicas[0], gen, guid);
-            UNIT_ASSERT(test.Lookup()->Get()->Status == res);     
+            test.ChangeReplicaConfig(replicas[1], gen, guid);
+            UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, res); 
         }
     }
 
+    Y_UNIT_TEST(TestProxyConfigMismatchNotSent) {
+        StateStorageTest test;
+        ui32 nw1Cnt = 0;
+        test.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifyConfigMismatch::EventType) {
+                nw1Cnt++;
+            }
+            return true;
+        };
+        UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::OK);
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+    }
+
+    Y_UNIT_TEST(TestProxyConfigMismatch) {
+        StateStorageTest test;
+
+        auto res = test.ResolveReplicas();
+        const auto &replicas = res->Get()->GetPlainReplicas();
+        UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::OK);
+        ui32 nw1Cnt = 0;
+        ui32 nw2Cnt = 0;
+        test.ChangeReplicaConfig(replicas[1], 1, 2);
+        test.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifyConfigMismatch::EventType) {
+                auto* node = test.Runtime.GetNode(1);
+                UNIT_ASSERT(node && node->ActorSystem);
+                TActorId replicaId = node->ActorSystem->LookupLocalService(replicas[1]);
+                auto msg = ev->Get<NStorage::TEvNodeWardenNotifyConfigMismatch>();
+                if(ev->Sender == replicaId)
+                    nw1Cnt++; // replica notify nodewarden
+                else
+                    UNIT_ASSERT_EQUAL(msg->ClusterStateGeneration, 1);
+                    UNIT_ASSERT_EQUAL(msg->ClusterStateGuid, 2);
+                    nw2Cnt++; // proxy notify nodewarden
+            }
+            return true;
+        };
+        UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::ERROR);
+        UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
+        UNIT_ASSERT_EQUAL(nw2Cnt, 1);
+    }
+
+
+    //TODO: change pile state via distcof does not work
     // Y_UNIT_TEST(TestRingGroupState) {
     //     StateStorageTest test;
     //     TString req = "{\"GetStateStorageConfig\": {}}";
     //     auto res = test.SendRequest(req);
     //     auto record = res->Get()->Record;
-
     //     Cerr << "Response: " << record;
     // }
 }

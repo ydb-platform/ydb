@@ -95,6 +95,7 @@ public:
 class TInsertTable: public TInsertTableAccessor {
 private:
     bool Loaded = false;
+    TInsertWriteId LastWriteId = TInsertWriteId{ 0 };
 
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
@@ -120,6 +121,9 @@ public:
     std::vector<TCommittedBlob> Read(TInternalPathId pathId, const std::optional<ui64> lockId, const TSnapshot& reqSnapshot,
         const std::shared_ptr<arrow::Schema>& pkSchema, const TPKRangesFilter* pkRangesFilter) const;
     bool Load(NIceDb::TNiceDb& db, IDbWrapper& dbTable, const TInstant loadTime);
+
+    TInsertWriteId BuildNextWriteId(NTabletFlatExecutor::TTransactionContext& txc);
+    TInsertWriteId BuildNextWriteId(NIceDb::TNiceDb& db);
 };
 
 }   // namespace NKikimr::NOlap

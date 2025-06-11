@@ -63,6 +63,7 @@ struct TGenerationContext : public TThrRefBase {
     const TString Table;
     const TString PrimaryKeyColumn;
     const TString GenerationColumn;
+    const TString ExpireAtColumn;
 
     const TString PrimaryKey;
 
@@ -74,6 +75,8 @@ struct TGenerationContext : public TThrRefBase {
     // - In Check operation - expected generation, caller normally uses
     // it with Transaction (must have CommitTx = false)
     const ui64 Generation;
+
+    const std::optional<TInstant> ExpireAt;
 
     std::optional<NYdb::NTable::TTransaction> Transaction;
 
@@ -88,8 +91,10 @@ struct TGenerationContext : public TThrRefBase {
                        const TString& table,
                        const TString& primaryKeyColumn,
                        const TString& generationColumn,
+                       const TString& expireAtColumn,
                        const TString& primaryKey,
                        ui64 generation,
+                       std::optional<TInstant> expireAt = std::nullopt,
                        const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
         : Session(session)
         , CommitTx(commitTx)
@@ -97,8 +102,10 @@ struct TGenerationContext : public TThrRefBase {
         , Table(table)
         , PrimaryKeyColumn(primaryKeyColumn)
         , GenerationColumn(generationColumn)
+        , ExpireAtColumn(expireAtColumn)
         , PrimaryKey(primaryKey)
         , Generation(generation)
+        , ExpireAt(expireAt)
         , ExecDataQuerySettings(execDataQuerySettings)
     {
     }
@@ -136,6 +143,8 @@ NThreading::TFuture<NYdb::TStatus> RegisterCheckGeneration(const TGenerationCont
 
 // Checks that generation is equal to the one in DB
 NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& context);
+
+NThreading::TFuture<NYdb::TStatus> UpdateGenerationTtl(const TGenerationContextPtr& context);
 
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
 

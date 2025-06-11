@@ -8,28 +8,48 @@
 
 namespace NYdbWorkload {
 
-class TVectorGenerator {
+using TFloatVector = std::vector<float>;
+
+class TVectorRecallEvaluator {
 public:
-    TVectorGenerator(size_t vectorDimension, size_t vectorCount);
+    TVectorRecallEvaluator(size_t vectorDimension, size_t targetCount);
+    ~TVectorRecallEvaluator();
     
     void PregenerateSelectEmbeddings(size_t vectorDimension, size_t vectorCount);
-    const std::vector<float>& GetRandomSelectEmbedding();
+    const TFloatVector& GetRandomSelectEmbedding();
+    void FillEtalons(const char* tableName, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
+    const TFloatVector& GetTargetEmbedding(size_t index) const;
+    const std::vector<ui64>& GetTargetEtalons(size_t index) const;
+    void AddRecall(double recall);
+    double GetAverageRecall() const;
+    size_t GetTargetCount() const;
 private:
     std::random_device Rd;
     std::mt19937_64 Gen;
     std::normal_distribution<float> VectorValueGenerator;
     std::uniform_int_distribution<size_t> PregeneratedIndexGenerator;
-    std::vector<std::vector<float>> SelectEmbeddings;
+
+    struct TSelectTarget {
+        TFloatVector Target;                    // Random target to use in select workload
+        std::vector<ui64> Etalons;              // Etalon vector Ids for recall measurement
+    };
+    std::vector<TSelectTarget> SelectTargets;
+
+    double TotalRecall = 0.0;
+    size_t ProcessedTargets = 0;
 };
 
+class TVectorWorkloadGenerator;
+
 class TVectorWorkloadParams final: public TWorkloadParams {
+    friend class TVectorWorkloadGenerator;
 public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     void Validate(const ECommandType commandType, int workloadType) override;
 
-    const std::vector<float>& GetRandomSelectEmbedding() const;
+    const TFloatVector& GetRandomSelectEmbedding() const;
     
     TString TableName;
     TString IndexName;
@@ -45,7 +65,7 @@ public:
 private:
     size_t GetVectorDimension() const;
 
-    THolder<TVectorGenerator> VectorGenerator;
+    THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
 };
 
 class TVectorWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TVectorWorkloadParams> {
@@ -76,6 +96,8 @@ private:
     TQueryInfo SelectScanImpl();
     TQueryInfo SelectIndexImpl();
     TQueryInfo SelectPrefixIndexImpl();
+
+    size_t CurrentTargetIndex = 0;
 };
 
 } // namespace NYdbWorkload

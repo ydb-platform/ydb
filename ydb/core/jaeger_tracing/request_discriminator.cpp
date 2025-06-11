@@ -96,8 +96,8 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.AlterTopic", ERequestType::TOPIC_ALTERTOPIC},
     {"Topic.DropTopic", ERequestType::TOPIC_DROPTOPIC},
 
-    {"Bridge.SwitchClusterState", ERequestType::BRIDGE_SWITCHCLUSTERSTATE},
     {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
+    {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

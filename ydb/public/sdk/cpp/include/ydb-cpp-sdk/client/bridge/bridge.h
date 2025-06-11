@@ -12,36 +12,36 @@
 
 namespace NYdb::NBridge {
 
-struct TSwitchClusterStateSettings : public TOperationRequestSettings<TSwitchClusterStateSettings> {};
+struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClusterStateSettings> {};
 
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
-struct TClusterState {
-    enum EPileState {
-        DISCONNECTED = Ydb::Bridge::ClusterState::DISCONNECTED,
-        NOT_SYNCHRONIZED = Ydb::Bridge::ClusterState::NOT_SYNCHRONIZED,
-        SYNCHRONIZED = Ydb::Bridge::ClusterState::SYNCHRONIZED,
-    };
+enum class EPileState {
+    DISCONNECTED = Ydb::Bridge::DISCONNECTED,
+    NOT_SYNCHRONIZED = Ydb::Bridge::NOT_SYNCHRONIZED,
+    SYNCHRONIZED = Ydb::Bridge::SYNCHRONIZED,
+    PROMOTE = Ydb::Bridge::PROMOTE,
+    PRIMARY = Ydb::Bridge::PRIMARY,
+};
 
-    std::vector<EPileState> PerPileState;
-    ui32 PrimaryPile = 0;
-    ui32 PromotedPile = 0;
-    ui64 Generation = 0;
+struct TPileStateUpdate {
+    ui32 PileId = 0;
+    EPileState State = EPileState::DISCONNECTED;
 };
 
 class TGetClusterStateResult : public TStatus {
 public:
-    TGetClusterStateResult(TStatus&& status, TClusterState&& state)
+    TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state)
         : TStatus(std::move(status))
         , State_(std::move(state))
     {}
 
-    const TClusterState& GetState() const {
+    const std::vector<TPileStateUpdate>& GetState() const {
         return State_;
     }
 
 private:
-    TClusterState State_;
+    std::vector<TPileStateUpdate> State_;
 };
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
@@ -51,7 +51,7 @@ public:
     explicit TBridgeClient(const TDriver& driver, const TCommonClientSettings& settings = {});
     ~TBridgeClient();
 
-    TAsyncStatus SwitchClusterState(const TClusterState& state, const TSwitchClusterStateSettings& settings = {});
+    TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates, const TUpdateClusterStateSettings& settings = {});
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings = {});
 

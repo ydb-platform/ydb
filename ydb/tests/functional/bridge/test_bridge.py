@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import logging
 import time
-from hamcrest import assert_that, is_
+import pytest
+from hamcrest import assert_that, is_, has_entries
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -15,11 +16,59 @@ from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 logger = logging.getLogger(__name__)
 
 
+def update_cluster_state(client, updates, expected_status=StatusIds.SUCCESS):
+    response = client.update_cluster_state(updates)
+    logger.debug("Update cluster state response: %s", response)
+    assert_that(response.operation.status, is_(expected_status))
+    if expected_status == StatusIds.SUCCESS:
+        result = bridge.UpdateClusterStateResult()
+        response.operation.result.Unpack(result)
+        return result
+    else:
+        return response
+
+
+def get_cluster_state(client):
+    response = client.get_cluster_state()
+    assert_that(response.operation.status, is_(StatusIds.SUCCESS))
+    result = bridge.GetClusterStateResult()
+    response.operation.result.Unpack(result)
+    logger.debug("Get cluster state result: %s", result)
+    return result
+
+
+def get_cluster_state_and_check(client, expected_states):
+    result = get_cluster_state(client)
+    actual_states = {s.pile_id: s.state for s in result.per_pile_state}
+    assert_that(actual_states, is_(has_entries(expected_states)))
+    assert_that(len(actual_states), is_(len(expected_states)))
+    return result
+
+
+def wait_for_cluster_state(client, expected_states, timeout_seconds=3):
+    start_time = time.time()
+    last_exception = None
+    while time.time() - start_time < timeout_seconds:
+        try:
+            get_cluster_state_and_check(client, expected_states)
+            return
+        except AssertionError as e:
+            last_exception = e
+            time.sleep(0.5)
+    raise AssertionError(f"Cluster state did not reach expected state in {timeout_seconds}s") from last_exception
+
+
+def check_states(result, expected_states):
+    actual_states = {s.pile_id: s.state for s in result.per_pile_state}
+    assert_that(actual_states, is_(has_entries(expected_states)))
+    assert_that(len(actual_states), is_(len(expected_states)))
+
+
 class BridgeKiKiMRTest(object):
     erasure = Erasure.BLOCK_4_2
     use_config_store = True
     separate_node_configs = True
-    nodes_count = 8
+    nodes_count = 16
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -33,11 +82,10 @@ class BridgeKiKiMRTest(object):
             'GRPC_PROXY': LogLevels.DEBUG,
         }
 
-        # Bridge configuration with two piles
         bridge_config = {
             "piles": [
-                {"name": "pile1"},
-                {"name": "pile2"}
+                {"name": "r1"},
+                {"name": "r2"}
             ]
         }
 
@@ -49,16 +97,15 @@ class BridgeKiKiMRTest(object):
             metadata_section=cls.metadata_section,
             separate_node_configs=cls.separate_node_configs,
             simple_config=True,
-            use_self_management=True,  # Bridge requires self-management
-            extra_grpc_services=['bridge'],  # Enable Bridge gRPC service
+            use_self_management=True,
+            extra_grpc_services=['bridge'],
             additional_log_configs=log_configs,
-            bridge_config=bridge_config  # Enable Bridge mode
+            bridge_config=bridge_config
         )
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
 
-        # Create Bridge client
         host = cls.cluster.nodes[1].host
         grpc_port = cls.cluster.nodes[1].port
         cls.bridge_client = BridgeClient(host, grpc_port)
@@ -69,157 +116,72 @@ class BridgeKiKiMRTest(object):
         cls.bridge_client.close()
         cls.cluster.stop()
 
-    def create_test_cluster_state(self, generation=1, primary_pile=0, promoted_pile=0):
-        state = bridge.ClusterState()
-        state.generation = generation
-        state.primary_pile = primary_pile
-        state.promoted_pile = promoted_pile
-        # Add pile states for two piles
-        state.per_pile_state.append(bridge.ClusterState.SYNCHRONIZED)
-        state.per_pile_state.append(bridge.ClusterState.SYNCHRONIZED)
-        return state
-
 
 class TestBridgeBasic(BridgeKiKiMRTest):
 
-    def test_initial_get_cluster_state(self):
-        """Test getting cluster state when not configured - should return NOT_FOUND"""
-        logger.info("Testing initial GetClusterState - expecting NOT_FOUND")
+    def test_update_and_get_cluster_state(self):
+        initial_result = get_cluster_state(self.bridge_client)
+        check_states(initial_result, {0: bridge.PRIMARY, 1: bridge.SYNCHRONIZED})
 
-        response = self.bridge_client.get_cluster_state()
-        assert_that(response.operation.status, is_(StatusIds.NOT_FOUND))
-        logger.info(f"Got expected NOT_FOUND status: {response.operation.status}")
-
-    def test_switch_and_get_cluster_state(self):
-        """Test switching cluster state and then getting it back"""
-        logger.info("Testing SwitchClusterState + GetClusterState cycle")
-
-        test_state = self.create_test_cluster_state(
-            generation=1,
-            primary_pile=0,
-            promoted_pile=0
-        )
-
-        logger.info(f"Switching to state: generation={test_state.generation}, "
-                    f"primary_pile={test_state.primary_pile}, "
-                    f"promoted_pile={test_state.promoted_pile}")
-
-        switch_response = self.bridge_client.switch_cluster_state(test_state)
-        assert_that(switch_response.operation.status, is_(StatusIds.SUCCESS))
-        logger.info("Switch operation successful")
-
-        logger.info("Getting state back to verify")
-        get_response = self.bridge_client.get_cluster_state()
-        assert_that(get_response.operation.status, is_(StatusIds.SUCCESS))
-
-        result = bridge.GetClusterStateResult()
-        get_response.operation.result.Unpack(result)
-
-        retrieved_state = result.cluster_state
-        logger.info(f"Retrieved state: generation={retrieved_state.generation}, "
-                    f"primary_pile={retrieved_state.primary_pile}, "
-                    f"promoted_pile={retrieved_state.promoted_pile}, "
-                    f"per_pile_state_size={len(retrieved_state.per_pile_state)}")
-
-        assert_that(retrieved_state.generation, is_(test_state.generation))
-        assert_that(retrieved_state.primary_pile, is_(test_state.primary_pile))
-        assert_that(retrieved_state.promoted_pile, is_(test_state.promoted_pile))
-        assert_that(len(retrieved_state.per_pile_state), is_(2))
-        assert_that(retrieved_state.per_pile_state[0], is_(bridge.ClusterState.SYNCHRONIZED))
-        assert_that(retrieved_state.per_pile_state[1], is_(bridge.ClusterState.SYNCHRONIZED))
-
-        logger.info("State verification successful - all fields match")
-
-    def test_multiple_state_switches(self):
-        """Test multiple consecutive state switches"""
-        logger.info("Testing multiple consecutive state switches")
-
-        states_to_test = [
-            (1, 0, 0),
-            (2, 0, 0),
-            (3, 0, 0),
+        updates = [
+            bridge.PileStateUpdate(pile_id=1, state=bridge.PROMOTE),
         ]
+        update_cluster_state(self.bridge_client, updates)
+        wait_for_cluster_state(self.bridge_client, {0: bridge.PRIMARY, 1: bridge.PROMOTE})
 
-        for generation, primary_pile, promoted_pile in states_to_test:
-            logger.info(f"Testing state switch to generation={generation}")
+    def test_failover(self):
+        initial_result = get_cluster_state(self.bridge_client)
+        check_states(initial_result, {0: bridge.PRIMARY, 1: bridge.SYNCHRONIZED})
 
-            test_state = self.create_test_cluster_state(generation, primary_pile, promoted_pile)
+        update_cluster_state(self.bridge_client, [
+            bridge.PileStateUpdate(pile_id=0, state=bridge.DISCONNECTED),
+            bridge.PileStateUpdate(pile_id=1, state=bridge.PRIMARY),
+        ])
+        wait_for_cluster_state(self.bridge_client, {0: bridge.DISCONNECTED, 1: bridge.PRIMARY})
 
-            switch_response = self.bridge_client.switch_cluster_state(test_state)
-            assert_that(switch_response.operation.status, is_(StatusIds.SUCCESS))
-
-            get_response = self.bridge_client.get_cluster_state()
-            assert_that(get_response.operation.status, is_(StatusIds.SUCCESS))
-
-            result = bridge.GetClusterStateResult()
-            get_response.operation.result.Unpack(result)
-            retrieved_state = result.cluster_state
-
-            assert_that(retrieved_state.generation, is_(generation))
-            logger.info(f"Successfully verified generation {generation}")
+        update_cluster_state(self.bridge_client, [
+            bridge.PileStateUpdate(pile_id=0, state=bridge.NOT_SYNCHRONIZED),
+        ])
+        wait_for_cluster_state(self.bridge_client, {0: bridge.NOT_SYNCHRONIZED, 1: bridge.PRIMARY})
 
 
 class TestBridgeValidation(BridgeKiKiMRTest):
 
-    def test_invalid_primary_pile(self):
-        """Test validation - primary_pile >= per_pile_state size should fail"""
-        logger.info("Testing invalid primary_pile validation")
-
-        state = bridge.ClusterState()
-        state.generation = 1
-        state.primary_pile = 2  # Invalid - only 2 piles (0,1)
-        state.promoted_pile = 0
-        state.per_pile_state.append(bridge.ClusterState.SYNCHRONIZED)
-        state.per_pile_state.append(bridge.ClusterState.SYNCHRONIZED)
-
-        response = self.bridge_client.switch_cluster_state(state)
-        assert_that(response.operation.status, is_(StatusIds.BAD_REQUEST))
-        logger.info("Got expected BAD_REQUEST for invalid primary_pile")
-
-    def test_invalid_promoted_pile(self):
-        """Test validation - promoted_pile >= per_pile_state size should fail"""
-        logger.info("Testing invalid promoted_pile validation")
-
-        state = bridge.ClusterState()
-        state.generation = 1
-        state.primary_pile = 0
-        state.promoted_pile = 2  # Invalid - only 2 piles (0,1)
-        state.per_pile_state.append(bridge.ClusterState.SYNCHRONIZED)
-        state.per_pile_state.append(bridge.ClusterState.SYNCHRONIZED)
-
-        response = self.bridge_client.switch_cluster_state(state)
-        assert_that(response.operation.status, is_(StatusIds.BAD_REQUEST))
-        logger.info("Got expected BAD_REQUEST for invalid promoted_pile")
-
-    def test_empty_per_pile_state(self):
-        """Test validation - empty per_pile_state should fail"""
-        logger.info("Testing empty per_pile_state validation")
-
-        state = bridge.ClusterState()
-        state.generation = 1
-        state.primary_pile = 0
-        state.promoted_pile = 0
-
-        response = self.bridge_client.switch_cluster_state(state)
-        assert_that(response.operation.status, is_(StatusIds.BAD_REQUEST))
-        logger.info("Got expected BAD_REQUEST for empty per_pile_state")
-
-
-class TestBridgeStressTest(BridgeKiKiMRTest):
-
-    def test_rapid_state_changes(self):
-        logger.info("Testing rapid state changes")
-        for i in range(10):
-            state = self.create_test_cluster_state(generation=i+1)
-            switch_response = self.bridge_client.switch_cluster_state(state)
-            assert_that(switch_response.operation.status, is_(StatusIds.SUCCESS))
-            time.sleep(0.1)  # Brief delay between changes
-
-        get_response = self.bridge_client.get_cluster_state()
-        assert_that(get_response.operation.status, is_(StatusIds.SUCCESS))
-
-        result = bridge.GetClusterStateResult()
-        get_response.operation.result.Unpack(result)
-        assert_that(result.cluster_state.generation, is_(10))
-
-        logger.info("Rapid state changes test completed successfully")
+    @pytest.mark.parametrize(
+        "updates, test_name",
+        [
+            (
+                [],
+                "no_updates"
+            ),
+            (
+                [
+                    bridge.PileStateUpdate(pile_id=0, state=bridge.PRIMARY),
+                    bridge.PileStateUpdate(pile_id=1, state=bridge.PRIMARY),
+                ],
+                "multiple_primary_piles_in_request"
+            ),
+            (
+                [
+                    bridge.PileStateUpdate(pile_id=0, state=bridge.SYNCHRONIZED),
+                ],
+                "no_primary_pile_in_result"
+            ),
+            (
+                [
+                    bridge.PileStateUpdate(pile_id=0, state=bridge.SYNCHRONIZED),
+                    bridge.PileStateUpdate(pile_id=0, state=bridge.PRIMARY),
+                ],
+                "duplicate_pile_update"
+            ),
+            (
+                [
+                    bridge.PileStateUpdate(pile_id=99, state=bridge.PRIMARY),
+                ],
+                "invalid_pile_id"
+            ),
+        ]
+    )
+    def test_invalid_updates(self, updates, test_name):
+        logger.info(f"Running validation test: {test_name}")
+        update_cluster_state(self.bridge_client, updates, StatusIds.BAD_REQUEST)

@@ -11,8 +11,6 @@
 
 namespace NKikimr::NGRpcService {
 
-void CopyToInternalClusterState(const Ydb::Bridge::ClusterState& from, NKikimrBridge::TClusterState& to);
-void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, Ydb::Bridge::ClusterState& to);
 
 template <typename TDerived, typename TRequest, typename TResultRecord>
 class TBridgeRequestGrpc : public TRpcOperationRequestActor<TDerived, TRequest> {

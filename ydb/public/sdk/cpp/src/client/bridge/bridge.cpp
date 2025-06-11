@@ -9,22 +9,22 @@ namespace NYdb::inline Dev::NBridge {
 
 namespace {
 
-void StateToProto(const TClusterState& state, Ydb::Bridge::ClusterState* proto) {
-    proto->set_generation(state.Generation);
-    proto->set_primary_pile(state.PrimaryPile);
-    proto->set_promoted_pile(state.PromotedPile);
-    for (const auto& s : state.PerPileState) {
-        proto->add_per_pile_state(static_cast<Ydb::Bridge::ClusterState_PileState>(s));
+void UpdatesToProto(const std::vector<TPileStateUpdate>& updates, Ydb::Bridge::UpdateClusterStateRequest* proto) {
+    for (const auto& update : updates) {
+        auto* u = proto->add_updates();
+        u->set_pile_id(update.PileId);
+        u->set_state(static_cast<Ydb::Bridge::PileState>(update.State));
     }
 }
 
-TClusterState StateFromProto(const Ydb::Bridge::ClusterState& proto) {
-    TClusterState state;
-    state.Generation = proto.generation();
-    state.PrimaryPile = proto.primary_pile();
-    state.PromotedPile = proto.promoted_pile();
+std::vector<TPileStateUpdate> StateFromProto(const Ydb::Bridge::GetClusterStateResult& proto) {
+    std::vector<TPileStateUpdate> state;
+    state.reserve(proto.per_pile_state_size());
     for (const auto& s : proto.per_pile_state()) {
-        state.PerPileState.push_back(static_cast<TClusterState::EPileState>(s));
+        state.push_back({
+            .PileId = s.pile_id(),
+            .State = static_cast<EPileState>(s.state())
+        });
     }
     return state;
 }
@@ -37,13 +37,13 @@ public:
         : TClientImplCommon(std::move(connections), settings)
     {}
 
-    TAsyncStatus SwitchClusterState(const TClusterState& state, const TSwitchClusterStateSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Bridge::SwitchClusterStateRequest>(settings);
-        StateToProto(state, request.mutable_cluster_state());
+    TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates, const TUpdateClusterStateSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::UpdateClusterStateRequest>(settings);
+        UpdatesToProto(updates, &request);
 
-        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::SwitchClusterStateRequest, Ydb::Bridge::SwitchClusterStateResponse>(
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::UpdateClusterStateRequest, Ydb::Bridge::UpdateClusterStateResponse>(
             std::move(request),
-            &Ydb::Bridge::V1::BridgeService::Stub::AsyncSwitchClusterState,
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncUpdateClusterState,
             TRpcRequestSettings::Make(settings));
     }
 
@@ -53,11 +53,11 @@ public:
         auto promise = NThreading::NewPromise<TGetClusterStateResult>();
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
-                TClusterState state;
+                std::vector<TPileStateUpdate> state;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
-                        state = StateFromProto(result.cluster_state());
+                        state = StateFromProto(result);
                     }
                 }
                 promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state)));
@@ -81,8 +81,8 @@ TBridgeClient::TBridgeClient(const TDriver& driver, const TCommonClientSettings&
 
 TBridgeClient::~TBridgeClient() = default;
 
-TAsyncStatus TBridgeClient::SwitchClusterState(const TClusterState& state, const TSwitchClusterStateSettings& settings) {
-    return Impl_->SwitchClusterState(state, settings);
+TAsyncStatus TBridgeClient::UpdateClusterState(const std::vector<TPileStateUpdate>& updates, const TUpdateClusterStateSettings& settings) {
+    return Impl_->UpdateClusterState(updates, settings);
 }
 
 TAsyncGetClusterStateResult TBridgeClient::GetClusterState(const TGetClusterStateSettings& settings) {

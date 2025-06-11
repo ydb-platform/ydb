@@ -8,8 +8,8 @@
 
 namespace NKikimr::NGRpcService {
 
-TBridgeGRpcService::TBridgeGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId) \
-    : ActorSystem(actorSystem) \
+TBridgeGRpcService::TBridgeGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
+    : ActorSystem(actorSystem)
     , Counters(std::move(counters))
     , GRpcRequestProxyId(grpcRequestProxyId)
 {
@@ -28,8 +28,9 @@ void TBridgeGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     #define SETUP_BRIDGE_METHOD(methodName, method, rlMode, requestType) \
         SETUP_METHOD(methodName, method, rlMode, requestType, Bridge, config)
 
-    SETUP_BRIDGE_METHOD(SwitchClusterState, DoSwitchClusterState, Rps, BRIDGE_SWITCHCLUSTERSTATE);
     SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, Rps, BRIDGE_GETCLUSTERSTATE);
+    SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, Rps, BRIDGE_UPDATECLUSTERSTATE);
+
     #undef SETUP_BRIDGE_METHOD
 }
 

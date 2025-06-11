@@ -58,19 +58,16 @@ class BridgeClient(object):
                 time.sleep(self.__retry_sleep_seconds)
 
     def get_cluster_state(self):
-        """Get current cluster state"""
         request = bridge_api.GetClusterStateRequest()
         return self.invoke(request, 'GetClusterState')
 
-    def switch_cluster_state(self, cluster_state):
-        """Switch to new cluster state"""
-        request = bridge_api.SwitchClusterStateRequest()
-        request.cluster_state.CopyFrom(cluster_state)
-        return self.invoke(request, 'SwitchClusterState')
+    def update_cluster_state(self, updates):
+        request = bridge_api.UpdateClusterStateRequest()
+        request.updates.extend(updates)
+        return self.invoke(request, 'UpdateClusterState')
 
     def close(self):
         self._channel.close()
 
     def __del__(self):
         self.close()
- 

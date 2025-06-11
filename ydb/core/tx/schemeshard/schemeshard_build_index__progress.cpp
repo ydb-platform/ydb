@@ -823,7 +823,9 @@ private:
     void AddGlobalShardsForCurrentParent(TIndexBuildInfo& buildInfo) {
         Y_ENSURE(NoShardsAdded(buildInfo));
         if (buildInfo.KMeans.Parent == 0) {
-            AddAllShards(buildInfo);
+            if (buildInfo.Shards.size() > 1) {
+                AddAllShards(buildInfo);
+            }
             return;
         }
         auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
@@ -838,6 +840,13 @@ private:
 
     void AddLocalClusters(TIndexBuildInfo& buildInfo) {
         Y_ENSURE(NoShardsAdded(buildInfo));
+        if (buildInfo.KMeans.Parent == 0) {
+            if (buildInfo.Shards.size() == 1) {
+                auto shardIt = buildInfo.Shards.begin();
+                AddShard(buildInfo, shardIt->first, shardIt->second);
+            }
+            return;
+        }
         for (const auto& [to, state] : buildInfo.Cluster2Shards) {
             if (state.Shards.size() == 1) {
                 const auto* status = buildInfo.Shards.FindPtr(state.Shards[0]);

@@ -62,7 +62,7 @@ class TKafkaTestClient {
             return Read<T>(Si, &header);
         }
 
-        TMessagePtr<TApiVersionsResponseData> ApiVersions();
+        TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
 
         TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, std::optional<bool> allowAutoTopicCreation = std::nullopt);
 
@@ -124,9 +124,9 @@ class TKafkaTestClient {
     protected:
         ui32 NextCorrelation();
         template <std::derived_from<TApiMessage> T>
-        TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request);
-        void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version);
-        void Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request);
+        TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
+        void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent = false);
+        void Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent = false);
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> Read(TSocketInput& si, TRequestHeaderData* requestHeader);
         void Print(const TBuffer& buffer);

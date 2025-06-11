@@ -1128,49 +1128,58 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
-    if (p.Msg.EnableKafkaDeduplication && sourceId.ProducerEpoch().has_value()) {
-        if (sourceId.ProducerEpoch().value().Defined() != p.Msg.ProducerEpoch.Defined()) {
-            CancelOneWriteOnWrite(ctx,
-                                  TStringBuilder() << "Can not write message at offset " << poffset
-                                  << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " with message producer epoch " << (p.Msg.ProducerEpoch.Defined() ? "defined" : "undefined")
-                                  << " and last seen producer epoch " << (sourceId.ProducerEpoch().value().Defined() ? "defined" : "undefined"),
-                                  p,
-                                  NPersQueue::NErrorCode::BAD_REQUEST);
+    if (p.Msg.EnableKafkaDeduplication && sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined()) {
+        auto WriteError = [this, &ctx, &p](TStringBuilder message) {
+            CancelOneWriteOnWrite(ctx, message, p, NPersQueue::NErrorCode::BAD_REQUEST);
+        };
+
+        auto lastEpoch = *sourceId.ProducerEpoch().value();
+
+        if (!p.Msg.ProducerEpoch.Defined()) {
+            // INVALID_PRODUCER_EPOCH
+            WriteError(TStringBuilder() << "Can not write message at offset " << poffset
+                                        << " in " << TopicName() << "-" << Partition.OriginalPartitionId
+                                        << " with message producer epoch undefined and last seen producer epoch defined (" << lastEpoch << ")");
             return false;
         }
 
-        if (sourceId.ProducerEpoch() && *sourceId.ProducerEpoch() > *p.Msg.ProducerEpoch) {
-            CancelOneWriteOnWrite(ctx,
-                                  TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                                  << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << *p.Msg.ProducerEpoch
-                                  << ", which is smaller than the last seen epoch " << *sourceId.ProducerEpoch(),
-                                  p,
-                                  NPersQueue::NErrorCode::BAD_REQUEST);
-            return false;
-        }
-    }
+        auto messageEpoch = *p.Msg.ProducerEpoch;
 
-    bool previousProducerEpochDefined = sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined();
-    if (p.Msg.EnableKafkaDeduplication && previousProducerEpochDefined) {
-        if (*sourceId.ProducerEpoch().value() == *p.Msg.ProducerEpoch) {
-            if (sourceId.SeqNo() && p.Msg.SeqNo <= *sourceId.SeqNo()) {
-                CancelOneWriteOnWrite(ctx,
-                    TStringBuilder() << "Duplicate sequence number at offset " << poffset
-                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " with message producer epoch " << *p.Msg.ProducerEpoch
-                    << " and last seen producer epoch " << *sourceId.ProducerEpoch(),
-                    p,
-                    NPersQueue::NErrorCode::BAD_REQUEST);
+        if (lastEpoch > messageEpoch) {
+            // INVALID_PRODUCER_EPOCH
+            WriteError(TStringBuilder() << "Epoch of producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                        << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " is " << messageEpoch
+                                        << ", which is smaller than the last seen epoch " << lastEpoch);
+            return false;
+        } else if (lastEpoch < messageEpoch) {
+            if (p.Msg.SeqNo != 0) {
+                // OUT_OF_ORDER_SEQUENCE_NUMBER
+                WriteError(TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                            << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": "
+                                            << "expected 0, got " << p.Msg.SeqNo);
                 return false;
             }
-            if (sourceId.SeqNo() && *sourceId.SeqNo() + 1 != p.Msg.SeqNo) {
-                CancelOneWriteOnWrite(ctx,
-                    TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << p.Msg.SeqNo << " (incoming seq. number), "
-                    << *sourceId.SeqNo() << " (current end sequence number)",
-                    p,
-                    NPersQueue::NErrorCode::BAD_REQUEST);
-                return false;
+        } else {
+            auto lastSeqNo = *sourceId.SeqNo();  // At this point it must be defined, as we've already checked ProducerEpoch.
+            auto lastSeqNoMod = lastSeqNo % (static_cast<i64>(std::numeric_limits<i32>::max()) + 1);
+            bool inSequence = lastSeqNoMod + 1 == p.Msg.SeqNo || (lastSeqNoMod == std::numeric_limits<i32>::max() && p.Msg.SeqNo == 0);
+            if (!inSequence) {
+                if (p.Msg.SeqNo <= lastSeqNo) {
+                    // DUPLICATE_SEQUENCE_NUMBER (or OUT_OF_ORDER_SEQUENCE_NUMBER as Kafka does ???)
+                    WriteError(TStringBuilder() << "Duplicate sequence number at offset " << poffset
+                                                << " in " << TopicName() << "-" << Partition.OriginalPartitionId << " with message producer epoch " << messageEpoch
+                                                << " and last seen producer epoch " << lastEpoch);
+                    return false;
+                } else {
+                    // OUT_OF_ORDER_SEQUENCE_NUMBER
+                    WriteError(TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                                << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << p.Msg.SeqNo << " (incoming seq. number), "
+                                                << lastSeqNo << " (current end sequence number)");
+                    return false;
+                }
             }
+
+            p.Msg.SeqNo = lastSeqNo + 1;
         }
     }
 

@@ -283,7 +283,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TString& transactiona
 
     ui64 totalSize = 0;
 
-    for (size_t batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
+    for (ui64 batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
         const auto& record = batch->Records[batchIndex];
 
         NKikimrPQClient::TDataChunk proto;
@@ -316,11 +316,20 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TString& transactiona
         w->SetSourceId(sourceId);
 
         w->SetEnableKafkaDeduplication(batch->ProducerId >= 0);
-        w->SetProducerEpoch(batch->ProducerEpoch);
+        if (batch->ProducerEpoch >= 0) {
+            w->SetProducerEpoch(batch->ProducerEpoch);
+        } else if (batch->ProducerEpoch == -1) {
+            // Kafka accepts messages with producer epoch == -1, as long as it's the first "epoch" for this producer ID,
+            // and ignores sequence numbers. I.e. you can send seqnos in any order with epoch == -1.
+        } else if (batch->ProducerEpoch < -1) {
+            // TODO(qyryq) Should lead to an INVALID_PRODUCER_EPOCH error.
+        }
+
         if (batch->BaseSequence >= 0) {
-            w->SetSeqNo(batch->BaseSequence + batchIndex);
+            // Handle int32 overflow.
+            w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<i64>(std::numeric_limits<i32>::max()) + 1));
         } else {
-            // TODO(qyryq) Should lead to an error.
+            // TODO(qyryq) Should lead to an INVALID_RECORD error.
             w->SetSeqNo(-1);
         }
 
@@ -541,7 +550,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             SendMetrics(TStringBuilder() << topicData.Name, writeResults.size(), "successful_messages", ctx);
                             auto& lastResult = writeResults.at(writeResults.size() - 1);
                             partitionResponse.LogAppendTimeMs = lastResult.GetWriteTimestampMS();
-                            // partitionResponse.BaseOffset = lastResult.GetOffset();  // TODO(qyryq) GetOffset?
+                            // partitionResponse.BaseOffset = lastResult.GetOffset();
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {

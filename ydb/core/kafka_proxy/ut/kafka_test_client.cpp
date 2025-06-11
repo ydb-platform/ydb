@@ -17,8 +17,10 @@ TKafkaTestClient::TKafkaTestClient(ui16 port, const TString clientName)
     , ClientName(clientName) {
 }
 
-TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions() {
-    Cerr << ">>>>> ApiVersionsRequest\n";
+TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent) {
+    if (!silent) {
+        Cerr << ">>>>> ApiVersionsRequest\n";
+    }
 
     TRequestHeaderData header = Header(NKafka::EApiKey::API_VERSIONS, 2);
 
@@ -26,7 +28,7 @@ TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions() {
     request.ClientSoftwareName = "SuperTest";
     request.ClientSoftwareVersion = "3100.7.13";
 
-    return WriteAndRead<TApiVersionsResponseData>(header, request);
+    return WriteAndRead<TApiVersionsResponseData>(header, request, silent);
 }
 
 TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation) {
@@ -627,31 +629,35 @@ ui32 TKafkaTestClient::NextCorrelation() {
 }
 
 template <std::derived_from<TApiMessage> T>
-TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMessage& request) {
-    Write(So, &header, &request);
+TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent) {
+    Write(So, &header, &request, silent);
     return Read<T>(Si, &header);
 }
 
-void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version) {
+void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent) {
     TWritableBuf sb(nullptr, request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
     so.Write(sb.Data(), sb.Size());
 
-    Print(sb.GetBuffer());
+    if (!silent) {
+        Print(sb.GetBuffer());
+    }
 }
 
-void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request) {
+void TKafkaTestClient::Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent) {
     TKafkaVersion version = header->RequestApiVersion;
     TKafkaVersion headerVersion = RequestHeaderVersion(request->ApiKey(), version);
 
     TKafkaInt32 size = header->Size(headerVersion) + request->Size(version);
-    Cerr << ">>>>> Size=" << size << Endl;
+    if (!silent) {
+        Cerr << ">>>>> Size=" << size << Endl;
+    }
     NKafka::NormalizeNumber(size);
     so.Write(&size, sizeof(size));
 
-    Write(so, header, headerVersion);
-    Write(so, request, version);
+    Write(so, header, headerVersion, silent);
+    Write(so, request, version, silent);
 
     so.Flush();
 }

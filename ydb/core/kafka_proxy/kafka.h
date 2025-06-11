@@ -159,7 +159,7 @@ enum ESizeFormat {
 
 // see https://kafka.apache.org/11/protocol.html#protocol_error_codes
 enum EKafkaErrors {
-    
+
     UNKNOWN_SERVER_ERROR                   = -1, // The server experienced an unexpected error when processing the request.
     NONE_ERROR                             =  0,
     OFFSET_OUT_OF_RANGE                    =  1, // The requested offset is not within the range of offsets maintained by the server.,
@@ -167,7 +167,7 @@ enum EKafkaErrors {
     UNKNOWN_TOPIC_OR_PARTITION             =  3, // This server does not host this topic-partition.
     INVALID_FETCH_SIZE                     =  4, // The requested fetch size is invalid.
     LEADER_NOT_AVAILABLE                   =  5, // There is no leader for this topic-partition as we are in the middle of a leadership election.
-    NOT_LEADER_OR_FOLLOWER                 =  6, // For requests intended only for the leader, this error indicates that the broker is not the current leader. 
+    NOT_LEADER_OR_FOLLOWER                 =  6, // For requests intended only for the leader, this error indicates that the broker is not the current leader.
                                                  // For requests intended for any replica, this error indicates that the broker is not a replica of the topic partition.
     REQUEST_TIMED_OUT                      =  7, // The request timed out.
     BROKER_NOT_AVAILABLE                   =  8, // The broker is not available.
@@ -342,7 +342,7 @@ public:
             value >>= 7;
         }
         ui8 b = (ui8) value;
-        write((const char*)&b, sizeof(b));        
+        write((const char*)&b, sizeof(b));
     }
 
     template<std::signed_integral T, typename U = std::make_unsigned_t<T>>
@@ -398,7 +398,7 @@ public:
     template<std::signed_integral S, typename U = std::make_unsigned_t<S>>
     S readVarint() {
         U v = readUnsignedVarint<U>();
-        return (v >> 1) ^ -static_cast<S>(v & 1);        
+        return (v >> 1) ^ -static_cast<S>(v & 1);
     }
 
     TArrayRef<const char> Bytes(size_t length);

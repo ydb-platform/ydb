@@ -535,25 +535,44 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     Y_UNIT_TEST(KafkaScenario) {
         TKafkaTestClient client(12579);
 
+        bool done = true;
+        std::mutex mutex;
+        // std::thread t([&]() {
+        //     while (!done) {
+        //         {
+        //             std::lock_guard lock(mutex);
+        //             client.ApiVersions(/* silent = */ true);
+        //         }
+        //         Sleep(TDuration::Seconds(5));
+        //     }
+        // });
+
         TString topicName = "topic-0-test";
 
-        auto deleteTopic = [&](const TString& topicName) {
-            client.DeleteTopics(std::vector<TString>{{topicName}});
+        auto DeleteTopic = [&](const TString& topicName) {
+            {
+                std::lock_guard lock(mutex);
+                client.DeleteTopics(std::vector<TString>{{topicName}});
+            }
             while (true) {
+                std::lock_guard lock(mutex);
                 auto res = client.Metadata({topicName}, false);
                 if (res->Topics[0].ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION) {
                     break;
                 }
             }
         };
-        auto createTopic = [&](const TString& topicName) -> TMessagePtr<TMetadataResponseData> {
+
+        auto CreateTopic = [&](const TString& topicName) -> TMessagePtr<TMetadataResponseData> {
             while (true) {
+                std::lock_guard lock(mutex);
                 auto res = client.CreateTopics(std::vector<TTopicConfig>{TTopicConfig(topicName, 1)});
                 if (res->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR) {
                     break;
                 }
             }
             while (true) {
+                std::lock_guard lock(mutex);
                 auto res = client.Metadata({topicName}, false);
                 if (res->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR) {
                     return res;
@@ -561,18 +580,19 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         };
 
-        auto withNewTopic = [&](const TString& topicName, std::function<void(NKafka::TMetadataResponseData::TMetadataResponseTopic)> fn) {
-            deleteTopic(topicName);
-            auto res = createTopic(topicName);
+        auto WithNewTopic = [&](const TString& topicName, std::function<void(NKafka::TMetadataResponseData::TMetadataResponseTopic)> fn) {
+            DeleteTopic(topicName);
+            auto res = CreateTopic(topicName);
             Y_DEFER {
-                deleteTopic(topicName);
+                DeleteTopic(topicName);
             };
             fn(res->Topics[0]);
         };
 
-        auto readMessages = [&](auto topic) -> std::vector<TKafkaRecord> {
+        [[maybe_unused]] auto ReadMessages = [&](auto topic) -> std::vector<TKafkaRecord> {
             std::vector<std::pair<decltype(topic), std::vector<i32>>> topics {{topic, {0}}};
             while (true) {
+                std::lock_guard lock(mutex);
                 auto res = client.Fetch(topics);
                 if (res->Responses[0].Partitions[0].ErrorCode == EKafkaErrors::NONE_ERROR) {
                     return res->Responses[0].Partitions[0].Records->Records;
@@ -581,11 +601,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         };
 
-        auto msg2 = client.InitProducerId();
-        i64 producerEpoch = msg2->ProducerEpoch;
-        i64 producerId = msg2->ProducerId;
-        Cerr << "XXXXX " << producerEpoch << " " << producerId << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(msg2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        i64 producerEpoch, producerId;
+        {
+            std::lock_guard lock(mutex);
+            auto msg2 = client.InitProducerId();
+            producerEpoch = msg2->ProducerEpoch;
+            producerId = msg2->ProducerId;
+            Cerr << "XXXXX " << producerEpoch << " " << producerId << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(msg2->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
 
         TString recordKey = "record-key";
         TString recordValue = "record-value";
@@ -599,10 +623,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TMaybe<i64> ProducerEpoch = Nothing();
             ui64 RecordCount = 1;
         };
-        auto makeBatch = [&](TBatchParams batchParams) -> TKafkaRecordBatch {
+        auto MakeBatch = [&](TBatchParams batchParams) -> TKafkaRecordBatch {
             TKafkaRecordBatch batch;
             batch.ProducerId = batchParams.ProducerId.GetOrElse(producerId);
             batch.ProducerEpoch = batchParams.ProducerEpoch.GetOrElse(producerEpoch);
+            // Can we send -1 as base offset?
+            // https://github.com/apache/kafka/blob/3.4/clients/src/main/java/org/apache/kafka/clients/producer/RecordMetadata.java#L49-L50
             batch.BaseOffset = 0;
             batch.LastOffsetDelta = batchParams.RecordCount - 1;
             batch.BaseSequence = batchParams.BaseSequence;
@@ -616,7 +642,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 batch.Records[i].Headers.resize(1);
                 batch.Records[i].Headers[0].Key = TKafkaRawBytes(headerKey.data(), headerKey.size());
                 batch.Records[i].Headers[0].Value = TKafkaRawBytes(headerValue.data(), headerValue.size());
-                batch.Records[i].Length = batch.Records[i].Size(9) - 1;  // Don't count
+                batch.Records[i].Length = batch.Records[i].Size(9) - 1;  // Don't count length field. It's varint, so it's not 1 if the message if large.
             }
             batch.BatchLength = batch.Size(9) - 12;  // Don't count BaseOffset, BatchLength fields.
             return batch;
@@ -624,14 +650,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         struct TExpectedResponse {
             using T = NKafka::TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse;
-            TMaybe<T::IndexMeta::Type> Index;
             TMaybe<T::BaseOffsetMeta::Type> BaseOffset;
             TMaybe<EKafkaErrors> ErrorCode;
         };
-        auto checkResponse = [](TMessagePtr<TProduceResponseData> res, TExpectedResponse expected) {
-            if (expected.Index) {
-                UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].Index, *expected.Index);
-            }
+        auto CheckResponse = [](TMessagePtr<TProduceResponseData> res, TExpectedResponse expected) {
             if (expected.BaseOffset) {
                 UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].BaseOffset, *expected.BaseOffset);
             } else {
@@ -642,72 +664,157 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].ErrorCode, static_cast<TError>(*expected.ErrorCode));
             }
         };
+        auto ListOffsets = [&](auto topic) {
+            while (true) {
+                std::lock_guard lock(mutex);
+                std::vector<std::pair<i32, i64>> partitions{{{0, -1}}};
+                auto res = client.ListOffsets(partitions, topic);
+                return res;
+            }
+        };
+        auto AssertOffset = [&](TString topicName, i64 expectedOffset) {
+            auto offsets = ListOffsets(topicName);
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions[0].Offset, expectedOffset);
+        };
 
-        withNewTopic(topicName, [&](NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+        while (false) {
+            WithNewTopic(topicName, [&]([[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+                TBatchParams batchParams{ .ProducerId = 0, .ProducerEpoch = 0 };
+                while (true) {
+                    TString command;
+                    Cin >> command;
+                    if (command == "i") {
+                        Cin >> *batchParams.ProducerId;
+                        Cerr << "ProducerId = " << *batchParams.ProducerId << Endl;
+                    } else if (command == "e") {
+                        Cin >> *batchParams.ProducerEpoch;
+                        Cerr << "ProducerEpoch = " << *batchParams.ProducerEpoch << Endl;
+                    } else if (command == "s") {
+                        Cin >> batchParams.BaseSequence;
+                        Cerr << "BaseSequence = " << batchParams.BaseSequence << Endl;
+                    } else if (command == "r") {
+                        Cerr << "Recreate the topic" << Endl;
+                        break;
+                    } else if (command == "q") {
+                        Cerr << "Quit" << Endl;
+                        done = true;
+                    } else if (std::isdigit(command[0])) {
+                        batchParams.RecordCount = std::stoi(command);
+                        Cerr << "BatchParams(ProducerId=" << *batchParams.ProducerId
+                             << ", ProducerEpoch=" << *batchParams.ProducerEpoch
+                             << ", BaseSequence=" << batchParams.BaseSequence
+                             << ", RecordCount=" << batchParams.RecordCount
+                             << ")" << Endl;
+                        auto batch = MakeBatch(batchParams);
+
+                        std::lock_guard lock(mutex);
+                        auto result = client.Produce(topicName, 0, batch);
+                        auto response = result->Responses[0].PartitionResponses[0];
+                        if (response.ErrorCode == EKafkaErrors::NONE_ERROR) {
+                            batchParams.BaseSequence += batchParams.RecordCount;
+                        }
+                        Cerr << "Response(ErrorCode=" << response.ErrorCode
+                             << ", BaseOffset=" << response.BaseOffset
+                             << ", ErrorMessage='" << response.ErrorMessage.value_or("")
+                             << "')" << Endl;
+                    }
+                }
+            });
+            if (done) break;
+        }
+
+        WithNewTopic(topicName, [&]([[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Send a request with unknown producer ID.
+            auto unknownProducerId = producerId + 1;
+            auto batch = MakeBatch({ .BaseSequence = 1, .ProducerId = unknownProducerId, .RecordCount = 1 });
+            auto res = client.Produce(topicName, 0, batch);
+            CheckResponse(res, {
+                .BaseOffset = 0,
+                .ErrorCode = EKafkaErrors::NONE_ERROR,
+            });
+
+            AssertOffset(topicName, 1);
+        });
+
+        WithNewTopic(topicName, [&]([[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
             // Send one message, it should work.
-            auto batch = makeBatch({ .BaseSequence = 1, .RecordCount = 1 });
+            auto batch = MakeBatch({ .BaseSequence = 1, .RecordCount = 1 });
             auto res = client.Produce(topicName, 0, batch);
-            checkResponse(res, {
-                .Index = 0,
+            CheckResponse(res, {
                 .BaseOffset = 0,
                 .ErrorCode = EKafkaErrors::NONE_ERROR,
             });
 
-            auto messages = readMessages(topicMetadata.TopicId);
+            AssertOffset(topicName, 1);
         });
 
-        withNewTopic(topicName, [&](NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
-            // Send one message with large seqno.
-            auto batch = makeBatch({ .BaseSequence = 100, .RecordCount = 1 });
+        WithNewTopic(topicName, [&]([[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Send one message with large seqno, it should work.
+            auto batch = MakeBatch({ .BaseSequence = 100, .RecordCount = 1 });
             auto res = client.Produce(topicName, 0, batch);
-            checkResponse(res, {
-                .Index = 0,
+            CheckResponse(res, {
                 .BaseOffset = 0,
                 .ErrorCode = EKafkaErrors::NONE_ERROR,
             });
 
-            auto messages = readMessages(topicMetadata.TopicId);
+            AssertOffset(topicName, 1);
         });
 
-        withNewTopic(topicName, [&](NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
-            auto batch = makeBatch({ .BaseSequence = 1, .RecordCount = 2 });
-            auto res = client.Produce(topicName, 0, batch);
-            checkResponse(res, {
-                .Index = 0,
+        WithNewTopic(topicName, [&]([[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Send two messages in separate batches, it should work.
+            auto res1 = client.Produce(topicName, 0, MakeBatch({ .BaseSequence = 1, .RecordCount = 1 }));
+            CheckResponse(res1, {
                 .BaseOffset = 0,
                 .ErrorCode = EKafkaErrors::NONE_ERROR,
             });
 
-            auto messages = readMessages(topicMetadata.TopicId);
-            Cerr << Endl;
+            auto res2 = client.Produce(topicName, 0, MakeBatch({ .BaseSequence = 2, .RecordCount = 1 }));
+            CheckResponse(res2, {
+                .BaseOffset = 1,
+                .ErrorCode = EKafkaErrors::NONE_ERROR,
+            });
+
+            AssertOffset(topicName, 2);
         });
 
-        withNewTopic(topicName, [&](NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+        WithNewTopic(topicName, [&]([[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Send two messages in one batch, it should work.
+            auto batch = MakeBatch({ .BaseSequence = 1, .RecordCount = 2 });
+            auto res = client.Produce(topicName, 0, batch);
+            CheckResponse(res, {
+                .BaseOffset = 0,
+                .ErrorCode = EKafkaErrors::NONE_ERROR,
+            });
+
+            AssertOffset(topicName, 2);
+        });
+
+        WithNewTopic(topicName, [&]([[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
             // Send two overlapping batches: seqnos 1, 2, 3, then seqnos 2, 3, 4.
 
-            auto batch1 = makeBatch({ .BaseSequence = 1, .RecordCount = 3 });
+            auto batch1 = MakeBatch({ .BaseSequence = 1, .RecordCount = 3 });
             auto res1 = client.Produce(topicName, 0, batch1);
-            checkResponse(res1, {
-                .Index = 0,
+            CheckResponse(res1, {
                 .BaseOffset = 0,
                 .ErrorCode = EKafkaErrors::NONE_ERROR,
             });
 
-            auto batch2 = makeBatch({ .BaseSequence = 2, .RecordCount = 3 });
+            auto batch2 = MakeBatch({ .BaseSequence = 2, .RecordCount = 3 });
             auto res2 = client.Produce(topicName, 0, batch2);
 
-            checkResponse(res2, {
-                .Index = 0,
+            CheckResponse(res2, {
                 .BaseOffset = -1,
                 .ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER,
             });
 
-            auto messages = readMessages(topicMetadata.TopicId);
-            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+            AssertOffset(topicName, 3);
         });
     }
 
     Y_UNIT_TEST(IdempotentProducerScenario) {
+        using TProducerId = TKafkaRecordBatch::ProducerIdMeta::Type;
+        using TProducerEpoch = TKafkaRecordBatch::ProducerEpochMeta::Type;
+        using TBaseSequence = TKafkaRecordBatch::BaseSequenceMeta::Type;
         TInsecureTestServer testServer("2");
         testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);
         testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
@@ -731,19 +838,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
             }
         };
-        auto withNewTopic = [&](std::function<void(TString topicName, NKafka::TMetadataResponseData::TMetadataResponseTopic)> fn) {
+
+        auto WithNewTopic = [&](std::function<void(TProducerId, TProducerEpoch, NKafka::TMetadataResponseData::TMetadataResponseTopic)> fn) {
             static ui64 index = 0;
             auto name = TStringBuilder() << topicNamePrefix << "-" << index++;
-            Cerr << "XXXXX withNewTopic " << name << Endl;
+            Cerr << "XXXXX WithNewTopic " << name << Endl;
             auto res = createTopic(name);
-            fn(name, res->Topics[0]);
+            auto msg = client.InitProducerId();
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            fn(msg->ProducerId, msg->ProducerEpoch, res->Topics[0]);
         };
-
-        // acquire producer id and epoch
-        auto msg = client.InitProducerId();
-        i64 producerEpoch = msg->ProducerEpoch;
-        i64 producerId = msg->ProducerId;
-        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
         TString recordKey = "record-key";
         TString recordValue = "record-value";
@@ -752,15 +856,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         struct TBatchParams {
             // i64 BaseOffset = 0;
-            i32 BaseSequence = 0;
-            TMaybe<i64> ProducerId = Nothing();
-            TMaybe<i64> ProducerEpoch = Nothing();
+            TBaseSequence BaseSequence = 0;
             ui64 RecordCount = 1;
         };
-        auto makeBatch = [&](TBatchParams batchParams) -> TKafkaRecordBatch {
+        auto MakeBatch = [&](TProducerId id, TProducerEpoch epoch, TBatchParams batchParams) -> TKafkaRecordBatch {
             TKafkaRecordBatch batch;
-            batch.ProducerId = batchParams.ProducerId.GetOrElse(producerId);
-            batch.ProducerEpoch = batchParams.ProducerEpoch.GetOrElse(producerEpoch);
+            batch.ProducerId = id;
+            batch.ProducerEpoch = epoch;
             // batch.BaseOffset = batchParams.BaseOffset;
             batch.BaseSequence = batchParams.BaseSequence;
             batch.Magic = 2; // Current supported
@@ -778,147 +880,225 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         struct TExpectedResponse {
             using T = NKafka::TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse;
-            T::IndexMeta::Type Index;
-            T::BaseOffsetMeta::Type BaseOffset;
-            EKafkaErrors ErrorCode;
+            TMaybe<T::BaseOffsetMeta::Type> BaseOffset = Nothing();
+            TMaybe<EKafkaErrors> ErrorCode = Nothing();
         };
-        auto checkResponse = [](TMessagePtr<TProduceResponseData> res, TExpectedResponse expected) {
-            UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].Index, expected.Index);
-            UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].BaseOffset, expected.BaseOffset);
-            using TError = NKafka::TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::ErrorCodeMeta::Type;
-            UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].ErrorCode, static_cast<TError>(expected.ErrorCode));
+        auto CheckResponse = [](TMessagePtr<TProduceResponseData> res, TExpectedResponse expected) {
+            if (expected.BaseOffset) {
+                UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].BaseOffset, *expected.BaseOffset);
+            } else {
+                UNIT_ASSERT_GE(res->Responses[0].PartitionResponses[0].BaseOffset, 0);
+            }
+            if (expected.ErrorCode) {
+                using TError = NKafka::TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::ErrorCodeMeta::Type;
+                UNIT_ASSERT_VALUES_EQUAL(res->Responses[0].PartitionResponses[0].ErrorCode, static_cast<TError>(*expected.ErrorCode));
+            }
         };
-
-        auto readMessages = [&](TString topicName) -> std::vector<TKafkaRecord> {
-            std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
-            auto msg = client.Fetch(topics);
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            auto record = msg->Responses[0].Partitions[0].Records->Records[0];
-
-            // auto readRecordKey = record.Key.value();
-            // auto readRecordKeysAsStr = TString(readRecordKey.data(), readRecordKey.size());
-            // UNIT_ASSERT_VALUES_EQUAL(readRecordKeysAsStr, recordKey);
-
-            auto readRecordValue = record.Value.value();
-            auto readRecordValuesAsStr = TString(readRecordValue.data(), readRecordValue.size());
-            UNIT_ASSERT_VALUES_EQUAL(readRecordValuesAsStr, readRecordValue);
-
-            auto readHeaderKey = record.Headers[0].Key.value();
-            auto readHeaderKeyStr = TString(readHeaderKey.data(), readHeaderKey.size());
-            UNIT_ASSERT_VALUES_EQUAL(readHeaderKeyStr, headerKey);
-
-            auto readHeaderValue = record.Headers[0].Value.value();
-            auto readHeaderValueStr = TString(readHeaderValue.data(), readHeaderValue.size());
-            UNIT_ASSERT_VALUES_EQUAL(readHeaderValueStr, headerValue);
-
-            return msg->Responses[0].Partitions[0].Records->Records;
+        auto ListOffsets = [&](auto topic) {
+            std::vector<std::pair<i32, i64>> partitions{{{0, -1}}};
+            auto res = client.ListOffsets(partitions, topic);
+            return res;
+        };
+        auto AssertOffset = [&](TString topicName, i64 expectedOffset) {
+            auto offsets = ListOffsets(topicName);
+            UNIT_ASSERT_VALUES_EQUAL(offsets->Topics[0].Partitions[0].Offset, expectedOffset);
         };
 
-        withNewTopic([&](TString topicName, [[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write correct seqnos:
+
+            auto topic = *topicMetadata.Name;
+
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 0 }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1 }));
+            CheckResponse(res2, { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            auto res3 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 2, .RecordCount = 3 }));
+            CheckResponse(res3, { .BaseOffset = 2, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            auto res4 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 5 }));
+            CheckResponse(res4, { .BaseOffset = 5, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 6);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // TODO(qyryq) Kafka does not respond with DUPLICATE_SEQUENCE_NUMBER at all.
+            // If you send several ProduceRequests to a partition, then if you repeat any of the last 5 requests,
+            // you'll just get the same response. But if you resend an older request, then you'll get an OUT_OF_ORDER_SEQUENCE_NUMBER error.
+            // You will get the same error if you send any other seqnos, even if they cover the seqnos within the last 5 requests.
+            // E.g ProduceRequests with seqnos (3) (4) (5) (6 7 8) (9) (10).
+            // If you repeat any of the (4) - (10) requests, the same response will be returned as the first one for that particular request.
+            // Any other request will result in an OUT_OF_ORDER_SEQUENCE_NUMBER error: (1), (3), even (6 7).
+
             // Send the same message twice, it should be written only once:
 
-            auto batch1 = makeBatch({ .BaseSequence = 5 });
-            auto res1 = client.Produce(topicName, 0, batch1);
-            checkResponse(res1, {
-                .Index = 0,
-                .BaseOffset = 0,
-                .ErrorCode = EKafkaErrors::NONE_ERROR,
-            });
+            auto topic = *topicMetadata.Name;
 
-            auto res2 = client.Produce(topicName, 0, batch1);  // Duplicate message
-            checkResponse(res2, {
-                .Index = 0,
-                .BaseOffset = 0,
-                .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER,
-            });
+            // Kafka allows any seqno if the producer ID is unknown, so we can send seqno 5 here.
+            auto batch1 = MakeBatch(id, epoch, { .BaseSequence = 5 });
 
-            auto messages = readMessages(topicName);
-            UNIT_ASSERT(true);
+            auto res1 = client.Produce(topic, 0, batch1);
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            auto res2 = client.Produce(topic, 0, batch1);  // Duplicate message
+            CheckResponse(res2, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER });
+
+            // We didn't send seqno = 1, but it still should respond with DUPLICATE_SEQUENCE_NUMBER:
+            auto res3 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1 }));
+            CheckResponse(res3, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER });
+
+            // Write a message with the correct seqno.
+            auto res4 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 6 }));
+            CheckResponse(res4, { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 2);
         });
 
-        withNewTopic([&](TString topicName, [[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
-            // Write a message with an invalid epoch
-
-            auto res1 = client.Produce(topicName, 0, makeBatch({ .BaseSequence = 5, .ProducerEpoch = producerEpoch }));
-            auto res2 = client.Produce(topicName, 0, makeBatch({ .BaseSequence = 6, .ProducerEpoch = producerEpoch - 1 }));
-            checkResponse(res2, {
-                .Index = 0,
-                .BaseOffset = 0,
-                .ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH,
-            });
-            auto messages = readMessages(topicName);
-            UNIT_ASSERT(true);
-        });
-
-        withNewTopic([&](TString topicName, [[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
-            // Write a message with a seqno less than expected:
-            auto res1 = client.Produce(topicName, 0, makeBatch({ .BaseSequence = 5 }));
-            auto res2 = client.Produce(topicName, 0, makeBatch({ .BaseSequence = 4 }));
-            checkResponse(res2, {
-                .Index = 0,
-                .BaseOffset = 0,
-                .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER,
-            });
-            auto messages = readMessages(topicName);
-            UNIT_ASSERT(true);
-        });
-
-        withNewTopic([&](TString topicName, [[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
-            // Write a message with a seqno greater than expected:
-            auto res1 = client.Produce(topicName, 0, makeBatch({ .BaseSequence = 5 }));
-            auto res2 = client.Produce(topicName, 0, makeBatch({ .BaseSequence = 7 }));
-            checkResponse(res2, {
-                .Index = 0,
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write a message with seqno greater than expected:
+            auto topic = *topicMetadata.Name;
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 5 }));
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 7 }));
+            CheckResponse(res2, {
                 .BaseOffset = 0,
                 .ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER,
             });
-            auto messages = readMessages(topicName);
-            UNIT_ASSERT(true);
+            AssertOffset(topic, 1);
         });
 
-        withNewTopic([&](TString topicName, [[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
-            // Send two overlapping batches: seqnos 1, 2, 3, then seqnos 2, 3, 4.
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write a message with seqno = max<int32>. The next seqno should be 0 and we should accept it.
+            auto topic = *topicMetadata.Name;
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = std::numeric_limits<int32_t>::max() }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 1);
 
-            auto batch1 = makeBatch({ .BaseSequence = 1, .RecordCount = 3 });
-            auto res1 = client.Produce(topicName, 0, batch1);
-            checkResponse(res1, {
-                .Index = 0,
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 0 }));
+            CheckResponse(res2, { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 2);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write a batch of messages with seqnos (max<int32> - 1, max<int32>, 0, 1).
+            auto topic = *topicMetadata.Name;
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = std::numeric_limits<int32_t>::max() - 1, .RecordCount = 4 }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 4);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write a batch with seqnos (max<int32> - 1, max<int32>), then write a batch of messages with seqnos (0, 1).
+            auto topic = *topicMetadata.Name;
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = std::numeric_limits<int32_t>::max() - 1, .RecordCount = 2 }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 0, .RecordCount = 2 }));
+            CheckResponse(res2, { .BaseOffset = 2, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 4);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Send two overlapping batches: seqnos 1, 2, 3, then seqnos 2, 3, 4.
+            // TODO(qyryq) Kafka doesn't accept the second batch at all, but we accept seqno = 4.
+
+            auto topic = *topicMetadata.Name;
+
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1, .RecordCount = 3 }));
+            CheckResponse(res1, {
                 .BaseOffset = 0,
                 .ErrorCode = EKafkaErrors::NONE_ERROR,
             });
 
-            auto batch2 = makeBatch({ .BaseSequence = 2, .RecordCount = 3 });
-            auto res2 = client.Produce(topicName, 0, batch2);
-            auto messages = readMessages(topicName);
-            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 4);  // TODO(qyryq) Kafka doesn't accept the second batch at all.
+            // TODO(qyryq) We should not accept the second batch at all. There's no way to respond with errors and success at the same time.
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 2, .RecordCount = 3 }));
+            CheckResponse(res2, {
+                .BaseOffset = 0,
+                .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER,
+            });
+            AssertOffset(topic, 4);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write a message with an invalid epoch, an old producer should be fenced.
+
+            auto topic = *topicMetadata.Name;
+
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 0 }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 1);
+
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch + 1, { .BaseSequence = 0 }));
+            CheckResponse(res2, { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 2);
+
+            auto res3 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1 }));
+            CheckResponse(res3, { .ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH });
+            AssertOffset(topic, 2);
+
+            auto res4 = client.Produce(topic, 0, MakeBatch(id, epoch + 1, { .BaseSequence = 1 }));
+            CheckResponse(res4, { .BaseOffset = 2, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 3);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write a message with unknown producer ID: any epoch + seqno pair is allowed.
+
+            auto topic = *topicMetadata.Name;
+
+            auto res1 = client.Produce(topic, 0, MakeBatch(id + 1, epoch + 1, { .BaseSequence = 10 }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 1);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+             // Write a message with known producer ID + new epoch: only newEpoch + 0 pair is allowed.
+
+            auto topic = *topicMetadata.Name;
+
+            // Write a message with some seqno.
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 10 }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            // Bump the epoch, write a message with non-zero seqno.
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch + 1, { .BaseSequence = 11 }));
+            CheckResponse(res2, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER });
+
+            AssertOffset(topic, 1);
+
+            auto res3 = client.Produce(topic, 0, MakeBatch(id, epoch + 1, { .BaseSequence = 0 }));
+            CheckResponse(res3, { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 2);
         });
 
         // TODO(qyryq) The same tests but with the tablet restarting in between the producer requests.
 
-        withNewTopic([&](TString topicName, [[maybe_unused]] NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
             // Send a message, kill the tablet, send the same message, it should be written only once:
 
-            auto batch1 = makeBatch({ .BaseSequence = 5 });
-            auto res1 = client.Produce(topicName, 0, batch1);
-            checkResponse(res1, {
-                .Index = 0,
+            auto topic = *topicMetadata.Name;
+
+            auto batch1 = MakeBatch(id, epoch, { .BaseSequence = 5 });
+            auto res1 = client.Produce(topic, 0, batch1);
+            CheckResponse(res1, {
                 .BaseOffset = 0,
                 .ErrorCode = EKafkaErrors::NONE_ERROR,
             });
 
             // Kill topic tablet:
-            TString oldPath = GetEnv("OLDPATH", topicName);
+            TString oldPath = GetEnv("OLDPATH", topic);  // TODO(qyryq) Delete this var.
             NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
             auto pathDescr = kikimrClient.Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
             auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
             kikimrClient.KillTablet(testServer.KikimrServer->GetServer(), tabletId);
 
             while (true) {
-                auto res2 = client.Produce(topicName, 0, batch1);  // Duplicate message
+                auto res2 = client.Produce(topic, 0, batch1);  // Duplicate message
                 if (res2->Responses[0].PartitionResponses[0].ErrorCode != EKafkaErrors::NOT_LEADER_OR_FOLLOWER) {
-                    checkResponse(res2, {
-                        .Index = 0,
+                    CheckResponse(res2, {
                         .BaseOffset = 0,
                         .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER,
                     });
@@ -926,8 +1106,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
             }
 
-            auto messages = readMessages(topicName);
-            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1);
+            AssertOffset(topic, 1);
         });
 
     } // Y_UNIT_TEST(IdempotentProducerScenario)

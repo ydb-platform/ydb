@@ -22,7 +22,7 @@ ALTER TRANSFER <name> [SET USING lambda] [SET (option = value [, ...])]
 
 ## Примеры {#examples}
 
-Следующий запрос изменяет [lambda функцию](expressions.md#lambda) преобразовывающее сообщение топика:
+Следующий запрос изменяет [lambda-функцию](expressions.md#lambda) преобразования сообщений топика:
 
 ```yql
 $new_lambda = ($msg) -> {

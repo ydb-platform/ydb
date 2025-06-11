@@ -71,9 +71,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlMaxMemoryLimit;
 
         mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
+            mkqlInitialMemoryLimit, EStaticControlType::KqpSessionMkqlInitialMemoryLimit);
         mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+            mkqlMaxMemoryLimit, EStaticControlType::KqpSessionMkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -154,9 +154,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlMaxMemoryLimit;
 
         mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
+            mkqlInitialMemoryLimit, EStaticControlType::KqpSessionMkqlInitialMemoryLimit);
         mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+            mkqlMaxMemoryLimit, EStaticControlType::KqpSessionMkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -187,9 +187,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlMaxMemoryLimit;
 
         mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
+            mkqlInitialMemoryLimit, EStaticControlType::KqpSessionMkqlInitialMemoryLimit);
         mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+            mkqlMaxMemoryLimit, EStaticControlType::KqpSessionMkqlMaxMemoryLimit);
 
 
         mkqlInitialMemoryLimit = 1_KB;

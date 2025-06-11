@@ -1433,9 +1433,10 @@ public:
                 return SyncStatus(requireStatus);
             }
 
+            auto cluster = TString(maybeAlterDatabase.Cast().DataSink().Cluster());
             TAlterDatabaseSettings alterDatabaseSettings = ParseAlterDatabaseSettings(maybeAlterDatabase.Cast());
 
-            auto future = Gateway->AlterDatabase(alterDatabaseSettings);
+            auto future = Gateway->AlterDatabase(cluster, alterDatabaseSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

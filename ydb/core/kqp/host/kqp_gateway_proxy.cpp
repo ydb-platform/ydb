@@ -561,6 +561,11 @@ static TFuture<TResult> PrepareSuccess() {
     return MakeFuture(result);
 }
 
+template<typename TResult>
+TFuture<TResult> InvalidCluster(const TString& cluster) {
+    return MakeFuture(ResultFromError<TResult>("Invalid cluster: " + cluster));
+}
+
 bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
     auto queryType = sessionCtx.Query().Type;
     if (queryType != EKikimrQueryType::Query && queryType != EKikimrQueryType::Script) {
@@ -665,9 +670,13 @@ public:
         return result;
     }
 
-    TFuture<TGenericResult> AlterDatabase(const TAlterDatabaseSettings& settings) override {
+    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) override {
         CHECK_PREPARED_DDL(AlterDatabase);
         try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
             NKikimrSchemeOp::TModifyScheme modifyScheme;
             auto preparation = PrepareAlterDatabase(settings, modifyScheme);
             if (!preparation.Success()) {
@@ -1259,7 +1268,7 @@ public:
 
         try {
             if (cluster != SessionCtx->GetCluster()) {
-                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+                return InvalidCluster<TGenericResult>(cluster);
             }
 
             std::pair<TString, TString> pathPair;

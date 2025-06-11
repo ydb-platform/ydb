@@ -1250,52 +1250,38 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    template <typename TRowSet>
-    TSchemeLimits LoadSchemeLimits(const TSchemeLimits& defaults, TRowSet& rowSet) {
+    template <typename PersistentTable, typename TRowSet>
+    TSchemeLimits LoadSchemeLimitsImpl(const TSchemeLimits& defaults, TRowSet& rowSet) {
         return TSchemeLimits {
-            .MaxDepth = rowSet.template GetValueOrDefault<Schema::SubDomains::DepthLimit>(defaults.MaxDepth),
-            .MaxPaths = rowSet.template GetValueOrDefault<Schema::SubDomains::PathsLimit>(defaults.MaxPaths),
-            .MaxChildrenInDir = rowSet.template GetValueOrDefault<Schema::SubDomains::ChildrenLimit>(defaults.MaxChildrenInDir),
-            .MaxAclBytesSize = rowSet.template GetValueOrDefault<Schema::SubDomains::AclByteSizeLimit>(defaults.MaxAclBytesSize),
-            .MaxPathElementLength = rowSet.template GetValueOrDefault<Schema::SubDomains::PathElementLength>(defaults.MaxPathElementLength),
-            .ExtraPathSymbolsAllowed = rowSet.template GetValueOrDefault<Schema::SubDomains::ExtraPathSymbolsAllowed>(defaults.ExtraPathSymbolsAllowed),
-            .MaxTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::TableColumnsLimit>(defaults.MaxTableColumns),
-            .MaxColumnTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::ColumnTableColumnsLimit>(defaults.MaxColumnTableColumns),
-            .MaxTableColumnNameLength = rowSet.template GetValueOrDefault<Schema::SubDomains::TableColumnNameLengthLimit>(defaults.MaxTableColumnNameLength),
-            .MaxTableKeyColumns = rowSet.template GetValueOrDefault<Schema::SubDomains::TableKeyColumnsLimit>(defaults.MaxTableKeyColumns),
-            .MaxTableIndices = rowSet.template GetValueOrDefault<Schema::SubDomains::TableIndicesLimit>(defaults.MaxTableIndices),
-            .MaxTableCdcStreams = rowSet.template GetValueOrDefault<Schema::SubDomains::TableCdcStreamsLimit>(defaults.MaxTableCdcStreams),
-            .MaxShards = rowSet.template GetValueOrDefault<Schema::SubDomains::ShardsLimit>(defaults.MaxShards),
-            .MaxShardsInPath = rowSet.template GetValueOrDefault<Schema::SubDomains::PathShardsLimit>(defaults.MaxShardsInPath),
-            .MaxConsistentCopyTargets = rowSet.template GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(defaults.MaxConsistentCopyTargets),
-            .MaxPQPartitions = rowSet.template GetValueOrDefault<Schema::SubDomains::PQPartitionsLimit>(defaults.MaxPQPartitions),
-            .MaxExports = rowSet.template GetValueOrDefault<Schema::SubDomains::ExportsLimit>(defaults.MaxExports),
-            .MaxImports = rowSet.template GetValueOrDefault<Schema::SubDomains::ImportsLimit>(defaults.MaxImports),
+            .MaxDepth = rowSet.template GetValueOrDefault<typename PersistentTable::DepthLimit>(defaults.MaxDepth),
+            .MaxPaths = rowSet.template GetValueOrDefault<typename PersistentTable::PathsLimit>(defaults.MaxPaths),
+            .MaxChildrenInDir = rowSet.template GetValueOrDefault<typename PersistentTable::ChildrenLimit>(defaults.MaxChildrenInDir),
+            .MaxAclBytesSize = rowSet.template GetValueOrDefault<typename PersistentTable::AclByteSizeLimit>(defaults.MaxAclBytesSize),
+            .MaxPathElementLength = rowSet.template GetValueOrDefault<typename PersistentTable::PathElementLength>(defaults.MaxPathElementLength),
+            .ExtraPathSymbolsAllowed = rowSet.template GetValueOrDefault<typename PersistentTable::ExtraPathSymbolsAllowed>(defaults.ExtraPathSymbolsAllowed),
+            .MaxTableColumns = rowSet.template GetValueOrDefault<typename PersistentTable::TableColumnsLimit>(defaults.MaxTableColumns),
+            .MaxColumnTableColumns = rowSet.template GetValueOrDefault<typename PersistentTable::ColumnTableColumnsLimit>(defaults.MaxColumnTableColumns),
+            .MaxTableColumnNameLength = rowSet.template GetValueOrDefault<typename PersistentTable::TableColumnNameLengthLimit>(defaults.MaxTableColumnNameLength),
+            .MaxTableKeyColumns = rowSet.template GetValueOrDefault<typename PersistentTable::TableKeyColumnsLimit>(defaults.MaxTableKeyColumns),
+            .MaxTableIndices = rowSet.template GetValueOrDefault<typename PersistentTable::TableIndicesLimit>(defaults.MaxTableIndices),
+            .MaxTableCdcStreams = rowSet.template GetValueOrDefault<typename PersistentTable::TableCdcStreamsLimit>(defaults.MaxTableCdcStreams),
+            .MaxShards = rowSet.template GetValueOrDefault<typename PersistentTable::ShardsLimit>(defaults.MaxShards),
+            .MaxShardsInPath = rowSet.template GetValueOrDefault<typename PersistentTable::PathShardsLimit>(defaults.MaxShardsInPath),
+            .MaxConsistentCopyTargets = rowSet.template GetValueOrDefault<typename PersistentTable::ConsistentCopyingTargetsLimit>(defaults.MaxConsistentCopyTargets),
+            .MaxPQPartitions = rowSet.template GetValueOrDefault<typename PersistentTable::PQPartitionsLimit>(defaults.MaxPQPartitions),
+            .MaxExports = rowSet.template GetValueOrDefault<typename PersistentTable::ExportsLimit>(defaults.MaxExports),
+            .MaxImports = rowSet.template GetValueOrDefault<typename PersistentTable::ImportsLimit>(defaults.MaxImports),
         };
     }
 
     template <typename TRowSet>
-    TSchemeLimits LoadAlterSchemeLimits(const TSchemeLimits& defaults, TRowSet& rowSet) {
-        return TSchemeLimits {
-            .MaxDepth = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::DepthLimit>(defaults.MaxDepth),
-            .MaxPaths = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PathsLimit>(defaults.MaxPaths),
-            .MaxChildrenInDir = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ChildrenLimit>(defaults.MaxChildrenInDir),
-            .MaxAclBytesSize = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::AclByteSizeLimit>(defaults.MaxAclBytesSize),
-            .MaxPathElementLength = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PathElementLength>(defaults.MaxPathElementLength),
-            .ExtraPathSymbolsAllowed = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ExtraPathSymbolsAllowed>(defaults.ExtraPathSymbolsAllowed),
-            .MaxTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableColumnsLimit>(defaults.MaxTableColumns),
-            .MaxColumnTableColumns = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ColumnTableColumnsLimit>(defaults.MaxColumnTableColumns),
-            .MaxTableColumnNameLength = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableColumnNameLengthLimit>(defaults.MaxTableColumnNameLength),
-            .MaxTableKeyColumns = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableKeyColumnsLimit>(defaults.MaxTableKeyColumns),
-            .MaxTableIndices = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableIndicesLimit>(defaults.MaxTableIndices),
-            .MaxTableCdcStreams = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::TableCdcStreamsLimit>(defaults.MaxTableCdcStreams),
-            .MaxShards = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ShardsLimit>(defaults.MaxShards),
-            .MaxShardsInPath = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PathShardsLimit>(defaults.MaxShardsInPath),
-            .MaxConsistentCopyTargets = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ConsistentCopyingTargetsLimit>(defaults.MaxConsistentCopyTargets),
-            .MaxPQPartitions = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::PQPartitionsLimit>(defaults.MaxPQPartitions),
-            .MaxExports = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ExportsLimit>(defaults.MaxExports),
-            .MaxImports = rowSet.template GetValueOrDefault<Schema::SubDomainsAlterData::ImportsLimit>(defaults.MaxImports),
-        };
+    TSchemeLimits LoadSchemeLimits(const TSchemeLimits& defaults, TRowSet& rowSet) {
+        return LoadSchemeLimitsImpl<Schema::SubDomains>(defaults, rowSet);
+    }
+
+    template <typename TRowSet>
+    TSchemeLimits LoadSchemeLimitsAlter(const TSchemeLimits& defaults, TRowSet& rowSet) {
+        return LoadSchemeLimitsImpl<Schema::SubDomainsAlterData>(defaults, rowSet);
     }
 
     bool ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
@@ -1679,7 +1665,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         alter->SetDatabaseQuotas(databaseQuotas);
                     }
 
-                    alter->SetSchemeLimits(LoadAlterSchemeLimits(subdomainInfo->GetSchemeLimits(), rowset));
+                    alter->SetSchemeLimits(LoadSchemeLimitsAlter(subdomainInfo->GetSchemeLimits(), rowset));
 
                     if (rowset.HaveValue<Schema::SubDomainsAlterData::ServerlessComputeResourcesMode>()) {
                         alter->SetServerlessComputeResourcesMode(

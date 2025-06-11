@@ -48,6 +48,9 @@ namespace {
             TActorId ActorId;
             const TString Database = "/Root/PQ";
             const TString TopicName = "topic"; // as specified in pq_ut_common
+            const NKikimrConfig::TKafkaProxyConfig KafkaConfig = {};
+            const TString KeyToProduce = "record-key";
+            const TString ValueToProduce = "record-value";
             TString TransactionalId = "123";
             
             void SetUp(NUnitTest::TTestContext&) override {
@@ -59,7 +62,7 @@ namespace {
                 Ctx->Runtime->DisableBreakOnStopCondition();
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_TRACE);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::PRI_TRACE);
-                TContext::TPtr kafkaContext = std::make_shared<TContext>(NKikimrConfig::TKafkaProxyConfig());
+                TContext::TPtr kafkaContext = std::make_shared<TContext>(KafkaConfig);
                 kafkaContext->DatabasePath = "/Root/PQ";
                 ActorId = Ctx->Runtime->Register(CreateKafkaProduceActor(kafkaContext));
                 auto dummySchemeCacheId = Ctx->Runtime->Register(new TDummySchemeCacheActor(Ctx->TabletId));
@@ -83,15 +86,13 @@ namespace {
                 records->ProducerId = producerId;
                 records->ProducerEpoch = producerEpoch;
 
-                TString key = "record-key";
-                TString value = "record-value";
                 TKafkaRecordBatch batch;
                 records->BaseOffset = 3;
                 records->BaseSequence = 5;
                 records->Magic = 2; // Current supported
                 records->Records.resize(1);
-                records->Records[0].Key = TKafkaRawBytes(key.data(), key.size());
-                records->Records[0].Value = TKafkaRawBytes(value.data(), value.size());
+                records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
+                records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
 
                 partitionData.Records = records;
                 topicData.PartitionData.push_back(partitionData);

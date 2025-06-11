@@ -23,6 +23,11 @@ namespace NKikimr {
         const TPile *BeingPromotedPile = nullptr; // a reference to the pile being promoted, or nullptr if none are promoted
 
         using TPtr = std::shared_ptr<const TBridgeInfo>;
+
+        const TPile *GetPile(TBridgePileId bridgePileId) const {
+            Y_ABORT_UNLESS(bridgePileId.GetRawId() < Piles.size());
+            return &Piles[bridgePileId.GetRawId()];
+        }
     };
 
 } // NKikimr

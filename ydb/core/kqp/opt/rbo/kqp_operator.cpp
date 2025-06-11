@@ -33,18 +33,6 @@ std::shared_ptr<IOperator> ExprNodeToOperator (TExprNode::TPtr node) {
     }
 }
 
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs) {
-    if (node->IsCallable("Member")) {
-        auto member = TCoMember(node);
-        IUs.push_back(TInfoUnit(member.Name().StringValue()));
-        return;
-    }
-
-    for (auto c : node->Children()) {
-        GetAllMembers(c, IUs);
-    }
-}
-
 void DFS(int vertex, TVector<int>& sortedStages, THashSet<int>& visited, const THashMap<int, TVector<int>> & stageInputs) {
     visited.emplace(vertex);
 
@@ -73,6 +61,7 @@ TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext& ctx, TVector<TIn
         items.push_back(tuple);
     }
 
+    /*
     return Build<TCoFlatMap>(ctx, input->Pos())
         .Input(input)
         .Lambda<TCoLambda>()
@@ -84,11 +73,23 @@ TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext& ctx, TVector<TIn
             .Build()
         .Build()
         .Done().Ptr();
+    */
+    
+    return Build<TCoMap>(ctx, input->Pos())
+        .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({arg})
+            .Body<TCoAsStruct>()
+                .Add(items)
+            .Build()
+        .Build()
+        .Done().Ptr();
+    
 }
 
 TExprNode::TPtr BuildSourceStage(TExprNode::TPtr dqsource, TExprContext& ctx) {
     auto arg = Build<TCoArgument>(ctx, dqsource->Pos()).Name("arg").Done().Ptr();
-    return Build<TDqStage>(ctx, dqsource->Pos())
+    return Build<TDqPhyStage>(ctx, dqsource->Pos())
         .Inputs()
             .Add({dqsource})
             .Build()
@@ -108,6 +109,18 @@ namespace NKqp {
 using namespace NYql;
 using namespace NNodes;
 
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs) {
+    if (node->IsCallable("Member")) {
+        auto member = TCoMember(node);
+        IUs.push_back(TInfoUnit(member.Name().StringValue()));
+        return;
+    }
+
+    for (auto c : node->Children()) {
+        GetAllMembers(c, IUs);
+    }
+}
+
 TInfoUnit::TInfoUnit(TString name) {
     if (auto idx = name.find('.'); idx != TString::npos) {
         Alias = name.substr(0, idx);
@@ -122,13 +135,14 @@ TInfoUnit::TInfoUnit(TString name) {
     }
 }
 
-inline bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs) {
+bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs) {
     return lhs.Alias == rhs.Alias && lhs.ColumnName == rhs.ColumnName;
 }
 
-TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
     if (FromSourceStage) {
         inputStage = BuildSourceStage(inputStage, ctx);
+        newStage = inputStage;
     }
     return Build<TDqCnBroadcast>(ctx, node->Pos())
         .Output()
@@ -138,9 +152,10 @@ TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage
         .Done().Ptr();
 }
 
-TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
     if (FromSourceStage) {
         inputStage = BuildSourceStage(inputStage, ctx);
+        newStage = inputStage;
     }
     return Build<TDqCnMap>(ctx, node->Pos())
         .Output()
@@ -150,9 +165,10 @@ TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExp
         .Done().Ptr();
 }
 
-TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
     if (FromSourceStage) {
         inputStage = BuildSourceStage(inputStage, ctx);
+        newStage = inputStage;
     }
     return Build<TDqCnUnionAll>(ctx, node->Pos())
         .Output()
@@ -162,11 +178,12 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
         .Done().Ptr();
 }
 
-TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
     TVector<TCoAtom> keyColumns;
 
     if (FromSourceStage) {
         inputStage = BuildSourceStage(inputStage, ctx);
+        newStage = inputStage;
     }
 
     for ( auto k : Keys ) {
@@ -191,8 +208,9 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         .Done().Ptr();
 }
 
-TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) {
     Y_UNUSED(node);
+    Y_UNUSED(newStage);
     Y_UNUSED(ctx);
     return inputStage;
 }

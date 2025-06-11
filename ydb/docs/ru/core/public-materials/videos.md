@@ -16,6 +16,8 @@
 
 - 2024
 
+  {% include [Joker](./_includes/conferences/2024/joker.md) %}
+
   {% include [SmartData](./_includes/conferences/2024/SmartData.md) %}
 
   {% include [HighLoad](./_includes/conferences/2024/HighLoad.md) %}

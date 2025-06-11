@@ -569,10 +569,10 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
 {
     TMutationId mutationId;
     THttpHeader header("GET", GetReadFileCommand(Context_.Config->ApiVersion));
-    header.AddTransactionId(transactionId);
     header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
-    header.MergeParameters(FormIORequestParameters(path, options));
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadFile(transactionId, options));
+    header.MergeParameters(FormIORequestParameters(path, options));
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -740,23 +740,7 @@ TNode::TListType THttpRawClient::SelectRows(
     THttpHeader header("GET", "select_rows");
     header.SetInputFormat(TFormat::YsonBinary());
     header.SetOutputFormat(TFormat::YsonBinary());
-
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .Item("query").Value(query)
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .DoIf(options.InputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("input_row_limit").Value(*options.InputRowLimit_);
-        })
-        .DoIf(options.OutputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("output_row_limit").Value(*options.OutputRowLimit_);
-        })
-        .Item("range_expansion_limit").Value(options.RangeExpansionLimit_)
-        .Item("fail_on_incomplete_result").Value(options.FailOnIncompleteResult_)
-        .Item("verbose_logging").Value(options.VerboseLogging_)
-        .Item("enable_code_cache").Value(options.EnableCodeCache_)
-    .EndMap());
+    header.MergeParameters(NRawClient::SerializeParamsForSelectRows(query, options));
 
     TRequestConfig config;
     config.IsHeavy = true;

@@ -609,6 +609,9 @@ public:
         // NB: This is somewhat racy but should work fine as long as more messages keep coming.
         auto lowBacklogWatermark = LowBacklogWatermark_.load(std::memory_order::relaxed);
         auto highBacklogWatermark = HighBacklogWatermark_.load(std::memory_order::relaxed);
+
+        BacklogQueueFillFraction_.store(static_cast<double>(backlogEvents) / highBacklogWatermark, std::memory_order::relaxed);
+
         if (Suspended_.load(std::memory_order::relaxed)) {
             if (backlogEvents < lowBacklogWatermark) {
                 Suspended_.store(false, std::memory_order::relaxed);
@@ -669,6 +672,11 @@ public:
     IInvokerPtr GetCompressionInvoker() override
     {
         return CompressionThreadPool_->GetInvoker();
+    }
+
+    double GetBacklogQueueFillFraction() const
+    {
+        return BacklogQueueFillFraction_.load(std::memory_order::relaxed);
     }
 
 private:
@@ -1515,6 +1523,8 @@ private:
     THashMap<TString, TLoggingAnchor*> AnchorMap_;
     std::atomic<TLoggingAnchor*> FirstAnchor_ = nullptr;
     std::vector<std::unique_ptr<TLoggingAnchor>> DynamicAnchors_;
+
+    std::atomic<double> BacklogQueueFillFraction_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1697,6 +1707,11 @@ void TLogManager::Synchronize(TInstant deadline)
         return;
     }
     Impl_->Synchronize(deadline);
+}
+
+double TLogManager::GetBacklogQueueFillFraction() const
+{
+    return Impl_->GetBacklogQueueFillFraction();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

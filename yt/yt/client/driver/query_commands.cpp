@@ -35,7 +35,7 @@ void TStartQueryCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;
@@ -104,7 +104,7 @@ void TAbortQueryCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("query_id", &TThis::QueryId);
 
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;
@@ -128,7 +128,7 @@ void TGetQueryResultCommand::Register(TRegistrar registrar)
     registrar.Parameter("query_id", &TThis::QueryId);
     registrar.Parameter("result_index", &TThis::ResultIndex)
         .Default(0);
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;
@@ -153,7 +153,7 @@ void TReadQueryResultCommand::Register(TRegistrar registrar)
     registrar.Parameter("result_index", &TThis::ResultIndex)
         .Default(0);
 
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;
@@ -215,7 +215,7 @@ void TGetQueryCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;
@@ -235,7 +235,7 @@ void TGetQueryCommand::DoExecute(ICommandContextPtr context)
 
 void TListQueriesCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;
@@ -353,7 +353,7 @@ void TAlterQueryCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;
@@ -372,7 +372,7 @@ void TAlterQueryCommand::DoExecute(ICommandContextPtr context)
 
 void TGetQueryTrackerInfoCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<TString>(
+    registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
         [] (TThis* command) -> auto& {
             return command->Options.QueryTrackerStage;

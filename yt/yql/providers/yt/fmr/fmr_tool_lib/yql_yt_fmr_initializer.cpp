@@ -11,7 +11,7 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         coordinatorSettings.DefaultFmrOperationSpec = fmrOperationSpec;
     }
 
-    auto coordinator = MakeFmrCoordinator(coordinatorSettings);
+    auto coordinator = isFileGateway ? MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService()) : MakeFmrCoordinator(coordinatorSettings, MakeYtCoordinatorService());
     if (!coordinatorServerUrl.empty()) {
         TFmrCoordinatorClientSettings coordinatorClientSettings;
         THttpURL parsedUrl;
@@ -26,10 +26,10 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
     IFmrWorker::TPtr worker = nullptr;
     if (!disableLocalFmrWorker) {
         auto tableDataService = MakeLocalTableDataService(TLocalTableDataServiceSettings(3));
-        auto fmrYtSerivce = isFileGateway ? MakeFileYtSerivce() : MakeFmrYtSerivce();
+        auto fmrYtJobSerivce = isFileGateway ? MakeFileYtJobSerivce() : MakeYtJobSerivce();
 
-        auto func = [tableDataService, fmrYtSerivce] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
-            return RunJob(task, tableDataService, fmrYtSerivce, cancelFlag);
+        auto func = [tableDataService, fmrYtJobSerivce] (NFmr::TTask::TPtr task, std::shared_ptr<std::atomic<bool>> cancelFlag) mutable {
+            return RunJob(task, tableDataService, fmrYtJobSerivce, cancelFlag);
         };
 
         NFmr::TFmrJobFactorySettings settings{.Function=func};

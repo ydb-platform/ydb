@@ -251,9 +251,6 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/dot_product
-    library/cpp/l1_distance
-    library/cpp/l2_distance
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base

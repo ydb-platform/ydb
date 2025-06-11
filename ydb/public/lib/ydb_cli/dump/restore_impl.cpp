@@ -940,10 +940,19 @@ namespace {
     }
 
     TRestoreResult ListBackupEntries(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, TVector<TFsBackupEntry>& backupEntries) {
-        TDirIterator backupIterator(fsBackupRoot);
+        TDirIterator backupIterator(fsBackupRoot, TDirIterator::TOptions(FTS_LOGICAL));
+        THashSet<TString> visited;
         for (auto* file = backupIterator.Next(); file; file = backupIterator.Next()) {
             if (file->fts_info == FTS_D) {
                 TFsPath fsPath(file->fts_path);
+
+                auto [it, emplaced] = visited.emplace(fsPath.GetPath());
+                if (!emplaced) {
+                    return Result<TRestoreResult>(EStatus::BAD_REQUEST,
+                        TStringBuilder() << "Backup folder must not contain duplicate paths to the same folder: "
+                            << fsPath.GetPath().Quote()
+                    );
+                }
 
                 if (fsPath.Child(NFiles::Incomplete().FileName).Exists()) {
                     return Result<TRestoreResult>(EStatus::BAD_REQUEST,
@@ -956,9 +965,7 @@ namespace {
                 if (types.empty()) {
                     TVector<TFsPath> children;
                     if (fsPath.List(children); children.empty()) {
-                        return Result<TRestoreResult>(fsPath, EStatus::BAD_REQUEST,
-                            TStringBuilder() << "Empty folder without the special \"" << NFiles::Empty().FileName << "\" marker file."
-                        );
+                        continue;
                     }
                     // intermediate folder
                     backupEntries.emplace_back(fsPath, GetDbPath(fsPath, fsBackupRoot, dbRestoreRoot), ESchemeEntryType::Directory);
@@ -1042,6 +1049,10 @@ TRestoreResult TRestoreClient::RestoreFolder(
     TVector<TFsBackupEntry> backupEntries;
     if (auto result = ListBackupEntries(fsBackupRoot, dbRestoreRoot, backupEntries); !result.IsSuccess()) {
         return result;
+    }
+    if (backupEntries.size() == 1) {
+        auto& [fsPath, dbPath, type] = backupEntries.front();
+        dbPath += (TStringBuilder() << '/' << fsPath.Basename());
     }
     LOG_D("List of entries in the backup: " << NJson::WriteJson(ConvertToJson(backupEntries), false));
 

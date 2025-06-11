@@ -22,19 +22,21 @@ private:
         return std::nullopt;
     }
 
-    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& info) const override {
-        return info.GetTotalBlobsSize() > ExpectedBlobsSize;
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& info) const override {
+        return info.GetTotalBlobBytes() > NextLevel->GetExpectedPortionSize();
     }
 
-    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const override {
-        return true;
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& info) const override {
+        return info.GetTotalBlobBytes() > GetExpectedPortionSize();
     }
 
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
         return 0;
     }
 
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+    virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override {
+        std::vector<TPortionInfo::TPtr> problems;
         const bool constructionFlag = Portions.empty();
         if (constructionFlag) {
             std::vector<TOrderedPortion> ordered;
@@ -54,6 +56,7 @@ private:
         for (auto&& i : remove) {
             AFL_VERIFY(Portions.erase(i));
         }
+        return problems;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
@@ -69,6 +72,9 @@ private:
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
+    virtual ui64 GetExpectedPortionSize() const override {
+        return ExpectedBlobsSize;
+    }
 
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,

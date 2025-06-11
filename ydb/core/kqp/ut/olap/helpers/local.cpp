@@ -3,9 +3,7 @@
 namespace NKikimr::NKqp {
 
 void TTableWithNullsHelper::CreateTableWithNulls(TString tableName /*= "tableWithNulls"*/, ui32 shardsCount /*= 4*/) {
-    TActorId sender = Server.GetRuntime()->AllocateEdgeActor();
-
-    TBase::CreateTestOlapTable(sender, "", Sprintf(R"(
+    TBase::CreateTestOlapTable("", Sprintf(R"(
             Name: "%s"
             ColumnShardCount: %d
             Schema {

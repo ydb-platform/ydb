@@ -222,6 +222,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         bool UseActorSystemTimeInBSQueue = false;
+        ui32 GroupSizeInUnits = 0;
 
         ///////////// BALANCING SETTINGS ////////////////////
         bool BalancingEnableSend = false;

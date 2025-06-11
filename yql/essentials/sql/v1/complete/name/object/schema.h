@@ -45,7 +45,7 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<ISchema>;
 
-        virtual ~ISchema() = default;
+        ~ISchema() override = default;
         virtual NThreading::TFuture<TListResponse> List(const TListRequest& request) const = 0;
     };
 

@@ -11,18 +11,22 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class IDataSource;
+class TSourceConstructor;
 using TColumnsSet = NCommon::TColumnsSet;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
 
-class TSpecialReadContext: public NCommon::TSpecialReadContext {
+class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
+    TActorId DuplicatesManager = TActorId();
+
+private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-        const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
+        const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion, const bool needFilterDuplicates) const;
     TMutex Mutex;
-    std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
+    std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
@@ -30,7 +34,21 @@ private:
 public:
     virtual TString ProfileDebugString() const override;
 
-    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
+    void RegisterActors();
+    void UnregisterActors();
+
+    const TActorId& GetDuplicatesManagerVerified() const {
+        AFL_VERIFY(DuplicatesManager);
+        return DuplicatesManager;
+    }
+
+    TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
+        : TBase(commonContext) {
+    }
+
+    ~TSpecialReadContext() {
+        AFL_VERIFY(!DuplicatesManager);
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

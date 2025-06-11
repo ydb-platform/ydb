@@ -1058,8 +1058,8 @@ public:
     struct TTxRunDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(bool isNewDataErasure);
 
-    struct TTxAddEntryToDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxAddEntryToDataErasure(const std::vector<TShardIdx>& dataErasureShards);
+    struct TTxAddNewShardToDataErasure;
+    NTabletFlatExecutor::ITransaction* CreateTxAddNewShardToDataErasure(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev);
 
     struct TTxCancelDataErasureShards;
     NTabletFlatExecutor::ITransaction* CreateTxCancelDataErasureShards(const std::vector<TShardIdx>& oldShards);
@@ -1189,6 +1189,7 @@ public:
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvCleanUpDataResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureManualStartupRequest::TPtr& ev, const TActorContext& ctx);
@@ -1396,7 +1397,7 @@ public:
 
     void PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexIssue(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue);
     void PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1452,7 +1453,7 @@ public:
         struct TTxReplyReshuffleKMeans;
         struct TTxReplyLocalKMeans;
         struct TTxReplyPrefixKMeans;
-        struct TTxReplyUpload;
+        struct TTxReplyUploadSample;
 
         struct TTxPipeReset;
         struct TTxBilling;

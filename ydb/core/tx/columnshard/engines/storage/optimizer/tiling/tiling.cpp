@@ -128,6 +128,34 @@ struct TSettings {
             }
         }
 
+        if (Factor < 2) {
+            return TConclusionStatus::Fail("factor must be at least 2");
+        }
+
+        if (MaxLevels < 1 || MaxLevels > 10) {
+            return TConclusionStatus::Fail("max_levels must be between 1 and 10");
+        }
+
+        if (MaxAccumulateCount < 2) {
+            return TConclusionStatus::Fail("max_accumulate_count must be at least 2");
+        }
+
+        if (ExpectedPortionSize < MaxAccumulatePortionSize * 3) {
+            return TConclusionStatus::Fail(TStringBuilder()
+                << "expected_portion_size (" << ExpectedPortionSize << ") must be at least "
+                << "3x larger than max_accumulate_portion_size (" << MaxAccumulatePortionSize << ")");
+        }
+
+        if (MaxAccumulateTime < TDuration::Seconds(15)) {
+            return TConclusionStatus::Fail("max_accumulate_time must be at least 15 seconds");
+        }
+
+        if (MaxCompactionBytes < ExpectedPortionSize * 4) {
+            return TConclusionStatus::Fail(TStringBuilder()
+                << "max_compaction_bytes (" << MaxCompactionBytes << ") is too small "
+                << "relative to expected_portion_size (" << ExpectedPortionSize << ")");
+        }
+
         SettingsJson = jsonInfo;
 
         return TConclusionStatus::Success();

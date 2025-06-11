@@ -8,10 +8,9 @@
 
 namespace NKikimr::NEvWrite {
 
-    TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId, const bool immediateWrite)
+    TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId)
         : WritesCount(writesCount)
         , LongTxActorId(longTxActorId)
-        , ImmediateWrite(immediateWrite)
         , LongTxId(longTxId)
     {
         Y_ABORT_UNLESS(writesCount);
@@ -40,7 +39,7 @@ namespace NKikimr::NEvWrite {
     }
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
-        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType, const bool immediateWrite,
+        const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx, const EModificationType mType,
         const std::optional<TDuration> timeout
     )
         : ShardId(shardId)
@@ -53,21 +52,14 @@ namespace NKikimr::NEvWrite {
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , ModificationType(mType)
-        , ImmediateWrite(immediateWrite)
         , Timeout(timeout)
     {
     }
 
     void TShardWriter::SendWriteRequest() {
-        if (ImmediateWrite) {
-            auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-            DataForShard->Serialize(*ev, TableId, SchemaVersion);
-            SendToTablet(std::move(ev));
-        } else {
-            auto ev = MakeHolder<TEvColumnShard::TEvWrite>(SelfId(), ExternalController->GetLongTxId(), TableId, DedupId, "", WritePartIdx, ModificationType);
-            DataForShard->Serialize(*ev);
-            SendToTablet(std::move(ev));
-        }
+        auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        DataForShard->Serialize(*ev, TableId, SchemaVersion);
+        SendToTablet(std::move(ev));
     }
 
     void TShardWriter::Bootstrap() {

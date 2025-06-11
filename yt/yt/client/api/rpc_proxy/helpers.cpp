@@ -424,6 +424,40 @@ void FromProto(
     result->EventTime = TInstant::FromValue(proto.event_time());
 }
 
+void ToProto(
+    NProto::TOperationEvent* proto,
+    const NApi::TOperationEvent& result)
+{
+    proto->set_timestamp(ToProto(result.Timestamp));
+    proto->set_event_type(ConvertOperationEventTypeToProto(result.EventType));
+
+    YT_OPTIONAL_TO_PROTO(proto, incarnation, result.Incarnation);
+
+    if (result.IncarnationSwitchReason) {
+        proto->set_incarnation_switch_reason(ConvertIncarnationSwitchReasonToProto(*result.IncarnationSwitchReason));
+    }
+
+    if (result.IncarnationSwitchInfo) {
+        proto->set_incarnation_switch_info(result.IncarnationSwitchInfo->ToString());
+    }
+}
+
+
+void FromProto(
+    NApi::TOperationEvent* result,
+    const NProto::TOperationEvent& proto)
+{
+    FromProto(&result->Timestamp, proto.timestamp());
+    result->EventType = ConvertOperationEventTypeFromProto(proto.event_type());
+    result->Incarnation = YT_OPTIONAL_FROM_PROTO(proto, incarnation);
+    if (proto.has_incarnation_switch_reason()) {
+        result->IncarnationSwitchReason = ConvertIncarnationSwitchReasonFromProto(proto.incarnation_switch_reason());
+    }
+    if (proto.has_incarnation_switch_info()) {
+        result->IncarnationSwitchInfo = TYsonString(proto.incarnation_switch_info());
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // MISC
 ////////////////////////////////////////////////////////////////////////////////
@@ -1476,6 +1510,54 @@ NScheduler::EOperationState ConvertOperationStateFromProto(
             THROW_ERROR_EXCEPTION("Protobuf contains unknown value for operation state");
     }
     YT_ABORT();
+}
+
+NProto::EOperationEventType ConvertOperationEventTypeToProto(
+    NApi::EOperationEventType operationEventType)
+{
+    switch (operationEventType) {
+        case NApi::EOperationEventType::IncarnationStarted:
+            return NProto::EOperationEventType::OET_INCARNATION_STARTED;
+    }
+}
+
+NApi::EOperationEventType ConvertOperationEventTypeFromProto(
+    NProto::EOperationEventType proto)
+{
+    switch (proto) {
+        case NProto::EOperationEventType::OET_INCARNATION_STARTED:
+            return NApi::EOperationEventType::IncarnationStarted;
+    }
+}
+
+NProto::EIncarnationSwitchReason ConvertIncarnationSwitchReasonToProto(
+    NControllerAgent::EOperationIncarnationSwitchReason operationEventType)
+{
+    switch (operationEventType) {
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobAborted:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_ABORTED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobFailed:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_FAILED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobInterrupted:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_INTERRUPTED;
+        case NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobLackAfterRevival:
+            return NProto::EIncarnationSwitchReason::ISR_JOB_LACK_AFTER_REVIVAL;
+    }
+}
+
+NControllerAgent::EOperationIncarnationSwitchReason ConvertIncarnationSwitchReasonFromProto(
+    NProto::EIncarnationSwitchReason proto)
+{
+    switch (proto) {
+        case NProto::EIncarnationSwitchReason::ISR_JOB_ABORTED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobAborted;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_FAILED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobFailed;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_INTERRUPTED:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobInterrupted;
+        case NProto::EIncarnationSwitchReason::ISR_JOB_LACK_AFTER_REVIVAL:
+            return NYT::NControllerAgent::EOperationIncarnationSwitchReason::JobLackAfterRevival;
+    }
 }
 
 NProto::EJobType ConvertJobTypeToProto(

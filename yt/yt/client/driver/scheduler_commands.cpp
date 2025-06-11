@@ -237,6 +237,30 @@ void TGetJobFailContextCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TListOperationEventsCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<EOperationEventType>>(
+        "event_type",
+        [] (TThis* command) -> auto& {return command->Options.EventType; })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<i64>(
+        "limit",
+        [] (TThis* command) -> auto& {return command->Options.Limit; })
+        .Optional(/*init*/ false);
+}
+
+void TListOperationEventsCommand::DoExecute(ICommandContextPtr context)
+{
+    auto result = WaitFor(context->GetClient()->ListOperationEvents(OperationIdOrAlias, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(BuildYsonStringFluently()
+        .List(result));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TListOperationsCommand::Register(TRegistrar registrar)
 {
     registrar.ParameterWithUniversalAccessor<std::optional<TInstant>>(

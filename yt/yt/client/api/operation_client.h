@@ -7,6 +7,8 @@
 
 #include <yt/yt/client/node_tracker_client/public.h>
 
+#include <yt/yt/client/controller_agent/public.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -111,6 +113,19 @@ struct TGetJobFailContextOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
 { };
+
+DEFINE_ENUM(EOperationEventType,
+    ((IncarnationStarted) (0))
+);
+
+struct TListOperationEventsOptions
+    : public TTimeoutOptions
+    , public TMasterReadOptions
+{
+    std::optional<EOperationEventType> EventType;
+
+    i64 Limit = 1000;
+};
 
 struct TListOperationsAccessFilter
     : public NYTree::TYsonStruct
@@ -419,6 +434,21 @@ struct TJobTraceEvent
 
 void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer);
 
+struct TOperationEvent
+{
+    TInstant Timestamp;
+    EOperationEventType EventType;
+
+    // Incarnation started
+    std::optional<std::string> Incarnation;
+
+    // Empty IncarnationSwitchReason and filled Incarnation means switch reason is "operation started".
+    std::optional<NControllerAgent::EOperationIncarnationSwitchReason> IncarnationSwitchReason;
+    std::optional<NYson::TYsonString> IncarnationSwitchInfo;
+};
+
+void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer);
+
 struct TListJobsStatistics
 {
     TEnumIndexedArray<NJobTrackerClient::EJobState, i64> StateCounts;
@@ -531,6 +561,10 @@ struct IOperationClient
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobFailContextOptions& options = {}) = 0;
+
+    virtual TFuture<std::vector<TOperationEvent>> ListOperationEvents(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options) = 0;
 
     virtual TFuture<TListOperationsResult> ListOperations(
         const TListOperationsOptions& options = {}) = 0;

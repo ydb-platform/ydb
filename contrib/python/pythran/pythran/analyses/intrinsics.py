@@ -10,10 +10,8 @@ class Intrinsics(ModuleAnalysis):
     """ Gather all intrinsics used in the module
     """
 
-    def __init__(self):
-        """ Result is a set of intrinsic values. """
-        self.result = set()
-        super(Intrinsics, self).__init__()
+    """ Result is a set of intrinsic values. """
+    ResultType = set
 
     def visit_Attribute(self, node):
         obj, _ = attr_to_path(node)

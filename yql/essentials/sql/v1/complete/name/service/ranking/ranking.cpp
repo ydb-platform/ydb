@@ -15,7 +15,7 @@ namespace NSQLComplete {
 
     public:
         explicit TRanking(TFrequencyData frequency)
-            : Frequency_(frequency)
+            : Frequency_(std::move(frequency))
         {
         }
 
@@ -108,7 +108,7 @@ namespace NSQLComplete {
             return std::numeric_limits<size_t>::max() - weight;
         }
 
-        const TStringBuf ContentView(const TGenericName& name Y_LIFETIME_BOUND) const {
+        TStringBuf ContentView(const TGenericName& name Y_LIFETIME_BOUND) const {
             return std::visit([](const auto& name) -> TStringBuf {
                 using T = std::decay_t<decltype(name)>;
                 if constexpr (std::is_base_of_v<TKeyword, T>) {

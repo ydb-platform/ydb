@@ -44,6 +44,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 #include <ydb/core/tx/priorities/usage/service.h>
@@ -596,9 +597,9 @@ protected:
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
         if (isInsert) {
-            NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+            NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
         } else {
-            NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+            NConveyorComposite::TCompServiceOperator::SendTaskToExecute(task);
         }
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
@@ -1190,7 +1191,7 @@ void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorCon
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(
-                new TEvTxProcessing::TEvReadSetAck(0, txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
+                new TEvTxProcessing::TEvReadSetAck(ev->Get()->Record.GetStep(), txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
                 ev->Get()->Record.GetTabletProducer(), true),
             IEventHandle::FlagTrackDelivery, txId);
         return;
@@ -1510,7 +1511,8 @@ public:
         }
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
-        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
+            std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
         return true;
     }
     void Complete(const TActorContext& /*ctx*/) override {

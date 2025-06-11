@@ -22,11 +22,12 @@ public:
     // Calculate minimum partitions based on warehouse count
     static int CalcMinParts(int warehouseCount);
 
+    static double GetPerWarehouseMB(const TString& table);
+
     // Expose internal constants for testing
     static int GetDefaultMinPartitions();
     static int GetDefaultMinWarehousesPerShard();
     static int GetMinItemsPerShard();
-    static double GetPerWarehouseMB(const TString& table);
     static const std::unordered_map<TString, double>& GetPerWarehouseMBMap();
 
 private:

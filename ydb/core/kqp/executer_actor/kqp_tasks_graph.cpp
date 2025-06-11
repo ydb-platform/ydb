@@ -1075,7 +1075,7 @@ void FillOutputDesc(
             }
             hashPartitionDesc.SetPartitionsCount(output.PartitionsCount);
 
-            Y_ENSURE(output.HashKind.has_value(), "HashKind wasn't set!");
+            Y_ENSURE(output.HashKind.has_value(), "HashKind wasn't set before the FillOutputDesc!");
 
             switch (output.HashKind.value()) {
                 using enum EHashShuffleFuncType;

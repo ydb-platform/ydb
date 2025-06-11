@@ -11,7 +11,7 @@ namespace NYql::NDq {
     std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*>
     CreateGenericReadActor(
         NConnector::IClient::TPtr genericClient,
-        NGeneric::TSource&& params,
+        Generic::TSource&& params,
         ui64 inputIndex,
         TCollectStatsLevel statsLevel,
         const THashMap<TString, TString>& secureParams,

@@ -77,7 +77,7 @@ class YamlConfigurator(object):
         self.cluster_description = cluster_description.ClusterDetails(config_path)
 
         with open(cluster_path, 'r') as f:
-            _domains = yaml.safe_load(f)
+            _domains = cluster_description.safe_load_no_duplicates(f.read())
             self.cluster_description.domains = _domains.get('domains', [])
 
     @property

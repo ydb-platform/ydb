@@ -61,6 +61,10 @@ class Slice:
     def slice_cfg_dir(self) -> str:
         return self.__slice_cfg_dir
 
+    @property
+    def v2(self):
+        return self.configurator.v2 if hasattr(self.configurator, 'v2') else False
+
     def _ensure_berkanavt_exists(self):
         cmd = r"sudo mkdir -p /Berkanavt"
         self.nodes.execute_async(cmd)
@@ -200,7 +204,7 @@ class Slice:
 
             self._format_drives()
             if 'cfg' in self.components.get('kikimr', []):
-                if self.configurator.v2:
+                if self.v2:
                     static_cfg_path = self.configurator.create_v2_cfg()
                     self._upload_cfg_v2(static_cfg_path)
                 else:
@@ -210,7 +214,7 @@ class Slice:
                 self._deploy_secrets()
 
             self._start_static()
-            if self.configurator.v2:
+            if self.v2:
                 self.__cluster_bootstrap()
             else:
                 self. __init_blobstorage_kikimr()
@@ -495,7 +499,7 @@ mon={mon}""".format(
                 self._update_kikimr()
 
         if 'kikimr' in self.components and 'cfg' in self.components.get('kikimr', []):
-            if self.configurator.v2:
+            if self.v2:
                 try:
                     self.__config_client.replace_config(self.configurator.static)
                 except config_client.ConfigClientError as e:

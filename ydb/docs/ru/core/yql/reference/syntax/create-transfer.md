@@ -37,7 +37,7 @@ WITH (option = value[, ...])
 
 {% endnote %}
 
-Создание экземпляра трансфера из топика `example_topic` из базы `/Root/another_database` в текущую базу в таблицу `example_table`:
+Создание экземпляра трансфера из топика `example_topic` базы данных `/Root/another_database` в таблицу `example_table` текущей базы данных :
 
 ```yql
 $transformation_lambda = ($msg) -> {

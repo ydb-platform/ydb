@@ -498,6 +498,34 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
+    // copy and rename *MoveTable* family
+    //TODO: generalize all Move* stuff
+    TEvSchemeShard::TEvModifySchemeTransaction* MoveSequenceRequest(ui64 txId, const TString& src, const TString& dst, ui64 schemeShard, const TApplyIf& applyIf) {
+        auto tx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        auto transaction = tx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence);
+        SetApplyIf(*transaction, applyIf);
+
+        auto descr = transaction->MutableMoveSequence();
+        descr->SetSrcPath(src);
+        descr->SetDstPath(dst);
+
+        return tx.Release();
+    }
+
+    void AsyncMoveSequence(TTestActorRuntime& runtime, ui64 txId, const TString& src, const TString& dst, ui64 schemeShard) {
+        AsyncSend(runtime, schemeShard, MoveSequenceRequest(txId, src, dst, schemeShard));
+    }
+
+    void TestMoveSequence(TTestActorRuntime& runtime, ui64 txId, const TString& src, const TString& dst, const TVector<TExpectedResult>& expectedResults) {
+        TestMoveSequence(runtime, TTestTxConfig::SchemeShard, txId, src, dst, expectedResults);
+    }
+
+    void TestMoveSequence(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& src, const TString& dst, const TVector<TExpectedResult>& expectedResults) {
+        AsyncMoveSequence(runtime, txId, src, dst, schemeShard);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     TEvSchemeShard::TEvModifySchemeTransaction* LockRequest(ui64 txId, const TString &parentPath, const TString& name) {
         THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();

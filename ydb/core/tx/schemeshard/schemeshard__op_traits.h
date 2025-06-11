@@ -5,7 +5,6 @@
 #include "schemeshard_path.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/generic/map.h>
 #include <util/generic/string.h>
@@ -172,6 +171,13 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCo
     : public TSchemeTxTraitsFallback
 {
     constexpr inline static bool CreateAdditionalDirs = true;
+};
+
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>

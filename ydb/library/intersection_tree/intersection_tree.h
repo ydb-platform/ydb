@@ -194,7 +194,7 @@ namespace NKikimr {
                 std::piecewise_construct,
                 std::forward_as_tuple(value),
                 std::forward_as_tuple(value, leftKey, rightKey));
-            Y_ABORT_UNLESS(res.second);
+            Y_ENSURE(res.second);
             TValueNode* valueNode = &res.first->second;
 
             TNode* left = FindOrInsert(valueNode->LeftKey, RandomNumber<ui32>());
@@ -213,7 +213,7 @@ namespace NKikimr {
 
             TNode* left = Find(valueNode->LeftKey);
             TNode* right = Find(valueNode->RightKey);
-            Y_ABORT_UNLESS(left && right);
+            Y_ENSURE(left && right);
             left->UseCount--;
             right->UseCount--;
 
@@ -269,7 +269,7 @@ namespace NKikimr {
             }
 
             const TPartitionKey& GetLeftPartitionKey() const {
-                Y_ABORT_UNLESS(LeftBorder);
+                Y_ENSURE(LeftBorder);
                 return LeftBorder->Key;
             }
 
@@ -286,7 +286,7 @@ namespace NKikimr {
             }
 
             const TPartitionKey& GetRightPartitionKey() const {
-                Y_ABORT_UNLESS(RightBorder);
+                Y_ENSURE(RightBorder);
                 return RightBorder->Key;
             }
 
@@ -372,7 +372,7 @@ namespace NKikimr {
                             count -= parent->RightDelta;
                             return {parent, count};
                         }
-                        Y_ABORT_UNLESS(parent->Left.get() == node);
+                        Y_DEBUG_ABORT_UNLESS(parent->Left.get() == node);
                         count -= parent->RightDelta;
                         node = parent;
                     }
@@ -395,7 +395,7 @@ namespace NKikimr {
                             count -= parent->LeftDelta;
                             return {parent, count};
                         }
-                        Y_ABORT_UNLESS(parent->Right.get() == node);
+                        Y_DEBUG_ABORT_UNLESS(parent->Right.get() == node);
                         count -= parent->RightDelta;
                         node = parent;
                     }
@@ -574,7 +574,7 @@ namespace NKikimr {
             while (p != q) {
                 p = p->Parent;
                 q = q->Parent;
-                Y_ABORT_UNLESS(p || q);
+                Y_DEBUG_ABORT_UNLESS(p || q);
                 if (!p) {
                     p = b;
                 }
@@ -719,7 +719,6 @@ namespace NKikimr {
                 *tptr = Merge(d->RemoveLeft(), d->RemoveRight());
                 tptr->get()->Parent = parent;
             } else if (parent) {
-                // Y_ABORT_UNLESS(d->LeftDelta == d->RightDelta);
                 if (leftChild) {
                     parent->LeftDelta += d->LeftDelta;
                     parent->LeftValues += std::move(d->LeftValues);

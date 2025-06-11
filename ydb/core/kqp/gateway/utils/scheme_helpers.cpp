@@ -3,8 +3,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
 namespace NKikimr::NKqp::NSchemeHelpers {

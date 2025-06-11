@@ -4,19 +4,18 @@
 
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
-
-#include "error_collector.h"
+#include <ydb/core/tx/columnshard/counters/error_collector.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 class TRepliesAdapter: public NWrappers::NExternalStorage::IReplyAdapter {
 private:
-    std::shared_ptr<TErrorCollector> Collector;
+    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> ErrorCollector;
     const TString StorageId;
 
 public:
-    TRepliesAdapter(std::shared_ptr<TErrorCollector>& collector, const TString& storageId)
-        : Collector(std::move(collector))
+    TRepliesAdapter(std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector, const TString& storageId)
+        : ErrorCollector(std::move(errorCollector))
         , StorageId(std::move(storageId))
     {
 

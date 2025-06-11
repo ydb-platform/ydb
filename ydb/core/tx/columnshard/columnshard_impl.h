@@ -7,7 +7,6 @@
 #include "defs.h"
 #include "inflight_request_tracker.h"
 #include "tables_manager.h"
-#include "blobs_action/tier/error_collector.h"
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
@@ -38,6 +37,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/columnshard/counters/error_collector.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/tiering/common.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -474,6 +474,7 @@ protected:
     }
 
 private:
+    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> TieringErrorCollector = std::make_shared<NKikimr::NColumnShard::TErrorCollector>();
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
     std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
@@ -484,7 +485,6 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
     std::shared_ptr<NOlap::NDataLocks::TManager> DataLocksManager;
-    std::shared_ptr<NOlap::NBlobOperations::NTier::TErrorCollector> TieringErrorCollector = std::make_shared<NOlap::NBlobOperations::NTier::TErrorCollector>();
 
     ui64 PrioritizationClientId = 0;
 

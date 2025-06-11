@@ -2247,13 +2247,12 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
 }
 
 void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
-    if (KMeans.Parent == 0) {
-        // For Parent == 0 only single kmeans needed, so there is only two options:
-        // 1. It fits entirely in the single shard => local kmeans for single shard
-        // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
-        return;
-    }
-    const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
+    // For Parent == 0 only single kmeans needed, so there are two options:
+    // 1. It fits entirely in the single shard => local kmeans for single shard
+    // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
+    const auto [parentFrom, parentTo] = KMeans.Parent == 0
+        ? std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId>{0, 0}
+        : KMeans.RangeToBorders(range);
     // TODO(mbkkt) We can make it more granular
 
     // the new range does not intersect with other ranges, just add it with 1 shard

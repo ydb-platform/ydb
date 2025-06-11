@@ -182,6 +182,8 @@ private:
 
         LOG_I("Start Script Execution");
         SendToKqpProxy(std::move(ev));
+
+        Register(CreateScriptProgressActor(ExecutionId, Database, "{}"));
     }
 
     void Handle(TEvCheckAliveRequest::TPtr& ev) {
@@ -450,7 +452,7 @@ private:
 
     void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         Register(
-            CreateScriptProgressActor(ExecutionId, Database, ev->Get()->Record.GetQueryPlan(), "")
+            CreateScriptProgressActor(ExecutionId, Database, ev->Get()->Record.GetQueryPlan())
         );
     }
 

@@ -65,4 +65,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const NPq::NProto::StreamingDisposition& disposition = {}
 );
 
+TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
+TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);
+
 } // namespace NYql

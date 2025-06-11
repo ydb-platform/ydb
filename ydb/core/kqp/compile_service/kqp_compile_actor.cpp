@@ -309,7 +309,7 @@ private:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);

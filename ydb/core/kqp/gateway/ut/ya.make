@@ -14,6 +14,8 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes/llvm16
     ydb/services/metadata
     yql/essentials/sql/pg
+    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
 )
 
 YQL_LAST_ABI_VERSION()

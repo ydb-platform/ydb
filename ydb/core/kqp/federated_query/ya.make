@@ -10,9 +10,11 @@ PEERDIR(
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/library/db_pool/protos
+    ydb/library/logger
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/s3/actors_factory
+    ydb/library/yql/providers/pq/gateway/native
     ydb/library/yql/providers/solomon/gateway
     yql/essentials/core/dq_integration/transform
     yql/essentials/public/issue

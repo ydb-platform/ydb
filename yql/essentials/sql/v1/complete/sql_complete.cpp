@@ -79,7 +79,7 @@ namespace NSQLComplete {
 
         TNameRequest NameRequestFrom(
             TCompletionInput input,
-            const TLocalSyntaxContext& context,
+            const TLocalSyntaxContext& context, // TODO(YQL-19747): rename to `local`
             const TGlobalContext& global) const {
             TNameRequest request = {
                 .Prefix = TString(GetCompletedToken(input, context.EditRange).Content),
@@ -132,6 +132,14 @@ namespace NSQLComplete {
                 TClusterName::TConstraints constraints;
                 constraints.Namespace = ""; // TODO(YQL-19747): filter by provider
                 request.Constraints.Cluster = std::move(constraints);
+            }
+
+            if (auto name = global.EnclosingFunction.Transform(NormalizeName);
+                name && name == "concat") {
+                auto& object = request.Constraints.Object;
+                object = object.Defined() ? object : TObjectNameConstraints();
+                object->Kinds.emplace(EObjectKind::Folder);
+                object->Kinds.emplace(EObjectKind::Table);
             }
 
             return request;
@@ -196,14 +204,14 @@ namespace NSQLComplete {
 
                 if constexpr (std::is_base_of_v<TFolderName, T>) {
                     name.Indentifier.append('/');
-                    if (!context.Object->IsQuoted) {
+                    if (!context.Object || !context.Object->IsQuoted) {
                         name.Indentifier.prepend('`');
                     }
                     return {ECandidateKind::FolderName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TTableName, T>) {
-                    if (!context.Object->IsQuoted) {
+                    if (!context.Object || !context.Object->IsQuoted) {
                         name.Indentifier.prepend('`');
                     }
                     return {ECandidateKind::TableName, std::move(name.Indentifier)};

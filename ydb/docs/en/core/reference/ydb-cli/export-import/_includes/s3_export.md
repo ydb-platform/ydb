@@ -36,7 +36,7 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 `--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. If no `--item` parameters are specified, the whole source path will be exported. `STRING` is set in `<property>=<value>,...` format with the following properties:
 
 - `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
-- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items. It can be generated automatically from the name of the exported object. In the case of encrypted export, it is not recommended to specify an explicit destination path in order to anonymize exported object names.
+- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items. It can be generated automatically from the name of the exported object. In case of encrypted export, it is not recommended to specify an explicit destination path in order to anonymize exported object names.
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
 

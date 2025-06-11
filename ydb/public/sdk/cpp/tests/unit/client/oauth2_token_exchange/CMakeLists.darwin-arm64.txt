@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(helpers)
+
 add_executable(tests-unit-client-oauth2_token_exchange)
 
 
@@ -24,6 +26,7 @@ target_link_libraries(tests-unit-client-oauth2_token_exchange PUBLIC
   library-cpp-json
   cpp-string_utils-base64
   types-credentials-oauth2_token_exchange
+  client-oauth2_token_exchange-helpers
 )
 
 target_allocator(tests-unit-client-oauth2_token_exchange

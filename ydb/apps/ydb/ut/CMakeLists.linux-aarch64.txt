@@ -22,9 +22,13 @@ target_link_libraries(ydb-apps-ydb-ut PUBLIC
   cpp-testing-unittest_main
   contrib-libs-grpc
   contrib-libs-fmt
+  contrib-libs-jwt-cpp
+  cpp-json-writer
   core-security-certificate_check
+  client-yc_public-iam
   src-client-topic
   src-client-table
+  client-oauth2_token_exchange-helpers
   topic_workload
 )
 

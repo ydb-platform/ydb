@@ -275,7 +275,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def port(self):
         return self.grpc_port
-    
+
     @property
     def endpoint(self):
         return "{}:{}".format(self.host, self.port)

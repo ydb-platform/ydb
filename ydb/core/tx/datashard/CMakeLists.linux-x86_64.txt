@@ -102,6 +102,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   core-kqp-runtime
   core-persqueue-writer
   ydb-core-protos
+  ydb-core-scheme
   ydb-core-tablet
   ydb-core-tablet_flat
   tx-long_tx_service-public
@@ -440,6 +441,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   core-kqp-runtime
   core-persqueue-writer
   ydb-core-protos
+  ydb-core-scheme
   ydb-core-tablet
   ydb-core-tablet_flat
   tx-long_tx_service-public

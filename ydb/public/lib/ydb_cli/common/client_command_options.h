@@ -209,7 +209,7 @@ public:
     TClientCommandOption& Env(const TString& envName, bool isFileName, const TString& humanReadableFileName = {});
 
     // Parse option from profile
-    TClientCommandOption& ProfileParam(const TString& profileParamName);
+    TClientCommandOption& ProfileParam(const TString& profileParamName, bool isFileName = false);
 
     TClientCommandOption& SetSupportsProfile(bool supports = true);
 
@@ -241,7 +241,7 @@ protected:
 
     // Try parse from profile.
     // if parsedValue is not null, set it with parsed value, if actual
-    virtual bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, std::vector<TString>* errors, bool parseOnly) const;
+    virtual bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, bool* isFileName, std::vector<TString>* errors, bool parseOnly) const;
 
 protected:
     struct TEnvInfo {
@@ -264,6 +264,7 @@ protected:
     std::vector<TEnvInfo> EnvInfo;
     TString DefaultOptionValue;
     TString ProfileParamName;
+    bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;
     TString ConnectionParamName;
     TString Documentation;
@@ -272,7 +273,7 @@ protected:
 
 class TAuthMethodOption : public TClientCommandOption {
 public:
-    using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly)>;
+    using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly)>;
 public:
     TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions);
 
@@ -293,7 +294,7 @@ public:
     }
 
 protected:
-    bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, std::vector<TString>* errors, bool parseOnly) const override;
+    bool TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, bool* isFileName, std::vector<TString>* errors, bool parseOnly) const override;
 
 protected:
     TString AuthMethodName;

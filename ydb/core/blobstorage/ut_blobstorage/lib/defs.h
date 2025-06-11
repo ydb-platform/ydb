@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/mind/bscontroller/bsc.h>

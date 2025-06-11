@@ -32,10 +32,10 @@ TAsyncExecuteQueryResult GetDistrictOrderId(
         DECLARE $d_id AS Int32;
 
         SELECT D_NEXT_O_ID
-          FROM `district`
+          FROM `{}`
          WHERE D_W_ID = $d_w_id
            AND D_ID = $d_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -69,14 +69,14 @@ TAsyncExecuteQueryResult GetStockCount(
         DECLARE $s_quantity AS Int32;
 
         SELECT COUNT(DISTINCT (s.S_I_ID)) AS STOCK_COUNT
-         FROM `order_line` as ol INNER JOIN `stock` as s ON s.S_I_ID = ol.OL_I_ID
+         FROM `{}` as ol INNER JOIN `{}` as s ON s.S_I_ID = ol.OL_I_ID
          WHERE ol.OL_W_ID = $ol_w_id
          AND ol.OL_D_ID = $ol_d_id
          AND ol.OL_O_ID < $ol_o_id_high
          AND ol.OL_O_ID >= $ol_o_id_low
          AND s.S_W_ID = $s_w_id
          AND s.S_QUANTITY < $s_quantity;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_ORDER_LINE, TABLE_STOCK);
 
     auto params = TParamsBuilder()
         .AddParam("$ol_w_id").Int32(warehouseID).Build()
@@ -117,17 +117,20 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     const int threshold = RandomNumber(10, 20);
 
     LOG_T("Terminal " << context.TerminalID << " started StockLevel transaction in "
-        << warehouseID << ", " << districtID);
+        << warehouseID << ", " << districtID << ", session: " << session.GetId());
 
     // Get next order ID from district
     auto districtFuture = GetDistrictOrderId(session, context, warehouseID, districtID);
     auto districtResult = co_await TSuspendWithFuture(districtFuture, context.TaskQueue, context.TerminalID);
     if (!districtResult.IsSuccess()) {
-        LOG_E("Terminal " << context.TerminalID << " district query failed: "
-            << districtResult.GetIssues().ToOneLineString());
         if (ShouldExit(districtResult)) {
-            std::quick_exit(1);
+            LOG_E("Terminal " << context.TerminalID << " district query (stocklevel) failed: "
+                << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " district query (stocklevel) failed: "
+            << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return districtResult;
     }
 
@@ -138,7 +141,8 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     if (!districtParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID
             << ", warehouseId " << warehouseID << ", districtId " << districtID << " not found");
-        std::quick_exit(1);
+        RequestStop();
+        co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
     }
 
     int nextOrderID = *districtParser.ColumnParser("D_NEXT_O_ID").GetOptionalInt32();
@@ -149,13 +153,16 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     if (!stockCountResult.IsSuccess()) {
         if (ShouldExit(stockCountResult)) {
             LOG_E("Terminal " << context.TerminalID << " stock count query failed: "
-                << stockCountResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " stock count query failed: "
+            << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return stockCountResult;
     }
 
-    LOG_T("Terminal " << context.TerminalID << " is committing StockLevel transaction");
+    LOG_T("Terminal " << context.TerminalID << " is committing StockLevel transaction, session: " << session.GetId());
 
     auto commitFuture = tx.Commit();
     auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);

@@ -8,10 +8,13 @@ namespace NKikimr::NStorage {
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
         const std::weak_ptr<TScepter> Scepter;
+        const ui64 ScepterCounter;
         std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>> Event;
         const TActorId Sender;
         const ui64 Cookie;
         const TActorId RequestSessionId;
+
+        bool IsScepterlessOperation = false;
 
         TActorId ParentId;
         ui32 WaitingReplyFromNode = 0;
@@ -29,6 +32,7 @@ namespace NKikimr::NStorage {
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
 
         void Bootstrap(TActorId parentId);
+        bool IsScepterExpired() const;
 
         void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
@@ -122,6 +126,8 @@ namespace NKikimr::NStorage {
         // Bridge mode
 
         void SwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
+        bool CheckSwitchBridgeCommand();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition

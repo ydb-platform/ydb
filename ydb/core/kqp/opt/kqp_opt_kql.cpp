@@ -540,13 +540,13 @@ TExprBase BuildDeleteTableWithIndex(const TKiWriteTable& write, const TKikimrTab
         .Done();
 }
 
-TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
-    const TPositionHandle pos, TExprContext& ctx)
+TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withSystemColumns,
+    const TCoLambda& filter, const TCoAtom& isBatch, const TPositionHandle pos, TExprContext& ctx)
 {
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
     const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/);
 
-    const auto allRows = BuildReadTable(tableColumns, pos, tableData, false, {}, ctx);
+    const auto allRows = BuildReadTable(tableColumns, pos, tableData, (isBatch == "true"), {}, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(allRows)
@@ -557,7 +557,7 @@ TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withS
 TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescription& tableData, bool withSystemColumns,
     TExprContext& ctx)
 {
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx);
+    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
     auto keysToDelete = ProjectColumns(rowsToDelete, tableData.Metadata->KeyColumnNames, ctx);
 
     return Build<TKqlDeleteRows>(ctx, del.Pos())
@@ -572,7 +572,7 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
 TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx);
+    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
 
     auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
@@ -623,9 +623,9 @@ TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTabl
 }
 
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
-    const TPositionHandle pos, TExprContext& ctx)
+    const TCoAtom& isBatch, const TPositionHandle pos, TExprContext& ctx)
 {
-    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, false, {}, ctx);
+    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, (isBatch == "true"), {}, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(kqlReadTable)
@@ -692,7 +692,7 @@ THashSet<TStringBuf> GetUpdateColumns(const TKikimrTableDescription& tableData, 
 TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx);
+    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
 
     auto updateColumns = GetUpdateColumns(tableData, update.Update());
     auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, update.Pos(), ctx);
@@ -720,7 +720,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
 TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx);
+    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
 
     TVector<TExprBase> effects;
 
@@ -775,7 +775,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         .Columns()
             .Add(updateColumnsList)
             .Build()
-        .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+        .IsBatch(update.IsBatch())
         .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -846,7 +846,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()
-                .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+                .IsBatch(update.IsBatch())
                 .Settings().Build()
                 .Done();
 

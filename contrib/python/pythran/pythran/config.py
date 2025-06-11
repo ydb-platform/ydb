@@ -200,8 +200,6 @@ def make_extension(python, **extra):
 
     if python:
         extension['define_macros'].append('ENABLE_PYTHON_MODULE')
-    extension['define_macros'].append(
-        '__PYTHRAN__={}'.format(sys.version_info.major))
 
     pythonic_dir = get_include()
 
@@ -313,10 +311,7 @@ def run():
     Dump on stdout the config flags required to compile pythran-generated code.
     '''
     import argparse
-    import distutils.ccompiler
-    import distutils.sysconfig
     import pythran
-    import numpy
 
     parser = argparse.ArgumentParser(
         prog='pythran-config',
@@ -327,8 +322,26 @@ def run():
     parser.add_argument('--compiler', action='store_true',
                         help='print default compiler')
 
-    parser.add_argument('--cflags', action='store_true',
-                        help='print compilation flags')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--cflags', action='store_true',
+                        help='print compilation flags to compile extension '
+                             'modules directly')
+
+    # The with-BLAS variant could be added if there's user demand. Unclear
+    # if there are packages that need this, and also integrate with a build
+    # system for Python and NumPy flags. SciPy and scikit-image need the
+    # no-BLAS variant.
+    group.add_argument('--cflags-pythran-only', action='store_true',
+                       help='print compilation flags for usage by a build '
+                            'system (doesn\'t include Python, NumPy or BLAS '
+                            'flags).'
+                       )
+
+    parser.add_argument('--include-dir', action='store_true',
+                        help=(
+                            'print Pythran include directory '
+                            '(matches `pythran.get_include()`).')
+                        )
 
     parser.add_argument('--libs', action='store_true',
                         help='print linker flags')
@@ -348,6 +361,21 @@ def run():
                         )
 
     args = parser.parse_args(sys.argv[1:])
+
+    # This should not rely on distutils/setuptools, or anything else not in the
+    # stdlib. Please don't add imports higher up.
+    if args.cflags_pythran_only:
+        compile_flags = [
+                "-DENABLE_PYTHON_MODULE",
+                "-DPYTHRAN_BLAS_NONE",
+                ]
+        print(" ".join(compile_flags), f"-I{get_include()}")
+        return None
+
+
+    import distutils.ccompiler
+    import distutils.sysconfig
+    import numpy
 
     args.python = not args.no_python
 
@@ -415,6 +443,9 @@ def run():
         logger.info('LDFLAGS = '.rjust(10) + ' '.join(ldflags))
         if args.libs:
             output.extend(ldflags)
+
+    if args.include_dir:
+        output.append(get_include())
 
     if output:
         print(' '.join(output))

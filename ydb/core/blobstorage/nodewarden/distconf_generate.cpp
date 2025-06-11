@@ -442,11 +442,13 @@ namespace NKikimr::NStorage {
             }
 
             ui32 maxSlots = defaultMaxSlots;
+            ui32 slotSizeInUnits = 0;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
                 }
+                slotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
             }
 
             const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
@@ -457,6 +459,7 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable && pileFilter,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
+                .SlotSizeInUnits = slotSizeInUnits,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

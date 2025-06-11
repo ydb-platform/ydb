@@ -6,7 +6,7 @@ from pythran.passmanager import Transformation
 import gast as ast
 
 
-class ListCompToGenexp(Transformation):
+class ListCompToGenexp(Transformation[PotentialIterator]):
     '''
     Transforms list comprehension into genexp
     >>> import gast as ast
@@ -25,8 +25,6 @@ def bar(n):                                    \\n\
     def bar(n):
         return foo((x for x in builtins.range(n)))
     '''
-    def __init__(self):
-        Transformation.__init__(self, PotentialIterator)
 
     def visit_ListComp(self, node):
         self.generic_visit(node)

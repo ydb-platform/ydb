@@ -1,6 +1,6 @@
 # For docker context at root git directory
 
-FROM golang:1.20
+FROM ghcr.io/ydb-platform/golang:1.20
 
 WORKDIR /project/sources/
 

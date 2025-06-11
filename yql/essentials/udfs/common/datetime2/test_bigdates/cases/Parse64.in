@@ -1,0 +1,60 @@
+{
+    "fdatetime1"="-144170 12 31 235959 GMT text";
+    "fdatetime2"="%text% 12/31/-144170 23:59:59.";
+    "fdatetime3"="december/31/-144170";
+    "fdatetime4"="dec/31/-144170";
+};
+{
+    "fdatetime1"="-144169 01 01 000000 GMT text";
+    "fdatetime2"="%text% 01/01/-144169 00:00:00.";
+    "fdatetime3"="january/01/-144169";
+    "fdatetime4"="jan/01/-144169";
+};
+{
+    "fdatetime1"="-1 01 01 235959.99 GMT text";
+    "fdatetime2"="%text% 01/01/-1 23:59:59.999999";
+    "fdatetime3"="January/01/-1";
+    "fdatetime4"="Jan/01/-1";
+};
+{
+    "fdatetime1"="1 01 01 000000 GMT text";
+    "fdatetime2"="%text% 01/01/1 00:00:00.0000000";
+    "fdatetime3"="JANUARY/01/1";
+    "fdatetime4"="JAN/01/1";
+};
+{
+    "fdatetime1"="1969 12 31 235959.999999 GMT text";
+    "fdatetime2"="%text% 12/31/1969 23:59:59.999999";
+    "fdatetime3"="DeCeMbEr/31/1969";
+    "fdatetime4"="DeC/31/1969";
+};
+{
+    "fdatetime1"="1970 01 01 000000.00 GMT text";
+    "fdatetime2"="%text% 01/01/1970 00:00:00.00";
+    "fdatetime3"="JaNuArY/01/1970";
+    "fdatetime4"="JaN/01/1970";
+};
+{
+    "fdatetime1"="2025 01 01 000000 GMT bar";
+    "fdatetime2"="%text% 01/01/2025 00:00:00.1234567890abcdef1234567890abcdef";
+    "fdatetime3"="jEnuary/01/2025";
+    "fdatetime4"="jEn/01/2025";
+};
+{
+    "fdatetime1"="2106 01 01 000000 GMT text";
+    "fdatetime2"="%text% 01/01/2106 00:00:00.";
+    "fdatetime3"="jANuARy/01/2106";
+    "fdatetime4"="jAN/01/2106";
+};
+{
+    "fdatetime1"="148107 12 31 235959.999999 GMT text";
+    "fdatetime2"="%text% 12/31/148107 23:59:59.999999";
+    "fdatetime3"="DECEMBER/31/148107";
+    "fdatetime4"="DEC/31/148107";
+};
+{
+    "fdatetime1"="148108 01 01 000000.000000 GMT text";
+    "fdatetime2"="%text% 01/01/148108 00:00:00.000000";
+    "fdatetime3"="jaNUARy/01/148108";
+    "fdatetime4"="jaN/01/148108";
+};

@@ -15,7 +15,7 @@
 - [вторичный индекс](../../../../concepts/glossary.md#secondary-index).
 - [векторный индекс](../../../../concepts/glossary.md#vector-index).
 
-Экспорт колоночных таблиц в S3 описан в статье [{#T}](../../../../concepts/federated_query/s3/import_and_export.md).
+Экспорт колоночных таблиц в S3 описан в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-from-olap-to-s3).
 
 {% endnote %}
 

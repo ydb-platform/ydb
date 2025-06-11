@@ -264,13 +264,15 @@ AUTO_PARTITIONING_MIN_PARTITIONS_COUNT определяет минимально
 
 {{ ydb-short-name }} поддерживает экспорт данных из колоночных таблиц в объектное хранилище S3, а также импорт из S3 в новые колоночные таблицы с помощью SQL-запросов. Это позволяет быстро переносить большие объемы данных между хранилищами и {{ ydb-short-name }}.
 
-Пример запроса для [экспорта данных](../../federated_query/s3/import_and_export.md#export-from-olap-to-s3):
+Пример запроса для экспорта данных:
 
 ```yql
 INSERT INTO s3_external_table SELECT * FROM article_column_table
 ```
 
-Пример запроса для [импорта данных](../../federated_query/s3/import_and_export.md#import-from-s3-to-olap):
+Подробнее см. в статье [{#T}](../../federated_query/s3/write_data.md#export-from-olap-to-s3).
+
+Пример запроса для импорта данных:
 
 ```yql
 CREATE TABLE article_column_table (
@@ -280,4 +282,4 @@ WITH (STORE = COLUMN)
 AS SELECT * FROM s3_external_table
 ```
 
-Подробнее см. в статье [{#T}](../../federated_query/s3/import_and_export.md).
+Подробнее см. в статье [{#T}](../../federated_query/s3/external_table.md#import-from-s3-to-olap).

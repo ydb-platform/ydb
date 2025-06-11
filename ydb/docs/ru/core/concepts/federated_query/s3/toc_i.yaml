@@ -5,4 +5,3 @@ items:
 - { name: Форматы данных и алгоритмы сжатия,                        href: formats.md }
 - { name: Партиционирование данных,                                 href: partitioning.md }
 - { name: Расширенное партиционирование,                            href: partition_projection.md }
-- { name: Экспорт и импорт данных между колоночными таблицами и S3, href: import_and_export.md }

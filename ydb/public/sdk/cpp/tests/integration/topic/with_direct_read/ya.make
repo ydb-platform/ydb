@@ -1,4 +1,4 @@
-GTEST(topic_it)
+GTEST(topic_direct_read_it)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/tests/integration/tests_common.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
@@ -23,15 +23,13 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+ENV(PQ_EXPERIMENTAL_DIRECT_READ="1")
+
 SRCS(
-    basic_usage.cpp
-    describe_topic.cpp
-    local_partition.cpp
-    trace.cpp
+    ../basic_usage.cpp
+    ../describe_topic.cpp
+    ../direct_read.cpp
+    ../local_partition.cpp
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    with_direct_read
-)

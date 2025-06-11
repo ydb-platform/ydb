@@ -303,14 +303,6 @@ inline auto& Proto(TEvColumnShard::TEvProposeTransactionResult* ev) {
     return ev->Record;
 }
 
-inline auto& Proto(TEvColumnShard::TEvWrite* ev) {
-    return ev->Record;
-}
-
-inline auto& Proto(TEvColumnShard::TEvWriteResult* ev) {
-    return ev->Record;
-}
-
 inline TMessageSeqNo SeqNoFromProto(const NKikimrTxColumnShard::TSchemaSeqNo& proto) {
     return TMessageSeqNo(proto.GetGeneration(), proto.GetRound());
 }

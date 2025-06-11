@@ -439,10 +439,6 @@ bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, bool waitResult = true, std::vector<ui64>* writeIds = nullptr,
     const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert, const ui64 lockId = 1);
 
-std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
-    const ui64 writePartId, const TString& data, const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
-    const NEvWrite::EModificationType mType = NEvWrite::EModificationType::Upsert);
-
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 
 void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds, NOlap::TSnapshot snap, ui64 scanId = 0);

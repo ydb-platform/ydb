@@ -850,7 +850,7 @@ public:
             issue->set_id("0");
             issue->set_status(Ydb::Monitoring::StatusFlag::RED);
             issue->set_message("Cluster is not bootstrapped");
-            ReplyAndPassAway(std::move(result));
+            return ReplyAndPassAway(std::move(result));
         }
         if (config.HasBlobStorageConfig()) {
             if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
@@ -3232,7 +3232,7 @@ public:
         FillResult({&result});
         RemoveUnrequestedEntries(result, Request->Request);
 
-        ReplyAndPassAway(std::move(response));
+        return ReplyAndPassAway(std::move(response));
     }
 
     void ReplyAndPassAway(THolder<TEvSelfCheckResult> response) {

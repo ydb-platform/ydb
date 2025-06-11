@@ -44,6 +44,7 @@ COPY --from=builder \
 EXPOSE ${GRPC_TLS_PORT:-2135}
 EXPOSE ${GRPC_PORT:-2136}
 EXPOSE ${MON_PORT:-8765}
+EXPOSE ${YDB_KAFKA_PROXY_PORT:-9092}
 
 HEALTHCHECK --start-period=60s --interval=1s CMD sh ./health_check
 

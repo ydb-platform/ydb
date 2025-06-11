@@ -552,6 +552,7 @@ std::unique_ptr<TEvPersQueue::TEvReleasePartition> TPartitionFamily::MakeEvRelea
     auto& r = res->Record;
 
     r.SetSession(Session->SessionName);
+    r.SetCount(1);
     r.SetTopic(Topic());
     r.SetPath(TopicPath());
     r.SetGeneration(TabletGeneration());

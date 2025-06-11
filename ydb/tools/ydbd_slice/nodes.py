@@ -218,12 +218,13 @@ class Nodes(object):
             local_path += '/'
         if directory:
             remote_path += '/'
+
+        original_remote_path = remote_path
         if compressed_path is not None:
             self._logger.info('compressing %s to %s' % (local_path, compressed_path))
             if not os.path.isfile(compressed_path) or os.stat(local_path).st_mtime != os.stat(compressed_path).st_mtime:
                 subprocess.check_call(['zstd', '-5f', local_path, '-o', compressed_path, '-T0'])
             local_path = compressed_path
-            original_remote_path = remote_path
             remote_path += '.zstd'
 
         self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))

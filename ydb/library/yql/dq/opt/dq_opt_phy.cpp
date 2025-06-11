@@ -2216,21 +2216,25 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
 
                     TVector<TCoAtom> keyColumns;
                     for (auto* item : structType->GetItems()) {
-                        auto columnName = Build<TCoAtom>(ctx, node.Pos()).Value(item->GetName()).Done();
-                        keyColumns.push_back(columnName);
+                        if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Data) {
+                            auto columnName = Build<TCoAtom>(ctx, node.Pos()).Value(item->GetName()).Done();
+                            keyColumns.push_back(columnName);
+                        }
                     }
 
-                    auto shuffleConnection = Build<TDqCnHashShuffle>(ctx, node.Pos())
-                                                 .Output()
-                                                    .Stage(connection.Output().Stage())
-                                                    .Index(connection.Output().Index())
-                                                 .Build()
-                                                    .KeyColumns()
-                                                    .Add(keyColumns)
-                                                 .Build()
-                                                 .Done();
+                    if (keyColumns.size()) {
+                        auto shuffleConnection = Build<TDqCnHashShuffle>(ctx, node.Pos())
+                                                     .Output()
+                                                        .Stage(connection.Output().Stage())
+                                                        .Index(connection.Output().Index())
+                                                     .Build()
+                                                     .KeyColumns()
+                                                        .Add(keyColumns)
+                                                     .Build()
+                                                     .Done();
 
-                    replaces[connection.Raw()] = shuffleConnection.Ptr();
+                        replaces[connection.Raw()] = shuffleConnection.Ptr();
+                    }
                 }
             }
 

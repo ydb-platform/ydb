@@ -179,6 +179,13 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCo
 };
 
 template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool CreateDirsFromName = true;
+};
+
+template <>
 struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>
     : public TSchemeTxTraitsFallback
 {

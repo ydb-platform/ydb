@@ -179,6 +179,15 @@ struct TListOperationsOptions
     }
 };
 
+struct TListOperationsContext final
+{
+    bool StrictOperationInfoAccessValidation = false;
+    // Should only be filled if |StrictOperationInfoAccessValidation| is true.
+    THashSet<std::string> UserTransitiveClosure = {};
+};
+
+DEFINE_REFCOUNTED_TYPE(TListOperationsContext)
+
 struct TPollJobShellResponse
 {
     NYson::TYsonString Result;

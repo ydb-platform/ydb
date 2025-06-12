@@ -430,4 +430,34 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     return true;
 }
 
+void TTablesManager::MoveTableProposeOnExecute(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("scheme_shard_local_path_id", schemeShardLocalPathId);
+    const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
+    AFL_VERIFY(RenamingLocalToInternal.emplace(schemeShardLocalPathId, *internalPathId).second)("internal_path_id", internalPathId);
+    //AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+}
+
+void TTablesManager::MoveTableProgressOnExecute(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "move_table_progress_on_execute")("old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
+    const auto& internalPathId = ResolveInternalPathId(oldSchemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
+    AFL_VERIFY(HasTable(*internalPathId));
+    auto& table = Tables.at(*internalPathId);
+    table.UpdateLocalPathIdOnExecute(db, newSchemeShardLocalPathId);
+}
+
+void TTablesManager::MoveTableProgressOnComplete(const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)
+        ("event", "move_table_progress_on_complete")("old_local_path_id", oldSchemeShardLocalPathId)("new_local_path_id", newSchemeShardLocalPathId);
+    const auto& internalPathId = ResolveInternalPathId(oldSchemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
+    AFL_VERIFY(HasTable(*internalPathId));
+    auto& table = Tables.at(*internalPathId);
+    table.UpdateLocalPathIdOnComplete(newSchemeShardLocalPathId);
+    AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
+    AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, *internalPathId).second);
+}
+
 }   // namespace NKikimr::NColumnShard

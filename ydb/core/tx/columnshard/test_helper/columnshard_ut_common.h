@@ -382,6 +382,17 @@ struct TTestSchema {
         return out;
     }
 
+    static TString MoveTableTxBody(ui64 srcPathId, ui64 dstPathId, ui32 version) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        tx.MutableMoveTable()->SetSrcPathId(srcPathId);
+        tx.MutableMoveTable()->SetDstPathId(dstPathId);
+        // tx.MutableSeqNo()->SetGeneration(seqNo.Generation);
+        tx.MutableSeqNo()->SetRound(version);
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
     static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {

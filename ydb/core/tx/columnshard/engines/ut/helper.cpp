@@ -1,5 +1,8 @@
 #include "helper.h"
 
+#include <ydb/core/formats/arrow/special_keys.h>
+
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NEngines::NTest {

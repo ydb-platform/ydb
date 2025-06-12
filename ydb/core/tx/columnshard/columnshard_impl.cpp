@@ -17,9 +17,7 @@
 #include "bg_tasks/manager/manager.h"
 #include "blobs_action/storages_manager/manager.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
-#include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
-#include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_reader/actor.h"
 #include "bg_tasks/events/events.h"
@@ -89,7 +87,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
           Counters.GetPortionIndexCounters(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
-    , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
@@ -209,17 +206,6 @@ NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
     }
     Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
     return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
-}
-
-TInsertWriteId TColumnShard::HasLongTxWrite(const NLongTxService::TLongTxId& longTxId, const ui32 partId) const {
-    auto it = LongTxWritesByUniqueId.find(longTxId.UniqueId);
-    if (it != LongTxWritesByUniqueId.end()) {
-        auto itPart = it->second.find(partId);
-        if (itPart != it->second.end()) {
-            return itPart->second->InsertWriteId;
-        }
-    }
-    return (TInsertWriteId)0;
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -515,15 +501,10 @@ protected:
             AFL_VERIFY(TxEvent->IndexChanges->ResourcesGuard);
         }
         TxEvent->IndexChanges->Blobs = ExtractBlobsData();
-        const bool isInsert = !!dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
         TxEvent->IndexChanges->SetStage(NOlap::NChanges::EStage::ReadyForConstruct);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
-        if (isInsert) {
-            NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
-        } else {
-            NConveyorComposite::TCompServiceOperator::SendTaskToExecute(task);
-        }
+        NConveyorComposite::TCompServiceOperator::SendTaskToExecute(task);
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());

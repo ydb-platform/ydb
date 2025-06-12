@@ -130,6 +130,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("tablet_id", TabletID())("event", "TEvWriteBlobsResult");
 
     auto& putResult = ev->Get()->GetPutResult();
+    AFL_VERIFY(putResult.GetPutStatus() != NKikimrProto::OK);
     OnYellowChannels(putResult);
     NOlap::TWritingBuffer& wBuffer = ev->Get()->MutableWritesBuffer();
     auto baseAggregations = wBuffer.GetAggregations();
@@ -142,26 +143,18 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             "writing_id", writeMeta.GetId())("status", putResult.GetPutStatus());
         Counters.GetWritesMonitor()->OnFinishWrite(aggr->GetSize(), 1);
 
-        if (putResult.GetPutStatus() != NKikimrProto::OK) {
-            Counters.GetCSCounters().OnWritePutBlobsFail(TMonotonic::Now() - writeMeta.GetWriteStartInstant());
-            Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+        Counters.GetCSCounters().OnWritePutBlobsFail(TMonotonic::Now() - writeMeta.GetWriteStartInstant());
+        Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
 
-            AFL_VERIFY(!writeMeta.HasLongTxId());
-            auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(),
-                ev->Get()->GetWriteResultStatus(), ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
-            ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
-            Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
-            wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
-        } else {
-            const TMonotonic now = TMonotonic::Now();
-            Counters.OnWritePutBlobsSuccess(now - writeMeta.GetWriteStartInstant(), aggr->GetRows());
-            LOG_S_DEBUG("Write (record) into pathId " << writeMeta.GetPathId()
-                                                      << (writeMeta.GetWriteId() ? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : "")
-                                                      << " at tablet " << TabletID());
-        }
+        AFL_VERIFY(!writeMeta.HasLongTxId());
+        auto operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), ev->Get()->GetWriteResultStatus(),
+            ev->Get()->GetErrorMessage() ? ev->Get()->GetErrorMessage() : "put data fails");
+        ctx.Send(writeMeta.GetSource(), result.release(), 0, operation->GetCookie());
+        Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::PutBlob);
+        wBuffer.RemoveData(aggr, StoragesManager->GetInsertOperator());
     }
-    Execute(new TTxWrite(this, ev), ctx);
+    AFL_VERIFY(wBuffer.IsEmpty());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx) {

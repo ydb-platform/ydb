@@ -9,8 +9,8 @@ class IMetadataFiller {
 private:
     virtual TConclusionStatus DoFillMetadata(const NColumnShard::TColumnShard* shard, const std::shared_ptr<TReadMetadataBase>& metadata, const TReadDescription& read) const = 0;
 
-    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const bool reverse, const TSnapshot& reqSnapshot) const {
-        return NAbstract::TGranuleMetaView(granule, reverse, reqSnapshot);
+    virtual NAbstract::TGranuleMetaView DoBuildGranuleView(const TGranuleMeta& granule, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool reverse, const TSnapshot& reqSnapshot) const {
+        return NAbstract::TGranuleMetaView(granule, schemeShardLocalPathId, reverse, reqSnapshot);
     }
 public:
     virtual ~IMetadataFiller() = default;
@@ -19,8 +19,8 @@ public:
         return DoFillMetadata(shard, metadata, read);
     }
 
-    NAbstract::TGranuleMetaView BuildGranuleView(const TGranuleMeta& granule, const bool reverse, const TSnapshot& reqSnapshot) const {
-        return DoBuildGranuleView(granule, reverse, reqSnapshot);
+    NAbstract::TGranuleMetaView BuildGranuleView(const TGranuleMeta& granule, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool reverse, const TSnapshot& reqSnapshot) const {
+        return DoBuildGranuleView(granule, schemeShardLocalPathId, reverse, reqSnapshot);
     }
 
 };

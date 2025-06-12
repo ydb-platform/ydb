@@ -3,6 +3,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/tx/tiering/tier/identifier.h>
@@ -356,6 +357,16 @@ public:
     virtual THashMap<TString, std::shared_ptr<NKikimr::NOlap::NDataLocks::ILock>> GetExternalDataLocks() const {
         return {};
     }
+
+    virtual ui64 GetInternalPathIdOffset(const ui64 /*tabletId*/) const {
+        return 0;
+    }
+
+    virtual void OnAddPathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
+    }
+    virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
+    }
+
 };
 
 class TControllers {

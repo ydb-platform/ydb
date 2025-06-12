@@ -39,7 +39,7 @@ namespace NKikimr::NKqp::NScheduler {
             PassedAway = true;
 
             if (IsSchedulable()) {
-                if (!Throttled) {
+                if (!IsThrottled()) {
                     StopExecution();
                 }
 
@@ -63,24 +63,16 @@ namespace NKikimr::NKqp::NScheduler {
                 return TBase::DoExecuteImpl();
             }
 
-            const auto now = Now();
-
+            // TODO: use single "now" moment for delay, throttle and resume?
             // TODO: account waiting on mailbox?
 
-            if (auto delay = CalculateDelay(now)) {
-                Throttled = true;
-                StartThrottle = now;
+            if (auto delay = CalculateDelay(Now())) {
+                Throttle();
                 this->Schedule(*delay, new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
                 return;
             }
 
-            TDuration burstThrottle;
-            if (Throttled) {
-                burstThrottle = now - StartThrottle;
-            }
-            Throttled = false;
-
-            StartExecution(burstThrottle);
+            StartExecution(IsThrottled() ? Resume() : 0);
             TBase::DoExecuteImpl();
             if (!PassedAway) {
                 StopExecution();
@@ -89,8 +81,6 @@ namespace NKikimr::NKqp::NScheduler {
 
     private:
         bool PassedAway = false;
-        bool Throttled = false;
-        TMonotonic StartThrottle;
     };
 
 } // namespace NKikimr::NKqp::NScheduler

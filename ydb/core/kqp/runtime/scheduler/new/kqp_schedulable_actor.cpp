@@ -4,6 +4,8 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
+static constexpr TDuration AverageBatchTime = TDuration::MicroSeconds(100);
+
 using namespace NHdrf::NDynamic;
 
 // class TSchedulableTask
@@ -28,6 +30,7 @@ void TSchedulableTask::IncreaseUsage(const TDuration& burstThrottle) {
 }
 
 void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
+    Y_ENSURE(Query);
     for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         --parent->Usage;
         parent->BurstUsage += burstUsage.MicroSeconds();
@@ -38,6 +41,7 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
 
 TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
     : SchedulableTask(std::move(options.SchedulableTask))
+    , BatchTime(AverageBatchTime)
 {
 }
 
@@ -60,30 +64,61 @@ void TSchedulableActorHelper::StartExecution(const TDuration& burstThrottle) {
 void TSchedulableActorHelper::StopExecution() {
     Y_ASSERT(SchedulableTask);
 
-    SchedulableTask->DecreaseUsage(TDuration::MicroSeconds(Timer.Passed() * 1'000'000));
+    TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
+    SchedulableTask->Query->DelayedSumBatches += (timePassed - BatchTime).MicroSeconds();
+    BatchTime = timePassed;
+    SchedulableTask->DecreaseUsage(timePassed);
+}
+
+void TSchedulableActorHelper::Throttle() {
+    Y_ASSERT(!Throttled);
+
+    Throttled = true;
+    SchedulableTask->Query->DelayedSumBatches += BatchTime.MicroSeconds();
+    SchedulableTask->Query->DelayedCount++;
+    StartThrottle = Now();
+}
+
+bool TSchedulableActorHelper::IsThrottled() const {
+    return Throttled;
+}
+
+TDuration TSchedulableActorHelper::Resume() {
+    Y_ASSERT(Throttled);
+
+    Throttled = false;
+    SchedulableTask->Query->DelayedSumBatches -= BatchTime.MicroSeconds();
+    SchedulableTask->Query->DelayedCount--;
+    return Now() - StartThrottle;
 }
 
 std::optional<TDuration> TSchedulableActorHelper::CalculateDelay(TMonotonic now) const {
-    // const auto usage = SchedulableTask->Query->BurstUsage.load();
-    // const auto limit = SchedulableTask->Query->FairShare * (now - LastNowRecalc + SMOOTH_PERIOD) + TrackedBefore;
+    const auto SmoothPeriod = TDuration::MilliSeconds(100);
+    const auto MaxDelay = TDuration::Seconds(10);
+    const auto ActivationPenalty = TDuration::MicroSeconds(10);
 
-    // if (current_limit > usage) {
-    //     return {};
-    // }
+    const auto query = SchedulableTask->Query;
+    const auto snapshot = query->GetSnapshot();
+    const auto usage = query->BurstUsage.load();
+    const auto share = snapshot->FairShare;
+    const auto limit = share * (now - snapshot->Timestamp + SmoothPeriod).MicroSeconds() + snapshot->AdjustedUsage;
 
-    // if (current->FairShare < MinCapacity) {
-    //     return MaxDelay;
-    // }
+    if (limit > usage) {
+        return {};
+    }
 
-    // return Min(
-    //     MaxDelay,
-    //     (usage + current->TrackedBefore +
-    //      Max<i64>(0, pool->DelayedSumBatches) +
-    //      BatchTime + ActivationPenalty * (pool->DelayedCount + 1)
-    //     ) / current->FairShare - (now - current->LastNowRecalc)
-    // );
-    Y_UNUSED(now);
-    return {};
+    if (share < 1e-9) {
+        return MaxDelay;
+    }
+
+    return Min(
+        MaxDelay,
+        TDuration::MicroSeconds(
+            (usage - snapshot->AdjustedUsage + Max<i64>(0, query->DelayedSumBatches) +
+             (BatchTime + ActivationPenalty * (query->DelayedCount + 1)).MicroSeconds()
+            ) / share
+        ) - (now - snapshot->Timestamp)
+    );
 }
 
 void TSchedulableActorHelper::AccountThrottledTime(TMonotonic) {

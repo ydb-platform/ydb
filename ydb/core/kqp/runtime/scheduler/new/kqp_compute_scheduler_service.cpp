@@ -291,7 +291,9 @@ void TComputeScheduler::UpdateFairShare() {
 
     {
         TWriteGuard lock(Mutex);
-        Root->SetSnapshot(snapshot);
+        if (auto oldSnapshot = Root->SetSnapshot(snapshot)) {
+            snapshot->AccountFairShare(oldSnapshot);
+        }
     }
 
     Counters.UpdateFairShare->Add((TMonotonic::Now() - startTime).MicroSeconds());

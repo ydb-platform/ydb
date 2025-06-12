@@ -1,5 +1,9 @@
 LIBRARY()
 
+IF (USE_HDRF_SCHEDULER)
+    CFLAGS(-DUSE_HDRF_SCHEDULER)
+ENDIF()
+
 SRCS(
     control.cpp
     kqp_event_ids.h

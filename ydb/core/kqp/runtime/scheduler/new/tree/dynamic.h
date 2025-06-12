@@ -11,9 +11,28 @@
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
-    struct TTreeElementBase : public TStaticAttributes {
-        ui64 FairShare = 0;
+    template <class TSnapshotPtr>
+    class TSnapshotSwitch {
+        public:
+            // returns previous snapshot
+            TSnapshotPtr SetSnapshot(const TSnapshotPtr& snapshot) {
+                ui8 oldSnapshotIdx = SnapshotIdx;
+                ui8 newSnapshotIdx = 1 - SnapshotIdx;
+                Snapshots.at(newSnapshotIdx) = snapshot;
+                SnapshotIdx = newSnapshotIdx;
+                return Snapshots.at(oldSnapshotIdx);
+            }
 
+            TSnapshotPtr GetSnapshot() const {
+                return Snapshots.at(SnapshotIdx);
+            }
+
+        private:
+            std::array<TSnapshotPtr, 2> Snapshots;
+            std::atomic<ui8> SnapshotIdx = 0;
+    };
+
+    struct TTreeElementBase : public TStaticAttributes {
         std::atomic<ui64> Usage = 0;
         std::atomic<ui64> Demand = 0;
 
@@ -38,7 +57,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         }
     };
 
-    class TQuery : public TTreeElementBase {
+    class TQuery : public TTreeElementBase, public TSnapshotSwitch<NSnapshot::TQueryPtr> {
     public:
         explicit TQuery(const TQueryId& id, const TStaticAttributes& attrs = {});
 
@@ -47,6 +66,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         }
 
         NSnapshot::TQuery* TakeSnapshot() const override;
+
+        // TODO(scheduler): for calculate delay scheme.
+        std::atomic<i64> DelayedSumBatches = 0;
+        std::atomic<ui64> DelayedCount = 0;
 
     private:
         const TQueryId Id;
@@ -90,7 +113,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         THashMap<TString /* poolId */, TPoolPtr> Pools;
     };
 
-    class TRoot : public TTreeElementBase {
+    class TRoot : public TTreeElementBase, public TSnapshotSwitch<NSnapshot::TRootPtr> {
     public:
         explicit TRoot(TIntrusivePtr<TKqpCounters> counters);
 
@@ -98,18 +121,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         TDatabasePtr GetDatabase(const TString& id) const;
 
         NSnapshot::TRoot* TakeSnapshot() const override;
-        void SetSnapshot(const NSnapshot::TRootPtr& snapshot);
-        NSnapshot::TRootPtr GetSnapshot() const {
-            return Snapshots.at(SnapshotIdx);
-        }
 
     public:
         ui64 TotalLimit = Infinity();
 
     private:
         THashMap<TString /* name */, TDatabasePtr> Databases;
-        std::array<NSnapshot::TRootPtr, 2> Snapshots;
-        std::atomic<ui8> SnapshotIdx = 0;
 
         struct {
             NMonitoring::TDynamicCounters::TCounterPtr TotalLimit;

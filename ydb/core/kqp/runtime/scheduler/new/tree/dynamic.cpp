@@ -45,7 +45,7 @@ TQuery::TQuery(const TQueryId& id, const TStaticAttributes& attrs)
 }
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() const {
-    auto* newQuery = new NSnapshot::TQuery(GetId(), *this);
+    auto* newQuery = new NSnapshot::TQuery(GetId(), const_cast<TQuery*>(this));
     newQuery->Demand = Demand.load();
     return newQuery;
 }
@@ -166,15 +166,6 @@ NSnapshot::TRoot* TRoot::TakeSnapshot() const {
     }
 
     return newRoot;
-}
-
-void TRoot::SetSnapshot(const NSnapshot::TRootPtr& snapshot) {
-    ui8 newSnapshotIdx = 1 - SnapshotIdx;
-    Snapshots.at(newSnapshotIdx) = snapshot;
-    if (Snapshots.at(SnapshotIdx)) {
-        Snapshots.at(SnapshotIdx)->AccountFairShare(Snapshots.at(SnapshotIdx));
-    }
-    SnapshotIdx = newSnapshotIdx;
 }
 
 } // namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic

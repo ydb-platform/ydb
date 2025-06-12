@@ -186,6 +186,11 @@ namespace NTable {
                 return EReady::Data;
             }
 
+            if (Page.BaseRow() + Page->Count >= EndRowId) {
+                // Row is outside of bounds
+                return Exhausted();
+            }
+
             if (seek != ESeek::Exact) {
                 // The row we seek is on the next page
 

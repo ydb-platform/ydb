@@ -27,7 +27,6 @@ private:
     TWriteAggregation* ParentAggregation;
 
 public:
-    std::shared_ptr<TUserData> BuildInsertionUserData(const NColumnShard::TColumnShard& owner) const;
     void InitBlobId(const TUnifiedBlobId& id);
 
     const NArrow::TSerializedBatch& GetSplittedBlobs() const {

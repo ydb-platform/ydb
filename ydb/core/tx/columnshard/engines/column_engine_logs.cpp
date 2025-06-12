@@ -168,27 +168,6 @@ bool TColumnEngineForLogs::FinishLoading() {
     return true;
 }
 
-std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept {
-    Y_ABORT_UNLESS(dataToIndex.size());
-
-    TSaverContext saverContext(StoragesManager);
-    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), saverContext);
-    auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
-
-    for (const auto& data : changes->GetDataToIndex()) {
-        const TInternalPathId pathId = data.GetPathId();
-
-        if (changes->PathToGranule.contains(pathId)) {
-            continue;
-        }
-        if (!data.GetRemove()) {
-            AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
-        }
-    }
-
-    return changes;
-}
-
 ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
     const std::optional<ui64> waitingPriority) const noexcept {
     auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);

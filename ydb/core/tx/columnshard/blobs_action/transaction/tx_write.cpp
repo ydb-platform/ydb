@@ -1,6 +1,5 @@
 #include "tx_write.h"
 
-#include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
 
 namespace NKikimr::NColumnShard {

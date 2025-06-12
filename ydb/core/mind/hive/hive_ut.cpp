@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/protos/counters_hive.pb.h>
@@ -7153,7 +7154,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
             if (tablet.GetTabletID() == tabletId) {
                 foundTablet = true;
-                UNIT_ASSERT_EQUAL_C(tablet.GetNodeID(), nodeId, "tablet started on wrong node");
+                UNIT_ASSERT_EQUAL_C(tablet.GetNodeID(), nodeId, "tablet started on node " << tablet.GetNodeID() << " instead of " << nodeId);
             }
         }
         UNIT_ASSERT(foundTablet);
@@ -7673,6 +7674,163 @@ Y_UNIT_TEST_SUITE(THiveTest) {
       UNIT_ASSERT(result);
 
       UNIT_ASSERT_VALUES_EQUAL(0, getTabletsStartingCounter());
+    }
+
+    class TDummyBridge {
+        TTestBasicRuntime& Runtime;
+        TTestActorRuntimeBase::TEventObserverHolder Observer;
+        std::shared_ptr<TBridgeInfo> BridgeInfo;
+        std::unordered_set<TActorId> Subscribers;
+
+        void Notify() {
+            for (auto subscriber : Subscribers) {
+                auto ev  = std::make_unique<TEvNodeWardenStorageConfig>(nullptr, nullptr, true, BridgeInfo);
+                Runtime.Send(new IEventHandle(subscriber, subscriber, ev.release()));
+            }
+        }
+
+    public:
+        TDummyBridge(TTestBasicRuntime& runtime) : Runtime(runtime) 
+        {
+            Runtime.PileCallback = [](ui32 nodeIdx) { return nodeIdx % 2; };
+
+            BridgeInfo = std::make_shared<TBridgeInfo>();
+            std::vector<ui32> nodeIds(Runtime.GetNodeCount());
+            for (ui32 i = 0; i < Runtime.GetNodeCount(); ++i) {
+                nodeIds[i] = Runtime.GetNodeId(i);
+            }
+            BridgeInfo->Piles.push_back(TBridgeInfo::TPile{
+                .BridgePileId = TBridgePileId::FromValue(0),
+                .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
+                .IsPrimary = true,
+                .IsBeingPromoted = false,
+            });
+            BridgeInfo->Piles.push_back(TBridgeInfo::TPile{
+                .BridgePileId = TBridgePileId::FromValue(1),
+                .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
+                .IsPrimary = false,
+                .IsBeingPromoted = false,
+            });
+            for (size_t i = 0; i < 2; ++i) {
+                for (size_t j = i; j < nodeIds.size(); ++j) {
+                    BridgeInfo->Piles[i].StaticNodeIds.push_back(nodeIds[j]);
+                }
+            }
+            BridgeInfo->PrimaryPile = BridgeInfo->Piles.data();
+
+            Observer = Runtime.AddObserver<TEvNodeWardenStorageConfig>([this](auto&& ev) {
+                ev->Get()->BridgeInfo = BridgeInfo;
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
+
+        void Subscribe(TActorId actor) {
+            Subscribers.insert(actor);
+        }
+
+        void Unsubscribe(TActorId actor) {
+            Subscribers.erase(actor);
+        }
+
+        void Promote(ui32 pile) {
+            auto newState = std::make_shared<TBridgeInfo>();
+            newState->Piles = BridgeInfo->Piles;
+            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                if (i == pile) {
+                    newState->Piles[i].IsPrimary = false;
+                    newState->Piles[i].IsBeingPromoted = true;
+                } else {
+                    newState->Piles[i].IsPrimary = false;
+                    newState->Piles[i].IsBeingPromoted = false;
+                }
+            }
+            newState->BeingPromotedPile = newState->Piles.data() + pile;
+            newState->PrimaryPile = nullptr;
+
+            BridgeInfo.swap(newState);
+            Notify();
+        }
+
+        void Disconnect(ui32 pile) {
+            auto newState = std::make_shared<TBridgeInfo>();
+            newState->Piles = BridgeInfo->Piles;
+            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                if (i == pile) {
+                    newState->Piles[i].IsPrimary = false;
+                    newState->Piles[i].IsBeingPromoted = false;
+                    newState->Piles[i].State = NKikimrBridge::TClusterState::DISCONNECTED;
+                } else {
+                    newState->Piles[i].IsPrimary = true;
+                    newState->Piles[i].IsBeingPromoted = false;
+                    newState->PrimaryPile = newState->Piles.data() + i;
+                }
+            }
+            newState->BeingPromotedPile = nullptr;
+
+            BridgeInfo.swap(newState);
+            Notify();
+        }
+
+        void Reconnect() {
+            auto newState = std::make_shared<TBridgeInfo>();
+            newState->Piles = BridgeInfo->Piles;
+            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                if (newState->Piles[i].State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                    newState->Piles[i].State = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED;
+                }
+            }
+
+            BridgeInfo.swap(newState);
+            Notify();
+        }
+
+        void Synchronize() {
+            auto newState = std::make_shared<TBridgeInfo>();
+            newState->Piles = BridgeInfo->Piles;
+            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                if (newState->Piles[i].State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED) {
+                    newState->Piles[i].State = NKikimrBridge::TClusterState::SYNCHRONIZED;
+                }
+            }
+
+            BridgeInfo.swap(newState);
+            Notify();
+        }
+    };
+
+    Y_UNIT_TEST(TestBridgeCreateTablet) {
+        TTestBasicRuntime runtime(2, false);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        ui64 tablet1 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tablet1, 0);
+        AssertTabletStartedOnNode(runtime, tablet1, 0);
+        bridge.Promote(1);
+        ui64 tablet2 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tablet2, 0);
+        AssertTabletStartedOnNode(runtime, tablet2, 1);
+        bridge.Disconnect(1);
+        ui64 tablet3 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 2, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tablet3, 0);
+        AssertTabletStartedOnNode(runtime, tablet3, 0);
+        bridge.Reconnect();
+        ui64 tablet4 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 3, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tablet4, 0);
+        AssertTabletStartedOnNode(runtime, tablet4, 0);
+        bridge.Synchronize();
+        ui64 tablet5 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 4, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tablet5, 0);
+        AssertTabletStartedOnNode(runtime, tablet5, 0);
+        bridge.Disconnect(0);
+        ui64 tablet6 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 5, tabletType, BINDED_CHANNELS), 0, true);
+        MakeSureTabletIsUp(runtime, tablet6, 0);
+        AssertTabletStartedOnNode(runtime, tablet6, 1);
     }
 }
 

@@ -207,6 +207,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
         }
+        if (auto bridgePileId = AppData(ctx)->BridgePileId; bridgePileId) {
+            request->Record.SetBridgePileId(*bridgePileId);
+        }
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());
 

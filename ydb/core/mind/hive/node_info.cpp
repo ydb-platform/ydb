@@ -167,6 +167,12 @@ bool TNodeInfo::MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debu
         return false;
     }
 
+    if (Hive.BridgeInfo) {
+        if (!filter.IsAllowedPile(BridgePileId)) {
+            return false;
+        }
+    }
+
     return true;
 }
 

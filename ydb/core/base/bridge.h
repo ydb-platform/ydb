@@ -24,6 +24,10 @@ namespace NKikimr {
 
         using TPtr = std::shared_ptr<const TBridgeInfo>;
 
+        TBridgeInfo() = default;
+        TBridgeInfo(const TBridgeInfo&) = delete;
+        TBridgeInfo(TBridgeInfo&&) = default;
+
         const TPile *GetPile(TBridgePileId bridgePileId) const {
             Y_ABORT_UNLESS(bridgePileId.GetRawId() < Piles.size());
             return &Piles[bridgePileId.GetRawId()];

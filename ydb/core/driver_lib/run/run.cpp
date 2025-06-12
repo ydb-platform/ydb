@@ -415,6 +415,44 @@ public:
     }
 };
 
+class TBridgePileIdInitializer : public IAppDataInitializer {
+    const TKikimrRunConfig& Config;
+
+public:
+    TBridgePileIdInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        const auto& appConfig = Config.AppConfig;
+        if (appConfig.HasDynamicNodeConfig()) {
+            const auto& nodeInfo = appConfig.GetDynamicNodeConfig().GetNodeInfo();
+            if (nodeInfo.HasBridgePileId()) {
+                appData->BridgePileId = nodeInfo.GetBridgePileId();
+            }
+            return;
+        }
+        if (appConfig.HasBridgeConfig()) {
+            auto checkNodeId = [nodeId = Config.NodeId](auto&& node) { return node.GetNodeId() == nodeId; };
+            const auto& nodes = appConfig.GetNameserviceConfig().GetNode();
+            auto nodeIt = std::find_if(nodes.begin(), nodes.end(), checkNodeId);
+            if (nodeIt == nodes.end()) {
+                return;
+            }
+            const auto& pileName = nodeIt->GetBridgePileName();
+            auto checkPileName = [&](auto&& pile) { return pile.GetName() == pileName; };
+            const auto& piles = appConfig.GetBridgeConfig().GetPiles();
+            auto pileIt = std::find_if(piles.begin(), piles.end(), checkPileName);
+            if (pileIt == piles.end()) {
+                return;
+            }
+            appData->BridgePileId = pileIt - piles.begin();
+        }
+    }
+};
+
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
@@ -1293,6 +1331,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TClusterNameInitializer(runConfig));
     // setup yaml config info
     appDataInitializers.AddAppDataInitializer(new TYamlConfigInitializer(runConfig));
+    // setup bridge pile id
+    appDataInitializers.AddAppDataInitializer(new TBridgePileIdInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
 

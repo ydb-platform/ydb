@@ -272,6 +272,7 @@ struct TAppData {
 
     TString TenantName;
     TString NodeName;
+    std::optional<ui32> BridgePileId;
 
     TIntrusivePtr<TResourceProfiles> ResourceProfiles;
 

@@ -32,6 +32,10 @@ target_link_libraries(tx-columnshard-common PUBLIC
   libs-apache-arrow
   core-formats-arrow
   columnshard-common-protos
+  columnshard-data_sharing-protos
+  columnshard-transactions-protos
+  columnshard-export-protos
+  core-scheme-protos
   tools-enum_parser-enum_serialization_runtime
 )
 

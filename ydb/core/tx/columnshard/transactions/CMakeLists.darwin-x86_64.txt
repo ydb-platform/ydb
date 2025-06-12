@@ -19,8 +19,8 @@ get_built_tool_path(
   enum_parser
 )
 
-add_subdirectory(locks)
 add_subdirectory(protos)
+add_subdirectory(locks)
 add_subdirectory(operators)
 add_subdirectory(transactions)
 

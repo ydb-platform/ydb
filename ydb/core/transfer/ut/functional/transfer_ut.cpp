@@ -4,6 +4,49 @@ using namespace NReplicationTest;
 
 Y_UNIT_TEST_SUITE(Transfer)
 {
+    void CheckTopicLocalOrRemote(bool local) {
+        MainTestCase testCase(std::nullopt, "ROW");
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = %s
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:$x._offset,
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(local));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(LocalBase) {
+        CheckTopicLocalOrRemote(true);
+    }
+
+    Y_UNIT_TEST(RemoteBase) {
+        CheckTopicLocalOrRemote(false);
+    }
+
     Y_UNIT_TEST(CreateTransfer_TargetNotFound)
     {
         MainTestCase testCase;

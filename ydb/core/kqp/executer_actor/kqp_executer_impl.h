@@ -563,6 +563,7 @@ protected:
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
+#if defined(USE_HDRF_SCHEDULER)
         if (const auto& poolId = GetUserRequestContext()->PoolId; poolId != NResourcePool::DEFAULT_POOL_ID && !poolId.empty()) {
             auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
             addQueryEvent->DatabaseId = Database;
@@ -570,6 +571,7 @@ protected:
             addQueryEvent->QueryId = TxId;
             this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
         }
+#endif
 
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {

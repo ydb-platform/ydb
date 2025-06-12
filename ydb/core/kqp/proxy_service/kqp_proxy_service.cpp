@@ -675,10 +675,12 @@ public:
             return;
         }
 
+#if defined(USE_HDRF_SCHEDULER)
         // TODO: not the best place for adding database.
         auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>();
         addDatabaseEvent->Id = ev->Get()->GetDatabaseId();
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
+#endif
 
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
@@ -1659,9 +1661,11 @@ private:
             ev->Get()->SetPoolConfig(poolConfig);
         }
 
+#if defined(USE_HDRF_SCHEDULER)
         if (poolId != NResourcePool::DEFAULT_POOL_ID && !poolId.empty()) {
             Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
         }
+#endif
 
         return true;
     }

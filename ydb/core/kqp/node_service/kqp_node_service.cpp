@@ -168,6 +168,7 @@ private:
         LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
+#if defined(USE_HDRF_SCHEDULER)
         const auto& databaseId = msg.GetDatabaseId();
         const auto& poolId = msg.GetPoolId();
 
@@ -182,6 +183,7 @@ private:
         addQueryEvent->PoolId = msg.GetPoolId();
         addQueryEvent->QueryId = txId;
         Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
+#endif
 
         auto now = TAppData::TimeProvider->Now();
         NKqpNode::TTasksRequest request(txId, ev->Sender, now);

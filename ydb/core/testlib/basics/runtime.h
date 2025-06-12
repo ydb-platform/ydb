@@ -13,6 +13,9 @@ namespace NActors {
         using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
         TNodeLocationCallback LocationCallback;
 
+        using TPileCallback = std::function<ui32(ui32)>;
+        TPileCallback PileCallback;
+
         NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
 
         ~TTestBasicRuntime();
@@ -21,5 +24,6 @@ namespace NActors {
 
         void AddICStuff();
         void AddAuditLogStuff();
+        void AddBridgeStuff();
     };
 }

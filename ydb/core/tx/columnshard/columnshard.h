@@ -98,7 +98,7 @@ namespace TEvColumnShard {
 
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
-        YDB_READONLY_DEF(NColumnShard::TInternalPathId, PathId);
+        YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
@@ -114,7 +114,7 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
+        TEvInternalScan(const NColumnShard::TUnifiedPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
             , Snapshot(snapshot)
             , LockId(lockId)
@@ -242,11 +242,11 @@ namespace TEvColumnShard {
     struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
         TEvWrite() = default;
 
-        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
+        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, NColumnShard::TSchemeShardLocalPathId tableId,
                  const TString& dedupId, const TString& data, const ui32 writePartId,
                 const NEvWrite::EModificationType modificationType) {
             ActorIdToProto(source, Record.MutableSource());
-            Record.SetTableId(tableId);
+            tableId.ToProto(Record);
             Record.SetDedupId(dedupId);
             Record.SetData(data);
             Record.SetWritePartId(writePartId);
@@ -279,7 +279,7 @@ namespace TEvColumnShard {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            Record.SetTableId(writeMeta.GetTableId().GetRawValue());
+            writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(Record);
             Record.SetDedupId(writeMeta.GetDedupId());
             Record.SetStatus(status);
         }

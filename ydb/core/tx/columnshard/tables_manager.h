@@ -93,7 +93,8 @@ public:
 };
 
 class TTableInfo {
-    const TInternalPathId PathId;
+    const TInternalPathId InternalPathId;
+    TSchemeShardLocalPathId SchemeShardLocalPathId; //path id the table is known as at SchemeShard
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
@@ -102,8 +103,8 @@ public:
         return Versions.empty();
     }
 
-    TInternalPathId GetPathId() const {
-        return PathId;
+    TUnifiedPathId GetPathId() const {
+        return TUnifiedPathId{InternalPathId, SchemeShardLocalPathId};
     }
 
     const NOlap::TSnapshot& GetDropVersionVerified() const {
@@ -130,14 +131,22 @@ public:
         return *DropVersion < *minReadSnapshot;
     }
 
-    TTableInfo(const TInternalPathId pathId)
-        : PathId(pathId) {
+    TTableInfo(const TUnifiedPathId& pathId)
+        : InternalPathId(pathId.InternalPathId)
+        , SchemeShardLocalPathId(pathId.SchemeShardLocalPathId) {
     }
 
     template <class TRow>
     static TTableInfo InitFromDB(const TRow& rowset) {
-        const auto pathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
-        TTableInfo result(pathId);
+        const auto internalPathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
+        AFL_VERIFY(internalPathId);
+        const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(
+            rowset.template HaveValue<Schema::TableInfo::SchemeShardLocalPathId>() 
+                ? rowset.template GetValue<Schema::TableInfo::SchemeShardLocalPathId>() 
+                : internalPathId.GetRawValue()
+        );
+        AFL_VERIFY(schemeShardLocalPathId);
+        TTableInfo result({internalPathId, schemeShardLocalPathId});
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             result.DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
@@ -186,9 +195,10 @@ public:
     }
 };
 
-class TTablesManager {
+class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -200,10 +210,14 @@ private:
     NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
+    ui64 InternalPathIdOffset;
 
-public:
     friend class TTxInit;
 
+public: //IPathIdTranslator
+    virtual std::optional<NColumnShard::TSchemeShardLocalPathId> ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const override;
+    virtual std::optional<TInternalPathId> ResolveInternalPathId(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const override;
+public:
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
@@ -309,7 +323,8 @@ public:
 
     const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
-
+    TInternalPathId CreateInternalPathId(const TSchemeShardLocalPathId schemShardLocalPathId);
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> ResolveInternalPathIds(const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const;
     bool HasTable(const TInternalPathId pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = std::nullopt) const;
     bool IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const;
     bool IsReadyForFinishWrite(const TInternalPathId pathId, const NOlap::TSnapshot& minReadSnapshot) const;
@@ -327,7 +342,7 @@ public:
         const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, NIceDb::TNiceDb& db);
     bool FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json);
 
-    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const TInternalPathId pathId,
+    [[nodiscard]] std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateAddShardingInfoTx(TColumnShard& owner, const NColumnShard::TSchemeShardLocalPathId pathId,
         const ui64 versionId, const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const;
 
     void SetSchemaObjectsCache(const std::shared_ptr<NOlap::TSchemaObjectsCache>& cache) {

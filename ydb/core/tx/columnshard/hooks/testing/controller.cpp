@@ -92,23 +92,6 @@ void TController::DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard&
     AFL_VERIFY(ShardActuals.erase(shard.TabletID()));
 }
 
-std::vector<NKikimr::NColumnShard::TInternalPathId> TController::GetPathIds(const ui64 tabletId) const {
-    TGuard<TMutex> g(Mutex);
-    std::vector<NKikimr::NColumnShard::TInternalPathId> result;
-    for (auto&& i : ShardActuals) {
-        if (i.first == tabletId) {
-            const auto& index = i.second->GetIndexAs<NOlap::TColumnEngineForLogs>();
-            std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
-
-            for (auto&& g : granules) {
-                result.emplace_back(g->GetPathId());
-            }
-            break;
-        }
-    }
-    return result;
-}
-
 bool TController::IsTrivialLinks() const {
     TGuard<TMutex> g(Mutex);
     for (auto&& i : ShardActuals) {

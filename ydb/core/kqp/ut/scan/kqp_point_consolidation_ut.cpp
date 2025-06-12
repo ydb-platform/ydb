@@ -167,7 +167,33 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
         }
         {
             /*
-                There is one segment with another points as ranges:
+                There are only 2 points in the range with the double primary key:
+                [(0, "aaa");(0, "aaa")], [(9, "cde");(9, "cde")]
+
+                With EnableParallelPointReadConsolidation the query will use 1 task for reading, without it 2 tasks.
+            */
+
+            const auto query = Q_(R"(
+                SELECT * FROM `TestShardedDoublePrimary`
+                WHERE (Id1, Id2) IN ((0, "aaa"), (9, "cde"));
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+                TExecuteQuerySettings{}.StatsMode(EStatsMode::Full)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets()[0].RowsCount(), 2);
+
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
+
+            const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 1 : 2);
+        }
+        {
+            /*
+                There is a segment with another points as ranges:
                 [0;1], [268435455;268435455], [536870911;536870911], ...
 
                 The query will use 4 (max) tasks regardless of the consolidation setting.
@@ -219,15 +245,15 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
         }
         {
             /*
-                There are only 2 points in the range with double primary key:
-                [(0, "aaa");(0, "aaa")], [(9, "cde");(9, "cde")]
+                There are only 2 points in the range with some order:
+                [0;0], [268435455;268435455]
 
-                With EnableParallelPointReadConsolidation the query will use 1 task for reading, without it 2 tasks.
+                The query is sorted, so the consolidation is not applied and 2 tasks are used.
             */
 
             const auto query = Q_(R"(
-                SELECT * FROM `TestShardedDoublePrimary`
-                WHERE (Id1, Id2) IN ((0, "aaa"), (9, "cde"));
+                SELECT * FROM `TestSharded`
+                WHERE Id IN (0, 268435455) ORDER BY Id;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
@@ -241,7 +267,7 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
 
             const auto tasksCount = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(tasksCount, PointConsolidation ? 2 : 2);
         }
     }
 
@@ -342,118 +368,6 @@ Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
             };
 
             UNIT_ASSERT_VALUES_EQUAL(resultSet, expected);
-        }
-    }
-
-    Y_UNIT_TEST_TWIN(ReadRangesSorted, PointConsolidation) {
-        TKikimrRunner kikimr(GetAppConfig(PointConsolidation));
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        CreateSampleTables(session);
-
-        {
-            const auto query = Q_(R"(
-                SELECT Id, Value FROM `TestSharded`
-                WHERE Id IN (0, 268435455) ORDER BY Id;
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-                TExecuteQuerySettings{}.StatsMode(EStatsMode::Full)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [0u;[0u]];
-                [268435455u;[2u]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-        {
-            const auto query = Q_(R"(
-                SELECT Id, Value FROM `TestSharded`
-                WHERE Id IN (0, 268435455, 536870911, 805306367, 1073741823, 1342177279) ORDER BY Id;
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-                TExecuteQuerySettings{}.StatsMode(EStatsMode::Full)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [0u;[0u]];
-                [268435455u;[2u]];
-                [536870911u;[0u]];
-                [805306367u;[3u]];
-                [1073741823u;[1u]];
-                [1342177279u;[4u]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-        {
-            const auto query = Q_(R"(
-                SELECT Id, Value FROM `TestSharded`
-                WHERE Id IN (0, 1, 268435455, 536870911, 805306367, 1073741823, 1342177279) ORDER BY Id;
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-                TExecuteQuerySettings{}.StatsMode(EStatsMode::Full)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [0u;[0u]];
-                [268435455u;[2u]];
-                [536870911u;[0u]];
-                [805306367u;[3u]];
-                [1073741823u;[1u]];
-                [1342177279u;[4u]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-        {
-            const auto query = Q_(R"(
-                SELECT Id, Value FROM `TestSharded`
-                WHERE Id > 0 ORDER BY Id;
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-                TExecuteQuerySettings{}.StatsMode(EStatsMode::Full)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [70640909u;[4u]];
-                [141281818u;[3u]];
-                [211922728u;[3u]];
-                [268435455u;[2u]];
-                [353204547u;[2u]];
-                [423845456u;[1u]];
-                [494486365u;[0u]];
-                [536870911u;[0u]];
-                [635768184u;[4u]];
-                [706409094u;[4u]];
-                [777050003u;[3u]];
-                [805306367u;[3u]];
-                [918331822u;[2u]];
-                [988972731u;[1u]];
-                [1073741823u;[1u]];
-                [1130254550u;[0u]];
-                [1200895460u;[0u]];
-                [1271536369u;[4u]];
-                [1342177279u;[4u]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-        {
-            const auto query = Q_(R"(
-                SELECT Id1, Id2, Value FROM `TestShardedDoublePrimary`
-                WHERE (Id1, Id2) IN ((0, "aaa"), (2, "a"), (5, "bc"), (9, "cde"), (10, "fg")) ORDER BY Id1, Id2;
-            )");
-
-            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
-                TExecuteQuerySettings{}.StatsMode(EStatsMode::Full)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-            CompareYson(R"([
-                [0u;["aaa"];[1u]];
-                [2u;["a"];[0u]];
-                [5u;["bc"];[2u]];
-                [9u;["cde"];[3u]];
-                [10u;["fg"];[4u]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

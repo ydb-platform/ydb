@@ -1365,7 +1365,7 @@ protected:
             Counters->Counters->FullScansExecuted->Inc();
         }
 
-        bool isParallelPointRead = EnableParallelPointReadConsolidation && IsParallelPointReadPossible(partitions);
+        bool isParallelPointRead = EnableParallelPointReadConsolidation && !source.GetSorted() && IsParallelPointReadPossible(partitions);
         bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
 
         if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {

@@ -29,9 +29,6 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::Disk:
             Counters.OnWriteOverloadDisk();
             break;
-        case EOverloadStatus::InsertTable:
-            Counters.OnWriteOverloadInsertTable(writeSize);
-            break;
         case EOverloadStatus::OverloadMetadata:
             Counters.OnWriteOverloadMetadata(writeSize);
             break;
@@ -58,9 +55,6 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
 }
 
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalPathId pathId) const {
-    if (InsertTable && InsertTable->IsOverloadedByCommitted(pathId)) {
-        return EOverloadStatus::InsertTable;
-    }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     if (TablesManager.GetPrimaryIndex()) {
         if (TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {

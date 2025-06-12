@@ -52,8 +52,6 @@ void TTxInit::SetDefaults() {
     Self->LastCompletedTx = NOlap::TSnapshot::Zero();
     Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
-    Self->LongTxWrites.clear();
-    Self->LongTxWritesByUniqueId.clear();
 }
 
 std::shared_ptr<ITxReader> TTxInit::BuildReader() {

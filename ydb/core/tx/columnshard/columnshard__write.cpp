@@ -51,7 +51,7 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
             Y_ABORT("invalid function usage");
     }
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "write_overload")("size", writeSize)("path_id", writeMeta.GetInternalPathId())(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "write_overload")("size", writeSize)("path_id", writeMeta.GetPathId())(
         "reason", overloadReason);
 
     ctx.Send(writeMeta.GetSource(), event.release(), 0, cookie);
@@ -162,7 +162,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         } else {
             const TMonotonic now = TMonotonic::Now();
             Counters.OnWritePutBlobsSuccess(now - writeMeta.GetWriteStartInstant(), aggr->GetRows());
-            LOG_S_DEBUG("Write (record) into pathId " << writeMeta.GetInternalPathId()
+            LOG_S_DEBUG("Write (record) into pathId " << writeMeta.GetPathId()
                                                       << (writeMeta.GetWriteId() ? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : "")
                                                       << " at tablet " << TabletID());
         }
@@ -438,9 +438,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(operation.GetTableId().GetTableId());
+    const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(operation.GetTableId());
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
+    const auto& pathId = TUnifiedPathId{*internalPathId, schemeShardLocalPathId};
     if (!TablesManager.IsReadyForStartWrite(*internalPathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
         return;
@@ -468,7 +469,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
         OverloadWriteFail(overloadStatus,
-            NEvWrite::TWriteMeta(0, schemeShardLocalPathId, *internalPathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
+            NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
                 Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),
             arrowData->GetSize(), cookie, std::move(result), ctx);
         return;
@@ -487,7 +488,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize());
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, *internalPathId, cookie, lockId, *mType, behaviour));
+    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, lockId, *mType, behaviour));
     WriteTasksQueue->Drain(false, ctx);
 }
 

@@ -28,7 +28,7 @@ private:
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
-        PathId = TInternalPathId::FromRawValue(proto.GetPathId());
+        PathId = TInternalPathId::FromProto(proto);
         for (auto&& portionProto : proto.GetPortions()) {
             const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
             TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);

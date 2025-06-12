@@ -287,7 +287,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     }
 
     AFL_VERIFY(HasIndex());
-    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(record.GetTable().GetPathId().GetLocalId());
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record.GetTable().GetPathId());
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();

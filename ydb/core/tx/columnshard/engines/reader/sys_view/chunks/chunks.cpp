@@ -143,7 +143,7 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
             break;
         }
         recordsCount += it->second.GetRecordsVerified().size() + it->second.GetIndexesVerified().size();
-        AppendStats(builders, granule.GetSchemeShardLocalPathId(), it->second);
+        AppendStats(builders, granule.GetPathId().SchemeShardLocalPathId, it->second);
         granule.PopFrontPortion();
         FetchedAccessors.erase(it);
         if (recordsCount > 10000) {

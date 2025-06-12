@@ -103,12 +103,8 @@ public:
         return Versions.empty();
     }
 
-    TInternalPathId GetInternalPathId() const {
-        return InternalPathId;
-    }
-
-    TSchemeShardLocalPathId GetSchemeShardLocalPathId() const {
-        return SchemeShardLocalPathId;
+    TUnifiedPathId GetPathId() const {
+        return TUnifiedPathId{InternalPathId, SchemeShardLocalPathId};
     }
 
     const NOlap::TSnapshot& GetDropVersionVerified() const {
@@ -135,9 +131,9 @@ public:
         return *DropVersion < *minReadSnapshot;
     }
 
-    TTableInfo(const TInternalPathId internalPathId, const TSchemeShardLocalPathId schemeShardLocalPathId)
-        : InternalPathId(internalPathId)
-        , SchemeShardLocalPathId(schemeShardLocalPathId) {
+    TTableInfo(const TUnifiedPathId& pathId)
+        : InternalPathId(pathId.InternalPathId)
+        , SchemeShardLocalPathId(pathId.SchemeShardLocalPathId) {
     }
 
     template <class TRow>
@@ -150,7 +146,7 @@ public:
                 : internalPathId.GetRawValue()
         );
         AFL_VERIFY(schemeShardLocalPathId);
-        TTableInfo result(internalPathId, schemeShardLocalPathId);
+        TTableInfo result({internalPathId, schemeShardLocalPathId});
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             result.DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
@@ -226,10 +222,6 @@ public:
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
         const ui64 tabletId);
-
-    NOlap::TTabletId GetTabletId() const {
-        return NOlap::TTabletId{TabletId};
-    }
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;

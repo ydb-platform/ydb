@@ -43,7 +43,7 @@ bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
     const auto minReadSnapshot = Self->GetMinReadSnapshot();
     for (auto&& aggr : buffer.GetAggregations()) {
         const auto& writeMeta = aggr->GetWriteMeta();
-        Y_ABORT_UNLESS(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetInternalPathId(), minReadSnapshot));
+        Y_ABORT_UNLESS(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetPathId().InternalPathId, minReadSnapshot));
         txc.DB.NoMoreReadsForTx();
         TWriteOperation::TPtr operation;
         AFL_VERIFY(!writeMeta.HasLongTxId());
@@ -120,8 +120,8 @@ void TTxWrite::DoComplete(const TActorContext& ctx) {
         AFL_VERIFY(!writeMeta.HasLongTxId());
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetInternalPathId())) {
-                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetInternalPathId(),
+            if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
+                auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(writeMeta.GetPathId().InternalPathId,
                     buffer.GetAggregations()[i]->GetRecordBatch(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
             }

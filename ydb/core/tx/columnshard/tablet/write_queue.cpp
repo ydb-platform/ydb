@@ -9,10 +9,8 @@ namespace NKikimr::NColumnShard {
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
     owner->Counters.GetCSCounters().WritingCounters->OnWritingTaskDequeue(TMonotonic::Now() - Created);
     owner->OperationsManager->RegisterLock(LockId, owner->Generation());
-    const auto schemeShardLocalPathId = owner->GetTablesManager().ResolveSchemeShardLocalPathId(PathId);
-    AFL_VERIFY(schemeShardLocalPathId);
-    auto writeOperation = owner->OperationsManager->RegisterOperation(
-        *schemeShardLocalPathId, PathId, LockId, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
+    auto writeOperation = owner->OperationsManager->RegisterOperation(PathId,
+        LockId, Cookie, GranuleShardingVersionId, ModificationType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", ArrowData->GetSize())("operation_id", writeOperation->GetIdentifier())(
         "in_flight", owner->Counters.GetWritesMonitor()->GetWritesInFlight())(
@@ -24,7 +22,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationInsertionWriteActorId,
         owner->BufferizationPortionsWriteActorId);
-    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
+    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;
 }
@@ -65,7 +63,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
 }
 
 void TWriteTasksQueue::Enqueue(TWriteTask&& task) {
-    const TInternalPathId pathId = task.GetPathId();
+    const auto& pathId = task.GetInternalPathId();
     WriteTasks[pathId].emplace_back(std::move(task));
 }
 

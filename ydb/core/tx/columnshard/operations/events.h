@@ -100,9 +100,9 @@ public:
             i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
-                pathId = i.GetWriteMeta().GetInternalPathId();
+                pathId = i.GetWriteMeta().GetPathId().InternalPathId;
             } else {
-                AFL_VERIFY(pathId == i.GetWriteMeta().GetInternalPathId());
+                AFL_VERIFY(pathId == i.GetWriteMeta().GetPathId().InternalPathId);
             }
         }
         AFL_VERIFY(pathId);

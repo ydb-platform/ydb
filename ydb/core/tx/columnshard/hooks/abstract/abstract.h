@@ -340,11 +340,11 @@ public:
         return {};
     }
 
-    virtual void OnSwitchToWork(const NOlap::TTabletId tabletId) {
+    virtual void OnSwitchToWork(const ui64 tabletId) {
         Y_UNUSED(tabletId);
     }
 
-    virtual void OnCleanupActors(const NOlap::TTabletId tabletId) {
+    virtual void OnCleanupActors(const ui64 tabletId) {
         Y_UNUSED(tabletId);
     }
 
@@ -358,13 +358,13 @@ public:
         return {};
     }
 
-    virtual ui64 GetInternalPathIdOffset(const NOlap::TTabletId /*tabletId*/) const {
+    virtual ui64 GetInternalPathIdOffset(const ui64 /*tabletId*/) const {
         return 0;
     }
 
-    virtual void OnAddPathIdMapping(const NOlap::TTabletId /* tabletId */, const NColumnShard::TInternalPathId /* internalPathId */, const NColumnShard::TSchemeShardLocalPathId /* localPathId */) {
+    virtual void OnAddPathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
-    virtual void OnDeletePathIdMapping(const NOlap::TTabletId /* tabletId */, const NColumnShard::TInternalPathId /* internalPathId */, const NColumnShard::TSchemeShardLocalPathId /* localPathId */) {
+    virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
 
 };

@@ -381,12 +381,13 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(tableProto);
     if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
-        LOG_S_DEBUG("EnsureTable for existed pathId: " << *internalPathId << " at tablet " << TabletID());
+        LOG_S_DEBUG("EnsureTable for existed pathId: " << TUnifiedPathId(*internalPathId, schemeShardLocalPathId)
+             << " at tablet " << TabletID());
         return;
     }
     const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);
 
-    LOG_S_DEBUG("EnsureTable for pathId: " << internalPathId
+    LOG_S_DEBUG("EnsureTable for pathId: " << TUnifiedPathId(internalPathId, schemeShardLocalPathId)
                                            << " ttl settings: " << tableProto.GetTtlSettings()
                                            << " at tablet " << TabletID());
 
@@ -414,7 +415,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     {
         THashSet<NTiers::TExternalStorageId> usedTiers;
-        TTableInfo table(internalPathId, schemeShardLocalPathId);
+        TTableInfo table({internalPathId, schemeShardLocalPathId});
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -446,8 +447,8 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     Y_ABORT_UNLESS(TablesManager.HasTable(*internalPathId), "AlterTable on a dropped or non-existent table");
-
-    LOG_S_DEBUG("AlterTable for pathId: " << *internalPathId
+    const auto& pathId = TUnifiedPathId(*internalPathId, schemeShardLocalPathId);
+    LOG_S_DEBUG("AlterTable for pathId: " << pathId
                                           << " schema: " << alterProto.GetSchema()
                                           << " ttl settings: " << alterProto.GetTtlSettings()
                                           << " at tablet " << TabletID());
@@ -483,12 +484,13 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(dropProto);
     const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
+    const auto& pathId = TUnifiedPathId(*internalPathId, schemeShardLocalPathId);
     if (!TablesManager.HasTable(*internalPathId)) {
-        LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << *internalPathId << " at tablet " << TabletID());
+        LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;
     }
 
-    LOG_S_DEBUG("DropTable for pathId: " << *internalPathId << " at tablet " << TabletID());
+    LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
     TablesManager.DropTable(*internalPathId, version, db);
 }
 

@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             std::optional<NColumnShard::TSchemeShardLocalPathId> schemeShardLocalPathId;
             for (auto&& i : csController->GetShardActualIds()) {
                 Cerr << ">>> shard actual id: " << i << Endl;
-                const auto pathIds = csController->GetPathIdTranslator(NOlap::TTabletId{i})->GetSchemeShardLocalPathIds();
+                const auto pathIds = csController->GetPathIdTranslator(i)->GetSchemeShardLocalPathIds();
                 UNIT_ASSERT(pathIds.size() == 1);
                 if (schemeShardLocalPathId.has_value()) {
                     UNIT_ASSERT(schemeShardLocalPathId == *pathIds.begin());

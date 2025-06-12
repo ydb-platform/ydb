@@ -8,14 +8,12 @@ namespace NKikimr::NOlap::NReader::NSysView::NAbstract {
 class TGranuleMetaView {
 private:
     using TPortions = std::deque<std::shared_ptr<TPortionInfo>>;
-    YDB_READONLY_DEF(TInternalPathId, InternalPathId);
-    YDB_READONLY_DEF(NColumnShard::TSchemeShardLocalPathId, SchemeShardLocalPathId);
+    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
     YDB_READONLY_DEF(TPortions, Portions);
     YDB_READONLY_DEF(std::vector<NStorageOptimizer::TTaskDescription>, OptimizerTasks);
 public:
     TGranuleMetaView(const TGranuleMeta& granule, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool reverse, const TSnapshot& reqSnapshot)
-        : InternalPathId(granule.GetPathId())
-        , SchemeShardLocalPathId(schemeShardLocalPathId)
+        : PathId({granule.GetPathId(), schemeShardLocalPathId})
     {
         for (auto&& i : granule.GetPortions()) {
             if (i.second->IsRemovedFor(reqSnapshot)) {
@@ -43,7 +41,7 @@ public:
     }
 
     bool operator<(const TGranuleMetaView& item) const {
-        return InternalPathId < item.InternalPathId;
+        return PathId.SchemeShardLocalPathId < item.PathId.SchemeShardLocalPathId;
     }
 
     std::shared_ptr<TPortionInfo> PopFrontPortion() {

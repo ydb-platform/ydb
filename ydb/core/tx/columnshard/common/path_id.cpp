@@ -2,6 +2,8 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/scheme/protos/pathid.pb.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h>
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
@@ -135,6 +137,24 @@ void TSchemeShardLocalPathId::ToProto(NKikimrSchemeOp::TGranuleShardingInfo& pro
 }
 
 template<>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrTxDataShard::TEvKqpScan& proto) {
+    return TSchemeShardLocalPathId(proto.GetLocalPathId());
+}
+template<>
+void TSchemeShardLocalPathId::ToProto(NKikimrTxDataShard::TEvKqpScan& proto) const {
+    proto.SetLocalPathId(PathId);
+}
+
+template<>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrDataEvents::TTableId& proto) {
+    return TSchemeShardLocalPathId(proto.GetTableId());
+}
+template<>
+void TSchemeShardLocalPathId::ToProto(NKikimrDataEvents::TTableId& proto) const {
+    proto.SetTableId(PathId);
+}
+
+template<>
 TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrDataEvents::TLock& proto) {
     return TSchemeShardLocalPathId(proto.GetPathId());
 }
@@ -143,6 +163,14 @@ void TSchemeShardLocalPathId::ToProto(NKikimrDataEvents::TLock& proto) const {
     proto.SetPathId(PathId);
 }
 
+template<>
+TSchemeShardLocalPathId TSchemeShardLocalPathId::FromProto(const NKikimrProto::TPathID& proto) {
+    return TSchemeShardLocalPathId(proto.GetLocalId());
+}
+template<>
+void TSchemeShardLocalPathId::ToProto(NKikimrProto::TPathID& proto) const {
+    proto.SetLocalId(PathId);
+}
 } //namespace NKikimr::NColumnShard
 
 template<>
@@ -153,4 +181,9 @@ void Out<NKikimr::NColumnShard::TInternalPathId>(IOutputStream& s, const NKikimr
 template<>
 void Out<NKikimr::NColumnShard::TSchemeShardLocalPathId>(IOutputStream& s, const NKikimr::NColumnShard::TSchemeShardLocalPathId& v) {
     s << v.GetRawValue();
+}
+
+template<>
+void Out<NKikimr::NColumnShard::TUnifiedPathId>(IOutputStream& s, const NKikimr::NColumnShard::TUnifiedPathId& v) {
+    s << "{internal: " << v.InternalPathId << ", ss: " << v.SchemeShardLocalPathId << "}";
 }

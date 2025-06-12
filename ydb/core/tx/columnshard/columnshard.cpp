@@ -52,7 +52,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     if (Tiers) {
         Tiers->Stop(true);
     }
-    NYDBTest::TControllers::GetColumnShardController()->OnCleanupActors(NOlap::TTabletId{TabletID()});
+    NYDBTest::TControllers::GetColumnShardController()->OnCleanupActors(TabletID());
 }
 
 void TColumnShard::BecomeBroken(const TActorContext& ctx) {
@@ -88,7 +88,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup()); 
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
-    NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(NOlap::TTabletId{TabletID()});
+    NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
@@ -412,7 +412,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 
     LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
     for (const auto& [internalPathId, table] : tables) {
-        const auto& schemeShardLocalPathId = table.GetSchemeShardLocalPathId();
+        const auto& schemeShardLocalPathId = table.GetPathId().SchemeShardLocalPathId;
         auto* periodicTableStats = ev->Record.AddTables();
         periodicTableStats->SetDatashardId(TabletID());
         periodicTableStats->SetTableLocalId(schemeShardLocalPathId.GetRawValue());

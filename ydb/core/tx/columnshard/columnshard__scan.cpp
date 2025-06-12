@@ -32,25 +32,19 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         return;
     }
 
-    const auto schemeShardLocalPath = TSchemeShardLocalPathId::FromRawValue(record.GetLocalPathId());
+    const auto schemeShardLocalPath = TSchemeShardLocalPathId::FromProto(record);
     auto internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPath);
     if (!internalPathId && NOlap::NReader::NSysView::NAbstract::ISysViewPolicy::BuildByPath(record.GetTablePath())) {
         internalPathId = TInternalPathId::FromRawValue(schemeShardLocalPath.GetRawValue());  //TODO register ColumnStore in tablesmanager
     }
     if (!internalPathId) {
-        //TODO FIXME
         const auto& request = ev->Get()->Record;
-        const TString table = request.GetTablePath();
-        const ui32 scanGen = request.GetGeneration();
-        const auto scanComputeActor = ev->Sender;
+        auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(request.GetGeneration(), TabletID());
+        error->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
+        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,TStringBuilder() << "table: " << request.GetTablePath() << "not found");
+        NYql::IssueToMessage(issue, error->Record.MutableIssues()->Add());
 
-        auto ev = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>(scanGen, TabletID());
-        ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-            TStringBuilder() << "table not found");
-        NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
-
-        ctx.Send(scanComputeActor, ev.Release());
+        ctx.Send(ev->Sender, error.Release());
         return;
     }
     Counters.GetColumnTablesCounters()->GetPathIdCounter(*internalPathId)->OnReadEvent();

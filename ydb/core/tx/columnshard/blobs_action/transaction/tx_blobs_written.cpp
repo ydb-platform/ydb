@@ -57,7 +57,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         if (!operationIds.emplace(operation->GetWriteId()).second) {
             continue;
         }
-        AFL_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetInternalPathId(), minReadSnapshot));
+        AFL_VERIFY(Self->TablesManager.IsReadyForFinishWrite(writeMeta.GetPathId().InternalPathId, minReadSnapshot));
         Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             operation->OnWriteFinish(txc, {}, true);
@@ -75,7 +75,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetDataShard(Self->TabletID());
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
-            writeMeta.GetSchemeShardLocalPathId().ToProto(lock);
+            writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
@@ -103,11 +103,11 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
             continue;
         }
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
-        pathIds.emplace(op->GetInternalPathId());
+        pathIds.emplace(op->GetPathId().InternalPathId);
         if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
-            if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetInternalPathId())) {
+            if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
                 auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
-                    writeMeta.GetInternalPathId(), writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
+                    writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
             }
         }

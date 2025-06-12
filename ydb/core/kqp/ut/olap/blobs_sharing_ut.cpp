@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             AFL_VERIFY(ShardIds.size() == ShardsCount)("count", ShardIds.size())("ids", JoinSeq(",", ShardIds));
             std::set<NColumnShard::TInternalPathId> pathIdsSet;
             for (auto&& i : ShardIds) {
-                const auto pathIdTranslator = Controller->GetPathIdTranslator(NOlap::TTabletId{i});
+                const auto pathIdTranslator = Controller->GetPathIdTranslator(i);
                 auto pathIds = pathIdTranslator->GetInternalPathIds();
                 pathIdsSet.insert(pathIds.begin(), pathIds.end());
             }

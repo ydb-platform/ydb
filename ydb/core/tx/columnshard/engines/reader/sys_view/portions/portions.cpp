@@ -45,8 +45,8 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     ui64 recordsCount = 0;
     while (auto portion = granule.PopFrontPortion()) {
         recordsCount += 1;
-        AFL_VERIFY(portion->GetPathId() == granule.GetInternalPathId());
-        AppendStats(builders, *portion, granule.GetSchemeShardLocalPathId());
+        AFL_VERIFY(portion->GetPathId() == granule.GetPathId().InternalPathId);
+        AppendStats(builders, *portion, granule.GetPathId().SchemeShardLocalPathId);
         if (recordsCount >= 10000) {
             break;
         }

@@ -41,11 +41,10 @@ public:
     template<typename Proto>
     void ToProto(Proto& proto) const;
 
-
     auto operator<=>(const TInternalPathId&) const = default;
 };
 
-static_assert(sizeof(TInternalPathId)==sizeof(ui64));
+static_assert(sizeof(TInternalPathId) == sizeof(ui64));
 
 class TSchemeShardLocalPathId {
     ui64 PathId;
@@ -82,7 +81,17 @@ public:
     auto operator<=>(const TSchemeShardLocalPathId&) const = default;
 };
 
-static_assert(sizeof(TSchemeShardLocalPathId)==sizeof(ui64));
+static_assert(sizeof(TSchemeShardLocalPathId) == sizeof(ui64));
+
+struct TUnifiedPathId {
+    TInternalPathId InternalPathId;
+    TSchemeShardLocalPathId SchemeShardLocalPathId;
+    explicit operator bool() const {
+        return InternalPathId && SchemeShardLocalPathId;
+    }
+};
+
+static_assert(sizeof(TUnifiedPathId) == 2 * sizeof(ui64));
 
 } //namespace NKikimr::NColumnShard
 

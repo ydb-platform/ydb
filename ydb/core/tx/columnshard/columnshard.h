@@ -98,7 +98,7 @@ namespace TEvColumnShard {
 
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
-        YDB_READONLY_DEF(NColumnShard::TInternalPathId, PathId);
+        YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
@@ -114,7 +114,7 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
+        TEvInternalScan(const NColumnShard::TUnifiedPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
             , Snapshot(snapshot)
             , LockId(lockId)
@@ -279,7 +279,7 @@ namespace TEvColumnShard {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            writeMeta.GetSchemeShardLocalPathId().ToProto(Record);
+            writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(Record);
             Record.SetDedupId(writeMeta.GetDedupId());
             Record.SetStatus(status);
         }

@@ -44,17 +44,16 @@ NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(const NColumnShard
         return TConclusionStatus::Success();
     }
     AFL_VERIFY(read.PKRangesFilter);
-    const auto& schemeShardLocalPathId = shard->GetTablesManager().ResolveSchemeShardLocalPathId(read.PathId);
-    AFL_VERIFY(schemeShardLocalPathId);
+    const auto& schemeShardLocalPathId = read.PathId.SchemeShardLocalPathId;
     for (auto&& filter : *read.PKRangesFilter) {
         const auto fromPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
         const auto toPathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
-        if ((fromPathId <= *schemeShardLocalPathId) && (*schemeShardLocalPathId <= toPathId)) {
-            auto pathInfo = logsIndex->GetGranuleOptional(read.PathId);
+        if ((fromPathId <= schemeShardLocalPathId) && (schemeShardLocalPathId <= toPathId)) {
+            auto pathInfo = logsIndex->GetGranuleOptional(read.PathId.InternalPathId);
             if (!pathInfo) {
                 continue;
             }
-            metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, *schemeShardLocalPathId, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
+            metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, schemeShardLocalPathId, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
             break;
         }
     }

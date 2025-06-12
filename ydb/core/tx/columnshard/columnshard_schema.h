@@ -794,7 +794,6 @@ struct Schema : NIceDb::Schema {
         );
     }
 
-
     static void SaveTableVersionInfo(
             NIceDb::TNiceDb& db,
             TInternalPathId pathId, const NOlap::TSnapshot& version,

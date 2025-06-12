@@ -11805,7 +11805,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         if (enableCompaction) {
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
-            csController->WaitIndexation(TDuration::Seconds(5));
             csController->WaitCompactions(TDuration::Seconds(5));
             csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
             csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
@@ -11832,7 +11831,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         if (enableIndexation) {
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-            csController->WaitIndexation(TDuration::Seconds(5));
         }
         if (enableCompaction) {
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
@@ -12035,7 +12033,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
 
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
     void TestInsertAddInsertDrop(
@@ -12075,7 +12072,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             if (!autoIndexation && indexationAfterInsertAddColumn) {
                 csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-                csController->WaitIndexation(TDuration::Seconds(5));
                 csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
             }
 
@@ -12086,14 +12082,12 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             if (!autoIndexation && indexationAfterInsertDropColumn) {
                 csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-                csController->WaitIndexation(TDuration::Seconds(5));
                 csController->DisableBackground(NYDBTest::ICSController::EBackground::Indexation);
             }
         }
 
         if (!autoIndexation && indexationInEnd) {
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-            csController->WaitIndexation(TDuration::Seconds(5));
         }
     }
 
@@ -12137,7 +12131,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
 
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(InsertDropAddColumn) {
@@ -12175,7 +12168,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
 
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
     Y_UNIT_TEST(CreateWithoutColumnFamily) {

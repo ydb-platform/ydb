@@ -281,14 +281,14 @@ class TestYdbWorkload(object):
         for i in range(100):
             while True:
                 try:
-                    self.delete_test_chunk(session, table_path, i, retries=0)
+                    self.delete_test_chunk(session, table_path, i, retries=10)
                     break
                 except (ydb.issues.Overloaded, ydb.issues.Unavailable):
                     time.sleep(1)
 
         def can_write():
             try:
-                self.upsert_test_chunk(session, 'huge', 0, retries=0)
+                self.upsert_test_chunk(session, table_path, 0, retries=0)
                 return True
             except (ydb.issues.Overloaded, ydb.issues.Unavailable):
                 return False

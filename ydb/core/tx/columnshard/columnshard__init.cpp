@@ -61,7 +61,6 @@ std::shared_ptr<ITxReader> TTxInit::BuildReader() {
     result->AddChildren(std::make_shared<NLoading::TTxControllerInitializer>("tx_controller", Self));
     result->AddChildren(std::make_shared<NLoading::TOperationsManagerInitializer>("operations_manager", Self));
     result->AddChildren(std::make_shared<NLoading::TStoragesManagerInitializer>("storages_manager", Self));
-    result->AddChildren(std::make_shared<NLoading::TLongTxInitializer>("long_tx", Self));
     result->AddChildren(std::make_shared<NLoading::TDBLocksInitializer>("db_locks", Self));
     result->AddChildren(std::make_shared<NLoading::TBackgroundSessionsInitializer>("bg_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));

@@ -3438,7 +3438,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
 
     }
 

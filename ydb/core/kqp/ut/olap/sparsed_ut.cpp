@@ -353,7 +353,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
-        csController->WaitIndexation(TDuration::Seconds(3));
 
         {
             auto result = session.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=uid, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SPARSED`)").GetValueSync();

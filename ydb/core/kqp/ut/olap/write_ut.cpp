@@ -99,7 +99,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         TTypedLocalHelper("Utf8", kikimr).ExecuteSchemeQuery("DROP TABLE `/Root/olapStore/olapTable`;");
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csController->WaitIndexation(TDuration::Seconds(5));
         csController->WaitCompactions(TDuration::Seconds(5));
     }
 

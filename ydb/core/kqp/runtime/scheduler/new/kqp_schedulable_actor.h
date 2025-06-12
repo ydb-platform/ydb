@@ -35,6 +35,10 @@ protected:
     void StartExecution(const TDuration& burstThrottle);
     void StopExecution();
 
+    void Throttle();
+    bool IsThrottled() const;
+    TDuration Resume();
+
     std::optional<TDuration> CalculateDelay(TMonotonic now) const;
 
     void AccountThrottledTime(TMonotonic now);
@@ -42,6 +46,9 @@ protected:
 private:
     TSchedulableTaskPtr SchedulableTask;
     THPTimer Timer;
+    bool Throttled = false;
+    TMonotonic StartThrottle;
+    TDuration BatchTime;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

@@ -15,18 +15,18 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
     struct TTreeElementBase : public TStaticAttributes {
         ui64 TotalLimit = Infinity();
+        ui64 FairShare = 0;
 
-        ui64 FairShare = 0; // dynamic?+snapshot
+        ui64 Demand = 0;
+        ui64 AdjustedUsage = 0; // also known as TrackedBefore // TODO(scheduler): initialize
 
-        std::atomic<ui64> Demand = 0; // dynamic+snapshot
-
-        TTreeElementBase* Parent = nullptr; // dynamic+snapshot
-        std::vector<TTreeElementPtr> Children; // dynamic+snapshot
+        TTreeElementBase* Parent = nullptr;
+        std::vector<TTreeElementPtr> Children;
 
         virtual ~TTreeElementBase() = default;
 
-        void AddChild(const TTreeElementPtr& element); // dynamic+snapshot
-        void RemoveChild(const TTreeElementPtr& element); // dynamic+snapshot
+        void AddChild(const TTreeElementPtr& element);
+        void RemoveChild(const TTreeElementPtr& element);
 
         bool IsRoot() const {
             return !Parent;
@@ -36,18 +36,21 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
             return Children.empty();
         }
 
-        virtual void AccountFairShare(const TDuration& period); // snapshot
-        virtual void UpdateBottomUp(ui64 totalLimit); // snapshot
-        void UpdateTopDown(); // snapshot
+        virtual void AccountFairShare(const TDuration& period);
+        virtual void UpdateBottomUp(ui64 totalLimit);
+        void UpdateTopDown();
     };
 
     class TQuery : public TTreeElementBase {
     public:
-        explicit TQuery(const TQueryId& queryId, const TStaticAttributes& attrs = {});
+        TQuery(const TQueryId& queryId, NDynamic::TQuery* origQuery);
 
         const TQueryId& GetId() const {
             return Id;
         }
+
+        const TMonotonic Timestamp = TMonotonic::Now();
+        NDynamic::TQuery* Origin;
 
     private:
         const TQueryId Id;

@@ -1,5 +1,7 @@
 #include "snapshot.h"
 
+#include "dynamic.h"
+
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
 
 void TTreeElementBase::AddChild(const TTreeElementPtr& element) {
@@ -66,10 +68,11 @@ void TTreeElementBase::UpdateTopDown() {
         }
         child->UpdateTopDown();
 
-        // TODO: refactor this - used for scenario with delays.
-        // if (auto query = std::dynamic_pointer_cast<TQuery>(child)) {
-        //     query->OriginalQuery->FairShare = child->FairShare;
-        // }
+        // TODO: looks a little bit hacky.
+        if (auto query = std::dynamic_pointer_cast<TQuery>(child); query && query->Origin) {
+            query->Origin->SetSnapshot(query);
+            query->Origin = nullptr;
+        }
     }
 
     // TODO: distribute resources lost because of integer division.
@@ -79,10 +82,11 @@ void TTreeElementBase::UpdateTopDown() {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const TStaticAttributes& attrs)
-    : Id(id)
+TQuery::TQuery(const TQueryId& id, NDynamic::TQuery* origQuery)
+    : Origin(origQuery)
+    , Id(id)
 {
-    Update(attrs);
+    Update(*origQuery);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

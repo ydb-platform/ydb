@@ -45,7 +45,7 @@ TConclusionStatus TInStoreShardsUpdate::DoInitializeImpl(const TUpdateInitializa
 }
 
 void TInStoreShardsUpdate::FillToShardTx(NKikimrTxColumnShard::TCreateTable& info) const {
-    NColumnShard::TSchemeShardLocalPathId::FromRawValue(TargetInStoreTable->GetPathId().LocalPathId).ToProto(info);
+    info.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
     auto& alterBody = TargetInStoreTable->GetTableInfoVerified();
 
     AFL_VERIFY(alterBody.Description.HasSchemaPresetId());

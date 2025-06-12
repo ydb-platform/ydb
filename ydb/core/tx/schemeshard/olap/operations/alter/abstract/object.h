@@ -45,10 +45,6 @@ public:
 
     }
 
-    NColumnShard::TSchemeShardLocalPathId GetLocalPathId() const {
-        return NColumnShard::TSchemeShardLocalPathId::FromRawValue(PathId.LocalPathId);
-    }
-
     static std::shared_ptr<ISSEntity> GetEntityVerified(TOperationContext& context, const TPath& path);
 };
 

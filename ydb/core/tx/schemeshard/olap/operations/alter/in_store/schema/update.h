@@ -30,7 +30,7 @@ private:
 
         auto& alter = *result.MutableAlterTable();
         FillToShardTx(alter);
-        TargetInStoreTable->GetLocalPathId().ToProto(alter);
+        alter.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
         return result.SerializeAsString();
     }
 

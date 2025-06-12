@@ -53,7 +53,7 @@ public:
 
             auto* drop = tx.MutableDropTable();
 
-            NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId.LocalPathId).ToProto(*drop);
+            drop->SetPathId(pathId.LocalPathId);
 
             Y_ABORT_UNLESS(tx.SerializeToString(&columnShardTxBody));
         }

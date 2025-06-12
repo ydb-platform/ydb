@@ -36,15 +36,15 @@ private:
             auto& alter = *result.MutableEnsureTables();
             auto& create = *alter.AddTables();
             FillToShardTx(create);
-            TargetInStoreTable->GetLocalPathId().ToProto(create);
+            create.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
         }
         if (DeleteShardIds.contains(tabletId)) {
-            TargetInStoreTable->GetLocalPathId().ToProto(*result.MutableDropTable());
+            result.MutableDropTable()->SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
         } else {
             auto container = Sharding->GetTabletShardingInfoOptional(tabletId);
             if (!!container) {
                 auto& shardingInfo = *result.MutableGranuleShardingInfo();
-                TargetInStoreTable->GetLocalPathId().ToProto(shardingInfo);
+                shardingInfo.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
                 shardingInfo.SetVersionId(Sharding->GetShardInfoVerified(tabletId).GetShardingVersion());
                 *shardingInfo.MutableContainer() = container.SerializeToProto();
                 AFL_VERIFY(ModifiedShardIds.contains(tabletId));

@@ -2,7 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard__op_traits.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/sharding/sharding.h>
@@ -287,7 +287,7 @@ public:
             }
 
             Y_ABORT_UNLESS(create);
-            NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId.LocalPathId).ToProto(*create);
+            create->SetPathId(pathId.LocalPathId);
 
             if (tableInfo->Description.HasTtlSettings()) {
                 create->MutableTtlSettings()->CopyFrom(tableInfo->Description.GetTtlSettings());

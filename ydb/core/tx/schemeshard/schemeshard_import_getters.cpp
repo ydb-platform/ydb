@@ -338,6 +338,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (!IsView(SchemeKey) && NoObjectFound(result.GetError().GetErrorType())) {
             // try search for a view
             SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
+            SchemeFileType = NBackup::EBackupFileType::ViewCreate;
             HeadObject(SchemeKey);
             return;
         }
@@ -459,7 +460,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         TString content;
-        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema)) {
+        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
             return;
         }
 
@@ -806,6 +807,7 @@ private:
 
     const TString MetadataKey;
     TString SchemeKey;
+    NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;

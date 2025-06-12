@@ -9,45 +9,33 @@
 
 namespace NYdbWorkload {
 
-std::string MakeSelect(const char* tableName, const char* indexName) {
+std::string MakeSelect(const char* tableName, const char* indexName, size_t kmeansTreeClusters) {
     return std::format(R"_(--!syntax_v1
-        DECLARE $EmbeddingList as List<Float>;
-        $EmbeddingString = Knn::ToBinaryStringFloat($EmbeddingList);
-
-        pragma ydb.KMeansTreeSearchTopSize = "10";
+        DECLARE $Embedding as String;
+        pragma ydb.KMeansTreeSearchTopSize="{0}";
         SELECT id
-        FROM {0}
-        {1}
-        ORDER BY Knn::CosineDistance(embedding, $EmbeddingString)
+        FROM {1}
+        {2}
+        ORDER BY Knn::CosineDistance(embedding, $Embedding)
         LIMIT $K;
     )_", 
+        kmeansTreeClusters,
         tableName, 
         indexName ? std::format("VIEW {0}", indexName) : ""
     );
 }
 
-NYdb::TParams MakeSelectParams(const TFloatVector& target, ui64 topK) {
+NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, ui64 topK) {
     NYdb::TParamsBuilder paramsBuilder;
     
-    auto& paramsList = paramsBuilder.AddParam("$EmbeddingList").BeginList();
-    for(float val: target)
-        paramsList.AddListItem().Float(val);
-    paramsList.EndList().Build();
-
+    paramsBuilder.AddParam("$Embedding").String(embeddingBytes).Build();
     paramsBuilder.AddParam("$K").Uint64(topK).Build();
 
     return paramsBuilder.Build();
 }
 
-TVectorRecallEvaluator::TVectorRecallEvaluator(size_t vectorDimension, size_t vectorCount) 
-    : Rd()
-    , Gen(Rd())
-    , VectorValueGenerator(0.0, 1.0)
-    , PregeneratedIndexGenerator(0, vectorCount - 1)
+TVectorRecallEvaluator::TVectorRecallEvaluator() 
 {
-    Gen.seed(Now().MicroSeconds());
-
-    PregenerateSelectEmbeddings(vectorDimension, vectorCount);
 }
 
 TVectorRecallEvaluator::~TVectorRecallEvaluator() {
@@ -55,64 +43,223 @@ TVectorRecallEvaluator::~TVectorRecallEvaluator() {
         Cout << "Average recall: " << GetAverageRecall() << Endl;
 }
 
-void TVectorRecallEvaluator::PregenerateSelectEmbeddings(size_t vectorDimension, size_t targetCount) {
+void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient) {
+    Cout << "Sampling " << targetCount << " vectors from dataset..." << Endl;
+    
+    // Create a local random generator
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+       
+    // First query to get min and max ID range
+    std::string rangeQuery = std::format(R"_(--!syntax_v1
+        SELECT Unwrap(MIN(id)) as min_id, Unwrap(MAX(id)) as max_id FROM {0};
+    )_", tableName);
+    
+    // Execute the range query
+    std::optional<NYdb::TResultSet> rangeResultSet;
+    NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&rangeQuery, &rangeResultSet](NYdb::NQuery::TSession session) {
+        auto result = session.ExecuteQuery(
+            rangeQuery,
+            NYdb::NQuery::TTxControl::NoTx())
+            .GetValueSync();
+        
+        Y_ABORT_UNLESS(result.IsSuccess(), "Range query failed: %s", result.GetIssues().ToString().c_str());
+        
+        rangeResultSet = result.GetResultSet(0);
+        return result;
+    }));
+    
+    // Parse the range result
+    NYdb::TResultSetParser rangeParser(*rangeResultSet);
+    Y_ABORT_UNLESS(rangeParser.TryNextRow());
+    ui64 minId = rangeParser.ColumnParser("min_id").GetUint64();
+    ui64 maxId = rangeParser.ColumnParser("max_id").GetUint64();
+    
+    Y_ABORT_UNLESS(minId <= maxId, "Invalid ID range in the dataset: min=%lu, max=%lu", minId, maxId);
+    
+    // Query to get total count of vectors in the table
+    std::string countQuery = std::format(R"_(--!syntax_v1
+        SELECT Unwrap(COUNT(*)) FROM {0};
+    )_", tableName);
+    
+    // Execute the count query
+    std::optional<NYdb::TResultSet> countResultSet;
+    NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&countQuery, &countResultSet](NYdb::NQuery::TSession session) {
+        auto result = session.ExecuteQuery(
+            countQuery,
+            NYdb::NQuery::TTxControl::NoTx())
+            .GetValueSync();
+        
+        Y_ABORT_UNLESS(result.IsSuccess(), "Count query failed: %s", result.GetIssues().ToString().c_str());
+        
+        countResultSet = result.GetResultSet(0);
+        return result;
+    }));
+    
+    // Parse the count result
+    NYdb::TResultSetParser countParser(*countResultSet);
+    Y_ABORT_UNLESS(countParser.TryNextRow());
+    ui64 totalVectors = countParser.ColumnParser(0).GetUint64();
+    
+    Y_ABORT_UNLESS(totalVectors > 0, "No vectors found in the dataset");
+    
+    // If we have fewer vectors than requested targets, adjust targetCount
+    if (totalVectors < targetCount) {
+        Cerr << "Warning: Requested " << targetCount << " targets but only " << totalVectors 
+             << " vectors exist in the dataset. Using all available vectors." << Endl;
+        targetCount = totalVectors;
+    }
+    
+    // Generate random IDs in the range
+    std::set<ui64> sampleIds;
+    std::uniform_int_distribution<ui64> idDist(minId, maxId);
+    size_t attemptsLimit = targetCount * 10; // Limit the number of attempts to avoid infinite loops
+    size_t attempts = 0;
+    
+    // Reserve space for targets
+    SelectTargets.clear();
     SelectTargets.reserve(targetCount);
-    for (size_t i = 0; i < targetCount; ++i) {
-        TSelectTarget target {
-            .Target = TFloatVector(vectorDimension),
-            .Etalons = {}
-        };
-        target.Target.resize(vectorDimension); 
-        for (size_t j = 0; j < vectorDimension; ++j) {
-            target.Target[j] = VectorValueGenerator(Gen);
+    
+    // Keep sampling until we have enough targets or reach attempt limit
+    while (SelectTargets.size() < targetCount && attempts < attemptsLimit) {
+        ui64 randomId = idDist(gen);
+        
+        // Skip if we've already tried this ID
+        if (sampleIds.find(randomId) != sampleIds.end()) {
+            attempts++;
+            continue;
         }
-        SelectTargets.emplace_back(target);
+        
+        sampleIds.insert(randomId);
+        attempts++;
+        
+        // Query to get vector by ID
+        std::string vectorQuery = std::format(R"_(--!syntax_v1
+            SELECT id, Unwrap(embedding) as embedding FROM {0} WHERE id = {1};
+        )_", tableName, randomId);
+        
+        std::optional<NYdb::TResultSet> vectorResultSet;
+        NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&vectorQuery, &vectorResultSet](NYdb::NQuery::TSession session) {
+            auto result = session.ExecuteQuery(
+                vectorQuery,
+                NYdb::NQuery::TTxControl::NoTx())
+                .GetValueSync();
+            
+            Y_ABORT_UNLESS(result.IsSuccess(), "Vector query failed: %s", result.GetIssues().ToString().c_str());
+            
+            vectorResultSet = result.GetResultSet(0);
+            return result;
+        }));
+        
+        // Parse the vector result
+        NYdb::TResultSetParser vectorParser(*vectorResultSet);
+        if (!vectorParser.TryNextRow()) {
+            // ID doesn't exist, try another random ID
+            continue;
+        }
+        
+        ui64 id = vectorParser.ColumnParser("id").GetUint64();
+        std::string embeddingBytes = vectorParser.ColumnParser("embedding").GetString();
+        
+        // Ensure we got a valid embedding
+        if (embeddingBytes.empty()) {
+            Cerr << "Warning: Empty embedding retrieved for id " << id << Endl;
+            continue;
+        }
+        
+        // Create target with the sampled vector
+        TSelectTarget target;
+        target.EmbeddingBytes = std::move(embeddingBytes);
+        target.Etalons.push_back(id);  // The vector's own ID is an etalon
+        
+        SelectTargets.push_back(std::move(target));
+    }
+    
+    if (SelectTargets.size() < targetCount) {
+        Cerr << "Warning: Could only sample " << SelectTargets.size() << " vectors after " 
+             << attempts << " attempts." << Endl;
+    } else {
+        Cout << "Successfully sampled " << SelectTargets.size() << " vectors from the dataset." << Endl;
     }
 }
 
-const TFloatVector& TVectorRecallEvaluator::GetRandomSelectEmbedding() {
-    return SelectTargets[PregeneratedIndexGenerator(Gen)].Target;
-}
+
 
 void TVectorRecallEvaluator::FillEtalons(const char* tableName, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
     Cout << "Recall initialization..." << Endl;
-    // Process each target vector
-    for (TSelectTarget& target : SelectTargets) {
-        // Create the brute force scan query
-        std::string scanQuery = MakeSelect(tableName, nullptr);
-        NYdb::TParams params = MakeSelectParams(target.Target, topK);
+    
+    // Prepare the query template
+    std::string queryTemplate = MakeSelect(tableName, nullptr, 0);
+    
+    // Maximum number of concurrent queries to execute
+    const size_t MAX_CONCURRENT_QUERIES = 20;
+    
+    // Process targets in batches
+    for (size_t batchStart = 0; batchStart < SelectTargets.size(); batchStart += MAX_CONCURRENT_QUERIES) {
+        size_t batchEnd = std::min(batchStart + MAX_CONCURRENT_QUERIES, SelectTargets.size());
         
-        std::optional<NYdb::TResultSet> resultSet;
+        // Start async queries for this batch
+        std::vector<std::pair<size_t, NYdb::NQuery::TAsyncExecuteQueryResult>> asyncQueries;
+        asyncQueries.reserve(batchEnd - batchStart);
         
-        // Execute the query to get etalon results
-        NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&scanQuery, &params, &resultSet](NYdb::NQuery::TSession session) {
-            auto result = session.ExecuteQuery(
-                scanQuery,
-                NYdb::NQuery::TTxControl::NoTx(),
-                params)
-                .GetValueSync();
+        for (size_t i = batchStart; i < batchEnd; i++) {
+            NYdb::TParams params = MakeSelectParams(SelectTargets[i].EmbeddingBytes, topK);
             
-            Y_ABORT_UNLESS(result.IsSuccess(), "Query failed: %s", result.GetIssues().ToString().c_str());
+            auto asyncResult = queryClient.RetryQuery([queryTemplate, params](NYdb::NQuery::TSession session) {
+                return session.ExecuteQuery(
+                    queryTemplate,
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params);
+            });
             
-            resultSet = result.GetResultSet(0);
-            return result;
-        }));
-
-        // Process the result set to extract IDs
-        NYdb::TResultSetParser parser(*resultSet);
+            asyncQueries.emplace_back(i, std::move(asyncResult));
+        }
         
-        target.Etalons.reserve(topK);
+        // Wait for all queries in this batch to complete
+        for (auto& [targetIndex, asyncResult] : asyncQueries) {
+            auto result = asyncResult.GetValueSync();
+            Y_ABORT_UNLESS(result.IsSuccess(), "Query failed for target %zu: %s", 
+                          targetIndex, result.GetIssues().ToString().c_str());
+            
+            auto resultSet = result.GetResultSet(0);
+            NYdb::TResultSetParser parser(resultSet);
+            
+            // Clear and prepare etalons for this target
+            SelectTargets[targetIndex].Etalons.clear();
+            SelectTargets[targetIndex].Etalons.reserve(topK);
+            
+            // Extract all IDs from the result set
+            while (parser.TryNextRow()) {
+                ui64 id = parser.ColumnParser("id").GetUint64();
+                SelectTargets[targetIndex].Etalons.push_back(id);
+            }
+        }
         
-        // Extract all IDs from the result set
-        while (parser.TryNextRow()) {
-            ui64 id = parser.ColumnParser("id").GetUint64();
-            target.Etalons.emplace_back(id);
+        // Log progress for large datasets
+        if (SelectTargets.size() > 100 && (batchEnd % 100 == 0 || batchEnd == SelectTargets.size())) {
+            Cout << "Processed " << batchEnd << " of " << SelectTargets.size() << " targets..." << Endl;
         }
     }
-    Cout << "Recall initialization compteted for " << SelectTargets.size() << " targets." << Endl;
+    
+    // Verify all targets have etalons
+    size_t emptyEtalons = 0;
+    for (const auto& target : SelectTargets) {
+        if (target.Etalons.empty()) {
+            emptyEtalons++;
+        }
+    }
+    
+    if (emptyEtalons > 0) {
+        Cerr << "Warning: " << emptyEtalons << " targets have empty etalon sets" << Endl;
+    }
+    
+    Cout << "Recall initialization completed for " << SelectTargets.size() << " targets." << Endl;
 }
-const TFloatVector& TVectorRecallEvaluator::GetTargetEmbedding(size_t index) const {
-    return SelectTargets.at(index).Target;
+
+
+
+const std::string& TVectorRecallEvaluator::GetTargetEmbedding(size_t index) const {
+    return SelectTargets.at(index).EmbeddingBytes;
 }
 
 const std::vector<ui64>& TVectorRecallEvaluator::GetTargetEtalons(size_t index) const {
@@ -207,7 +354,6 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
     
     // Extract IDs from index search results
     std::vector<ui64> indexResults;
-    indexResults.reserve(Params.TopK);
     while (parser.TryNextRow()) {
         ui64 id = parser.ColumnParser("id").GetUint64();
         indexResults.push_back(id);
@@ -215,54 +361,52 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
     
     // Get the etalons for the current target
     const auto& etalons = Params.VectorRecallEvaluator->GetTargetEtalons(CurrentTargetIndex);
-
-    if (etalons.empty()) {
-        Cerr << "Warning: Etalon set is empty for target " << CurrentTargetIndex << Endl;
-        return;
-    }
-
-    std::unordered_set<ui64> etalonSet(etalons.begin(), etalons.end());
     
-    // Calculate recall
-    // Recall = (number of relevant ids retrieved) / (total number of relevant ids)
-    size_t relevantRetrieved = 0;
-    for (const auto& id : indexResults) {
-        if (etalonSet.find(id) != etalonSet.end()) {
-            relevantRetrieved++;
-        }
-    }
-    
-    if (relevantRetrieved == 0 && !indexResults.empty()) {
-        const auto& targetVector = Params.VectorRecallEvaluator->GetTargetEmbedding(CurrentTargetIndex);
-        std::ostringstream vectorStr;
-        vectorStr << "[";
-        for (size_t i = 0; i < targetVector.size(); ++i) {
-            if (i > 0) vectorStr << ",";
-            vectorStr << targetVector[i] << "f";
-        }
-        vectorStr << "]";
+    // Check if target ID is first in results
+    if (!indexResults.empty() && !etalons.empty()) {
+        ui64 targetId = etalons[0]; // First etalon is the target ID itself
         
-        Cerr << "Warning: Zero relevant results for target " << CurrentTargetIndex 
-             << ". Target vector: " << vectorStr.str() << Endl;
+        if (indexResults[0] != targetId) {
+            Cerr << "Warning: Target ID " << targetId << " is not the first result for target " 
+                 << CurrentTargetIndex << ". Found " << indexResults[0] << " instead." << Endl;
+        }
+        
+        // Calculate recall (including the target vector itself)
+        size_t relevantRetrieved = 0;
+        for (const auto& id : indexResults) {
+            // Check if this ID is in the etalon results
+            if (std::find(etalons.begin(), etalons.end(), id) != etalons.end()) {
+                relevantRetrieved++;
+            }
+        }
+        
+        // Calculate recall for this target
+        double recall = etalons.empty() ? 0.0 : static_cast<double>(relevantRetrieved) / etalons.size();
+        
+        // Add to total recall
+        Params.VectorRecallEvaluator->AddRecall(recall);
+        
+        // Add warning when zero relevant results found, but don't print embedding bytes
+        if (relevantRetrieved == 0 && !indexResults.empty()) {
+            Cerr << "Warning: Zero relevant results for target " << CurrentTargetIndex << Endl;
+        }
+    } else {
+        // Handle empty results or empty etalons
+        Cerr << "Warning: Empty results or etalons for target " << CurrentTargetIndex << Endl;
     }
-
-    // Calculate recall for this target
-    double recall = etalons.empty() ? 0.0 : static_cast<double>(relevantRetrieved) / etalons.size();
     
-    // Add to total recall
-    Params.VectorRecallEvaluator->AddRecall(recall);
-
     // Move to the next target
     CurrentTargetIndex = (CurrentTargetIndex + 1) % Params.VectorRecallEvaluator->GetTargetCount();
 }
 
+
 TQueryInfo TVectorWorkloadGenerator::SelectScanImpl() {
-    std::string query = MakeSelect(Params.TableName.c_str(), nullptr);
+    std::string query = MakeSelect(Params.TableName.c_str(), nullptr, 0);
     return SelectImpl(query);
 }
 
 TQueryInfo TVectorWorkloadGenerator::SelectIndexImpl() {
-    std::string query = MakeSelect(Params.TableName.c_str(), Params.IndexName.c_str());
+    std::string query = MakeSelect(Params.TableName.c_str(), Params.IndexName.c_str(), Params.KmeansTreeSearchClusters);
     return SelectImpl(query);
 }
 
@@ -375,7 +519,8 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                     break;
                 case TVectorWorkloadGenerator::EType::Select:
                     VectorDimension = GetVectorDimension();
-                    VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>(VectorDimension, Targets);
+                    VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>();
+                    VectorRecallEvaluator->SampleExistingVectors(TableName.c_str(), Targets, *QueryClient);
                     VectorRecallEvaluator->FillEtalons(TableName.c_str(), TopK, *QueryClient);
                     break;
             }
@@ -388,10 +533,6 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
           break;
     }
     return;
-}
-
-const TFloatVector& TVectorWorkloadParams::GetRandomSelectEmbedding() const {
-    return VectorRecallEvaluator->GetRandomSelectEmbedding();
 }
 
 THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {

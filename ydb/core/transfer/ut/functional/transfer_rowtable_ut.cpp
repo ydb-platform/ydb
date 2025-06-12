@@ -47,6 +47,11 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
     }
 
 
+    Y_UNIT_TEST(ColumnType_Bool)
+    {
+        ColumnType_Bool(TableType);
+    }
+
     Y_UNIT_TEST(ColumnType_Date)
     {
         ColumnType_Date(TableType);
@@ -57,9 +62,34 @@ Y_UNIT_TEST_SUITE(Transfer_RowTable)
         ColumnType_Double(TableType);
     }
 
+    Y_UNIT_TEST(ColumnType_Int8)
+    {
+        ColumnType_Int8(TableType);
+    }
+
+    Y_UNIT_TEST(ColumnType_Int16)
+    {
+        ColumnType_Int16(TableType);
+    }
+
+    Y_UNIT_TEST(ColumnType_Int32)
+    {
+        ColumnType_Int32(TableType);
+    }
+
+    Y_UNIT_TEST(ColumnType_Int64)
+    {
+        ColumnType_Int64(TableType);
+    }
+
     Y_UNIT_TEST(ColumnType_Utf8_LongValue)
     {
         ColumnType_Utf8_LongValue(TableType);
+    }
+
+    Y_UNIT_TEST(ColumnType_Uuid)
+    {
+        ColumnType_Uuid(TableType);
     }
 
 

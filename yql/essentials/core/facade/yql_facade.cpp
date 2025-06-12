@@ -258,7 +258,7 @@ TProgramPtr TProgramFactory::Create(
     auto udfResolver = UdfResolver_;
 
     if (UdfResolverLogfile_) {
-        udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(udfResolver, *UdfResolverLogfile_, sessionId);
+        udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
     }
 
     if (udfIndex) {

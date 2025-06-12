@@ -15,7 +15,7 @@ namespace NSQLComplete {
 
     TFrequencyData Pruned(const TFrequencyData& data);
 
-    TFrequencyData ParseJsonFrequencyData(const TStringBuf text);
+    TFrequencyData ParseJsonFrequencyData(TStringBuf text);
 
     TFrequencyData LoadFrequencyData();
 

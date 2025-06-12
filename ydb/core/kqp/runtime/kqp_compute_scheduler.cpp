@@ -228,7 +228,7 @@ private:
 template<typename T>
 class TParameter : public IObservableValue<T> {
 public:
-    TParameter(TObservableUpdater* engine, double initialValue)
+    TParameter(TObservableUpdater* engine, T initialValue)
         : Value_(initialValue)
         , Updater_(engine)
     {

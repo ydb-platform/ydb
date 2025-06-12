@@ -593,7 +593,9 @@ namespace types
   array<T> array<T>::operator*(long n) const
   {
     if (size() == 1) {
-      return array<T>(fast(0), single_value{}, n);
+      array<T> r(n);
+      std::fill(begin(), end(), fast(0));
+      return r;
     } else {
       array<T> r(size() * n);
       auto start = r.begin();

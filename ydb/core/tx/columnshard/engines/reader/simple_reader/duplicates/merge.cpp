@@ -9,6 +9,7 @@ private:
     THashMap<ui64, NArrow::TColumnFilter> Filters;
     YDB_READONLY(ui64, RowsAdded, 0);
     YDB_READONLY(ui64, RowsSkipped, 0);
+    bool IsDone = false;
 
     void AddImpl(const ui64 sourceId, const bool value) {
         auto* findFilter = Filters.FindPtr(sourceId);
@@ -35,10 +36,13 @@ public:
     }
 
     THashMap<ui64, NArrow::TColumnFilter>&& ExtractFilters() && {
+        AFL_VERIFY(!IsDone);
+        IsDone = true;
         return std::move(Filters);
     }
 
     void AddSource(const ui64 sourceId) {
+        AFL_VERIFY(!IsDone);
         AFL_VERIFY(Filters.emplace(sourceId, NArrow::TColumnFilter::BuildAllowFilter()).second);
     }
 };

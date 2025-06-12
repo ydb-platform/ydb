@@ -48,8 +48,8 @@ namespace NPQ {
         void SaveInProgress(const TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
-                ReadsInProgress.insert(blob);
+                auto blobId = MakeBlobId(kvRequest.Partition, reqBlob);
+                ReadsInProgress.insert(blobId);
             }
         }
 
@@ -249,11 +249,20 @@ namespace NPQ {
 
             auto response = MakeHolder<TEvKeyValue::TEvResponse>();
             response->Record = std::move(resp);
-            response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
+            if (kvReq.CookiePQ == Max<ui64>()) {
+                response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
+            } else {
+                response->Record.SetCookie(kvReq.CookiePQ);
+            }
 
             ctx.Send(kvReq.Sender, response.Release()); // -> Partition
 
             UpdateCounters(ctx);
+        }
+
+        static ui64 GetKeyValueRequestCookie(const NKikimrClient::TKeyValueRequest& request)
+        {
+            return request.HasCookie() ? request.GetCookie() : Max<ui64>();
         }
 
         // Passthrough request to KV
@@ -263,7 +272,7 @@ namespace NPQ {
 
             auto& srcRequest = ev->Get()->Record;
 
-            TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), TPartitionId(Max<ui32>()));
+            TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, GetKeyValueRequestCookie(srcRequest), TPartitionId(Max<ui32>()));
 
             SaveCmdWrite(srcRequest, kvReq, ctx);
             SaveCmdRename(srcRequest, kvReq, ctx);
@@ -353,7 +362,7 @@ namespace NPQ {
             Y_ABORT_UNLESS(resp->TabletId == TabletId);
 
             for (const TCacheBlobL2& blob : resp->Removed)
-                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount), blob.Value);
+                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix), blob.Value);
 
             if (resp->Overload) {
                 LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE,

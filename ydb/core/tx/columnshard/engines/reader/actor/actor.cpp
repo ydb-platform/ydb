@@ -21,7 +21,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
     TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-    const NColumnShard::TScanCounters& scanCountersPool, const NConveyor::TCPULimitsConfig& cpuLimits)
+    const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnShardActorId(columnShardActorId)
@@ -83,10 +83,8 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
         ACFL_DEBUG("event", "TEvTaskProcessedResult");
-        auto t = static_pointer_cast<IApplyAction>(result.GetResult());
-        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(result.GetResult()));
         if (!ScanIterator->Finished()) {
-            ScanIterator->Apply(t);
+            ScanIterator->Apply(result.GetResult());
         }
     }
     ContinueProcessing();

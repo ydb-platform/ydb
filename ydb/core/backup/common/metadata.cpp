@@ -25,19 +25,34 @@ ui64 TMetadata::GetVersion() const {
 
 void TMetadata::AddChangefeed(const TChangefeedMetadata& changefeed) {
     if (!Changefeeds) {
-        Changefeeds.ConstructInPlace();
+        Changefeeds.emplace();
     }
     Changefeeds->push_back(changefeed);
 }
 
-const TMaybe<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds() const {
+const std::optional<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds() const {
     return Changefeeds;
+}
+
+void TMetadata::SetEnablePermissions(bool enablePermissions) {
+    EnablePermissions = enablePermissions;
+}
+
+bool TMetadata::HasEnablePermissions() const {
+    return EnablePermissions.has_value();
+}
+
+bool TMetadata::GetEnablePermissions() const {
+    return *EnablePermissions;
 }
 
 TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
     if (Version.Defined()) {
         m["version"] = *Version;
+    }
+    if (EnablePermissions) {
+        m["permissions"] = static_cast<int>(*EnablePermissions);
     }
 
     NJson::TJsonArray fullBackups;
@@ -76,9 +91,14 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
         result.Version = value.GetUIntegerSafe();
     }
 
+    if (json.Has("permissions")) {
+        const int val = json["permissions"].GetInteger();
+        result.EnablePermissions = val != 0;
+    }
+
     if (json.Has("changefeeds")) {
         // Changefeeds can be absent in older versions of metadata
-        result.Changefeeds.ConstructInPlace(); // explicitly say that the listing of changefeeds is throgh metadata
+        result.Changefeeds.emplace(); // explicitly say that the listing of changefeeds is throgh metadata
         const NJson::TJsonValue& changefeeds = json["changefeeds"];
         for (const NJson::TJsonValue& changefeed : changefeeds.GetArray()) {
             result.AddChangefeed({

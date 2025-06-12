@@ -13,7 +13,14 @@ namespace NKikimr::NOlap::NChanges {
 enum class EStage : ui32 {
     Created = 0,
     Started,
+    AskResources,
+    AskAccessors,
+    ReadBlobs,
+    ReadyForConstruct,
     Constructed,
+    WriteDraft,
+    AskDiskQuota,
+    Writing,
     Compiled,
     Written,
     Finished,
@@ -31,19 +38,24 @@ public:
         using TBase = NColumnShard::TCommonCountersOwner;
 
     private:
-        NMonitoring::TDynamicCounters::TCounterPtr Tasks;
-        NMonitoring::TDynamicCounters::TCounterPtr WritePortions;
+        NMonitoring::TDynamicCounters::TCounterPtr TasksChanges;
+        NMonitoring::TDynamicCounters::TCounterPtr TasksCount;
 
     public:
-        void Inc(const ui64 writePortions) const {
-            Tasks->Inc();
-            WritePortions->Add(writePortions);
+        void Inc() const {
+            TasksChanges->Inc();
+            TasksCount->Inc();
         }
 
-        TTaskCounters(const NColumnShard::TCommonCountersOwner& owner, const TString& sensorPrefix)
+        void Dec() const {
+            TasksChanges->Dec();
+            TasksCount->Dec();
+        }
+
+        TTaskCounters(const NColumnShard::TCommonCountersOwner& owner)
             : TBase(owner)
-            , Tasks(TBase::GetDeriviative(TStringBuilder() << sensorPrefix << "Tasks"))
-            , WritePortions(TBase::GetDeriviative(TStringBuilder() << sensorPrefix << "WritePortions")) {
+            , TasksChanges(TBase::GetDeriviative("Tasks/Count"))
+            , TasksCount(TBase::GetValue("Tasks/Count")) {
         }
     };
 
@@ -56,13 +68,19 @@ public:
         TStageCounters(const NColumnShard::TCommonCountersOwner& owner, const NBlobOperations::EConsumer consumerId)
             : TBase(owner, "consumer", ToString(consumerId)) {
             for (size_t i = 0; i < (ui64)EStage::COUNT; ++i) {
-                Stages[i] = std::make_shared<TTaskCounters>(TBase::CreateSubGroup("stage", ToString(static_cast<EStage>(i))), "Changes/Stage/");
+                Stages[i] = std::make_shared<TTaskCounters>(TBase::CreateSubGroup("stage", ToString(static_cast<EStage>(i))));
             }
         }
 
-        void OnStageChanged(const EStage stage, const ui64 writePortions) const {
-            AFL_VERIFY(static_cast<size_t>(stage) < Stages.size())("index", stage)("size", Stages.size());
-            Stages[static_cast<size_t>(stage)]->Inc(writePortions);
+        void OnStageChanged(const std::optional<EStage> stageFrom, const std::optional<EStage> stageTo) const {
+            if (stageFrom) {
+                AFL_VERIFY(static_cast<size_t>(*stageFrom) < Stages.size())("index", *stageFrom)("size", Stages.size());
+                Stages[static_cast<size_t>(*stageFrom)]->Dec();
+            }
+            if (stageTo) {
+                AFL_VERIFY(static_cast<size_t>(*stageTo) < Stages.size())("index", *stageTo)("size", Stages.size());
+                Stages[static_cast<size_t>(*stageTo)]->Inc();
+            }
         }
     };
 
@@ -75,6 +93,34 @@ private:
     }
 
 public:
+    class TStageCountersGuard: TNonCopyable {
+    private:
+        const std::shared_ptr<TStageCounters> Counters;
+        YDB_READONLY(EStage, CurrentStage, EStage::Created);
+    public:
+        EStage GetStage() const {
+            return CurrentStage;
+        }
+
+        TStageCountersGuard(const std::shared_ptr<TStageCounters>& counters, const EStage startStage)
+            : Counters(counters)
+            , CurrentStage(startStage) {
+            Counters->OnStageChanged(std::nullopt, startStage);
+        }
+
+        ~TStageCountersGuard() {
+            Counters->OnStageChanged(CurrentStage, std::nullopt);
+        }
+
+        void SetStage(const EStage stageTo) {
+            AFL_VERIFY(stageTo >= CurrentStage)("current", CurrentStage)("to", stageTo);
+            if (CurrentStage != stageTo) {
+                Counters->OnStageChanged(CurrentStage, stageTo);
+                CurrentStage = stageTo;
+            }
+        }
+    };
+
     TChangesCounters()
         : TBase("ColumnEngineChanges") {
         for (ui64 i = 0; i < (ui64)NBlobOperations::EConsumer::COUNT; ++i) {
@@ -82,8 +128,8 @@ public:
         }
     }
 
-    static std::shared_ptr<TStageCounters> GetStageCounters(const NBlobOperations::EConsumer consumerId) {
-        return Singleton<TChangesCounters>()->GetStageCountersImpl(consumerId);
+    static std::shared_ptr<TStageCountersGuard> GetStageCounters(const NBlobOperations::EConsumer consumerId) {
+        return std::make_shared<TStageCountersGuard>(Singleton<TChangesCounters>()->GetStageCountersImpl(consumerId), EStage::Created);
     }
 };
 

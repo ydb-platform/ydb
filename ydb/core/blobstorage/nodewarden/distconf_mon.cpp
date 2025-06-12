@@ -139,7 +139,7 @@ namespace NKikimr::NStorage {
                 {"direct_bound_nodes", getDirectBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
                 {"error_reason", ErrorReason},
-                {"has_quorum", HasQuorum()},
+                {"has_quorum", StorageConfig && HasQuorum(*StorageConfig)},
                 {"scepter", Scepter ? NJson::TJsonMap{
                     {"id", Scepter->Id},
                 } : NJson::TJsonValue{NJson::JSON_NULL}},
@@ -224,7 +224,7 @@ namespace NKikimr::NStorage {
                         if (ErrorReason) {
                            out << "ErrorReason: " << ErrorReason << "<br/>";
                         }
-                        out << "Quorum: " << (HasQuorum() ? "yes" : "no") << "<br/>";
+                        out << "Quorum: " << (StorageConfig && HasQuorum(*StorageConfig) ? "yes" : "no") << "<br/>";
                         out << "Scepter: " << (Scepter ? ToString(Scepter->Id) : "null") << "<br/>";
                     }
                 }
@@ -297,6 +297,38 @@ namespace NKikimr::NStorage {
                                         TABLED() { out << info.SessionId; }
                                         TABLED() { out << makeBoundNodeIds(); }
                                         TABLED() { out << FormatList(info.ScatterTasks); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Cache";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Key"; }
+                                    TABLEH() { out << "Generation"; }
+                                    TABLEH() { out << "Value size"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                std::vector<TString> keys;
+                                for (const auto& [key, value] : Cache) {
+                                    keys.push_back(key);
+                                }
+                                std::ranges::sort(keys);
+                                for (const TString& key : keys) {
+                                    const TCacheItem& value = Cache.at(key);
+                                    TABLER() {
+                                        TABLED() { out << key; }
+                                        TABLED() { out << value.Generation; }
+                                        TABLED() { out << (value.Value ? value.Value->size() : 0); }
                                     }
                                 }
                             }

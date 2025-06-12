@@ -2,7 +2,6 @@
 
 #include "blobs_action/transaction/tx_blobs_written.h"
 #include "blobs_action/transaction/tx_draft.h"
-#include "blobs_action/transaction/tx_write.h"
 #include "common/limits.h"
 #include "counters/columnshard.h"
 #include "engines/column_engine_logs.h"

@@ -3,12 +3,12 @@
 
 namespace NKikimr::NColumnShard {
 
-class TTxMonitoring : public TTransactionBase<TColumnShard> {
+class TTxMonitoring: public TTransactionBase<TColumnShard> {
 public:
     TTxMonitoring(TColumnShard* self, const NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(self)
-        , HttpInfoEvent(ev)
-    {}
+        , HttpInfoEvent(ev) {
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
@@ -24,12 +24,24 @@ inline TString TEscapeHtml(const TString& in) {
     out.reserve(in.size());
     for (char c : in) {
         switch (c) {
-            case '<':  out += "&lt;";   break;
-            case '>':  out += "&gt;";   break;
-            case '&':  out += "&amp;";  break;
-            case '\'': out += "&#39;";  break;
-            case '\"': out += "&#34;";  break;
-            default:   out += c;        break;
+            case '<':
+                out += "&lt;";
+                break;
+            case '>':
+                out += "&gt;";
+                break;
+            case '&':
+                out += "&amp;";
+                break;
+            case '\'':
+                out += "&#39;";
+                break;
+            case '\"':
+                out += "&#34;";
+                break;
+            default:
+                out += c;
+                break;
         }
     }
 
@@ -40,7 +52,7 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
     return Self->TablesManager.FillMonitoringReport(txc, JsonReport["tables_manager"]);
 }
 
-template<typename T>
+template <typename T>
 void TPrintErrorTable(TStringStream& html, std::queue<T> errors, const std::string& errorType) {
     if (errors.empty()) {
         html << "No " << errorType << " errors<br />";
@@ -65,7 +77,7 @@ void TPrintErrorTable(TStringStream& html, std::queue<T> errors, const std::stri
 void TTxMonitoring::Complete(const TActorContext& ctx) {
     const auto& cgi = HttpInfoEvent->Get()->Cgi();
     std::map<std::pair<ui64, ui64>, NJson::TJsonValue> schemaVersions;
-    for (const auto& item: JsonReport["tables_manager"]["schema_versions"].GetArray()) {
+    for (const auto& item : JsonReport["tables_manager"]["schema_versions"].GetArray()) {
         auto& schemaVersion = schemaVersions[std::make_pair<ui64, ui64>(item["SinceStep"].GetInteger(), item["SinceTxId"].GetInteger())];
         schemaVersion = item;
     }
@@ -81,7 +93,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     TStringStream html;
     html << "<h3>Special Values</h3>";
     html << "<b>CurrentSchemeShardId:</b> " << Self->CurrentSchemeShardId << "<br />";
-    html << "<b>ProcessingParams:</b> " << Self->ProcessingParams.value_or(NKikimrSubDomains::TProcessingParams{}).ShortDebugString() << "<br />";
+    html << "<b>ProcessingParams:</b> " << Self->ProcessingParams.value_or(NKikimrSubDomains::TProcessingParams{}).ShortDebugString()
+         << "<br />";
     html << "<b>LastPlannedStep:</b> " << Self->LastPlannedStep << "<br />";
     html << "<b>LastPlannedTxId :</b> " << Self->LastPlannedTxId << "<br />";
     html << "<b>LastSchemaSeqNoGeneration :</b> " << Self->LastSchemaSeqNo.Generation << "<br />";
@@ -99,7 +112,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     html << "<pre>" << JsonReport << "</pre><br />";
     html << "<h4>Top " << countVersions << " of " << schemaVersions.size() << " Versions</h4>";
     size_t counter = 0;
-    for (const auto& [_, schemaVersion]: schemaVersions) {
+    for (const auto& [_, schemaVersion] : schemaVersions) {
         html << counter;
         html << "<pre>" << schemaVersion << "</pre><br />";
         if (++counter == countVersions) {
@@ -119,7 +132,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
 
 bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive) {
-         return false;
+        return false;
     }
 
     if (!ev) {
@@ -130,4 +143,4 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     return true;
 }
 
-}
+}   // namespace NKikimr::NColumnShard

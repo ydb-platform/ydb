@@ -18,7 +18,8 @@ NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TOperator::GetCurren
     return ExternalStorageOperator->Get();
 }
 
-std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
+std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(
+    const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
     return std::make_shared<TDeclareRemovingAction>(GetStorageId(), GetSelfTabletId(), counters, GCInfo);
 }
 
@@ -107,7 +108,8 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
 
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
     const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
-    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation, const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector)
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation,
+    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector)
     : TBase(storageId, storageSharedBlobsManager)
     , ErrorCollector(std::move(errorCollector))
     , TabletActorId(shardActorId)
@@ -133,4 +135,4 @@ bool TOperator::DoLoad(IBlobManagerDb& dbBlobs) {
     return true;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

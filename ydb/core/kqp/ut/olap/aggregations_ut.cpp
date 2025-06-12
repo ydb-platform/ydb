@@ -1421,7 +1421,6 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
             TString result = FormatResultSetYson(status.GetResultSet(0));
-            Cout << result << Endl;
             CompareYson(result, R"([[[0.400000006;]]])");
         }
     }

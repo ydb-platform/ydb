@@ -6,8 +6,25 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 namespace NKikimr::NColumnShard {
+
+namespace {
+
+void FillTxUpdateStats(NKikimrQueryStats::TTxStats* stats, ui64 pathId, ui64 rows, ui64 bytes,
+                       NEvWrite::EModificationType modificationType)
+{
+    auto tableStats = stats->AddTableAccessStats();
+    tableStats->MutableTableInfo()->SetPathId(pathId);
+    auto row = modificationType == NEvWrite::EModificationType::Delete ? tableStats->MutableEraseRow()
+                                                                       : tableStats->MutableUpdateRow();
+    row->SetCount(rows);
+    row->SetRows(rows);
+    row->SetBytes(bytes);
+}
+
+} // namespace
 
 bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorContext&) {
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
@@ -77,6 +94,8 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
+            FillTxUpdateStats(ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
+                              writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
     }

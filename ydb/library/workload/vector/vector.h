@@ -8,29 +8,21 @@
 
 namespace NYdbWorkload {
 
-using TFloatVector = std::vector<float>;
-
 class TVectorRecallEvaluator {
 public:
-    TVectorRecallEvaluator(size_t vectorDimension, size_t targetCount);
+    TVectorRecallEvaluator();
     ~TVectorRecallEvaluator();
     
-    void PregenerateSelectEmbeddings(size_t vectorDimension, size_t vectorCount);
-    const TFloatVector& GetRandomSelectEmbedding();
+    void SampleExistingVectors(const char* tableName, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient);
     void FillEtalons(const char* tableName, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
-    const TFloatVector& GetTargetEmbedding(size_t index) const;
+    const std::string& GetTargetEmbedding(size_t index) const;
     const std::vector<ui64>& GetTargetEtalons(size_t index) const;
     void AddRecall(double recall);
     double GetAverageRecall() const;
     size_t GetTargetCount() const;
 private:
-    std::random_device Rd;
-    std::mt19937_64 Gen;
-    std::normal_distribution<float> VectorValueGenerator;
-    std::uniform_int_distribution<size_t> PregeneratedIndexGenerator;
-
     struct TSelectTarget {
-        TFloatVector Target;                    // Random target to use in select workload
+        std::string EmbeddingBytes;             // Sample targets to use in select workload
         std::vector<ui64> Etalons;              // Etalon vector Ids for recall measurement
     };
     std::vector<TSelectTarget> SelectTargets;
@@ -49,8 +41,6 @@ public:
     TString GetWorkloadName() const override;
     void Validate(const ECommandType commandType, int workloadType) override;
 
-    const TFloatVector& GetRandomSelectEmbedding() const;
-    
     TString TableName;
     TString IndexName;
     TString Distance;

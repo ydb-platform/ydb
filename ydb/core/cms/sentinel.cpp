@@ -149,6 +149,14 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     }
 }
 
+EMaintenanceStatus::E TPDiskStatusComputer::ComputeMaintenanceStatus(EMaintenanceStatus::E current) const {
+    if (current == EMaintenanceStatus::NOT_SET) {
+        return current;
+    }
+
+    return MaintenanceStatus;
+}
+
 EPDiskState TPDiskStatusComputer::GetState() const {
     return State;
 }
@@ -177,11 +185,22 @@ void TPDiskStatusComputer::ResetForcedStatus() {
     ForcedStatus.Clear();
 }
 
+void TPDiskStatusComputer::SetMaintenanceStatus(EMaintenanceStatus::E status) {
+    MaintenanceStatus = status;
+}
+
 /// TPDiskStatus
 
 TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+    : TPDiskStatus(initialStatus, EMaintenanceStatus::NOT_SET, defaultStateLimit, goodStateLimit, stateLimits)
+{
+}
+
+TPDiskStatus::TPDiskStatus(EPDiskStatus initialStatus, EMaintenanceStatus::E initialMaintenanceStatus,
+                           const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
     : TPDiskStatusComputer(defaultStateLimit, goodStateLimit, stateLimits)
     , Current(initialStatus)
+    , CurrentMaintenanceStatus(initialMaintenanceStatus)
     , ChangingAllowed(true)
 {
 }
@@ -192,11 +211,16 @@ void TPDiskStatus::AddState(EPDiskState state, bool isNodeLocked) {
 
 bool TPDiskStatus::IsChanged() const {
     TString unused;
-    return Current != Compute(Current, unused);
+    return Current != Compute(Current, unused) || IsMaintenanceStatusChanged();
+}
+
+bool TPDiskStatus::IsMaintenanceStatusChanged() const {
+    return CurrentMaintenanceStatus != ComputeMaintenanceStatus(CurrentMaintenanceStatus);
 }
 
 void TPDiskStatus::ApplyChanges(TString& reason) {
     Current = Compute(Current, reason);
+    CurrentMaintenanceStatus = ComputeMaintenanceStatus(CurrentMaintenanceStatus);
 }
 
 void TPDiskStatus::ApplyChanges() {
@@ -206,6 +230,10 @@ void TPDiskStatus::ApplyChanges() {
 
 EPDiskStatus TPDiskStatus::GetStatus() const {
     return Current;
+}
+
+EMaintenanceStatus::E TPDiskStatus::GetMaintenanceStatus() const {
+    return CurrentMaintenanceStatus;
 }
 
 bool TPDiskStatus::IsNewStatusGood() const {
@@ -242,9 +270,11 @@ void TPDiskStatus::DisallowChanging() {
 
 /// TPDiskInfo
 
-TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
-    : TPDiskStatus(initialStatus, defaultStateLimit, goodStateLimit, stateLimits)
+TPDiskInfo::TPDiskInfo(EPDiskStatus initialStatus, EMaintenanceStatus::E initialMaintenanceStatus,
+                       const ui32& defaultStateLimit, const ui32& goodStateLimit, const TLimitsMap& stateLimits)
+    : TPDiskStatus(initialStatus, initialMaintenanceStatus, defaultStateLimit, goodStateLimit, stateLimits)
     , ActualStatus(initialStatus)
+    , ActualMaintenanceStatus(initialMaintenanceStatus)
 {
     Touch();
 }
@@ -550,7 +580,7 @@ class TConfigUpdater: public TUpdaterBase<TEvSentinel::TEvConfigUpdated, TConfig
                     continue;
                 }
 
-                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), Config.DefaultStateLimit, Config.GoodStateLimit, Config.StateLimits));
+                pdisks.emplace(id, new TPDiskInfo(pdisk.GetDriveStatus(), pdisk.GetMaintenanceStatus(), Config.DefaultStateLimit, Config.GoodStateLimit, Config.StateLimits));
             }
 
             SentinelState->ConfigUpdaterState.GotBSCResponse = true;
@@ -916,7 +946,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         }));
     }
 
-    void LogStatusChange(const TPDiskID& id, EPDiskStatus status, EPDiskStatus requiredStatus, const TString& reason) {
+    void LogStatusChange(const TPDiskID& id, EPDiskStatus status, EPDiskStatus requiredStatus,
+                         EMaintenanceStatus::E maintenanceStatus, EMaintenanceStatus::E requiredMaintenanceStatus,
+                         const TString& reason) {
         auto ev = MakeHolder<TCms::TEvPrivate::TEvLogAndSend>();
 
         ev->LogData.SetRecordType(NKikimrCms::TLogRecordData::PDISK_MONITOR_ACTION);
@@ -924,6 +956,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         id.Serialize(action.MutablePDiskId());
         action.SetCurrentStatus(status);
         action.SetRequiredStatus(requiredStatus);
+        action.SetCurrentMaintenanceStatus(maintenanceStatus);
+        action.SetRequiredMaintenanceStatus(requiredMaintenanceStatus);
 
         Y_ABORT_UNLESS(SentinelState->Nodes.contains(id.NodeId));
         action.SetHost(SentinelState->Nodes[id.NodeId].Host);
@@ -988,15 +1022,26 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             bool hasGoodState = NKikimrBlobStorage::TPDiskState::Normal == info.GetState();
 
-            if (it->second.HasFaultyMarker() && Config.EvictVDisksStatus.Defined()) {
-                hasGoodState = false;
-                info.SetForcedStatus(*Config.EvictVDisksStatus);
-            } else {
-                info.ResetForcedStatus();
+            info.ResetForcedStatus();
+            info.SetMaintenanceStatus(EMaintenanceStatus::NO_REQUEST);
+
+            if (it->second.HasFaultyMarker()) {
+                switch (Config.EvictVDisksStatus) {
+                    case EEvictVDisksStatus::Faulty:
+                        hasGoodState = false;
+                        info.SetForcedStatus(EPDiskStatus::FAULTY);
+                        break;
+                    case EEvictVDisksStatus::Maintenance:
+                        info.SetMaintenanceStatus(EMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+                        break;
+                    case EEvictVDisksStatus::Disabled:
+                        break;
+                }
             }
+
             all.AddPDisk(id, hasGoodState);
             if (info.IsChanged()) {
-                if (info.IsNewStatusGood() || info.HasForcedStatus()) {
+                if (info.IsNewStatusGood() || info.HasForcedStatus() || info.IsMaintenanceStatusChanged()) {
                     alwaysAllowed.insert(id);
                 } else {
                     changed.AddPDisk(id, hasGoodState);
@@ -1027,17 +1072,21 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             }
 
             const EPDiskStatus status = info->GetStatus();
+            const EMaintenanceStatus::E maintenanceStatus = info->GetMaintenanceStatus();
             TString reason;
             info->ApplyChanges(reason);
             const EPDiskStatus requiredStatus = info->GetStatus();
+            const EMaintenanceStatus::E requiredMaintenanceStatus = info->GetMaintenanceStatus();
 
             LOG_N("PDisk status changed"
                 << ": pdiskId# " << id
                 << ", status# " << status
                 << ", required status# " << requiredStatus
+                << ", maintenance status# " << maintenanceStatus
+                << ", required maintenance status# " << requiredMaintenanceStatus
                 << ", reason# " << reason
                 << ", dry run# " << Config.DryRun);
-            LogStatusChange(id, status, requiredStatus, reason);
+            LogStatusChange(id, status, requiredStatus, maintenanceStatus, requiredMaintenanceStatus, reason);
 
             if (!Config.DryRun) {
                 SentinelState->ChangeRequests.emplace(id, info);
@@ -1081,6 +1130,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             command.MutableHostKey()->SetNodeId(id.NodeId);
             command.SetPDiskId(id.DiskId);
             command.SetStatus(info->GetStatus());
+            command.SetMaintenanceStatus(info->GetMaintenanceStatus());
         }
         request->Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
 
@@ -1187,6 +1237,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
                     entry.MutableInfo()->SetLastStatusChange(info->LastStatusChange.ToString());
                     entry.MutableInfo()->SetIgnoreReason(info->IgnoreReason);
                     entry.MutableInfo()->SetStatusChangeFailed(info->StatusChangeFailed);
+                    entry.MutableInfo()->SetMaintenanceStatus(info->ActualMaintenanceStatus);
+                    entry.MutableInfo()->SetDesiredMaintenanceStatus(info->GetMaintenanceStatus());
+                    entry.MutableInfo()->SetPrevDesiredMaintenanceStatus(info->PrevMaintenanceStatus);
                 }
             }
         }
@@ -1218,6 +1271,8 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info.StatusChangeFailed = false;
             info.PrevStatus = info.ActualStatus;
             info.ActualStatus = info.GetStatus();
+            info.PrevMaintenanceStatus = info.ActualMaintenanceStatus;
+            info.ActualMaintenanceStatus = info.GetMaintenanceStatus();
             info.LastStatusChange = Now();
             info.PrevStatusChangeAttempt = info.StatusChangeAttempt;
             info.StatusChangeAttempt = SentinelState->StatusChangeAttempt;

@@ -23,6 +23,7 @@ add_library(formats-arrow-program)
 
 
 target_compile_options(formats-arrow-program PRIVATE
+  -Wno-unused-parameter
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
@@ -93,6 +94,7 @@ add_global_library_for(formats-arrow-program.global
 
 
 target_compile_options(formats-arrow-program.global PRIVATE
+  -Wno-unused-parameter
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 

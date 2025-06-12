@@ -1,6 +1,7 @@
 #include "init_impl.h"
 #include "mock.h"
 #include <ydb/library/yaml_json/yaml_to_json.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NConfig {
 
@@ -208,22 +209,7 @@ class TDefaultNodeBrokerClient
             const TString& nodeRegistrationToken,
             const IEnv& env)
     {
-        TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
-        NYdb::TDriverConfig config;
-        if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
-            if (grpcSettings.PathToGrpcCaFile) {
-                config.UseSecureConnection(env.ReadFromFile(grpcSettings.PathToGrpcCaFile, "CA certificates").c_str());
-            }
-            if (grpcSettings.PathToGrpcCertFile && grpcSettings.PathToGrpcPrivateKeyFile) {
-                auto certificate = env.ReadFromFile(grpcSettings.PathToGrpcCertFile, "Client certificates");
-                auto privateKey = env.ReadFromFile(grpcSettings.PathToGrpcPrivateKeyFile, "Client certificates key");
-                config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
-            }
-        }
-        if (nodeRegistrationToken) {
-            config.SetAuthToken(nodeRegistrationToken);
-        }
-        config.SetEndpoint(endpoint.Address);
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, nodeRegistrationToken);
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
@@ -460,6 +446,97 @@ public:
     }
 };
 
+class TConfigResultWrapper
+    : public IStorageConfigResult
+{
+public:
+    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result) {
+        TString clusterConfig;
+        TString storageConfig;
+        for (const auto& entry : result.GetConfigs()) {
+            std::visit([&](auto&& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, NYdb::NConfig::TMainConfigIdentity>) {
+                    MainYamlConfig = entry.Config;
+                } else if constexpr (std::is_same_v<T, NYdb::NConfig::TStorageConfigIdentity>) {
+                    StorageYamlConfig = entry.Config;
+                }
+            }, entry.Identity);
+        }
+    }
+
+    const TString& GetMainYamlConfig() const override {
+        return MainYamlConfig;
+    }
+
+    const TString& GetStorageYamlConfig() const override {
+        return StorageYamlConfig;
+    }
+
+private:
+    TString MainYamlConfig;
+    TString StorageYamlConfig;
+};
+
+class TDefaultConfigClient
+    : public IConfigClient
+{
+private:
+    static NYdb::NConfig::TFetchConfigResult TryToFetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TString& addrs,
+        const IEnv& env)
+    {
+
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addrs, env);
+
+        auto connection = NYdb::TDriver(config);
+
+        auto client = NYdb::NConfig::TConfigClient(connection);
+        NYdb::NConfig::TFetchConfigResult result = client.FetchAllConfigs().GetValueSync();
+        connection.Stop(true);
+        return result;
+    }
+
+    static NYdb::NConfig::TFetchConfigResult FetchConfigImpl(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger)
+    {
+        NYdb::NConfig::TFetchConfigResult result;
+        TBackoffTimer backoffTimer(1000, 3600000);
+
+        while (!result.IsSuccess()) {
+            for (const auto& addr : addrs) {
+                logger.Out() << "Trying to fetch config from " << addr << Endl;
+                result = TryToFetchConfig(grpcSettings, addr, env);
+                if (result.IsSuccess()) {
+                    logger.Out() << "Success. Fetched config from " << addr << Endl;
+                    break;
+                }
+                logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(result) << Endl;
+            }
+            if (!result.IsSuccess()) {
+                ui64 backoffMs = backoffTimer.NextBackoffMs();
+                env.Sleep(TDuration::MilliSeconds(backoffMs));
+            }
+        }
+        return result;
+    }
+
+public:
+    std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger) const override
+    {
+        auto result = FetchConfigImpl(grpcSettings, addrs, env, logger);
+        return std::make_shared<TConfigResultWrapper>(std::move(result));
+    }
+};
+
 class TDefaultInitLogger
     : public IInitLogger
 {
@@ -499,6 +576,10 @@ std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient() {
 
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient() {
     return std::make_unique<TDefaultDynConfigClient>();
+}
+
+std::unique_ptr<IConfigClient> MakeDefaultConfigClient() {
+    return std::make_unique<TDefaultConfigClient>();
 }
 
 std::unique_ptr<IInitLogger> MakeDefaultInitLogger() {
@@ -810,6 +891,27 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     return regularConfig;
 }
 
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::optional<TString>& authToken) {
+    TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
+    NYdb::TDriverConfig config;
+    if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
+        if (grpcSettings.PathToGrpcCaFile) {
+            config.UseSecureConnection(env.ReadFromFile(grpcSettings.PathToGrpcCaFile, "CA certificates").c_str());
+        }
+        if (grpcSettings.PathToGrpcCertFile && grpcSettings.PathToGrpcPrivateKeyFile) {
+            auto certificate = env.ReadFromFile(grpcSettings.PathToGrpcCertFile, "Client certificates");
+            auto privateKey = env.ReadFromFile(grpcSettings.PathToGrpcPrivateKeyFile, "Client certificates key");
+            config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
+        }
+    }
+    if (authToken) {
+        config.SetAuthToken(authToken.value());
+    }
+    config.SetEndpoint(endpoint.Address);
+
+    return config;
+}
+
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps) {
     return std::make_unique<TInitialConfiguratorImpl>(deps);
 }
@@ -821,6 +923,7 @@ class TInitialConfiguratorDepsRecorder
     TProtoConfigFileProviderRecorder ProtoConfigFileProvider;
     TNodeBrokerClientRecorder NodeBrokerClient;
     TDynConfigClientRecorder DynConfigClient;
+    TConfigClientRecorder ConfigClient;
     TEnvRecorder Env;
 public:
     TInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
@@ -828,6 +931,7 @@ public:
         , ProtoConfigFileProvider(deps.ProtoConfigFileProvider)
         , NodeBrokerClient(deps.NodeBrokerClient)
         , DynConfigClient(deps.DynConfigClient)
+        , ConfigClient(deps.ConfigClient)
         , Env(deps.Env)
     {}
 
@@ -839,6 +943,7 @@ public:
             .MemLogInit = Impls.MemLogInit,
             .NodeBrokerClient = NodeBrokerClient,
             .DynConfigClient = DynConfigClient,
+            .ConfigClient = ConfigClient,
             .Env = Env,
             .Logger = Impls.Logger,
         };
@@ -852,6 +957,7 @@ public:
             .MemLogInit = MakeNoopMemLogInitializer(),
             .NodeBrokerClient = std::make_unique<TNodeBrokerClientMock>(NodeBrokerClient.GetMock()),
             .DynConfigClient = std::make_unique<TDynConfigClientMock>(DynConfigClient.GetMock()),
+            .ConfigClient = std::make_unique<TConfigClientMock>(ConfigClient.GetMock()),
             .Env = std::make_unique<TEnvMock>(Env.GetMock()),
             .Logger = MakeNoopInitLogger(),
         };

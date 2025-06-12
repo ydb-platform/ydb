@@ -62,6 +62,20 @@ public:
     void Init(const NKikimrConfig::TMemoryLogConfig&) const override {}
 };
 
+class TNoopConfigClient
+    : public IConfigClient
+{
+public:
+    std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings&,
+        const TVector<TString>&,
+        const IEnv&,
+        IInitLogger&) const override
+    {
+        return nullptr;
+    }
+};
+
 std::unique_ptr<IMemLogInitializer> MakeNoopMemLogInitializer() {
     return std::make_unique<TNoopMemLogInitializer>();
 }
@@ -72,6 +86,10 @@ std::unique_ptr<INodeBrokerClient> MakeNoopNodeBrokerClient() {
 
 std::unique_ptr<IDynConfigClient> MakeNoopDynConfigClient() {
     return std::make_unique<TNoopDynConfigClient>();
+}
+
+std::unique_ptr<IConfigClient> MakeNoopConfigClient() {
+    return std::make_unique<TNoopConfigClient>();
 }
 
 std::unique_ptr<IInitLogger> MakeNoopInitLogger() {

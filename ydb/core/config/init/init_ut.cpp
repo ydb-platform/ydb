@@ -167,6 +167,7 @@ selector_config:
         auto memLogInit = NConfig::MakeNoopMemLogInitializer();
         auto nodeBrokerClient = NConfig::MakeNoopNodeBrokerClient();
         auto dynConfigClient = NConfig::MakeNoopDynConfigClient();
+        auto configClient = NConfig::MakeNoopConfigClient();
         auto logger = NConfig::MakeNoopInitLogger();
 
         auto envMock = std::make_unique<NConfig::TEnvMock>();
@@ -180,6 +181,7 @@ selector_config:
             *memLogInit,
             *nodeBrokerClient,
             *dynConfigClient,
+            *configClient,
             *envMock,
             *logger,
         };

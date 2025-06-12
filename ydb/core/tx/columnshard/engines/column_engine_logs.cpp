@@ -6,7 +6,6 @@
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
 #include "changes/general_compaction.h"
-#include "changes/indexation.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
 

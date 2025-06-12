@@ -30,7 +30,6 @@
 #include "engines/changes/cleanup_portions.h"
 #include "engines/changes/cleanup_tables.h"
 #include "engines/changes/general_compaction.h"
-#include "engines/changes/indexation.h"
 #include "engines/changes/ttl.h"
 #include "hooks/abstract/abstract.h"
 #include "resource_subscriber/counters.h"
@@ -532,14 +531,12 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
-    SetupIndexation();
     SetupCompaction({});
     SetupCleanupPortions();
     SetupCleanupTables();
     SetupMetadata();
     SetupTtl();
     SetupGC();
-    SetupCleanupInsertTable();
 }
 
 class TChangesTask: public NConveyor::ITask {
@@ -715,14 +712,6 @@ public:
     }
 };
 
-class TInsertChangesReadTask: public TChangesReadTask, public TMonitoringObjectsCounter<TInsertChangesReadTask> {
-private:
-    using TBase = TChangesReadTask;
-
-public:
-    using TBase::TBase;
-};
-
 class TCompactChangesReadTask: public TChangesReadTask, public TMonitoringObjectsCounter<TCompactChangesReadTask> {
 private:
     using TBase = TChangesReadTask;
@@ -738,85 +727,6 @@ private:
 public:
     using TBase::TBase;
 };
-
-void TColumnShard::StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex) {
-    Counters.GetCSCounters().IndexationInput(bytesToIndex);
-
-    std::vector<NOlap::TCommittedData> data;
-    data.reserve(dataToIndex.size());
-    for (auto& ptr : dataToIndex) {
-        data.push_back(*ptr);
-        if (!TablesManager.HasTable(data.back().GetPathId())) {
-            data.back().SetRemove();
-        }
-    }
-
-    Y_ABORT_UNLESS(data.size());
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(std::move(data));
-    Y_ABORT_UNLESS(indexChanges);
-
-    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    indexChanges->Start(*this);
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, indexChanges, Settings.CacheDataAfterIndexing);
-
-    const TString externalTaskId = indexChanges->GetTaskIdentifier();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size())("max_limit", (i64)Limits.MaxInsertBytes)("has_more", bytesToIndex >= Limits.MaxInsertBytes)("external_task_id", externalTaskId);
-
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-        ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                                    std::make_shared<TInsertChangesReadTask>(std::move(ev), SelfId(), TabletID(), Counters.GetIndexationCounters(), GetLastCompletedTx()),
-                                    0, indexChanges->CalcMemoryForUsage(), externalTaskId, InsertTaskSubscription));
-}
-
-void TColumnShard::SetupIndexation() {
-    if (!AppDataVerified().ColumnShardConfig.GetIndexationEnabled() || !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Indexation)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "disabled");
-        return;
-    }
-    BackgroundController.CheckDeadlinesIndexation();
-    if (BackgroundController.GetIndexingActiveCount()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")("count", BackgroundController.GetIndexingActiveCount())("insert_overload_size", InsertTable->GetCountersCommitted().Bytes)("indexing_debug", BackgroundController.DebugStringIndexation());
-        return;
-    }
-
-    bool force = false;
-    if (InsertTable->GetPathPriorities().size() && InsertTable->GetPathPriorities().rbegin()->first.GetCategory() == NOlap::TPathInfoIndexPriority::EIndexationPriority::PreventOverload) {
-        force = true;
-    }
-    const ui64 bytesLimit = NYDBTest::TControllers::GetColumnShardController()->GetGuaranteeIndexationStartBytesLimit();
-    const TDuration durationLimit = NYDBTest::TControllers::GetColumnShardController()->GetGuaranteeIndexationInterval();
-    if (!force && InsertTable->GetCountersCommitted().Bytes < bytesLimit &&
-        TMonotonic::Now() < BackgroundController.GetLastIndexationInstant() + durationLimit) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "not_enough_data_and_too_frequency")("insert_size", InsertTable->GetCountersCommitted().Bytes);
-        return;
-    }
-
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_indexation_tasks")("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
-    Counters.GetCSCounters().OnSetupIndexation();
-    ui64 bytesToIndex = 0;
-    ui64 txBytesWrite = 0;
-    std::vector<const NOlap::TCommittedData*> dataToIndex;
-    dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
-    for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
-        for (auto* pathInfo : it->second) {
-            for (auto& data : pathInfo->GetCommitted()) {
-                Y_ABORT_UNLESS(data.BlobSize());
-                bytesToIndex += data.BlobSize();
-                txBytesWrite += data.GetTxVolume();
-                dataToIndex.push_back(&data);
-                if (bytesToIndex >= (ui64)Limits.MaxInsertBytes || txBytesWrite >= NOlap::TGlobalLimits::TxWriteLimitBytes || dataToIndex.size() > 500) {
-                    StartIndexTask(std::move(dataToIndex), bytesToIndex);
-                    dataToIndex.clear();
-                    bytesToIndex = 0;
-                    txBytesWrite = 0;
-                }
-            }
-        }
-    }
-    if (dataToIndex.size()) {
-        StartIndexTask(std::move(dataToIndex), bytesToIndex);
-    }
-}
 
 namespace {
 class TCompactionAllocated: public NPrioritiesQueue::IRequest {

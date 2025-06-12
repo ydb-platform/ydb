@@ -8,7 +8,6 @@
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/library/signals/object_counter.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/data_events/write_data.h>
 

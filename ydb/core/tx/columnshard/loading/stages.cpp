@@ -8,27 +8,6 @@
 
 namespace NKikimr::NColumnShard::NLoading {
 
-bool TInsertTableInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
-    for (auto&& i : Self->TablesManager.GetTables()) {
-        localInsertTable->RegisterPathInfo(i.first);
-    }
-    if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
-        ACFL_ERROR("step", "TInsertTable::Load_Fails");
-        return false;
-    }
-    Self->InsertTable.swap(localInsertTable);
-    return true;
-}
-
-bool TInsertTableInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::InsertTable>(db, txc.DB.GetScheme());
-}
-
 bool TTxControllerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     auto localTxController = std::make_unique<TTxController>(*Self);
     if (!localTxController->Load(txc)) {

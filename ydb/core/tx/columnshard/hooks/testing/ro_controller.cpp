@@ -5,7 +5,6 @@
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_tables.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>

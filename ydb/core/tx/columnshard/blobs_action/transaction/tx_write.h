@@ -25,9 +25,6 @@ private:
     TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
 
-    bool CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
-    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
-
     class TReplyInfo {
     private:
         std::unique_ptr<NActors::IEventBase> Event;

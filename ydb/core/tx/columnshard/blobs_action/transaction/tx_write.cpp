@@ -5,34 +5,6 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId) {
-    auto userData = batch.BuildInsertionUserData(*Self);
-    NOlap::TInsertedData insertData(writeId, userData);
-
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
-    if (ok) {
-        Self->UpdateInsertTableCounters();
-        return true;
-    }
-    return false;
-}
-
-bool TTxWrite::CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId) {
-    auto userData = batch.BuildInsertionUserData(*Self);
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    AFL_VERIFY(CommitSnapshot);
-    NOlap::TCommittedData commitData(userData, *CommitSnapshot, Self->Generation(), writeId);
-    if (Self->TablesManager.HasTable(userData->GetPathId())) {
-        auto counters = Self->InsertTable->CommitEphemeral(dbTable, std::move(commitData));
-        Self->Counters.GetTabletCounters()->OnWriteCommitted(counters);
-    }
-    Self->UpdateInsertTableCounters();
-    return true;
-}
-
 bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
     CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
     TMemoryProfileGuard mpg("TTxWrite::Execute");

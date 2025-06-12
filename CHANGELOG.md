@@ -16,5 +16,3 @@
 * 17629:Fixed early object deletion in wide combiner. [#17629](https://github.com/ydb-platform/ydb/pull/17629) ([Filitov Mikhail](https://github.com/lll-phill-lll))
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18117) [issues](https://github.com/ydb-platform/ydb/issues/18116) with reading messages larger than 6Mb via [Kafka API](./reference/kafka-api).
 * 18077:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 18270:Fixed replication bug #10650 [#18270](https://github.com/ydb-platform/ydb/pull/18270) ([Alexander Rutkovsky](https://github.com/alexvru))
-* 18302:Optimized memory usage in transactions with a large number of participants by changing the storage and resending mechanism for TEvReadSet messages. [#18302](https://github.com/ydb-platform/ydb/pull/18302) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))

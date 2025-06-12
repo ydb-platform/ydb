@@ -19,7 +19,7 @@ private:
     NJson::TJsonValue JsonReport = NJson::JSON_MAP;
 };
 
-inline TString EscapeHtml(const TString& in) {
+inline TString TEscapeHtml(const TString& in) {
     TString out;
     out.reserve(in.size());
     for (char c : in) {
@@ -51,9 +51,9 @@ void TPrintErrorTable(TStringStream& html, std::queue<T> errors, const std::stri
         while (!errors.empty()) {
             const auto& element = errors.front();
             html << "<tr>"
-                 << "<td>" << EscapeHtml(element.Tier) << "</td>"
+                 << "<td>" << TEscapeHtml(element.Tier) << "</td>"
                  << "<td>" << element.Time.ToString() << "</td>"
-                 << "<td>" << EscapeHtml(element.ErrorReason) << "</td>"
+                 << "<td>" << TEscapeHtml(element.ErrorReason) << "</td>"
                  << "</tr>";
             errors.pop();
         }
@@ -108,9 +108,8 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     }
 
     html << "<h3>Tiering Errors</h3>";
-    // std::cout << "la-la-la4 " << Self->GetTieringErrors().size() << '\n';
-    auto readErrors = Self->TieringErrorCollector->GetAllReadErrors();
-    auto writeErrors = Self->TieringErrorCollector->GetAllWriteErrors();
+    auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
+    auto writeErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllWriteErrors();
 
     TPrintErrorTable(html, readErrors, "read");
     TPrintErrorTable(html, writeErrors, "write");

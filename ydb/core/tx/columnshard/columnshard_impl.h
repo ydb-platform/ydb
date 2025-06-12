@@ -474,7 +474,6 @@ protected:
     }
 
 private:
-    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> TieringErrorCollector = std::make_shared<NKikimr::NColumnShard::TErrorCollector>();
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
     std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;

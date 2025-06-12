@@ -52,7 +52,7 @@
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
-#include <ydb/core/protos/checksum.pb.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
@@ -792,6 +792,7 @@ class TDataShard
             struct WrittenBytes :    Column<5, NScheme::NTypeIds::Uint64> {};
             struct WrittenRows :     Column<6, NScheme::NTypeIds::Uint64> {};
             struct ChecksumState :   Column<7, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TChecksumState; };
+            struct DownloadState :   Column<8, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TS3DownloadState; };
 
             using TKey = TableKey<TxId>;
             using TColumns = TableColumns<
@@ -801,7 +802,8 @@ class TDataShard
                 ProcessedBytes,
                 WrittenBytes,
                 WrittenRows,
-                ChecksumState
+                ChecksumState,
+                DownloadState
             >;
         };
 
@@ -3393,14 +3395,14 @@ protected:
                 }
                 for (const auto& pi : SysTablesPartOwners) {
                     ev->Record.AddSysTablesPartOwners(pi);
-                }                
+                }
             }
 
             ev->Record.MutableTableStats()->SetImmediateTxCompleted(TabletCounters->Cumulative()[COUNTER_PREPARE_IMMEDIATE].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_IMMEDIATE].Get());
             ev->Record.MutableTableStats()->SetPlannedTxCompleted(TabletCounters->Cumulative()[COUNTER_PLANNED_TX_COMPLETE].Get());
             ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get() + TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOADED].Get());
             ev->Record.MutableTableStats()->SetTxRejectedBySpace(
-                TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get() 
+                TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get()
               + TabletCounters->Cumulative()[COUNTER_PREPARE_DISK_SPACE_EXHAUSTED].Get()
               + TabletCounters->Cumulative()[COUNTER_WRITE_OUT_OF_SPACE].Get()
               + TabletCounters->Cumulative()[COUNTER_WRITE_DISK_SPACE_EXHAUSTED].Get()

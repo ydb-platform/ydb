@@ -1260,6 +1260,17 @@ message TBackupTask {
     optional TCompressionOptions Compression = 13;
     optional bool EnableChecksums = 16; 
     optional bool EnablePermissions = 18;
+
+    // Encryption (currently available only for s3):
+    message TEncryptionSettings {
+        optional string EncryptionAlgorithm = 1;
+        optional bytes IV = 2;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 3;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 19;
 }
 
 message TRestoreTask {
@@ -1274,6 +1285,15 @@ message TRestoreTask {
     }
 
     optional bool ValidateChecksums = 7; // currently available for s3
+
+    message TEncryptionSettings {
+        optional bytes IV = 1;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 2;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 8;
 }
 
 message TPersQueueGroupAllocate {
@@ -2149,4 +2169,20 @@ message TImportTableChangefeeds {
 
 message TChangefeedUnderlyingTopics {
     repeated TPathDescription ChangefeedUnderlyingTopics = 1;
+}
+
+message TExportMetadata {
+    message TSchemaMappingItem {
+        optional string SourcePath = 1;
+        optional string DestinationPrefix = 2;
+
+        // encryption details
+        optional bytes IV = 3;
+    }
+
+    repeated TSchemaMappingItem SchemaMapping = 1;
+
+    optional string CompressionAlgorithm = 2;
+    optional string EncryptionAlgorithm = 3;
+    optional bytes IV = 4;
 }

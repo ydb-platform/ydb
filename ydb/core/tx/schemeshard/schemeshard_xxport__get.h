@@ -34,7 +34,7 @@ struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
             return true;
         }
 
-        Self->FromXxportInfo(entry, it->second);
+        Self->FromXxportInfo(entry, *it->second);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
         return true;

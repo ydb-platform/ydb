@@ -17,3 +17,7 @@ message TChecksumState {
         TSha256State Sha256State = 1;
     }
 }
+
+message TS3DownloadState {
+    optional bytes EncryptedDeserializerState = 1;
+}

@@ -3,7 +3,7 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_helpers.h"
-#include "schemeshard_import_scheme_getter.h"
+#include "schemeshard_import_getters.h"
 #include "schemeshard_import_scheme_query_executor.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
@@ -67,6 +67,42 @@ TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
 }
 
+bool ValidateDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain) {
+    const TPath path = TPath::Resolve(dstPath, ss);
+    TPath::TChecker checks = path.Check();
+    checks
+        .IsAtLocalSchemeShard()
+        .HasResolvedPrefix()
+        .FailOnRestrictedCreateInTempZone();
+
+    if (path.IsResolved()) {
+        checks
+            .IsResolved()
+            .IsDeleted();
+    } else {
+        checks
+            .NotEmpty()
+            .NotResolved();
+    }
+
+    if (checks) {
+        checks
+            .IsValidLeafName()
+            .DepthLimit()
+            .PathsLimit();
+
+        if (path.Parent().IsResolved()) {
+            checks.DirChildrenLimit();
+        }
+    }
+
+    if (!checks) {
+        explain = checks.GetError();
+        return false;
+    }
+    return true;
+}
+
 }
 
 struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
@@ -105,7 +141,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         if (uid) {
             if (auto it = Self->ImportsByUid.find(uid); it != Self->ImportsByUid.end()) {
                 if (IsSameDomain(it->second, request.GetDatabaseName())) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), it->second);
+                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *it->second);
                     return Reply(std::move(response));
                 } else {
                     return Reply(
@@ -141,6 +177,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         TImportInfo::TPtr importInfo = nullptr;
+        TImportInfo::EState initialState = TImportInfo::EState::Waiting;
 
         switch (request.GetRequest().GetSettingsCase()) {
         case NKikimrImport::TCreateImportRequest::kImportFromS3Settings:
@@ -150,6 +187,10 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
                 }
 
+                if (!settings.source_prefix().empty() && AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                    initialState = TImportInfo::EState::DownloadExportMetadata;
+                }
+
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
 
                 if (request.HasUserSID()) {
@@ -157,7 +198,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 TString explain;
-                if (!FillItems(importInfo, settings, explain)) {
+                if (!FillItems(*importInfo, settings, explain)) {
                     return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
                 }
             }
@@ -170,18 +211,18 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         Y_ABORT_UNLESS(importInfo != nullptr);
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistCreateImport(db, importInfo);
+        Self->PersistCreateImport(db, *importInfo);
 
-        importInfo->State = TImportInfo::EState::Waiting;
+        importInfo->State = initialState;
         importInfo->StartTime = TAppData::TimeProvider->Now();
-        Self->PersistImportState(db, importInfo);
+        Self->PersistImportState(db, *importInfo);
 
         Self->Imports[id] = importInfo;
         if (uid) {
             Self->ImportsByUid[uid] = importInfo;
         }
 
-        Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), importInfo);
+        Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *importInfo);
 
         Progress = true;
         return Reply(std::move(response));
@@ -221,53 +262,24 @@ private:
     }
 
     template <typename TSettings>
-    bool FillItems(TImportInfo::TPtr importInfo, const TSettings& settings, TString& explain) {
+    bool FillItems(TImportInfo& importInfo, const TSettings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
-        importInfo->Items.reserve(settings.items().size());
+        importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
-            const auto& dstPath = settings.items(itemIdx).destination_path();
-            if (!dstPaths.insert(dstPath).second) {
+            const TString& dstPath = settings.items(itemIdx).destination_path();
+            if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
                 explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
                 return false;
             }
 
-            const TPath path = TPath::Resolve(dstPath, Self);
-            {
-                TPath::TChecker checks = path.Check();
-                checks
-                    .IsAtLocalSchemeShard()
-                    .HasResolvedPrefix()
-                    .FailOnRestrictedCreateInTempZone();
-
-                if (path.IsResolved()) {
-                    checks
-                        .IsResolved()
-                        .IsDeleted();
-                } else {
-                    checks
-                        .NotEmpty()
-                        .NotResolved();
-                }
-
-                if (checks) {
-                    checks
-                        .IsValidLeafName()
-                        .DepthLimit()
-                        .PathsLimit();
-
-                    if (path.Parent().IsResolved()) {
-                        checks.DirChildrenLimit();
-                    }
-                }
-
-                if (!checks) {
-                    explain = checks.GetError();
-                    return false;
-                }
+            if (!ValidateDstPath(dstPath, Self, explain)) {
+                return false;
             }
 
-            importInfo->Items.emplace_back(dstPath);
+            auto& item = importInfo.Items.emplace_back(dstPath);
+            item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
+            item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
         }
 
         return true;
@@ -284,6 +296,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     ui64 Id;
     TMaybe<ui32> ItemIdx;
     TEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
+    TEvPrivate::TEvImportSchemaMappingReady::TPtr SchemaMappingResult = nullptr;
     TEvPrivate::TEvImportSchemeQueryResult::TPtr SchemeQueryResult = nullptr;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
@@ -300,6 +313,13 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemeReady::TPtr& ev)
         : TXxport::TTxBase(self)
         , SchemeResult(ev)
+    {
+    }
+
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , Id(ev->Get()->ImportId)
+        , SchemaMappingResult(ev)
     {
     }
 
@@ -342,6 +362,8 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 
         if (SchemeResult) {
             OnSchemeResult(txc, ctx);
+        } else if (SchemaMappingResult) {
+            OnSchemaMappingResult(txc, ctx);
         } else if (SchemeQueryResult) {
             OnSchemeQueryPreparation(txc, ctx);
         } else if (AllocateResult) {
@@ -372,18 +394,26 @@ private:
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx));
+        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
         Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
     }
 
-    void CreateTable(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+    void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
+        LOG_I("TImport::TTxProgress: Download schema mapping"
+            << ": info# " << importInfo->ToString());
+
+        importInfo->SchemaMappingGetter = ctx.RegisterWithSameMailbox(CreateSchemaMappingGetter(Self->SelfId(), importInfo));
+        Self->RunningImportSchemeGetters.emplace(importInfo->SchemaMappingGetter);
+    }
+
+    void CreateTable(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
 
         item.SubState = ESubState::Proposed;
 
         LOG_I("TImport::TTxProgress: CreateTable propose"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
@@ -429,14 +459,14 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void RetryViewsCreation(TImportInfo::TPtr importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    void RetryViewsCreation(TImportInfo& importInfo, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const auto database = GetDatabase(*Self);
         TVector<ui32> retriedItems;
-        for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-            auto& item = importInfo->Items[itemIdx];
+        for (ui32 itemIdx : xrange(importInfo.Items.size())) {
+            auto& item = importInfo.Items[itemIdx];
             if (IsWaiting(item) && IsCreatedByQuery(item)) {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
-                    Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
+                    Self->SelfId(), importInfo.Id, itemIdx, item.CreationQuery, database
                 ));
                 Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
 
@@ -447,22 +477,22 @@ private:
             }
         }
         if (!retriedItems.empty()) {
-            importInfo->WaitingViews = std::ssize(retriedItems);
+            importInfo.WaitingViews = std::ssize(retriedItems);
             LOG_D("TImport::TTxProgress: retry view creation"
-                << ": id# " << importInfo->Id
+                << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
             );
         }
     }
 
-    void TransferData(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+    void TransferData(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
 
         item.SubState = ESubState::Proposed;
 
         LOG_I("TImport::TTxProgress: Restore propose"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
@@ -470,36 +500,36 @@ private:
         Send(Self->SelfId(), RestorePropose(Self, txId, importInfo, itemIdx));
     }
 
-    bool CancelTransferring(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    bool CancelTransferring(TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
 
         if (item.WaitTxId == InvalidTxId) {
             if (item.SubState == ESubState::Proposed) {
-                importInfo->State = EState::Cancellation;
+                importInfo.State = EState::Cancellation;
             }
 
             return false;
         }
 
-        importInfo->State = EState::Cancellation;
+        importInfo.State = EState::Cancellation;
 
         LOG_I("TImport::TTxProgress: cancel restore's tx"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo->Id);
+        Send(Self->SelfId(), CancelRestorePropose(importInfo, item.WaitTxId), 0, importInfo.Id);
         return true;
     }
 
-    void BuildIndex(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+    void BuildIndex(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
 
         item.SubState = ESubState::Proposed;
 
         LOG_I("TImport::TTxProgress: build index"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
@@ -507,35 +537,35 @@ private:
         Send(Self->SelfId(), BuildIndexPropose(Self, txId, importInfo, itemIdx, MakeIndexBuildUid(importInfo, itemIdx)));
     }
 
-    bool CancelIndexBuilding(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    bool CancelIndexBuilding(TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
 
         if (item.WaitTxId == InvalidTxId) {
             if (item.SubState == ESubState::Proposed) {
-                importInfo->State = EState::Cancellation;
+                importInfo.State = EState::Cancellation;
             }
 
             return false;
         }
 
-        importInfo->State = EState::Cancellation;
+        importInfo.State = EState::Cancellation;
 
         LOG_I("TImport::TTxProgress: cancel index building"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        Send(Self->SelfId(), CancelIndexBuildPropose(Self, importInfo, item.WaitTxId), 0, importInfo->Id);
+        Send(Self->SelfId(), CancelIndexBuildPropose(Self, importInfo, item.WaitTxId), 0, importInfo.Id);
         return true;
     }
 
-    bool CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId, TString& error) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+    bool CreateChangefeed(TImportInfo& importInfo, ui32 itemIdx, TTxId txId, TString& error) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
         item.SubState = ESubState::Proposed;
 
         LOG_I("TImport::TTxProgress: CreateChangefeed propose"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
@@ -550,13 +580,13 @@ private:
         return true;
     }
 
-    void CreateConsumers(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+    void CreateConsumers(TImportInfo& importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
         item.SubState = ESubState::Proposed;
 
         LOG_I("TImport::TTxProgress: CreateConsumers propose"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
 
@@ -565,37 +595,37 @@ private:
         Send(Self->SelfId(), CreateConsumersPropose(Self, txId, item));
     }
 
-    void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+    void AllocateTxId(TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
 
         item.SubState = ESubState::AllocateTxId;
 
         LOG_I("TImport::TTxProgress: Allocate txId"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, importInfo->Id);
+        Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, importInfo.Id);
     }
 
-    void SubscribeTx(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items.at(itemIdx);
+    void SubscribeTx(TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        auto& item = importInfo.Items.at(itemIdx);
 
         item.SubState = ESubState::Subscribed;
 
         LOG_I("TImport::TTxProgress: Wait for completion"
-            << ": info# " << importInfo->ToString()
+            << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
         Y_ABORT_UNLESS(item.WaitTxId != InvalidTxId);
         Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(item.WaitTxId)));
     }
 
-    TTxId GetActiveRestoreTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    TTxId GetActiveRestoreTxId(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
 
         Y_ABORT_UNLESS(item.State == EState::Transferring);
         Y_ABORT_UNLESS(item.DstPathId);
@@ -612,9 +642,9 @@ private:
         return path->LastTxId;
     }
 
-    TTxId GetActiveBuildIndexId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    TTxId GetActiveBuildIndexId(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
 
         Y_ABORT_UNLESS(item.State == EState::BuildIndexes);
 
@@ -627,9 +657,9 @@ private:
         return TTxId(ui64((*infoPtr)->Id));
     }
 
-    TTxId GetActiveCreateChangefeedTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    TTxId GetActiveCreateChangefeedTxId(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
 
         Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
         Y_ABORT_UNLESS(item.DstPathId);
@@ -646,9 +676,9 @@ private:
         return path->LastTxId;
     }
 
-    TTxId GetActiveCreateConsumerTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    TTxId GetActiveCreateConsumerTxId(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
 
         Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
         Y_ABORT_UNLESS(item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateConsumers);
@@ -666,11 +696,11 @@ private:
         return path->LastTxId;
     }
 
-    static TString MakeIndexBuildUid(TImportInfo::TPtr importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    static TString MakeIndexBuildUid(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
 
-        return TStringBuilder() << importInfo->Id << "-" << itemIdx << "-" << item.NextIndexIdx;
+        return TStringBuilder() << importInfo.Id << "-" << itemIdx << "-" << item.NextIndexIdx;
     }
 
     void KillChildActors(TImportInfo::TItem& item) {
@@ -684,23 +714,35 @@ private:
         }
     }
 
-    void Cancel(TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf marker) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+    void Cancel(TImportInfo& importInfo, ui32 itemIdx, TStringBuf marker) {
+        const TItem* item = nullptr;
+        if (itemIdx != ui32(-1)) {
+            Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+            item = &importInfo.Items.at(itemIdx);
+        }
 
+        TStringBuilder itemLogStr;
+        if (item) {
+            itemLogStr << ", item# " << item->ToString(itemIdx);
+        }
         LOG_N("TImport::TTxProgress: " << marker << ", cancelling"
-            << ", info# " << importInfo->ToString()
-            << ", item# " << item.ToString(itemIdx));
+            << ", info# " << importInfo.ToString()
+            << itemLogStr);
 
-        importInfo->State = EState::Cancelled;
+        importInfo.State = EState::Cancelled;
 
-        for (ui32 i : xrange(importInfo->Items.size())) {
-            KillChildActors(importInfo->Items[i]);
+        if (auto schemaMappingGetter = std::exchange(importInfo.SchemaMappingGetter, {})) {
+            Send(schemaMappingGetter, new TEvents::TEvPoisonPill());
+            Self->RunningImportSchemeGetters.erase(schemaMappingGetter);
+        }
+
+        for (ui32 i : xrange(importInfo.Items.size())) {
+            KillChildActors(importInfo.Items[i]);
             if (i == itemIdx) {
                 continue;
             }
 
-            switch (importInfo->Items.at(i).State) {
+            switch (importInfo.Items.at(i).State) {
             case EState::Transferring:
                 CancelTransferring(importInfo, i);
                 break;
@@ -714,24 +756,26 @@ private:
             }
         }
 
-        if (importInfo->State == EState::Cancelled) {
-            importInfo->EndTime = TAppData::TimeProvider->Now();
+        if (importInfo.State == EState::Cancelled) {
+            importInfo.EndTime = TAppData::TimeProvider->Now();
         }
     }
 
     void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf itemIssue, TStringBuf marker) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items[itemIdx];
+        if (itemIdx != ui32(-1)) {
+            Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+            auto& item = importInfo->Items[itemIdx];
 
-        item.Issue = itemIssue;
-        PersistImportItemState(db, importInfo, itemIdx);
+            item.Issue = itemIssue;
+            PersistImportItemState(db, *importInfo, itemIdx);
 
-        if (importInfo->State != EState::Waiting) {
-            return;
+            if (importInfo->State != EState::Waiting) {
+                return;
+            }
         }
 
-        Cancel(importInfo, itemIdx, marker);
-        PersistImportState(db, importInfo);
+        Cancel(*importInfo, itemIdx, marker);
+        PersistImportState(db, *importInfo);
 
         SendNotificationsIfFinished(importInfo);
     }
@@ -801,11 +845,20 @@ private:
             << ": id# " << Id
             << ", itemIdx# " << ItemIdx);
 
-        if (ItemIdx) {
-            Resume(importInfo, *ItemIdx, txc, ctx);
-        } else {
-            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-                Resume(importInfo, itemIdx, txc, ctx);
+        switch (importInfo->State) {
+            case EState::DownloadExportMetadata: {
+                GetSchemaMapping(importInfo, ctx);
+                break;
+            }
+            default: {
+                if (ItemIdx) {
+                    Resume(importInfo, *ItemIdx, txc, ctx);
+                } else {
+                    for (ui32 itemIdx : xrange(importInfo->Items.size())) {
+                        Resume(importInfo, itemIdx, txc, ctx);
+                    }
+                }
+                break;
             }
         }
     }
@@ -837,7 +890,7 @@ private:
                 case EState::CreateChangefeed:
                     if (item.WaitTxId == InvalidTxId) {
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
-                            AllocateTxId(importInfo, itemIdx);
+                            AllocateTxId(*importInfo, itemIdx);
                         } else {
                             const auto database = GetDatabase(*Self);
                             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
@@ -846,7 +899,7 @@ private:
                             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
                         }
                     } else {
-                        SubscribeTx(importInfo, itemIdx);
+                        SubscribeTx(*importInfo, itemIdx);
                     }
                     break;
 
@@ -861,14 +914,14 @@ private:
 
                 switch (item.State) {
                 case EState::Transferring:
-                    if (!CancelTransferring(importInfo, itemIdx)) {
-                        txId = GetActiveRestoreTxId(importInfo, itemIdx);
+                    if (!CancelTransferring(*importInfo, itemIdx)) {
+                        txId = GetActiveRestoreTxId(*importInfo, itemIdx);
                     }
                     break;
 
                 case EState::BuildIndexes:
-                    if (!CancelIndexBuilding(importInfo, itemIdx)) {
-                        txId = GetActiveBuildIndexId(importInfo, itemIdx);
+                    if (!CancelIndexBuilding(*importInfo, itemIdx)) {
+                        txId = GetActiveBuildIndexId(*importInfo, itemIdx);
                     }
                     break;
 
@@ -878,15 +931,15 @@ private:
 
                 if (txId != InvalidTxId) {
                     item.WaitTxId = txId;
-                    Self->PersistImportItemState(db, importInfo, itemIdx);
+                    Self->PersistImportItemState(db, *importInfo, itemIdx);
 
                     switch (item.State) {
                     case EState::Transferring:
-                        CancelTransferring(importInfo, itemIdx);
+                        CancelTransferring(*importInfo, itemIdx);
                         break;
 
                     case EState::BuildIndexes:
-                        CancelIndexBuilding(importInfo, itemIdx);
+                        CancelIndexBuilding(*importInfo, itemIdx);
                         break;
 
                     default:
@@ -936,14 +989,14 @@ private:
         }
         if (!IsCreatedByQuery(item)) {
             TString error;
-            if (!CreateTablePropose(Self, TTxId(), importInfo, msg.ItemIdx, error)) {
+            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid scheme");
             }
         } else {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
-                << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
+                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
             if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
@@ -956,13 +1009,114 @@ private:
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
         }
 
-        Self->PersistImportItemScheme(db, importInfo, msg.ItemIdx);
+        Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);
 
         item.State = EState::CreateSchemeObject;
-        Self->PersistImportItemState(db, importInfo, msg.ItemIdx);
+        Self->PersistImportItemState(db, *importInfo, msg.ItemIdx);
         if (!IsCreatedByQuery(item)) {
-            AllocateTxId(importInfo, msg.ItemIdx);
+            AllocateTxId(*importInfo, msg.ItemIdx);
         }
+    }
+
+    void OnSchemaMappingResult(TTransactionContext& txc, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(SchemaMappingResult);
+
+        const auto& msg = *SchemaMappingResult->Get();
+
+        LOG_D("TImport::TTxProgress: OnSchemaMappingResult"
+            << ": id# " << msg.ImportId
+            << ", success# " << msg.Success
+        );
+
+        if (!Self->Imports.contains(msg.ImportId)) {
+            LOG_E("TImport::TTxProgress: OnSchemaMappingResult received unknown id"
+                << ": id# " << msg.ImportId);
+            return;
+        }
+
+        TImportInfo::TPtr importInfo = Self->Imports.at(msg.ImportId);
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        Self->RunningImportSchemeGetters.erase(std::exchange(importInfo->SchemaMappingGetter, {}));
+
+        if (!msg.Success) {
+            return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot get schema mapping: " << msg.Error);
+        }
+
+        if (!importInfo->SchemaMapping->Items.empty()) {
+            if (importInfo->Settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
+                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+            }
+        }
+
+        // Path in database for import
+        TString dstRoot;
+        if (importInfo->Settings.destination_path().empty()) {
+            dstRoot = CanonizePath(Self->RootPathElements);
+        } else {
+            dstRoot = CanonizePath(importInfo->Settings.destination_path());
+        }
+        TString sourcePrefix = NBackup::NormalizeExportPrefix(importInfo->Settings.source_prefix());
+        if (sourcePrefix) {
+            sourcePrefix.push_back('/');
+        }
+        auto combineDstPath = [&](const TString& path) -> TString {
+            TString objectPath = CanonizePath(path);
+            if (objectPath.size() > dstRoot.size() && objectPath.StartsWith(dstRoot) && objectPath[dstRoot.size()] == '/') {
+                return objectPath;
+            } else {
+                return dstRoot + objectPath;
+            }
+        };
+        auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
+            item.SrcPrefix = TStringBuilder() << sourcePrefix << NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix);
+            item.SrcPath = schemaMappingItem.ObjectPath;
+            item.ExportItemIV = schemaMappingItem.IV;
+        };
+        if (importInfo->Items.empty()) { // Fill the whole list from schema mapping
+            for (const auto& schemaMappingItem : importInfo->SchemaMapping->Items) {
+                TString dstPath = combineDstPath(schemaMappingItem.ObjectPath);
+                TString explain;
+                if (!ValidateDstPath(dstPath, Self, explain)) {
+                    return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot validate mapping: " << explain);
+                }
+
+                auto& item = importInfo->Items.emplace_back(dstPath);
+                init(schemaMappingItem, item);
+            }
+        } else { // Take existing items from items list
+            using TMapping = THashMap<TString, size_t>;
+            TMapping schemaMappingPrefixIndex;
+            TMapping schemaMappingObjectPathIndex;
+            for (size_t i = 0; i < importInfo->SchemaMapping->Items.size(); ++i) {
+                const auto& schemaMappingItem = importInfo->SchemaMapping->Items[i];
+                schemaMappingPrefixIndex[NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix)] = i;
+                schemaMappingObjectPathIndex[NBackup::NormalizeItemPath(schemaMappingItem.ObjectPath)] = i;
+            }
+            for (auto& item : importInfo->Items) {
+                TMapping::iterator mappingIt;
+                if (item.SrcPrefix) {
+                    mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
+                    if (mappingIt == schemaMappingPrefixIndex.end()) {
+                        return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
+                    }
+                } else if (item.SrcPath) {
+                    mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
+                    if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                        return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
+                    }
+                }
+
+                const auto& schemaMappingItem = importInfo->SchemaMapping->Items[mappingIt->second];
+                init(schemaMappingItem, item);
+            }
+        }
+
+        importInfo->State = EState::Waiting;
+        PersistImportState(db, *importInfo);
+        PersistSchemaMappingImportFields(db, *importInfo);
+        Resume(txc, ctx);
     }
 
     void OnSchemeQueryPreparation(TTransactionContext& txc, const TActorContext& ctx) {
@@ -1002,7 +1156,7 @@ private:
             // Scheme error happens when the view depends on a table (or a view) that is not yet imported.
             // Instead of tracking view dependencies, we simply retry the creation of the view later.
             item.State = EState::Waiting;
-            Self->PersistImportItemState(db, importInfo, message.ItemIdx);
+            Self->PersistImportItemState(db, *importInfo, message.ItemIdx);
 
             const auto stateCounts = CountItemsByState(importInfo->Items);
             if (AllWaiting(stateCounts)) {
@@ -1013,7 +1167,7 @@ private:
                     // No progress has been made since the last view creation retry.
                     return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
                 }
-                RetryViewsCreation(importInfo, db, ctx);
+                RetryViewsCreation(*importInfo, db, ctx);
             }
             return;
         }
@@ -1024,8 +1178,8 @@ private:
 
         if (item.State == EState::CreateSchemeObject) {
             item.PreparedCreationQuery = std::get<NKikimrSchemeOp::TModifyScheme>(message.Result);
-            PersistImportItemPreparedCreationQuery(db, importInfo, message.ItemIdx);
-            AllocateTxId(importInfo, message.ItemIdx);
+            PersistImportItemPreparedCreationQuery(db, *importInfo, message.ItemIdx);
+            AllocateTxId(*importInfo, message.ItemIdx);
         }
     }
 
@@ -1073,30 +1227,30 @@ private:
                 if (!Self->TableProfilesLoaded) {
                     Self->WaitForTableProfiles(id, i);
                 } else {
-                    CreateTable(importInfo, i, txId);
+                    CreateTable(*importInfo, i, txId);
                     itemIdx = i;
                 }
                 break;
 
             case EState::Transferring:
-                TransferData(importInfo, i, txId);
+                TransferData(*importInfo, i, txId);
                 itemIdx = i;
                 break;
 
             case EState::BuildIndexes:
-                BuildIndex(importInfo, i, txId);
+                BuildIndex(*importInfo, i, txId);
                 itemIdx = i;
                 break;
 
             case EState::CreateChangefeed:
                 if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
                     TString error;
-                    if (!CreateChangefeed(importInfo, i, txId, error)) {
+                    if (!CreateChangefeed(*importInfo, i, txId, error)) {
                         NIceDb::TNiceDb db(txc.DB);
                         CancelAndPersist(db, importInfo, i, error, "creation changefeed failed");
                     }
                 } else {
-                    CreateConsumers(importInfo, i, txId);
+                    CreateConsumers(*importInfo, i, txId);
                 }
                 itemIdx = i;
                 break;
@@ -1159,12 +1313,12 @@ private:
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
                 } else if (item.State == EState::Transferring) {
-                    txId = GetActiveRestoreTxId(importInfo, itemIdx);
+                    txId = GetActiveRestoreTxId(*importInfo, itemIdx);
                 } else if (item.State == EState::CreateChangefeed) {
                     if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
-                        txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                        txId = GetActiveCreateChangefeedTxId(*importInfo, itemIdx);
                     } else {
-                        txId = GetActiveCreateConsumerTxId(importInfo, itemIdx);
+                        txId = GetActiveCreateConsumerTxId(*importInfo, itemIdx);
                     }
 
                 }
@@ -1175,10 +1329,10 @@ private:
                 if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists && item.State == EState::CreateChangefeed) {
                     if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
                         item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
-                        AllocateTxId(importInfo, itemIdx);
+                        AllocateTxId(*importInfo, itemIdx);
                     } else if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
                         item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
-                        AllocateTxId(importInfo, itemIdx);
+                        AllocateTxId(*importInfo, itemIdx);
                     } else {
                         item.State = EState::Done;
                     }
@@ -1192,10 +1346,10 @@ private:
         }
 
         item.WaitTxId = txId;
-        Self->PersistImportItemState(db, importInfo, itemIdx);
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         if (importInfo->State != EState::Waiting && item.State == EState::Transferring) {
-            CancelTransferring(importInfo, itemIdx);
+            CancelTransferring(*importInfo, itemIdx);
             return;
         }
 
@@ -1204,10 +1358,10 @@ private:
             Y_ABORT_UNLESS(createPath);
 
             item.DstPathId = createPath.Base()->PathId;
-            Self->PersistImportItemDstPathId(db, importInfo, itemIdx);
+            Self->PersistImportItemDstPathId(db, *importInfo, itemIdx);
         }
 
-        SubscribeTx(importInfo, itemIdx);
+        SubscribeTx(*importInfo, itemIdx);
     }
 
     void OnCreateIndexResult(TTransactionContext& txc, const TActorContext&) {
@@ -1247,20 +1401,20 @@ private:
 
             if (record.GetStatus() == Ydb::StatusIds::ALREADY_EXISTS) {
                 if (item.State == EState::BuildIndexes) {
-                    txId = GetActiveBuildIndexId(importInfo, itemIdx);
+                    txId = GetActiveBuildIndexId(*importInfo, itemIdx);
                 }
             }
 
             if (txId == InvalidTxId) {
                 item.Issue = GetIssues(record);
-                Self->PersistImportItemState(db, importInfo, itemIdx);
+                Self->PersistImportItemState(db, *importInfo, itemIdx);
 
                 if (importInfo->State != EState::Waiting) {
                     return;
                 }
 
-                Cancel(importInfo, itemIdx, "unhappy propose");
-                Self->PersistImportState(db, importInfo);
+                Cancel(*importInfo, itemIdx, "unhappy propose");
+                Self->PersistImportState(db, *importInfo);
 
                 return SendNotificationsIfFinished(importInfo);
             }
@@ -1269,14 +1423,14 @@ private:
         }
 
         item.WaitTxId = txId;
-        Self->PersistImportItemState(db, importInfo, itemIdx);
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         if (importInfo->State != EState::Waiting) {
-            CancelIndexBuilding(importInfo, itemIdx);
+            CancelIndexBuilding(*importInfo, itemIdx);
             return;
         }
 
-        SubscribeTx(importInfo, itemIdx);
+        SubscribeTx(*importInfo, itemIdx);
     }
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
@@ -1307,7 +1461,7 @@ private:
         auto& item = importInfo->Items.at(itemIdx);
 
         item.WaitTxId = InvalidTxId;
-        Self->PersistImportItemState(db, importInfo, itemIdx);
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
 
         Self->TxIdToImport.erase(txId);
 
@@ -1322,21 +1476,21 @@ private:
                 break;
             }
             item.State = EState::Transferring;
-            AllocateTxId(importInfo, itemIdx);
+            AllocateTxId(*importInfo, itemIdx);
             break;
 
         case EState::Transferring:
             if (const auto issue = GetIssues(item.DstPathId, txId)) {
                 item.Issue = *issue;
-                Cancel(importInfo, itemIdx, "issues during restore");
+                Cancel(*importInfo, itemIdx, "issues during restore");
             } else {
                 if (item.NextIndexIdx < item.Scheme.indexes_size()) {
                     item.State = EState::BuildIndexes;
-                    AllocateTxId(importInfo, itemIdx);
+                    AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
                     item.State = EState::CreateChangefeed;
-                    AllocateTxId(importInfo, itemIdx);
+                    AllocateTxId(*importInfo, itemIdx);
                 } else {
                     item.State = EState::Done;
                 }
@@ -1346,14 +1500,14 @@ private:
         case EState::BuildIndexes:
             if (const auto issue = GetIssues(TIndexBuildId(ui64(txId)))) {
                 item.Issue = *issue;
-                Cancel(importInfo, itemIdx, "issues during index building");
+                Cancel(*importInfo, itemIdx, "issues during index building");
             } else {
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
-                    AllocateTxId(importInfo, itemIdx);
+                    AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
                     item.State = EState::CreateChangefeed;
-                    AllocateTxId(importInfo, itemIdx);
+                    AllocateTxId(*importInfo, itemIdx);
                 } else {
                     item.State = EState::Done;
                 }
@@ -1363,10 +1517,10 @@ private:
         case EState::CreateChangefeed:
             if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
                 item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
-                AllocateTxId(importInfo, itemIdx);
+                AllocateTxId(*importInfo, itemIdx);
             } else if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
                 item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
-                AllocateTxId(importInfo, itemIdx);
+                AllocateTxId(*importInfo, itemIdx);
             } else {
                 item.State = EState::Done;
             }
@@ -1381,11 +1535,11 @@ private:
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
         } else if (AllDoneOrWaiting(stateCounts)) {
-            RetryViewsCreation(importInfo, db, ctx);
+            RetryViewsCreation(*importInfo, db, ctx);
         }
 
-        Self->PersistImportItemState(db, importInfo, itemIdx);
-        Self->PersistImportState(db, importInfo);
+        Self->PersistImportItemState(db, *importInfo, itemIdx);
+        Self->PersistImportState(db, *importInfo);
 
         SendNotificationsIfFinished(importInfo);
 
@@ -1405,6 +1559,10 @@ ITransaction* TSchemeShard::CreateTxProgressImport(ui64 id, const TMaybe<ui32>& 
 }
 
 ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev) {
+    return new TImport::TTxProgress(this, ev);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 

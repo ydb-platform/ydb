@@ -46,6 +46,33 @@ namespace {
 
 namespace NPrivate {
 
+template <class TMessage, class TEnum>
+Aws::Http::Scheme ParseSchemeImpl(TEnum scheme, bool abortOnFailure = true) {
+    switch (scheme) {
+        case TMessage::HTTP:
+            return Aws::Http::Scheme::HTTP;
+        case TMessage::HTTPS:
+            return Aws::Http::Scheme::HTTPS;
+        default:
+            if (abortOnFailure) {
+                Y_ABORT("Unknown scheme");
+            }
+            return Aws::Http::Scheme::HTTP;
+    }
+}
+
+Aws::Http::Scheme ParseScheme(NKikimrSchemeOp::TS3Settings::EScheme scheme, bool abortOnFailure = true) {
+    return ParseSchemeImpl<NKikimrSchemeOp::TS3Settings>(scheme, abortOnFailure);
+}
+
+Aws::Http::Scheme ParseScheme(Ydb::Import::ImportFromS3Settings::Scheme scheme, bool abortOnFailure = true) {
+    return ParseSchemeImpl<Ydb::Import::ImportFromS3Settings>(scheme, abortOnFailure);
+}
+
+Aws::Http::Scheme ParseScheme(Ydb::Export::ExportToS3Settings::Scheme scheme, bool abortOnFailure = true) {
+    return ParseSchemeImpl<Ydb::Export::ExportToS3Settings>(scheme, abortOnFailure);
+}
+
 template <typename TSettings>
 Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
     Aws::Client::ClientConfiguration config;
@@ -60,16 +87,7 @@ Aws::Client::ClientConfiguration ConfigFromSettings(const TSettings& settings) {
     config.connectTimeoutMs = 10000;
     config.maxConnections = threadsCount;
 
-    switch (settings.scheme()) {
-        case TSettings::HTTP:
-            config.scheme = Aws::Http::Scheme::HTTP;
-            break;
-        case TSettings::HTTPS:
-            config.scheme = Aws::Http::Scheme::HTTPS;
-            break;
-        default:
-            Y_ABORT("Unknown scheme");
-    }
+    config.scheme = NPrivate::ParseScheme(settings.scheme());
 
     return config;
 }
@@ -104,16 +122,7 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
     config.maxConnections = settings.HasMaxConnectionsCount() ? settings.GetMaxConnectionsCount() : settings.GetExecutorThreadsCount();
     config.caPath = "/etc/ssl/certs";
 
-    switch (settings.GetScheme()) {
-        case NKikimrSchemeOp::TS3Settings::HTTP:
-            config.scheme = Aws::Http::Scheme::HTTP;
-            break;
-        case NKikimrSchemeOp::TS3Settings::HTTPS:
-            config.scheme = Aws::Http::Scheme::HTTPS;
-            break;
-        default:
-            Y_ABORT("Unknown scheme");
-    }
+    config.scheme = NPrivate::ParseScheme(settings.GetScheme());
 
     if (settings.HasRegion()) {
         config.region = settings.GetRegion();
@@ -127,22 +136,17 @@ Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(co
         config.proxyHost = settings.GetProxyHost();
         config.proxyPort = settings.GetProxyPort();
 
-        switch (settings.GetProxyScheme()) {
-            case NKikimrSchemeOp::TS3Settings::HTTP:
-                config.proxyScheme = Aws::Http::Scheme::HTTP;
-                break;
-            case NKikimrSchemeOp::TS3Settings::HTTPS:
-                config.proxyScheme = Aws::Http::Scheme::HTTPS;
-                break;
-            default:
-                break;
-        }
+        config.proxyScheme = NPrivate::ParseScheme(settings.GetProxyScheme(), false);
     }
 
     return config;
 }
 
 Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
+    return NPrivate::ConfigFromSettings(settings);
+}
+
+Aws::Client::ClientConfiguration TS3ExternalStorageConfig::ConfigFromSettings(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
     return NPrivate::ConfigFromSettings(settings);
 }
 
@@ -155,6 +159,10 @@ Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(cons
 }
 
 Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
+    return NPrivate::CredentialsFromSettings(settings);
+}
+
+Aws::Auth::AWSCredentials TS3ExternalStorageConfig::CredentialsFromSettings(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
     return NPrivate::CredentialsFromSettings(settings);
 }
 
@@ -171,6 +179,14 @@ IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOpera
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings)
+    : Config(ConfigFromSettings(settings))
+    , Credentials(CredentialsFromSettings(settings))
+    , UseVirtualAddressing(!settings.disable_virtual_addressing())
+{
+    Bucket = settings.bucket();
+}
+
+TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ListObjectsInS3ExportSettings& settings)
     : Config(ConfigFromSettings(settings))
     , Credentials(CredentialsFromSettings(settings))
     , UseVirtualAddressing(!settings.disable_virtual_addressing())

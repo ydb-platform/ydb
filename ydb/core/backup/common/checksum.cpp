@@ -79,7 +79,12 @@ IChecksum* CreateChecksum() {
 }
 
 TString ChecksumKey(const TString& objKey) {
-    return objKey + ".sha256";
+    TString ret;
+    TStringBuf key = objKey;
+    key.ChopSuffix(".enc"); // We calculate checksum for nonencrypted data, so cut .enc suffix
+    ret = key;
+    ret += ".sha256";
+    return ret;
 }
 
 } // NKikimr::NBackup

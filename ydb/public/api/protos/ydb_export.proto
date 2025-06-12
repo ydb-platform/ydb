@@ -1,6 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
@@ -86,15 +87,19 @@ message ExportToS3Settings {
     };
 
     message Item {
-        // Database path to a table to be exported
+        // Database path to a table/directory to be exported
         string source_path = 1 [(required) = true];
 
         /* Tables are exported to one or more S3 objects.
            The object name begins with 'destination_prefix'.
            This prefix will be followed by '/data_PartNumber', where 'PartNumber'
            represents the index of the part, starting at zero.
+           Not required if the default `destination_prefix` is set.
+           If not specified, actual S3 path is the default `destination_prefix` concatenated with:
+            * The object path relative to the global `source_path` for a non-encrypted export
+            * The anonymized path for an encrypted export
         */
-        string destination_prefix = 2 [(required) = true];
+        string destination_prefix = 2;
     }
 
     string endpoint = 1 [(required) = true];
@@ -102,7 +107,7 @@ message ExportToS3Settings {
     string bucket = 3 [(required) = true];
     string access_key = 4 [(required) = true];
     string secret_key = 5 [(required) = true];
-    repeated Item items = 6 [(size).ge = 1];
+    repeated Item items = 6;
     string description = 7 [(length).le = 128];
     uint32 number_of_retries = 8;
     StorageClass storage_class = 9;
@@ -120,6 +125,20 @@ message ExportToS3Settings {
     // details: https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html
     // it is especially useful for custom s3 implementations
     bool disable_virtual_addressing = 12;
+
+    // Database root if not provided.
+    // All object names are calculated and written relative to this path.
+    string source_path = 13;
+
+    // A default S3 path prefix for all export items.
+    // When specified, export writes SchemaMapping file with the list of objects.
+    // Must be provided for an encrypted backup.
+    string destination_prefix = 14;
+
+    // Settings for data encryption.
+    // If encryption_settings field is not specified,
+    // the resulting data will not be encrypted.
+    EncryptionSettings encryption_settings = 15;
 }
 
 message ExportToS3Result {
@@ -140,4 +159,25 @@ message ExportToS3Response {
     // operation.result = ExportToS3Result
     // operation.metadata = ExportToS3Metadata
     Ydb.Operations.Operation operation = 1;
+}
+
+// Export encryption settings
+// Don't specify this struct for unencrypted exports
+message EncryptionSettings {
+    // Algorithm for export encryption.
+    // Not required in case of import/list operation.
+    // Currently the following algorithms are supported:
+    //  AES-128-GCM
+    //  AES-256-GCM
+    //  ChaCha20-Poly1305
+    string encryption_algorithm = 1;
+
+    oneof Key {
+        SymmetricKey symmetric_key = 2;
+    }
+
+    message SymmetricKey {
+        // This key will be used for data encryption
+        bytes key = 1 [(Ydb.sensitive) = true];
+    }
 }

@@ -719,7 +719,7 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
 NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
     auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
         .ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;
 }
@@ -1387,6 +1387,16 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables, bool wi
 void InitRoot(Tests::TServer::TPtr server, TActorId sender) {
     server->SetupRootStoragePools(sender);
 }
+
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
+    auto grantQuery = Sprintf(R"(
+            GRANT %s ON `%s` TO `%s`;
+        )",
+        permissions, path, user
+    );
+    auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+};  
 
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)

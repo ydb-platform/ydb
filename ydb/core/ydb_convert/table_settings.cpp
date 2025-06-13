@@ -461,15 +461,21 @@ bool FillIndexTablePartitioning(
         }
         break;
 
-    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
         if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions)) {
             return false;
         }
         if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions)) {
             return false;
         }
+        const bool prefixVectorIndex = index.index_columns().size() > 1;
+        if (prefixVectorIndex) {
+            if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().prefix_table_settings(), indexImplTableDescriptions)) {
+                return false;
+            }
+        }
         break;
-
+    }
     case Ydb::Table::TableIndex::TYPE_NOT_SET:
         break;
     }

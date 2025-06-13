@@ -372,6 +372,8 @@ void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateT
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user);
+
 THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp op);
 

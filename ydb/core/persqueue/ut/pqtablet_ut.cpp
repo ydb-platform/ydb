@@ -2241,7 +2241,7 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
     UNIT_ASSERT_EQUAL(overloadedCount, 2);
 }
 
-Y_UNIT_TEST_F(KafkaTransactionSupportivePartitionsShouldBeDeletedAfterTimeout, TPQTabletFixture)
+Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
@@ -2269,7 +2269,7 @@ Y_UNIT_TEST_F(KafkaTransactionSupportivePartitionsShouldBeDeletedAfterTimeout, T
     UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 0);
 }
 
-Y_UNIT_TEST_F(NonKafkaTransactionSupportivePartitionsShouldNotBeDeletedAfterTimeout, TPQTabletFixture)
+Y_UNIT_TEST_F(Non_Kafka_Transaction_Supportive_Partitions_Should_Not_Be_Deleted_After_Timeout, TPQTabletFixture)
 {
     const ui64 mockTabletId = MakeTabletID(false, 22222);
     const ui64 txId = 67890;
@@ -2303,7 +2303,7 @@ Y_UNIT_TEST_F(NonKafkaTransactionSupportivePartitionsShouldNotBeDeletedAfterTime
     UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(1).GetKafkaTransaction(), false);
 }
 
-Y_UNIT_TEST_F(InKafkaTxnOnlySupportivePartitionsThatExceededTimeoutShouldBeDeleted, TPQTabletFixture)
+Y_UNIT_TEST_F(In_Kafka_Txn_Only_Supportive_Partitions_That_Exceeded_Timeout_Should_Be_Deleted, TPQTabletFixture)
 {
     TDuration kafkaTxnTimeout = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
         + KAFKA_TRANSACTION_DELETE_DELAY_MS;

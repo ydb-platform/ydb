@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
         auto tableClient = kikimr.GetTableClient();
         auto& client = kikimr.GetTestClient();
 

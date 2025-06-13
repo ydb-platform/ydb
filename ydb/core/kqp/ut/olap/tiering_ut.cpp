@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
         tieringHelper.SetTablePath("/Root/olapTable");
 
-        olapHelper.CreateTestOlapTableWithoutStore();
+        olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier("tier1");
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
         {

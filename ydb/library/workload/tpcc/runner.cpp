@@ -41,17 +41,16 @@ constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
 //-----------------------------------------------------------------------------
 
+// We have two sources of stats: terminal stats and per taskqueue thread stats.
+// Note, that terminal stats are also per thread: multiple terminals are running on the same thread
+// shared same stats object. Thus, terminal stats are aggregated values.
+//
+// Here we collect all the stats in a single place to easily display progress:
+//  * terminal stats: TPC-C related statistics like per transaction type latencies, tpmC.
+//  * thread stats: load, Queue
 struct TAllStatistics {
-    struct TThreadStatistics {
-        struct TStatsDerivative {
-            double OkPerSecond = 0;
-            double FailedPerSecond = 0;
-            double UserAbortedPerSecond = 0;
-            THistogram LatencyHistogramMs{256, 32768};
-            THistogram LatencyHistogramFullMs{256, 32768};
-            THistogram LatencyHistogramPure{256, 32768};
-        };
 
+    struct TThreadStatistics {
         TThreadStatistics() {
             TaskThreadStats = std::make_unique<ITaskQueue::TThreadStats>();
             TerminalStats = std::make_unique<TTerminalStats>();
@@ -65,35 +64,6 @@ struct TAllStatistics {
             QueriesPerSecond =
                 (TaskThreadStats->ExternalTasksResumed.load(std::memory_order_relaxed) -
                     prev.TaskThreadStats->ExternalTasksResumed.load(std::memory_order_relaxed)) / seconds;
-
-            // Calculate derivatives for all transaction types
-            for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
-                auto type = static_cast<ETransactionType>(i);
-                const auto& currentStats = TerminalStats->GetStats(type);
-                const auto& prevStats = prev.TerminalStats->GetStats(type);
-
-                Stats[i].OkPerSecond = 1.0 *
-                    (currentStats.OK.load(std::memory_order_relaxed) -
-                        prevStats.OK.load(std::memory_order_relaxed)) / seconds;
-
-                Stats[i].FailedPerSecond = 1.0 *
-                    (currentStats.Failed.load(std::memory_order_relaxed) -
-                        prevStats.Failed.load(std::memory_order_relaxed)) / seconds;
-
-                Stats[i].UserAbortedPerSecond = 1.0 *
-                    (currentStats.UserAborted.load(std::memory_order_relaxed) -
-                        prevStats.UserAborted.load(std::memory_order_relaxed)) / seconds;
-
-                // Calculate histogram deltas directly
-                Stats[i].LatencyHistogramMs = currentStats.LatencyHistogramMs;
-                Stats[i].LatencyHistogramMs.Sub(prevStats.LatencyHistogramMs);
-
-                Stats[i].LatencyHistogramFullMs = currentStats.LatencyHistogramFullMs;
-                Stats[i].LatencyHistogramFullMs.Sub(prevStats.LatencyHistogramFullMs);
-
-                Stats[i].LatencyHistogramPure = currentStats.LatencyHistogramPure;
-                Stats[i].LatencyHistogramPure.Sub(prevStats.LatencyHistogramPure);
-            }
 
             ExecutingTime = TaskThreadStats->ExecutingTime.load(std::memory_order_relaxed) -
                 prev.TaskThreadStats->ExecutingTime.load(std::memory_order_relaxed);
@@ -113,53 +83,39 @@ struct TAllStatistics {
 
         size_t TerminalsPerSecond = 0;
         size_t QueriesPerSecond = 0;
-        std::array<TStatsDerivative, GetEnumItemsCount<ETransactionType>()> Stats;
+
         double ExecutingTime = 0;
         double TotalTime = 0;
         THistogram InternalInflightWaitTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
         THistogram ExternalQueueTimeMs{ITaskQueue::TThreadStats::BUCKET_COUNT, ITaskQueue::TThreadStats::MAX_HIST_VALUE};
     };
 
-    TAllStatistics(size_t threadCount)
+    TAllStatistics(size_t threadCount, Clock::time_point ts)
         : StatVec(threadCount)
+        , Ts(ts)
     {
     }
 
-    void CalculateDerivative(const TAllStatistics& prev) {
+    void CalculateDerivativeAndTotal(const TAllStatistics& prev) {
         size_t seconds = duration_cast<std::chrono::duration<size_t>>(Ts - prev.Ts).count();
 
         // Calculate per-thread derivatives
-        for (size_t i = 0; i < StatVec.size(); ++i) {
-            StatVec[i].CalculateDerivative(prev.StatVec[i], seconds);
-        }
-
-        // Aggregate global statistics
-        for (size_t txType = 0; txType < GetEnumItemsCount<ETransactionType>(); ++txType) {
-            GlobalStats[txType].OkPerSecond = 0;
-            GlobalStats[txType].FailedPerSecond = 0;
-            GlobalStats[txType].UserAbortedPerSecond = 0;
-            GlobalStats[txType].LatencyHistogramMs.Reset();
-            GlobalStats[txType].LatencyHistogramFullMs.Reset();
-            GlobalStats[txType].LatencyHistogramPure.Reset();
-
+        if (seconds != 0) {
             for (size_t i = 0; i < StatVec.size(); ++i) {
-                GlobalStats[txType].OkPerSecond += StatVec[i].Stats[txType].OkPerSecond;
-                GlobalStats[txType].FailedPerSecond += StatVec[i].Stats[txType].FailedPerSecond;
-                GlobalStats[txType].UserAbortedPerSecond += StatVec[i].Stats[txType].UserAbortedPerSecond;
-                GlobalStats[txType].LatencyHistogramMs.Add(StatVec[i].Stats[txType].LatencyHistogramMs);
-                GlobalStats[txType].LatencyHistogramFullMs.Add(StatVec[i].Stats[txType].LatencyHistogramFullMs);
-                GlobalStats[txType].LatencyHistogramPure.Add(StatVec[i].Stats[txType].LatencyHistogramPure);
+                StatVec[i].CalculateDerivative(prev.StatVec[i], seconds);
             }
         }
 
-        // Calculate tpmC based on New Order transactions
-        Tpmc = GlobalStats[static_cast<size_t>(ETransactionType::NewOrder)].OkPerSecond * 60.0;
+        // Aggregate total statistics
+        for (const auto& stats: StatVec) {
+            stats.TerminalStats->Collect(TotalTerminalStats);
+        }
     }
 
-    Clock::time_point Ts;
     TVector<TThreadStatistics> StatVec;
-    std::array<TThreadStatistics::TStatsDerivative, GetEnumItemsCount<ETransactionType>()> GlobalStats;
-    double Tpmc = 0;
+    const Clock::time_point Ts;
+
+    TTerminalStats TotalTerminalStats;
 };
 
 //-----------------------------------------------------------------------------
@@ -182,7 +138,11 @@ public:
         double ProgressPercent = 0.0;
 
         // Computed metrics not in LastStatisticsSnapshot
+
+        // these ones are results preview, i.e. "total" tpmC at the moment
+        double Tpmc = 0.0;
         double Efficiency = 0.0;
+
         size_t RunningTerminals = 0;
         size_t RunningTransactions = 0;
     };
@@ -197,13 +157,15 @@ private:
     void Join();
 
     void UpdateDisplayIfNeeded(Clock::time_point now);
-    std::unique_ptr<TAllStatistics> CollectStatistics(Clock::time_point now);
+    void CollectStatistics(Clock::time_point now);
+    TCalculatedStatusData CalculateStatusData(Clock::time_point now);
 
     void UpdateDisplayTextMode(const TCalculatedStatusData& data);
     void UpdateDisplayTuiMode(const TCalculatedStatusData& data);
-    TCalculatedStatusData CalculateStatusData(Clock::time_point now);
     void ExitTuiMode();
-    void DumpFinalStats();
+
+    void PrintTransactionStatisticsPretty(std::ostream& os);
+    void PrintFinalResultPretty();
 
 private:
     NConsoleClient::TClientCommand::TConfig ConnectionConfig;
@@ -218,7 +180,11 @@ private:
     std::stop_source TerminalsStopSource;
 
     std::atomic<bool> StopWarmup{false};
-    std::vector<std::shared_ptr<TTerminalStats>> StatsVec;
+
+    // 1. Terminals are pinned to own threads.
+    // 2. Many terminals are executed on a single thread.
+    // 3. Stats are shared between terminals and are aggregation.
+    std::vector<std::shared_ptr<TTerminalStats>> PerThreadTerminalStats;
     std::vector<std::unique_ptr<TTerminal>> Terminals;
 
     std::unique_ptr<ITaskQueue> TaskQueue;
@@ -280,9 +246,9 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver, clientSettings));
     }
 
-    StatsVec.reserve(threadCount);
+    PerThreadTerminalStats.reserve(threadCount);
     for (size_t i = 0; i < threadCount; ++i) {
-        StatsVec.emplace_back(std::make_shared<TTerminalStats>());
+        PerThreadTerminalStats.emplace_back(std::make_shared<TTerminalStats>());
     }
 
     const size_t maxTerminalsPerThread = (terminalsCount + threadCount - 1) / threadCount;
@@ -314,7 +280,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             Config.SimulateTransactionSelect1Count,
             TerminalsStopSource.get_token(),
             StopWarmup,
-            StatsVec[i % threadCount],
+            PerThreadTerminalStats[i % threadCount],
             Log);
 
         Terminals.emplace_back(std::move(terminalPtr));
@@ -391,11 +357,8 @@ void TPCCRunner::RunSync() {
 
     TaskQueue->Run();
 
-    LastStatisticsSnapshot = std::make_unique<TAllStatistics>(StatsVec.size());
-    LastStatisticsSnapshot->Ts = {}; // to force display update
-
-    LastStatisticsSnapshot = std::make_unique<TAllStatistics>(StatsVec.size());
-    LastStatisticsSnapshot->Ts = {}; // to force display update
+    // empty ts to enforce display update
+    LastStatisticsSnapshot = std::make_unique<TAllStatistics>(PerThreadTerminalStats.size(), Clock::time_point{});
 
     // We don't want to start all terminals at the same time, because then there will be
     // a huge queue of ready terminals, which we can't handle
@@ -453,8 +416,7 @@ void TPCCRunner::RunSync() {
     MeasurementsStartTs = Clock::now();
 
     // reset statistics
-    LastStatisticsSnapshot = std::make_unique<TAllStatistics>(StatsVec.size());
-    LastStatisticsSnapshot->Ts = MeasurementsStartTs;
+    LastStatisticsSnapshot = std::make_unique<TAllStatistics>(PerThreadTerminalStats.size(), MeasurementsStartTs);
 
     StopDeadline = MeasurementsStartTs + std::chrono::minutes(Config.RunMinutes);
     while (!GetGlobalInterruptSource().stop_requested()) {
@@ -469,7 +431,7 @@ void TPCCRunner::RunSync() {
     LOG_D("Finished measurements");
     Join();
 
-    DumpFinalStats();
+    PrintFinalResultPretty();
 }
 
 void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
@@ -477,9 +439,8 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
     if (delta < Config.DisplayUpdateInterval) {
         return;
     }
-    std::unique_ptr<TAllStatistics> newStatistics = CollectStatistics(now);
-    LastStatisticsSnapshot = std::move(newStatistics);
 
+    CollectStatistics(now);
     TCalculatedStatusData data = CalculateStatusData(now);
 
     switch (Config.DisplayMode) {
@@ -506,8 +467,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     }
 
     ss << std::endl << "Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
-       << "tpmC: " << std::setprecision(1) << LastStatisticsSnapshot->Tpmc << " | "
-       << "Running: " << data.RunningTransactions << " transactions";
+       << "tpmC: " << std::setprecision(1) << data.Tpmc;
 
     std::cout << ss.str();
 
@@ -577,37 +537,8 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     std::cout << std::string(totalWidth, '-') << std::endl;
 
     // Transaction statistics
-    std::cout << "\n\nTransaction Statistics:\n";
-
-    // Build header using stringstream to calculate width
-    std::stringstream txHeaderStream;
-    txHeaderStream << std::left
-                   << std::setw(15) << "Transaction"
-                   << std::setw(12) << "OK/s"
-                   << std::setw(12) << "Fail/s"
-                   << std::setw(12) << "p50 (ms)"
-                   << std::setw(12) << "p90 (ms)"
-                   << std::setw(12) << "p99 (ms)";
-
-    std::string txHeader = txHeaderStream.str();
-    size_t txTableWidth = txHeader.length();
-
-    std::cout << std::string(txTableWidth, '-') << std::endl;
-    std::cout << txHeader << std::endl;
-    std::cout << std::string(txTableWidth, '-') << std::endl;
-
-    for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
-        const auto& stats = LastStatisticsSnapshot->GlobalStats[i];
-        std::cout << std::left
-                  << std::setw(15) << std::string(ToString(static_cast<ETransactionType>(i)))
-                  << std::setw(12) << std::fixed << std::setprecision(2) << stats.OkPerSecond
-                  << std::setw(12) << std::fixed << std::setprecision(2) << stats.FailedPerSecond
-                  << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(50)
-                  << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(90)
-                  << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(99)
-                  << std::endl;
-    }
-    std::cout << std::string(txTableWidth, '-') << std::endl;
+    std::cout << "\n\n";
+    PrintTransactionStatisticsPretty(std::cout);
 }
 
 void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
@@ -627,16 +558,12 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // Left side of header: runner info, efficiency, phase, progress
 
     std::stringstream headerSs;
-    headerSs << "TPC-C Runner: " << Config.WarehouseCount << " warehouses, "
-             << Config.ThreadCount << " threads";
+    headerSs << "TPC-C Runner: " << Config.WarehouseCount << " warehouses";
 
     std::stringstream metricsSs;
     metricsSs << std::fixed << std::setprecision(1)
               << "Efficiency: " << data.Efficiency << "%   "
-              << "tpmC: " << LastStatisticsSnapshot->Tpmc;
-
-    std::stringstream runningSs;
-    runningSs << "Running: " << data.RunningTransactions << " transactions";
+              << "tpmC: " << data.Tpmc;
 
     std::stringstream timingSs;
     timingSs << data.Phase << ": " << data.ElapsedMinutes << ":"
@@ -653,7 +580,6 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     auto leftHeader = vbox({
         text(headerSs.str()),
         text(metricsSs.str()),
-        text(runningSs.str()),
         text(timingSs.str()),
         hbox({
             text("Progress: "),
@@ -668,26 +594,34 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // Add header row for transaction table
     txRows.push_back(hbox({
         text("Transaction") | size(WIDTH, EQUAL, 15),
-        text("OK/s") | size(WIDTH, EQUAL, 6),
-        text("Fail/s") | size(WIDTH, EQUAL, 8),
+        text("OK")     | size(WIDTH, EQUAL, 8),
+        text("Failed") | size(WIDTH, EQUAL, 8),
+        text("User Aborted") | size(WIDTH, EQUAL, 14),
         text("p50") | size(WIDTH, EQUAL, 5),
+        text("p90") | size(WIDTH, EQUAL, 5),
         text("p99") | size(WIDTH, EQUAL, 5)
     }));
 
     for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
-        const auto& stats = LastStatisticsSnapshot->GlobalStats[i];
+        auto type = static_cast<ETransactionType>(i);
+        const auto& totalForType = LastStatisticsSnapshot->TotalTerminalStats.GetStats(type);
 
-        std::stringstream okSs, failSs, p50Ss, p99Ss;
-        okSs << std::fixed << std::setprecision(0) << stats.OkPerSecond;
-        failSs << std::fixed << std::setprecision(1) << stats.FailedPerSecond;
-        p50Ss << std::fixed << std::setprecision(0) << stats.LatencyHistogramFullMs.GetValueAtPercentile(50);
-        p99Ss << std::fixed << std::setprecision(0) << stats.LatencyHistogramFullMs.GetValueAtPercentile(99);
+        std::stringstream p50Ss, p90Ss, p99Ss;
+        p50Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(50);
+        p90Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(90);
+        p99Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(99);
+
+        auto ok = totalForType.OK.load(std::memory_order_relaxed);
+        auto failed = totalForType.Failed.load(std::memory_order_relaxed);
+        auto aborted = totalForType.UserAborted.load(std::memory_order_relaxed);
 
         txRows.push_back(hbox({
-            text(std::string(ToString(static_cast<ETransactionType>(i)))) | size(WIDTH, EQUAL, 15),
-            text(okSs.str()) | size(WIDTH, EQUAL, 6),
-            text(failSs.str()) | size(WIDTH, EQUAL, 8),
+            text(std::string(ToString(type))) | size(WIDTH, EQUAL, 15),
+            text(ToString(ok)) | size(WIDTH, EQUAL, 8),
+            text(ToString(failed)) | size(WIDTH, EQUAL, 8),
+            text(ToString(aborted)) | size(WIDTH, EQUAL, 14),
             text(p50Ss.str()) | size(WIDTH, EQUAL, 5),
+            text(p90Ss.str()) | size(WIDTH, EQUAL, 5),
             text(p99Ss.str()) | size(WIDTH, EQUAL, 5)
         }));
     }
@@ -817,19 +751,18 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     std::cout << screen.ToString();
 }
 
-std::unique_ptr<TAllStatistics> TPCCRunner::CollectStatistics(Clock::time_point now) {
-    auto threadCount = StatsVec.size();
-    auto snapshot = std::make_unique<TAllStatistics>(threadCount);
-    snapshot->Ts = now;
+void TPCCRunner::CollectStatistics(Clock::time_point now) {
+    auto threadCount = PerThreadTerminalStats.size();
+    auto snapshot = std::make_unique<TAllStatistics>(threadCount, now);
 
-    for (size_t i = 0; i < StatsVec.size(); ++i) {
-        StatsVec[i]->Collect(*snapshot->StatVec[i].TerminalStats);
+    for (size_t i = 0; i < PerThreadTerminalStats.size(); ++i) {
+        PerThreadTerminalStats[i]->Collect(*snapshot->StatVec[i].TerminalStats);
         TaskQueue->CollectStats(i, *snapshot->StatVec[i].TaskThreadStats);
     }
 
-    snapshot->CalculateDerivative(*LastStatisticsSnapshot);
+    snapshot->CalculateDerivativeAndTotal(*LastStatisticsSnapshot);
 
-    return snapshot;
+    LastStatisticsSnapshot.swap(snapshot);
 }
 
 TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_point now) {
@@ -860,10 +793,26 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
     data.RemainingMinutes = std::max(0LL, remaining.count() / 60);
     data.RemainingSeconds = std::max(0LL, remaining.count() % 60);
 
-    data.ProgressPercent = (static_cast<double>(elapsed.count()) / duration.count()) * 100.0;
+    if (duration.count() != 0) {
+        data.ProgressPercent = (static_cast<double>(elapsed.count()) / duration.count()) * 100.0;
+    }
 
-    // Calculate efficiency
-    data.Efficiency = (LastStatisticsSnapshot->Tpmc * 100.0) / (Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE);
+    // Calculate tpmC and efficiency
+    if (data.ElapsedMinutes == 0 && data.ElapsedSeconds == 0) {
+        data.Tpmc = 0;
+    } else {
+        // approximate
+        const auto& newOrderStats = LastStatisticsSnapshot->TotalTerminalStats.GetStats(ETransactionType::NewOrder);
+        auto newOrdersCount = newOrderStats.OK.load(std::memory_order_relaxed);
+        double tpmc = newOrdersCount * 60 / elapsed.count();
+
+        // there are two errors: rounding + approximation, we might overshoot
+        // 100% efficiency very slightly because of errors and it's OK to "round down"
+        double maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / elapsed.count();
+        data.Tpmc = std::min(maxPossibleTpmc, tpmc);
+    }
+
+    data.Efficiency = (data.Tpmc * 100.0) / (Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE);
 
     // Get running counts
     data.RunningTerminals = TaskQueue->GetRunningCount();
@@ -880,93 +829,90 @@ void TPCCRunner::ExitTuiMode() {
     std::cout.flush();
 }
 
-void TPCCRunner::DumpFinalStats() {
+void TPCCRunner::PrintTransactionStatisticsPretty(std::ostream& os) {
+    os << "Transaction Statistics:\n";
+
+    // Build header using stringstream to calculate width
+    std::stringstream txHeaderStream;
+    txHeaderStream << std::left
+                   << std::setw(15) << "Transaction"
+                   << std::setw(12) << "OK"
+                   << std::setw(12) << "Failed"
+                   << std::setw(12) << "UserAborted"
+                   << std::setw(12) << "p50 (ms)"
+                   << std::setw(12) << "p90 (ms)"
+                   << std::setw(12) << "p99 (ms)";
+
+    std::string header = txHeaderStream.str();
+    size_t tableWidth = header.length();
+
+    os << std::string(tableWidth, '-') << std::endl;
+    os << header << std::endl;
+    os << std::string(tableWidth, '-') << std::endl;
+
+    size_t totalOK = 0;
+    size_t totalFailed = 0;
+    size_t totalUserAborted = 0;
+
+    for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
+        auto type = static_cast<ETransactionType>(i);
+        auto typeStr = ToString(type);
+        const auto& stats = LastStatisticsSnapshot->TotalTerminalStats.GetStats(type);
+        auto ok = stats.OK.load(std::memory_order_relaxed);
+        auto failed = stats.Failed.load(std::memory_order_relaxed);
+        auto aborted = stats.UserAborted.load(std::memory_order_relaxed);
+
+        totalOK += ok;
+        totalFailed += failed;
+        totalUserAborted += aborted;
+
+        os << std::left
+           << std::setw(15) << std::string(typeStr)
+           << std::setw(12) << std::fixed << std::setprecision(1) << ok
+           << std::setw(12) << std::fixed << std::setprecision(1) << failed
+           << std::setw(12) << std::fixed << std::setprecision(1) << aborted
+           << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(50)
+           << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(90)
+           << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(99)
+           << std::endl;
+    }
+    os << std::string(tableWidth, '-') << std::endl;
+
+    os << std::setw(15) << "TOTAL"
+        << std::setw(12) << std::fixed << std::setprecision(1) << totalOK
+        << std::setw(12) << std::fixed << std::setprecision(1) << totalFailed
+        << std::setw(12) << std::fixed << std::setprecision(1) << totalUserAborted
+        << std::endl;
+
+    os << std::string(tableWidth, '-') << std::endl;
+}
+
+void TPCCRunner::PrintFinalResultPretty() {
     if (MeasurementsStartTs == Clock::time_point{}) {
         std::cout << "Stopped before measurements" << std::endl;
+        return;
     }
 
     auto now = Clock::now();
     double secondsPassed = duration_cast<std::chrono::duration<double>>(now - MeasurementsStartTs).count();
     auto minutesPassed = secondsPassed / 60;
 
-    TTerminalStats stats;
+    CollectStatistics(now);
+    TCalculatedStatusData data = CalculateStatusData(now);
 
-    // Collect stats from all terminals
-    for (const auto& srcStats : StatsVec) {
-        srcStats->Collect(stats);
-    }
-
-    // Calculate total transactions
-    size_t totalOK = 0;
-    size_t totalFailed = 0;
-    size_t totalUserAborted = 0;
-
-    size_t tableWidth = Config.ExtendedStats ? 95 : 65;
-
-    // Print header
-    std::cout << "\n\nTransaction Statistics:\n";
-    std::cout << std::string(tableWidth, '-') << std::endl;
-    std::cout << std::setw(15) << "Transaction"
-              << std::setw(10) << "OK"
-              << std::setw(10) << "Failed"
-              << std::setw(15) << "User Aborted"
-              << std::setw(10) << "p90 (ms)";
-
-    if (Config.ExtendedStats) {
-        std::cout << std::setw(15) << "terminal p90 (ms)"
-                  << std::setw(15) << "pure p90 (ms)";
-    }
-
-    std::cout << std::endl;
-    std::cout << std::string(tableWidth, '-') << std::endl;
-
-    size_t totalNewOrders = 0;
-
-    // Print stats for each transaction type
-    for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
-        auto type = static_cast<ETransactionType>(i);
-        const auto& txStats = stats.GetStats(type);
-
-        if (type == ETransactionType::NewOrder) {
-            totalNewOrders += txStats.OK;
-        }
-
-        totalOK += txStats.OK;
-        totalFailed += txStats.Failed;
-        totalUserAborted += txStats.UserAborted;
-
-        std::cout << std::setw(15) << std::string(ToString(type))
-                  << std::setw(10) << txStats.OK
-                  << std::setw(10) << txStats.Failed
-                  << std::setw(15) << txStats.UserAborted
-                  << std::setw(10) << txStats.LatencyHistogramFullMs.GetValueAtPercentile(90);
-
-        if (Config.ExtendedStats) {
-            std::cout << std::setw(15) << txStats.LatencyHistogramMs.GetValueAtPercentile(90)
-                << std::setw(15) << txStats.LatencyHistogramPure.GetValueAtPercentile(90);
-        }
-
-        std::cout << std::endl;
-    }
-
-    // Print totals
-    std::cout << std::string(tableWidth, '-') << std::endl;
-    std::cout << std::setw(15) << "TOTAL"
-              << std::setw(10) << totalOK
-              << std::setw(10) << totalFailed
-              << std::setw(15) << totalUserAborted
-              << std::endl;
-    std::cout << std::string(tableWidth, '-') << std::endl;
+    std::cout << "\n\n";
+    PrintTransactionStatisticsPretty(std::cout);
 
     if (minutesPassed >= 1) {
-        size_t tpmC = size_t(totalNewOrders / minutesPassed);
-        double efficiency = 1.0 * tpmC * 100 / Config.WarehouseCount / MAX_TPMC_PER_WAREHOUSE;
         std::cout << "warehouses: " << Config.WarehouseCount << std::endl;
-        std::cout << "tpmC: " << tpmC << std::endl;
-        std::cout << "efficiency: " << std::setprecision(2) << efficiency << "%" << std::endl;
+        std::cout << "tpmC*: " << data.Tpmc << std::endl;
+        std::cout << "efficiency: " << std::setprecision(2) << data.Efficiency << "%" << std::endl;
     } else {
         std::cout << "Less than minute passed, tpmC calculation skipped" << std::endl;
     }
+
+    std::cout << "* These results are not officially recognized TPC results "
+              << "and are not comparable with other TPC-C test results published on the TPC website" << std::endl;
 }
 
 } // anonymous

@@ -178,5 +178,8 @@ enum EOperationType {
     ESchemeOpCreateSysView = 116;
     ESchemeOpDropSysView = 117;
 
+    // Long Incremental Restore
+    ESchemeOpCreateLongIncrementalRestoreOp = 118;
+
     // Some entries are grouped by semantics, so are out of order
 }

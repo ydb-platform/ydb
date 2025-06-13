@@ -214,7 +214,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
         }
 
         void Execute() {
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 
@@ -262,7 +261,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 #ifdef address_sanitizer_enabled
             MultiColumnRepCount = 30;
 #endif
-            CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
             CSController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
             CSController->SetOverridePeriodicWakeupActivationPeriod(TDuration::MilliSeconds(100));
 

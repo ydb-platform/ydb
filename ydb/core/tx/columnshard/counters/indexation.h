@@ -19,7 +19,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionHugePartsCount;
 
 public:
-    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> TieringErrors = std::make_shared<NKikimr::NColumnShard::TErrorCollector>();
+    const std::shared_ptr<NKikimr::NColumnShard::TError> TieringErrors = std::make_shared<NKikimr::NColumnShard::TError>();
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 

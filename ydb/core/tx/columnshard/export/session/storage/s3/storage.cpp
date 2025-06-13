@@ -9,7 +9,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 
 namespace {
-static std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> DummyCollector = std::make_shared<NKikimr::NColumnShard::TErrorCollector>();
+static std::shared_ptr<NKikimr::NColumnShard::TError> DummyCollector = std::make_shared<NKikimr::NColumnShard::TError>();
 }
 
 namespace NKikimr::NOlap::NExport {

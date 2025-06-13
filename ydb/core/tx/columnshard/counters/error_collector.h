@@ -3,55 +3,65 @@
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 #include <util/system/spinlock.h>
 
 #include <queue>
 
 namespace NKikimr::NColumnShard {
 
-class TErrorCollector {
+class TPerTierError {
 public:
-    struct Error {
-        TString Tier;
-        TString ErrorReason;
+    struct TRecord {
+        TString Reason;
         TInstant Time;
     };
 
-    TErrorCollector() = default;
+    TPerTierError() {
+    }
 
-    void AddReadError(const TString& tier, const TString& message, const TInstant& time) {
+    void Add(const TString& tier, const TString& reason) {
         TGuard<TSpinLock> lock(Lock);
-        if (ErrorReadCollector.size() == QUEUE_MAX_SIZE) {
-            ErrorReadCollector.pop();
+        auto& q = ErrorsCollector[tier];
+        if (q.size() == QUEUE_MAX_SIZE) {
+            q.pop();
         }
 
-        ErrorReadCollector.push({ tier, message, time });
+        q.push({ reason, TInstant::Now() });
     }
 
-    void AddWriteError(const TString& tier, const TString& message, const TInstant& time) {
+    THashMap<TString, std::queue<TRecord>> GetAll() const {
         TGuard<TSpinLock> lock(Lock);
-        if (ErrorWriteCollector.size() == QUEUE_MAX_SIZE) {
-            ErrorWriteCollector.pop();
-        }
-
-        ErrorWriteCollector.push({ tier, message, time });
-    }
-
-    std::queue<Error> GetAllReadErrors() const {
-        TGuard<TSpinLock> lock(Lock);
-        return ErrorReadCollector;
-    }
-
-    std::queue<Error> GetAllWriteErrors() const {
-        TGuard<TSpinLock> lock(Lock);
-        return ErrorWriteCollector;
+        return ErrorsCollector;
     }
 
 private:
     static constexpr size_t QUEUE_MAX_SIZE = 10;
     mutable TSpinLock Lock;
-    std::queue<Error> ErrorReadCollector;
-    std::queue<Error> ErrorWriteCollector;
+    THashMap<TString, std::queue<TRecord>> ErrorsCollector;
+};
+
+class TError {
+public:
+    void OnReadError(const TString& tier, const TString& message) {
+        Read.Add(tier, message);
+    }
+
+    void OnWriteError(const TString& tier, const TString& message) {
+        Write.Add(tier, message);
+    }
+
+    THashMap<TString, std::queue<TPerTierError::TRecord>> GetAllReadErrors() const {
+        return Read.GetAll();
+    }
+
+    THashMap<TString, std::queue<TPerTierError::TRecord>> GetAllWriteErrors() const {
+        return Write.GetAll();
+    }
+
+private:
+    TPerTierError Read;
+    TPerTierError Write;
 };
 
 }   // namespace NKikimr::NColumnShard

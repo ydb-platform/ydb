@@ -109,7 +109,7 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
     const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation,
-    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector)
+    const std::shared_ptr<NKikimr::NColumnShard::TError>& errorCollector)
     : TBase(storageId, storageSharedBlobsManager)
     , ErrorCollector(std::move(errorCollector))
     , TabletActorId(shardActorId)

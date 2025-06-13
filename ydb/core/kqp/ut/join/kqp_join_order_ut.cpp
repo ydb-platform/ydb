@@ -123,7 +123,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
 
-    serverSettings.SetNodeCount(2);
+    serverSettings.SetNodeCount(1);
     #if defined(_asan_enabled_)
         serverSettings.SetNodeCount(1);
     #endif

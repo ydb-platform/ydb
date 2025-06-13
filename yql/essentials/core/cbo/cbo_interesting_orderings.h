@@ -140,7 +140,7 @@ public:
     TTableAliasMap() = default;
 
     void AddMapping(const TString& table, const TString& alias);
-    void AddRename(const TString& from, const TString& to);
+    void AddRename(TString from, TString to);
     TBaseColumn GetBaseColumnByRename(const TString& renamedColumn);
     TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn);
     TString ToString() const;

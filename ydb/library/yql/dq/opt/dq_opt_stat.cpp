@@ -575,6 +575,8 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
     else {
         typeCtx->SetStats(input.Get(), typeCtx->GetStats(flatmapInput.Raw()));
     }
+
+    Cout << "flatmap: " << inputStats->TableAliases->ToString() << Endl;
 }
 
 /**
@@ -965,8 +967,9 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationCont
     }
     topStats->SortingOrderingIdx = orderingInfo.OrderingIdx;
 
+    TString propagatedAliases = topStats->TableAliases ? topStats->TableAliases->ToString() : "empty";
     YQL_CLOG(TRACE, CoreDq) << "Input of the TopBase: " << inputStats->ToString();
-    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for TopBase: " << topStats->ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for TopBase: " << topStats->ToString() << ", propagated aliases: " << propagatedAliases;
     typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
 }
 
@@ -985,8 +988,9 @@ void InferStatisticsForSortBase(const TExprNode::TPtr& input, TTypeAnnotationCon
     }
     topStats->SortingOrderingIdx = orderingInfo.OrderingIdx;
 
+    TString propagatedAliases = topStats->TableAliases ? topStats->TableAliases->ToString() : "empty";
     YQL_CLOG(TRACE, CoreDq) << "Input of the SortBase: " << inputStats->ToString();
-    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for SortBase: " << topStats->ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for SortBase: " << topStats->ToString() << ", propagated aliases: " << propagatedAliases;
     typeCtx->SetStats(inputNode.Raw(), std::move(topStats));
 }
 
@@ -1011,7 +1015,7 @@ void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TTypeAnnotationCon
 
         if (inputStats->Aliases) {
             inputStats->Aliases->insert(std::move(label));
-        }
+        } else
         if (inputStats->TableAliases) {
             tableAliases.Merge(*inputStats->TableAliases);
         }

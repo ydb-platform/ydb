@@ -98,30 +98,37 @@ void TTableAliasMap::AddMapping(const TString& table, const TString& alias) {
     TableByAlias[alias] = table;
 }
 
-void TTableAliasMap::AddRename(const TString& from, const TString& to) {
+void TTableAliasMap::AddRename(TString from, TString to) {
     if (auto pointIdx = from.find('.'); pointIdx != TString::npos) {
         TString alias = from.substr(0, pointIdx);
         TString baseTable = GetBaseTableByAlias(alias);
         TString columnName = from.substr(pointIdx + 1);
 
-        if (auto it = BaseColumnByRename.find(columnName); it != BaseColumnByRename.end()) {
-            auto baseColumn = it->second;
-            BaseColumnByRename[to] = BaseColumnByRename[from] = it->second;
-            return;
+        // if (auto it = BaseColumnByRename.find(columnName); it != BaseColumnByRename.end()) {
+        //     auto baseColumn = it->second;
+        //     BaseColumnByRename[to] = BaseColumnByRename[from] = it->second;
+        //     return;
+        // }
+
+
+        if (pointIdx == 0) {
+            from = from.substr(1);
+        }
+        if (auto pointIdx = to.find('.'); pointIdx == 0) {
+            to = to.substr(1);
         }
 
-        auto fromColumn = TBaseColumn(alias, columnName);
         auto baseColumn = TBaseColumn(baseTable, columnName);
-
         BaseColumnByRename[to] = BaseColumnByRename[from] = baseColumn;
         return;
     }
 
     if (BaseColumnByRename.contains(from)) {
         BaseColumnByRename[to] = BaseColumnByRename[from];
-    } else {
-        BaseColumnByRename[to] = BaseColumnByRename[from] = TBaseColumn("", from);
     }
+    //  else {
+    //     BaseColumnByRename[to] = TBaseColumn("", from);
+    // }
 }
 
 TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const TString& renamedColumn) {
@@ -176,6 +183,9 @@ void TTableAliasMap::Merge(const TTableAliasMap& other) {
         TableByAlias[alias] = table;
     }
     for (const auto& [from, to] : other.BaseColumnByRename) {
+        if (BaseColumnByRename.contains(from)) {
+            continue;
+        }
         BaseColumnByRename[from] = TBaseColumn(to.Relation, to.Column);
     }
 }

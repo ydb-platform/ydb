@@ -126,6 +126,15 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
 
         os << tmp;
     }
+    if (s.TableAliases) {
+        if (s.TableAliases->Empty()) {
+            os << ", IS EMPTY";
+        } else {
+            os << ", " << s.TableAliases->ToString();
+        }
+    } else {
+        os << ", IS NULL";
+    }
 
     return os;
 }

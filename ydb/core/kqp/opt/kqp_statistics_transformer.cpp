@@ -58,14 +58,16 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         return;
     }
 
-    if (inputStats->TableAliases && columns) {
+    TTableAliasMap tableAlias;
+    if (columns) {
         for (const auto& column: *columns) {
+            TString alias;
             if (inputStats->Aliases && inputStats->Aliases->size() == 1) {
-                TString alias = *inputStats->Aliases->begin();
-                TString from = alias + "." + column.StringValue();
-                TString to = column.StringValue();
-                inputStats->TableAliases->AddRename(from, to);
+                alias = *inputStats->Aliases->begin();
             }
+            TString from = alias + "." + column.StringValue();
+            TString to = column.StringValue();
+            tableAlias.AddRename(from, to);
         }
     }
 
@@ -107,6 +109,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     stats->LogicalOrderings = inputStats->LogicalOrderings;
     stats->SortingOrderings = inputStats->SortingOrderings;
     stats->Aliases = inputStats->Aliases;
+    stats->TableAliases = MakeIntrusive<TTableAliasMap>(std::move(tableAlias));
     stats->SourceTableName = inputStats->SourceTableName;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
@@ -251,7 +254,8 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
     auto inputNode = TExprBase(input);
     auto streamLookup = inputNode.Cast<TKqpCnStreamLookup>();
 
-    int nAttrs = streamLookup.Columns().Size();
+    auto columns = streamLookup.Columns();
+    int nAttrs = columns.Size();
     auto tableStats = typeCtx->GetStats(streamLookup.Table().Raw());
     auto inputStats = typeCtx->GetStats(streamLookup.Output().Raw());
 
@@ -271,6 +275,17 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
         inputStats->StorageType
     );
     res->SortingOrderings = inputStats->SortingOrderings;
+
+    // if (inputStats->TableAliases && columns) {
+    //     for (const auto& column: *columns) {
+    //         if (inputStats->Aliases && inputStats->Aliases->size() == 1) {
+    //             TString alias = *inputStats->Aliases->begin();
+    //             TString from = alias + "." + column.StringValue();
+    //             TString to = column.StringValue();
+    //             inputStats->TableAliases->AddRename(from, to);
+    //         }
+    //     }
+    // }
 
     typeCtx->SetStats(input.Get(), res);
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for KqpCnStreamLookup: " << res->ToString();
@@ -1278,6 +1293,14 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
         InferStatisticsForOlapRead(input, TypeCtx);
     } else {
         matched = false;
+    }
+
+
+    if (TCoExtractMembers::Match(input.Get())) {
+        auto stats = TypeCtx->GetStats(input.Get());
+        Cout << "after lambdas: " << stats->TableAliases->ToString() << Endl;
+        auto childStats = TypeCtx->GetStats(input->Child(0));
+        Cout << "after lambdas input: " << childStats->TableAliases->ToString() << Endl;
     }
     return matched;
 }

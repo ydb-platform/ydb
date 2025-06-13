@@ -859,8 +859,8 @@ void TPCCRunner::PrintTransactionStatisticsPretty(std::ostream& os) {
         auto aborted = stats.UserAborted.load(std::memory_order_relaxed);
 
         totalOK += ok;
-        totalFailed += totalFailed;
-        totalUserAborted += totalUserAborted;
+        totalFailed += failed;
+        totalUserAborted += aborted;
 
         os << std::left
            << std::setw(15) << std::string(typeStr)
@@ -886,6 +886,7 @@ void TPCCRunner::PrintTransactionStatisticsPretty(std::ostream& os) {
 void TPCCRunner::PrintFinalResultPretty() {
     if (MeasurementsStartTs == Clock::time_point{}) {
         std::cout << "Stopped before measurements" << std::endl;
+        return;
     }
 
     auto now = Clock::now();

@@ -54,18 +54,47 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
 
 template <typename T>
 void TPrintErrorTable(TStringStream& html, std::queue<T> errors, const std::string& errorType) {
+    html << R"(
+        <style>
+            .error-table {
+                border-collapse: collapse;
+                width: 100%;
+                margin-bottom: 1em;
+                font-family: Arial, sans-serif;
+            }
+            .error-table th,
+            .error-table td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                word-break: break-all;
+                text-align: left;
+                vertical-align: top;
+            }
+            .error-table th {
+                background-color: #f2f2f2;
+                font-weight: bold;
+            }
+            .error-table tr:nth-child(even) {
+                background-color: #fafafa;
+            }
+            .error-table tr:hover {
+                background-color: #f4f8ff;
+            }
+        </style>
+    )";
+
     if (errors.empty()) {
         html << "No " << errorType << " errors<br />";
     } else {
         html << "<b>" << errorType << " errors:</b><br />";
-        html << "<table>"
+        html << "<table class='error-table'>"
                 "<tr><th>Tier</th><th>Time</th><th>Error</th></tr>";
         while (!errors.empty()) {
             const auto& element = errors.front();
             html << "<tr>"
                  << "<td>" << TEscapeHtml(element.Tier) << "</td>"
                  << "<td>" << element.Time.ToString() << "</td>"
-                 << "<td>" << TEscapeHtml(element.ErrorReason) << "</td>"
+                 << "<td style=\"max-width:420px;\">" << TEscapeHtml(element.ErrorReason) << "</td>"
                  << "</tr>";
             errors.pop();
         }

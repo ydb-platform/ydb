@@ -14,7 +14,7 @@ public:
     ~TVectorRecallEvaluator();
     
     void SampleExistingVectors(const char* tableName, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient);
-    void FillEtalons(const char* tableName, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
+    void FillEtalons(const char* tableName, const char* indexPrefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
     const std::string& GetTargetEmbedding(size_t index) const;
     const std::vector<ui64>& GetTargetEtalons(size_t index) const;
     void AddRecall(double recall);
@@ -45,6 +45,7 @@ public:
 
     TString TableName;
     TString IndexName;
+    std::optional<std::string> IndexPrefixColumn;
     TString Distance;
     TString VectorType;
     size_t KmeansTreeLevels = 0;
@@ -56,6 +57,7 @@ public:
     size_t TopK = 0;
 private:
     size_t GetVectorDimension() const;
+    std::optional<std::string> GetIndexPrefixColumn() const;
 
     THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
 };

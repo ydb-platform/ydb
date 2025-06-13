@@ -11,7 +11,7 @@ namespace NYdbWorkload {
 
 thread_local std::optional<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex = std::nullopt;
 
-std::string MakeSelect(const char* tableName, const char* indexName, size_t kmeansTreeClusters) {
+std::string MakeSelect(const char* tableName, const char* indexName, const char* indexPrefixColumn, size_t kmeansTreeClusters) {
     Y_UNUSED(indexName);
     return std::format(R"_(--!syntax_v1
         DECLARE $Embedding as String;
@@ -19,12 +19,14 @@ std::string MakeSelect(const char* tableName, const char* indexName, size_t kmea
         SELECT id
         FROM {1}
         {2}
+        {3}
         ORDER BY Knn::CosineDistance(embedding, $Embedding)
         LIMIT $K;
     )_", 
         kmeansTreeClusters,
-        tableName, 
-        indexName ? std::format("VIEW {0}", indexName) : ""
+        tableName,
+        indexName ? std::format("VIEW {0}", indexName) : "",
+        indexPrefixColumn ? std::format("WHERE {0} = 30", indexPrefixColumn) : ""
     );
 }
 
@@ -188,11 +190,11 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
 
 
 
-void TVectorRecallEvaluator::FillEtalons(const char* tableName, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
+void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* indexPrefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
     Cout << "Recall initialization..." << Endl;
     
     // Prepare the query template
-    std::string queryTemplate = MakeSelect(tableName, nullptr, 0);
+    std::string queryTemplate = MakeSelect(tableName, nullptr, indexPrefixColumn, 0);
     
     // Maximum number of concurrent queries to execute
     const size_t MAX_CONCURRENT_QUERIES = 20;
@@ -345,7 +347,7 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     }
 
     // Create the query string
-    std::string query = MakeSelect(Params.TableName.c_str(), Params.IndexName.c_str(), Params.KmeansTreeSearchClusters);
+    std::string query = MakeSelect(Params.TableName.c_str(), Params.IndexName.c_str(), Params.IndexPrefixColumn.has_value() ? Params.IndexPrefixColumn->c_str() : nullptr, Params.KmeansTreeSearchClusters);
     
     // Get the embedding for the specified target
     const auto& targetEmbedding = Params.VectorRecallEvaluator->GetTargetEmbedding(*ThreadLocalTargetIndex);
@@ -496,6 +498,42 @@ size_t TVectorWorkloadParams::GetVectorDimension() const {
     return dimension;
 }
 
+std::optional<std::string> TVectorWorkloadParams::GetIndexPrefixColumn() const {
+    // Build the full path to the table
+    std::string tablePath = DbPath + "/" + TableName;
+
+    auto session = TableClient->GetSession().ExtractValueSync().GetSession();
+    auto describeTableResult = session.DescribeTable(tablePath).GetValueSync();
+    Y_ABORT_UNLESS(describeTableResult.IsSuccess(), "DescribeTable failed: %s", describeTableResult.GetIssues().ToString().c_str());
+    
+    // Get the table description
+    const auto& tableDescription = describeTableResult.GetTableDescription();
+    
+    // Find the specified index
+    bool indexFound = false;
+    std::optional<std::string> prefixColumn;
+    
+    for (const auto& index : tableDescription.GetIndexDescriptions()) {
+        if (index.GetIndexName() == IndexName) {
+            indexFound = true;
+            
+            // Check if we have more than one column (indicating a prefixed index)
+            const auto& keyColumns = index.GetIndexColumns();
+            if (keyColumns.size() > 1) {
+                // The first column is the prefix column, the last column is the embedding
+                prefixColumn = keyColumns[0];
+            }
+            
+            break;
+        }
+    }
+    
+    Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableName.c_str());
+    
+    return prefixColumn;
+}
+
+
 void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
     switch (commandType) {
         case TWorkloadParams::ECommandType::Init:
@@ -506,9 +544,10 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                     break;
                 case TVectorWorkloadGenerator::EType::Select:
                     VectorDimension = GetVectorDimension();
+                    IndexPrefixColumn = GetIndexPrefixColumn();
                     VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>();
                     VectorRecallEvaluator->SampleExistingVectors(TableName.c_str(), Targets, *QueryClient);
-                    VectorRecallEvaluator->FillEtalons(TableName.c_str(), TopK, *QueryClient);
+                    VectorRecallEvaluator->FillEtalons(TableName.c_str(), IndexPrefixColumn.has_value() ? IndexPrefixColumn->c_str() : nullptr, TopK, *QueryClient);
                     break;
             }
             break;

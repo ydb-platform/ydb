@@ -50,7 +50,7 @@ enum class EOperationBehaviour : ui32 {
 class TWriteOperation: public TMonitoringObjectsCounter<TWriteOperation> {
 private:
     YDB_READONLY(TString, Identifier, TGUID::CreateTimebased().AsGuidString());
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY_DEF(TUnifiedPathId, PathId);
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
@@ -70,7 +70,7 @@ public:
         *Activity = 0;
     }
 
-    TWriteOperation(const TInternalPathId pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
+    TWriteOperation(const TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
         const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
         const bool writePortions);
 

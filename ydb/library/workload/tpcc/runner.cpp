@@ -2,7 +2,7 @@
 
 #include "constants.h"
 #include "log.h"
-#include "stderr_capture.h"
+#include "log_backend.h"
 #include "task_queue.h"
 #include "terminal.h"
 #include "transactions.h"
@@ -208,6 +208,9 @@ private:
 private:
     NConsoleClient::TClientCommand::TConfig ConnectionConfig;
     TRunConfig Config;
+
+    // XXX Log instance owns LogBackend (unfortunately, it accepts THolder with LogBackend)
+    TLogBackendWithCapture* LogBackend;
     std::shared_ptr<TLog> Log;
 
     std::vector<TDriver> Drivers;
@@ -227,7 +230,6 @@ private:
     Clock::time_point StopDeadline;
 
     std::unique_ptr<TAllStatistics> LastStatisticsSnapshot;
-    std::unique_ptr<TStdErrCapture> LogCapture;
 };
 
 //-----------------------------------------------------------------------------
@@ -235,9 +237,8 @@ private:
 TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig)
     : ConnectionConfig(connectionConfig)
     , Config(runConfig)
-    , Log(std::make_shared<TLog>(CreateLogBackend("cerr", Config.LogPriority, true)))
-    , LogCapture(Config.DisplayMode == TRunConfig::EDisplayMode::Tui ?
-                 std::make_unique<TStdErrCapture>(TUI_LOG_LINES) : nullptr)
+    , LogBackend(new TLogBackendWithCapture("cerr", runConfig.LogPriority, TUI_LOG_LINES))
+    , Log(std::make_shared<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
 {
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;
@@ -615,18 +616,12 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // First update is special: we switch buffers and capture stderr to display live logs
     static bool firstUpdate = true;
     if (firstUpdate) {
-        if (LogCapture) {
-            LogCapture->StartCapture();
-        }
+        LogBackend->StartCapture();
 
         // Switch to alternate screen buffer (like htop)
         std::cout << "\033[?1049h";
         std::cout << "\033[2J\033[H"; // Clear screen and move to top
         firstUpdate = false;
-    }
-
-    if (LogCapture) {
-        LogCapture->UpdateCapture();
     }
 
     // Left side of header: runner info, efficiency, phase, progress
@@ -799,24 +794,10 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
 
     Elements logElements;
     logElements.push_back(text("Logs"));
-    if (LogCapture) {
-        const auto& capturedLines = LogCapture->GetLogLines();
-        size_t truncatedCount = LogCapture->GetTruncatedCount();
 
-        // Get last 10 lines
-        size_t startIndex = 0;
-        if (capturedLines.size() > 10) {
-            startIndex = capturedLines.size() - 10;
-        }
-
-        if (truncatedCount > 0) {
-            logElements.push_back(text("... logs truncated: " + std::to_string(truncatedCount) + " lines"));
-        }
-
-        for (size_t i = startIndex; i < capturedLines.size(); ++i) {
-            logElements.push_back(text(capturedLines[i]));
-        }
-    }
+    LogBackend->GetLogLines([&](const std::string& line) {
+        logElements.push_back(text(line));
+    });
 
     auto logsSection = vbox(logElements) | border | size(HEIGHT, EQUAL, 12);
 
@@ -892,10 +873,7 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
 }
 
 void TPCCRunner::ExitTuiMode() {
-    // Restore stderr and flush captured logs
-    if (LogCapture) {
-        LogCapture->RestoreAndFlush();
-    }
+    LogBackend->StopCapture();
 
     // Switch back to main screen buffer (restore original content)
     std::cout << "\033[?1049l";

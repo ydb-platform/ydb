@@ -56,7 +56,8 @@ protected:
     virtual bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const = 0;
 
     bool CheckRequestedHost();
-    void ForwardRequestHeaders(NHttp::THttpOutgoingRequestPtr& request) const;
+    NHttp::THeadersBuilder FilterHeaders(const TStringBuf& headers, const TVector<TStringBuf>& whitelist) const;
+    NHttp::THttpOutgoingResponsePtr CreateResponseFromProtectedResource(const NHttp::THttpIncomingResponsePtr& response);
     void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
 
     static bool IsAuthorizedRequest(TStringBuf authHeader);
@@ -64,7 +65,7 @@ protected:
     static TString FixReferenceInHtml(TStringBuf html, TStringBuf host);
 
 private:
-    NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response);
+    NHttp::THttpOutgoingRequestPtr CreateRequestToProtectedResource(TStringBuf authHeader, bool secure) const;
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response);
     TString GetFixedLocationHeader(TStringBuf location);
     NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost();

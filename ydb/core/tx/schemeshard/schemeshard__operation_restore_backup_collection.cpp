@@ -299,8 +299,23 @@ bool CreateLongIncrementalRestoreOp(
     const TPath& bcPath,
     TVector<ISubOperation::TPtr>& result)
 {
-    Y_UNUSED(opId, bcPath, result);
+    // Create a control plane operation for long incremental restore
+    NKikimrSchemeOp::TModifyScheme longIncrementalRestoreOp;
+    longIncrementalRestoreOp.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+    longIncrementalRestoreOp.SetInternal(true);
+    
+    // Set the backup collection path as the working directory for this operation
+    longIncrementalRestoreOp.SetWorkingDir(bcPath.PathString());
+    
+    // Create the control plane sub-operation
+    result.push_back(new TCreateRestoreOpControlPlane(opId, longIncrementalRestoreOp));
+    
     return true;
+}
+
+ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx) {
+    // Create the control plane sub-operation directly for operation factory dispatch
+    return new TCreateRestoreOpControlPlane(opId, tx);
 }
 
 TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

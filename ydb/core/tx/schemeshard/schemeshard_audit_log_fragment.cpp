@@ -272,6 +272,9 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
+    // long incremental restore
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        return "RESTORE INCREMENTAL LONG";
     // system view
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         return "CREATE SYSTEM VIEW";
@@ -612,6 +615,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        // For long incremental restore operations, extract the backup collection name
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:

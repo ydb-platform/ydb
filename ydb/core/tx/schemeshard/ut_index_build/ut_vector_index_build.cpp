@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 0);
     }
 
-    Y_UNIT_TEST(ServerLessDB) {
+    Y_UNIT_TEST_FLAG(ServerLessDB, smallScanBuffer) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -356,6 +356,11 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             });
             auto settings = request->Record.MutableSettings();
             settings->set_max_shards_in_flight(1);
+            if (smallScanBuffer) {
+                settings->MutableScanSettings()->SetMaxBatchRows(1);
+            } else {
+                settings->MutableScanSettings()->ClearMaxBatchRows();
+            }
             auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
             kmeansSettings->Mutablevector_settings()->Setlevels(2);
             kmeansSettings->Mutablevector_settings()->Setclusters(4);
@@ -410,8 +415,13 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         logBillingStats();
         UNIT_ASSERT_VALUES_EQUAL(uploadRows, 420);
         UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 11740);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, 600);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, 7000);
+        if (smallScanBuffer) {
+            UNIT_ASSERT_VALUES_EQUAL(readRows, 1400); // SAMPLE + KMEANS * 3 + UPLOAD = 5 scans
+            UNIT_ASSERT_VALUES_EQUAL(readBytes, 20600);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(readRows, 600);
+            UNIT_ASSERT_VALUES_EQUAL(readBytes, 7000);
+        }
 
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
         {
@@ -433,17 +443,21 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
             auto expectedBill = TBillRecord()
-                .Id("109-72075186233409549-2-4-200-148-1800-420-600-11740-7000")
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
+            if (smallScanBuffer) {
+                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-1400-11740-20600");
+            } else {
+                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-600-11740-7000");
+            }
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
         }
         meteringBlocker.Stop().Unblock();
     }
 
-    Y_UNIT_TEST_FLAG(VectorIndexDescriptionIsPersisted, prefixed) {
+    Y_UNIT_TEST_FLAG(DescriptionIsPersisted, prefixed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;

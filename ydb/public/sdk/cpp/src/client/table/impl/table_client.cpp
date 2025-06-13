@@ -1021,7 +1021,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
 }
 
 
-TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocated(
+TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocatedUnsafe(
     const std::string& table,
     TValue&& rows,
     google::protobuf::Arena* arena,
@@ -1029,7 +1029,6 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocated(
 ) {
     auto request = MakeOperationRequestOnArena<Ydb::Table::BulkUpsertRequest>(settings, arena);
     request->set_table(TStringType{table});
-    // TODO: Ydb::Type still gets copied because request is arena-allocated and rows' Type is not
     *request->mutable_rows()->mutable_type() = std::move(rows.GetType()).ExtractProto();
     *request->mutable_rows()->mutable_value() = std::move(rows).ExtractProto();
 

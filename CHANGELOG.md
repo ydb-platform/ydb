@@ -10,16 +10,10 @@
 
 ### Bug fixes
 
-* 17627:Fix early object deletion in wide combiner. [#17627](https://github.com/ydb-platform/ydb/pull/17627) ([Filitov Mikhail](https://github.com/lll-phill-lll))
-* 17853:The transaction has entered the EXECUTED state, but has not yet saved it to disk. If the tablet receives a TEvReadSet, it will send a TEvReadSetAck in response. TEvReadSetAck and it will delete the transaction. If the tablet restarts at this point, the transaction will remain in the WAIT_RS state. The tablet should send TEvReadSetAck only after it saves the transaction status to disk. [#17853](https://github.com/ydb-platform/ydb/pull/17853) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* [Fixed](https://github.com/ydb-platform/ydb/pull/18115) [issues](https://github.com/ydb-platform/ydb/issues/18116) with reading messages larger than 6Mb via [Kafka API](./reference/kafka-api). ([Andrey Serebryanskiy](https://github.com/a-serebryanskiy))
 * 18086:Bug fixes for direct read in topics [#18086](https://github.com/ydb-platform/ydb/pull/18086) ([qyryq](https://github.com/qyryq))
-* 18078:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18078](https://github.com/ydb-platform/ydb/pull/18078) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 18006:The PQ tablet forgets about the transaction only after it receives a TEvReadSetAck from all participants. Another shard may be deleted before the PQ completes the transaction (for example, due to a split table). As a result, transactions are executed, but remain in the WAIT_RS_ACKS state. If the PQ tablet sends a TEvReadSet to a tablet that has already been deleted, it receives a TEvClientConnected with the `Dead` flag in response. In this case, we consider that we have received a TEvReadSetAck. [#18006](https://github.com/ydb-platform/ydb/pull/18006) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 16797:Fixed altering of max_active_partition property of the topic with YQL query [#16797](https://github.com/ydb-platform/ydb/pull/16797) ([Nikolay Shestakov](https://github.com/nshestakov))
 
 ### Performance
 
-* 17712:Cherry pick latest Roaring UDF changes [#17712](https://github.com/ydb-platform/ydb/pull/17712) ([jsjant](https://github.com/jsjant))
-* 17578:Cherry-pick NaiveBulkAnd into Roaring UDF [#17578](https://github.com/ydb-platform/ydb/pull/17578) ([jsjant](https://github.com/jsjant))
-* 17756:Limit internal inflight config updates. [#17756](https://github.com/ydb-platform/ydb/pull/17756) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 17712:Introduced Intersect, Add and IsEmpty operations to Roaring UDF. [#17712](https://github.com/ydb-platform/ydb/pull/17712) ([jsjant](https://github.com/jsjant))
+* 17578:Added naive bulk And to Roaring UDF. [#17578](https://github.com/ydb-platform/ydb/pull/17578) ([jsjant](https://github.com/jsjant)

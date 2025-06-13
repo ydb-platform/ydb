@@ -30,3 +30,19 @@ SELECT
     "value" AS value, "name" AS name
 ```
 
+## Экспорт данных из колоночной таблицы в объектное хранилище S3 {#export-from-olap-to-s3}
+
+{{ ydb-short-name }} поддерживает экспорт данных из [колоночных таблиц](../../datamodel/table.md#column-oriented-tables) (OLAP-таблиц) с помощью [внешнего соединения](../../datamodel/external_data_source.md). Для экспорта нужно использовать запрос [записи во внешнее соединение](#connection-write):
+
+```yql
+INSERT INTO `connection`.`test/`
+WITH
+(
+    FORMAT = "csv_with_names"
+)
+SELECT
+    *
+FROM column_table
+```
+
+Экспорт данных из [строковых таблиц](../../datamodel/table.md#row-oriented-tables) с помощью внешнего соединения поддерживается только для таблиц размера до 1 ГБ.

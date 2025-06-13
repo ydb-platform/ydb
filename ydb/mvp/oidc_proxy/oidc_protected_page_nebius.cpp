@@ -6,6 +6,7 @@
 #include "openid_connect.h"
 #include "context.h"
 #include "oidc_protected_page_nebius.h"
+#include "oidc_whoami_extended_nebius.h"
 
 namespace NMVP::NOIDC {
 
@@ -129,13 +130,39 @@ void THandlerSessionServiceCheckNebius::RequestAuthorizationCode() {
     ReplyAndPassAway(std::move(httpResponse));
 }
 
+bool THandlerSessionServiceCheckNebius::NeedWhoamiExtention() const {
+    if (Request->Method == "OPTIONS" || Settings.WhoamiExtendedInfoEndpoint.empty()) {
+        return false;
+    }
+
+    TStringBuf path(ProtectedPage.Url);
+    path = path.Before('?');
+
+    static const TVector<TStringBuf> WHOAMI_PATHS = {
+        "/viewer/json/whoami",
+        "/viewer/whoami"
+    };
+    for (const auto& whoamiPath : WHOAMI_PATHS) {
+        if (path.EndsWith(whoamiPath)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader, bool secure) {
+    if (NeedWhoamiExtention()) {
+        Register(new THandlerWhoamiExtendNebius(Sender, Request, HttpProxyId, Settings, authHeader));
+        BLOG_D("Start Whoami extended info process");
+        return PassAway();
+    }
+
     THandlerSessionServiceCheck::ForwardUserRequest(authHeader, secure);
     Become(&THandlerSessionServiceCheckNebius::StateWork);
 }
 
 bool THandlerSessionServiceCheckNebius::NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const {
-    if ((response->Status == "400" || response->Status.empty()) && RequestedPageScheme.empty()) {
+    if ((response->Status == "400" || response->Status.empty()) && ProtectedPage.Scheme.empty()) {
         return !response->GetRequest()->Secure;
     }
     return false;

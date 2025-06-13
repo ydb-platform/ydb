@@ -9,6 +9,7 @@
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 #include <util/datetime/base.h>
@@ -110,6 +111,12 @@ struct TConfig
 
     /// @brief Represents the role involved in RPC proxy configuration.
     TString RpcProxyRole;
+
+    /// @brief Proxy url aliasing rules to be used for connection.
+    ///
+    /// You can pass here "foo" => "fqdn:port" and afterwards use "foo" as handy alias,
+    /// while all connections will be made to "fqdn:port" address.
+    THashMap<TString, TString> ProxyUrlAliasingRules;
 
     ///
     /// For historical reasons mapreduce client uses its own logging system.
@@ -264,6 +271,7 @@ struct TConfig
     void LoadToken();
     void LoadSpec();
     void LoadTimings();
+    void LoadProxyUrlAliasingRules();
 
     void Reset();
 

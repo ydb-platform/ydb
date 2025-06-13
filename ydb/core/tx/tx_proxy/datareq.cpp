@@ -1695,7 +1695,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
             return Die(ctx);
         }
 
-        if (FlatMKQLRequest && entry.Kind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
+        if (FlatMKQLRequest && entry.Kind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
             TMaybe<TString> error;
 
             if (entry.KeyDescription->RowOperation != TKeyDesc::ERowOperation::Read) {

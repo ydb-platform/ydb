@@ -2601,7 +2601,11 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
 
         NIceDb::TUpdate<Schema::TablePartitionStats::SearchHeight>(stats.SearchHeight),
         NIceDb::TUpdate<Schema::TablePartitionStats::FullCompactionTs>(stats.FullCompactionTs),
-        NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize)
+        NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize),
+
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksAcquired>(stats.LocksAcquired),
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksWholeShard>(stats.LocksWholeShard),
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksBroken>(stats.LocksBroken)
     );
 
     if (!stats.StoragePoolsStats.empty()) {
@@ -4921,6 +4925,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 

@@ -84,6 +84,9 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     sysStats.SetPlannedTxCompleted(stats.PlannedTxCompleted);
     sysStats.SetTxRejectedByOverload(stats.TxRejectedByOverload);
     sysStats.SetTxRejectedBySpace(stats.TxRejectedBySpace);
+    sysStats.SetLocksAcquired(stats.LocksAcquired);
+    sysStats.SetLocksWholeShard(stats.LocksWholeShard);
+    sysStats.SetLocksBroken(stats.LocksBroken);
 
     if (nodeId) {
         sysStats.SetNodeId(*nodeId);
@@ -198,6 +201,10 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
     newStats.RowReads = tableStats.GetRowReads();
     newStats.RangeReads = tableStats.GetRangeReads();
     newStats.RangeReadRows = tableStats.GetRangeReadRows();
+
+    newStats.LocksAcquired = tableStats.GetLocksAcquired();
+    newStats.LocksWholeShard = tableStats.GetLocksWholeShard();
+    newStats.LocksBroken = tableStats.GetLocksBroken();
 
     TInstant now = AppData(ctx)->TimeProvider->Now();
     newStats.SetCurrentRawCpuUsage(tabletMetrics.GetCPU(), now);
@@ -468,28 +475,30 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    {
-        auto path = TPath::Init(pathId, Self);
-        auto checks = path.Check();
-
-        constexpr ui64 deltaShards = 2;
-        checks
-            .PathShardsLimit(deltaShards)
-            .ShardsLimit(deltaShards);
-
-        if (!checks) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Do not request full stats from datashard"
-                             << ", datashard: " << datashardId
-                             << ", reason: " << checks.GetError());
-            return true;
-        }
+    auto path = TPath::Init(pathId, Self);
+    auto checks = path.Check();
+    constexpr ui64 deltaShards = 2;
+    checks
+        .PathShardsLimit(deltaShards)
+        .ShardsLimit(deltaShards);
+    if (!checks) {
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Do not request full stats from datashard"
+                            << ", datashard: " << datashardId
+                            << ", reason: " << checks.GetError());
+        return true;
     }
 
     if (newStats.HasBorrowedData) {
         // We don't want to split shards that have borrow parts
         // We must ask them to compact first
         Self->EnqueueBorrowedCompaction(shardIdx);
+        return true;
+    }
+
+    if (path.IsLocked()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Postpone split tablet " << datashardId << " because it is locked by " << path.LockedBy());
         return true;
     }
 

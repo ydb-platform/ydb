@@ -5,4 +5,5 @@ RECURSE(
     oltp_workload
     simple_queue
     statistics_workload
+    transfer
 )

@@ -16,7 +16,7 @@ public:
         return Rows->size();
     }
 
-    auto GetRowsData() const {
+    std::shared_ptr<NTxProxy::TUploadRows> GetRowsData() const {
         return Rows;
     }
 
@@ -38,10 +38,10 @@ public:
         LastKey = {};
     }
 
-    void AddRow(TSerializedCellVec&& key, TSerializedCellVec&& targetPk, TString&& targetValue) {
-        Rows->emplace_back(std::move(targetPk), std::move(targetValue));
+    void AddRow(TSerializedCellVec&& rowKey, TString&& rowValue, TSerializedCellVec&& originalKey = {}) {
+        Rows->emplace_back(std::move(rowKey), std::move(rowValue));
         ByteSize += Rows->back().first.GetBuffer().size() + Rows->back().second.size();
-        LastKey = std::move(key);
+        LastKey = std::move(originalKey);
     }
 
     bool IsEmpty() const {
@@ -52,9 +52,8 @@ public:
         return Rows->size();
     }
 
-    bool IsReachLimits(const TUploadLimits& Limits) {
-        // TODO(mbkkt) why [0..BatchRowsLimit) but [0..BatchBytesLimit]
-        return Rows->size() >= Limits.BatchRowsLimit || ByteSize > Limits.BatchBytesLimit;
+    bool HasReachedLimits(size_t rowsLimit, ui64 bytesLimit) const {
+        return Rows->size() > rowsLimit || ByteSize > bytesLimit;
     }
 
     auto&& ExtractLastKey() {

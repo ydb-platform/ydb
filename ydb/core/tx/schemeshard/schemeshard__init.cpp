@@ -2394,6 +2394,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.FullCompactionTs = rowSet.GetValueOrDefault<Schema::TablePartitionStats::FullCompactionTs>();
                 stats.MemDataSize = rowSet.GetValueOrDefault<Schema::TablePartitionStats::MemDataSize>();
 
+                stats.LocksAcquired = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksAcquired>();
+                stats.LocksWholeShard = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksWholeShard>();
+                stats.LocksBroken = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksBroken>();
+
                 tableInfo->UpdateShardStats(shardIdx, stats);
 
                 // note that we don't update shard metrics here, because we will always update
@@ -3405,7 +3409,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-           // Read KesusAlters
+        // Read KesusAlters
         {
             TKesusAlterRows kesusAlterRows;
             if (!LoadKesusAlters(db, kesusAlterRows)) {
@@ -4512,6 +4516,36 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read index build
         {
+            auto fillBuildInfoSafe = [&](TIndexBuildInfo& buildInfo, const TString& stepName, const auto& fill) {
+                try {
+                    fill(buildInfo);
+                } catch (const std::exception& exc) {
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                        "Init " << stepName << " unhandled exception, id#" << buildInfo.Id
+                        << " " << TypeName(exc) << ": " << exc.what() << Endl
+                        << TBackTrace::FromCurrentException().PrintToString()
+                        << ", TIndexBuildInfo: " << buildInfo);
+        
+                    // in-memory volatile state:
+                    buildInfo.IsBroken = true;
+                    buildInfo.AddIssue(TStringBuilder() << "Init " << stepName << " unhandled exception " << exc.what());
+                }
+            };
+
+            auto fillBuildInfoByIdSafe = [&](TIndexBuildId id, const TString& stepName, const auto& fill) {
+                const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                Y_ASSERT(buildInfoPtr);
+                if (!buildInfoPtr) {
+                    LOG_ERROR_S(ctx, NKikimrServices::BUILD_INDEX, 
+                        "Init " << stepName << " BuildInfo not found: id#" << id);
+                    return;
+                }
+                auto& buildInfo = *buildInfoPtr->Get();
+                if (!buildInfo.IsBroken) {
+                    fillBuildInfoSafe(buildInfo, stepName, fill);
+                }
+            };
+
             // read main info
             {
                 auto rowset = db.Table<Schema::IndexBuild>().Range().Select();
@@ -4520,17 +4554,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildInfo::TPtr indexInfo = TIndexBuildInfo::FromRow(rowset);
+                    TIndexBuildInfo::TPtr buildInfo = new TIndexBuildInfo();
+                    fillBuildInfoSafe(*buildInfo, "IndexBuild", [&](TIndexBuildInfo& buildInfo) {
+                        TIndexBuildInfo::FillFromRow(rowset, &buildInfo);
+                    });
 
-                    auto [it, emplaced] = Self->IndexBuilds.emplace(indexInfo->Id, indexInfo);
-                    Y_ABORT_UNLESS(emplaced);
-                    if (indexInfo->Uid) {
-                        // TODO(mbkkt) It also should be unique, but we're not sure.
-                        Y_ASSERT(!Self->IndexBuildsByUid.contains(indexInfo->Uid));
-                        Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
+                    // Note: broken build are also added to IndexBuilds
+                    Y_ASSERT(!Self->IndexBuilds.contains(buildInfo->Id));
+                    Self->IndexBuilds[buildInfo->Id] = buildInfo;
+
+                    if (buildInfo->Uid) {
+                        Y_ASSERT(!Self->IndexBuildsByUid.contains(buildInfo->Uid));
+                        Self->IndexBuildsByUid[buildInfo->Uid] = buildInfo;
                     }
 
-                    OnComplete.ToProgress(indexInfo->Id);
+                    OnComplete.ToProgress(buildInfo->Id);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4552,15 +4590,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeProgress::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.KMeans.Set(
-                        rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::State>()
-                    );
-                    buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+                    fillBuildInfoByIdSafe(id, "KMeansTreeProgress", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.KMeans.Set(
+                            rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::ParentBegin>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::State>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
+                        );
+                        buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+                    });
 
                     if (!rowset.Next()) {
                         return false;
@@ -4576,20 +4617,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
 
+                size_t sampleCount = 0;
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.Sample.Set(
-                        rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
-                        rowset.GetValue<Schema::KMeansTreeSample::Data>()
-                    );
+                    fillBuildInfoByIdSafe(id, "KMeansTreeSample", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.Sample.Add(
+                            rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                            rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                        );
+                    });
+                    sampleCount++;
 
                     if (!rowset.Next()) {
                         return false;
                     }
                 }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                             "KMeansTreeSample records: " << sampleCount
+                             << ", at schemeshard: " << Self->TabletID());
             }
 
             // read index build columns
@@ -4601,11 +4647,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildColumns::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
-                                   << ": id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.AddIndexColumnInfo(rowset);
+                    fillBuildInfoByIdSafe(id, "IndexBuildColumns", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddIndexColumnInfo(rowset);
+                    });
 
                     if (!rowset.Next()) {
                         return false;
@@ -4621,11 +4665,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::BuildColumnOperationSettings::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
-                                   << ": id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.AddBuildColumnInfo(rowset);
+                    fillBuildInfoByIdSafe(id, "BuildColumnOperationSettings", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddBuildColumnInfo(rowset);
+                    });
 
                     if (!rowset.Next()) {
                         return false;
@@ -4642,11 +4684,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::IndexBuildShardStatus::Id>();
-                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
-                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found"
-                                   << ": id# " << id);
-                    auto& buildInfo = *buildInfoPtr->Get();
-                    buildInfo.AddShardStatus(rowset);
+                    fillBuildInfoByIdSafe(id, "IndexBuildShardStatus", [&](TIndexBuildInfo& buildInfo) {
+                        buildInfo.AddShardStatus(rowset);
+                    });
 
                     if (!rowset.Next()) {
                         return false;

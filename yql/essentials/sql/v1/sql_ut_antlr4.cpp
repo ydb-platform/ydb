@@ -1499,6 +1499,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableBatchReturning) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input returning *;", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH DELETE is unsupported with RETURNING\n");
+    }
+
     Y_UNIT_TEST(DeleteFromTableOnValues) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input on (key) values (1);",
             10, "kikimr");
@@ -1581,6 +1587,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UpdateByValuesBatchReturning) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input set value = 'cool' where key = 200 returning key;", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with RETURNING\n");
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {

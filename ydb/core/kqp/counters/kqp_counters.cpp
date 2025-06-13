@@ -891,6 +891,14 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     QueryStatMemFinishBytes = KqpGroup->GetCounter("Query/Stat/MemFinishBytes", true);
     QueryStatMemConvertBytes = KqpGroup->GetCounter("Query/Stat/MemConvertBytes", true);
 
+    /* Statistics batch operations */
+    BatchOperationUpdateRows = KqpGroup->GetCounter("BatchOperation/Update/Rows", true);
+    BatchOperationUpdateBytes = KqpGroup->GetCounter("BatchOperation/Update/Bytes", true);
+
+    BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
+    BatchOperationDeleteBytes = KqpGroup->GetCounter("BatchOperation/Delete/Bytes", true);
+
+    BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {

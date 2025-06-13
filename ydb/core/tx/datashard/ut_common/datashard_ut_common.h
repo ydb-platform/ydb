@@ -670,6 +670,12 @@ void CancelAddIndex(
         const TString& dbName,
         ui64 buildIndexId);
 
+ui64 AsyncMoveIndex(
+        Tests::TServer::TPtr server,
+        const TString& tablePath,
+        const TString& srcIndexName,
+        const TString& dstIndexName);
+
 ui64 AsyncAlterDropIndex(
         Tests::TServer::TPtr server,
         const TString& workingDir,

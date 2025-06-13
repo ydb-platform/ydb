@@ -1,6 +1,7 @@
+#include "common_ut.h"
 #include "service.h"
 #include "table_writer.h"
-#include "common_ut.h"
+#include "worker.h"
 
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>

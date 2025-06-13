@@ -341,6 +341,18 @@ void TKikimrRunner::CreateSampleTables() {
         WITH (
             PARTITION_AT_KEYS = (105)
         );
+
+        CREATE TABLE `TuplePrimaryDescending` (
+            Col1 Uint32,
+            Col2 Uint64,
+            Col3 Int64,
+            Col4 Int64,
+            PRIMARY KEY (Col2, Col1, Col3)
+        )
+        WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            PARTITION_AT_KEYS = (2, 3)
+        );
     )").GetValueSync());
 
     AssertSuccessResult(session.ExecuteDataQuery(R"(
@@ -451,6 +463,24 @@ void TKikimrRunner::CreateSampleTables() {
             (105, "Two",   "Name4", "Value28"),
             (106, "One",   "Name3", "Value29"),
             (108, "One",    NULL,   "Value31");
+
+        REPLACE INTO `TuplePrimaryDescending` (Col1, Col2, Col3, Col4) VALUES
+            (0, 1, 0, 3),
+            (1, 1, 0, 1),
+            (1, 1, 1, 0),
+            (1, 1, 2, 1),
+            (2, 1, 0, 2),
+            (1, 2, 0, 1),
+            (1, 2, 1, 0),
+            (2, 2, 0, 1),
+            (3, 2, 1, 5),
+            (0, 3, 0, 1),
+            (1, 3, 3, 0),
+            (2, 3, 0, 1),
+            (0, 3, 2, 4),
+            (1, 3, 1, 1),
+            (2, 3, 1, 2),
+            (3, 3, 0, 1);
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
 
 }
@@ -683,6 +713,14 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
 
     CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
 
+    return result;
+}
+
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
+    auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
+        .ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;
 }
 
@@ -1350,6 +1388,16 @@ void InitRoot(Tests::TServer::TPtr server, TActorId sender) {
     server->SetupRootStoragePools(sender);
 }
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
+    auto grantQuery = Sprintf(R"(
+            GRANT %s ON `%s` TO `%s`;
+        )",
+        permissions, path, user
+    );
+    auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+};  
+
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
 {
@@ -1468,6 +1516,65 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
     }
 
     UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
+}
+
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName) {
+    int result = 0;
+
+    TTestActorRuntime* runtime = server.GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(&server, sender, path);
+    UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+
+    for (auto x : shards) {
+        runtime->SendToPipe(
+            x,
+            sender,
+            new TEvTablet::TEvGetCounters,
+            0,
+            GetPipeConfigWithRetries());
+
+        auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+        UNIT_ASSERT(ev);
+
+        const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+        for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+            if (counter.GetName() == counterName) {
+                result += counter.GetValue();
+            }
+        }
+    }
+
+    return result;
+}
+
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected) {
+    for (size_t attempt = 0; attempt < 30; ++attempt)
+    {
+        Cerr << "... SELECT from partition_stats for " << tableName << " , attempt " << attempt << Endl;
+
+        const TString selectPartitionStats(Q_(Sprintf(R"(
+            SELECT *
+            FROM `/Root/.sys/partition_stats`
+            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'   
+        )", (checkFollower ? "!=" : "="), tableName.c_str())));
+
+        auto result = session.ExecuteDataQuery(selectPartitionStats, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+        Cerr << selectPartitionStats << Endl;
+
+        auto rs = result.GetResultSet(0);
+        if (readsExpected) {
+            if (rs.RowsCount() != 0)
+                return;
+            Sleep(TDuration::Seconds(5));
+        } else {
+            if (rs.RowsCount() == 0)
+                return;
+            Y_FAIL("!readsExpected, but there are read stats for %s", tableName.c_str());
+        }
+    }
+    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());    
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {

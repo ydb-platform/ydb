@@ -2758,6 +2758,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
         settings.CertificateFile = Config.GetKafkaProxyConfig().GetCert();
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
+        settings.TcpNotDelay = true;
 
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),

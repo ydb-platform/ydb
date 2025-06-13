@@ -1671,8 +1671,25 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                             {"monitoring.view"})), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Token->GetGroupSIDs().size(), 4, result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->Token->IsExist("all-users@well-known"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-gizmo@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->Token->IsExist("user1@as"), result->Token->ShortDebugString());
+        } else {
+            // Authorization successful for cluster resource
+            accessServiceMock.AllowedResourceIds.clear();
+            accessServiceMock.AllowedResourceIds.emplace("folder");
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                            userToken,
+                                            {{"folder_id", "folder"}, },
+                                            {"monitoring.view"})), 0);
+            result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Token->GetGroupSIDs().size(), 3, result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->Token->IsExist("all-users@well-known"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->Token->IsExist("user1@as"), result->Token->ShortDebugString());
         }
     }
 

@@ -29,6 +29,8 @@ private:
 
     double TotalRecall = 0.0;
     size_t ProcessedTargets = 0;
+    
+    mutable std::mutex Mutex;
 };
 
 class TVectorWorkloadGenerator;
@@ -80,14 +82,9 @@ private:
     TQueryInfoList Upsert();
     TQueryInfoList Select();
 
-    void RecallCallback(NYdb::NQuery::TExecuteQueryResult);
+    void RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex);
 
-    TQueryInfo SelectImpl(const std::string& query);
-    TQueryInfo SelectScanImpl();
-    TQueryInfo SelectIndexImpl();
-    TQueryInfo SelectPrefixIndexImpl();
-
-    size_t CurrentTargetIndex = 0;
+    static thread_local std::optional<size_t> ThreadLocalTargetIndex;
 };
 
 } // namespace NYdbWorkload

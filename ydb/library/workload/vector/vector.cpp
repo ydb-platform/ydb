@@ -9,7 +9,10 @@
 
 namespace NYdbWorkload {
 
+thread_local std::optional<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex = std::nullopt;
+
 std::string MakeSelect(const char* tableName, const char* indexName, size_t kmeansTreeClusters) {
+    Y_UNUSED(indexName);
     return std::format(R"_(--!syntax_v1
         DECLARE $Embedding as String;
         pragma ydb.KMeansTreeSearchTopSize="{0}";
@@ -267,11 +270,13 @@ const std::vector<ui64>& TVectorRecallEvaluator::GetTargetEtalons(size_t index) 
 }
 
 void TVectorRecallEvaluator::AddRecall(double recall) {
+    std::lock_guard<std::mutex> lock(Mutex);
     TotalRecall += recall;
     ProcessedTargets++;
 }
 
 double TVectorRecallEvaluator::GetAverageRecall() const {
+    std::lock_guard<std::mutex> lock(Mutex);
     return ProcessedTargets > 0 ? TotalRecall / ProcessedTargets : 0.0;
 }
 
@@ -332,22 +337,31 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
 }
 
 TQueryInfoList TVectorWorkloadGenerator::Select() {
-    // TODO Detect index existance
-//    return TQueryInfoList(1, SelectScanImpl());
-    return TQueryInfoList(1, SelectIndexImpl());
-}
+    // If this is the first call on this thread, initialize with a value based on thread address
+    if (!ThreadLocalTargetIndex.has_value()) {
+        // Use the address of a thread_local variable as a unique start identifier
+        uintptr_t threadValue = reinterpret_cast<uintptr_t>(&ThreadLocalTargetIndex);
+        ThreadLocalTargetIndex = threadValue % Params.VectorRecallEvaluator->GetTargetCount();
+    }
 
-TQueryInfo TVectorWorkloadGenerator::SelectImpl(const std::string& query) {
-    const auto& targetEmbedding = Params.VectorRecallEvaluator->GetTargetEmbedding(CurrentTargetIndex);
-    NYdb::TParams params = MakeSelectParams(targetEmbedding, Params.TopK);
-    TQueryInfo queryInfo(query, std::move(params));
-    queryInfo.GenericQueryResultCallback = std::bind(&TVectorWorkloadGenerator::RecallCallback, this, std::placeholders::_1);
-    return queryInfo;
-}
-
-void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult) {
-    Y_ABORT_UNLESS(queryResult.IsSuccess(), "Query failed: %s", queryResult.GetIssues().ToString().c_str());
+    // Create the query string
+    std::string query = MakeSelect(Params.TableName.c_str(), Params.IndexName.c_str(), Params.KmeansTreeSearchClusters);
     
+    // Get the embedding for the specified target
+    const auto& targetEmbedding = Params.VectorRecallEvaluator->GetTargetEmbedding(*ThreadLocalTargetIndex);
+    NYdb::TParams params = MakeSelectParams(targetEmbedding, Params.TopK);
+    
+    // Create the query info with a callback that captures the target index
+    TQueryInfo queryInfo(query, std::move(params));
+    queryInfo.GenericQueryResultCallback = std::bind(&TVectorWorkloadGenerator::RecallCallback, this, std::placeholders::_1, *ThreadLocalTargetIndex);
+    return TQueryInfoList(1, queryInfo);
+}
+
+void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex) {
+    if (!queryResult.IsSuccess()) {
+        // Ignore the error. It's printed in the verbose mode
+        return;
+    }    
     // Get the result set
     auto resultSet = queryResult.GetResultSet(0);
     NYdb::TResultSetParser parser(resultSet);
@@ -359,8 +373,8 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
         indexResults.push_back(id);
     }
     
-    // Get the etalons for the current target
-    const auto& etalons = Params.VectorRecallEvaluator->GetTargetEtalons(CurrentTargetIndex);
+    // Get the etalons for the specified target
+    const auto& etalons = Params.VectorRecallEvaluator->GetTargetEtalons(targetIndex);
     
     // Check if target ID is first in results
     if (!indexResults.empty() && !etalons.empty()) {
@@ -368,10 +382,10 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
         
         if (indexResults[0] != targetId) {
             Cerr << "Warning: Target ID " << targetId << " is not the first result for target " 
-                 << CurrentTargetIndex << ". Found " << indexResults[0] << " instead." << Endl;
+                 << targetIndex << ". Found " << indexResults[0] << " instead." << Endl;
         }
         
-        // Calculate recall (including the target vector itself)
+        // Calculate recall
         size_t relevantRetrieved = 0;
         for (const auto& id : indexResults) {
             // Check if this ID is in the etalon results
@@ -386,44 +400,18 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
         // Add to total recall
         Params.VectorRecallEvaluator->AddRecall(recall);
         
-        // Add warning when zero relevant results found, but don't print embedding bytes
+        // Add warning when zero relevant results found
         if (relevantRetrieved == 0 && !indexResults.empty()) {
-            Cerr << "Warning: Zero relevant results for target " << CurrentTargetIndex << Endl;
+            Cerr << "Warning: Zero relevant results for target " << targetIndex << Endl;
         }
     } else {
         // Handle empty results or empty etalons
-        Cerr << "Warning: Empty results or etalons for target " << CurrentTargetIndex << Endl;
+        Cerr << "Warning: Empty results or etalons for target " << targetIndex << Endl;
     }
-    
-    // Move to the next target
-    CurrentTargetIndex = (CurrentTargetIndex + 1) % Params.VectorRecallEvaluator->GetTargetCount();
-}
 
+    // Update the thread-local index for the next query
+    ThreadLocalTargetIndex = (*ThreadLocalTargetIndex + 1) % Params.VectorRecallEvaluator->GetTargetCount();
 
-TQueryInfo TVectorWorkloadGenerator::SelectScanImpl() {
-    std::string query = MakeSelect(Params.TableName.c_str(), nullptr, 0);
-    return SelectImpl(query);
-}
-
-TQueryInfo TVectorWorkloadGenerator::SelectIndexImpl() {
-    std::string query = MakeSelect(Params.TableName.c_str(), Params.IndexName.c_str(), Params.KmeansTreeSearchClusters);
-    return SelectImpl(query);
-}
-
-TQueryInfo TVectorWorkloadGenerator::SelectPrefixIndexImpl() {
-    std::string query = std::format(R"_(--!syntax_v1
-        DECLARE $EmbeddingList as List<Float>;
-        $EmbeddingString = Knn::ToBinaryStringFloat($EmbeddingList);
-
-        SELECT id, Knn::CosineDistance(embedding, $EmbeddingString) AS similarity
-        FROM {0}
-        VIEW {1}
-        WHERE intent = 'factoid'
-        ORDER BY Knn::CosineDistance(embedding, $EmbeddingString)
-        LIMIT $K;
-    )_", Params.TableName.c_str(), Params.IndexName.c_str());
-
-    return SelectImpl(query);
 }
 
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
@@ -441,14 +429,13 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .Required().StoreResult(&Distance);
         opts.AddLongOption(0, "vector-type", "Type of vectors")
             .Required().StoreResult(&VectorType);
-        opts.AddLongOption(0, "dimension", "Vector dimension.")
+        opts.AddLongOption(0, "vector-dimension", "Vector dimension.")
             .Required().StoreResult(&VectorDimension);
         opts.AddLongOption(0, "kmeans-tree-levels", "Number of levels in the kmeans tree")
             .Required().StoreResult(&KmeansTreeLevels);
         opts.AddLongOption(0, "kmeans-tree-clusters", "Number of cluster in kmeans")
             .Required().StoreResult(&KmeansTreeClusters);
-        opts.AddLongOption(0, "vector-dimension", "Vector dimension.")
-            .Required().StoreResult(&VectorDimension);
+
     };
 
     auto addUpsertParam = [&]() {

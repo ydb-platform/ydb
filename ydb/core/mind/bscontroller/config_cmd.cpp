@@ -378,6 +378,8 @@ namespace NKikimr::NBsController {
                     STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA09, "Transaction complete", (UniqueId, state->UniqueId),
                             (NextConfigTxSeqNo, configTxSeqNo));
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(configTxSeqNo);
+                } else {
+                    Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
                 Self->UpdatePDisksCounters();

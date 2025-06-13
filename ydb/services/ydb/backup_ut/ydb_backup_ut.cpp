@@ -236,7 +236,7 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
     };
 }
 
-auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
+auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool prefix) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
             if (indexDesc.GetIndexName() != indexName) {
@@ -245,13 +245,16 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
             if (indexDesc.GetIndexType() != indexType) {
                 continue;
             }
-            if (indexDesc.GetIndexColumns().size() != 1) {
+            if (indexDesc.GetIndexColumns().size() != (prefix ? 2 : 1)) {
                 continue;
             }
             if (indexDesc.GetDataColumns().size() != 0) {
                 continue;
             }
-            if (indexDesc.GetIndexColumns()[0] != "Value") {
+            if (prefix && indexDesc.GetIndexColumns().front() != "Group") {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns().back() != "Value") {
                 continue;
             }
             if (indexType != NYdb::NTable::EIndexType::GlobalVectorKMeansTree) {
@@ -292,6 +295,19 @@ auto CreateHasSerialChecker(i64 nextValue, bool nextUsed) {
             }
         }
         return false;
+    };
+}
+
+auto CreateReadReplicasSettingsChecker(const NYdb::NTable::TReadReplicasSettings::EMode expectedMode, const ui64 expectedCount, const TString& debugHint = "") {
+    return [=](const TTableDescription& tableDescription) {
+        UNIT_ASSERT_C(tableDescription.GetReadReplicasSettings(), debugHint);
+        UNIT_ASSERT_C(tableDescription.GetReadReplicasSettings()->GetMode() == expectedMode, debugHint);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            tableDescription.GetReadReplicasSettings()->GetReadReplicasCount(),
+            expectedCount,
+            debugHint
+        );
+        return true;
     };
 }
 
@@ -446,6 +462,52 @@ void TestIndexTablePartitioningSettingsArePreserved(
     CheckTableDescription(session, indexTablePath, CreateMinPartitionsChecker(minIndexPartitions, DEBUG_HINT));
 }
 
+void TestIndexTableReadReplicasSettingsArePreserved(
+    const char* table, const char* index, NYdb::NTable::TReadReplicasSettings::EMode readReplicasMode, const ui64 readReplicasCount, TSession& session,
+    TBackupFunction&& backup, TRestoreFunction&& restore
+) {
+    const TString indexTablePath = JoinFsPaths(table, index, "indexImplTable");
+    TString readReplicasModeAsString;
+    switch (readReplicasMode) {
+        case NYdb::NTable::TReadReplicasSettings::EMode::PerAz:
+            readReplicasModeAsString = "PER_AZ";
+            break;
+        case NYdb::NTable::TReadReplicasSettings::EMode::AnyAz:
+            readReplicasModeAsString = "ANY_AZ";
+            break;
+        default:
+            UNIT_FAIL(TString::Join("Unsupported readReplicasMode"));
+    }
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL ON (Value)
+            );
+        )",
+        table, index
+    ));
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            ALTER TABLE `%s` ALTER INDEX %s SET (
+                READ_REPLICAS_SETTINGS = "%s:%)" PRIu64 R"("
+            );
+        )", table, index, readReplicasModeAsString.c_str(), readReplicasCount
+    ));
+    CheckTableDescription(session, indexTablePath, CreateReadReplicasSettingsChecker(readReplicasMode, readReplicasCount, DEBUG_HINT));
+
+    backup();
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore();
+    CheckTableDescription(session, indexTablePath, CreateReadReplicasSettingsChecker(readReplicasMode, readReplicasCount, DEBUG_HINT));
+}
+
 void TestTableSplitBoundariesArePreserved(
     const char* table, ui64 partitions, TSession& session, TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
@@ -588,23 +650,37 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
 }
 
 void TestRestoreTableWithIndex(
-    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
+    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, bool prefix, TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     TString query;
     if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        query = Sprintf(R"(CREATE TABLE `%s` (
-            Key Uint32,
-            Value String,
-            PRIMARY KEY (Key),
-            INDEX %s GLOBAL USING vector_kmeans_tree
-                ON (Value)
-                WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
-        );)", table, index);
+        if (prefix) {
+            query = Sprintf(R"(CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Group, Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+            );)", table, index);
+        } else {
+            query = Sprintf(R"(CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+            );)", table, index);
+        }
     } else {
         query = Sprintf(R"(
             CREATE TABLE `%s` (
                 Key Uint32,
+                Group Uint32,
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX %s %s ON (Value)
@@ -623,7 +699,7 @@ void TestRestoreTableWithIndex(
 
     restore();
 
-    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType)));
+    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType), prefix));
 }
 
 void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore) {
@@ -1253,6 +1329,30 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreIndexTableReadReplicasSettings) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        constexpr auto readReplicasMode = NYdb::NTable::TReadReplicasSettings::EMode::PerAz;
+        constexpr ui64 readReplicasCount = 1;
+
+        TestIndexTableReadReplicasSettingsArePreserved(
+            table,
+            index,
+            readReplicasMode,
+            readReplicasCount,
+            session,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup)
+        );
+    }
+
     Y_UNIT_TEST(RestoreTableSplitBoundaries) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
@@ -1488,7 +1588,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
@@ -1505,6 +1605,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             index,
             indexType,
+            prefix,
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
@@ -1831,6 +1932,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
+
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
@@ -2054,6 +2159,24 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST(RestoreIndexTableReadReplicasSettings) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/table";
+        constexpr const char* index = "byValue";
+        constexpr auto readReplicasMode = NYdb::NTable::TReadReplicasSettings::EMode::PerAz;
+        constexpr ui64 readReplicasCount = 1;
+
+        TestIndexTableReadReplicasSettingsArePreserved(
+            table,
+            index,
+            readReplicasMode,
+            readReplicasCount,
+            testEnv.GetTableSession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
+        );
+    }
+
     Y_UNIT_TEST(RestoreTableSplitBoundaries) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
@@ -2218,7 +2341,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
@@ -2227,6 +2350,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexType,
+            prefix,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
@@ -2345,5 +2469,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
+    }
+
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 }

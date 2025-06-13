@@ -24,14 +24,6 @@ using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
 
-void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
-    out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " Codec: " << Codec
-    << " }";
-}
-
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
         << " PartitionId: " << PartitionId
@@ -199,6 +191,17 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         WaitEvent(ev->Sender, ev->Cookie);
     }
 
+    void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
+        auto [path, partitionId, consumerName, offset, settings]  = std::move(ev->Get()->GetArgs());
+
+        Y_UNUSED(path);
+        Y_UNUSED(partitionId);
+        Y_UNUSED(consumerName);
+        Y_UNUSED(settings);
+
+        PartitionEndWatcher.SetCommittedOffset(offset - 1, ev->Sender);
+    }
+
     void WaitEvent(const TActorId& sender, ui64 cookie) {
         auto request = MakeRequest(SelfId());
         auto cb = [request, sender, cookie](const NThreading::TFuture<void>&) {
@@ -217,7 +220,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         }
 
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-            PartitionEndWatcher.Clear();
+            PartitionEndWatcher.Clear(x->GetCommittedOffset());
             x->Confirm();
             Send(ev->Get()->Sender, new TEvYdbProxy::TEvStartTopicReadingSession(*x), 0, ev->Get()->Cookie);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
@@ -271,6 +274,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
+            hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
 
         default:
             return StateBase(ev);
@@ -521,10 +525,6 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
     return new TYdbProxy(endpoint, database, ssl, credentials);
 }
 
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult::TMessage, o, x) {
-    return x.Out(o);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult, o, x) {

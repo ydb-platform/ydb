@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkydb_embedded_ui=globalThis.webpackChunkydb_embedded_ui||[]).push([[7773],{7773:(e,a,s)=>{s.d(a,{default:()=>d});var u=s(47238);const d=s.n(u)()},47238:e=>{function a(e){e.languages.csv={value:/[^\r\n,"]+|"(?:[^"]|"")*"(?!")/,punctuation:/,/}}e.exports=a,a.displayName="csv",a.aliases=[]}}]);

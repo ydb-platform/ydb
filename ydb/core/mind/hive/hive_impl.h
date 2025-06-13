@@ -4,6 +4,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -395,6 +396,8 @@ protected:
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
     NKikimrHive::TEvSeizeTablets MigrationFilter;
+    TBridgeInfo::TPtr BridgeInfo;
+    bool HaveStorageConfig = false;
 
     TActorId ResponsivenessActorID;
     TTabletResponsivenessPinger *ResponsivenessPinger;
@@ -511,6 +514,7 @@ protected:
     void BuildLocalConfig();
     void BuildCurrentConfig();
     void Cleanup();
+    void MaybeLoadEverything();
 
     void Handle(TEvHive::TEvCreateTablet::TPtr&);
     void Handle(TEvHive::TEvAdoptTablet::TPtr&);
@@ -598,6 +602,7 @@ protected:
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
+    void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -724,6 +729,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects);
     void ProcessPendingStopTablet();
     void ProcessPendingResumeTablet();
+    const TBridgeInfo::TPile* GetPile(TBridgePileId pile) const;
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();

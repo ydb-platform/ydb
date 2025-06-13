@@ -97,6 +97,8 @@ public:
         BLOG_D("THive::TTxInitScheme::Complete");
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());
+        ctx.Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
     }
 };
 

@@ -337,6 +337,7 @@ public:
                     }
                 }
                 node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
+                node.BridgePileId = TBridgePileId::FromValue(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }

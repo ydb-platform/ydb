@@ -61,7 +61,6 @@ public:
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, NActors::NLog::PRI_DEBUG);
-        NYdb::NTable::TTableClient tableClient = TestHelper->GetKikimr().GetTableClient();
         Tests::NCommon::TLoggerInit(TestHelper->GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
     }

@@ -28,4 +28,12 @@ void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, 
     }
 }
 
+void TCollector::DoSetCache(std::shared_ptr<TLRUCache<std::tuple<TActorId, TInternalPathId, ui64>, TPortionDataAccessor, TNoopDelete, TMetadataSizeProvider>>) {
+    AFL_VERIFY(false);
+}
+
+void TCollector::DoSetOwner(const TActorId&) {
+    AFL_VERIFY(false);
+}
+
 }   // namespace NKikimr::NOlap::NDataAccessorControl::NInMem

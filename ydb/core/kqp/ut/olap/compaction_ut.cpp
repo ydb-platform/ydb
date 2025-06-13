@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompaction) {
         auto& testHelper = compactionHelper.GetTestHelper();
         auto& olapHelper = compactionHelper.GetOlapHelper();
 
-        olapHelper.CreateTestOlapTableWithoutStore("table1");
+        olapHelper.CreateTestOlapTable("table1");
         testHelper.CreateTier("tier1");
         testHelper.SetTiering("/Root/table1", "/Root/tier1", "timestamp");
         compactionHelper.SetCompaction("/Root/table1", 3000000);
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompaction) {
         compactionHelper.WaitTierData("/Root/table1");
         compactionHelper.ValidatePortionTierSize("/Root/table1", 0.5 * 3000000, 2 * 3000000);
 
-        olapHelper.CreateTestOlapTableWithoutStore("table2");
+        olapHelper.CreateTestOlapTable("table2");
         testHelper.CreateTier("tier2");
         testHelper.SetTiering("/Root/table2", "/Root/tier2", "timestamp");
         compactionHelper.SetCompaction("/Root/table2", 1000000);

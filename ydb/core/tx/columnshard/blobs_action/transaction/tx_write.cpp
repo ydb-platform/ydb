@@ -93,7 +93,7 @@ bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
-            AddTableAccessStatsToTxStats(ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
+            AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
                                          aggr->GetRows(), aggr->GetSize(), operation->GetModificationType());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }

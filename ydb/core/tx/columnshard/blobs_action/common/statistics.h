@@ -6,7 +6,7 @@
 
 namespace NKikimr::NColumnShard {
 
-void AddTableAccessStatsToTxStats(NKikimrQueryStats::TTxStats* stats, ui64 pathId, ui64 rows, ui64 bytes,
+void AddTableAccessStatsToTxStats(NKikimrQueryStats::TTxStats& stats, ui64 pathId, ui64 rows, ui64 bytes,
                                   NEvWrite::EModificationType modificationType);
 
 } // namespace NKikimr::NColumnShard

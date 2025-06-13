@@ -78,7 +78,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
-            AddTableAccessStatsToTxStats(ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
+            AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
                                          writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }

@@ -1,6 +1,8 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
 #include <util/digest/numeric.h>
@@ -54,6 +56,16 @@ namespace {
         {
             if (Name() != name) {
                 return false;
+            }
+
+            // FIXME: The condition below is required to untie the
+            // Gordian knot with the upgrade, when two MiniKQL
+            // runtimes with different versions are being used.
+            // See YQL-19967 for more info.
+            if (MKQL_RUNTIME_VERSION < 51U && typesOnly) {
+                builder.SimpleSignature<TResult(TAutoMap<char*>)>();
+                builder.IsStrict();
+                return true;
             }
 
             auto args = builder.Args();

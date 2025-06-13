@@ -24,11 +24,8 @@ TConclusionStatus TReadMetadata::Init(
             if (!i->IsCommitted()) {
                 AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
                 auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
-                if (owner->HasLongTxWrites(written->GetInsertWriteId())) {
-                } else {
-                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(written->GetInsertWriteId());
-                    AddWriteIdToCheck(written->GetInsertWriteId(), op->GetLockId());
-                }
+                auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(written->GetInsertWriteId());
+                AddWriteIdToCheck(written->GetInsertWriteId(), op->GetLockId());
             }
         }
     }

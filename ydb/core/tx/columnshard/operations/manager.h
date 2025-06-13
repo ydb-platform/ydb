@@ -200,7 +200,7 @@ public:
     }
 
     TWriteOperation::TPtr RegisterOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
-        const NEvWrite::EModificationType mType, const bool portionsWriting);
+        const NEvWrite::EModificationType mType);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {
             return false;

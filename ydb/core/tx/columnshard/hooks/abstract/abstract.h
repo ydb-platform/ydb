@@ -65,7 +65,6 @@ public:
 class ICSController {
 public:
     enum class EBackground {
-        Indexation,
         Compaction,
         TTL,
         Cleanup,

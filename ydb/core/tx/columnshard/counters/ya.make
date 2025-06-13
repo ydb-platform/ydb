@@ -9,7 +9,6 @@ SRCS(
     common_data.cpp
     engine_logs.cpp
     indexation.cpp
-    insert_table.cpp
     req_tracer.cpp
     scan.cpp
     splitter.cpp

@@ -17,9 +17,6 @@ namespace NKikimr::NOlap {
 
 class TColumnChunkLoadContextV2;
 class TIndexChunkLoadContext;
-class TInsertedData;
-class TCommittedData;
-class TInsertTableAccessor;
 class TColumnRecord;
 class TIndexChunk;
 struct TGranuleRecord;
@@ -38,15 +35,7 @@ public:
         return *result;
     }
 
-    virtual void Insert(const TInsertedData& data) = 0;
-    virtual void Commit(const TCommittedData& data) = 0;
-    virtual void Abort(const TInsertedData& data) = 0;
-    virtual void EraseInserted(const TInsertedData& data) = 0;
-    virtual void EraseCommitted(const TCommittedData& data) = 0;
-    virtual void EraseAborted(const TInsertedData& data) = 0;
     virtual void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) = 0;
-
-    virtual bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) = 0;
 
     virtual void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) = 0;
     virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
@@ -74,15 +63,6 @@ public:
         : Database(db)
         , DsGroupSelector(dsGroupSelector)
     {}
-
-    void Insert(const TInsertedData& data) override;
-    void Commit(const TCommittedData& data) override;
-    void Abort(const TInsertedData& data) override;
-    void EraseInserted(const TInsertedData& data) override;
-    void EraseCommitted(const TCommittedData& data) override;
-    void EraseAborted(const TInsertedData& data) override;
-
-    bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) override;
 
     void WritePortion(const NOlap::TPortionInfo& portion) override;
     void ErasePortion(const NOlap::TPortionInfo& portion) override;

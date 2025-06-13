@@ -60,7 +60,6 @@ private:
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
-    bool WritePortions = false;
     const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>(1);
 
 public:
@@ -71,8 +70,7 @@ public:
     }
 
     TWriteOperation(const TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
-        const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
-        const bool writePortions);
+        const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType);
 
     void Start(
         TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context);

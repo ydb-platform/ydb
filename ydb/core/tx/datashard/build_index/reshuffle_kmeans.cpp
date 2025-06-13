@@ -81,9 +81,6 @@ protected:
 
     TUploadStatus UploadStatus;
 
-    ui64 UploadRows = 0;
-    ui64 UploadBytes = 0;
-
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse> Response;
 

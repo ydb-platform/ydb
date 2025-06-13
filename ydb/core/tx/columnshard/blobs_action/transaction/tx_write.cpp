@@ -1,26 +1,10 @@
 #include "tx_write.h"
 
+#include <ydb/core/tx/columnshard/blobs_action/common/statistics.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
-#include <ydb/core/protos/query_stats.pb.h>
 
 namespace NKikimr::NColumnShard {
-
-namespace {
-
-void FillTxUpdateStats(NKikimrQueryStats::TTxStats* stats, ui64 pathId, ui64 rows, ui64 bytes,
-                       NEvWrite::EModificationType modificationType)
-{
-    auto tableStats = stats->AddTableAccessStats();
-    tableStats->MutableTableInfo()->SetPathId(pathId);
-    auto row = modificationType == NEvWrite::EModificationType::Delete ? tableStats->MutableEraseRow()
-                                                                       : tableStats->MutableUpdateRow();
-    row->SetCount(rows);
-    row->SetRows(rows);
-    row->SetBytes(bytes);
-}
-
-} // namespace
 
 bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId) {
     auto userData = batch.BuildInsertionUserData(*Self);
@@ -109,8 +93,8 @@ bool TTxWrite::DoExecute(TTransactionContext& txc, const TActorContext&) {
             lock.SetCounter(info.GetInternalGenerationCounter());
             writeMeta.GetPathId().SchemeShardLocalPathId.ToProto(lock);
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
-            FillTxUpdateStats(ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
-                              aggr->GetRows(), aggr->GetSize(), operation->GetModificationType());
+            AddTableAccessStatsToTxStats(ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
+                                         aggr->GetRows(), aggr->GetSize(), operation->GetModificationType());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
     }

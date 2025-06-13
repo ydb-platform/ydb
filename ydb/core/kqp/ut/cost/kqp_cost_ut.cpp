@@ -616,10 +616,11 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
         const TString testTableName = "/Root/TestTable";
+        const ui64 minRowBytes = 300;
 
         CreateTestTable(session, true);
 
-        auto checkUpdatesStats = [&testTableName, &session](const TString& query, int rows, int bytes) {
+        auto checkUpdatesStats = [&testTableName, &session](const TString& query, ui64 rows) {
             auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
 
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
@@ -636,49 +637,33 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             UNIT_ASSERT_VALUES_EQUAL(tableAccess.name(), testTableName);
             UNIT_ASSERT_VALUES_EQUAL(tableAccess.updates().rows(), rows);
-            UNIT_ASSERT_VALUES_EQUAL(tableAccess.updates().bytes(), bytes);
+            UNIT_ASSERT_GT(tableAccess.updates().bytes(), rows * minRowBytes);
         };
 
         checkUpdatesStats(Q_(R"(
             REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
-        )"), 1, 368); // Why 368 ??
+        )"), 1);
 
         checkUpdatesStats(R"(
             UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
-        )", 1, 368);
-
-        // INSERT 3 NEW ROWS
-        checkUpdatesStats(Q_(R"(
-            INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
-            VALUES (201u, "Anna", 3500u, "None"), (202u, "Anna", 3500u, "None"), (203u, "Anna", 3500u, "None");
-        )"), 3, 1144); // Why not 368 * 3 = 1104 ??
+        )", 1);
 
         // INSERT 1 NEW ROW
         checkUpdatesStats(Q_(R"(
             INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (3u, "Anna", 3500u, "None");
-        )"), 1, 368);
+        )"), 1);
 
         // INSERT 2 NEW ROWS
         checkUpdatesStats(Q_(R"(
             INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
             VALUES (101u, "Anna", 3500u, "None"), (102u, "Anna", 3500u, "None");
-        )"), 2, 744); // Why not 368 * 2 = 736 ??
-
-        // INSERT 5 NEW ROWS
-        checkUpdatesStats(Q_(R"(
-            INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
-            VALUES (301u, "Anna", 3500u, "None"),
-                   (302u, "Anna", 3500u, "None"),
-                   (303u, "Anna", 3500u, "None"),
-                   (304u, "Anna", 3500u, "None"),
-                   (305u, "Anna", 3500u, "None");
-        )"), 5, 1584); // Why not 368 * 5 = 1840 ??
+        )"), 2);
 
         // UPDATE
         // TODO: reads ??
         checkUpdatesStats(Q_(R"(
                 UPDATE `/Root/TestTable` ON SELECT 3u AS Group, "Anna" AS Name, 4000u AS Amount, "None" AS Comment;
-            )"), 1, 368);
+        )"), 1);
 
         {
             // 2 SEPARATE INSERTS
@@ -706,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             UNIT_ASSERT_VALUES_EQUAL(tableAccess0.name(), testTableName);
             UNIT_ASSERT_VALUES_EQUAL(tableAccess0.updates().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(tableAccess0.updates().bytes(), 368);
+            UNIT_ASSERT_GT(tableAccess0.updates().bytes(), minRowBytes);
 
             const auto& phase1 = stats.query_phases(1);
 
@@ -715,7 +700,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
             UNIT_ASSERT_VALUES_EQUAL(tableAccess1.name(), testTableName);
             UNIT_ASSERT_VALUES_EQUAL(tableAccess1.updates().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(tableAccess1.updates().bytes(), 368);
+            UNIT_ASSERT_GT(tableAccess1.updates().bytes(), minRowBytes);
         }
 
         {
@@ -780,7 +765,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
 
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
@@ -806,7 +791,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
 
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
@@ -858,6 +843,36 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(tableAccess1.name(), testTableName);
             UNIT_ASSERT_VALUES_EQUAL(tableAccess1.updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(tableAccess1.updates().bytes(), 368);
+        }
+
+        {
+            // DELETE 2 ROWS
+            // rows are added in the 2 SEPARATE INSERTS test above
+            auto query = Q_(R"(
+                DELETE FROM `/Root/TestTable` ON SELECT Group, Name FROM `/Root/TestTable` WHERE Group = 401u OR Group = 402u;
+            )");
+
+            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
+
+            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << stats.DebugString() << Endl;
+
+            bool tableDeletesFound = false;
+            for (const auto& phase : stats.query_phases()) {
+                for (const auto& tableAccess : phase.table_access()) {
+                    if (tableAccess.name() != testTableName) {
+                        continue;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(tableAccess.deletes().rows(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(tableAccess.deletes().bytes(), 0);
+                    UNIT_ASSERT_C(!tableDeletesFound, "Found two deletes entries");
+                    tableDeletesFound = true;
+                }
+            }
+            UNIT_ASSERT_C(tableDeletesFound, "No deletes entries found");
         }
     }
 

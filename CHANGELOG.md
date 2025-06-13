@@ -25,4 +25,4 @@
 * 18378:[Fixed](https://github.com/ydb-platform/ydb/pull/18378) [a bug](https://github.com/ydb-platform/ydb/issues/16000) for handling per-dc followers created on older YDB versions. ([vporyadke](https://github.com/vporyadke))
 * 17629:Fixed early object deletion in wide combiner. [#17629](https://github.com/ydb-platform/ydb/pull/17629) ([Filitov Mikhail](https://github.com/lll-phill-lll))
 * 18077:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 19057:fixed "Failed to set up listener on port 9092 errno# 98 (Address already in use)" [#19057](https://github.com/ydb-platform/ydb/pull/19057) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 19057:Fixed "Failed to set up listener on port 9092 errno# 98 (Address already in use)" [#19057](https://github.com/ydb-platform/ydb/pull/19057) ([Nikolay Shestakov](https://github.com/nshestakov))

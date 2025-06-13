@@ -1183,6 +1183,8 @@ message TTabletTxInfo {
         optional TWriteId WriteId = 1;
         optional uint32 OriginalPartitionId = 2;
         optional uint32 InternalPartitionId = 3;
+        optional bool KafkaTransaction = 4 [default = false];
+        optional uint64 CreatedAt = 5;
     };
 
     optional uint64 PlanStep = 2;

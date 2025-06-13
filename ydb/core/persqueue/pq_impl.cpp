@@ -925,6 +925,11 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
         if (writeId.IsTopicApiTransaction()) {
             SubscribeWriteId(writeId, ctx);
         }
+
+        if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
+            writeInfo.KafkaTransaction = true;
+            writeInfo.CreatedAt = TInstant::MilliSeconds(txWrite.GetCreatedAt());
+        }
     }
 
     NewSupportivePartitions.clear();
@@ -2730,6 +2735,11 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 
         if (writeId.IsTopicApiTransaction() && writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
             SubscribeWriteId(writeId, ctx);
+        }
+
+        if (writeId.KafkaApiTransaction) {
+            writeInfo.KafkaTransaction = true;
+            writeInfo.CreatedAt = TInstant::Now();
         }
 
         TryWriteTxs(ctx);

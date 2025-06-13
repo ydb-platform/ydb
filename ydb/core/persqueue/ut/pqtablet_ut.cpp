@@ -230,6 +230,8 @@ protected:
     void SendWriteRequest(const TWriteRequestParams& params);
     void WaitWriteResponse(const TWriteResponseMatcher& matcher);
 
+    void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId);
+
     std::unique_ptr<TEvPersQueue::TEvRequest> MakeGetOwnershipRequest(const TGetOwnershipRequestParams& params,
                                                                       const TActorId& pipe) const;
 
@@ -246,6 +248,10 @@ protected:
     void SendSaveTxState(TAutoPtr<IEventHandle>& event);
 
     void WaitForTheTransactionToBeDeleted(ui64 txId);
+    
+    TVector<TString> WaitForExactSupportivePartitionsCount(ui32 expectedCount);
+    TVector<TString> GetSupportivePartitionsKeysFromKV();
+    NKikimrPQ::TTabletTxInfo GetTxWritesFromKV();
 
     //
     // TODO(abcdef): для тестирования повторных вызовов нужны примитивы Send+Wait
@@ -734,6 +740,20 @@ void TPQTabletFixture::SendWriteRequest(const TWriteRequestParams& params)
                event.Release());
 }
 
+void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId) {
+    auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+    auto* request = event->Record.MutablePartitionRequest();
+    request->SetTopic("/topic");
+    request->SetPartition(0);
+    request->SetCookie(123);
+    auto* writeId = request->MutableWriteId();
+    writeId->SetKafkaTransaction(true);
+    auto* requestProducerInstanceId = writeId->MutableKafkaProducerInstanceId();
+    requestProducerInstanceId->SetId(producerInstanceId.Id);
+    requestProducerInstanceId->SetEpoch(producerInstanceId.Epoch);
+    SendToPipe(Ctx->Edge, event.Release());
+}
+
 void TPQTabletFixture::WaitWriteResponse(const TWriteResponseMatcher& matcher)
 {
     bool found = false;
@@ -1115,6 +1135,79 @@ void TPQTabletFixture::WaitForTheTransactionToBeDeleted(ui64 txId)
     }
 
     UNIT_FAIL("Too many attempts");
+}
+
+TVector<TString> TPQTabletFixture::WaitForExactSupportivePartitionsCount(ui32 expectedCount) {
+    for (size_t i = 0; i < 200; ++i) {
+        auto result = GetSupportivePartitionsKeysFromKV();
+
+        if (result.empty() && expectedCount == 0) {
+            return result;
+        } else if (expectedCount == result.size()) {
+            return result;
+        } else {
+            Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(300));
+            continue;
+        }
+    }
+
+    UNIT_FAIL("Too many attempts");
+    return {};
+}
+
+TVector<TString> TPQTabletFixture::GetSupportivePartitionsKeysFromKV() {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto cmd = request->Record.AddCmdReadRange();
+    auto range = cmd->MutableRange();
+    range->SetFrom("D");
+    range->SetIncludeFrom(true);
+    range->SetTo("D");
+    range->SetIncludeTo(true);
+    cmd->SetIncludeData(false);
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    TVector<TString> supportivePartitionsKeys;
+    const auto& result = response->Record.GetReadRangeResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        for (ui32 i = 0; i < result.PairSize(); i++) {
+            supportivePartitionsKeys.emplace_back(result.GetPair(i).GetKey().c_str());
+        }
+        return supportivePartitionsKeys;
+    } else if (result.GetStatus() == NKikimrProto::NODATA) {
+        return supportivePartitionsKeys;
+    } else {
+        UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
+        return {};
+    }
+}
+
+NKikimrPQ::TTabletTxInfo TPQTabletFixture::GetTxWritesFromKV() {
+    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(12345);
+    auto* cmd = request->Record.AddCmdRead();
+    cmd->SetKey("_txinfo");
+    SendToPipe(Ctx->Edge, request.release());
+
+    auto response = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    const auto& result = response->Record.GetReadResult(0);
+    if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+        NKikimrPQ::TTabletTxInfo info;
+        if (!info.ParseFromString(result.GetValue())) {
+            UNIT_FAIL("tx writes read error");
+        }
+        return info;
+    } else if (result.GetStatus() == NKikimrProto::NODATA) {
+        return {};
+    } else {
+        UNIT_FAIL("Unexpected status from KV tablet" << result.GetStatus());
+        return {};
+    }
 }
 
 Y_UNIT_TEST_F(Parallel_Transactions_1, TPQTabletFixture)
@@ -2146,6 +2239,40 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
 
     UNIT_ASSERT_EQUAL(preparedCount, 1000);
     UNIT_ASSERT_EQUAL(overloadedCount, 2);
+}
+
+Y_UNIT_TEST_F(KafkaTransactionSupportivePartitionsShouldBeDeletedAfterTimeout, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    // this will create a supportive partition for a kafka transaction
+    SendKafkaTxnWriteRequest({1, 0});
+
+    WaitForExactSupportivePartitionsCount(1);
+
+    // increment time till after timeout
+    TDuration kafkaTxnTimeout = TDuration::MilliSeconds(
+        Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS
+    );
+    Ctx->Runtime->AdvanceCurrentTime(kafkaTxnTimeout);
+    // возможно тут лучше emulate sleep
+
+    // wait till supportive partition for this kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(0);
+    // validate that TxWrite for this transaction is deleted
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 0);
+}
+
+Y_UNIT_TEST_F(NonKafkaTransactionSupportivePartitionsShouldNotBeDeletedAfterTimeout, TPQTabletFixture)
+{
+    UNIT_FAIL("Unimplemented");
+}
+
+Y_UNIT_TEST_F(InKafkaTxnOnlySupportivePartitionsThatExceededTimeoutShouldBeDeleted, TPQTabletFixture)
+{
+    UNIT_FAIL("Unimplemented");
 }
 
 }

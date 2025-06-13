@@ -205,6 +205,8 @@ private:
         TMaybe<ui64> TxId;
         NKikimrLongTxService::TEvLockStatus::EStatus LongTxSubscriptionStatus = NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED;
         bool Deleting = false;
+        bool KafkaTransaction = false;
+        TInstant CreatedAt;
     };
 
     THashMap<TWriteId, TTxWriteInfo> TxWrites;

@@ -144,9 +144,20 @@ public:
     */
     TAsyncBulkUpsertResult BulkUpsertUnretryable(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
 
+    /**
+    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model,
+    * therefore, it is not retryable with the same `rows` object.
+    *
+    * The `Ydb::Value` is expected to be arena-allocated.
+    *
+    * See: https://protobuf.dev/reference/cpp/arenas
+    *
+    * @param arena The arena to allocate the `Ydb::Value` in.
+    * @param settings The settings for the bulk upsert operation.
+    */
     TAsyncBulkUpsertResult BulkUpsertUnretryableArenaAllocated(
         const std::string& table,
-        TArenaAllocatedValue&& rows,
+        TValue&& rows,
         google::protobuf::Arena* arena,
         const TBulkUpsertSettings& settings
     );

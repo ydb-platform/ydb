@@ -1269,7 +1269,7 @@ public:
 
     TAsyncBulkUpsertResult BulkUpsertUnretryableArenaAllocated(
         const std::string& table,
-        TArenaAllocatedValue&& rows,
+        TValue&& rows,
         google::protobuf::Arena* arena,
         const TBulkUpsertSettings& settings
     );

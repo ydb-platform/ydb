@@ -1050,32 +1050,28 @@ class TValue::TImpl {
 public:
     TImpl(const TType& type, const Ydb::Value& valueProto)
         : Type_(type)
-        , ProtoValue_(valueProto) {}
+        , ProtoValue_(valueProto)
+        , ArenaAllocatedValueProto_(nullptr) {}
 
     TImpl(const TType& type, Ydb::Value&& valueProto)
         : Type_(type)
-        , ProtoValue_(std::move(valueProto)) {}
+        , ProtoValue_(std::move(valueProto))
+        , ArenaAllocatedValueProto_(nullptr) {}
+
+    /**
+    * Lifetime of the arena, and hence the `Ydb::Value`, is expected to be managed by the caller.
+    * The `Ydb::Value` is expected to be arena-allocated.
+    *
+    * See: https://protobuf.dev/reference/cpp/arenas
+    */
+    TImpl(const TType& type, Ydb::Value* arenaAllocatedValueProto)
+        : Type_(type)
+        , ProtoValue_{}
+        , ArenaAllocatedValueProto_(arenaAllocatedValueProto) {}
 
     TType Type_;
     Ydb::Value ProtoValue_;
-};
-
-/**
-* Lifetime of the arena, and hence the `Ydb::Value`, is expected to be managed by the caller.
-*/
-class TArenaAllocatedValue::TImpl {
-public:
-    TImpl(const TType& type, Ydb::Value* value)
-        : Type_(type)
-        , ArenaAllocatedProtoValue_(value) {
-        // assert that the value is indeed arena-allocated
-        Y_ASSERT(ArenaAllocatedProtoValue_ != nullptr);
-        Y_ASSERT(ArenaAllocatedProtoValue_->GetArena() != nullptr);
-    }
-
-    // TODO: make Ydb::Type also arena-allocated?
-    TType Type_;
-    Ydb::Value* ArenaAllocatedProtoValue_;
+    Ydb::Value* ArenaAllocatedValueProto_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1085,6 +1081,9 @@ TValue::TValue(const TType& type, const Ydb::Value& valueProto)
 
 TValue::TValue(const TType& type, Ydb::Value&& valueProto)
     : Impl_(new TImpl(type, std::move(valueProto))) {}
+
+TValue::TValue(const TType& type, Ydb::Value* arenaAllocatedValueProto)
+    : Impl_(new TImpl(type, arenaAllocatedValueProto)) {}
 
 const TType& TValue::GetType() const {
     return Impl_->Type_;
@@ -1104,30 +1103,6 @@ Ydb::Value& TValue::GetProto() {
 
 Ydb::Value&& TValue::ExtractProto() && {
     return std::move(Impl_->ProtoValue_);
-}
-
-
-TArenaAllocatedValue::TArenaAllocatedValue(const TType& type, Ydb::Value* value)
-    : Impl_(new TImpl(type, value)) {}
-
-const TType& TArenaAllocatedValue::GetType() const {
-    return Impl_->Type_;
-}
-
-TType& TArenaAllocatedValue::GetType() {
-    return Impl_->Type_;
-}
-
-const Ydb::Value* TArenaAllocatedValue::GetProto() const {
-    return Impl_->ArenaAllocatedProtoValue_;
-}
-
-Ydb::Value* TArenaAllocatedValue::GetProto() {
-    return Impl_->ArenaAllocatedProtoValue_;
-}
-
-Ydb::Value&& TArenaAllocatedValue::ExtractProto() && {
-    return std::move(*Impl_->ArenaAllocatedProtoValue_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

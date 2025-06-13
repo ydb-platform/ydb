@@ -98,7 +98,7 @@ void TPrintErrorTable(TStringStream& html, THashMap<TString, std::queue<T>> erro
                     << "<td>" << element.Time.ToString() << "</td>"
                     << "<td style=\"max-width:420px;\">" << TEscapeHtml(element.Reason) << "</td>"
                     << "</tr>";
-                errors.pop();
+                queue.pop();
             }
         }
 

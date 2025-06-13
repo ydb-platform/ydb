@@ -15,14 +15,14 @@ private:
     const NActors::TActorId Parent;
     std::shared_ptr<TLocalManager> Manager;
 
-    std::shared_ptr<IAccessorCallback> AccessorsCallback;
+    std::shared_ptr<Foo> AccessorsCallback;
 
     void StartStopping() {
         PassAway();
     }
 
     void Handle(TEvRegisterController::TPtr& ev) {
-        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->IsUpdate());
+        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->GetIsUpdateFlag());
     }
     void Handle(TEvUnregisterController::TPtr& ev) {
         Manager->UnregisterController(ev->Get()->GetPathId());
@@ -36,7 +36,10 @@ private:
         Manager->RemovePortion(ev->Get()->GetPortion());
     }
     void Handle(TEvAskServiceDataAccessors::TPtr& ev);
-    
+    void Handle(TEvClearCache::TPtr&) {
+        Manager->ClearCache();
+    }
+
 public:
     TActor(const ui64 tabletId, const TActorId& parent)
         : TabletId(tabletId)
@@ -56,6 +59,7 @@ public:
             hFunc(TEvAskServiceDataAccessors, Handle);
             hFunc(TEvRemovePortion, Handle);
             hFunc(TEvAddPortion, Handle);
+            hFunc(TEvClearCache, Handle);
             default:
                 AFL_VERIFY(false);
         }

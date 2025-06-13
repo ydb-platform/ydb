@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     actor.cpp
+    node_actor.cpp
     events.cpp
     request.cpp
     manager.cpp

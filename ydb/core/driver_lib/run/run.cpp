@@ -1683,6 +1683,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, ProcessMemoryInfoProvider));
 
+    if (serviceMask.EnableSharedMetadaCache) {
+        sil->AddServiceInitializer(new TSharedMetadaCacheInitializer(runConfig));
+    }
+
 #if defined(ENABLE_MEMORY_TRACKING)
     if (serviceMask.EnableMemoryTracker) {
         sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));

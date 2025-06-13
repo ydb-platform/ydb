@@ -4,6 +4,7 @@
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
 #include "data_accessor/actor.h"
+#include "data_accessor/node_actor.h"
 #include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
@@ -36,7 +37,15 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationInsertionWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
-    ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
+    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataCache()){
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("IURII", "ENABLED");
+        // DataAccessorsManager->ClearCache((NOlap::TTabletId)TabletID());
+        ctx.Send(DataAccessorsControlActorId, new NOlap::NDataAccessorControl::TEvClearCache(SelfId()));
+    }
+    else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("IURII", "DISABLED");
+        ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
+    }
     if (!!OperationsManager) {
         OperationsManager->StopWriting();
     }
@@ -125,7 +134,14 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
-    DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    // Change actor here
+    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataCache()){
+        DataAccessorsControlActorId = NOlap::NDataAccessorControl::TNodeActor::MakeActorId(ctx.SelfID.NodeId());
+    } else {
+        DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("IURII", "123")("selfID", SelfId())("DATA", DataAccessorsControlActorId);
+
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();

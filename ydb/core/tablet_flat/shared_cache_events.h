@@ -55,9 +55,11 @@ namespace NKikimr::NSharedCache {
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        bool InMemory;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, bool inMemory)
             : PageCollection(std::move(pageCollection))
+            , InMemory(inMemory)
         {
         }
     };
@@ -68,9 +70,11 @@ namespace NKikimr::NSharedCache {
     struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TIntrusivePtr<TPage>> Pages;
+        bool InMemory;
 
-        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, bool inMemory)
             : PageCollection(std::move(pageCollection))
+            , InMemory(inMemory)
         {
         }
     };

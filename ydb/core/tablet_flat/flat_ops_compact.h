@@ -345,7 +345,7 @@ namespace NTabletFlatExecutor {
                 TVector<TIntrusivePtr<NTable::TLoader::TCache>> pageCollections;
                 for (auto& pageCollection : result.PageCollections) {
                     auto cache = MakeIntrusive<NTable::TLoader::TCache>(pageCollection.PageCollection);
-                    auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
+                    auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection, false);
                     auto gcList = SharedCachePages->GCList;
                     auto addPage = [&saveCompactedPages, &pageCollection, &cache, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
                         auto pageId = loadedPage.PageId;

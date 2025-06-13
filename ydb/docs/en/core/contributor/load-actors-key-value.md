@@ -2,8 +2,6 @@
 
 Loads a key-value tablet.
 
-{% include notitle [addition](../_includes/addition.md) %}
-
 ## Actor configuration {#options}
 
 ```proto

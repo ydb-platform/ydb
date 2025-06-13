@@ -1,8 +1,10 @@
 # Connecting the CLI to and authenticating with a database
 
+<!-- markdownlint-disable blanks-around-fences -->
+
 Most of the {{ ydb-short-name }} CLI commands relate to operations on a {{ ydb-short-name }} database and require establishing a connection to it to be executed.
 
-The {{ ydb-short-name }} CLI uses the following sources to determine the database to connect to and the [authentication mode](../../../concepts/auth.md) to use with it (listed in descending priority):
+The {{ ydb-short-name }} CLI uses the following sources to determine the database to connect to and the [authentication mode](../../../security/authentication.md) to use with it (listed in descending priority):
 
 1. The command line.
 2. The profile set in the `--profile` command-line option.

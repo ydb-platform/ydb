@@ -37,3 +37,6 @@ links:
   - title: PostgreSQL compatibility
     description: Integrate with PostgreSQL ecosystem
     href: postgresql/intro/
+  - title: Troubleshooting
+    description: Troubleshooting issues related to YDB databases and applications
+    href: troubleshooting/

@@ -5,11 +5,10 @@
 Общий вид команды:
 
 ```bash
-{{ ydb-cli }} [global options...] table ttl reset [options...] <table path>
+{{ ydb-cli }} [global options...] table ttl reset <table path>
 ```
 
 * `global options` — [глобальные параметры](commands/global-options.md).
-* `options` — [параметры подкоманды](#options).
 * `table path` — путь таблицы.
 
 Посмотрите описание команды выключения TTL:

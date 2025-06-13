@@ -1,4 +1,4 @@
-### Распределенные транзакции в YDB {#2019-conf-hydra}
+## Распределенные транзакции в YDB {#2019-conf-hydra}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

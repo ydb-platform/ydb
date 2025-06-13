@@ -1,0 +1,25 @@
+items:
+  - name: Инфраструктура
+    include:
+      mode: link
+      path: infrastructure/toc_p.yaml
+  - name: Нехватка ресурсов
+    include:
+      mode: link
+      path: hardware/toc_p.yaml
+  - name: Операционная система
+    include:
+      mode: link
+      path: system/toc_p.yaml
+  - name: Конфигурация YDB
+    include:
+      mode: link
+      path: ydb/toc_p.yaml
+  - name: Схемы таблиц
+    include:
+      mode: link
+      path: schemas/toc_p.yaml
+  - name: Клиентские приложения
+    include:
+      mode: link
+      path: queries/toc_p.yaml

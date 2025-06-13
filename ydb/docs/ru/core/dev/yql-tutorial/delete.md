@@ -1,10 +1,18 @@
 # Удаление данных
 
-Удалите данные из таблицы с помощью оператора [DELETE](../../yql/reference/syntax/delete.md).
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../_includes/not_allow_for_olap_text.md) %}
+
+Вместо `DELETE FROM` для удаления данных из колоночных таблиц можно воспользоваться механизмом удаления строк по времени — [TTL](../../concepts/ttl.md). TTL можно задать при [создании](../../yql/reference/syntax/create_table/index.md) строковой или колоночной таблицы (`CREATE TABLE`) или при их [изменении](../../yql/reference/syntax/alter_table/index.md) (`ALTER TABLE`).
+
+{% endnote %}
+
+Удалите данные из строковой таблицы с помощью оператора [DELETE](../../yql/reference/syntax/delete.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 
-```sql
+```yql
 DELETE
 FROM episodes
 WHERE
@@ -12,8 +20,6 @@ WHERE
     AND season_id = 5
     AND episode_id = 12
 ;
-
-COMMIT;
 
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 2 AND season_id = 5;
@@ -35,10 +41,6 @@ SELECT * FROM episodes WHERE series_id = 1 AND season_id = 1;
 DELETE FROM episodes ON
 SELECT * FROM $to_delete;
 
-COMMIT;
-
 -- Посмотреть результат:
 SELECT * FROM episodes WHERE series_id = 1 AND season_id = 1;
-
-COMMIT;
 ```

@@ -1,0 +1,9 @@
+items:
+    - name: Процессор
+      href: cpu-bottleneck.md
+    - name: Оперативная память
+      href: insufficient-memory.md
+    - name: Пропускная способность
+      href: io-bandwidth.md
+    - name: Дисковое пространство
+      href: disk-space.md

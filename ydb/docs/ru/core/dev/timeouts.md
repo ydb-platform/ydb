@@ -85,12 +85,12 @@
   )
 
   func executeInTx(ctx context.Context, s table.Session, query string) {
-	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*300) // client and by default operation timeout
-	defer cancel()
-	ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout override
-	ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*300) // cancel after timeout
-	tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
-	_, res, err := s.Execute(ctx, tx, query, table.NewQueryParameters())
+  ctx, cancel := context.WithTimeout(ctx, time.Millisecond*300) // client and by default operation timeout
+  defer cancel()
+  ctx = ydb.WithOperationTimeout(ctx, time.Millisecond*400)     // operation timeout override
+  ctx = ydb.WithOperationCancelAfter(ctx, time.Millisecond*300) // cancel after timeout
+  tx := table.TxControl(table.BeginTx(table.WithSerializableReadWrite()), table.CommitTx())
+  _, res, err := s.Execute(ctx, tx, query, table.NewQueryParameters())
   }
   ```
 

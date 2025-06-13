@@ -1,11 +1,12 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <util/string/printf.h>
 
 #include <library/cpp/testing/hook/hook.h>
+
+#include <aws/core/Aws.h>
 
 using namespace NSchemeShardUT_Private;
 using namespace NSchemeShardUT_Private::NExportReboots;
@@ -13,12 +14,14 @@ using namespace NKikimr::NWrappers::NTestHelpers;
 
 namespace {
 
+Aws::SDKOptions Options;
+
 Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-    NKikimr::InitAwsAPI();
+    Aws::InitAPI(Options);
 }
 
 Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-    NKikimr::ShutdownAwsAPI();
+    Aws::ShutdownAPI(Options);
 }
 
 }

@@ -1,8 +1,3 @@
----
-title: "Overview of tools for monitoring and determining system health in {{ ydb-full-name }}"
-description: "The article will tell you about the tools for monitoring and determining {{ ydb-full-name }} system health."
----
-
 # Using the embedded web UI
 
 {{ ydb-short-name }} provides tools for monitoring and determining system health:

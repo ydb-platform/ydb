@@ -357,7 +357,7 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
                 )
 
         def check_total_count(expected):
-            return check_counter({"sensor": "queue.total_count"}, expected)
+            return check_counter({"name": "queue.total_count"}, expected)
 
         def check_messages_sent(q_name, expected):
             return check_counter({"name": "queue.messages.sent_count_per_second", "queue": q_name}, expected)

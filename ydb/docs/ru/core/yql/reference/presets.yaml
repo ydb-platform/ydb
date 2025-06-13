@@ -1,0 +1,51 @@
+default:
+  oss: true
+  ya_make: true
+
+rtmr:
+  backend_name: RTMR
+  backend_name_lower: rtmr
+  rtmr: true
+  example_cluster: rtmr_yql_alpha
+  feature_not_null: true 
+  feature_column_container_type: true
+  feature_mapreduce: true
+  process_command: PROCESS STREAM
+  select_command: SELECT STREAM
+  feature_temp_table: true
+
+ydb:
+  backend_name: YDB
+  backend_name_lower: ydb
+  ydb: true
+  example_cluster: ydbtest
+  feature_secondary_index: true 
+  feature_changefeed: true 
+  feature_replace: true
+  feature_upsert: true
+  feature_join: true
+  feature_map_tables: true
+  feature_group_by_rollup_cube: true
+  feature_window_functions: true
+  feature_bulk_tables: false
+
+yt:
+  backend_name: YT
+  backend_name_lower: yt
+  yt: true
+  example_cluster: hahn
+  feature_mapreduce: true
+  process_command: PROCESS
+  reduce_command: REDUCE
+  feature_column_container_type: true
+  feature_subquery: true
+  feature_upsert: true
+  feature_join: true
+  feature_insert_with_truncate: true
+  feature_bulk_tables: true # CONCAT, RANGE, TablePath(), INSERT INTO details...
+  feature_group_by_rollup_cube: true
+  feature_window_functions: true
+  feature_codegen: true
+  feature_functional_tables: true 
+  feature_udf_noncpp: true
+  feature_temp_table: true

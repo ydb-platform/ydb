@@ -1,6 +1,6 @@
-To run the example against any available YDB database, you need to know the [endpoint](../../../../concepts/connect.md#endpoint) and the [database path](../../../../concepts/connect.md#database).
+To run the example against any available {{ ydb-short-name }} database, the [endpoint](../../../../concepts/connect.md#endpoint) and the [database path](../../../../concepts/connect.md#database) need to be provide.
 
-If authentication is enabled in the database, you also need to select the [authentication mode](../../../../concepts/auth.md) and get secrets (a token or username/password pair).
+If authentication is enabled for the database, the [authentication mode](../../../../security/authentication.md) needs to be chosen and credentials (a token or a username/password pair) need to be provided.
 
 Run the command as follows:
 
@@ -17,6 +17,7 @@ where
 - `<auth_mode_value>` is the authentication parameter value for the selected mode.
 
 For example:
+
 ```bash
 YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..." \
 python3 ydb-python-sdk/examples/basic_example_v1/ -e grpcs://ydb.example.com:2135 -d /path/db )

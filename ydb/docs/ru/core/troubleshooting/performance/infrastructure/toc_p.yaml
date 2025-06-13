@@ -1,0 +1,9 @@
+items:
+    - name: Сетевые проблемы
+      href: network.md
+    - name: Сбои датацентров
+      href: dc-outage.md
+    - name: Учения и работы по обслуживанию
+      href: dc-drills.md
+    - name: Аппаратные проблемы
+      href: hardware.md

@@ -1,6 +1,6 @@
 # Importing data from a file to an existing table
 
-With the `import file` command, you can import data from [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %} or [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %} files to an existing table.
+With the `import file` command, you can import data from [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) or [TSV](https://en.wikipedia.org/wiki/Tab-separated_values) files to an existing table.
 
 Data from an imported file is read in batches whose size is set in the `--batch-bytes` option. An independent query is used to write each batch to the database. The queries are executed asynchronously. When the number of executed queries reaches `--max-in-flight`, reading from the file pauses. You can import data from multiple files using a single command. In this case, data from the files will be read asynchronously.
 
@@ -8,7 +8,7 @@ The command implements the `BulkUpsert` method, which ensures high efficiency of
 
 If the table already includes data, it's replaced by imported data on primary key match.
 
-The imported file must be in the [UTF-8]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/UTF-8){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/UTF-8){% endif %} encoding. Line feeds aren't supported in the data field.
+The imported file must be in the [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding. Line feeds aren't supported in the data field.
 
 General format of the command:
 

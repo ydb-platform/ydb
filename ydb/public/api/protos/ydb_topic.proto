@@ -751,6 +751,9 @@ message CommitOffsetRequest {
 
     // Processed offset.
     int64 offset = 5;
+
+    // Read session identifier from StreamRead RPC.
+    string read_session_id = 6;
 }
 
 // Commit offset response sent from server to client.

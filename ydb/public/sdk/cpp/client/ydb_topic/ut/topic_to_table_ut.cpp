@@ -15,6 +15,7 @@
 
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -75,6 +76,8 @@ protected:
 
     void AddConsumer(const TString& topicPath,
                      const TVector<TString>& consumers);
+    void DropConsumer(const TString& topicPath,
+                      const TVector<TString>& consumers);
     void AlterAutoPartitioning(const TString& topicPath,
                                ui64 minActivePartitions,
                                ui64 maxActivePartitions,
@@ -136,6 +139,9 @@ protected:
     void RestartLongTxService();
     void RestartPQTablet(const TString& topicPath, ui32 partition);
     void DumpPQTabletKeys(const TString& topicName, ui32 partition);
+    void PQTabletPrepareFromResource(const TString& topicPath,
+                                     ui32 partitionId,
+                                     const TString& resourceName);
 
     void DeleteSupportivePartition(const TString& topicName,
                                    ui32 partition);
@@ -402,6 +408,20 @@ void TFixture::AddConsumer(const TString& topicPath,
 
     for (const auto& consumer : consumers) {
         settings.BeginAddConsumer(consumer);
+    }
+
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TFixture::DropConsumer(const TString& topicPath,
+                            const TVector<TString>& consumers)
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TAlterTopicSettings settings;
+
+    for (const auto& consumer : consumers) {
+        settings.AppendDropConsumers(consumer);
     }
 
     auto result = client.AlterTopic(topicPath, settings).GetValueSync();
@@ -1610,6 +1630,51 @@ void TFixture::DumpPQTabletKeys(const TString& topicName)
     }
 }
 
+void TFixture::PQTabletPrepareFromResource(const TString& topicPath,
+                                           ui32 partitionId,
+                                           const TString& resourceName)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
+
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    size_t count = 0;
+
+    for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {
+        TString key, encoded;
+
+        if (!stream.ReadTo(key, ' ')) {
+            break;
+        }
+        encoded = stream.ReadLine();
+
+        auto decoded = Base64Decode(encoded);
+        TStringInput decodedStream(decoded);
+        TBZipDecompress decompressor(&decodedStream);
+
+        auto* cmd = request->Record.AddCmdWrite();
+        cmd->SetKey(key);
+        cmd->SetValue(decompressor.ReadAll());
+    }
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), count);
+
+    for (size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
+        const auto &result = response->Record.GetWriteResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
+    }
+}
+
 void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d)
 {
     for (auto& topic : d.Topics) {
@@ -2584,6 +2649,51 @@ Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
     }
 
     UNIT_ASSERT_VALUES_UNEQUAL(successCount, TXS_COUNT);
+}
+
+Y_UNIT_TEST_F(The_Configuration_Is_Changing_As_We_Write_To_The_Topic, TFixture)
+{
+    // To test that you can change the topic configuration while writing to the partition
+
+    CreateTopic("topic_A", TEST_CONSUMER, 2);
+
+    AddConsumer("topic_A", {"consumer1", "consumer2"});
+
+    auto session = CreateTableSession();
+    auto tx = BeginTx(session);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, TString(100, 'x'), &tx, 0);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, TString(100, 'x'), &tx, 1);
+
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
+
+    RestartPQTablet("topic_A", 0);
+
+    DropConsumer("topic_A", {"consumer1"});
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_3, TString(100, 'x'), &tx, 0);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_3);
+
+    RestartPQTablet("topic_A", 0);
+
+    CommitTx(tx);
+
+    CheckTabletKeys("topic_A");
+}
+
+Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixture)
+{
+    // In the test, we check the compatibility between versions `24-4-2` and `24-4-*/25-1-*`. To do this, the data
+    // obtained on the `24-4-2` version is loaded into the PQ tablets.
+
+    CreateTopic("topic_A", TEST_CONSUMER, 2);
+
+    PQTabletPrepareFromResource("topic_A", 0, "topic_A_partition_0_v24-4-2.dat");
+    PQTabletPrepareFromResource("topic_A", 1, "topic_A_partition_1_v24-4-2.dat");
+
+    RestartPQTablet("topic_A", 0);
+    RestartPQTablet("topic_A", 1);
 }
 
 }

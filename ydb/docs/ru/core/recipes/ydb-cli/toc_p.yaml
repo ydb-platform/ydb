@@ -1,0 +1,7 @@
+items:
+- name: Конвертация типов таблиц 
+  href: convert-table-type.md
+- name: Нагрузочное тестирование
+  href: benchmarks.md
+- name: Настройка TTL таблиц
+  href: ttl.md

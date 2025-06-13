@@ -12,20 +12,20 @@ General format of the command:
 
 ## Hotkeys {#hotkeys}
 
-Hotkey | Description
----|---
-`CTRL + D` | Allows you to exit interactive mode.
-`Up arrow` | Scrolls through query history toward older queries.
-`Down arrow` | Scrolls through query history toward newer queries.
-`TAB` | Autocompletes the entered text to a suitable YQL command.
-`CTRL + R` | Allows searching for a query in history containing a specified substring.
+| Hotkey | Description |
+| ---|--- |
+| `CTRL + D` | Allows you to exit interactive mode. |
+| `Up arrow` | Scrolls through query history toward older queries. |
+| `Down arrow` | Scrolls through query history toward newer queries. |
+| `TAB` | Autocompletes the entered text to a suitable YQL command. |
+| `CTRL + R` | Allows searching for a query in history containing a specified substring. |
 
 ## Special commands {#spec-commands}
 
 Special commands are CLI-specific commands and are not part of the YQL syntax. They are intended for performing various functions that cannot be accomplished through a YQL query.
 
-Command | Description
----|---
+| Command | Description |
+| ---|--- |
 | `SET param = value` | The `SET` command sets the value of the [internal variable](#internal-vars) `param` to `value`. |
 | `EXPLAIN query-text` | Outputs the query plan for `query-text`. Equivalent to the command [ydb table query explain](commands/explain-plan.md#explain-plan). |
 | `EXPLAIN AST query-text` | Outputs the query plan for `query-text` along with the [AST](commands/explain-plan.md). Equivalent to the command [ydb table query explain --ast](commands/explain-plan.md#ast). |
@@ -34,9 +34,9 @@ Command | Description
 
 Internal variables determine the behavior of commands and are set using the [special command](#spec-commands) `SET`.
 
-Variable | Description
----|---
-| `stats` | The statistics collection mode for subsequent queries.<br>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
+| Variable | Description |
+| ---|--- |
+| `stats` | The statistics collection mode for subsequent queries.<br/>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
 
 ## Examples {#examples}
 

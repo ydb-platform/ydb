@@ -70,5 +70,8 @@ sub-directory1-1
 data_00.csv  scheme.pb
 
 /home/user/dump/series:
-data_00.csv  scheme.pb
+data_00.csv  scheme.pb  update_feed
+
+/home/user/dump/series/update_feed:
+changefeed_description.pb  topic_description.pb
 ```

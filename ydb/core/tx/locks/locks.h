@@ -252,7 +252,6 @@ struct TLockInfoWriteConflictListTag {};
 struct TLockInfoBrokenListTag {};
 struct TLockInfoBrokenPersistentListTag {};
 struct TLockInfoExpireListTag {};
-struct TLockInfoRangesListTag {};
 
 /// Aggregates shard, point and range locks
 class TLockInfo
@@ -264,7 +263,6 @@ class TLockInfo
     , public TIntrusiveListItem<TLockInfo, TLockInfoBrokenListTag>
     , public TIntrusiveListItem<TLockInfo, TLockInfoBrokenPersistentListTag>
     , public TIntrusiveListItem<TLockInfo, TLockInfoExpireListTag>
-    , public TIntrusiveListItem<TLockInfo, TLockInfoRangesListTag>
 {
     friend class TTableLocks;
     friend class TLockLocker;
@@ -510,19 +508,16 @@ class TLockLocker {
     friend class TSysLocks;
 
 public:
-    /// Prevent unlimited locks count growth
-    static ui64 LockLimit();
-
-    /// Prevent unlimited range count growth
-    static ui64 LockRangesLimit();
-
-    /// Prevent unlimited number of total ranges
-    static ui64 TotalRangesLimit();
-
-    /// Make it possible to override defaults (e.g. for tests)
-    static void SetLockLimit(ui64 newLimit);
-    static void SetLockRangesLimit(ui64 newLimit);
-    static void SetTotalRangesLimit(ui64 newLimit);
+    /// Prevent unlimited lock's count growth
+    static constexpr ui64 LockLimit() {
+        // Valgrind and sanitizers are too slow
+        // Some tests cannot exhaust default limit in under 5 minutes
+        return NValgrind::PlainOrUnderValgrind(
+            NSan::PlainOrUnderSanitizer(
+                16 * 1024,
+                1024),
+            1024);
+    }
 
     /// We don't expire locks until this time limit after they are created
     static constexpr TDuration LockTimeLimit() { return TDuration::Minutes(5); }
@@ -540,7 +535,6 @@ public:
 
     void AddPointLock(const TLockInfo::TPtr& lock, const TPointKey& key);
     void AddRangeLock(const TLockInfo::TPtr& lock, const TRangeKey& key);
-    void MakeShardLock(TLockInfo* lock);
     void AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables);
     void AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksWriteListTag>& writeTables);
 
@@ -598,10 +592,8 @@ public:
 
     void UpdateSchema(const TPathId& tableId, const TVector<NScheme::TTypeInfo>& keyColumnTypes);
     void RemoveSchema(const TPathId& tableId, ILocksDb* db);
-    bool ForceShardLock(
-        const TLockInfo::TPtr& lock,
-        const TIntrusiveList<TTableLocks,
-        TTableLocksReadListTag>& readTables, ui64 newRanges);
+    bool ForceShardLock(const TPathId& tableId) const;
+    bool ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const;
 
     void ScheduleBrokenLock(TLockInfo* lock);
     void ScheduleRemoveBrokenRanges(ui64 lockId, const TRowVersion& at);
@@ -641,8 +633,6 @@ private:
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
     THashSet<ui64> ShardLocks;
-    // A list of locks that have ranges (from oldest to newest)
-    TIntrusiveList<TLockInfo, TLockInfoRangesListTag> LocksWithRanges;
     // A list of locks that may be removed when enough time passes
     TIntrusiveList<TLockInfo, TLockInfoExpireListTag> ExpireQueue;
     // A list of broken, but not yet removed locks

@@ -1,4 +1,4 @@
-### Breaking out of the cage: move complex development to GitHub {#2024-devworld}
+## Breaking out of the cage: move complex development to GitHub {#2024-devworld}
 
 {% include notitle [general_tag](../../tags.md#general) %}
 

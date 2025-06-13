@@ -1,6 +1,6 @@
 # Импорт данных из файла в существующую таблицу
 
-С помощью подкоманды `import file` вы можете импортировать данные из файлов форматов [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %}, [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, [Parquet](https://parquet.apache.org/docs/overview/), [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %} в существующую таблицу.
+С помощью подкоманды `import file` вы можете импортировать данные из файлов форматов [CSV](https://ru.wikipedia.org/wiki/CSV), [JSON](https://ru.wikipedia.org/wiki/JSON), [Parquet](https://parquet.apache.org/docs/overview/), [TSV](https://ru.wikipedia.org/wiki/TSV) в существующую таблицу.
 
 При импорте файл читается пакетами, размер которых задан параметром `--batch-bytes`. Каждый пакет записывается в БД отдельным запросом. Запросы выполняются асинхронно. Когда число выполняемых запросов достигает указанного в `--max-in-flight`, чтение из файла приостанавливается. Вы можете импортировать данные из нескольких файлов одной командой. В этом случае данные из них будут читаться одновременно.
 
@@ -8,7 +8,7 @@
 
 Если в таблице уже содержатся данные, они будут заменены импортируемыми при совпадении первичного ключа.
 
-Импортируемый файл должен быть в кодировке [UTF-8]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/UTF-8){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/UTF-8){% endif %}. Обработка переноса строки внутри поля данных не поддерживается.
+Импортируемый файл должен быть в кодировке [UTF-8](https://ru.wikipedia.org/wiki/UTF-8). Обработка переноса строки внутри поля данных не поддерживается.
 
 Общий вид команды:
 

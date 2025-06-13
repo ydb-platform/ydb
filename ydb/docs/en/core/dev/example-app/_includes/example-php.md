@@ -1,8 +1,6 @@
-# App in PHP
+# Example app in PHP
 
 This page contains a detailed description of the code of a test app that is available as part of the {{ ydb-short-name }} [PHP SDK](https://github.com/yandex-cloud/ydb-php-sdk).
-
-{% include [addition.md](auxilary/addition.md) %}
 
 {% include [init.md](steps/01_init.md) %}
 
@@ -27,17 +25,17 @@ $config = [
     'iam_config'  => [
         // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
     ],
-    
+
     'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
 ];
 
 $ydb = new Ydb($config);
-
 ```
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
 To create tables, use the `session->createTable()` method:
+
 ```php
 protected function createTabels()
 {
@@ -148,7 +146,6 @@ protected function upsertSimple()
 }
 ```
 
-
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 To execute YQL queries, use the `session->query()` method.
@@ -174,6 +171,7 @@ print_r($result->rows());
 {% include [param_queries.md](../_includes/steps/06_param_queries.md) %}
 
 Here's a code sample that shows how to use prepared queries.
+
 ```php
 protected function selectPrepared($series_id, $season_id, $episode_id)
 {

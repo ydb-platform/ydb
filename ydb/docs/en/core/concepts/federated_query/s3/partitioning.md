@@ -4,7 +4,7 @@ In S3 ({{ objstorage-full-name }}), it is possible to store very large volumes o
 
 For example, data is stored in the following directory structure:
 
-```
+```text
 year=2021
     month=01
     month=02
@@ -15,7 +15,7 @@ year=2022
 
 The query below explicitly implies that only the data for February 2021 needs to be processed, and other data is not needed.
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -38,7 +38,7 @@ If the data partitioning scheme is not specified, then _all_ stored data will be
 
 If you explicitly describe the storage structure, specifying that the data in S3 ({{ objstorage-full-name }}) is placed in directories by years and months
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -70,7 +70,7 @@ The example above shows working with data at the level of [connections](../../da
 
 When working at the connection level, partitioning is set using the `partitioned_by` parameter, where the list of columns is specified in JSON format.
 
-```sql
+```yql
 SELECT
     *
 FROM
@@ -86,7 +86,7 @@ In the `partitioned_by` parameter, the columns of the data schema by which the d
 
 For example, `PARTITIONED_BY=['year', 'month']` defines the directory structure
 
-```
+```text
 year=2021
     month=01
     month=02
@@ -97,7 +97,7 @@ year=2022
 
 And `partitioned_by=['month', 'year']` defines another directory structure
 
-```
+```text
 month=01
     year=2021
     year=2022
@@ -110,6 +110,7 @@ month=03
 ## Supported data types
 
 Partitioning is possible only with the following set of YQL data types:
+
 - Uint16, Uint32, Uint64
 - Int16, Int32, Int64
 - String, Utf8
@@ -121,7 +122,8 @@ When using other types for specifying partitioning, an error is returned.
 The storage path format, where the name of each directory explicitly specifies the column name, is called the "[Hive-Metastore format](https://en.wikipedia.org/wiki/Apache_Hive)" or simply the "Hive format."
 
 This format looks as follows:
-```
+
+```text
 month=01
     year=2021
     year=2022

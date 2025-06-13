@@ -1,11 +1,4 @@
----
-title: "Инструкция по инициализации драйвера в {{ ydb-short-name }}"
-description: "В статье приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK."
----
-
 # Инициализация драйвера
-
-{% include [work in progress message](_includes/addition.md) %}
 
 Для подключения к {{ ydb-short-name }} требуется указать обязательные параметры (подробнее читайте в разделе [Подключение к серверу {{ ydb-short-name }}](../../concepts/connect.md)) и дополнительные, которые определяют поведение драйвера при работе.
 
@@ -83,6 +76,7 @@ description: "В статье приведены примеры кода под�
   {% cut "С помощью строки подключения" %}
 
     Регистрация драйвера `database/sql` реализуется в момент импорта пакета конкретного драйвера через символ подчеркивавния:
+
     ```golang
     package main
 
@@ -107,7 +101,27 @@ description: "В статье приведены примеры кода под�
 
 - Java
 
-  {% include [work in progress message](_includes/addition.md) %}
+  ```java
+  public void work() {
+      GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+              .build());
+      // Работа с transport
+      doWork(transport);
+      transport.close();
+  }
+  ```
+
+- JDBC Driver
+
+  ```java
+  public void work() {
+      // JDBC Driver должен быть доступен в classpath для автоматической загрузки
+      Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+      // Работа с connection
+      doWork(connection);
+      connection.close();
+  }
+  ```
 
 - Python
 
@@ -167,11 +181,19 @@ description: "В статье приведены примеры кода под�
       'iam_config'  => [
           // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
       ],
-      
+
       'credentials' => new \YdbPlatform\Ydb\Auth\Implement\AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
   ];
 
   $ydb = new Ydb($config);
+  ```
+
+- Rust
+
+  ```rust
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+        .with_credentials(AccessTokenCredentials::from("..."))
+        .client()?
   ```
 
 {% endlist %}

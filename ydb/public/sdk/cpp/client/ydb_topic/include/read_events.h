@@ -32,6 +32,11 @@ public:
         return TopicPath;
     }
 
+    //! Read session id.
+    const TString GetReadSessionId() const {
+        return ReadSessionId;
+    }
+
     //! Partition id.
     ui64 GetPartitionId() const {
         return PartitionId;
@@ -40,6 +45,7 @@ public:
 protected:
     ui64 PartitionSessionId;
     TString TopicPath;
+    TString ReadSessionId;
     ui64 PartitionId;
 };
 

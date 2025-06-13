@@ -35,7 +35,7 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 
 You can configure SelfHeal in **Viewer** → **Cluster Management System** → **CmsConfigItems**.
 
-To create the initial settings, click **Create**. If you want to update the current settings, click ![](../../_assets/pencil.svg).
+To create the initial settings, click **Create**. If you want to update the current settings, click ![pencil](../../_assets/pencil.svg).
 
 You can use the following settings:
 
@@ -48,7 +48,7 @@ You can use the following settings:
 | **State update interval (sec.)** | PDisk state update interval. |
 | **Timeout (sec.)** | PDisk state update timeout. |
 | **Change status retries** | Number of retries to change the PDisk status for BSC (`ACTIVE`, `FAULTY`, `BROKEN`, and so on). |
-| **Change status retry interval (sec.)** | Delay between retries to update the PDisk status in BSC. CMS monitors the status of the disk with the interval **State update inverval**. If the disk remains in one **Status update interval** state during several cycles, the CMS changes its status to BSC.<br>Next are the settings for the number of update cycles after which the CMS changes the disk status. If the disk state is `Normal`, the disk status changes to `ACTIVE`. In other states, the disk switches to `FAULTY`.<br>The `0` value disables status changes for the state (by default, this is set for `Unknown`).<br>For example, with the default settings, if the CMS detects the `Initial` disk state for five `Status update interval` cycles which are 60 seconds each, the disk status changes to `FAULTY`. |
+| **Change status retry interval (sec.)** | Delay between retries to update the PDisk status in BSC. CMS monitors the status of the disk with the interval **State update inverval**. If the disk remains in one **Status update interval** state during several cycles, the CMS changes its status to BSC.<br/>Next are the settings for the number of update cycles after which the CMS changes the disk status. If the disk state is `Normal`, the disk status changes to `ACTIVE`. In other states, the disk switches to `FAULTY`.<br/>The `0` value disables status changes for the state (by default, this is set for `Unknown`).<br/>For example, with the default settings, if the CMS detects the `Initial` disk state for five `Status update interval` cycles which are 60 seconds each, the disk status changes to `FAULTY`. |
 | **Default state limit** | For states with no setting specified, this value can be used by default. This value is also used for unknown PDisk states that don't have any settings. It's used if no value is set for states such as `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, and `Normal`. |
 | **Initial** | PDisk starts initializing. Transition to `FAULTY`. |
 | **InitialFormatRead** | PDisk is reading its format. Transition to `FAULTY`. |
@@ -65,6 +65,7 @@ You can use the following settings:
 | **Missing** | The node responds, but this PDisk is missing from its list. Transition to `FAULTY`. |
 | **Timeout** | The node didn't respond within the specified timeout. Transition to `FAULTY`. |
 | **NodeDisconnected** | The node has disconnected. Transition to `FAULTY`. |
+| **Stopped** | PDisk has been stopped. Transition to `FAULTY`. |
 | **Unknown** | Unexpected response, for example, `TEvUndelivered` to the state request. Transition to `FAULTY`. |
 
 ## Working with donor disks {#disks}

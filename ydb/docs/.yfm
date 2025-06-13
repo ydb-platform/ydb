@@ -2,9 +2,21 @@ allowHTML: true
 langs: ['en','ru']
 apply-presets: true
 allowCustomResources: true
+included: true
+strict: true
 resources:
   style:
-    - _assets/tags.css   
+    - _assets/tags.css
+    - _assets/badge.css
+  csp:
+    - "img-src":
+        - "https://github.ydb.tech"
+    - "frame-src":
+        - "https://vk.com"
+        - "https://login.vk.com"
+        - "https://runtime.strm.yandex.ru"
+        - "https://www.youtube.com"
+        - "https://rutube.ru"
 
 docs-viewer:
   project-name: ydb
@@ -12,10 +24,11 @@ docs-viewer:
   langs: ['en','ru']
   themes: ['light', 'dark']
   favicon-src: https://storage.yandexcloud.net/ydb-www-prod-site-assets/favicon-202305/favicon.ico
-  gtm: 
+  gtm:
     id: GTM-W7ZBL4X
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
-  
+  unrestrict-revision-access: true
+
   logo-options:
     url:
       en: https://ydb.tech/
@@ -27,7 +40,7 @@ docs-viewer:
     img-has:
       width: 80px
       offset: true
-  
+
   index-page:
     title: YDB Open Source
     description: Горизонтально масштабируемая распределённая отказоустойчивая СУБД

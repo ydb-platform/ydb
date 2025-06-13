@@ -14,15 +14,17 @@ General format of the command:
 
 * [endpoint](../../../concepts/connect.md#endpoint) — URL of database cluster.
 * [database](../../../concepts/connect.md#database) — Database path.
-* **Authentication parameters:**
-  * [token](../../../concepts/auth.md#iam) — Access Token.
-  * [yc-token](../../../concepts/auth.md#iam) — Refresh Token.
-  * [sa-key-file](../../../concepts/auth.md#iam) — Service Account Key.
-  * [use-metadata-credentials](../../../concepts/auth.md#iam) — Metadata.
-  * [user](../../../concepts/auth.md#static-credentials)
-  * [password](../../../concepts/auth.md#static-credentials)
+* Authentication parameters:
+
+  * [token](../../../security/authentication.md#iam) — Access Token.
+  * [yc-token](../../../security/authentication.md#iam) — Refresh Token.
+  * [sa-key-file](../../../security/authentication.md#iam) — Service Account Key.
+  * [use-metadata-credentials](../../../security/authentication.md#iam) — Metadata.
+  * [user](../../../security/authentication.md#static-credentials)
+  * [password](../../../security/authentication.md#static-credentials)
+
 * [ca-file](../../../concepts/connect.md#tls-cert) — Root certificate.
-* [iam-endpoint](../../../concepts/auth.md#iam) — URL of IAM service.
+* [iam-endpoint](../../../security/authentication.md#iam) — URL of IAM service.
 
 ## Examples {#examples}
 

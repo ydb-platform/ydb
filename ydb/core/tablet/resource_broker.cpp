@@ -1275,7 +1275,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     const ui64 CSGeneralCompactionMemoryLimit = NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
     const ui64 CSScanMemoryLimit = NOlap::TGlobalLimits::ScanMemoryLimit;
 
-    const ui64 TotalCPU = 20;
+    const ui64 TotalCPU = 256; // means unlimited
     const ui64 TotalMemory = 16ULL << 30;
 
     static_assert(KqpRmQueueMemory < TotalMemory);
@@ -1363,7 +1363,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue = config.AddQueues();
     queue->SetName("queue_restore");
     queue->SetWeight(100);
-    queue->MutableLimit()->SetCpu(2);
+    queue->MutableLimit()->SetCpu(10);
 
     queue = config.AddQueues();
     queue->SetName(NLocalDb::KqpResourceManagerQueue);

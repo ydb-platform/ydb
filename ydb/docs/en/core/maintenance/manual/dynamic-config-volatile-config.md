@@ -1,6 +1,6 @@
 # Volatile configurations
 
-Volatile configurations are a special type of configuration that complements dynamic configurations while being non-persistent. These configurations are discarded when the Console [tablet](../../concepts/cluster/common_scheme_ydb.md#tablets) is moved or restarted, as well as when the main configuration is updated.
+Volatile configurations are a special type of configuration that complements dynamic configurations while being non-persistent. These configurations are discarded when the Console [tablet](../../concepts/glossary.md#tablet) is moved or restarted, as well as when the main configuration is updated.
 
 Primary use cases:
 
@@ -25,6 +25,7 @@ These configurations are added at the end of the selectors set, and the syntax f
 ## Example of working with volatile configuration
 
 Temporarily enabling logging settings for the `blobstorage` component to `DEBUG` on the node `host1.example.com`:
+
 ```bash
 # Request current metadata to form a correct header for the volatile configuration
 $ {{ ydb-cli }} admin config fetch --all

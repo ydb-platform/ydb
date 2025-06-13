@@ -1,6 +1,5 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
@@ -16,6 +15,7 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <aws/core/Aws.h>
 #include <google/protobuf/util/message_differencer.h>
 
 using namespace NYdb;
@@ -397,12 +397,14 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
+    Aws::SDKOptions Options;
+
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-        NKikimr::InitAwsAPI();
+        Aws::InitAPI(Options);
     }
 
     Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-        NKikimr::ShutdownAwsAPI();
+        Aws::ShutdownAPI(Options);
     }
 
     using NKikimr::NWrappers::NTestHelpers::TS3Mock;

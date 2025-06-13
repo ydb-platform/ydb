@@ -1,15 +1,19 @@
 #include "context.h"
 #include "openid_connect.h"
-#include "oidc_settings.h"
+
+#include <ydb/core/util/wildcard.h>
 #include <ydb/library/security/util.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
+
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
+
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
 
 namespace NMVP::NOIDC {
 
@@ -20,6 +24,37 @@ NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpI
     SetCORS(request, &headers);
     TString body {"{\"error\":\"Authorization Required\",\"authUrl\":\"" + redirectUrl + "\"}"};
     return request->CreateResponse("401", "Unauthorized", headers, body);
+}
+
+TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {
+    TStringBuilder result;
+    size_t n = html.find(findStr);
+    if (n == TStringBuf::npos) {
+        return TString(html);
+    }
+    size_t len = findStr.length() + 1;
+    size_t pos = 0;
+    while (n != TStringBuf::npos) {
+        result << html.SubStr(pos, n + len - pos);
+        if (html[n + len] == '/') {
+            result << "/" << host;
+            if (html[n + len + 1] == '\'' || html[n + len + 1] == '\"') {
+                result << "/internal";
+                n++;
+            }
+        }
+        pos = n + len;
+        n = html.find(findStr, pos);
+    }
+    result << html.SubStr(pos);
+    return result;
+}
+
+TString FixReferenceInHtml(TStringBuf html, TStringBuf host) {
+    TStringBuf findString = "href=";
+    auto result = FixReferenceInHtml(html, host, findString);
+    findString = "src=";
+    return FixReferenceInHtml(result, host, findString);
 }
 
 } // namespace
@@ -256,6 +291,128 @@ TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) 
         BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
     }
     return cookieValue;
+}
+
+TCrackedPage::TCrackedPage(TStringBuf url)
+    : Url(url)
+{
+    Parsed = NHttp::CrackURL(Url, Scheme, Host, Uri);
+    if (Parsed) {
+        SchemeValid = Scheme.empty() || Scheme == "http" || Scheme == "https";
+    }
+}
+
+bool TCrackedPage::IsValid() const {
+    return Parsed && SchemeValid;
+}
+
+bool TCrackedPage::CheckRequestedHost(const TOpenIdConnectSettings& settings) const {
+    if (!IsValid()) {
+        return false;
+    }
+    return std::any_of(settings.AllowedProxyHosts.begin(), settings.AllowedProxyHosts.end(),
+        [this](const TString& pattern) {
+            return NKikimr::IsMatchesWildcard(Host, pattern);
+        });
+}
+
+NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {
+    auto outRequest = NHttp::THttpOutgoingRequest::CreateRequest(params.Request->Method, params.ProtectedPage.Url);
+    NHttp::THeadersBuilder headers(params.Request->Headers);
+    for (const auto& header : params.Settings.REQUEST_HEADERS_WHITE_LIST) {
+        if (headers.Has(header)) {
+            outRequest->Set(header, headers.Get(header));
+        }
+    }
+    outRequest->Set("Accept-Encoding", "deflate");
+
+    if (!params.AuthHeader.empty()) {
+        outRequest->Set(AUTHORIZATION, params.AuthHeader);
+    }
+    if (params.Request->HaveBody()) {
+        outRequest->SetBody(params.Request->Body);
+    }
+    if (params.ProtectedPage.Scheme.empty()) {
+        outRequest->Secure = params.Secure;
+    }
+
+    return outRequest;
+}
+
+NHttp::THeadersBuilder ProxyResponseHeaders(const TProxiedResponseParams& params) {
+    NHttp::THeadersBuilder headers(params.Response->Headers);
+    NHttp::THeadersBuilder outHeaders;
+    static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
+        "Content-Type",
+        "Connection",
+        "X-Worker-Name",
+        "Set-Cookie",
+        "Access-Control-Allow-Origin",
+        "Access-Control-Allow-Credentials",
+        "Access-Control-Allow-Headers",
+        "Access-Control-Allow-Methods",
+        "traceresponse"
+    };
+    for (const auto& header : HEADERS_WHITE_LIST) {
+        if (headers.Has(header)) {
+            outHeaders.Set(header, headers.Get(header));
+        }
+    }
+
+    if (headers.Has(LOCATION)) {
+        outHeaders.Set(LOCATION, GetFixedLocationHeader(params.ProtectedPage, headers.Get(LOCATION)));
+    }
+
+    return outHeaders;
+}
+
+TString ProxyResponseBody(const TProxiedResponseParams& params) {
+    TString outBody = params.OutBody ? params.OutBody : TString(params.Response->Body);
+    NHttp::THeadersBuilder headers(params.Response->Headers);
+    TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
+    if (contentType == "text/html") {
+        return FixReferenceInHtml(outBody, params.Response->GetRequest()->Host);
+    } else {
+        return outBody;
+    }
+}
+
+TString GetFixedLocationHeader(const TCrackedPage& page, TStringBuf location) {
+    if (location.StartsWith("//")) {
+        return TStringBuilder() << '/' << (page.Scheme.empty() ? "" : TString(page.Scheme) + "://") << location.SubStr(2);
+    } else if (location.StartsWith('/')) {
+        return TStringBuilder() << '/'
+                                << (page.Scheme.empty() ? "" : TString(page.Scheme) + "://")
+                                << page.Host << location;
+    } else {
+        TStringBuf locScheme, locHost, locUri;
+        NHttp::CrackURL(location, locScheme, locHost, locUri);
+        if (!locScheme.empty()) {
+            return TStringBuilder() << '/' << location;
+        }
+    }
+    return TString(location);
+}
+
+NHttp::THttpOutgoingResponsePtr CreateProxiedResponse(const TProxiedResponseParams& params) {
+    auto outStatus = params.OutStatus ? params.OutStatus : params.Response->Status;
+    auto outMessage = params.OutMessage ? params.OutMessage : params.Response->Message;
+    auto outHeaders = ProxyResponseHeaders(params);
+    auto outBody = ProxyResponseBody(params);
+    return params.Request->CreateResponse(outStatus, outMessage, outHeaders, outBody);
+}
+
+NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage) {
+    NHttp::THeadersBuilder headers;
+    headers.Set("Content-Type", "text/html");
+    SetCORS(request, &headers);
+
+    TStringBuilder html;
+    html << "<html><head><title>403 Forbidden</title></head><body bgcolor=\"white\"><center><h1>";
+    html << "403 Forbidden host: " << protectedPage.Host;
+    html << "</h1></center></body></html>";
+
+    return request->CreateResponse("403", "Forbidden", headers, html);
 }
 
 } // NMVP::NOIDC

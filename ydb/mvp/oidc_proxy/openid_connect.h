@@ -1,17 +1,29 @@
 #pragma once
 #include "context.h"
+#include "oidc_settings.h"
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/profile_service.grpc.pb.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
 namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings;
+
+constexpr TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
+constexpr TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
+constexpr TStringBuf AUTHORIZATION = "Authorization";
+constexpr TStringBuf LOCATION = "Location";
+
+constexpr TStringBuf USER_SID = "UserSID";
+constexpr TStringBuf ORIGINAL_USER_TOKEN = "OriginalUserToken";
+constexpr TStringBuf EXTENDED_INFO = "ExtendedInfo";
+constexpr TStringBuf EXTENDED_ERRORS = "ExtendedErrors";
 
 struct TRestoreOidcContextResult {
     struct TStatus {
@@ -53,6 +65,48 @@ TCheckStateResult CheckState(const TString& state, const TString& key);
 TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 
+struct TCrackedPage {
+    TString Url;
+    TStringBuf Scheme;
+    TStringBuf Host;
+    TStringBuf Uri;
+
+    bool Parsed = false;
+    bool SchemeValid = false;
+
+    explicit TCrackedPage(TStringBuf url);
+    bool IsValid() const;
+    bool CheckRequestedHost(const TOpenIdConnectSettings& settings) const;
+};
+
+struct TProxiedRequestParams {
+    const NHttp::THttpIncomingRequestPtr Request;
+    TStringBuf AuthHeader;
+    bool Secure = false;
+    TCrackedPage ProtectedPage;
+    const TOpenIdConnectSettings Settings;
+};
+
+struct TProxiedResponseParams {
+    const NHttp::THttpIncomingRequestPtr Request;
+    const NHttp::THttpIncomingResponsePtr Response;
+    TCrackedPage ProtectedPage;
+    const TOpenIdConnectSettings Settings;
+    TString OutStatus;
+    TString OutMessage;
+    TString OutBody;
+};
+
+bool ExtractHttpScheme(const TString& url, TString& outScheme);
+bool IsHostAllowed(const TString& url, const TVector<TString>& allowedHosts);
+
+NHttp::THeadersBuilder ProxyResponseHeaders(const TProxiedResponseParams& params);
+TString ProxyResponseBody(const TProxiedResponseParams& params);
+TString GetFixedLocationHeader(const TCrackedPage& page, TStringBuf location);
+NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& param);
+NHttp::THttpOutgoingResponsePtr CreateProxiedResponse(const TProxiedResponseParams& param);
+NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage);
+
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {
     TStringBuf scheme = "grpc";
@@ -72,6 +126,7 @@ struct TEvPrivate {
         EvCheckSessionResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCreateSessionResponse,
         EvErrorResponse,
+        EvGetProfileResponse,
         EvEnd
     };
 
@@ -89,6 +144,14 @@ struct TEvPrivate {
         yandex::cloud::priv::oauth::v1::CreateSessionResponse Response;
 
         TEvCreateSessionResponse(yandex::cloud::priv::oauth::v1::CreateSessionResponse&& response)
+            : Response(response)
+        {}
+    };
+
+    struct TEvGetProfileResponse : NActors::TEventLocal<TEvGetProfileResponse, EvGetProfileResponse> {
+        nebius::iam::v1::GetProfileResponse Response;
+
+        TEvGetProfileResponse(nebius::iam::v1::GetProfileResponse&& response)
             : Response(response)
         {}
     };

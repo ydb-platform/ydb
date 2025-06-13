@@ -2,12 +2,14 @@
 #include "oidc_session_create_handler.h"
 #include "oidc_impersonate_start_page_nebius.h"
 #include "oidc_impersonate_stop_page_nebius.h"
+#include "oidc_whoami_extended_nebius.h"
 #include "oidc_settings.h"
 #include "openid_connect.h"
 #include "context.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/testlib/service_mocks/session_service_mock.h>
+#include <ydb/library/testlib/service_mocks/profile_service_mock.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/mvp_test_runtime.h>
 #include <library/cpp/json/json_reader.h>
@@ -1503,5 +1505,191 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
     Y_UNIT_TEST(OpenIdConnectStreamingRequestResponseNebius) {
         OpenIdConnectStreamingRequestResponseTest(NMvp::nebius_v1);
+    }
+
+    constexpr TStringBuf VALID_TOKEN = "good-token";
+    constexpr TStringBuf BAD_TOKEN = "bad-token";
+    constexpr TStringBuf USER_ACCOUNT_ID = "user-account";
+    constexpr TStringBuf EXTENDED_USER_ACCOUNT_ID = "extended-user-account";
+
+    struct OidcWhoamiTestContext {
+        TString Token;
+        TString AuthHeader;
+        TString WhoamiResponse;
+        TString ExpectedStatus;
+        NMvp::EAccessServiceType AccessServiceType = NMvp::nebius_v1;
+
+        OidcWhoamiTestContext(TStringBuf token, TString whoamiResponse, TStringBuf expectedStatus, NMvp::EAccessServiceType serviceType = NMvp::nebius_v1)
+            : Token(token)
+            , AuthHeader(TStringBuilder() << "Bearer " << token)
+            , WhoamiResponse(std::move(whoamiResponse))
+            , ExpectedStatus(expectedStatus)
+            , AccessServiceType(serviceType)
+        {}
+
+        static TString GetViewerResponse200() {
+            TStringBuilder body;
+            body << "{\"UserSID\":\"" << USER_ACCOUNT_ID
+                << "\",\"OriginalUserToken\":\"" << VALID_TOKEN << "\"}";
+
+            TStringBuilder response;
+            response << "HTTP/1.1 200 OK\r\n"
+                     << "Connection: close\r\n"
+                     << "Content-Type: application/json\r\n"
+                     << "Content-Length: " << body.length() << "\r\n\r\n"
+                     << body;
+            return response;
+        }
+
+        static TString GetViewerResponse403() {
+            static const TString FORBIDDEN = "Forbidden";
+            TStringBuilder response;
+            response << "HTTP/1.1 403 Forbidden\r\n"
+                     << "Connection: close\r\n"
+                     << "Content-Type: text/plain\r\n"
+                     << "Content-Length: "<< FORBIDDEN.length() << "\r\n\r\n"
+                     << FORBIDDEN;
+            return response;
+        }
+
+        static TString GetViewerResponse307() {
+            return "HTTP/1.1 307 Temporary Redirect\r\n"
+                "Connection: close\r\n"
+                "Location: /viewer/whoami\r\n"
+                "Content-Length: 0\r\n\r\n";
+        }
+    };
+
+    NJson::TJsonValue OidcWhoamiExtendedInfoTest(const OidcWhoamiTestContext& context) {
+        TPortManager tp;
+        ui16 profilePort = tp.GetPort(8766);
+
+        TMvpTestRuntime runtime;
+        runtime.Initialize();
+
+        const TString allowedProxyHost = "ydb.viewer.page";
+
+        TOpenIdConnectSettings settings {
+            .ClientId = "test-client",
+            .AllowedProxyHosts = {allowedProxyHost},
+            .WhoamiExtendedInfoEndpoint = "localhost:" + ToString(profilePort),
+            .AccessServiceType = context.AccessServiceType
+        };
+
+        auto profileMock = std::make_unique<TProfileServiceMock>();
+        profileMock->AllowedTokens = { TStringBuilder() << IAM_TOKEN_SCHEME << VALID_TOKEN };
+        profileMock->UserAccountId = EXTENDED_USER_ACCOUNT_ID;
+
+        grpc::ServerBuilder builder;
+        builder.AddListeningPort(settings.WhoamiExtendedInfoEndpoint, grpc::InsecureServerCredentials());
+        builder.RegisterService(profileMock.get());
+        std::unique_ptr<grpc::Server> grpcServer(builder.BuildAndStart());
+
+        // oidc extends whoami
+        const TString url = "/" + allowedProxyHost + "/viewer/whoami";
+        auto request = new NHttp::THttpIncomingRequest();
+        request->Method = "GET";
+        request->URL = url;
+        request->Endpoint->Secure = true;
+
+        const NActors::TActorId edge = runtime.AllocateEdgeActor();
+        const NActors::TActorId target = runtime.Register(new TProtectedPageHandler(edge, settings));
+
+        NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/viewer/whoami HTTP/1.1\r\n"
+                                "Host: oidcproxy.net\r\n"
+                                "Authorization: Bearer " + context.Token + "\r\n");
+
+        runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
+
+        // oidc requests viewer whoami
+        TAutoPtr<IEventHandle> handle;
+        auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Method, "GET");
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->Host, allowedProxyHost);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoingRequestEv->Request->URL, "/viewer/whoami");
+
+        // viewer returns 200 to oidc
+        NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+        EatWholeString(incomingResponse, context.WhoamiResponse);
+        runtime.Send(new IEventHandle(handle->Sender, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+
+        // oidc final response
+        auto* outgoing = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+
+        UNIT_ASSERT(outgoing != nullptr);
+        UNIT_ASSERT_STRINGS_EQUAL(outgoing->Response->Status, context.ExpectedStatus);
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(outgoing->Response->Body, &json);
+        return json;
+    }
+
+    Y_UNIT_TEST(OidcWhoami200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            OidcWhoamiTestContext(VALID_TOKEN, OidcWhoamiTestContext::GetViewerResponse200(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], VALID_TOKEN);
+        UNIT_ASSERT(json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    Y_UNIT_TEST(OidcWhoamiBadIam200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            OidcWhoamiTestContext(BAD_TOKEN, OidcWhoamiTestContext::GetViewerResponse200(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], VALID_TOKEN);
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseStatus"], "401");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseMessage"], "Invalid or missing token");
+    }
+
+    Y_UNIT_TEST(OidcWhoamiBadYdb200) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            OidcWhoamiTestContext(VALID_TOKEN, OidcWhoamiTestContext::GetViewerResponse403(), "200"));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], EXTENDED_USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], VALID_TOKEN);
+        UNIT_ASSERT(json.Has(EXTENDED_INFO));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseMessage"], "Forbidden");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseBody"], "Forbidden");
+    }
+
+    Y_UNIT_TEST(OidcWhoamiNoInfo500) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            OidcWhoamiTestContext(BAD_TOKEN, OidcWhoamiTestContext::GetViewerResponse403(), "500"));
+
+        UNIT_ASSERT(!json.Has(USER_SID));
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseStatus"], "401");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Iam"]["ResponseMessage"], "Invalid or missing token");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseMessage"], "Forbidden");
+        UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseBody"], "Forbidden");
+    }
+
+    Y_UNIT_TEST(OidcWhoamiForward307) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            OidcWhoamiTestContext(VALID_TOKEN, OidcWhoamiTestContext::GetViewerResponse307(), "307"));
+
+        UNIT_ASSERT(!json.Has(USER_SID));
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    Y_UNIT_TEST(OidcYandexIgnoresWhoamiExtention) {
+        auto json = OidcWhoamiExtendedInfoTest(
+            OidcWhoamiTestContext(VALID_TOKEN, OidcWhoamiTestContext::GetViewerResponse200(), "200", NMvp::yandex_v2));
+
+        UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], USER_ACCOUNT_ID);
+        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], VALID_TOKEN);
+        UNIT_ASSERT(!json.Has(EXTENDED_INFO));
+        UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
 }

@@ -314,6 +314,10 @@ U AsUnsigned(S value) {
     return (value << 1) ^ (value >> Shift);
 }
 
+inline TKafkaRawBytes ToRawBytes(const TString& str) {
+    return TKafkaRawBytes(str.data(), str.size());
+}
+
 
 class TKafkaWritable {
 public:

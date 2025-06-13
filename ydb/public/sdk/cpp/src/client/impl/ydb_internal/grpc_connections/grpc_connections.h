@@ -276,10 +276,6 @@ public:
             }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
-
-
-
-
     template<typename TService, typename TRequest, typename TResponse>
     void RunOnArena(
         TRequest* request,
@@ -416,10 +412,6 @@ public:
             }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
-
-
-
-
     template<typename TService, typename TRequest, typename TResponse>
     void RunDeferred(
         TRequest&& request,
@@ -429,48 +421,17 @@ public:
         TDuration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
         bool poll = false,
-        std::shared_ptr<IQueueClientContext> context = nullptr)
-    {
-        if (!TryCreateContext(context)) {
-            TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
-            userResponseCb(nullptr, status);
-            return;
-        }
-
-        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, deferredTimeout, poll, context]
-            (TResponse* response, TPlainStatus status) mutable
-        {
-            if (response) {
-                Ydb::Operations::Operation* operation = response->mutable_operation();
-                if (!operation->ready() && poll) {
-                    auto action = MakeIntrusive<TDeferredAction>(
-                        operation->id(),
-                        std::move(userResponseCb),
-                        this,
-                        std::move(context),
-                        deferredTimeout,
-                        dbState,
-                        status.Endpoint);
-
-                    action->Start();
-                } else {
-                    NYdb::NIssue::TIssues opIssues;
-                    NYdb::NIssue::IssuesFromMessage(operation->issues(), opIssues);
-                    userResponseCb(operation, TPlainStatus{static_cast<EStatus>(operation->status()), std::move(opIssues),
-                        status.Endpoint, std::move(status.Metadata)});
-                }
-            } else {
-                userResponseCb(nullptr, status);
-            }
-        };
-
-        Run<TService, TRequest, TResponse>(
+        std::shared_ptr<IQueueClientContext> context = nullptr) {
+        RunDeferredImpl<false, TService, TRequest, TResponse>(
             std::forward<TRequest>(request),
-            responseCb,
+            std::move(userResponseCb),
             rpc,
             dbState,
+            deferredTimeout,
             requestSettings,
-            std::move(context));
+            poll,
+            std::move(context)
+        );
     }
 
     template<typename TService, typename TRequest, typename TResponse>
@@ -482,48 +443,17 @@ public:
         TDuration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
         bool poll = false,
-        std::shared_ptr<IQueueClientContext> context = nullptr)
-    {
-        if (!TryCreateContext(context)) {
-            TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
-            userResponseCb(nullptr, status);
-            return;
-        }
-
-        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, deferredTimeout, poll, context]
-            (TResponse* response, TPlainStatus status) mutable
-        {
-            if (response) {
-                Ydb::Operations::Operation* operation = response->mutable_operation();
-                if (!operation->ready() && poll) {
-                    auto action = MakeIntrusive<TDeferredAction>(
-                        operation->id(),
-                        std::move(userResponseCb),
-                        this,
-                        std::move(context),
-                        deferredTimeout,
-                        dbState,
-                        status.Endpoint);
-
-                    action->Start();
-                } else {
-                    NYdb::NIssue::TIssues opIssues;
-                    NYdb::NIssue::IssuesFromMessage(operation->issues(), opIssues);
-                    userResponseCb(operation, TPlainStatus{static_cast<EStatus>(operation->status()), std::move(opIssues),
-                        status.Endpoint, std::move(status.Metadata)});
-                }
-            } else {
-                userResponseCb(nullptr, status);
-            }
-        };
-
-        RunOnArena<TService, TRequest, TResponse>(
+        std::shared_ptr<IQueueClientContext> context = nullptr) {
+        RunDeferredImpl<true, TService, TRequest, TResponse>(
             request,
-            responseCb,
+            std::move(userResponseCb),
             rpc,
             dbState,
+            deferredTimeout,
             requestSettings,
-            std::move(context));
+            poll,
+            std::move(context)
+        );
     }
 
     // Run request using discovery endpoint.
@@ -836,6 +766,69 @@ template<typename TService, typename TRequest, typename TResponse>
     const TLog& GetLog() const override;
 
 private:
+    template <bool RequestOnArena, typename TService, typename TRequest, typename TResponse>
+    void RunDeferredImpl(
+        std::conditional_t<RequestOnArena, TRequest*, TRequest&&> request,
+        TDeferredOperationCb&& userResponseCb,
+        TSimpleRpc<TService, TRequest, TResponse> rpc,
+        TDbDriverStatePtr dbState,
+        TDuration deferredTimeout,
+        const TRpcRequestSettings& requestSettings,
+        bool poll = false,
+        std::shared_ptr<IQueueClientContext> context = nullptr) {
+        if (!TryCreateContext(context)) {
+            TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
+            userResponseCb(nullptr, status);
+            return;
+        }
+
+        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, deferredTimeout, poll, context]
+            (TResponse* response, TPlainStatus status) mutable
+        {
+            if (response) {
+                Ydb::Operations::Operation* operation = response->mutable_operation();
+                if (!operation->ready() && poll) {
+                    auto action = MakeIntrusive<TDeferredAction>(
+                        operation->id(),
+                        std::move(userResponseCb),
+                        this,
+                        std::move(context),
+                        deferredTimeout,
+                        dbState,
+                        status.Endpoint);
+
+                    action->Start();
+                } else {
+                    NYdb::NIssue::TIssues opIssues;
+                    NYdb::NIssue::IssuesFromMessage(operation->issues(), opIssues);
+                    userResponseCb(operation, TPlainStatus{static_cast<EStatus>(operation->status()), std::move(opIssues),
+                        status.Endpoint, std::move(status.Metadata)});
+                }
+            } else {
+                userResponseCb(nullptr, status);
+            }
+        };
+
+        if constexpr (RequestOnArena) {
+            RunOnArena<TService, TRequest, TResponse>(
+                request,
+                responseCb,
+                rpc,
+                dbState,
+                requestSettings,
+                std::move(context));
+        }
+        else {
+            Run<TService, TRequest, TResponse>(
+                std::forward<TRequest>(request),
+                responseCb,
+                rpc,
+                dbState,
+                requestSettings,
+                std::move(context));
+        }
+    }
+
     template <typename TService, typename TCallback>
     void WithServiceConnection(TCallback callback, TDbDriverStatePtr dbState,
         const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)

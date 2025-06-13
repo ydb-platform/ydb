@@ -17,7 +17,6 @@ add_subdirectory(granule)
 add_subdirectory(tablet)
 add_subdirectory(tables)
 add_subdirectory(portion)
-add_subdirectory(insert_table)
 add_subdirectory(schema_version)
 
 add_library(tx-columnshard-normalizer INTERFACE)
@@ -32,7 +31,6 @@ target_link_libraries(tx-columnshard-normalizer INTERFACE
   columnshard-normalizer-tablet
   columnshard-normalizer-tables
   columnshard-normalizer-portion
-  columnshard-normalizer-insert_table
   columnshard-normalizer-schema_version
 )
 

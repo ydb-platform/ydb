@@ -46,7 +46,6 @@ target_link_libraries(columnshard-transactions-operators.global PUBLIC
 
 target_sources(columnshard-transactions-operators.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/long_tx_write.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/backup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/sharing.cpp
 )

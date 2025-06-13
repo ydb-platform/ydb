@@ -27,7 +27,6 @@ target_link_libraries(engines-reader-abstract PUBLIC
   contrib-libs-cxxsupp
   yutil
   engines-scheme-versions
-  columnshard-engines-insert_table
   core-tx-program
   ydb-core-protos
   columnshard-data_sharing-protos

@@ -26,7 +26,6 @@ add_subdirectory(changes)
 add_subdirectory(portions)
 add_subdirectory(reader)
 add_subdirectory(predicate)
-add_subdirectory(insert_table)
 add_subdirectory(loading)
 add_subdirectory(writer)
 add_subdirectory(ut)
@@ -53,7 +52,6 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-reader
   columnshard-engines-predicate
   columnshard-engines-storage
-  columnshard-engines-insert_table
   columnshard-engines-changes
   columnshard-engines-portions
   columnshard-engines-protos

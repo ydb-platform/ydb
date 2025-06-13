@@ -44,7 +44,6 @@ target_sources(tx-columnshard-counters PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/common_data.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/engine_logs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/indexation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/insert_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/req_tracer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp

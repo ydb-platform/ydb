@@ -569,7 +569,7 @@ private:
     );
 
     TAsyncStatus UpsertTValueBufferOnArena(
-        const TString& dbPath, std::function<TArenaAllocatedValue(google::protobuf::Arena*)>&& buildFunc);
+        const TString& dbPath, std::function<TValue(google::protobuf::Arena*)>&& buildFunc);
 
     TStatus UpsertJson(IInputStream &input, const TString &dbPath, std::optional<ui64> inputSizeHint,
                        ProgressCallbackFunc & progressCallback);
@@ -1073,11 +1073,11 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
 
 inline
 TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
-    const TString& dbPath, std::function<TArenaAllocatedValue(google::protobuf::Arena*)>&& buildFunc) {
+    const TString& dbPath, std::function<TValue(google::protobuf::Arena*)>&& buildFunc) {
     auto arena = std::make_shared<google::protobuf::Arena>();
 
     // For the first attempt values are built before acquiring request inflight semaphore
-    std::optional<TArenaAllocatedValue> prebuiltValue = buildFunc(arena.get());
+    std::optional<TValue> prebuiltValue = buildFunc(arena.get());
 
     auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc),
                                 prebuiltValue = std::move(prebuiltValue), arena = std::move(arena)]
@@ -1085,8 +1085,9 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
         auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue, arena]() {
             // For every retry attempt after first request build value from strings again
             // to prevent copying data in retryFunc in a happy way when there is only one request
-            TArenaAllocatedValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc(arena.get());
+            TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc(arena.get());
             prebuiltValue = std::nullopt;
+
             return tableClient.BulkUpsertUnretryableArenaAllocated(
                 dbPath, std::move(builtValue), arena.get(), UpsertSettings)
                 .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {

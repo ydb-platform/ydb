@@ -1018,7 +1018,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryable(const std::str
 
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocated(
     const std::string& table,
-    TArenaAllocatedValue&& rows,
+    TValue&& rows,
     google::protobuf::Arena* arena,
     const TBulkUpsertSettings& settings
 ) {

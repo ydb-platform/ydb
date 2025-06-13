@@ -271,6 +271,7 @@ class TValue {
 public:
     TValue(const TType& type, const Ydb::Value& valueProto);
     TValue(const TType& type, Ydb::Value&& valueProto);
+    TValue(const TType& type, Ydb::Value* arenaAllocatedValueProto);
 
     const TType& GetType() const;
     TType& GetType();
@@ -285,23 +286,6 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-
-class TArenaAllocatedValue {
-public:
-    TArenaAllocatedValue(const TType& type, Ydb::Value* value);
-
-    const TType& GetType() const;
-    TType& GetType();
-
-    const Ydb::Value* GetProto() const;
-    Ydb::Value* GetProto();
-
-    Ydb::Value&& ExtractProto() &&;
-
-private:
-    class TImpl;
-    std::shared_ptr<TImpl> Impl_;
-};
 
 class TValueParser : public TMoveOnly {
     friend class TResultSetParser;

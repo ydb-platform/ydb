@@ -582,7 +582,7 @@ TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& f
 
 
 
-TArenaAllocatedValue TCsvParser::BuildListOnArena(
+TValue TCsvParser::BuildListOnArena(
     const std::vector<TString>& lines,
     const TString& filename,
     google::protobuf::Arena* arena,
@@ -609,7 +609,7 @@ TArenaAllocatedValue TCsvParser::BuildListOnArena(
     }
 
     // Return a TValue that references the arena-allocated message
-    return TArenaAllocatedValue(ResultListType.value(), value);
+    return TValue(ResultListType.value(), value);
 }
 
 // Helper method to process a single CSV line

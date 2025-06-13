@@ -65,6 +65,7 @@ namespace NLs {
     TCheckFunc ShardsInsideDomain(ui64 count);
     TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions = 0);
+    TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected);
 
     TCheckFunc FreezeStateEqual(NKikimrSchemeOp::EFreezeState expectedState);
 

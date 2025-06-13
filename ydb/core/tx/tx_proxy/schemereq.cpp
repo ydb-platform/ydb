@@ -1268,6 +1268,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
                 // Admins can always change ACLs
                 allowACLBypass = isAdmin;
+            } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain) {
+                if (IsDB(entry) && !IsClusterAdministrator) {
+                    const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                        << "only cluster admins can alter databases"
+                    );
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                    return false;
+                }
             }
 
             ui32 access = requestIt->RequireAccess;

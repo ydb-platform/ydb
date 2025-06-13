@@ -795,6 +795,20 @@ TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions) {
     };
 }
 
+TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& domain = record.GetPathDescription().GetDomainDescription();
+        const auto& actual = domain.GetSchemeLimits();
+
+        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+            "scheme limits mismatch, domain with id " << domain.GetDomainKey().GetPathId()
+                << " has limits: " << actual.ShortDebugString().Quote()
+                << ", but expected limits are: " << expected.ShortDebugString().Quote()
+        );
+    };
+}
+
 TCheckFunc FreezeStateEqual(NKikimrSchemeOp::EFreezeState expectedState) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);

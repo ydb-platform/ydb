@@ -100,8 +100,10 @@ struct TAllStatistics {
         size_t seconds = duration_cast<std::chrono::duration<size_t>>(Ts - prev.Ts).count();
 
         // Calculate per-thread derivatives
-        for (size_t i = 0; i < StatVec.size(); ++i) {
-            StatVec[i].CalculateDerivative(prev.StatVec[i], seconds);
+        if (seconds != 0) {
+            for (size_t i = 0; i < StatVec.size(); ++i) {
+                StatVec[i].CalculateDerivative(prev.StatVec[i], seconds);
+            }
         }
 
         // Aggregate total statistics
@@ -791,7 +793,9 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
     data.RemainingMinutes = std::max(0LL, remaining.count() / 60);
     data.RemainingSeconds = std::max(0LL, remaining.count() % 60);
 
-    data.ProgressPercent = (static_cast<double>(elapsed.count()) / duration.count()) * 100.0;
+    if (duration.count() != 0) {
+        data.ProgressPercent = (static_cast<double>(elapsed.count()) / duration.count()) * 100.0;
+    }
 
     // Calculate tpmC and efficiency
     if (data.ElapsedMinutes == 0 && data.ElapsedSeconds == 0) {

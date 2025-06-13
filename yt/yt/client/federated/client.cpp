@@ -211,10 +211,10 @@ public:
         Underlying_->UnsubscribeAborted(handler);
     }
 
-    std::optional<TString> TryGetStickyProxyAddress() const override
+    std::optional<std::string> TryGetStickyProxyAddress() const override
     {
         const auto* derived = Underlying_->TryAs<NRpcProxy::TTransaction>();
-        return nullptr == derived ? std::nullopt : std::make_optional(derived->GetStickyProxyAddress());
+        return !derived ? std::nullopt : derived->GetStickyProxyAddress();
     }
 
     UNIMPLEMENTED_METHOD(TFuture<void>, SetNode, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetNodeOptions&));

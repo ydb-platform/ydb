@@ -228,7 +228,7 @@ struct TListJobsOptions
     NJobTrackerClient::TJobId JobCompetitionId;
     std::optional<NJobTrackerClient::EJobType> Type;
     std::optional<NJobTrackerClient::EJobState> State;
-    std::optional<TString> Address;
+    std::optional<std::string> Address;
     std::optional<bool> WithStderr;
     std::optional<bool> WithFailContext;
     std::optional<bool> WithSpec;

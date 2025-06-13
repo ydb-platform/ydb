@@ -184,7 +184,7 @@ ITransactionPtr TClient::AttachTransaction(
     auto client = GetRpcProxyClient();
 
     auto channel = options.StickyAddress
-        ? WrapStickyChannelIntoRetrying(CreateNonRetryingChannelByAddress(options.StickyAddress))
+        ? WrapStickyChannelIntoRetrying(CreateNonRetryingChannelByAddress(*options.StickyAddress))
         : GetRetryingChannel();
 
     auto proxy = CreateApiServiceProxy(channel);
@@ -214,7 +214,7 @@ ITransactionPtr TClient::AttachTransaction(
     if (options.StickyAddress || transactionType == ETransactionType::Tablet) {
         stickyParameters.emplace();
         if (options.StickyAddress) {
-            stickyParameters->ProxyAddress = options.StickyAddress;
+            stickyParameters->ProxyAddress = *options.StickyAddress;
         } else {
             stickyParameters->ProxyAddress = rsp->GetAddress();
         }

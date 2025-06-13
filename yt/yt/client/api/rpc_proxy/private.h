@@ -12,7 +12,7 @@ namespace NYT::NApi::NRpcProxy {
 struct TStickyTransactionParameters
 {
     // Empty if not supported.
-    TString ProxyAddress;
+    std::string ProxyAddress;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

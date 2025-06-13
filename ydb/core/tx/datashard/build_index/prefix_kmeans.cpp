@@ -241,7 +241,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_D("Seek " << seq << " " << Debug());
+        LOG_T("Seek " << seq << " " << Debug());
 
         if (IsExhausted) {
             return Uploader.CanFinish()
@@ -256,7 +256,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        LOG_T("Feed " << Debug());
+        // LOG_T("Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
@@ -294,7 +294,7 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_D("Exhausted " << Debug());
+        LOG_T("Exhausted " << Debug());
 
         if (!FinishPrefix()) {
             return EScan::Reset;
@@ -379,13 +379,13 @@ protected:
     {
         if (FinishPrefixImpl()) {
             StartNewPrefix();
-            LOG_D("FinishPrefix finished " << Debug());
+            LOG_T("FinishPrefix finished " << Debug());
             return true;
         } else {
             IsFirstPrefixFeed = false;
 
             if (IsPrefixRowsValid) {
-                LOG_D("FinishPrefix not finished, manually feeding " << PrefixRows.Size() << " saved rows " << Debug());
+                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.Size() << " saved rows " << Debug());
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
                         TSerializedCellVec row(row_);
@@ -393,14 +393,14 @@ protected:
                     }
                     if (FinishPrefixImpl()) {
                         StartNewPrefix();
-                        LOG_D("FinishPrefix finished in " << iteration << " iterations " << Debug());
+                        LOG_T("FinishPrefix finished in " << iteration << " iterations " << Debug());
                         return true;
                     } else {
-                        LOG_D("FinishPrefix not finished in " << iteration << " iterations " << Debug());
+                        LOG_T("FinishPrefix not finished in " << iteration << " iterations " << Debug());
                     }
                 }
             } else {
-                LOG_D("FinishPrefix not finished, rescanning rows " << Debug());
+                LOG_T("FinishPrefix not finished, rescanning rows " << Debug());
             }
 
             return false;

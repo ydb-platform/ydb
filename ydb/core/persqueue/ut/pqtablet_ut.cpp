@@ -2248,9 +2248,13 @@ Y_UNIT_TEST_F(KafkaTransactionSupportivePartitionsShouldBeDeletedAfterTimeout, T
     // this will create a supportive partition for a kafka transaction
     SendKafkaTxnWriteRequest({1, 0});
 
+    // validate supportive partition was created
     WaitForExactSupportivePartitionsCount(1);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(1).GetKafkaTransaction(), true);
 
-    // increment time till after timeout
+    // increment time till after kafka txn timeout
     TDuration kafkaTxnTimeout = TDuration::MilliSeconds(
         Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
         + KAFKA_TRANSACTION_DELETE_DELAY_MS
@@ -2267,12 +2271,63 @@ Y_UNIT_TEST_F(KafkaTransactionSupportivePartitionsShouldBeDeletedAfterTimeout, T
 
 Y_UNIT_TEST_F(NonKafkaTransactionSupportivePartitionsShouldNotBeDeletedAfterTimeout, TPQTabletFixture)
 {
-    UNIT_FAIL("Unimplemented");
+    const ui64 mockTabletId = MakeTabletID(false, 22222);
+    const ui64 txId = 67890;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    // create Topic API transaction
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+    WaitForExactSupportivePartitionsCount(1);
+
+    // create Kafka transaction
+    SendKafkaTxnWriteRequest({1, 0});
+    WaitForExactSupportivePartitionsCount(2);
+
+    // increment time till after kafka txn timeout
+    TDuration kafkaTxnTimeout = TDuration::MilliSeconds(
+        Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS
+    );
+    Ctx->Runtime->AdvanceCurrentTime(kafkaTxnTimeout);
+
+    // wait till supportive partition for this kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(1);
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(txInfo.GetTxWrites(1).GetKafkaTransaction(), false);
 }
 
 Y_UNIT_TEST_F(InKafkaTxnOnlySupportivePartitionsThatExceededTimeoutShouldBeDeleted, TPQTabletFixture)
 {
-    UNIT_FAIL("Unimplemented");
+    TDuration kafkaTxnTimeout = Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() 
+        + KAFKA_TRANSACTION_DELETE_DELAY_MS;
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    // this will create a supportive partition for first kafka transaction
+    SendKafkaTxnWriteRequest({1, 0});
+    WaitForExactSupportivePartitionsCount(1);
+
+    // advance time to value strictly less then kafka transaction timeout
+    ui64 testTimeAdvanceMs = KAFKA_TRANSACTION_DELETE_DELAY_MS / 2;
+    Ctx->Runtime->AdvanceCurrentTime(TDuration::MilliSeconds(testTimeAdvanceMs));
+    // this will create a supportive partition for second kafka transaction
+    SendKafkaTxnWriteRequest({1, 0});
+    WaitForExactSupportivePartitionsCount(2);
+
+    // increment time till after timeout for the first transaction
+    Ctx->Runtime->AdvanceCurrentTime(Ctx->Runtime->GetAppData(0).KafkaProxyConfig.GetTransactionTimeoutMs() + testTimeAdvanceMs + 1);
+
+    // wait till supportive partition for this kafka transaction is deleted
+    WaitForExactSupportivePartitionsCount(1);
+    // validate that TxWrite for this transaction is deleted
+    auto txInfo = GetTxWritesFromKV();
+    UNIT_ASSERT_EQUAL(txInfo.TxWritesSize(), 1);
 }
 
 }

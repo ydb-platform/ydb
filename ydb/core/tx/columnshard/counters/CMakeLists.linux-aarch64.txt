@@ -52,6 +52,7 @@ target_sources(tx-columnshard-counters PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/writes_monitor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/portion_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/duplicate_filtering.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/error_collector.cpp
   ${PROJECT_BINARY_DIR}/ydb/core/tx/columnshard/counters/columnshard.h_serialized.h
 )
 

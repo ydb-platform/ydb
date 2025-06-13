@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(1000000);
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(100));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 

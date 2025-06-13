@@ -2,12 +2,10 @@
 
 #include "fwd.h"
 
-#include <google/protobuf/arena.h>
 #include <util/datetime/base.h>
 
 #include <optional>
 #include <memory>
-#include <ydb/public/api/protos/ydb_value.pb.h>
 
 namespace Ydb {
     class Type;

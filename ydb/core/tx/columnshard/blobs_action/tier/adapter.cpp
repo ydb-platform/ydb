@@ -28,7 +28,7 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
         ErrorCollector->OnReadError(StorageId, err);
 
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(bRange, NKikimrProto::EReplyStatus::ERROR,
-            TStringBuilder() << ev->Result, TStringBuilder{} << ev->GetError().GetExceptionName() << ", " << ev->GetError().GetMessage(), false,
+            TStringBuilder() << ev->Result, err, false,
             StorageId);
     }
 }

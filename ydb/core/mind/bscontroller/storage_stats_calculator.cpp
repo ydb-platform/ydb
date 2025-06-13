@@ -158,7 +158,7 @@ public:
                 TGroupMapper::TGroupDefinition group;
                 TString error;
                 std::deque<ui64> groupSizes;
-                while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 0, false, error)) {
+                while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 0, false, {}, error)) {
                     std::vector<TGroupDiskInfo> disks;
                     std::deque<NKikimrBlobStorage::TPDiskMetrics> pdiskMetrics;
                     std::deque<NKikimrBlobStorage::TVDiskMetrics> vdiskMetrics;

@@ -66,6 +66,8 @@ bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
+    // TODO(alexvru): bridge group status
+
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
             VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty()) {
         Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
@@ -152,6 +154,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 
 void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     StorageConfig = std::move(ev->Get()->Config);
+    BridgeInfo = std::move(ev->Get()->BridgeInfo);
     SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});

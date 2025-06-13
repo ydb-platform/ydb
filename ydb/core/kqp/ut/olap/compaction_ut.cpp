@@ -47,7 +47,7 @@ public:
                         {{"levels" : 
                             [
                                 {{"class_name" : "Zero", "expected_blobs_size" : {portion_size}}},
-                                {{"class_name" : "Zero"}}
+                                {{"class_name" : "Zero", "expected_blobs_size" : {portion_size}}}
                             ]
                         }}`);
             )", 

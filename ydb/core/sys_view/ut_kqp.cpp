@@ -114,6 +114,54 @@ void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = fa
     }
 }
 
+void BreakLock(TSession& session, const TString& tableName) {
+    std::optional<TTransaction> tx1;
+
+    {  // tx0: write test data
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "UPSERT INTO `" << tableName << "` (Key, Value) VALUES (55u, \"Fifty five\")",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {  // tx0: read all data
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "SELECT * FROM `" << tableName << "`",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    while (!tx1) {
+    // tx1: start reading
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "SELECT * FROM `" << tableName << "` WHERE Key = 55u",
+        TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TString yson = FormatResultSetYson(result.GetResultSet(0));
+        if (yson == "[]") {
+            continue;
+        }
+
+        NKqp::CompareYson(R"([
+            [[55u];["Fifty five"]];
+        ])", yson);
+        tx1 = result.GetTransaction();
+        UNIT_ASSERT(tx1);
+    }
+
+    {  // tx2: write + commit
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "UPSERT INTO `" << tableName << "` (Key, Value) VALUES (55u, \"NewValue1\")",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {  // tx1: try to commit
+        auto result = tx1->Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
 void SetupAuthEnvironment(TTestEnv& env) {
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
@@ -160,6 +208,47 @@ void CheckEmpty(TScanQueryPartIterator& it) {
 
     ])";
     NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+}
+
+size_t GetRowCount(TTableClient& client, const TString& tableName, const TString& condition = {}) {
+    TStringBuilder query;
+    query << "SELECT * FROM `" << tableName << "`";
+    if (!condition.empty())
+        query << " WHERE " << condition;
+    auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    auto ysonString = NKqp::StreamResultToYson(it);
+    auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+    UNIT_ASSERT(node.IsList());
+    return node.AsList().size();
+}
+
+ui64 GetIntervalEnd(TTableClient& client, const TString& name) {
+    TStringBuilder query;
+    query << "SELECT MAX(IntervalEnd) FROM `" << name << "`";
+    auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    auto ysonString = NKqp::StreamResultToYson(it);
+    auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+    UNIT_ASSERT(node.IsList());
+    UNIT_ASSERT(node.AsList().size() == 1);
+    auto row = node.AsList()[0];
+    UNIT_ASSERT(row.IsList());
+    UNIT_ASSERT(row.AsList().size() == 1);
+    auto value = row.AsList()[0];
+    UNIT_ASSERT(value.IsList());
+    UNIT_ASSERT(value.AsList().size() == 1);
+    return value.AsList()[0].AsUint64();
+}
+
+void WaitForStats(TTableClient& client, const TString& tableName, const TString& condition = {}) {
+    size_t rowCount = 0;
+    for (size_t iter = 0; iter < 30; ++iter) {
+        if (rowCount = GetRowCount(client, tableName, condition))
+            break;
+        Sleep(TDuration::Seconds(5));
+    }
+    UNIT_ASSERT_GE(rowCount, 0);   
 }
 
 class TYsonFieldChecker {
@@ -756,6 +845,36 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(1u); // LastTtlRowsErased
     }
 
+    Y_UNIT_TEST(PartitionStatsLocksFields) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        TTestEnv env;
+        CreateRootTable(env, /* partitionCount */ 1, /* fillTable */ true);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+     
+        BreakLock(session, "/Root/Table0");
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "LocksBroken != 0");
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken
+            FROM `/Root/.sys/partition_stats`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        TYsonFieldChecker check(ysonString, 3);
+
+        check.Uint64(1); // LocksAcquired
+        check.Uint64(0); // LocksWholeShard
+        check.Uint64(1); // LocksBroken
+    }    
+
     Y_UNIT_TEST(PartitionStatsFields) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
@@ -811,13 +930,16 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
                 FollowerId,
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken,
                 UpdateTime
             FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-        TYsonFieldChecker check(ysonString, 24);
+        TYsonFieldChecker check(ysonString, 27);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -842,6 +964,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
         check.Uint64(0u); // FollowerId
+        check.Uint64(0u); // LocksAcquired
+        check.Uint64(0u); // LocksWholeShard
+        check.Uint64(0u); // LocksBroken
         check.Uint64GreaterOrEquals(nowUs); // UpdateTime
     }
 
@@ -1231,38 +1356,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    size_t GetRowCount(TTableClient& client, const TString& tableName, const TString& condition = {}) {
-        TStringBuilder query;
-        query << "SELECT * FROM `" << tableName << "`";
-        if (!condition.empty())
-            query << " WHERE " << condition;
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        auto ysonString = NKqp::StreamResultToYson(it);
-        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-        UNIT_ASSERT(node.IsList());
-        return node.AsList().size();
-    }
-
-    ui64 GetIntervalEnd(TTableClient& client, const TString& name) {
-        TStringBuilder query;
-        query << "SELECT MAX(IntervalEnd) FROM `" << name << "`";
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        auto ysonString = NKqp::StreamResultToYson(it);
-        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-        UNIT_ASSERT(node.IsList());
-        UNIT_ASSERT(node.AsList().size() == 1);
-        auto row = node.AsList()[0];
-        UNIT_ASSERT(row.IsList());
-        UNIT_ASSERT(row.AsList().size() == 1);
-        auto value = row.AsList()[0];
-        UNIT_ASSERT(value.IsList());
-        UNIT_ASSERT(value.AsList().size() == 1);
-        return value.AsList()[0].AsUint64();
-    }
-
-    Y_UNIT_TEST(TopPartitionsFields) {
+    Y_UNIT_TEST(TopPartitionsByCpuFields) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         auto nowUs = TInstant::Now().MicroSeconds();
@@ -1314,7 +1408,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(0); // InFlightTxCount
     }
 
-    Y_UNIT_TEST(TopPartitionsTables) {
+    Y_UNIT_TEST(TopPartitionsByCpuTables) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         constexpr ui64 partitionCount = 5;
@@ -1344,7 +1438,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check("/Root/Tenant1/.sys/top_partitions_one_hour");
     }
 
-    Y_UNIT_TEST(TopPartitionsRanges) {
+    Y_UNIT_TEST(TopPartitionsByCpuRanges) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         constexpr ui64 partitionCount = 5;
@@ -1425,7 +1519,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(TopPartitionsFollowers) {
+    Y_UNIT_TEST(TopPartitionsByCpuFollowers) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         auto nowUs = TInstant::Now().MicroSeconds();
@@ -1600,6 +1694,58 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }        
     }    
 
+    Y_UNIT_TEST(TopPartitionsByTliFields) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        TTestEnv env(1, 4, {.EnableSVP = true});
+        CreateTenantsAndTables(env);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+     
+        const TString tableName = "/Root/Tenant1/Table1";
+        const TString viewName = "/Root/Tenant1/.sys/top_partitions_by_tli_one_minute";
+
+        BreakLock(session, tableName);
+
+        WaitForStats(client, viewName, "LocksAcquired != 0");
+
+        ui64 intervalEnd = GetIntervalEnd(client, viewName);
+
+        TStringBuilder query;
+        query << R"(
+            SELECT
+                IntervalEnd,
+                Rank,
+                TabletId,
+                Path,
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken,
+                NodeId,
+                DataSize,
+                RowCount,
+                IndexSize)"
+            << " FROM `" << viewName << "`"
+            << " WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp)"
+            << " AND Path=\"" << tableName << "\"";
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        TYsonFieldChecker check(ysonString, 11);
+        check.Uint64(intervalEnd); // IntervalEnd
+        check.Uint64(1); // Rank
+        check.Uint64Greater(0); // TabletId
+        check.String(tableName); // Path
+        check.Uint64GreaterOrEquals(1); // LocksAcquired
+        check.Uint64(0); // LocksWholeShard
+        check.Uint64GreaterOrEquals(1); // LocksBroken
+        check.Uint64Greater(0); // NodeId
+        check.Uint64Greater(0); // DataSize
+        check.Uint64(4); // RowCount
+        check.Uint64(0); // IndexSize
+    }
+
     Y_UNIT_TEST(Describe) {
         TTestEnv env;
         CreateRootTable(env);
@@ -1619,7 +1765,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             const auto& columns = table.GetTableColumns();
             const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
@@ -1780,7 +1926,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 32);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1798,7 +1944,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 24);
+
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 26);
 
             THashSet<TString> names;
             for (const auto& child : children) {

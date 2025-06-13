@@ -21,6 +21,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -2600,7 +2601,11 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
 
         NIceDb::TUpdate<Schema::TablePartitionStats::SearchHeight>(stats.SearchHeight),
         NIceDb::TUpdate<Schema::TablePartitionStats::FullCompactionTs>(stats.FullCompactionTs),
-        NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize)
+        NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize),
+
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksAcquired>(stats.LocksAcquired),
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksWholeShard>(stats.LocksWholeShard),
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksBroken>(stats.LocksBroken)
     );
 
     if (!stats.StoragePoolsStats.empty()) {
@@ -4920,6 +4925,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 
@@ -4970,6 +4976,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasure, DataErasureManager->WakeupToRunDataErasure);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
         HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
+        HFuncTraced(TEvKeyValue::TEvCleanUpDataResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureManualStartupRequest, Handle);
@@ -7664,7 +7671,11 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev,
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxCompleteDataErasureShard(ev), ctx);
+    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvForceDataCleanupResult::TPtr>(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(this->CreateTxCompleteDataErasureShard(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx) {

@@ -276,7 +276,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             [[72057594046644480u];[0u];["/Root/Join1"];[10u]];
             [[72057594046644480u];[1u];["/Root/Join1"];[10u]];
             [[72057594046644480u];[0u];["/Root/Join2"];[11u]];
-            [[72057594046644480u];[1u];["/Root/Join2"];[11u]]
+            [[72057594046644480u];[1u];["/Root/Join2"];[11u]];
+            [[72057594046644480u];[0u];["/Root/TuplePrimaryDescending"];[12u]];
+            [[72057594046644480u];[1u];["/Root/TuplePrimaryDescending"];[12u]];
+            [[72057594046644480u];[2u];["/Root/TuplePrimaryDescending"];[12u]]
         ])", StreamResultToYson(it));
     }
 
@@ -716,6 +719,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             ])", actual);
         }
 
+        // from master - should read
+        CheckTableReads(session, "/Root/Followers", false, true);
+        // from followers - should NOT read yet
+        CheckTableReads(session, "/Root/Followers", true, false);        
+
         Cerr << "... SELECT from follower" << Endl;
         {
             auto result = session.ExecuteDataQuery(R"(
@@ -730,6 +738,11 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 [[31u];["Four"]]
             ])", actual);
         }
+
+        // from master - should read
+        CheckTableReads(session, "/Root/Followers", false, true);
+        // from followers - should read
+        CheckTableReads(session, "/Root/Followers", true, true);
 
         for (size_t attempt = 0; attempt < 30; ++attempt)
         {

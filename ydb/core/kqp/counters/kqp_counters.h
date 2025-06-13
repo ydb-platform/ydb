@@ -419,6 +419,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorPrepareWrites;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWriteOnlyOperations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorReadWriteOperations;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorDistributedCommits;
@@ -479,6 +482,12 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemConvertBytes;
 
+    // Statistics batch operations
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationRetries;
 };
 
 struct TKqpRequestCounters : public TThrRefBase {

@@ -5114,6 +5114,21 @@
                 "ColumnId": 40,
                 "ColumnName": "ReadBytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 41,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 42,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 43,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -5159,7 +5174,10 @@
                     37,
                     38,
                     39,
-                    40
+                    40,
+                    41,
+                    42,
+                    43
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7358,6 +7376,21 @@
                 "ColumnId": 34,
                 "ColumnName": "ByKeyFilterSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "LocksAcquired",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 36,
+                "ColumnName": "LocksWholeShard",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 37,
+                "ColumnName": "LocksBroken",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -7397,7 +7430,10 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35,
+                    36,
+                    37
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8148,6 +8184,26 @@
                 "ColumnId": 4,
                 "ColumnName": "Parent",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "ParentBegin",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Child",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ChildBegin",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "TableSize",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -8157,7 +8213,11 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

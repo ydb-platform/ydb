@@ -7,8 +7,11 @@
 
 namespace NKikimr::NSysView {
 
-THolder<NActors::IActor> CreateTopPartitionsScan(const NActors::TActorId& ownerId, ui32 scanId,
+THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& ownerId, ui32 scanId,
     const TTableId& tableId, const TTableRange& tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);
 
+THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const TTableId& tableId, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns);    
 } // NKikimr::NSysView

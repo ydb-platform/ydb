@@ -46,28 +46,29 @@ public:
         Response = new TEvNodeBroker::TEvExtendLeaseResponse;
         Response->Record.SetNodeId(nodeId);
 
-        auto it = Self->Nodes.find(nodeId);
-        if (it == Self->Nodes.end()) {
-            if (Self->ExpiredNodes.contains(nodeId))
+        auto it = Self->Dirty.Nodes.find(nodeId);
+        if (it == Self->Dirty.Nodes.end()) {
+            if (Self->Dirty.ExpiredNodes.contains(nodeId))
                 return Error(TStatus::WRONG_REQUEST, "Node has expired", ctx);
             else
                 return Error(TStatus::WRONG_REQUEST, "Unknown node", ctx);
         }
 
-        if (Self->IsBannedId(nodeId))
+        if (Self->Dirty.IsBannedId(nodeId))
             return Error(TStatus::WRONG_REQUEST, "Node ID is banned", ctx);
 
         auto &node = it->second;
         if (!node.IsFixed()) {
-            Self->DbUpdateNodeLease(node, txc);
-            Response->Record.SetExpire(Self->Epoch.NextEnd.GetValue());
+            Self->Dirty.DbUpdateNodeLease(node, txc);
+            Self->Dirty.ExtendLease(node);
+            Response->Record.SetExpire(Self->Dirty.Epoch.NextEnd.GetValue());
             Update = true;
         } else {
             Response->Record.SetExpire(TInstant::Max().GetValue());
         }
 
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
-        Self->Epoch.Serialize(*Response->Record.MutableEpoch());
+        Self->Dirty.Epoch.Serialize(*Response->Record.MutableEpoch());
 
         return true;
     }
@@ -82,9 +83,7 @@ public:
         ctx.Send(Event->Sender, Response.Release());
 
         if (Update)
-            Self->ExtendLease(Self->Nodes.at(Event->Get()->Record.GetNodeId()));
-
-        Self->TxCompleted(Event->Get()->Record.GetNodeId(), this, ctx);
+            Self->Committed.ExtendLease(Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId()));
     }
 
 private:

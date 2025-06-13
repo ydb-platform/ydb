@@ -340,6 +340,8 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
 
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query);
+
 class TStreamReadError : public yexception {
 public:
     TStreamReadError(NYdb::EStatus status)
@@ -370,6 +372,8 @@ void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateT
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 
+void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user);
+
 THolder<NKikimr::NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NKikimr::NSchemeCache::TSchemeCacheNavigate::EOp op);
 
@@ -382,6 +386,9 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
+
+void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, bool checkFollower, bool readsExpected);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 

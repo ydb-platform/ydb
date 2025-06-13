@@ -161,6 +161,7 @@ namespace NKikimr {
             TDuration CommitDuration;
             TDuration OtherDuration;
             TDuration PhantomDuration;
+            TDuration OutOfSpaceDelayDuration;
 
             std::unique_ptr<NRepl::TProxyStat> ProxyStat;
 

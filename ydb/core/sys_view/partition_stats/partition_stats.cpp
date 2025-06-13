@@ -32,7 +32,8 @@ public:
         SVLOG_D("NSysView::TPartitionStatsCollector bootstrapped");
 
         if (AppData()->UsePartitionStatsCollectorForTests) {
-            OverloadedPartitionBound = 0.0;
+            OverloadedByCpuPartitionBound = 0.0;
+            OverloadedByTliPartitionBound = 0;
             ProcessOverloadedInterval = TDuration::Seconds(1);
         }
 
@@ -88,7 +89,7 @@ private:
 
             auto& oldPartitions = table.Partitions;
             std::unordered_map<TShardIdx, TPartitionStats> newPartitions;
-            std::set<TOverloadedFollower> overloaded;
+            std::set<TFollowerStats> overloadedByCpu, overloadedByTli;
 
             for (auto shardIdx : ev->Get()->ShardIndices) {
                 auto old = oldPartitions.find(shardIdx);
@@ -96,17 +97,24 @@ private:
                     newPartitions[shardIdx] = old->second;
 
                     for (const auto& followerStat: old->second.FollowerStats) {
-                        if (IsPartitionOverloaded(followerStat.second))
-                            overloaded.insert({shardIdx, followerStat.first});
+                        if (IsPartitionOverloadedByCpu(followerStat.second))
+                            overloadedByCpu.insert({shardIdx, followerStat.first});
+                        if (IsPartitionOverloadedByTli(followerStat.second))
+                            overloadedByTli.insert({shardIdx, followerStat.first});
                     }
                 }
             }
 
-            if (!overloaded.empty()) {
-                tables.Overloaded[pathId].swap(overloaded);
+            if (!overloadedByCpu.empty()) {
+                tables.OverloadedByCpu[pathId].swap(overloadedByCpu);
             } else {
-                tables.Overloaded.erase(pathId);
+                tables.OverloadedByCpu.erase(pathId);
             }
+            if (!overloadedByTli.empty()) {
+                tables.OverloadedByTli[pathId].swap(overloadedByTli);
+            } else {
+                tables.OverloadedByTli.erase(pathId);
+            }            
 
             oldPartitions.swap(newPartitions);
             table.ShardIndices.swap(ev->Get()->ShardIndices);
@@ -125,7 +133,8 @@ private:
 
         auto& tables = DomainTables[domainKey];
         tables.Stats.erase(pathId);
-        tables.Overloaded.erase(pathId);
+        tables.OverloadedByCpu.erase(pathId);
+        tables.OverloadedByTli.erase(pathId);
     }
 
     void Handle(TEvSysView::TEvSendPartitionStats::TPtr& ev) {
@@ -153,18 +162,29 @@ private:
 
         auto& followerStats = partitionStats.FollowerStats[followerId];
 
-        TOverloadedFollower overloadedFollower = {shardIdx, followerId};
-        if (IsPartitionOverloaded(newStats)) {
-            tables.Overloaded[pathId].insert(overloadedFollower);
+        TFollowerStats overloadedFollower = {shardIdx, followerId};
+        if (IsPartitionOverloadedByCpu(newStats)) {
+            tables.OverloadedByCpu[pathId].insert(overloadedFollower);
         } else {
-            auto overloadedFound = tables.Overloaded.find(pathId);
-            if (overloadedFound != tables.Overloaded.end()) {
+            auto overloadedFound = tables.OverloadedByCpu.find(pathId);
+            if (overloadedFound != tables.OverloadedByCpu.end()) {
                 overloadedFound->second.erase(overloadedFollower);
                 if (overloadedFound->second.empty()) {
-                    tables.Overloaded.erase(pathId);
+                    tables.OverloadedByCpu.erase(pathId);
                 }
             }
         }
+        if (IsPartitionOverloadedByTli(newStats)) {
+            tables.OverloadedByTli[pathId].insert(overloadedFollower);
+        } else {
+            auto overloadedFound = tables.OverloadedByTli.find(pathId);
+            if (overloadedFound != tables.OverloadedByTli.end()) {
+                overloadedFound->second.erase(overloadedFollower);
+                if (overloadedFound->second.empty()) {
+                    tables.OverloadedByTli.erase(pathId);
+                }
+            }
+        }        
 
         if (followerStats.HasTtlStats()) {
             newStats.MutableTtlStats()->Swap(followerStats.MutableTtlStats());
@@ -376,37 +396,54 @@ private:
         }
         auto& domainTables = domainFound->second;
 
-        struct TPartition {
+        struct TPartitionByCpu {
             TPathId PathId;
             TShardIdx ShardIdx;
             ui32 FollowerId;
             double CPUCores;
         };
-        std::vector<TPartition> sorted;
+        std::vector<TPartitionByCpu> sortedByCpu;
 
-        for (const auto& [pathId, overloadedFollowers] : domainTables.Overloaded) {
-            for (const TOverloadedFollower& overloadedFollower : overloadedFollowers) {
+        struct TPartitionByTli {
+            TPathId PathId;
+            TShardIdx ShardIdx;
+            ui32 FollowerId;
+            ui64 LocksBroken;
+        };
+        std::vector<TPartitionByTli> sortedByTli;        
+
+        for (const auto& [pathId, overloadedFollowers] : domainTables.OverloadedByCpu) {
+            for (const TFollowerStats& overloadedFollower : overloadedFollowers) {
                 const auto& table = domainTables.Stats[pathId];
                 const auto& partition = table.Partitions.at(overloadedFollower.ShardIdx).FollowerStats.at(overloadedFollower.FollowerId);
-                sorted.emplace_back(TPartition{pathId, overloadedFollower.ShardIdx, overloadedFollower.FollowerId, partition.GetCPUCores()});
+                sortedByCpu.emplace_back(TPartitionByCpu{pathId, overloadedFollower.ShardIdx, overloadedFollower.FollowerId, partition.GetCPUCores()});
             }
         }
+        for (const auto& [pathId, overloadedFollowers] : domainTables.OverloadedByTli) {
+            for (const TFollowerStats& overloadedFollower : overloadedFollowers) {
+                const auto& table = domainTables.Stats[pathId];
+                const auto& partition = table.Partitions.at(overloadedFollower.ShardIdx).FollowerStats.at(overloadedFollower.FollowerId);
+                sortedByTli.emplace_back(TPartitionByTli{pathId, overloadedFollower.ShardIdx, overloadedFollower.FollowerId, partition.GetLocksBroken()});
+            }
+        }        
 
-        std::sort(sorted.begin(), sorted.end(),
+        std::sort(sortedByCpu.begin(), sortedByCpu.end(),
             [] (const auto& l, const auto& r) { return l.CPUCores > r.CPUCores; });
+        std::sort(sortedByTli.begin(), sortedByTli.end(),
+            [] (const auto& l, const auto& r) { return l.LocksBroken > r.LocksBroken; });
 
         auto now = TActivationContext::Now();
         auto nowUs = now.MicroSeconds();
 
         size_t count = 0;
         auto sendEvent = MakeHolder<TEvSysView::TEvSendTopPartitions>();
-        for (const auto& entry : sorted) {
+        for (const auto& entry : sortedByCpu) {
             const auto& table = domainTables.Stats[entry.PathId];
             const auto& followerStats = table.Partitions.at(entry.ShardIdx).FollowerStats;
             const auto& partition = followerStats.at(entry.FollowerId);
             const auto& leaderPartition = followerStats.at(0);
 
-            auto* result = sendEvent->Record.AddPartitions();
+            auto* result = sendEvent->Record.AddPartitionsByCpu();
             result->SetTabletId(partition.GetTabletId());
             result->SetPath(table.Path);
             result->SetPeakTimeUs(nowUs);
@@ -422,11 +459,34 @@ private:
                 break;
             }
         }
+        for (const auto& entry : sortedByTli) {
+            const auto& table = domainTables.Stats[entry.PathId];
+            const auto& followerStats = table.Partitions.at(entry.ShardIdx).FollowerStats;
+            const auto& partition = followerStats.at(entry.FollowerId);
+            const auto& leaderPartition = followerStats.at(0);
+
+            auto* result = sendEvent->Record.AddPartitionsByTli();
+            result->SetTabletId(partition.GetTabletId());
+            result->SetPath(table.Path);
+            result->SetLocksAcquired(partition.GetLocksAcquired());
+            result->SetLocksWholeShard(partition.GetLocksWholeShard());
+            result->SetLocksBroken(partition.GetLocksBroken());
+            result->SetNodeId(partition.GetNodeId());
+            result->SetDataSize(leaderPartition.GetDataSize());
+            result->SetRowCount(leaderPartition.GetRowCount());
+            result->SetIndexSize(leaderPartition.GetIndexSize());
+            result->SetFollowerId(partition.GetFollowerId());
+
+            if (++count == TOP_PARTITIONS_COUNT) {
+                break;
+            }
+        }        
 
         sendEvent->Record.SetTimeUs(nowUs);
 
         SVLOG_D("NSysView::TPartitionStatsCollector: TEvProcessOverloaded "
-            << "top size# " << sorted.size()
+            << ", top size by CPU # " << sortedByCpu.size()
+            << ", top size by TLI # " << sortedByTli.size()
             << ", time# " << now);
 
         Send(MakePipePerNodeCacheID(false),
@@ -447,8 +507,11 @@ private:
         TBase::PassAway();
     }
 
-    bool IsPartitionOverloaded(const NKikimrSysView::TPartitionStats& stats) const {
-        return stats.GetCPUCores() >= OverloadedPartitionBound;
+    bool IsPartitionOverloadedByCpu(const NKikimrSysView::TPartitionStats& stats) const {
+        return stats.GetCPUCores() >= OverloadedByCpuPartitionBound;
+    }
+    bool IsPartitionOverloadedByTli(const NKikimrSysView::TPartitionStats& stats) const {
+        return stats.GetLocksBroken() >= OverloadedByTliPartitionBound;
     }
 
 private:
@@ -458,7 +521,8 @@ private:
     TPathId DomainKey;
     ui64 SysViewProcessorId = 0;
 
-    double OverloadedPartitionBound = 0.7;
+    double OverloadedByCpuPartitionBound = 0.7;
+    ui64 OverloadedByTliPartitionBound = 1;
     TDuration ProcessOverloadedInterval = TDuration::Seconds(15);
 
     typedef ui32 TFollowerId;
@@ -473,22 +537,23 @@ private:
         TString Path;
     };
 
-    struct TOverloadedFollower {
+    struct TFollowerStats {
         TShardIdx ShardIdx;
         TFollowerId FollowerId;
 
-        bool operator<(const TOverloadedFollower &other) const {
+        bool operator<(const TFollowerStats &other) const {
             return std::tie(ShardIdx, FollowerId) < std::tie(other.ShardIdx, other.FollowerId);
         }
 
-        bool operator==(const TOverloadedFollower &other) const {
+        bool operator==(const TFollowerStats &other) const {
             return std::tie(ShardIdx, FollowerId) == std::tie(other.ShardIdx, other.FollowerId);
         }
     };
 
     struct TDomainTables {
         std::map<TPathId, TTableStats> Stats;
-        std::unordered_map<TPathId, std::set<TOverloadedFollower>> Overloaded;
+        std::unordered_map<TPathId, std::set<TFollowerStats>> OverloadedByCpu;
+        std::unordered_map<TPathId, std::set<TFollowerStats>> OverloadedByTli;
     };
     std::unordered_map<TPathId, TDomainTables> DomainTables;
 
@@ -694,6 +759,15 @@ private:
                 insert({TSchema::FollowerId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
                     return TCell::Make<ui32>(stats.GetFollowerId());
                 }});                
+                insert({TSchema::LocksAcquired::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetLocksAcquired());
+                }});
+                insert({TSchema::LocksWholeShard::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetLocksWholeShard());
+                }});
+                insert({TSchema::LocksBroken::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetLocksBroken());
+                }});
             }
         };
         static TExtractorsMap extractors;

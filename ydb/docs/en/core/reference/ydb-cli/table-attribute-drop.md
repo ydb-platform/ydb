@@ -21,7 +21,7 @@ Look up the description of the command to add a custom attribute:
 ## Parameters of the subcommand {#options}
 
 | Name | Description |
----|---
+| ---|--- |
 | `--attributes` | The key of the custom attribute to be dropped. You can list multiple keys separated by a comma (`,`). |
 
 ## Examples {examples}

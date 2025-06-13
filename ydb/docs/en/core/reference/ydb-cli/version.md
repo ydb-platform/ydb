@@ -22,7 +22,7 @@ View a description of the command:
 ## Parameters of the subcommand {#options}
 
 | Parameter | Description |
----|---
+| ---|--- |
 | `--semantic` | Get only the version number. |
 | `--check` | Check if a new version is available. |
 | `--disable-checks` | Disable new version availability checks. |

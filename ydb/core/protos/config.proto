@@ -1535,7 +1535,7 @@ message TImmediateControlsConfig {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
             MinValue: 1,
             MaxValue: 2,
-            DefaultValue: 2 }];
+            DefaultValue: 1 }];
 
         optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
@@ -2215,6 +2215,7 @@ message TMetadataCacheConfig {
 
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
+    optional uint32 DrainTimeoutSeconds = 2;
 }
 
 message TLabel {
@@ -2324,6 +2325,7 @@ message TYdbVersion {
     optional uint32 Year = 1;
     optional uint32 Major = 2;
     optional uint32 Minor = 3;
+    optional uint32 Patch = 5;
     optional uint32 Hotfix = 4;
 }
 

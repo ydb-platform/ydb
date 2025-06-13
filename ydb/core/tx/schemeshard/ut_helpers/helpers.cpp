@@ -18,6 +18,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -1686,7 +1687,7 @@ namespace NSchemeShardUT_Private {
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         Ydb::Table::TableIndex& index = *settings.mutable_index();
@@ -1714,9 +1715,9 @@ namespace NSchemeShardUT_Private {
             if (cfg.KMeansTreeSettings) {
                 cfg.KMeansTreeSettings->SerializeTo(kmeansTreeSettings);
             } else {
-                // some random valid settings
-                kmeansTreeSettings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
-                kmeansTreeSettings.mutable_settings()->set_vector_dimension(42);
+                // valid settings for tests - uint8 vectors of size 4
+                kmeansTreeSettings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+                kmeansTreeSettings.mutable_settings()->set_vector_dimension(4);
                 kmeansTreeSettings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
                 kmeansTreeSettings.set_clusters(4);
                 // More than 2 is too long for reboot tests
@@ -1727,6 +1728,9 @@ namespace NSchemeShardUT_Private {
                 cfg.GlobalIndexSettings[0].SerializeTo(*settings.mutable_level_table_settings());
                 if (cfg.GlobalIndexSettings.size() > 1) {
                     cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
+                }
+                if (cfg.GlobalIndexSettings.size() > 2) {
+                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
                 }
             }
         } break;
@@ -1740,7 +1744,7 @@ namespace NSchemeShardUT_Private {
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         auto* col = settings.mutable_column_build_operation()->add_column();
@@ -1789,7 +1793,7 @@ namespace NSchemeShardUT_Private {
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
 
-        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
@@ -2600,4 +2604,73 @@ namespace NSchemeShardUT_Private {
         SendNextValRequest(runtime, sender, path);
         return WaitNextValResult(runtime, sender, expectedStatus);
     }
+
+    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
+            const TString& rangeFlags)
+    {
+        TStringBuilder keyFmt;
+        for (const auto& k : pk) {
+            keyFmt << "'('" << k << " (Null) (Void)) ";
+        }
+        const auto columnsFmt = "'" + JoinSeq(" '", columns);
+
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
+            (let range '(%s%s))
+            (let columns '(%s))
+            (let result (SelectRange '__user__%s range columns '()))
+            (return (AsList (SetResult 'Result result) ))
+        ))", rangeFlags.data(), keyFmt.data(), columnsFmt.data(), table.data()), result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        return result;
+    }
+
+    ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table) {
+        auto tableDesc = DescribePath(runtime, schemeshardId, table, true, false, true);
+        const auto& pathDesc = tableDesc.GetPathDescription();
+        const auto& key = pathDesc.GetTable().GetKeyColumnNames();
+        ui32 rows = 0;
+        for (const auto& x : pathDesc.GetTablePartitions()) {
+            auto result = ReadTable(runtime, x.GetDatashardId(), pathDesc.GetSelf().GetName(),
+                {key.begin(), key.end()}, {pathDesc.GetTable().GetKeyColumnNames()[0]});
+            auto value = NClient::TValue::Create(result);
+            rows += value["Result"]["List"].Size();
+        }
+        return rows;
+    }
+
+    ui32 CountRows(TTestActorRuntime& runtime, const TString& table) {
+        return CountRows(runtime, TTestTxConfig::SchemeShard, table);
+    }
+
+    void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath, bool withValue, ui32 shard, ui32 min, ui32 max) {
+        TVector<TCell> cells;
+        ui8 str[6] = { 0 };
+        str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        for (ui32 key = min; key < max; ++key) {
+            str[0] = ((key+106)* 7) % 256;
+            str[1] = ((key+106)*17) % 256;
+            str[2] = ((key+106)*37) % 256;
+            str[3] = ((key+106)*47) % 256;
+            cells.emplace_back(TCell::Make(key));
+            cells.emplace_back(TCell((const char*)str, 5));
+            if (withValue) {
+                // optionally use the same value for an additional covered string column
+                cells.emplace_back(TCell((const char*)str, 5));
+            }
+        }
+        std::vector<ui32> columnIds{1, 2};
+        if (withValue) {
+            columnIds.push_back(3);
+        }
+        TSerializedCellMatrix matrix(cells, max-min, withValue ? 3 : 2);
+        WriteOp(runtime, schemeShardId, txId, tablePath,
+            shard, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+            columnIds, std::move(matrix), true);
+    };
+
 }

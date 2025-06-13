@@ -1,3 +1,5 @@
 items:
 - name: TLS
   href: tls.md
+- name: client_certificate_authorization
+  href: client_certificate_authorization.md

@@ -100,8 +100,6 @@ public:
         }
 
         DoExecute();
-        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
-        csController->WaitIndexation(TDuration::Seconds(5));
     }
 
 };

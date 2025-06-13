@@ -995,7 +995,7 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
             // to prevent copying data in retryFunc in a happy way when there is only one request
             TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc();
             prebuiltValue = std::nullopt;
-            return tableClient.BulkUpsertUnretryable(dbPath, std::move(builtValue), UpsertSettings)
+            return tableClient.BulkUpsertUnretryableUnsafe(dbPath, std::move(builtValue), UpsertSettings)
                 .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                     NYdb::TStatus status = bulkUpsertResult.GetValueSync();
                     return NThreading::MakeFuture(status);
@@ -1088,7 +1088,7 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
             TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc(arena.get());
             prebuiltValue = std::nullopt;
 
-            return tableClient.BulkUpsertUnretryableArenaAllocated(
+            return tableClient.BulkUpsertUnretryableArenaAllocatedUnsafe(
                 dbPath, std::move(builtValue), arena.get(), UpsertSettings)
                 .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                     NYdb::TStatus status = bulkUpsertResult.GetValueSync();

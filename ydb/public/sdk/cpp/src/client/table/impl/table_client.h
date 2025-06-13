@@ -138,24 +138,9 @@ public:
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
-    /**
-    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model,
-    * therefore, it is not retryable with the same `rows` object.
-    */
-    TAsyncBulkUpsertResult BulkUpsertUnretryable(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
+    TAsyncBulkUpsertResult BulkUpsertUnretryableUnsafe(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
 
-    /**
-    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model,
-    * therefore, it is not retryable with the same `rows` object.
-    *
-    * The `Ydb::Value` is expected to be arena-allocated.
-    *
-    * See: https://protobuf.dev/reference/cpp/arenas
-    *
-    * @param arena The arena to allocate the `Ydb::Value` in.
-    * @param settings The settings for the bulk upsert operation.
-    */
-    TAsyncBulkUpsertResult BulkUpsertUnretryableArenaAllocated(
+    TAsyncBulkUpsertResult BulkUpsertUnretryableArenaAllocatedUnsafe(
         const std::string& table,
         TValue&& rows,
         google::protobuf::Arena* arena,

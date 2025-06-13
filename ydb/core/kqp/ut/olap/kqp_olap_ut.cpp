@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
              .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
 
         {
             //1. QueryService

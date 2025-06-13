@@ -1,1 +1,1 @@
-{% include [sdk.md](_includes/sdk.md) %}
+{% include [sdk](_includes/sdk.md) %}

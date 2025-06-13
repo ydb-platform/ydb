@@ -5,6 +5,7 @@ A simple load type using a YDB database as a Key-Value storage.
 ## Types of load {#workload-types}
 
 This load test runs several types of load:
+
 * [upsert](#upsert-kv): Using the UPSERT operation, inserts rows that are tuples (key1, key2, ... keyK, value1, value2, ... valueN) into the table created previously with the init command, the K and N numbers are specified in the settings.
 * [insert](#insert-kv): The function is the same as the upsert load, only the INSERT operation is used for insertion.
 * [select](#select-kv): Reads data using the SELECT * WHERE key = $key operation. A query always affects all table columns, but isn't always a point query, and the number of primary key variations can be controlled using parameters.
@@ -81,7 +82,7 @@ When the work is complete, you can delete the table:
 
 The following YQL command is executed:
 
-```sql
+```yql
 DROP TABLE `kv_test`
 ```
 

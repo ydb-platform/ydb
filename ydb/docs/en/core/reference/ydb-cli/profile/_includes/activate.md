@@ -37,7 +37,7 @@ Please choose profile to activate:
  [3] <profile_name_1> (active)
  [4] <profile_name_2>
  ...
-Please enter your numeric choice: 
+Please enter your numeric choice:
 ```
 
 - `1` terminates the command execution and keeps the currently activated profile activated. It's marked as `(active)` in the list of existing profiles starting from item 3.

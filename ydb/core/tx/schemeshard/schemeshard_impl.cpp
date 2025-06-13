@@ -4475,6 +4475,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+    MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
 
@@ -6991,6 +6992,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureStatsBatching(schemeShardConfig, ctx);
         ConfigureStatsOperations(schemeShardConfig, ctx);
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+        MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     }
 
     if (appConfig.HasTableProfilesConfig()) {

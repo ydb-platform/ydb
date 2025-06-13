@@ -39,6 +39,18 @@ items:
   href: bulk-upsert.md
 - name: Установка режима выполнения транзакции
   href: tx-control.md
+- name: Настройка TTL
+  href: ttl.md
+- name: Координация
+  items:
+  - name: Распределённая блокировка
+    href: distributed-lock.md
+  - name: Выбор лидера
+    href: leader-election.md
+  - name: Обнаружение сервисов
+    href: service-discovery.md
+  - name: Публикация конфигурации
+    href: config-publication.md
 - name: Диагностика проблем
   items:
   - name: Обзор

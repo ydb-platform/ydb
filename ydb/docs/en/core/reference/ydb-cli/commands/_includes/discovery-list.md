@@ -9,6 +9,7 @@ Using the `discovery list` information command, you can get a list of {{ ydb-sho
 {% include [conn_options_ref.md](conn_options_ref.md) %}
 
 The output rows in the response contain the following information:
+
 1. Endpoint, including protocol and port
 2. Availability zone (in square brackets)
 3. The `#` character is used for the list of {{ ydb-short-name }} services available on this endpoint

@@ -4,34 +4,47 @@ items:
 - name: Quick start
   href: quickstart.md
 - name: Concepts
+  href: concepts/index.md
   include:
     mode: link
     path: concepts/toc_p.yaml
 - name: For DevOps
+  href: devops/index.md
   include:
     mode: link
     path: devops/toc_p.yaml
 - name: For Developers
+  href: dev/index.md
   include:
     mode: link
     path: dev/toc_p.yaml
 - name: For Security Engineers
+  href: security/index.md
   include:
     mode: link
     path: security/toc_p.yaml
 - name: For Contributors
+  href: contributor/index.md
   include:
     mode: link
     path: contributor/toc_p.yaml
 - name: Reference
+  href: reference/index.md
   include:
     mode: link
     path: reference/toc_p.yaml
 - name: Recipes
+  href: recipes/index.md
   include:
     mode: link
     path: recipes/toc_p.yaml
+- name: Troubleshooting
+  href: troubleshooting/index.md
+  include:
+    mode: link
+    path: troubleshooting/toc_p.yaml
 - name: Questions and answers
+  href: faq/index.md
   include:
     mode: link
     path: faq/toc_p.yaml
@@ -40,9 +53,10 @@ items:
     mode: link
     path: public-materials/toc_p.yaml
 - name: Downloads
+  href: downloads/index.md
   include:
     mode: link
-    path: downloads/toc_p.yaml
+    path: downloads/toc_i.yaml
 - name: Changelog
   include:
     mode: link

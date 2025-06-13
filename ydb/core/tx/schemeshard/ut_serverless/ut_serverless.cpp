@@ -1,7 +1,7 @@
+#include <ydb/core/metering/metering.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
-
-#include <ydb/core/metering/metering.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -251,6 +251,72 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             meteringData += "\n";
             UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
         }
+    }
+
+    Y_UNIT_TEST(StorageBillingLabels) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetAllowServerlessStorageBilling(&runtime, true);
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "ServerlessDB"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: 2
+            }
+        )", TTestTxConfig::SchemeShard));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "ServerlessDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "ServerlessDB", AlterUserAttrs({
+            {"cloud_id", "CLOUD_ID_VAL"},
+            {"folder_id", "FOLDER_ID_VAL"},
+            {"database_id", "DATABASE_ID_VAL"},
+            {"label_k", "v"},
+            {"not_a_label_x", "y"},
+        }));
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> block(runtime);
+        runtime.WaitFor("metering", [&]{ return block.size() >= 1; });
+
+        const auto& jsonStr = block[0]->Get()->MeteringJson;
+        UNIT_ASSERT_C(jsonStr.Contains(R"("labels":{"k":"v"})"), jsonStr);
+        UNIT_ASSERT_C(!jsonStr.Contains("not_a_label"), jsonStr);
     }
 
     Y_UNIT_TEST(TestServerlessComputeResourcesMode) {

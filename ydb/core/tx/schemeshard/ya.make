@@ -247,6 +247,7 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
     library/cpp/json
+    library/cpp/protobuf/json
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base

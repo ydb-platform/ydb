@@ -43,13 +43,14 @@ Any command can be run from the command line with the `--help` option to get hel
 | [scheme describe](../commands/scheme-describe.md) | Description of a data schema object |
 | [scheme ls](../commands/scheme-ls.md) | List of data schema objects |
 | [scheme mkdir](../commands/dir.md#mkdir) | Creating a directory |
-| scheme permissions add | Granting permissions |
-| scheme permissions chown | Changing the owner of an object |
-| scheme permissions clear | Clearing permissions |
-| scheme permissions grant | Granting permissions |
-| scheme permissions remove | Removing a permission |
-| scheme permissions revoke | Revoking a permission |
-| scheme permissions set | Setting permissions |
+| [scheme permissions chown](../commands/scheme-permissions.md#chown) | Change object owner |
+| [scheme permissions clear](../commands/scheme-permissions.md#clear) | Clear permissions |
+| [scheme permissions grant](../commands/scheme-permissions.md#grant-revoke) | Grant permission |
+| [scheme permissions revoke](../commands/scheme-permissions.md#grant-revoke) | Revoke permission |
+| [scheme permissions set](../commands/scheme-permissions.md#set) | Set permissions |
+| [scheme permissions list](../commands/scheme-permissions.md#list) | View permissions |
+| [scheme permissions clear-inheritance](../commands/scheme-permissions.md#clear-inheritance) | Disable permission inheritance |
+| [scheme permissions set-inheritance](../commands/scheme-permissions.md#set-inheritance) | Enable permission inheritance |
 | [scheme rmdir](../commands/dir.md#rmdir) | Deleting a directory |
 | [scripting yql](../scripting-yql.md) | Executing a YQL script |
 | table attribute add | Adding a table attribute |

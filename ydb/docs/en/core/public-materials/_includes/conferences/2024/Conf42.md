@@ -1,4 +1,4 @@
-### Enhancing a Distributed SQL Database Engine: A Case Study on Performance Optimization {#2024-conf42-devops}
+## Enhancing a Distributed SQL Database Engine: A Case Study on Performance Optimization {#2024-conf42-devops}
 
 {% include notitle [internals_tag](../../tags.md#database_internals) %}
 

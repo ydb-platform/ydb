@@ -1,0 +1,11 @@
+items:
+  - name: Tag naming
+    href: tags.md
+  - name: Installation
+    href: prerequisites.md
+  - name: Start
+    href: start.md
+  - name: Configuration
+    href: configuration.md
+  - name: Cleanup
+    href: cleanup.md

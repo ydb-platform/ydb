@@ -66,6 +66,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
     }
 
+    Y_UNIT_TEST(ConcurrentSplitOneToOne) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "Table"
+                            Columns { Name: "Key"       Type: "Utf8"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["Key", "Value"]
+                            )");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({""})});
+
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+                            SourceTabletId: 72075186233409546
+                            AllowOneToOneSplitMerge: true
+                            )");
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+                        SourceTabletId: 72075186233409546
+                        AllowOneToOneSplitMerge: true
+                        )",
+                       {NKikimrScheme::StatusMultipleModifications});
+
+        WaitForSuppressed(runtime, suppressed, 2, prevObserver);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, {txId-1, txId});
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets); //delete src
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({""})});
+    }
+
     Y_UNIT_TEST(Split10Shards) {
         TTestBasicRuntime runtime;
 

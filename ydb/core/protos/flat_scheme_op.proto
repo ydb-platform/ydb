@@ -1397,6 +1397,7 @@ message TSplitMergeTablePartitions {
     repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
+    optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
 }
 
 message TUserAttribute {

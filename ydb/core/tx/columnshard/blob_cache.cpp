@@ -92,7 +92,6 @@ private:
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(30);
-    static constexpr TDuration FAST_READ_DEADLINE = TDuration::Seconds(10);
 
     TLRUCache<TBlobRange, TString> Cache;
     /// List of cached ranges by blob id.
@@ -358,12 +357,11 @@ private:
     }
 
     static TInstant ReadDeadline(TReadItem::EReadVariant variant) {
-        if (variant == TReadItem::EReadVariant::FAST) {
-            return TAppData::TimeProvider->Now() + FAST_READ_DEADLINE;
-        } else if (variant == TReadItem::EReadVariant::DEFAULT) {
+        if (variant == TReadItem::EReadVariant::DEFAULT) {
             return TAppData::TimeProvider->Now() + DEFAULT_READ_DEADLINE;
         }
-        return TInstant::Max(); // EReadVariant::DEFAULT_NO_DEADLINE
+        // We want to wait for data anyway in this case. This behaviour is similar to datashard
+        return TInstant::Max(); // EReadVariant::DEFAULT_NO_DEADLINE || EReadVariant::FAST
     }
 
     void MakeReadRequests(const TActorContext& ctx) {

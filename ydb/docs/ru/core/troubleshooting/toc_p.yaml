@@ -1,0 +1,6 @@
+items:
+- name: Проблемы с производительностью
+  href: performance/index.md
+  include:
+    mode: link
+    path: performance/toc_p.yaml

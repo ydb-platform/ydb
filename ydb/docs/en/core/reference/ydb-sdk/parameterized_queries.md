@@ -4,7 +4,7 @@
 
 Request with data in the request body:
 
-```sql
+```yql
 SELECT sa.title AS season_title, sr.title AS series_title
 FROM seasons AS sa INNER JOIN series AS sr ON sa.series_id = sr.series_id
 WHERE sa.series_id = 15 AND sa.season_id = 3
@@ -12,7 +12,7 @@ WHERE sa.series_id = 15 AND sa.season_id = 3
 
 The corresponding parameterized query:
 
-```sql
+```yql
 DECLARE $seriesId AS Uint64;
 DECLARE $seasonId AS Uint64;
 

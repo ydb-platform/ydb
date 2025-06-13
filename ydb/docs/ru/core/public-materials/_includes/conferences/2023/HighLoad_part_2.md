@@ -1,4 +1,4 @@
-### YDB Topic Service: как мы повышали производительность очереди сообщений {#2023-conf-hl-ydb-topic}
+## YDB Topic Service: как мы повышали производительность очереди сообщений {#2023-conf-hl-ydb-topic}
 
 <div class = "multi-tags-container">
 
@@ -8,7 +8,7 @@
 
 </div>
 
-5 лет назад Яндекс перешел с Kafka на собственную разработку поверх YDB. С тех пор Yandex Topic Service сильно подрос по нагрузке и вышел в Open Source. В этом докладе {{ team.zivaykin.name }} ({{ team.zivaykin.position }}) рассказывает про ускорение YDB Topic Service и приводит сравнение с конкурентами.
+5 лет назад Яндекс перешел с Kafka на собственную разработку поверх YDB. С тех пор Yandex Topic Service сильно подрос по нагрузке и вышел в Open Source. В этом докладе {{ team.zevaykin.name }} ({{ team.zevaykin.position }}) рассказывает про ускорение YDB Topic Service и приводит сравнение с конкурентами.
 
 @[YouTube](https://www.youtube.com/watch?v=I-6SS6_C1Cw&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=22&pp=iAQB)
 
@@ -17,7 +17,7 @@
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topic_service/presentation.pdf)
 
 
-### Особенности шин данных для очень больших инсталляций на примере YDB Topics {#2023-conf-hl-data-bus}
+## Особенности шин данных для очень больших инсталляций на примере YDB Topics {#2023-conf-hl-data-bus}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -25,12 +25,12 @@
 
 @[YouTube](https://www.youtube.com/watch?v=zKPOAdNOQx4&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=92&pp=iAQB)
 
-Доклад будет интересен разработчикам и командам эксплуатации, особенно в компаниях больших размеров. 
+Доклад будет интересен разработчикам и командам эксплуатации, особенно в компаниях больших размеров.
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/ydb_topics_data_bus/presentation.pdf)
 
 
-### Поиск по образцу на последовательностях строк в БД {#2023-conf-hl-search-inline}
+## Поиск по образцу на последовательностях строк в БД {#2023-conf-hl-search-inline}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -38,12 +38,12 @@
 
 @[YouTube](https://www.youtube.com/watch?v=TSFVV0zGSBI&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=130&pp=iAQB)
 
-Отдельная часть выступления посвящена отличиям в обработке аналитических запросов на табличках и обработке на потоках «живых» данных. Доклад будет интересен разработчикам БД, дата-аналитикам, а также всем, кто интересуется поиском по образцу на больших данных. 
+Отдельная часть выступления посвящена отличиям в обработке аналитических запросов на табличках и обработке на потоках «живых» данных. Доклад будет интересен разработчикам БД, дата-аналитикам, а также всем, кто интересуется поиском по образцу на больших данных.
 
 [Слайды](https://presentations.ydb.tech/2023/ru/highload/template_search_in_str_seq/presentation.pdf)
 
 
-### Из pytest в Go. Тестовое окружение на фикстурах {#2023-conf-hl-pytest-go}
+## Из pytest в Go. Тестовое окружение на фикстурах {#2023-conf-hl-pytest-go}
 
 {% include notitle [testing_tag](../../tags.md#testing) %}
 
@@ -51,6 +51,29 @@
 
 @[YouTube](https://www.youtube.com/watch?v=Vtg8UmU62OA&list=PLH-XmS0lSi_yksBrXBOIgnuW_RmwfLKYn&index=100&pp=iAQB)
 
-Доклад будет интересен разработчикам на Go и тимлидам. 
+Доклад будет интересен разработчикам на Go и тимлидам.
 
 [Слайды](https://presentations.ydb.tech/2023/ru/golang_conf/from_pytest_to_go/presentation.pdf)
+
+## Внутренняя платёжная система Яндекса: что под капотом?
+
+{% include notitle [use_cases_tag](../../tags.md#use_cases) %}
+
+Доклад Антона Куранды «Внутренняя платёжная система Яндекса: что под капотом?» раскрывает архитектурные решения, применённые при создании высоконагруженной внутренней платёжной платформы Яндекса (Yandex PSP), рассчитанной на тысячи платежей в секунду и обработку сотен терабайт данных в год. Рассказывается об основных принципах: использование stateless-микросервисов на Golang, хранение состояний и событий в геораспределённой СУБД YDB (в формате key-value), построение бизнес-логики на иерархических конечных автоматах с event sourcing, а также внедрение таск-шедулеров для планирования и асинхронной обработки задач. Подчёркивается, как данные подходы обеспечивают высокую отказоустойчивость (SLA ~99.997 %), ускорение проведения платежей в 6–10 раз и быстрый time-to-market для новых сервисов. Отмечается универсальность архитектуры — её можно применять в различных сферах: не только в финтехе, но и в e-commerce, автоматизации услуг, биллинге и логистике.
+
+Этот доклад будет особенно полезен архитекторам, техническим руководителям, разработчикам высоконагруженных и транзакционных систем, а также специалистам, ищущим практические примеры построения крупных гибких платформ на современных инженерных принципах.
+
+{% list tabs %}
+
+- RuTube
+
+    @[rutube](6c513d83ad9d22bf310915d5a61416c6)
+
+- YouTube
+
+    @[youtube](Z7gie1Kqmvc)
+
+{% endlist %}
+
+
+[Слайды](https://presentations.ydb.tech/2023/ru/highload/yandex_payment_system/presentation.pdf)

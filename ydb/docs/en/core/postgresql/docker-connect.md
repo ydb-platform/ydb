@@ -4,7 +4,7 @@
 
 Currently, the PostgreSQL compatibility feature is available for testing in the Docker image: `ghcr.io/ydb-platform/local-ydb:nightly`.
 
-Commands for starting a local Docker container with YDB and open ports for PostgreSQL and Web-UI:
+Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for PostgreSQL and Embedded UI:
 
 {% note tip %}
 
@@ -21,7 +21,8 @@ To preserve the container's state, you need to remove the environment variable `
     To launch using a Docker Compose configuration file, it must already be [installed on your system](https://docs.docker.com/compose/install/standalone/).
 
     docker-compose.yaml:
-    ```
+
+    ```yaml
     services:
         ydb:
             image: ghcr.io/ydb-platform/local-ydb:nightly
@@ -36,11 +37,12 @@ To preserve the container's state, you need to remove the environment variable `
     ```
 
     Run:
+
     ```bash
     docker-compose up -d --pull=always
     ```
 
-- Docker command:
+- Docker command
 
     ```bash
     docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
@@ -60,12 +62,13 @@ docker run --rm -it --network=host postgres:14 psql postgresql://root:1234@local
 
 ### Hello world example
 
-```sql
+```yql
 SELECT 'Hello, world!';
 ```
 
 Output:
-```
+
+```text
     column0
 ---------------
  Hello, world!
@@ -73,10 +76,10 @@ Output:
 ```
 
 ### Creating a Table
+
 The primary purpose of database management systems is to store data for later retrieval. As an SQL-based system, the principal abstraction for storing data is the table. To create our first table, execute the following query:
 
 ```sql
-
 CREATE TABLE example
 (
     key int4,
@@ -86,8 +89,8 @@ CREATE TABLE example
 ```
 
 ### Adding test data
-Now let's populate our table with some initial data. The simplest way to do this is by using literals.
 
+Now let's populate our table with some initial data. The simplest way to do this is by using literals.
 
 ```sql
 INSERT INTO example (key, value)
@@ -102,7 +105,8 @@ SELECT COUNT(*) FROM example;
 ```
 
 Output:
-```
+
+```text
  column0
 ---------
        2
@@ -123,6 +127,7 @@ This command will stop the running container and delete all data stored within i
     ```bash
     docker-compose down -vt 1
     ```
+
     {% note info %}
 
     To stop a Docker container and preserve its data, you should run it without the `YDB_USE_IN_MEMORY_PDISKS` environment variable and use the stop command:

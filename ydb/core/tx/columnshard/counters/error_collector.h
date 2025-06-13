@@ -10,14 +10,14 @@
 
 namespace NKikimr::NColumnShard {
 
-class TPerTierError {
+class TPerTierErrorCollector {
 public:
-    struct TRecord {
+    struct TError {
         TString Reason;
         TInstant Time;
     };
 
-    TPerTierError() {
+    TPerTierErrorCollector() {
     }
 
     void Add(const TString& tier, const TString& reason) {
@@ -30,7 +30,7 @@ public:
         q.push({ reason, TInstant::Now() });
     }
 
-    THashMap<TString, std::queue<TRecord>> GetAll() const {
+    THashMap<TString, std::queue<TError>> GetAll() const {
         TGuard<TSpinLock> lock(Lock);
         return ErrorsCollector;
     }
@@ -38,10 +38,10 @@ public:
 private:
     static constexpr size_t QUEUE_MAX_SIZE = 10;
     mutable TSpinLock Lock;
-    THashMap<TString, std::queue<TRecord>> ErrorsCollector;
+    THashMap<TString, std::queue<TError>> ErrorsCollector;
 };
 
-class TError {
+class TErrorCollector {
 public:
     void OnReadError(const TString& tier, const TString& message) {
         Read.Add(tier, message);
@@ -51,17 +51,17 @@ public:
         Write.Add(tier, message);
     }
 
-    THashMap<TString, std::queue<TPerTierError::TRecord>> GetAllReadErrors() const {
+    THashMap<TString, std::queue<TPerTierErrorCollector::TError>> GetAllReadErrors() const {
         return Read.GetAll();
     }
 
-    THashMap<TString, std::queue<TPerTierError::TRecord>> GetAllWriteErrors() const {
+    THashMap<TString, std::queue<TPerTierErrorCollector::TError>> GetAllWriteErrors() const {
         return Write.GetAll();
     }
 
 private:
-    TPerTierError Read;
-    TPerTierError Write;
+    TPerTierErrorCollector Read;
+    TPerTierErrorCollector Write;
 };
 
 }   // namespace NKikimr::NColumnShard

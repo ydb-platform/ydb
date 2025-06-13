@@ -56,11 +56,6 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ct
     }
 }
 
-ui64 TSchemeShard::TIndexBuilder::TTxBase::RequestUnits(const TBillingStats& stats) {
-    return TRUCalculator::ReadTable(stats.GetReadBytes())
-         + TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
-}
-
 void TSchemeShard::TIndexBuilder::TTxBase::RoundPeriod(TInstant& start, TInstant& end) {
     if (start.Hours() == end.Hours()) {
         return; // that is OK
@@ -157,7 +152,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         billed += toBill;
         Self->PersistBuildIndexBilled(db, buildInfo);
 
-        ui64 requestUnits = RequestUnits(toBill);
+        ui64 requestUnits = TRUCalculator::Calculate(toBill);
 
         const TString billRecord = TBillRecord()
             .Id(id)

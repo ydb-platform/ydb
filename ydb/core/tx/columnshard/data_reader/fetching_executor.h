@@ -11,6 +11,10 @@ private:
 
 public:
     virtual TString GetTaskClassIdentifier() const override;
+
+    TFetchingExecutor(const std::shared_ptr<TPortionsDataFetcher>& fetcher)
+        : Fetcher(fetcher) {
+    }
 };
 
 }   // namespace NKikimr::NOlap::NDataFetcher

@@ -93,8 +93,8 @@ public:
 
 class TEnvironment {
 private:
-    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
-    std::shared_ptr<IStoragesManager> StoragesManager;
+    YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
+    YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
 
 public:
 };
@@ -113,6 +113,8 @@ private:
     virtual EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const = 0;
 
 public:
+    virtual ~IFetchingStep() = default;
+
     [[nodiscard]] EStepResult Execute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const {
         return DoExecute(fetchingContext);
     }
@@ -187,6 +189,7 @@ public:
 class TRequestInput {
 private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TFullPortionInfo>>, Portions);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ActualSchema);
     YDB_READONLY(NBlobOperations::EConsumer, Consumer, NBlobOperations::EConsumer::UNDEFINED);
     YDB_READONLY_DEF(TString, ExternalTaskId);
 
@@ -195,8 +198,9 @@ public:
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId)
         : Consumer(consumer)
         , ExternalTaskId(externalTaskId) {
+        ActualSchema = versions->GetLastSchema();
         for (auto&& i : portions) {
-            Portions.emplace_back(TFullPortionInfo(i, versions->GetSchemaVerified(i->GetSchemaVersionVerified())));
+            Portions.emplace_back(std::make_shared<TFullPortionInfo>(i, versions->GetSchemaVerified(i->GetSchemaVersionVerified())));
         }
     }
 };

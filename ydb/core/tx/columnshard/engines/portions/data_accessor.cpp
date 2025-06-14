@@ -116,7 +116,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<TString, THashSet<TB
 
 void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo, const std::set<ui32>* entityIds) const {
     for (auto&& i : GetRecordsVerified()) {
-        if (columnIds && !columnIds->contains(i.GetColumnId())) {
+        if (entityIds && !entityIds->contains(i.GetColumnId())) {
             continue;
         }
         const TString& storageId = PortionInfo->GetColumnStorageId(i.GetColumnId(), indexInfo);
@@ -124,7 +124,7 @@ void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<TString, THashSet<TB
             "blob_id", PortionInfo->RestoreBlobRange(i.GetBlobRange()).ToString());
     }
     for (auto&& i : GetIndexesVerified()) {
-        if (columnIds && !columnIds->contains(i.GetIndexId())) {
+        if (entityIds && !entityIds->contains(i.GetIndexId())) {
             continue;
         }
         const TString& storageId = PortionInfo->GetIndexStorageId(i.GetIndexId(), indexInfo);

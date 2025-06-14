@@ -80,7 +80,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 }));                                                                                                    \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                                    \
                     #NAME, logger, getCounterBlock("table", #NAME),                                                                     \
-                    (USE_LIMITER ? getLimiter("TableService", #NAME, UNLIMITED_INFLIGHT) : nullptr))->Run();                         \
+                    (USE_LIMITER ? getLimiter(EStaticControlType::GRpcControlsRequestConfigsTableService##NAME##MaxInflight, UNLIMITED_INFLIGHT) : nullptr))->Run();                         \
         ++proxyCounter;                                                                                                                 \
     }                                                                                                                                   \
     }

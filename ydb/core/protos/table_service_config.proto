@@ -393,5 +393,5 @@ message TTableServiceConfig {
 
     optional bool EnableIndexStreamWrite = 88 [default = false];
 
-    optional bool EnableParallelPointReadConsolidation = 89 [default = false];
+    optional bool EnableParallelPointReadConsolidation = 89 [default = true];
 };

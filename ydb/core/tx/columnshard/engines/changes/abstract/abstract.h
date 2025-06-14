@@ -380,6 +380,8 @@ public:
 
     NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> GroupResourcesGuard;
+    
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();

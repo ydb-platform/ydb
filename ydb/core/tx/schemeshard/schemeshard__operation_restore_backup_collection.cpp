@@ -3,6 +3,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation.h"
 
+#include <util/generic/guid.h>
+
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -201,6 +203,19 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         NKikimrSchemeOp::TLongIncrementalRestoreOp op;
+
+        op.SetTxId(ui64(OperationId.GetTxId()));
+
+        // Create deterministic UUID for test reproducibility
+        // Using parts from OperationId to ensure uniqueness within the same SchemeShard
+        const ui64 txId = ui64(OperationId.GetTxId());
+        // Create deterministic GUID from txId for test reproducibility
+        TGUID uuid;
+        uuid.dw[0] = static_cast<ui32>(txId);
+        uuid.dw[1] = static_cast<ui32>(txId >> 32);
+        uuid.dw[2] = static_cast<ui32>(txId ^ 0xDEADBEEF);
+        uuid.dw[3] = static_cast<ui32>((txId ^ 0xCAFEBABE) >> 32);
+        op.SetId(uuid.AsGuidString());
 
         bcPath->PathId.ToProto(op.MutableBackupCollectionPathId());
 

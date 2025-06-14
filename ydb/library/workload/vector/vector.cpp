@@ -547,6 +547,22 @@ std::optional<std::string> TVectorWorkloadParams::GetIndexPrefixColumn() const {
             break;
         }
     }
+
+    // If a prefix column was found, verify that it has an integer type
+    if (prefixColumn.has_value()) {
+        // Find the column in table schema
+        for (const auto& column : tableDescription.GetColumns()) {
+            if (column.Name == prefixColumn.value()) {
+                // Check column type
+                const NYdb::TType& typeInfo = column.Type;
+                
+                // Check if it's an integer type
+                Y_ABORT_UNLESS(typeInfo.ToString().contains("int") || typeInfo.ToString().contains("Int"), 
+                    "Prefix column '%s' in index '%s' must be an integer type. Found type: %s", 
+                    prefixColumn->c_str(), IndexName.c_str(), typeInfo.ToString().c_str());          
+            }
+        }
+    }
     
     Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableName.c_str());
     

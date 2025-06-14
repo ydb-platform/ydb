@@ -357,10 +357,6 @@ public:
         return {};
     }
 
-    virtual ui64 GetInternalPathIdOffset(const ui64 /*tabletId*/) const {
-        return 0;
-    }
-
     virtual void OnAddPathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {

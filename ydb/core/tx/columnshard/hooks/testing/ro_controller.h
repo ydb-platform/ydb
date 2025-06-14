@@ -179,9 +179,6 @@ public:
         }
     }
 
-    virtual ui64 GetInternalPathIdOffset(const ui64 tabletId) const override {
-        return 1000000 + static_cast<ui64>(tabletId) % 1000;
-    }
 };
 
 }

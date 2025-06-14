@@ -381,17 +381,23 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // Test 1: Try to restore from empty backup collection (no backups)
         setup.CreateBackupCollection("EmptyCollection", {"/MyRoot/NonExistentTable"});
         
-        // This should succeed even with no actual backup data (we're testing operation dispatch)
-        setup.ExecuteRestore("EmptyCollection");
+        // This should fail with StatusInvalidParameter because there's nothing to restore
+        setup.ExecuteRestore("EmptyCollection", {NKikimrScheme::StatusInvalidParameter});
 
         // Test 2: Try to restore from backup collection that doesn't match expected format
         setup.CreateBackupCollection("MalformedCollection", {"/MyRoot/TestTable"});
 
-        // Create some directories that don't follow backup naming convention
+        // Create some directories that don't follow backup naming convention (no actual table backups inside)
         setup.CreateCustomBackupDirectories("MalformedCollection", {"invalid_backup_name", "another_invalid"});
 
-        // Should handle malformed backup structure gracefully
-        setup.ExecuteRestore("MalformedCollection");
+        // Should fail with StatusPathDoesNotExist because the table backups don't exist in the backup directories
+        setup.ExecuteRestore("MalformedCollection", {NKikimrScheme::StatusPathDoesNotExist});
+        
+        // Test 3: Try to restore with proper backup structure (should succeed)
+        setup.CreateCompleteBackupScenario("ValidCollection", {"ValidTable"}, 1);
+        
+        // This should succeed because we have valid backup structure
+        setup.ExecuteRestore("ValidCollection");
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpDatabaseTableVerification) {

@@ -69,17 +69,14 @@ bool TWorkersPool::DrainTasks() {
     while (ActiveWorkersIdx.size() && Processes.front().GetCategory()->HasTasks()) {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
-        THashMap<TString, std::shared_ptr<TProcessScope>> scopes;
+        THashSet<TString> scopes;
         while ((tasks.empty() || predicted < DeliveringDuration.GetValue() * 10) && Processes.front().GetCategory()->HasTasks()) {
             std::pop_heap(Processes.begin(), Processes.end(), predHeap);
-            tasks.emplace_back(Processes.back().GetCategory()->ExtractTaskWithPrediction(Processes.back().GetCounters()));
+            tasks.emplace_back(Processes.back().GetCategory()->ExtractTaskWithPrediction(Processes.back().GetCounters(), scopes));
             Processes.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
             std::push_heap(Processes.begin(), Processes.end(), predHeap);
             scopes.emplace(tasks.back().GetScope()->GetScopeId(), tasks.back().GetScope());
-        }
-        for (auto&& i : scopes) {
-            i.second->IncInFlight();
         }
         newTask = true;
         AFL_VERIFY(tasks.size());
@@ -93,7 +90,7 @@ bool TWorkersPool::DrainTasks() {
 
 void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
     //        const ui32 catIdx = (ui32)result.GetCategory();
-    std::set<TString> scopeIds;
+    THashSet<TString> scopeIds;
     for (auto&& t : result) {
         bool found = false;
         for (auto&& i : Processes) {
@@ -103,10 +100,7 @@ void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result) {
                 i.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
                 found = true;
                 i.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
-                if (scopeIds.emplace(t.GetScope()->GetScopeId()).second) {
-                    t.GetScope()->DecInFlight();
-                }
-                i.GetCategory()->PutTaskResult(std::move(t));
+                i.GetCategory()->PutTaskResult(std::move(t), scopeIds);
                 break;
             }
         }

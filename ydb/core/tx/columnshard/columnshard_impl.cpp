@@ -22,6 +22,7 @@
 #include "blobs_reader/actor.h"
 #include "bg_tasks/events/events.h"
 
+#include "data_reader/contexts.h"
 #include "data_accessor/manager.h"
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
@@ -715,7 +716,7 @@ public:
     using TBase::TBase;
 };
 
-class TCompactionExecutor : public NDataFetcher::IFetchCallback {
+class TCompactionExecutor: public NOlap::NDataFetcher::IFetchCallback {
 private:
     const ui64 TabletId;
     const NActors::TActorId ParentActorId;
@@ -723,7 +724,7 @@ private:
     std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
-    virtual void DoOnFinished(TCurrentContext&& context) override {
+    virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
         NActors::TLogContextGuard g(
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
         AFL_VERIFY(context.GetResourceGuards().size() == 2);
@@ -751,14 +752,11 @@ private:
 public:
     TCompactionExecutor(const ui64 tabletId, const NActors::TActorId parentActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
         const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
-        : TabletId()
+        : TabletId(tabletId)
         , ParentActorId(parentActorId)
         , Changes(changes)
-        , VersionedIndex(versionedIndex)
-    {
-    
+        , VersionedIndex(versionedIndex) {
     }
-
 };
 
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
@@ -778,7 +776,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo, NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier());
-    auto env = std::make_shared<NDataFetcher::TEnvironment>(DataAccessorsManager, StoragesManager);
+    auto env = std::make_shared<NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
         std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo),
         env, NConveyorComposite::ESpecialTaskCategory::Compaction);

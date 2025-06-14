@@ -23,7 +23,7 @@ using namespace NYql::NNodes;
 
 using TStatus = IGraphTransformer::TStatus;
 
-auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSort::Match(node); };
+auto IsSort = [](const TExprNode* node) { return TCoTopBase::Match(node) || TCoSortBase::Match(node); };
 
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
@@ -41,7 +41,7 @@ public:
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStagesKeepSorted));
         AddHandler(0, &TKqlIndexLookupJoin::Match, HNDL(BuildStreamIdxLookupJoinStages));
         AddHandler(0, &TKqlSequencer::Match, HNDL(BuildSequencerStages));
-        AddHandler(0, IsSort, HNDL(RemoveRedundantSortByPk));
+        AddHandler(0, IsSort, HNDL(RemoveRedundantSortOverReadTable));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(ApplyLimitToOlapReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
@@ -203,9 +203,9 @@ protected:
         return output;
     }
 
-    TMaybeNode<TExprBase> RemoveRedundantSortByPk(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpRemoveRedundantSortByPk(node, ctx, KqpCtx, TypesCtx);
-        DumpAppliedRule("RemoveRedundantSortByPk", node.Ptr(), output.Ptr(), ctx);
+    TMaybeNode<TExprBase> RemoveRedundantSortOverReadTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRemoveRedundantSortOverReadTable(node, ctx, KqpCtx, TypesCtx);
+        DumpAppliedRule("RemoveRedundantSortOverReadTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -360,7 +360,7 @@ protected:
     TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        bool ruleEnabled = KqpCtx.Config->OrderPreservingLookupJoinEnabled();
+        bool ruleEnabled = true;
         TExprBase output = KqpBuildTopStageRemoveSort(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, ruleEnabled);
         DumpAppliedRule("BuildTopStageRemoveSort", node.Ptr(), output.Ptr(), ctx);
         return output;

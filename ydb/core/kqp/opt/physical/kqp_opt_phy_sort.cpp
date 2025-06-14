@@ -27,22 +27,22 @@ TKqpTable GetTable(TExprBase input, bool isReadRanges) {
     return input.Cast<TKqpReadTable>().Table();
 };
 
-TExprBase KqpRemoveRedundantSortByPk(
+TExprBase KqpRemoveRedundantSortOverReadTable(
     TExprBase node,
     TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx,
     const TTypeAnnotationContext& typeCtx
 ) {
-    auto maybeSort = node.Maybe<TCoSort>();
+    auto maybeSortBase = node.Maybe<TCoSortBase>();
     auto maybeTopBase = node.Maybe<TCoTopBase>();
 
-    if (!maybeSort && !maybeTopBase) {
+    if (!maybeSortBase && !maybeTopBase) {
         return node;
     }
 
-    auto input = maybeSort ? maybeSort.Cast().Input() : maybeTopBase.Cast().Input();
-    auto sortDirections = maybeSort ? maybeSort.Cast().SortDirections() : maybeTopBase.Cast().SortDirections();
-    auto keySelector = maybeSort ? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
+    auto input = maybeSortBase ? maybeSortBase.Cast().Input() : maybeTopBase.Cast().Input();
+    auto sortDirections = maybeSortBase ? maybeSortBase.Cast().SortDirections() : maybeTopBase.Cast().SortDirections();
+    auto keySelector = maybeSortBase ? maybeSortBase.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
 
     auto maybeFlatmap = input.Maybe<TCoFlatMap>();
 
@@ -156,12 +156,12 @@ TExprBase KqpBuildTopStageRemoveSort(
         return node;
     }
 
-    auto maybeSort = node.Maybe<TCoSort>();
+    auto maybeSortBase = node.Maybe<TCoSort>();
     auto maybeTopBase = node.Maybe<TCoTopBase>();
 
-    const auto dqUnion = maybeSort? maybeSort.Cast().Input().Cast<TDqCnUnionAll>(): maybeTopBase.Cast().Input().Cast<TDqCnUnionAll>();
+    const auto dqUnion = maybeSortBase? maybeSortBase.Cast().Input().Cast<TDqCnUnionAll>(): maybeTopBase.Cast().Input().Cast<TDqCnUnionAll>();
 
-    // skip this rule to activate KqpRemoveRedundantSortByPk later to reduce readings count
+    // skip this rule to activate KqpRemoveRedundantSortOverReadTable later to reduce readings count
     auto stageBody = dqUnion.Output().Stage().Program().Body();
     if (stageBody.Maybe<TCoFlatMap>()) {
         auto flatmap = dqUnion.Output().Stage().Program().Body().Cast<TCoFlatMap>();
@@ -200,7 +200,7 @@ TExprBase KqpBuildTopStageRemoveSort(
         return node;
     }
 
-    const auto& keySelector = maybeSort? maybeSort.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
+    const auto& keySelector = maybeSortBase? maybeSortBase.Cast().KeySelectorLambda() : maybeTopBase.Cast().KeySelectorLambda();
 
     if (!CanPushDqExpr(keySelector, dqUnion)) {
         return node;

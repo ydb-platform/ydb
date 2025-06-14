@@ -29,6 +29,7 @@ enum class EConsumer {
     WRITING_OPERATOR,
     NORMALIZER,
     STATISTICS,
+    UNDEFINED,
 
     COUNT
 };

@@ -2237,9 +2237,10 @@ message TSysViewDescription {
 }
 
 message TLongIncrementalRestoreOp {
-    optional NKikimrProto.TPathID BackupCollectionPathId = 1;
-    optional string Id = 2;
-    repeated string TablePathList = 3;
-    optional string FullBackupTrimmedName = 4;
-    repeated string IncrementalBackupTrimmedNames = 5;
+    optional uint64 TxId = 1;
+    optional NKikimrProto.TPathID BackupCollectionPathId = 2;
+    optional string Id = 3;
+    repeated string TablePathList = 4;
+    optional string FullBackupTrimmedName = 5;
+    repeated string IncrementalBackupTrimmedNames = 6;
 }

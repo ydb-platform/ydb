@@ -2048,35 +2048,13 @@ struct Schema : NIceDb::Schema {
     // Header table for the overall incremental restore operation
     struct IncrementalRestoreOperations : Table<120> {
         struct Id :                  Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
-        struct Uid :                 Column<2, NScheme::NTypeIds::Utf8> {};
-        struct DomainOwnerId :       Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
-        struct DomainLocalId :       Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
 
-        // NKikimrSchemeOp::TModifyScheme serialized as string
-        struct Operation :           Column<5, NScheme::NTypeIds::String> {};
-        struct RestoreSettings :     Column<6, NScheme::NTypeIds::String> {};
-
-        struct State :               Column<7, NScheme::NTypeIds::Byte> {};
-        struct Issue :               Column<8, NScheme::NTypeIds::Utf8> {};
-        struct UserSID :             Column<9, NScheme::NTypeIds::Utf8> {};
-        struct StartTime :           Column<10, NScheme::NTypeIds::Timestamp> {};
-        struct EndTime :             Column<11, NScheme::NTypeIds::Timestamp> {};
-        struct NumberOfTargets :     Column<12, NScheme::NTypeIds::Uint32> {}; // Total number of tables in this operation
+        struct Operation :           Column<2, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
-            Uid,
-            DomainOwnerId,
-            DomainLocalId,
-            Operation,
-            RestoreSettings,
-            State,
-            Issue,
-            UserSID,
-            StartTime,
-            EndTime,
-            NumberOfTargets
+            Operation
         >;
     };
 

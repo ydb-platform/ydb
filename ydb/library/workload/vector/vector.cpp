@@ -5,12 +5,15 @@
 
 #include <format>
 #include <string>
-#include <random>
+
+#include <algorithm>
 
 namespace NYdbWorkload {
 
-thread_local std::optional<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex = std::nullopt;
+// Initialize thread local atomic
+thread_local std::atomic<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex{0};
 
+// Utility function to create select query
 std::string MakeSelect(const char* tableName, const char* indexName, const char* indexPrefixColumn, size_t kmeansTreeClusters) {
     return std::format(R"_(--!syntax_v1
         DECLARE $Embedding as String;
@@ -29,6 +32,7 @@ std::string MakeSelect(const char* tableName, const char* indexName, const char*
     );
 }
 
+// Utility function to create parameters for select query
 NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, ui64 topK) {
     NYdb::TParamsBuilder paramsBuilder;
     
@@ -38,9 +42,8 @@ NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, ui64 topK) {
     return paramsBuilder.Build();
 }
 
-TVectorRecallEvaluator::TVectorRecallEvaluator() 
-{
-}
+// TVectorRecallEvaluator implementation
+TVectorRecallEvaluator::TVectorRecallEvaluator() {}
 
 TVectorRecallEvaluator::~TVectorRecallEvaluator() {
     if (ProcessedTargets)
@@ -184,8 +187,6 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
     Y_ABORT_UNLESS(!SelectTargets.empty());
 }
 
-
-
 void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* indexPrefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
     Cout << "Recall initialization..." << Endl;
     
@@ -248,8 +249,6 @@ void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* inde
     Cout << "Recall initialization completed for " << SelectTargets.size() << " targets." << Endl;
 }
 
-
-
 const std::string& TVectorRecallEvaluator::GetTargetEmbedding(size_t index) const {
     return SelectTargets.at(index).EmbeddingBytes;
 }
@@ -268,10 +267,73 @@ double TVectorRecallEvaluator::GetAverageRecall() const {
     return ProcessedTargets > 0 ? TotalRecall / ProcessedTargets : 0.0;
 }
 
+double TVectorRecallEvaluator::GetTotalRecall() const {
+    return TotalRecall;
+}
+
+size_t TVectorRecallEvaluator::GetProcessedTargets() const {
+    return ProcessedTargets;
+}
+
 size_t TVectorRecallEvaluator::GetTargetCount() const {
     return SelectTargets.size();
 }
 
+// Process query results
+void TVectorRecallEvaluator::ProcessQueryResult(const NYdb::NQuery::TExecuteQueryResult& queryResult, size_t targetIndex, bool verbose) {
+    if (!queryResult.IsSuccess()) {
+        // Ignore the error. It's printed in the verbose mode
+        return;
+    }
+    
+    // Get the result set
+    auto resultSet = queryResult.GetResultSet(0);
+    NYdb::TResultSetParser parser(resultSet);
+    
+    // Extract IDs from index search results
+    std::vector<ui64> indexResults;
+    while (parser.TryNextRow()) {
+        ui64 id = parser.ColumnParser("id").GetUint64();
+        indexResults.push_back(id);
+    }
+    
+    // Get the etalons for the specified target
+    const auto& etalons = GetTargetEtalons(targetIndex);
+    
+    // Check if target ID is first in results
+    if (!indexResults.empty() && !etalons.empty()) {
+        ui64 targetId = etalons[0]; // First etalon is the target ID itself
+        
+        if (verbose && indexResults[0] != targetId) {
+            Cerr << "Warning: Target ID " << targetId << " is not the first result for target " 
+                 << targetIndex << ". Found " << indexResults[0] << " instead." << Endl;
+        }
+        
+        // Calculate recall
+        size_t relevantRetrieved = 0;
+        for (const auto& id : indexResults) {
+            // Check if this ID is in the etalon results
+            if (std::find(etalons.begin(), etalons.end(), id) != etalons.end()) {
+                relevantRetrieved++;
+            }
+        }
+        
+        // Calculate recall for this target
+        double recall = etalons.empty() ? 0.0 : static_cast<double>(relevantRetrieved) / etalons.size();
+        AddRecall(recall);
+
+        // Add warning when zero relevant results found
+        if (verbose && relevantRetrieved == 0 && !indexResults.empty()) {
+            Cerr << "Warning: Zero relevant results for target " << targetIndex << Endl;
+        }
+    } else {
+        // Handle empty results or empty etalons
+        if (verbose)
+            Cerr << "Warning: Empty results or etalons for target " << targetIndex << Endl;
+    }
+}
+
+// TVectorWorkloadGenerator implementation
 TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* params)
     : TBase(params)
 {
@@ -292,14 +354,12 @@ std::string TVectorWorkloadGenerator::GetDDLQueries() const {
 }
 
 TQueryInfoList TVectorWorkloadGenerator::GetInitialData() {
-    TQueryInfoList res;
-    return res;
+    return {};
 }
 
 TVector<std::string> TVectorWorkloadGenerator::GetCleanPaths() const {
     return {"vector"};
 }
-
 
 TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {
     switch (static_cast<EType>(type)) {
@@ -324,88 +384,56 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
     return {};
 }
 
+size_t TVectorWorkloadGenerator::GetNextTargetIndex(size_t currentIndex) const {
+    return (currentIndex + 1) % Params.VectorRecallEvaluator->GetTargetCount();
+}
+
 TQueryInfoList TVectorWorkloadGenerator::Select() {
-    // If this is the first call on this thread, initialize with a value based on thread address
-    if (!ThreadLocalTargetIndex.has_value()) {
-        // Use the address of a thread_local variable as a unique start identifier
+    // Initialize thread-local target index if needed
+    if (ThreadLocalTargetIndex.load() == 0) {
+        // Use the thread address as a starting point
         uintptr_t threadValue = reinterpret_cast<uintptr_t>(&ThreadLocalTargetIndex);
-        ThreadLocalTargetIndex = threadValue % Params.VectorRecallEvaluator->GetTargetCount();
+        ThreadLocalTargetIndex.store(threadValue % Params.VectorRecallEvaluator->GetTargetCount());
     }
+    
+    // Get current target index
+    size_t targetIndex = ThreadLocalTargetIndex.load();
 
     // Create the query string
-    std::string query = MakeSelect(Params.TableName.c_str(), Params.IndexName.c_str(), Params.IndexPrefixColumn.has_value() ? Params.IndexPrefixColumn->c_str() : nullptr, Params.KmeansTreeSearchClusters);
+    std::string query = MakeSelect(
+        Params.TableName.c_str(), 
+        Params.IndexName.c_str(), 
+        Params.IndexPrefixColumn.has_value() ? Params.IndexPrefixColumn->c_str() : nullptr, 
+        Params.KmeansTreeSearchClusters
+    );
     
     // Get the embedding for the specified target
-    const auto& targetEmbedding = Params.VectorRecallEvaluator->GetTargetEmbedding(*ThreadLocalTargetIndex);
+    const auto& targetEmbedding = Params.VectorRecallEvaluator->GetTargetEmbedding(targetIndex);
     NYdb::TParams params = MakeSelectParams(targetEmbedding, Params.TopK);
     
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
     if (Params.Recall) {
-        queryInfo.GenericQueryResultCallback = std::bind(&TVectorWorkloadGenerator::RecallCallback, this, std::placeholders::_1, *ThreadLocalTargetIndex);
+        queryInfo.GenericQueryResultCallback = std::bind(
+            &TVectorWorkloadGenerator::RecallCallback, 
+            this, 
+            std::placeholders::_1, 
+            targetIndex
+        );
     }
+    
+    // Update the thread-local index for the next query
+    ThreadLocalTargetIndex.store(GetNextTargetIndex(targetIndex));
+    
     return TQueryInfoList(1, queryInfo);
 }
 
 void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex) {
-    Y_ABORT_UNLESS(Params.Recall);
-    if (!queryResult.IsSuccess()) {
-        // Ignore the error. It's printed in the verbose mode
-        return;
-    }    
-    // Get the result set
-    auto resultSet = queryResult.GetResultSet(0);
-    NYdb::TResultSetParser parser(resultSet);
-    
-    // Extract IDs from index search results
-    std::vector<ui64> indexResults;
-    while (parser.TryNextRow()) {
-        ui64 id = parser.ColumnParser("id").GetUint64();
-        indexResults.push_back(id);
-    }
-    
-    // Get the etalons for the specified target
-    const auto& etalons = Params.VectorRecallEvaluator->GetTargetEtalons(targetIndex);
-    
-    // Check if target ID is first in results
-    if (!indexResults.empty() && !etalons.empty()) {
-        ui64 targetId = etalons[0]; // First etalon is the target ID itself
-        
-        if (Params.Verbose && indexResults[0] != targetId) {
-            Cerr << "Warning: Target ID " << targetId << " is not the first result for target " 
-                 << targetIndex << ". Found " << indexResults[0] << " instead." << Endl;
-        }
-        
-        // Calculate recall
-        size_t relevantRetrieved = 0;
-        for (const auto& id : indexResults) {
-            // Check if this ID is in the etalon results
-            if (std::find(etalons.begin(), etalons.end(), id) != etalons.end()) {
-                relevantRetrieved++;
-            }
-        }
-        
-        // Calculate recall for this target
-        double recall = etalons.empty() ? 0.0 : static_cast<double>(relevantRetrieved) / etalons.size();
-        
-        // Add to total recall
-        Params.VectorRecallEvaluator->AddRecall(recall);
-        
-        // Add warning when zero relevant results found
-        if (Params.Verbose && relevantRetrieved == 0 && !indexResults.empty()) {
-            Cerr << "Warning: Zero relevant results for target " << targetIndex << Endl;
-        }
-    } else {
-        // Handle empty results or empty etalons
-        if (Params.Verbose)
-            Cerr << "Warning: Empty results or etalons for target " << targetIndex << Endl;
-    }
-
-    // Update the thread-local index for the next query
-    ThreadLocalTargetIndex = (*ThreadLocalTargetIndex + 1) % Params.VectorRecallEvaluator->GetTargetCount();
-
+    // Use the evaluator to process the result and calculate recall
+    Params.VectorRecallEvaluator->ProcessQueryResult(queryResult, targetIndex, Params.Verbose);
 }
 
+// TVectorWorkloadParams implementation
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     auto addCommonParam = [&]() {
         opts.AddLongOption( "table", "Table name.")
@@ -540,7 +568,12 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                     VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>();
                     VectorRecallEvaluator->SampleExistingVectors(TableName.c_str(), Targets, *QueryClient);
                     if (Recall) {
-                        VectorRecallEvaluator->FillEtalons(TableName.c_str(), IndexPrefixColumn.has_value() ? IndexPrefixColumn->c_str() : nullptr, TopK, *QueryClient);
+                        VectorRecallEvaluator->FillEtalons(
+                            TableName.c_str(), 
+                            IndexPrefixColumn.has_value() ? IndexPrefixColumn->c_str() : nullptr, 
+                            TopK, 
+                            *QueryClient
+                        );
                     }
                     break;
             }
@@ -550,9 +583,8 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
         case TWorkloadParams::ECommandType::Root:
             break;
         case TWorkloadParams::ECommandType::Import:
-          break;
+            break;
     }
-    return;
 }
 
 THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {
@@ -563,4 +595,4 @@ TString TVectorWorkloadParams::GetWorkloadName() const {
     return "vector";
 }
 
-}
+} // namespace NYdbWorkload

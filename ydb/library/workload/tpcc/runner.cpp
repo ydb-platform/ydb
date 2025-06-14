@@ -478,25 +478,18 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     size_t halfCount = (threadCount + 1) / 2;
 
     // Headers for both columns
-    std::stringstream leftHeader, rightHeader;
-    leftHeader << std::left
+    std::stringstream threadsHeader;
+    threadsHeader << std::left
                << std::setw(5) << "Thr"
                << std::setw(5) << "Load"
                << std::setw(10) << "QPS"
                << std::setw(10) << "Queue"
                << std::setw(15) << "queue p90, ms";
 
-    rightHeader << std::left
-                << std::setw(5) << "Thr"
-                << std::setw(5) << "Load"
-                << std::setw(10) << "QPS"
-                << std::setw(10) << "Queue"
-                << std::setw(15) << "queue p90, ms";
-
     // Print headers side by side
-    std::cout << leftHeader.str() << " | " << rightHeader.str() << std::endl;
+    std::cout << threadsHeader.str() << " | " << threadsHeader.str() << std::endl;
 
-    size_t totalWidth = leftHeader.str().length() + 3 + rightHeader.str().length();
+    size_t totalWidth = threadsHeader.str().length() * 2 + 3;
     std::cout << std::string(totalWidth, '-') << std::endl;
 
     // Print thread data in two columns
@@ -513,7 +506,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
                      << std::setw(10) << stats.TaskThreadStats->InternalTasksWaitingInflight
                      << std::setw(15) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
         } else {
-            leftLine << std::string(leftHeader.str().length(), ' ');
+            leftLine << std::string(threadsHeader.str().length(), ' ');
         }
 
         // Right column
@@ -529,7 +522,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
                       << std::setw(10) << stats.TaskThreadStats->InternalTasksWaitingInflight
                       << std::setw(15) << std::setprecision(2) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
         } else {
-            rightLine << std::string(rightHeader.str().length(), ' ');
+            rightLine << std::string(threadsHeader.str().length(), ' ');
         }
 
         std::cout << leftLine.str() << " | " << rightLine.str() << std::endl;
@@ -558,12 +551,11 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // Left side of header: runner info, efficiency, phase, progress
 
     std::stringstream headerSs;
-    headerSs << "TPC-C Runner: " << Config.WarehouseCount << " warehouses";
+    headerSs << "Result preview";
 
     std::stringstream metricsSs;
-    metricsSs << std::fixed << std::setprecision(1)
-              << "Efficiency: " << data.Efficiency << "%   "
-              << "tpmC: " << data.Tpmc;
+    metricsSs << "Efficiency: " << std::setw(3) << std::fixed << std::setprecision(1) << data.Efficiency << "%   "
+        << "tpmC: " << std::fixed << std::setprecision(0) << data.Tpmc;
 
     std::stringstream timingSs;
     timingSs << data.Phase << ": " << data.ElapsedMinutes << ":"
@@ -577,14 +569,13 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     // Calculate progress ratio for gauge
     float progressRatio = static_cast<float>(data.ProgressPercent / 100.0);
 
-    auto leftHeader = vbox({
-        text(headerSs.str()),
+    auto topLeftMainInfo = vbox({
         text(metricsSs.str()),
         text(timingSs.str()),
         hbox({
-            text("Progress: "),
+            text("Progress: ["),
             gauge(progressRatio) | size(WIDTH, EQUAL, 20),
-            text(" " + std::to_string(static_cast<int>(data.ProgressPercent)) + "%")
+            text("] " + std::to_string(static_cast<int>(data.ProgressPercent)) + "%")
         })
     });
 
@@ -593,13 +584,10 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
     Elements txRows;
     // Add header row for transaction table
     txRows.push_back(hbox({
-        text("Transaction") | size(WIDTH, EQUAL, 15),
-        text("OK")     | size(WIDTH, EQUAL, 8),
-        text("Failed") | size(WIDTH, EQUAL, 8),
-        text("User Aborted") | size(WIDTH, EQUAL, 14),
-        text("p50") | size(WIDTH, EQUAL, 5),
-        text("p90") | size(WIDTH, EQUAL, 5),
-        text("p99") | size(WIDTH, EQUAL, 5)
+        text("Transaction") | size(WIDTH, EQUAL, 12),
+        text("p50, ms") | align_right | size(WIDTH, EQUAL, 9),
+        text("p90, ms") | align_right | size(WIDTH, EQUAL, 9),
+        text("p99, ms") | align_right | size(WIDTH, EQUAL, 9)
     }));
 
     for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
@@ -611,30 +599,20 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
         p90Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(90);
         p99Ss << std::fixed << std::setprecision(0) << totalForType.LatencyHistogramFullMs.GetValueAtPercentile(99);
 
-        auto ok = totalForType.OK.load(std::memory_order_relaxed);
-        auto failed = totalForType.Failed.load(std::memory_order_relaxed);
-        auto aborted = totalForType.UserAborted.load(std::memory_order_relaxed);
-
         txRows.push_back(hbox({
-            text(std::string(ToString(type))) | size(WIDTH, EQUAL, 15),
-            text(ToString(ok)) | size(WIDTH, EQUAL, 8),
-            text(ToString(failed)) | size(WIDTH, EQUAL, 8),
-            text(ToString(aborted)) | size(WIDTH, EQUAL, 14),
-            text(p50Ss.str()) | size(WIDTH, EQUAL, 5),
-            text(p90Ss.str()) | size(WIDTH, EQUAL, 5),
-            text(p99Ss.str()) | size(WIDTH, EQUAL, 5)
+            text(std::string(ToString(type))) | size(WIDTH, EQUAL, 12),
+            text(p50Ss.str()) | align_right | size(WIDTH, EQUAL, 9),
+            text(p90Ss.str()) | align_right | size(WIDTH, EQUAL, 9),
+            text(p99Ss.str()) | align_right | size(WIDTH, EQUAL, 9)
         }));
     }
+    auto topRightTransactionStats = vbox(txRows);
 
-    auto rightHeader = vbox(txRows);
-
-    // Top section: left header + right transaction table (50/50 split)
-
-    auto topSection = hbox({
-        leftHeader | flex,
+    auto topSection = window(text(headerSs.str()), hbox({
+        topLeftMainInfo | flex,
         separator(),
-        rightHeader | flex
-    }) | border;
+        topRightTransactionStats | flex
+    }));
 
     // Per-thread statistics in two columns with header
 
@@ -644,18 +622,18 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
 
     auto headerRow = hbox({
         text("Thr") | size(WIDTH, EQUAL, 4),
-        text("    Load") | size(WIDTH, EQUAL, 24),
-        text("QPS") | size(WIDTH, EQUAL, 8),
-        text("Queue") | size(WIDTH, EQUAL, 10),
-        text("Queue p90, ms") | size(WIDTH, EQUAL, 20)
+        text("Load") | center | size(WIDTH, EQUAL, 24),
+        text("QPS") | align_right | size(WIDTH, EQUAL, 8),
+        text("Queue") | align_right | size(WIDTH, EQUAL, 10),
+        text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20)
     });
 
     auto headerRow2 = hbox({
         text("Thr") | size(WIDTH, EQUAL, 4),
-        text("    Load") | size(WIDTH, EQUAL, 24),
-        text("QPS") | size(WIDTH, EQUAL, 8),
-        text("Queue") | size(WIDTH, EQUAL, 10),
-        text("Queue p90, ms") | size(WIDTH, EQUAL, 20)
+        text("Load") | center | size(WIDTH, EQUAL, 24),
+        text("QPS") | align_right | size(WIDTH, EQUAL, 8),
+        text("Queue") | align_right | size(WIDTH, EQUAL, 10),
+        text("Queue p90, ms") | align_right | size(WIDTH, EQUAL, 20)
     });
 
     leftThreadElements.push_back(headerRow);
@@ -685,7 +663,7 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
         }
 
         std::stringstream loadPercentSs, qpsSs, queueSizeSs, queueP90Ss;
-        loadPercentSs << std::fixed << std::setprecision(1) << (load * 100) << "%";
+        loadPercentSs << std::fixed << std::setprecision(1) << std::setw(4) << std::right << (load * 100) << "%";
         qpsSs << std::fixed << std::setprecision(0) << stats.QueriesPerSecond;
         queueSizeSs << stats.TaskThreadStats->InternalTasksWaitingInflight;
         queueP90Ss << std::fixed << std::setprecision(1) << stats.InternalInflightWaitTimeMs.GetValueAtPercentile(90);
@@ -697,10 +675,10 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
                 loadBar | size(WIDTH, EQUAL, 10),
                 text("] "),
                 text(loadPercentSs.str()) | color(loadColor)
-            }) | size(WIDTH, EQUAL, 24),
-            text(qpsSs.str()) | size(WIDTH, EQUAL, 8),
-            text(queueSizeSs.str()) | size(WIDTH, EQUAL, 10),
-            text(queueP90Ss.str()) | size(WIDTH, EQUAL, 20)
+            }) |  size(WIDTH, EQUAL, 24),
+            text(qpsSs.str()) | align_right | size(WIDTH, EQUAL, 8),
+            text(queueSizeSs.str()) | align_right | size(WIDTH, EQUAL, 10),
+            text(queueP90Ss.str()) | align_right | size(WIDTH, EQUAL, 20)
         });
 
         if (i < halfCount) {
@@ -718,22 +696,22 @@ void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
         rightThreadElements.push_back(text(""));
     }
 
-    auto threadSection = hbox({
+    auto threadSection = window(text("TPC-C client state"), hbox({
         vbox(leftThreadElements) | flex,
         separator(),
         vbox(rightThreadElements) | flex
-    }) | border;
+    }));
 
     // Logs section (last 10 lines, full width)
 
     Elements logElements;
-    logElements.push_back(text("Logs"));
 
     LogBackend->GetLogLines([&](const std::string& line) {
-        logElements.push_back(text(line));
+        logElements.push_back(paragraph(line));
     });
 
-    auto logsSection = vbox(logElements) | border | size(HEIGHT, EQUAL, 12);
+    auto logsSection = window(text("Logs"),
+        vbox(logElements) | size(HEIGHT, EQUAL, 12));
 
     // Main layout
 
@@ -835,13 +813,15 @@ void TPCCRunner::PrintTransactionStatisticsPretty(std::ostream& os) {
     // Build header using stringstream to calculate width
     std::stringstream txHeaderStream;
     txHeaderStream << std::left
-                   << std::setw(15) << "Transaction"
-                   << std::setw(12) << "OK"
-                   << std::setw(12) << "Failed"
-                   << std::setw(12) << "UserAborted"
-                   << std::setw(12) << "p50 (ms)"
-                   << std::setw(12) << "p90 (ms)"
-                   << std::setw(12) << "p99 (ms)";
+                   << std::setw(12) << "Transaction"
+                   << std::setw(12) << std::right << "OK"
+                   << std::setw(10) << std::right << "Failed";
+    if (Config.ExtendedStats) {
+        txHeaderStream << std::setw(15) << std::right << "UserAborted";
+    }
+    txHeaderStream << std::setw(9) << std::right << "p50, ms"
+                   << std::setw(9) << std::right << "p90, ms"
+                   << std::setw(9) << std::right << "p99, ms";
 
     std::string header = txHeaderStream.str();
     size_t tableWidth = header.length();
@@ -867,22 +847,26 @@ void TPCCRunner::PrintTransactionStatisticsPretty(std::ostream& os) {
         totalUserAborted += aborted;
 
         os << std::left
-           << std::setw(15) << std::string(typeStr)
-           << std::setw(12) << std::fixed << std::setprecision(1) << ok
-           << std::setw(12) << std::fixed << std::setprecision(1) << failed
-           << std::setw(12) << std::fixed << std::setprecision(1) << aborted
-           << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(50)
-           << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(90)
-           << std::setw(12) << std::fixed << std::setprecision(1) << stats.LatencyHistogramFullMs.GetValueAtPercentile(99)
+           << std::setw(12) << std::string(typeStr)
+           << std::fixed << std::setprecision(1) << std::setw(12) << std::right << ok
+           << std::fixed << std::setprecision(1) << std::setw(10) << std::right << failed;
+        if (Config.ExtendedStats) {
+            os << std::fixed << std::setprecision(1) << std::setw(15) << std::right << aborted;
+        }
+        os << std::fixed << std::setprecision(1) << std::setw(9) << std::right << stats.LatencyHistogramFullMs.GetValueAtPercentile(50)
+           << std::fixed << std::setprecision(1) << std::setw(9) << std::right << stats.LatencyHistogramFullMs.GetValueAtPercentile(90)
+           << std::fixed << std::setprecision(1) << std::setw(9) << std::right << stats.LatencyHistogramFullMs.GetValueAtPercentile(99)
            << std::endl;
     }
     os << std::string(tableWidth, '-') << std::endl;
 
-    os << std::setw(15) << "TOTAL"
-        << std::setw(12) << std::fixed << std::setprecision(1) << totalOK
-        << std::setw(12) << std::fixed << std::setprecision(1) << totalFailed
-        << std::setw(12) << std::fixed << std::setprecision(1) << totalUserAborted
-        << std::endl;
+    os << std::left << std::setw(12) << "TOTAL"
+        << std::setw(12) << std::fixed << std::setprecision(1) << std::right << totalOK
+        << std::setw(10) << std::fixed << std::setprecision(1) << std::right << totalFailed;
+    if (Config.ExtendedStats) {
+        os << std::setw(15) << std::fixed << std::setprecision(1) << std::right << totalUserAborted;
+    }
+    os << std::endl;
 
     os << std::string(tableWidth, '-') << std::endl;
 }

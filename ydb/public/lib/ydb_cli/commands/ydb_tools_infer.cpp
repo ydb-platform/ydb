@@ -3,6 +3,7 @@
 #include <ydb/library/arrow_inference/arrow_inference.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <arrow/csv/options.h>
 #include <arrow/io/file.h>
@@ -112,17 +113,13 @@ int TCommandToolsInferCsv::Run(TConfig& config) {
 
     auto& arrowFields = std::get<NYdb::NArrowInference::ArrowFields>(result);
     TStringBuilder query;
-    query << "CREATE TABLE `" << Path << "` (\n";
-    bool first = true;
+    query << "CREATE TABLE `" << Path << "` (" << Endl;
     for (const auto& field : arrowFields) {
         if (field->name().empty()) {
             continue;
         }
         Ydb::Type inferredType;
         bool inferResult = NYdb::NArrowInference::ArrowToYdbType(inferredType, *field->type(), formatConfig);
-        if (!first) {
-            query << ",\n";
-        }
         TString resultType = "Text";
         if (inferResult) {
             TTypeParser parser(inferredType);
@@ -143,15 +140,42 @@ int TCommandToolsInferCsv::Run(TConfig& config) {
         } else if (config.IsVerbose()) {
             Cerr << "Failed to infer type for column " << field->name() << Endl;
         }
-        query << "    `" << field->name() << "` " << resultType;
+        query << "    `" << field->name() << "` " << resultType << ',' << Endl;
         if (!field->nullable()) {
             query << " NOT NULL";
         }
-        first = false;
     }
-    query << "\n) PRIMARY KEY (" << arrowFields[0]->name() << ")";
+    query << "    PRIMARY KEY (" << arrowFields[0]->name() << ") -- First column is chosen. Probably need to change this." << Endl;
+    query <<
+R"()
+WITH (
+    STORE = ROW -- or COLUMN
+    -- Other useful table options to consider:
+    --, AUTO_PARTITIONING_BY_SIZE = ENABLED
+    --, AUTO_PARTITIONING_BY_LOAD = ENABLED
+    --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
+);)";
 
-    Cout << query << Endl;
+    if (Execute) {
+        Cerr << "Executing request: " << Endl << query << Endl;
+        TDriver driver = CreateDriver(config);
+        NQuery::TQueryClient client(driver);
+        auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Zero(), true)
+            .GetValueSync();
+        if (result.IsSuccess()) {
+            Cout << "Query executed successfully." << Endl;
+            if (!result.GetIssues().Empty()) {
+                Cerr << "Issues: " << result.GetIssues().ToString() << Endl;
+            }
+        } else {
+            Cerr << "Failed to create a table." << Endl;
+            result.Out(Cerr);
+        }
+    } else {
+        Cout << query << Endl;
+    }
 
     return EXIT_SUCCESS;
 }

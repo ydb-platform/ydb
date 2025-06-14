@@ -113,6 +113,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr&) {
     if (!AckReceivedInstant) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ping_from_kqp");
         LastResultInstant = TMonotonic::Now();
     }
 }
@@ -399,7 +400,7 @@ void TColumnShardScan::SendScanError(const TString& reason) {
     auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, msg);
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_finish")("compute_actor_id", ScanComputeActorId)("stats", Stats->ToJson())(
-        "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"));
+        "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"))("reason", reason);
 
     Send(ScanComputeActorId, ev.Release());
 }

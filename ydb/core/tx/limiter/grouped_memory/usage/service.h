@@ -100,4 +100,11 @@ public:
 
 using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy>;
 
+class TCompMemoryLimiterPolicy {
+public:
+    static const inline TString Name = "Comp";
+};
+
+using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy>;
+
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

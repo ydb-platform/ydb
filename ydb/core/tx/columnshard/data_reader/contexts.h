@@ -45,6 +45,13 @@ public:
         return *Blobs;
     }
 
+    NBlobOperations::NRead::TCompositeReadBlobs ExtractBlobs() {
+        AFL_VERIFY(!!Blobs);
+        auto result = std::move(*Blobs);
+        Blobs.reset();
+        return result;
+    }
+
     void ResetBlobs() {
         Blobs.reset();
     }
@@ -85,6 +92,8 @@ private:
     bool IsFinished = false;
 
 public:
+    virtual ~IFetchCallback() = default;
+
     void OnFinished(TCurrentContext&& context) {
         AFL_VERIFY(!IsFinished);
         IsFinished = true;

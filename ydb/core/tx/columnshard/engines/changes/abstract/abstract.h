@@ -17,6 +17,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <util/datetime/base.h>
@@ -381,7 +382,6 @@ public:
     NBlobOperations::NRead::TCompositeReadBlobs Blobs;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> GroupResourcesGuard;
-    
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();

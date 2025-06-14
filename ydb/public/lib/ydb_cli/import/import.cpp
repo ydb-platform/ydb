@@ -1215,8 +1215,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     }());
 
     auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
-    // TODO: what codec to use? ZSTD is used in ydb_workload_import.cpp; use it here as well?
-    constexpr auto codecType = arrow::Compression::type::UNCOMPRESSED;
+    constexpr auto codecType = arrow::Compression::type::ZSTD;
     writeOptions.codec = *arrow::util::Codec::Create(codecType);
 
     // determines if we should fallback to YDB Types (TValue with Protobuf arena) when Apache Arrow failed.

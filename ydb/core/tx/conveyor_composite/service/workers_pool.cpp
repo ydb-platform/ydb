@@ -64,18 +64,25 @@ bool TWorkersPool::DrainTasks() {
         return r.GetCPUUsage()->CalcWeight(r.GetWeight()) < l.GetCPUUsage()->CalcWeight(l.GetWeight());
     };
     std::make_heap(Processes.begin(), Processes.end(), predHeap);
-    AFL_VERIFY(Processes.size());
+    std::vector<TWeightedCategory> procLocal = Processes;
+    AFL_VERIFY(procLocal.size());
     bool newTask = false;
-    while (ActiveWorkersIdx.size() && Processes.front().GetCategory()->HasTasks()) {
+    while (ActiveWorkersIdx.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
         THashSet<TString> scopes;
-        while ((tasks.empty() || predicted < DeliveringDuration.GetValue() * 10) && Processes.front().GetCategory()->HasTasks()) {
-            std::pop_heap(Processes.begin(), Processes.end(), predHeap);
-            tasks.emplace_back(Processes.back().GetCategory()->ExtractTaskWithPrediction(Processes.back().GetCounters(), scopes));
-            Processes.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
+        while (procLocal.size() && (tasks.empty() || predicted < DeliveringDuration.GetValue() * 10) &&
+               procLocal.front().GetCategory()->HasTasks()) {
+            std::pop_heap(procLocal.begin(), procLocal.end(), predHeap);
+            auto task = procLocal.back().GetCategory()->ExtractTaskWithPrediction(procLocal.back().GetCounters(), scopes);
+            if (!task) {
+                procLocal.pop_back();
+                continue;
+            }
+            tasks.emplace_back(*task);
+            procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
-            std::push_heap(Processes.begin(), Processes.end(), predHeap);
+            std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
             scopes.emplace(tasks.back().GetScope()->GetScopeId(), tasks.back().GetScope());
         }
         newTask = true;

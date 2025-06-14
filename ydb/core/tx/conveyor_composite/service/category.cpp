@@ -13,16 +13,21 @@ void TProcessCategory::DoQuant(const TMonotonic newStart) {
     }
 }
 
-TWorkerTask TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
+std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
     std::shared_ptr<TProcess> pMin;
     TDuration dMin;
     for (auto&& [_, p] : ProcessesWithTasks) {
-        AFL_VERIFY(p->GetScope()->CheckToRun());
+        if (!p->GetScope()->CheckToRun()) {
+            continue;
+        }
         const TDuration d = p->GetCPUUsage()->CalcWeight(p->GetWeight());
         if (!pMin || d < dMin) {
             dMin = d;
             pMin = p;
         }
+    }
+    if (!pMin) {
+        return std::nullopt;
     }
     AFL_VERIFY(pMin);
     auto result = pMin->ExtractTaskWithPrediction(counters);
@@ -30,9 +35,6 @@ TWorkerTask TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TW
         AFL_VERIFY(ProcessesWithTasks.erase(pMin->GetProcessId()));
     } else if (scopeIds.emplace(pMin->GetScope()->GetScopeId()).second) {
         pMin->GetScope()->IncInFly();
-        if (!p->GetScope()->CheckToRun()) {
-            AFL_VERIFY(ProcessesWithTasks.erase(pMin->GetProcessId()));
-        }
     }
     Counters->WaitingQueueSize->Set(WaitingTasksCount->Val());
     return result;

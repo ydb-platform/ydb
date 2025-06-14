@@ -10,6 +10,7 @@ PEERDIR(
     ydb/library/actors/interconnect
     library/cpp/monlib/service/pages
     library/cpp/svnversion
+    ydb/library/global_plugins
     ydb/core/protos
     ydb/core/viewer/json
 )

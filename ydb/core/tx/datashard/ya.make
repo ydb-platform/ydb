@@ -102,8 +102,6 @@ SRCS(
     datashard_kqp_compute.h
     datashard_kqp_delete_rows.cpp
     datashard_kqp_effects.cpp
-    datashard_kqp_lookup_table.cpp
-    datashard_kqp_read_table.cpp
     datashard_kqp_upsert_rows.cpp
     datashard_loans.cpp
     datashard_locks_db.cpp
@@ -253,9 +251,6 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/dot_product
-    library/cpp/l1_distance
-    library/cpp/l2_distance
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -267,6 +262,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
@@ -313,6 +309,7 @@ RECURSE_FOR_TESTS(
     ut_compaction
     ut_data_cleanup
     ut_erase_rows
+    ut_export
     ut_external_blobs
     ut_followers
     ut_incremental_backup

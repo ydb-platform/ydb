@@ -6,7 +6,6 @@
 #include "changes/cleanup_portions.h"
 #include "changes/cleanup_tables.h"
 #include "changes/general_compaction.h"
-#include "changes/indexation.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
 
@@ -38,6 +37,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
+    AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, schema);
 }
@@ -53,6 +53,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
+    AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, std::move(schema));
 }
@@ -63,7 +64,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     bool switchAccessorsManager = false;
     if (!VersionedIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
-        Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
+        lastIndexInfo.CheckCompatible(indexInfo).Validate();
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
         switchAccessorsManager = !indexInfo.GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
     }
@@ -167,29 +168,8 @@ bool TColumnEngineForLogs::FinishLoading() {
     return true;
 }
 
-std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept {
-    Y_ABORT_UNLESS(dataToIndex.size());
-
-    TSaverContext saverContext(StoragesManager);
-    auto changes = std::make_shared<TInsertColumnEngineChanges>(std::move(dataToIndex), saverContext);
-    auto pkSchema = VersionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey();
-
-    for (const auto& data : changes->GetDataToIndex()) {
-        const TInternalPathId pathId = data.GetPathId();
-
-        if (changes->PathToGranule.contains(pathId)) {
-            continue;
-        }
-        if (!data.GetRemove()) {
-            AFL_VERIFY(changes->PathToGranule.emplace(pathId, GetGranulePtrVerified(pathId)->GetBucketPositions()).second);
-        }
-    }
-
-    return changes;
-}
-
 ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
-    const std::optional<ui64> waitingPriority) noexcept {
+    const std::optional<ui64> waitingPriority) const noexcept {
     auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
     if (!priority) {
         return 0;
@@ -436,12 +416,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     }
 
     for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-        AFL_VERIFY(portionInfo->HasInsertWriteId());
-        if (withUncommitted) {
-            if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
-                continue;
-            }
-        } else if (!portionInfo->HasCommitSnapshot()) {
+        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
             continue;
         }
         const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);

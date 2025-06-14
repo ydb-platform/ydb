@@ -37,6 +37,10 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 {% include notitle [Table of contents](orm/_includes/toc-table.md) %}
 
+## Vector search {#vectorsearch}
+
+{% include notitle [Table of contents](vectorsearch/_includes/toc-table.md) %}
+
 ## See also
 
 * [{#T}](../reference/ydb-sdk/index.md)

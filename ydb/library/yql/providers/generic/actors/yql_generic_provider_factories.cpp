@@ -32,9 +32,9 @@ namespace NYql::NDq {
                 genericClient,
                 credentialsFactory,
                 std::move(args.ParentId),
-                args.TaskCounters,
-                args.Alloc,
-                args.KeyTypeHelper,
+                std::move(args.TaskCounters),
+                std::move(args.Alloc),
+                std::move(args.KeyTypeHelper),
                 std::move(lookupSource),
                 args.KeyType,
                 args.PayloadType,
@@ -55,7 +55,8 @@ namespace NYql::NDq {
                  "IcebergGeneric",
                  "RedisGeneric",
                  "PrometheusGeneric",
-                 "MongoDBGeneric"}) {
+                 "MongoDBGeneric",
+                 "OpenSearchGeneric"}) {
             factory.RegisterSource<Generic::TSource>(name, readActorFactory);
             factory.RegisterLookupSource<Generic::TLookupSource>(name, lookupActorFactory);
         }

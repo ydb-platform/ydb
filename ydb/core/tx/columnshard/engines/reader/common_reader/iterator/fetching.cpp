@@ -27,7 +27,7 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
         return TConclusionStatus::Success();
     }
     auto executeResult = Cursor.Execute(Source);
-    if (!executeResult) {
+    if (executeResult.IsFail()) {
         return executeResult;
     }
     if (*executeResult) {
@@ -38,10 +38,9 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
 
 TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
     const bool changeSyncSection)
-    : TBase(ownerActorId)
+    : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , Source(source)
-    , Cursor(std::move(cursor))
-    , CountersGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard()) {
+    , Cursor(std::move(cursor)) {
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {
@@ -114,7 +113,8 @@ TString TFetchingScript::ProfileDebugString() const {
     return sb;
 }
 
-void TFetchingScriptBuilder::AddAllocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType) {
+void TFetchingScriptBuilder::AddAllocation(
+    const std::set<ui32>& entityIds, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const EMemType mType) {
     if (Steps.size() == 0) {
         AddStep(std::make_shared<TAllocateMemoryStep>(entityIds, mType, stage));
     } else {
@@ -157,7 +157,7 @@ TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& contex
     : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns()) {
 }
 
-void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage) {
+void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
     auto actualColumns = columns - AddedFetchingColumns;
     AddedFetchingColumns += columns;
     if (actualColumns.IsEmpty()) {
@@ -175,7 +175,7 @@ void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, cons
 }
 
 void TFetchingScriptBuilder::AddAssembleStep(
-    const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage, const bool sequential) {
+    const TColumnsSetIds& columns, const TString& purposeId, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const bool sequential) {
     auto actualColumns = columns - AddedAssembleColumns;
     AddedAssembleColumns += columns;
     if (actualColumns.IsEmpty()) {

@@ -659,7 +659,7 @@ TExprNode::TPtr RemoveOptionalReduceOverData(const TExprNode::TPtr& node, TExprC
 }
 
 TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (node->Head().IsCallable({"Likely", "AssumeStrict", "AssumeNonStrict"})) {
+    if (node->Head().IsCallable({"NoPush", "Likely", "AssumeStrict", "AssumeNonStrict"})) {
         const auto value = FromString<bool>(node->Child(1)->Head().Content());
         if (!value) {
             YQL_CLOG(DEBUG, Core) << "PropagateCoalesceWithConst over " << node->Head().Content() << " (false)";
@@ -3725,7 +3725,7 @@ TExprNode::TPtr MemberNthOverFlatMapWithOptional(const TExprNode::TPtr& node, TE
     YQL_ENSURE(node->IsCallable({"Member", "Nth"}));
     YQL_ENSURE(optCtx.Types);
     static const char optName[] = "MemberNthOverFlatMap";
-    if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
         return node;
     }
     if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(node->HeadPtr())) {
@@ -4002,7 +4002,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["FilterNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_ENSURE(optCtx.Types);
         static const char optName[] = "FilterNullMembersOverJust";
-        if (!IsOptimizerEnabled<optName>(*optCtx.Types) || IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
             return node;
         }
         const auto self = TCoFilterNullMembers(node);
@@ -6229,7 +6229,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         static const char optName[] = "UnorderedOverSortImproved";
         YQL_ENSURE(optCtx.Types);
-        const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+        const bool optEnabled = !IsOptimizerDisabled<optName>(*optCtx.Types);
         if (optEnabled) {
             if (node->Head().IsCallable(node->Content()) ||
                 node->Head().IsCallable("Sort") && node->IsCallable("Unordered"))
@@ -6950,8 +6950,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["Likely"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
-        if (node->Head().IsCallable("Likely")) {
+    map["Likely"] = map["NoPush"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+        if (IsNoPush(node->Head())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return node->HeadPtr();
         }

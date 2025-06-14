@@ -3179,7 +3179,10 @@ TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNod
         return nullptr;
     }
 
-    static const THashSet<TStringBuf> nullSafeOps = {"IsDistinctFrom", "IsNotDistinctFrom"};
+    static const THashSet<TStringBuf> nullSafeOps = {
+        "IsDistinctFrom", "IsNotDistinctFrom",
+        "EqualsIgnoreCase", "StartsWithIgnoreCase", "EndsWithIgnoreCase", "StringContainsIgnoreCase"
+    };
     if (!nullSafeOps.contains(opName)) {
         const bool bothArgNull = a->IsNull() && b->IsNull();
         const bool oneArgNull  = a->IsNull() || b->IsNull();

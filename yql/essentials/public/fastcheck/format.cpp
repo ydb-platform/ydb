@@ -40,13 +40,13 @@ TString ReplaceHidden(TStringBuf input) {
     return res;
 }
 
-class TFormatRunner : public ICheckRunner {
+class TFormatRunner : public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "format";
     }
 
-    TCheckResponse Run(const TChecksRequest& request) final {
+    TCheckResponse DoRun(const TChecksRequest& request) final {
         switch (request.Syntax) {
         case ESyntax::SExpr:
             return RunSExpr(request);
@@ -83,6 +83,7 @@ private:
         settings.File = request.File;
         settings.Antlr4Parser = true;
         settings.AnsiLexer = request.IsAnsiLexer;
+        settings.LangVer = request.LangVer;
 
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();

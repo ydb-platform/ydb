@@ -163,7 +163,6 @@
       - contrib/restricted/boost/config/include/boost/config/platform/solaris.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/irix.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/hpux.hpp
-      - contrib/restricted/boost/config/include/boost/config/platform/cygwin.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/win32.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/haiku.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/beos.hpp
@@ -782,18 +781,6 @@
     - BOOST_PP_ITERATE():
       - contrib/restricted/boost/variant/include/boost/variant/detail/substitute.hpp
 
-- source_filter: "^contrib/libs/gperftools"
-  includes:
-    - STACKTRACE_INL_HEADER:
-      - contrib/libs/gperftools/srcstacktrace_win32-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_generic-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_emscripten-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_x86-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_powerpc-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_aarch64-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_riscv-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_unimplemented-inl.inc
-
 - source_filter: "^contrib/libs/lzo2"
   includes:
     - LZO_CODE_MATCH_INCLUDE_FILE:
@@ -958,6 +945,12 @@
       - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/for_each.h
       - contrib/libs/nvidia/thrust/thrust/system/omp/detail/for_each.h
       - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/for_each.h
+
+    - __THRUST_DEVICE_SYSTEM_GATHER_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/gather.h
 
     - __THRUST_DEVICE_SYSTEM_GENERATE_HEADER:
       - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/generate.h

@@ -70,8 +70,8 @@ public:
     ~TFacadeRunOptions();
 
     EProgramType ProgramType = EProgramType::SExpr;
-    TLangVersion LangVer = UnknownLangVersion;
-    TLangVersion MaxLangVer = UnknownLangVersion;
+    TLangVersion LangVer = MinLangVersion;
+    TLangVersion MaxLangVer = GetMaxLangVersion();
     NYson::EYsonFormat ResultsFormat = NYson::EYsonFormat::Text;
     ERunMode Mode = ERunMode::Run;
     TString ProgramFile;

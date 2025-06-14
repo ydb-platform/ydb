@@ -40,6 +40,7 @@ class TllTieringTestBase(object):
             config = KikimrConfigGenerator(
                 extra_feature_flags={
                     "enable_external_data_sources": True,
+                    "enable_write_portions_on_insert": True,
                     "enable_tiering_in_column_shard": True
                 },
                 column_shard_config={
@@ -47,8 +48,10 @@ class TllTieringTestBase(object):
                     "compaction_actualization_lag_ms": 0,
                     "optimizer_freshness_check_duration_ms": 0,
                     "small_portion_detect_size_limit": 0,
-                    "max_read_staleness_ms": 60000,
+                    "max_read_staleness_ms": 20000,
                     "alter_object_enabled": True,
+                    "periodic_wakeup_activation_period_ms": 5000,
+                    "gcinterval_ms": 5000,
                 },
                 additional_log_configs={
                     "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,
@@ -84,6 +87,7 @@ class TllTieringTestBase(object):
         t0 = time.time()
         while time.time() - t0 < timeout_seconds:
             if condition_func():
+                logger.info(f"Waiting finished in {time.time() - t0}s (limit={timeout_seconds}s)")
                 return True
             time.sleep(1)
         return False

@@ -11,7 +11,8 @@ enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterO
 void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
-void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
@@ -99,7 +100,7 @@ private:
 };
 
 bool NeedCalc(NNodes::TExprBase node);
-bool IsConstantExpr(const TExprNode::TPtr& input);
+bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);
 
 } // namespace NYql::NDq {

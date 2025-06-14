@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/misc/utf8_decoder.h>
 
-#include <contrib/libs/yajl/api/yajl_gen.h>
+#include <contrib/deprecated/yajl/src/api/yajl_gen.h>
 
 #include <cmath>
 

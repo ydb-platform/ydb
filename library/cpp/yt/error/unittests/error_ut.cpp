@@ -789,6 +789,61 @@ TEST(TErrorTest, MacroStaticAnalysisBrokenFormat)
     // });
 }
 
+TEST(TErrorTest, Enrichers)
+{
+    static auto getAttribute = [] (const TError& error) {
+        return error.Attributes().Get<TString>("test_attribute", "");
+    };
+
+    {
+        static thread_local bool testEnricherEnabled = false;
+        testEnricherEnabled = true;
+
+        TError::RegisterEnricher([](TError* error) {
+            if (testEnricherEnabled) {
+                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            }
+        });
+
+        // Not from exception.
+        EXPECT_EQ(getAttribute(TError("E")), "X");
+        EXPECT_EQ(getAttribute(TError(NYT::EErrorCode::Generic, "E")), "X");
+
+        // std::exception.
+        EXPECT_EQ(getAttribute(TError(std::runtime_error("E"))), "X");
+
+        // Copying.
+        EXPECT_EQ(getAttribute(TError(TError(std::runtime_error("E")))), "X");
+        EXPECT_EQ(getAttribute(TError(TErrorException() <<= TError(std::runtime_error("E")))), "X");
+
+        testEnricherEnabled = false;
+    }
+
+    {
+        static thread_local bool testFromExceptionEnricherEnabled = false;
+        testFromExceptionEnricherEnabled = true;
+
+        TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {
+            if (testFromExceptionEnricherEnabled) {
+                *error <<= TErrorAttribute("test_attribute", getAttribute(*error) + "X");
+            }
+        });
+
+        // Not from exception.
+        EXPECT_EQ(getAttribute(TError("E")), "");
+        EXPECT_EQ(getAttribute(TError(NYT::EErrorCode::Generic, "E")), "");
+
+        // From exception.
+        EXPECT_EQ(getAttribute(TError(std::runtime_error("E"))), "X");
+        EXPECT_EQ(getAttribute(TError(TError(std::runtime_error("E")))), "X");
+
+        // From exception twice.
+        EXPECT_EQ(getAttribute(TError(TErrorException() <<= TError(std::runtime_error("E")))), "XX");
+
+        testFromExceptionEnricherEnabled = false;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

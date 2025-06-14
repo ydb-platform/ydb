@@ -16,6 +16,8 @@ public:
         , Event(resolvedEv->Get()->Request)
         , ScopeId(resolvedEv->Get()->ScopeId)
         , ServicedSubDomain(resolvedEv->Get()->ServicedSubDomain)
+        , BridgePileId(resolvedEv->Get()->BridgePileId)
+        , ResolveError(std::move(resolvedEv->Get()->Error))
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
@@ -44,6 +46,28 @@ public:
         return true;
     }
 
+    bool ShouldUpdateVersion() const
+    {
+        return Node || ExtendLease || SetLocation || FixNodeId;
+    }
+
+    void Reply(const TActorContext &ctx) const
+    {
+        if (Response->Record.GetStatus().GetCode() == TStatus::OK)
+            Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
+
+        LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
+                    "TTxRegisterNode reply with: " << Response->Record.ShortDebugString());
+
+        if (ScopeId != NActors::TScopeId()) {
+            auto& record = Response->Record;
+            record.SetScopeTabletId(ScopeId.first);
+            record.SetScopePathId(ScopeId.second);
+        }
+
+        ctx.Send(Event->Sender, Response.Release());
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
         auto &rec = Event->Get()->Record;
@@ -61,6 +85,10 @@ public:
         TNodeLocation loc(rec.GetLocation());
 
         Response = new TEvNodeBroker::TEvRegistrationResponse;
+
+        if (ResolveError) {
+            return Error(TStatus::WRONG_REQUEST, TStringBuilder() << ResolveError << " for " << host << ':' << port, ctx);
+        }
 
         if (rec.HasPath() && ScopeId == NActors::TScopeId()) {
             return Error(TStatus::ERROR,
@@ -93,23 +121,25 @@ public:
                              << host << ":" << port,
                              ctx);
             } else if (node.Location != loc) {
-                node.Location = loc;
-                Self->Dirty.DbUpdateNodeLocation(node, txc);
+                Self->Dirty.UpdateLocation(node, loc);
+                Self->Dirty.DbAddNode(node, txc);
                 SetLocation = true;
+            } else if (node.BridgePileId != node.BridgePileId) {
+                return Error(TStatus::WRONG_REQUEST, "Can't change bridge pile for the node", ctx);
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
-                Self->Dirty.DbFixNodeId(node, txc);
                 Self->Dirty.FixNodeId(node);
+                Self->Dirty.DbAddNode(node, txc);
                 FixNodeId = true;
             } else if (!node.IsFixed() && node.Expire < expire) {
-                Self->Dirty.DbUpdateNodeLease(node, txc);
                 Self->Dirty.ExtendLease(node);
+                Self->Dirty.DbAddNode(node, txc);
                 ExtendLease = true;
             }
             if (node.AuthorizedByCertificate != rec.GetAuthorizedByCertificate()) {
                 node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
-                Self->Dirty.DbUpdateNodeAuthorizedByCertificate(node, txc);
+                Self->Dirty.DbAddNode(node, txc);
                 UpdateNodeAuthorizedByCertificate = true;
             }
 
@@ -128,32 +158,34 @@ public:
                     AllocateSlotIndex = true;
                 }
             }
+        } else {
+            if (Self->Dirty.FreeIds.Empty())
+                return Error(TStatus::ERROR_TEMP, "No free node IDs", ctx);
 
-            Response->Record.MutableStatus()->SetCode(TStatus::OK);
-            return true;
-        }
+            NodeId = Self->Dirty.FreeIds.FirstNonZeroBit();
 
-        if (Self->Dirty.FreeIds.Empty())
-            return Error(TStatus::ERROR_TEMP, "No free node IDs", ctx);
+            Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
+            Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
+            Node->Lease = 1;
+            Node->Expire = expire;
+            Node->Version = Self->Dirty.Epoch.Version + 1;
+            Node->State = ENodeState::Active;
+            Node->BridgePileId = BridgePileId;
 
-        NodeId = Self->Dirty.FreeIds.FirstNonZeroBit();
+            if (Self->EnableStableNodeNames) {
+                Node->ServicedSubDomain = ServicedSubDomain;
+                Node->SlotIndex = Self->Dirty.SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
+            }
 
-        Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
-        Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
-        Node->Lease = 1;
-        Node->Expire = expire;
-
-        if (Self->EnableStableNodeNames) {
-            Node->ServicedSubDomain = ServicedSubDomain;
-            Node->SlotIndex = Self->Dirty.SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
+            Self->Dirty.DbAddNode(*Node, txc);
+            Self->Dirty.RegisterNewNode(*Node);
         }
 
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
-
-        Self->Dirty.DbAddNode(*Node, txc);
-        Self->Dirty.AddNode(*Node);
-        Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version + 1, txc);
-        Self->Dirty.UpdateEpochVersion();
+        if (ShouldUpdateVersion()) {
+            Self->Dirty.UpdateEpochVersion();
+            Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
+        }
 
         return true;
     }
@@ -162,27 +194,32 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Complete");
 
-        if (Node) {
-            Self->Committed.AddNode(*Node);
-            Self->Committed.UpdateEpochVersion();
-            Self->AddNodeToEpochCache(*Node);
-        } else if (ExtendLease)
-            Self->Committed.ExtendLease(Self->Committed.Nodes.at(NodeId));
-        else if (FixNodeId)
-            Self->Committed.FixNodeId(Self->Committed.Nodes.at(NodeId));
+        if (Response->Record.GetStatus().GetCode() != TStatus::OK) {
+            return Reply(ctx);
+        }
 
+        if (Node) {
+            Self->Committed.RegisterNewNode(*Node);
+        }
+
+        auto &node = Self->Committed.Nodes.at(NodeId);
         if (SetLocation) {
-            Self->Committed.Nodes.at(NodeId).Location = TNodeLocation(Event->Get()->Record.GetLocation());
+            Self->Committed.UpdateLocation(node, TNodeLocation(Event->Get()->Record.GetLocation()));
+        }
+
+        if (FixNodeId) {
+            Self->Committed.FixNodeId(node);
+        } else if (ExtendLease) {
+            Self->Committed.ExtendLease(node);
         }
 
         if (UpdateNodeAuthorizedByCertificate) {
-            Self->Committed.Nodes.at(NodeId).AuthorizedByCertificate = Event->Get()->Record.GetAuthorizedByCertificate();
+            node.AuthorizedByCertificate = Event->Get()->Record.GetAuthorizedByCertificate();
         }
 
         if (AllocateSlotIndex) {
-            Self->Committed.Nodes.at(NodeId).SlotIndex = Self->Committed.SlotIndexesPools[ServicedSubDomain].AcquireLowestFreeIndex();
+            node.SlotIndex = Self->Committed.SlotIndexesPools[ServicedSubDomain].AcquireLowestFreeIndex();
         } else if (SlotIndexSubdomainChanged) {
-            auto& node = Self->Committed.Nodes.at(NodeId);
             if (node.SlotIndex.has_value()) {
                 Self->Committed.SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
             }
@@ -190,26 +227,22 @@ public:
             node.SlotIndex = Self->Committed.SlotIndexesPools[ServicedSubDomain].AcquireLowestFreeIndex();
         }
 
-        Y_ABORT_UNLESS(Response);
-        // With all modifications applied we may fill node info.
-        if (Response->Record.GetStatus().GetCode() == TStatus::OK)
-            Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
-        LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxRegisterNode reply with: " << Response->Record.ShortDebugString());
-
-        if (ScopeId != NActors::TScopeId()) {
-            auto& record = Response->Record;
-            record.SetScopeTabletId(ScopeId.first);
-            record.SetScopePathId(ScopeId.second);
+        if (ShouldUpdateVersion()) {
+            Self->Committed.UpdateEpochVersion();
+            Self->AddNodeToEpochCache(node);
+            Self->AddNodeToUpdateNodesLog(node);
+            Self->ScheduleProcessSubscribersQueue(ctx);
         }
 
-        ctx.Send(Event->Sender, Response.Release());
+        Reply(ctx);
     }
 
 private:
     TEvNodeBroker::TEvRegistrationRequest::TPtr Event;
     const NActors::TScopeId ScopeId;
     const TSubDomainKey ServicedSubDomain;
+    const std::optional<TBridgePileId> BridgePileId;
+    TString ResolveError;
     TAutoPtr<TEvNodeBroker::TEvRegistrationResponse> Response;
     THolder<TNodeInfo> Node;
     ui32 NodeId;

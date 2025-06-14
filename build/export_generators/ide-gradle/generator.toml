@@ -19,6 +19,18 @@ template="build.gradle.kts.jinja"
 [targets.jar_proto]
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
+[targets.jar_test]
+is_test = true
+is_extra_target = true
+
+[targets.junit4]
+is_test = true
+is_extra_target = true
+
+[targets.junit5]
+is_test = true
+is_extra_target = true
+
 [attrs.target]
 # DEPRECATED
 annotation_processors="list"
@@ -65,7 +77,6 @@ runs-classpath="list"
 runs-cwd="str"
 runs-in="list"
 runs-in_dir="list"
-runs-in_dirs_inputs="list"
 runs-in_noparse="list"
 runs-out="list"
 runs-out_dir="list"
@@ -84,6 +95,7 @@ custom_runs-cmake_packages-components="list"
 
 javac-flags="list"
 kotlinc-flags="list"
+jvm_args="list"
 
 target_commands="list"
 target_commands-ITEM="dict"
@@ -91,6 +103,11 @@ target_commands-macro="str"
 target_commands-args="list"
 target_commands-args_escaped="list"
 target_commands-flags="list"
+
+with_kapt="flag"
+kapt-classpaths="list"
+kapt-opts="list"
+kapt-processors="list"
 
 [attrs.root]
 
@@ -100,15 +117,5 @@ target_commands-flags="list"
 consumer-classpath="str"
 consumer-jar="str"
 consumer-type="str"
+consumer-proto_namespace="str"
 consumer-prebuilt="flag"
-
-[merge]
-test=[
-    "/ut",
-    "/src/test",
-    "/src/test/java",
-    "/src/test-integration",
-    "/src/integration-test",
-    "/src/testFixtures",
-    "/src/intTest",
-]

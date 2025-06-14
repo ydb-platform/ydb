@@ -72,20 +72,20 @@ To set up monitoring for a {{ ydb-short-name }} cluster using [Prometheus](https
         - targets: ["localhost:8765"]
         ```
 
-    1. If necessary, in the `tls_config` section, specify the [CA-issued certificate](./initial-deployment.md#tls-certificates) used to sign the other TLS certificates of the {{ ydb-short-name }} cluster:
+    2. If necessary, in the `tls_config` section, specify the [CA-issued certificate](../manual/initial-deployment.md#tls-certificates) used to sign the other TLS certificates of the {{ ydb-short-name }} cluster:
 
        ```json
        tls_config:
            ca_file: '<ydb-ca-file>'
        ```
 
-1. [Run](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using the edited configuration file.
+2. [Run](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus using the edited configuration file.
 
-1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
+3. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
 
-1. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana, and attach it to the running Prometheus instance.
+4. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana, and attach it to the running Prometheus instance.
 
-1. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) to Grafana.
+5. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) to Grafana.
 
 To upload dashboards, use the Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) tool or run a [script](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Please note that the script uses [basic authentication](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) in Grafana. For other cases, modify the script.
 

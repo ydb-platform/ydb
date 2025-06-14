@@ -644,6 +644,10 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: YT_OP_SPEC_CONTAINS_SECRETS
+  severity: S_ERROR
+}
+ids {
   code: YQL_OFFSET_WITHOUT_SORT
   severity: S_WARNING
 }

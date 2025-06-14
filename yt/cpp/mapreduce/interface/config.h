@@ -17,6 +17,15 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NLogLevel {
+    inline constexpr std::string_view Fatal = "fatal";
+    inline constexpr std::string_view Error = "error";
+    inline constexpr std::string_view Info = "info";
+    inline constexpr std::string_view Debug = "debug";
+} // namespace NLogLevel
+
+////////////////////////////////////////////////////////////////////////////////
+
 extern const TString DefaultHosts;
 extern const TString DefaultRemoteTempTablesDirectory;
 extern const TString DefaultRemoteTempFilesDirectory;
@@ -90,6 +99,10 @@ struct TConfig
     TString LogPath;
     THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
 
+    /// @brief Path to the structured log file for recording telemetry data in JSON format.
+    /// This allows later retrieval and analysis of these metrics.
+    TString StructuredLog;
+
     /// @brief Represents the role involved in HTTP proxy configuration.
     ///
     /// @note If the "Hosts" configuration option is specified, it is given priority over the HTTP proxy role.
@@ -101,14 +114,13 @@ struct TConfig
     ///
     /// For historical reasons mapreduce client uses its own logging system.
     ///
-    /// If this options is set to true library switches to yt/yt/core logging by default.
-    /// But if user calls @ref NYT::SetLogger library switches back to logger provided by user
+    /// Currently library uses yt/yt/core logging by default.
+    /// But if user calls @ref NYT::SetLogger, library switches back to logger provided by user
     /// (except for messages from yt/yt/core).
     ///
-    /// This is temporary option. In future it would be true by default, and then removed.
-    ///
-    /// https://st.yandex-team.ru/YT-23645
-    bool LogUseCore = false;
+    /// TODO: This is a temporary option for emergency fallback.
+    /// Should be removed after eliminating all NYT::SetLogger references.
+    bool LogUseCore = true;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;

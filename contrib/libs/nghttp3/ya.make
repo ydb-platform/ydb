@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.8.0)
+VERSION(1.9.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/nghttp3/releases/download/v1.8.0/nghttp3-1.8.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/nghttp3/releases/download/v1.9.0/nghttp3-1.9.0.tar.xz)
 
 LICENSE(
     FSFAP AND

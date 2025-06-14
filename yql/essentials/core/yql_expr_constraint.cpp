@@ -822,9 +822,54 @@ private:
         }
 
         if constexpr (Adjacent) {
-            return CopyAllFrom<0>(input, output, ctx);
+            TSet<TStringBuf> except = {
+                TUniqueConstraintNode::Name(),
+                TDistinctConstraintNode::Name(),
+            };
+            CopyExcept(*input, *input->Child(0), except);
+
+            auto uniqueConstraint = input->Child(0)->GetConstraint<TUniqueConstraintNode>();
+            auto distinctConstraint = input->Child(0)->GetConstraint<TDistinctConstraintNode>();
+
+            TPartOfConstraintBase::TSetType keys = GetPathsToKeys<true>(input->Child(1)->Tail(), input->Child(1)->Head().Head());
+            if (!keys.empty()) {
+                TPartOfConstraintBase::TSetOfSetsType uniqueKeys;
+                for (const auto& elem : keys) {
+                    uniqueKeys.insert(TPartOfConstraintBase::TSetType{elem});
+                }
+
+                auto newUniqueConstraint = ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{uniqueKeys});
+                if (uniqueConstraint) {
+                    uniqueConstraint = TUniqueConstraintNode::Merge(
+                        newUniqueConstraint,
+                        dynamic_cast<const TUniqueConstraintNode*>(uniqueConstraint),
+                        ctx);
+                } else {
+                    uniqueConstraint = newUniqueConstraint;
+                }
+
+                auto newDistinctConstraint = ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{uniqueKeys});
+                if (distinctConstraint) {
+                    distinctConstraint = TDistinctConstraintNode::Merge(
+                        newDistinctConstraint,
+                        dynamic_cast<const TDistinctConstraintNode*>(distinctConstraint),
+                        ctx);
+                } else {
+                    distinctConstraint = newDistinctConstraint;
+                }
+            }
+
+            if (uniqueConstraint) {
+                input->AddConstraint(uniqueConstraint);
+            }
+            if (distinctConstraint) {
+                input->AddConstraint(distinctConstraint);
+            }
+
+            return TStatus::Ok;
         }
-        return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode>(input, output, ctx);
+
+        return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode>(input, output, ctx);
     }
 
     template<class TConstraint>

@@ -198,7 +198,8 @@ void TConfig::Reset()
     ApiVersion = GetEnv("YT_VERSION", "v3");
     LogLevel = GetEnv("YT_LOG_LEVEL", "error");
     LogPath = GetEnv("YT_LOG_PATH");
-    LogUseCore = GetBool("YT_LOG_USE_CORE", false);
+    LogUseCore = GetBool("YT_LOG_USE_CORE", true);
+    StructuredLog = GetEnv("YT_STRUCTURED_LOG");
 
     HttpProxyRole = GetEnv("YT_HTTP_PROXY_ROLE");
     RpcProxyRole = GetEnv("YT_RPC_PROXY_ROLE");

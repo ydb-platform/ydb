@@ -3,6 +3,8 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/core/langver/yql_core_langver.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <google/protobuf/arena.h>
@@ -15,15 +17,28 @@ int RunFormat(int argc, char* argv[]) {
     TString outFileName;
     TString inFileName;
     TString queryString;
+    NYql::TLangVersion langver = NYql::GetMaxReleasedLangVersion();
 
     opts.AddLongOption('o', "output", "save output to file").RequiredArgument("file").StoreResult(&outFileName);
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('p', "print-query", "print given query before parsing").NoArgument();
     opts.AddLongOption('f', "obfuscate", "obfuscate query").NoArgument();
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
+        .Handler1T<TString>([&](const TString& str) {
+            if (!NYql::ParseLangVersion(str, langver)) {
+                throw yexception() << "Failed to parse language version: " << str;
+            }
+        });
+
+    opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
+    TMaybe<NYql::TIssue> verIssue;
+    if (!NYql::CheckLangVersion(langver, NYql::GetMaxReleasedLangVersion(), verIssue)) {
+        throw yexception() << verIssue->ToString();
+    }
 
     THolder<TFixedBufferFileOutput> outFile;
     if (!outFileName.empty()) {
@@ -45,6 +60,7 @@ int RunFormat(int argc, char* argv[]) {
     }
     google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = langver;
     settings.Arena = &arena;
     settings.AnsiLexer = res.Has("ansi-lexer");
     NSQLTranslationV1::TLexers lexers;
@@ -72,7 +88,7 @@ int main(int argc, char* argv[]) {
     try {
         return RunFormat(argc, argv);
     } catch (const yexception& e) {
-        Cerr << "Caught exception:" << e.what() << Endl;
+        Cerr << "Caught exception: " << e.what() << Endl;
         return 1;
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;

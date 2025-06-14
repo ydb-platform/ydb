@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             result = session1.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/Test` (Group, Name, Comment)
                 VALUES (11U, "Sergey", "BadRow");
-            )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
 
             result = session1.ExecuteQuery(Q_(R"(
                 SELECT "Nothing";
-            )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     };
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             result = session1.ExecuteQuery(Q1_(R"(
                 UPSERT INTO Test (Group, Name, Amount) VALUES
                     (11, "Session1", 1);
-            )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
 
                 UPSERT INTO Test (Group, Name, Amount) VALUES
                     (11, "Session1", 1);
-            )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
             {
                 result = session1.ExecuteQuery(Q1_(R"(
                     SELECT * FROM Test WHERE Group = 11;
-                )"), TTxControl::Tx(tx1->GetId())).ExtractValueSync();
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 CompareYson(R"([[[2u];#;11u;"TEST"]])", FormatResultSetYson(result.GetResultSet(0)));
             }

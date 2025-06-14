@@ -253,7 +253,7 @@ private:
     }
 
 private:
-    void AddAllocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType);
+    void AddAllocation(const std::set<ui32>& entityIds, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const EMemType mType);
 
     template <class T, typename... Args>
     std::shared_ptr<T> InsertStep(const ui32 index, Args... args) {
@@ -275,8 +275,9 @@ public:
         Steps.emplace_back(step);
     }
 
-    void AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage);
-    void AddAssembleStep(const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage, const bool sequential);
+    void AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage);
+    void AddAssembleStep(const TColumnsSetIds& columns, const TString& purposeId, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage,
+        const bool sequential);
 
     static TFetchingScriptBuilder MakeForTests(ISnapshotSchema::TPtr schema, std::shared_ptr<TColumnsSetIds> guaranteeNotOptional = nullptr) {
         return TFetchingScriptBuilder(schema, guaranteeNotOptional ? guaranteeNotOptional : std::make_shared<TColumnsSetIds>());
@@ -319,7 +320,6 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
-    const NColumnShard::TCounterGuard CountersGuard;
 
 protected:
     virtual bool DoApply(IDataReader& owner) const override;

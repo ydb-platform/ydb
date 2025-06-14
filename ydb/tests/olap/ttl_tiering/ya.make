@@ -3,16 +3,17 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
-FORK_TEST_FILES()
+FORK_TESTS()
 
 TEST_SRCS(
     base.py
     data_correctness.py
-    ttl_delete_s3.py
-    ttl_unavailable_s3.py
     data_migration_when_alter_ttl.py
-    unstable_connection.py
     tier_delete.py
+    ttl_delete_s3.py
+    ttl_portion_size.py
+    ttl_unavailable_s3.py
+    unstable_connection.py
 )
 
 SIZE(MEDIUM)

@@ -21,7 +21,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
     TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-    const NColumnShard::TScanCounters& scanCountersPool)
+    const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnShardActorId(columnShardActorId)
@@ -33,6 +33,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , RequestCookie(requestCookie)
     , DataFormat(dataFormat)
     , TabletId(tabletId)
+    , CPULimits(cpuLimits)
     , ReadMetadataRange(readMetadataRange)
     , Timeout(timeout ? timeout : COMPUTE_HARD_TIMEOUT)
     , ScanCountersPool(scanCountersPool, TValidator::CheckNotNull(ReadMetadataRange)->GetProgram().GetGraphOptional())
@@ -53,7 +54,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     ReadCoordinatorActorId = ctx.Register(new NBlobOperations::NRead::TReadCoordinatorActor(TabletId, SelfId()));
 
     std::shared_ptr<TReadContext> context = std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ScanCountersPool,
-        ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId);
+        ReadMetadataRange, SelfId(), ResourceSubscribeActorId, ReadCoordinatorActorId, ComputeShardingPolicy, ScanId, CPULimits);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     StartInstant = TMonotonic::Now();
@@ -82,10 +83,8 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
         ACFL_DEBUG("event", "TEvTaskProcessedResult");
-        auto t = static_pointer_cast<IApplyAction>(result.GetResult());
-        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(result.GetResult()));
         if (!ScanIterator->Finished()) {
-            ScanIterator->Apply(t);
+            ScanIterator->Apply(result.GetResult());
         }
     }
     ContinueProcessing();
@@ -114,6 +113,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr&) {
     if (!AckReceivedInstant) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "ping_from_kqp");
         LastResultInstant = TMonotonic::Now();
     }
 }
@@ -167,15 +167,14 @@ void TColumnShardScan::CheckHanging(const bool logging) const {
 }
 
 void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
-        "Scan " << ScanActorId << " guard execution timeout"
-                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
-
+    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "guard execution timeout")("scan_actor_id", ScanActorId);
     CheckHanging(true);
     if (!AckReceivedInstant && TMonotonic::Now() >= GetComputeDeadline()) {
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_termination")("deadline", GetComputeDeadline())("timeout", Timeout);
         SendScanError("ColumnShard scanner timeout: HAS_ACK=0");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_continue")("deadline", GetComputeDeadline())("timeout", Timeout)("now", TMonotonic::Now());
         ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
     }
 }
@@ -250,18 +249,18 @@ bool TColumnShardScan::ProduceResults() noexcept {
             "batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey && result.GetScanCursor()->GetPKCursor() && CurrentLastReadKey->GetPKCursor()) {
-        auto pNew = NArrow::TReplaceKey::FromBatch(result.GetScanCursor()->GetPKCursor(), 0);
-        auto pOld = NArrow::TReplaceKey::FromBatch(CurrentLastReadKey->GetPKCursor(), 0);
+        auto pNew = result.GetScanCursor()->GetPKCursor();
+        auto pOld = CurrentLastReadKey->GetPKCursor();
         if (ReadMetadataRange->IsAscSorted()) {
-            AFL_VERIFY(!(pNew < pOld))("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
+            AFL_VERIFY(*pOld <= *pNew)("old", pOld->DebugString())("new", pNew->DebugString());
         } else if (ReadMetadataRange->IsDescSorted()) {
-            AFL_VERIFY(!(pOld < pNew))("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
+            AFL_VERIFY(*pNew <= *pOld)("old", pOld->DebugString())("new", pNew->DebugString());
         }
     }
     CurrentLastReadKey = result.GetScanCursor();
 
     if (CurrentLastReadKey->GetPKCursor()) {
-        Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor());
+        Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor()->ToBatch());
     }
     Result->LastCursorProto = CurrentLastReadKey->SerializeToProto();
     SendResult(false, false);
@@ -400,7 +399,7 @@ void TColumnShardScan::SendScanError(const TString& reason) {
     auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE, msg);
     NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_finish")("compute_actor_id", ScanComputeActorId)("stats", Stats->ToJson())(
-        "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"));
+        "iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO"))("reason", reason);
 
     Send(ScanComputeActorId, ev.Release());
 }

@@ -113,6 +113,7 @@ DECLARE_REFCOUNTED_STRUCT(TSingletonsConfig)
 DECLARE_REFCOUNTED_STRUCT(TSingletonsDynamicConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(IFairShareHierarchicalSlotQueueResource)
 
 class TBloomFilterBuilder;
 class TBloomFilter;
@@ -201,6 +202,11 @@ DEFINE_ENUM(EProcessErrorCode,
     ((CannotResolveBinary)(10002))
     ((CannotStartProcess) (10003))
 );
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

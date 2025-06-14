@@ -2,6 +2,7 @@
 
 #include "path.h"
 
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -320,6 +321,8 @@ struct Schema : NIceDb::Schema {
         struct PutUserDataLatency : Column<14, NScheme::NTypeIds::Interval> {};
         struct GetFastLatency : Column<15, NScheme::NTypeIds::Interval> {};
         struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
+        struct OperatingStatus : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct ExpectedStatus : Column<18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -336,7 +339,9 @@ struct Schema : NIceDb::Schema {
             PutTabletLogLatency,
             PutUserDataLatency,
             GetFastLatency,
-            LayoutCorrect>;
+            LayoutCorrect,
+            OperatingStatus,
+            ExpectedStatus>;
     };
 
     struct StoragePools : Table<7> {
@@ -599,6 +604,7 @@ struct Schema : NIceDb::Schema {
         struct PortionsCount: Column<3, NScheme::NTypeIds::Uint64> {};
         struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
         struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
+        struct InternalPathId: Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, TabletId>;
         using TColumns = TableColumns<
@@ -606,7 +612,8 @@ struct Schema : NIceDb::Schema {
             TabletId,
             PortionsCount,
             HostName,
-            NodeId
+            NodeId,
+            InternalPathId
         >;
     };
 
@@ -735,13 +742,13 @@ struct Schema : NIceDb::Schema {
 
     struct ShowCreate: Table<21> {
         struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
-        struct Statement: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct CreateQuery: Column<2, NScheme::NTypeIds::Utf8> {};
         struct PathType: Column<3, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Path, PathType>;
         using TColumns = TableColumns<
             Path,
-            Statement,
+            CreateQuery,
             PathType
         >;
     };
@@ -826,6 +833,8 @@ public:
     virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;
 
     virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const = 0;
+
+    virtual TMaybe<TSchema> GetSystemViewSchema(NKikimrSysView::ESysViewType viewType) const = 0;
 
     virtual bool IsSystemView(const TStringBuf viewName) const = 0;
 

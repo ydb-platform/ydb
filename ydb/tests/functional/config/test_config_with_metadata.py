@@ -41,6 +41,7 @@ class AbstractKiKiMRTest(object):
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
                                              metadata_section=cls.metadata_section,
+                                             simple_config=True,
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()

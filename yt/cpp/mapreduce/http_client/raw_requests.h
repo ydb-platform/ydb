@@ -55,23 +55,11 @@ std::unique_ptr<IOutputStream> WriteTable(
     const TMaybe<TFormat>& format,
     const TTableWriterOptions& options);
 
-void InsertRows(
+std::unique_ptr<IOutputStream> WriteFile(
     const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& rows,
-    const TInsertRowsOptions& options);
-
-TNode::TListType LookupRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TLookupRowsOptions& options);
-
-void DeleteRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TDeleteRowsOptions& options);
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options);
 
 TAuthorizationInfo WhoAmI(const TClientContext& context);
 

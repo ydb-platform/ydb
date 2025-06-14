@@ -83,6 +83,66 @@
     "test_ydb_impex.TestImpex.test_excess_columns[tsv-additional_args3-row]": {
         "uri": "file://test_ydb_impex.TestImpex.test_excess_columns_tsv-additional_args3-row_/result.output"
     },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_csv-additional_args0-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_csv-additional_args0-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_csv-additional_args1-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_csv-additional_args1-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_json-additional_args4-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_json-additional_args4-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_tsv-additional_args2-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_tsv-additional_args2-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_file_with_bom[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_tsv-additional_args3-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[csv-additional_args0-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_csv-additional_args0-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[csv-additional_args0-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_csv-additional_args0-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[csv-additional_args1-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_csv-additional_args1-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[csv-additional_args1-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_csv-additional_args1-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[json-additional_args4-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_json-additional_args4-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[json-additional_args4-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_json-additional_args4-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[tsv-additional_args2-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_tsv-additional_args2-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[tsv-additional_args2-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_tsv-additional_args2-row_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[tsv-additional_args3-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_tsv-additional_args3-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_stdin_with_bom[tsv-additional_args3-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_tsv-additional_args3-row_/result.output"
+    },
     "test_ydb_impex.TestImpex.test_multiple_files[csv-additional_args0-column]": {
         "uri": "file://test_ydb_impex.TestImpex.test_multiple_files_csv-additional_args0-column_/result.output"
     },

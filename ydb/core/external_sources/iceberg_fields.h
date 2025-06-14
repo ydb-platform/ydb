@@ -14,13 +14,13 @@ constexpr char WAREHOUSE_TLS[]          = "use_tls";
 constexpr char WAREHOUSE_DB[]           = "database_name";
 
 // Fields that belongs to a catalog
-constexpr char CATALOG_TYPE[]           = "catalog_type";
-constexpr char CATALOG_HIVE_URI[]       = "catalog_hive_uri";
+constexpr char CATALOG_TYPE[]               = "catalog_type";
+constexpr char CATALOG_HIVE_METASTORE_URI[] = "catalog_hive_metastore_uri";
 
 // Some values 
-constexpr char VALUE_S3[]     = "s3";
-constexpr char VALUE_HIVE[]   = "hive";
-constexpr char VALUE_HADOOP[] = "hadoop";
+constexpr char VALUE_S3[]               = "s3";
+constexpr char VALUE_HIVE_METASTORE[]   = "hive_metastore";
+constexpr char VALUE_HADOOP[]           = "hadoop";
 
 // List of fields which is pass to a connector
 constexpr std::array<const char*, 6> FieldsToConnector = {
@@ -29,7 +29,7 @@ constexpr std::array<const char*, 6> FieldsToConnector = {
     WAREHOUSE_S3_REGION,
     WAREHOUSE_S3_URI,
     CATALOG_TYPE,
-    CATALOG_HIVE_URI
+    CATALOG_HIVE_METASTORE_URI
 };
 
 } // NKikimr::NExternalSource::NIceberg

@@ -51,7 +51,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey, const NPDisk::TKey &sysLogKey,
     const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice,
-    TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, std::optional<TRcBuf> metadata)
+    TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization, std::optional<TRcBuf> metadata,
+    bool plainDataChunks)
 {
     TActorSystemCreator creator;
 
@@ -95,6 +96,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     cfg->SectorMap = sectorMap;
     // Disable encryption for SectorMap
     cfg->EnableSectorEncryption = !cfg->SectorMap;
+    cfg->PlainDataChunks = plainDataChunks;
 
     if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !sectorMap) {
         // path is a regular file
@@ -119,7 +121,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     }
     pDisk->WriteDiskFormat(diskSizeBytes, sectorSizeBytes, userAccessibleChunkSizeBytes, diskGuid,
         chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice,
-        std::move(metadata));
+        std::move(metadata), cfg->PlainDataChunks);
 }
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, TPDiskInfo &outInfo,
@@ -233,10 +235,20 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
 }
 
 void ObliterateDisk(TString path) {
-    TFile f(path, OpenAlways | RdWr);
+    TFile f(path, OpenExisting | RdWr);
     f.Flock(LOCK_EX | LOCK_NB);
 
-    TVector<ui8> zeros(NPDisk::FormatSectorSize * NPDisk::ReplicationFactor, 0);
+    bool isBlockDevice = false;
+    ui64 diskSizeBytes = 0;
+    DetectFileParameters(path, diskSizeBytes, isBlockDevice);
+
+    constexpr size_t portionSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+    if (diskSizeBytes <= portionSize) {
+        ythrow yexception() << "file is too small to be the YDB storage device, path# " << path.Quote() <<
+            " diskSizeBytes# " << diskSizeBytes;
+    }
+
+    TVector<ui8> zeros(portionSize, 0);
     f.Pwrite(zeros.data(), zeros.size(), 0);
     f.Flush();
 }

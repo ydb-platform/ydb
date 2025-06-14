@@ -31,7 +31,7 @@ private:
     using TBase = NAbstract::TStatsIterator<NKikimr::NSysView::Schema::PrimaryIndexPortionStats>;
     virtual bool AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const override;
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
-    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const;
+    void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const;
 public:
     using TBase::TBase;
 };

@@ -1553,7 +1553,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT(!result.IsSuccess());
             Cerr << result.GetIssues().ToString(true) << Endl;
-            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: DataQueryBlocks, At function: TKiDataQueryBlock, At function: KiReturningList! subissue: { <main>:1:1: Error: Column not found: fake } } }");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(true), "Column not found: fake");
         }
 
         {

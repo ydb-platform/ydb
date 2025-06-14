@@ -172,3 +172,8 @@ class SwaggerClient(object):
             return self.__http_get_and_parse_json(
                 "/json/tabletinfo", timeout=self.__timeout
             )
+
+    def nodes_info(self):
+        return self.__http_get_and_parse_json(
+            "/json/nodes", timeout=self.__timeout
+        )

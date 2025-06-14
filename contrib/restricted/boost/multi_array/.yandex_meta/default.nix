@@ -1,7 +1,7 @@
 self: super: with self; {
   boost_multi_array = stdenv.mkDerivation rec {
     pname = "boost_multi_array";
-    version = "1.87.0";
+    version = "1.88.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";

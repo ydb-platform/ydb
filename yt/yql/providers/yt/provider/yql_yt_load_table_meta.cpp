@@ -268,7 +268,7 @@ public:
                 tableDesc.Stat = stat;
                 if (HasReadIntents(tableDesc.Intents)) {
                     const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
-                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
+                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration, cluster);
                     if (!securityTagsSet.empty() && tmpFolder.empty()) {
                         TStringBuilder msg;
                         msg << "Table " << cluster << "." << tableName

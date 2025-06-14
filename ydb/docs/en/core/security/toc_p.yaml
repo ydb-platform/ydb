@@ -3,6 +3,8 @@ items:
   href: authentication.md
 - name: Authorization
   href: authorization.md
+- name: Initial security configuration
+  href: builtin-security.md
 - name: Audit log
   href: audit-log.md
 - name: Encryption

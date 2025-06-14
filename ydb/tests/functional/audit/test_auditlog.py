@@ -453,3 +453,28 @@ def test_broken_dynconfig(ydb_cluster, prepared_test_env, pool_fixture, config_f
     print(capture_audit.captured, file=sys.stderr)
     cfg = json.dumps(config)
     assert cfg in capture_audit.captured
+
+
+def test_create_and_remove_tenant(ydb_cluster):
+    capture_audit = CaptureFileOutput(ydb_cluster.config.audit_file_path)
+    print('AAA', capture_audit.filename, file=sys.stderr)
+
+    with capture_audit:
+        database = '/Root/users/database'
+        ydb_cluster.create_database(
+            database,
+            storage_pool_units_count={
+                'hdd': 1
+            }
+        )
+        database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
+        ydb_cluster.wait_tenant_up(database)
+        time.sleep(1)
+        ydb_cluster.remove_database(database)
+        ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+    print(capture_audit.captured, file=sys.stderr)
+    assert "BEGIN INIT DATABASE CONFIG" in capture_audit.captured
+    assert "END INIT DATABASE CONFIG" in capture_audit.captured
+    assert "BEGIN REMOVE DATABASE" in capture_audit.captured
+    assert "END REMOVE DATABASE" in capture_audit.captured

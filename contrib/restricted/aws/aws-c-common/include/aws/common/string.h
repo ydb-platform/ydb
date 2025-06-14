@@ -325,6 +325,7 @@ bool aws_byte_buf_write_from_whole_string(
 
 /**
  * Creates an aws_byte_cursor from an existing string.
+ * If the src is NULL, it returns an empty cursor
  */
 AWS_COMMON_API
 struct aws_byte_cursor aws_byte_cursor_from_string(const struct aws_string *src);
@@ -373,11 +374,12 @@ bool aws_c_string_is_valid(const char *str);
 AWS_STATIC_IMPL
 bool aws_char_is_space(uint8_t c);
 
+AWS_EXTERN_C_END
+
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/string.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_STRING_H */

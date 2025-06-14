@@ -135,6 +135,7 @@ struct TReadSetup {
     TInputBuf Buf_;
 };
 
+#ifndef _win_
 Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
     Y_UNIT_TEST(TestWriteJust) {
         TWriteSetup setup("WriteJust");
@@ -953,6 +954,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
     }
 #endif
 }
+#endif
 
 }
 #endif

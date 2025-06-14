@@ -63,6 +63,7 @@ PEERDIR(
     library/cpp/enumbitset
     library/cpp/monlib/dynamic_counters
     library/cpp/packedtypes
+    library/cpp/type_info/tz
     library/cpp/resource
     library/cpp/yson
     yql/essentials/core/pg_settings
@@ -72,8 +73,8 @@ PEERDIR(
     yql/essentials/parser/pg_catalog
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
+    yql/essentials/public/langver
     yql/essentials/public/udf
-    yql/essentials/public/udf/tz
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     yql/essentials/types/uuid
@@ -107,4 +108,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     benchmark
     ut
+    sanitizer_ut
 )

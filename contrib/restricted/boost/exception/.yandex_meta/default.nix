@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_exception = stdenv.mkDerivation rec {
     pname = "boost_exception";
-    version = "1.87.0";
+    version = "1.88.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "exception";
       rev = "boost-${version}";
-      hash = "sha256-2ySIcMOeWlE7y8hIXdJfxgAqJiSIO+QXyzqN0u8IvC4=";
+      hash = "sha256-oziBPE66j9nntT4eLj3lh8+xL3hjWu0B4UGhjuUoqI8=";
     };
   };
 }

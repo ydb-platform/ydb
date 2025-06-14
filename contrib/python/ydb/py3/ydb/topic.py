@@ -16,6 +16,7 @@ __all__ = [
     "TopicReader",
     "TopicReaderAsyncIO",
     "TopicReaderBatch",
+    "TopicReaderEvents",
     "TopicReaderMessage",
     "TopicReaderSelector",
     "TopicReaderSettings",
@@ -42,6 +43,8 @@ from . import aio, Credentials, _apis, issues
 
 from . import driver
 
+from ._topic_reader import events as TopicReaderEvents
+
 from ._topic_reader.datatypes import (
     PublicBatch as TopicReaderBatch,
     PublicMessage as TopicReaderMessage,
@@ -52,7 +55,9 @@ from ._topic_reader.topic_reader import (
     PublicTopicSelector as TopicReaderSelector,
 )
 
-from ._topic_reader.topic_reader_sync import TopicReaderSync as TopicReader
+from ._topic_reader.topic_reader_sync import (
+    TopicReaderSync as TopicReader,
+)
 
 from ._topic_reader.topic_reader_asyncio import (
     PublicAsyncIOReader as TopicReaderAsyncIO,
@@ -240,7 +245,7 @@ class TopicClientAsyncIO:
     def reader(
         self,
         topic: Union[str, TopicReaderSelector, List[Union[str, TopicReaderSelector]]],
-        consumer: str,
+        consumer: Optional[str],
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         # the func will be called from multiply threads in parallel
@@ -249,6 +254,7 @@ class TopicClientAsyncIO:
         # if max_worker in the executor is 1 - then decoders will be called from the thread without parallel
         decoder_executor: Optional[concurrent.futures.Executor] = None,
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
+        event_handler: Optional[TopicReaderEvents.EventHandler] = None,
     ) -> TopicReaderAsyncIO:
 
         if not decoder_executor:
@@ -256,6 +262,23 @@ class TopicClientAsyncIO:
 
         args = locals().copy()
         del args["self"]
+
+        if consumer == "":
+            raise issues.Error(
+                "Consumer name could not be empty! To use reader without consumer specify consumer as None."
+            )
+
+        if consumer is None:
+            if not isinstance(topic, TopicReaderSelector) or topic.partitions is None:
+                raise issues.Error(
+                    "To use reader without consumer it is required to specify partition_ids in topic selector."
+                )
+
+            if event_handler is None:
+                raise issues.Error(
+                    "To use reader without consumer it is required to specify event_handler with "
+                    "on_partition_get_start_offset method."
+                )
 
         settings = TopicReaderSettings(**args)
 
@@ -316,6 +339,21 @@ class TopicClientAsyncIO:
             settings.encoder_executor = self._executor
 
         return TopicTxWriterAsyncIO(tx=tx, driver=self._driver, settings=settings, _client=self)
+
+    async def commit_offset(self, path: str, consumer: str, partition_id: int, offset: int) -> None:
+        req = _ydb_topic.CommitOffsetRequest(
+            path=path,
+            consumer=consumer,
+            partition_id=partition_id,
+            offset=offset,
+        )
+
+        await self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.CommitOffset,
+            _wrap_operation,
+        )
 
     def close(self):
         if self._closed:
@@ -484,7 +522,7 @@ class TopicClient:
     def reader(
         self,
         topic: Union[str, TopicReaderSelector, List[Union[str, TopicReaderSelector]]],
-        consumer: str,
+        consumer: Optional[str],
         buffer_size_bytes: int = 50 * 1024 * 1024,
         # decoders: map[codec_code] func(encoded_bytes)->decoded_bytes
         # the func will be called from multiply threads in parallel
@@ -493,13 +531,30 @@ class TopicClient:
         # if max_worker in the executor is 1 - then decoders will be called from the thread without parallel
         decoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
         auto_partitioning_support: Optional[bool] = True,  # Auto partitioning feature flag. Default - True.
+        event_handler: Optional[TopicReaderEvents.EventHandler] = None,
     ) -> TopicReader:
         if not decoder_executor:
             decoder_executor = self._executor
 
         args = locals().copy()
         del args["self"]
-        self._check_closed()
+
+        if consumer == "":
+            raise issues.Error(
+                "Consumer name could not be empty! To use reader without consumer specify consumer as None."
+            )
+
+        if consumer is None:
+            if not isinstance(topic, TopicReaderSelector) or topic.partitions is None:
+                raise issues.Error(
+                    "To use reader without consumer it is required to specify partition_ids in topic selector."
+                )
+
+            if event_handler is None:
+                raise issues.Error(
+                    "To use reader without consumer it is required to specify event_handler with "
+                    "on_partition_get_start_offset method."
+                )
 
         settings = TopicReaderSettings(**args)
 
@@ -562,6 +617,21 @@ class TopicClient:
             settings.encoder_executor = self._executor
 
         return TopicTxWriter(tx, self._driver, settings, _parent=self)
+
+    def commit_offset(self, path: str, consumer: str, partition_id: int, offset: int) -> None:
+        req = _ydb_topic.CommitOffsetRequest(
+            path=path,
+            consumer=consumer,
+            partition_id=partition_id,
+            offset=offset,
+        )
+
+        self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.CommitOffset,
+            _wrap_operation,
+        )
 
     def close(self):
         if self._closed:

@@ -127,6 +127,7 @@ public:
         bool EnableSsl = false;
         bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
+        bool UsePerChannelTcpConnection = false;
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
 
@@ -370,7 +371,8 @@ public:
         bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
         RenderEntryType type = BEGIN,
-        TString prefix = {}
+        TString prefix = {},
+        bool shortForm = false
     );
 
     void Hide();
@@ -410,7 +412,8 @@ public:
         bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
         RenderEntryType type = BEGIN,
-        TString prefix = {}
+        TString prefix = {},
+        bool shortForm = false
     ) override;
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }

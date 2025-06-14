@@ -1,3 +1,10 @@
+
+{% note warning %}
+
+This page is outdated. Please refer to [{#T}](parameterized-query-execution.md) for up-to-date information.
+
+{% endnote %}
+
 # Running parametrized YQL queries and scripts
 
 ## Overview
@@ -53,7 +60,7 @@ echo '{"a":10}' > p1.json
 {{ ydb-cli }} -p quickstart table query execute -q 'declare $a as Int64;select $a' --param-file p1.json
 ```
 
-Through `stdin`:
+Via `stdin`:
 
 ```bash
 echo '{"a":10}' | {{ ydb-cli }} -p quickstart table query execute -q 'declare $a as Int64;select $a'
@@ -139,7 +146,7 @@ The YQL query runs as many times as many parameter value sets received on `stdin
 A rule for separating parameter sets from one another (framing) complements the `stdin` format specified by the `--stdin-format` option:
 
 | Name | Description |
----|---
+| --- | --- |
 | `--stdin-format` | Defines the `stdin` framing. <br/>Available options:<ul><li>`no-framing` (default): No framing, `stdin` expects a single set of parameters, and the YQL query is executed only once when the `stdin` stream is closed.</li><li>`newline-delimited`: A newline character marks the end of one set of parameter values on `stdin`, separating it from the next one. The YQL query is executed each time a newline character is read from `stdin`.</li></ul> |
 
 {% note warning %}
@@ -293,7 +300,7 @@ Command output:
 This example demonstrates the adaptive batching triggered by a processing delay. In the first line of the command below, we generate 1,000 rows at a delay of 0.2 seconds on `stdout` and pipe them to `stdin` to the YQL query execution command. The YQL query execution command shows the parameter batches in each subsequent YQL query call.
 
 ```bash
-for i in $(seq 1 1000);do echo "Line$i";sleep 0.2;done | \
+for i in $(seq 1 1000); do echo "Line$i"; sleep 0.2; done | \
 {{ ydb-cli }} -p quickstart table query execute \
   -q 'DECLARE $x AS List<Utf8>;
       SELECT ListLength($x), $x' \
@@ -335,7 +342,7 @@ This example demonstrates the adaptive batching triggered by a number of paramet
 In this example, we also demonstrate the option to join parameters from different sources and generate JSON at the output.
 
 ```bash
-for i in $(seq 1 200);do echo "Line$i";done | \
+for i in $(seq 1 200); do echo "Line$i"; done | \
 {{ ydb-cli }} -p quickstart table query execute \
   -q 'DECLARE $x AS List<Utf8>;
       DECLARE $p2 AS Int64;
@@ -372,7 +379,7 @@ Let's create a test table:
 Add 100,000 records to it:
 
 ```bash
-for i in $(seq 1 100000);do echo "$i";done | \
+for i in $(seq 1 100000); do echo "$i"; done | \
 {{ ydb-cli }} -p quickstart import file csv -p test_delete_1
 ```
 

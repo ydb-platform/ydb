@@ -12,7 +12,7 @@
 
 {% include [dump-options.md](./dump-options.md) %}
 
-[Конфигурация кластера](../../../../maintenance/manual/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin cluster config fetch`.
+[Конфигурация кластера](../../../../devops/configuration-management/configuration-v2/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin cluster config fetch`.
 
 ## База данных
 
@@ -26,7 +26,7 @@
 
 {% include [dump-options.md](./dump-options.md) %}
 
-[Конфигурация базы данных](../../../../maintenance/manual/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin database config fetch`.
+[Конфигурация базы данных](../../../../devops/configuration-management/configuration-v2/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin database config fetch`.
 
 ## Объекты схемы данных
 
@@ -55,7 +55,7 @@
 
 - `--save-partial-result`: Не удалять результат частично выполненной выгрузки. Без включения данной опции результат выгрузки будет удален, если в процессе её выполнения произойдет ошибка.
 
-- `--preserve-pool-kinds`: Если эта опция активна, в дамп будут сохранены имена типов устройств хранения, заданные для групп колонок таблиц (см. параметр `DATA` в статье [{#T}](../../../../yql/reference/syntax/create_table/family.md)). Если при восстановлении данных в базе не окажется [пулов хранения](../../../../concepts/glossary.md#storage-pool) с указанными именами, восстановление завершится ошибкой. По умолчанию данная опция деактивирована и при восстановлении используется пул хранения, заданный для базы данных при ее создании (см. [{#T}](../../../../devops/manual/initial-deployment.md#create-db)).
+- `--preserve-pool-kinds`: Если эта опция активна, в дамп будут сохранены имена типов устройств хранения, заданные для групп колонок таблиц (см. параметр `DATA` в статье [{#T}](../../../../yql/reference/syntax/create_table/family.md)). Если при восстановлении данных в базе не окажется [пулов хранения](../../../../concepts/glossary.md#storage-pool) с указанными именами, восстановление завершится ошибкой. По умолчанию данная опция деактивирована и при восстановлении используется пул хранения, заданный для базы данных при ее создании (см. [{#T}](../../../../devops/deployment-options/manual/initial-deployment.md#create-db)).
 
 - `--ordered`: Строки в выгруженных таблицах будут отсортированы по первичному ключу.
 

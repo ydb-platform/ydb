@@ -4,7 +4,6 @@
 
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
-#include <yql/essentials/core/yql_holding_file_storage.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/retry.h>
@@ -139,7 +138,7 @@ public:
         return FunctionRegistry_->IsLoadedUdfModule(moduleName);
     }
 
-    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel) const override {
+    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
         THashSet<TString> requiredLoadedModules;
         THashSet<TString> requiredExternalModules;
         TVector<TFunction*> loadedFunctions;
@@ -166,7 +165,6 @@ public:
         TResolve request;
         request.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
         TVector<TImport*> usedImports;
-        THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
 
         THashMap<TString, TImport*> path2LoadedImport;
@@ -194,7 +192,7 @@ public:
             }
 
             try {
-                LoadImport(holdingFileStorage, *filesBox, *import, request);
+                LoadImport(storage, *filesBox, *import, request);
                 usedImports.push_back(import);
             } catch (const std::exception& e) {
                 ctx.AddError(ExceptionToIssue(e));
@@ -220,6 +218,8 @@ public:
             if (udf->UserType) {
                 udfRequest->SetUserType(WriteTypeToYson(udf->UserType));
             }
+
+            udfRequest->SetLangVer(udf->LangVer);
         }
 
         TResolveResult response;
@@ -247,17 +247,16 @@ public:
         return !hasErrors;
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const override {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
         TResolve request;
         request.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
-        THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
         Y_DEFER {
             filesBox->Destroy();
         };
 
         for (auto import : imports) {
-            LoadImport(holdingFileStorage, *filesBox, import, request);
+            LoadImport(storage, *filesBox, import, request);
         }
 
         return RunResolverAndParseResult(request, { "--discover-proto" }, *filesBox);
@@ -371,6 +370,8 @@ private:
                 }
                 udf->SupportsBlocks = udfRes.GetSupportsBlocks();
                 udf->IsStrict = udfRes.GetIsStrict();
+                udf->MinLangVer = udfRes.GetMinLangVer();
+                udf->MaxLangVer = udfRes.GetMaxLangVer();
                 for (const auto& m : udfRes.GetMessages()) {
                     udf->Messages.push_back(m);
                 }

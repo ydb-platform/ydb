@@ -1,0 +1,23 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "id_1";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "date_1";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+            ]
+        ]
+    }
+}

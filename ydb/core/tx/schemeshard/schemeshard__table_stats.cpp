@@ -424,10 +424,12 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
     const TTableInfo* mainTableForIndex = Self->GetMainTableForIndex(pathId);
 
+    TString errStr;
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
     TString mergeReason;
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
+        && Self->CheckInFlightLimit(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions, errStr)
         && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, Self->ShardInfos[shardIdx].TabletID, shardsToMerge, mainTableForIndex, mergeReason)
     ) {
         TTxId txId = Self->GetCachedTxId(ctx);
@@ -484,28 +486,30 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return true;
     }
 
-    {
-        auto path = TPath::Init(pathId, Self);
-        auto checks = path.Check();
-
-        constexpr ui64 deltaShards = 2;
-        checks
-            .PathShardsLimit(deltaShards)
-            .ShardsLimit(deltaShards);
-
-        if (!checks) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Do not request full stats from datashard"
-                             << ", datashard: " << datashardId
-                             << ", reason: " << checks.GetError());
-            return true;
-        }
+    auto path = TPath::Init(pathId, Self);
+    auto checks = path.Check();
+    constexpr ui64 deltaShards = 2;
+    checks
+        .PathShardsLimit(deltaShards)
+        .ShardsLimit(deltaShards);
+    if (!checks) {
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Do not request full stats from datashard"
+                            << ", datashard: " << datashardId
+                            << ", reason: " << checks.GetError());
+        return true;
     }
 
     if (newStats.HasBorrowedData) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Postpone split tablet " << datashardId << " because it has borrow parts, enqueue compact them first");
         Self->EnqueueBorrowedCompaction(shardIdx);
+        return true;
+    }
+
+    if (path.IsLocked()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Postpone split tablet " << datashardId << " because it is locked by " << path.LockedBy());
         return true;
     }
 

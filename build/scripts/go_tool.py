@@ -459,7 +459,9 @@ def do_compile_asm(args):
     cmd += get_trimpath_args(args)
     cmd += ['-I', args.output_root, '-I', os.path.join(args.pkg_root, 'include')]
     cmd += ['-D', 'GOOS_' + args.targ_os]
-    if args.targ_arch == 'armv7':
+    if args.targ_arch == 'armv6':
+        cmd += ['-D', 'GOARCH_arm', '-D', 'GOARM_6']
+    elif args.targ_arch == 'armv7':
         cmd += ['-D', 'GOARCH_arm', '-D', 'GOARM_7']
     else:
         cmd += ['-D', 'GOARCH_' + args.targ_arch]
@@ -666,6 +668,9 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
     my_env['GOROOT'] = ''
     my_env['GOPATH'] = go_path_root
     my_env['GOARCH'] = args.targ_arch
+    if args.targ_arch == 'armv6':
+        my_env['GOARCH'] = 'arm'
+        my_env['GOARM'] = '6'
     if args.targ_arch == 'armv7':
         my_env['GOARCH'] = 'arm'
         my_env['GOARM'] = '7'
@@ -874,7 +879,7 @@ if __name__ == '__main__':
     parser.add_argument('++host-os', choices=['linux', 'darwin', 'windows'], required=True)
     parser.add_argument('++host-arch', choices=['amd64', 'arm64'], required=True)
     parser.add_argument('++targ-os', choices=['linux', 'darwin', 'windows'], required=True)
-    parser.add_argument('++targ-arch', choices=['amd64', 'x86', 'arm64', 'armv7'], required=True)
+    parser.add_argument('++targ-arch', choices=['amd64', 'x86', 'arm64', 'armv6', 'armv7'], required=True)
     parser.add_argument('++peers', nargs='*')
     parser.add_argument('++non-local-peers', nargs='*')
     parser.add_argument('++cgo-peers', nargs='*', default=[])

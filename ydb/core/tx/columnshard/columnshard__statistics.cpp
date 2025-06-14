@@ -207,7 +207,7 @@ public:
                     if (!indexMeta->IsInplaceData()) {
                         portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
-                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
+                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
 
                         for (const auto& sketchAsString : data) {
                             auto sketch =
@@ -287,8 +287,11 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     }
 
     AFL_VERIFY(HasIndex());
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record.GetTable().GetPathId());
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
-    auto spg = index.GetGranuleOptional(TInternalPathId::FromRawValue(record.GetTable().GetPathId().GetLocalId()));
+    auto spg = index.GetGranuleOptional(*internalPathId);
     AFL_VERIFY(spg);
 
     std::set<ui32> columnTagsRequested;

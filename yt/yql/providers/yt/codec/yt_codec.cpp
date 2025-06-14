@@ -1791,7 +1791,7 @@ public:
     void operator=(const TTempBlockWriter&) = delete;
 
     std::pair<char*, char*> NextEmptyBlock() override {
-        auto newPage = Pool_.GetPage();
+        auto newPage = NYql::NUdf::SanitizerMakeRegionAccessible(Pool_.GetPage(), TAlignedPagePool::POOL_PAGE_SIZE);
         auto header = (TPageHeader*)newPage;
         header->Avail_ = 0;
         header->Next_ = &Dummy_;

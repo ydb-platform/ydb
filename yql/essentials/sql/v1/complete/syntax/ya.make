@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     ansi.cpp
+    cursor_token_context.cpp
     format.cpp
     grammar.cpp
     local.cpp
@@ -20,6 +21,8 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/reflect
+    yql/essentials/sql/v1/complete/core
+    yql/essentials/sql/v1/complete/text
 )
 
 END()

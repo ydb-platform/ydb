@@ -83,7 +83,6 @@ namespace types
       return *new (this) numpy_iexpr<Arg>(expr);
     }
 
-    assert(buffer);
     return utils::broadcast_copy < numpy_iexpr &, numpy_iexpr const &, value,
            value - utils::dim_of<numpy_iexpr>::value,
            is_vectorizable && numpy_iexpr<Arg>::is_vectorizable &&

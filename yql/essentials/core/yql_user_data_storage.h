@@ -60,6 +60,8 @@ public:
     TUserDataBlock& Freeze(const TUserDataKey& key);
     TUserDataBlock* FreezeNoThrow(const TUserDataKey& key, TString& errorMessage);
 
+    THoldingFileStorage& GetHoldingFileStorage();
+
     // as above + udf will be scanned and meta info put into UdfIndex
     TUserDataBlock* FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage, const TString& customUdfPrefix, NUdf::ELogLevel logLevel);
 

@@ -147,6 +147,8 @@ struct TTxState {
         item(TxAlterTransfer, 100) \
         item(TxDropTransfer, 101) \
         item(TxDropTransferCascade, 102) \
+        item(TxCreateSysView, 103) \
+        item(TxDropSysView, 104) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -281,6 +283,7 @@ struct TTxState {
     // TxCopy: Stores path for cdc stream to create in case of ContinuousBackup; uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
     ui64 LoopStep = 0;
+    TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
@@ -371,6 +374,7 @@ struct TTxState {
         case TxCreateContinuousBackup:
         case TxCreateResourcePool:
         case TxCreateBackupCollection:
+        case TxCreateSysView:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -410,6 +414,7 @@ struct TTxState {
         case TxDropContinuousBackup:
         case TxDropResourcePool:
         case TxDropBackupCollection:
+        case TxDropSysView:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -486,6 +491,7 @@ struct TTxState {
         case TxDropContinuousBackup:
         case TxDropResourcePool:
         case TxDropBackupCollection:
+        case TxDropSysView:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -525,6 +531,7 @@ struct TTxState {
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
         case TxCreateBackupCollection:
+        case TxCreateSysView:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -604,6 +611,7 @@ struct TTxState {
         case TxDropExternalDataSource:
         case TxDropView:
         case TxDropResourcePool:
+        case TxDropSysView:
             return false;
         case TxMkDir:
         case TxCreateTable:
@@ -641,6 +649,7 @@ struct TTxState {
         case TxCreateResourcePool:
         case TxRestoreIncrementalBackupAtTable:
         case TxCreateBackupCollection:
+        case TxCreateSysView:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -795,6 +804,8 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpCreateBackupCollection: return TxCreateBackupCollection;
             case NKikimrSchemeOp::ESchemeOpAlterBackupCollection: return TxAlterBackupCollection;
             case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;
+            case NKikimrSchemeOp::ESchemeOpCreateSysView: return TxCreateSysView;
+            case NKikimrSchemeOp::ESchemeOpDropSysView: return TxDropSysView;
             default: return TxInvalid;
         }
     }

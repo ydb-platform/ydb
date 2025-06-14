@@ -683,7 +683,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
             TFunctionTypeInfo funcInfo;
             TType* userType = nullptr;
             TStringBuf typeConfig;
-            TStatus status = functionRegistry->FindFunctionTypeInfo(env, typeInfoHelper, nullptr, udfFuncName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
+            TStatus status = functionRegistry->FindFunctionTypeInfo(NYql::UnknownLangVersion, env, typeInfoHelper,
+                nullptr, udfFuncName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
             MKQL_ENSURE(status.IsOk(), status.GetError());
             auto type = funcInfo.FunctionType->GetReturnType();
             fullValidateFunc(value, builder, type);
@@ -733,7 +734,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         TType* userType = nullptr;
         TStringBuf typeConfig;
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper(new TTypeInfoHelper);
-        TStatus status = functionRegistry.FindFunctionTypeInfo(pgmBuilder.GetTypeEnvironment(), typeInfoHelper, nullptr,
+        TStatus status = functionRegistry.FindFunctionTypeInfo(NYql::UnknownLangVersion,
+            pgmBuilder.GetTypeEnvironment(), typeInfoHelper, nullptr,
             udfFuncName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
         MKQL_ENSURE(status.IsOk(), status.GetError());
         auto callable = pgmBuilder.Udf(udfFuncName);

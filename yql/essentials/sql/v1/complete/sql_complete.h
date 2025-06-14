@@ -1,17 +1,17 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/complete/name/name_service.h>
+#include <yql/essentials/sql/v1/complete/core/input.h>
+#include <yql/essentials/sql/v1/complete/core/environment.h>
+#include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
+
+#include <library/cpp/threading/future/future.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
-
-    struct TCompletionInput {
-        TStringBuf Text;
-        size_t CursorPosition = Text.length();
-    };
 
     struct TCompletedToken {
         TStringBuf Content;
@@ -24,11 +24,17 @@ namespace NSQLComplete {
         TypeName,
         FunctionName,
         HintName,
+        FolderName,
+        TableName,
+        ClusterName,
+        BindingName,
+        UnknownName,
     };
 
     struct TCandidate {
         ECandidateKind Kind;
         TString Content;
+        size_t CursorShift = 0;
 
         friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
     };
@@ -44,13 +50,21 @@ namespace NSQLComplete {
 
         struct TConfiguration {
             size_t Limit = 256;
+            THashSet<TString> IgnoredRules;
         };
 
-        virtual TCompletion Complete(TCompletionInput input) = 0;
         virtual ~ISqlCompletionEngine() = default;
+        virtual TCompletion
+        Complete(TCompletionInput input, TEnvironment env = {}) = 0;
+        virtual NThreading::TFuture<TCompletion> // TODO(YQL-19747): Migrate YDB CLI to `Complete` method
+        CompleteAsync(TCompletionInput input, TEnvironment env = {}) = 0;
     };
 
     using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;
+
+    ISqlCompletionEngine::TConfiguration MakeYDBConfiguration();
+
+    ISqlCompletionEngine::TConfiguration MakeYQLConfiguration();
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,

@@ -1,4 +1,4 @@
-## Use cases {#use-cases}
+## Use Cases {#use-cases}
 
 {{ ydb-short-name }} can be used as an alternative solution in the following cases:
 

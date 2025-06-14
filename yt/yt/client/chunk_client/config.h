@@ -244,6 +244,8 @@ struct TReplicationReaderConfig
     //! Use request batcher to reduce the number of get blocks requests.
     bool UseReadBlocksBatcher;
 
+    std::optional<i64> BlockSetSubrequestThreshold;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);

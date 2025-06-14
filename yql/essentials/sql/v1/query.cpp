@@ -373,6 +373,9 @@ static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, cons
     if (desc.Settings.BarriersInterval) {
         settings = node.L(settings, node.Q(node.Y(node.Q("barriers_interval"), desc.Settings.BarriersInterval)));
     }
+    if (desc.Settings.SchemaChanges) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("schema_changes"), desc.Settings.SchemaChanges)));
+    }
     if (desc.Settings.RetentionPeriod) {
         settings = node.L(settings, node.Q(node.Y(node.Q("retention_period"), desc.Settings.RetentionPeriod)));
     }
@@ -1314,6 +1317,19 @@ TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, b
     return new TCreateTableNode(pos, tr, existingOk, replaceIfExists, params, std::move(values), scoped);
 }
 
+namespace {
+
+bool InitDatabaseSettings(TContext& ctx, ISource* src, const THashMap<TString, TNodePtr>& settings) {
+    for (const auto& [setting, value] : settings) {
+        if (!value || !value->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}
+
 class TAlterDatabaseNode final : public TAstListNode {
 public:
     TAlterDatabaseNode(
@@ -1340,6 +1356,10 @@ public:
         if (Params.Owner.has_value()) {
             options = L(options, Q(Y(Q("owner"), Params.Owner.value().Build())));
         }
+        if (!InitDatabaseSettings(ctx, src, Params.DatabaseSettings)) {
+            return false;
+        }
+        AddDatabaseSettings(options, Params.DatabaseSettings);
 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
@@ -1359,6 +1379,13 @@ private:
     TScopedStatePtr Scoped;
     TDeferredAtom Cluster;
     TString Service;
+
+    void AddDatabaseSettings(TNodePtr& options, const THashMap<TString, TNodePtr>& settings) {
+        for (const auto& [setting, value] : settings) {
+            options = L(options, Q(Y(BuildQuotedAtom(Pos, setting), value)));
+        }
+    }
+
 };
 
 TNodePtr BuildAlterDatabase(
@@ -3229,6 +3256,11 @@ public:
                 if (ctx.OrderedColumns) {
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "OrderedColumns"))));
+                }
+
+                if (ctx.DeriveColumnOrder) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "DeriveColumnOrder"))));
                 }
 
                 if (ctx.PqReadByRtmrCluster) {

@@ -333,6 +333,7 @@ class TExecutor
             EvBrokenTransaction,
             EvLeaseExtend,
             EvActivateLowExecution,
+            EvRetryGcRequest,
 
             EvEnd
         };
@@ -347,6 +348,15 @@ class TExecutor
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
+
+        struct TEvRetryGcRequest : public TEventLocal<TEvRetryGcRequest, EvRetryGcRequest> {
+            const ui32 Channel;
+
+            explicit TEvRetryGcRequest(ui32 channel)
+                : Channel(channel)
+            {}
+        };
+
     };
 
     enum class ETxMode {
@@ -383,22 +393,29 @@ class TExecutor
     // Counts the number of times LeaseDuration was increased
     size_t LeaseDurationIncreases = 0;
 
-    struct TLeaseCommit {
+    struct TLeaseCommit : public TIntrusiveListItem<TLeaseCommit> {
+        using TByEndMap = std::multimap<TMonotonic, TLeaseCommit*>;
+
+        // Note: for lightweight read-only confirmations Step == 0
         const ui32 Step;
         const TMonotonic Start;
         TMonotonic LeaseEnd;
         TVector<std::function<void()>> Callbacks;
-        std::multimap<TMonotonic, TLeaseCommit*>::iterator ByEndIterator;
+        TByEndMap::iterator ByEndIterator;
+        const ui64 Cookie;
 
-        TLeaseCommit(ui32 step, TMonotonic start, TMonotonic leaseEnd)
+        TLeaseCommit(ui32 step, TMonotonic start, TMonotonic leaseEnd, ui64 cookie)
             : Step(step)
             , Start(start)
             , LeaseEnd(leaseEnd)
+            , Cookie(cookie)
         { }
     };
 
     TList<TLeaseCommit> LeaseCommits;
-    std::multimap<TMonotonic, TLeaseCommit*> LeaseCommitsByEnd;
+    TLeaseCommit::TByEndMap LeaseCommitsByEnd;
+    TIntrusiveList<TLeaseCommit> LeaseCommitsByStep;
+    ui64 LeaseCommitsCounter = 0;
 
     // TSeat's UniqID to an owned pointer
     absl::flat_hash_map<ui64, std::unique_ptr<TSeat>> Transactions;
@@ -560,12 +577,14 @@ class TExecutor
     void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvDropLease::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
+    void Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(NSharedCache::TEvResult::TPtr &ev);
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
@@ -641,6 +660,8 @@ public:
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) override;
     bool CancelTransaction(ui64 id) override;
 
+    void LeaseConfirmed(ui64 confirmedCookie);
+    TLeaseCommit* AddLeaseConfirm();
     TLeaseCommit* AttachLeaseCommit(TLogCommit* commit, bool force = false);
     TLeaseCommit* EnsureReadOnlyLease(TMonotonic at);
     void ConfirmReadOnlyLease(TMonotonic at) override;
@@ -706,7 +727,7 @@ public:
     TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId);
     ~TExecutor();
 
-    bool OnUnhandledException(const std::exception&) override;
+    bool OnUnhandledException(const std::exception& exc) override;
 
     STFUNC(StateInit);
     STFUNC(StateBoot);

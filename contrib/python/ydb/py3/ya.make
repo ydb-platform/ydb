@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.20.1)
+VERSION(3.21.2)
 
 LICENSE(Apache-2.0)
 
@@ -40,6 +40,7 @@ PY_SRCS(
     ydb/_topic_common/common.py
     ydb/_topic_reader/__init__.py
     ydb/_topic_reader/datatypes.py
+    ydb/_topic_reader/events.py
     ydb/_topic_reader/topic_reader.py
     ydb/_topic_reader/topic_reader_asyncio.py
     ydb/_topic_reader/topic_reader_sync.py

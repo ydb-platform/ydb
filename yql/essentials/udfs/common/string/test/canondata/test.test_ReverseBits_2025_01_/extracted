@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	select 
+	^
+        <tmp_path>/program.sql:<main>:4:13: Error: At function: Apply, At function: Udf
+        	    String::ReverseBits("Simple строка long enough\xfe\xff");
+	            ^
+            <tmp_path>/program.sql:<main>:4:13: Error: UDF 'String.ReverseBits' is not available before version 2025.02
+            	    String::ReverseBits("Simple строка long enough\xfe\xff");
+	            ^

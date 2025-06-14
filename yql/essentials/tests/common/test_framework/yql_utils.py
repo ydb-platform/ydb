@@ -496,6 +496,21 @@ def is_xfail(cfg):
     return False
 
 
+def get_langver(cfg):
+    for item in cfg:
+        if item[0] == 'langver':
+            return item[1]
+    return None
+
+
+def get_envs(cfg):
+    envs = dict()
+    for item in cfg:
+        if item[0] == 'env':
+            envs[item[1]] = item[2]
+    return envs
+
+
 def is_skip_forceblocks(cfg):
     for item in cfg:
         if item[0] == 'skip_forceblocks':
@@ -565,6 +580,7 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
+        langver=None
 ):
     '''
     Executes YQL/SQL
@@ -603,7 +619,8 @@ def execute(
         check_error=check_error,
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
-        parameters=parameters
+        parameters=parameters,
+        langver=langver
     )
 
     try:

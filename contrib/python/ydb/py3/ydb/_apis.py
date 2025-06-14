@@ -116,6 +116,7 @@ class TopicService(object):
     StreamRead = "StreamRead"
     StreamWrite = "StreamWrite"
     UpdateOffsetsInTransaction = "UpdateOffsetsInTransaction"
+    CommitOffset = "CommitOffset"
 
 
 class QueryService(object):

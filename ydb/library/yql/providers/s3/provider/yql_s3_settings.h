@@ -10,28 +10,31 @@ namespace NYql {
 
 struct TS3Settings {
     using TConstPtr = std::shared_ptr<const TS3Settings>;
-
-    NCommon::TConfSetting<bool, false> SourceCoroActor;
-    NCommon::TConfSetting<ui64, false> MaxOutputObjectSize;
-    NCommon::TConfSetting<ui64, false> UniqueKeysCountLimit;
-    NCommon::TConfSetting<ui64, false> BlockSizeMemoryLimit;
-    NCommon::TConfSetting<ui64, false> SerializeMemoryLimit; // Total serialization memory limit for all current blocks for all patition keys. Reachable in case of many but small partitions.
-    NCommon::TConfSetting<ui64, false> InFlightMemoryLimit; // Maximum memory used by one sink.
-    NCommon::TConfSetting<ui64, false> JsonListSizeLimit; // Limit of elements count in json list written to S3 file. Default: 10'000. Max: 100'000.
-    NCommon::TConfSetting<ui64, false> ArrowParallelRowGroupCount; // Number of parquet row groups to read in parallel, min == 1
-    NCommon::TConfSetting<bool, false> ArrowRowGroupReordering;    // Allow to push rows from file in any order, default false, but usually it is OK
-    NCommon::TConfSetting<ui64, false> ParallelDownloadCount;      // Number of files to read in parallel, min == 1
-    NCommon::TConfSetting<bool, false> UseBlocksSource;            // Deprecated and has to be removed after config cleanup
-    NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
-    NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;
-    NCommon::TConfSetting<ui64, false> MaxDiscoveryFilesPerDirectory;
-    NCommon::TConfSetting<bool, false> UseRuntimeListing; // Enables runtime listing
-    NCommon::TConfSetting<ui64, false> FileQueueBatchSizeLimit; // Limits total size of files in one PathBatch from FileQueue
-    NCommon::TConfSetting<ui64, false> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
-    NCommon::TConfSetting<ui64, false> FileQueuePrefetchSize;
-    NCommon::TConfSetting<bool, false> AsyncDecoding;  // Parse and decode input data at separate mailbox/thread of TaskRunner
-    NCommon::TConfSetting<bool, false> UsePredicatePushdown;
-    NCommon::TConfSetting<bool, false> AsyncDecompressing;  // Decompression and parsing input data in different mailbox/thread
+private:
+    static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+public:
+    NCommon::TConfSetting<bool, Static> SourceCoroActor;
+    NCommon::TConfSetting<ui64, Static> MaxOutputObjectSize;
+    NCommon::TConfSetting<ui64, Static> UniqueKeysCountLimit;
+    NCommon::TConfSetting<ui64, Static> BlockSizeMemoryLimit;
+    NCommon::TConfSetting<ui64, Static> SerializeMemoryLimit; // Total serialization memory limit for all current blocks for all patition keys. Reachable in case of many but small partitions.
+    NCommon::TConfSetting<ui64, Static> InFlightMemoryLimit; // Maximum memory used by one sink.
+    NCommon::TConfSetting<ui64, Static> JsonListSizeLimit; // Limit of elements count in json list written to S3 file. Default: 10'000. Max: 100'000.
+    NCommon::TConfSetting<ui64, Static> ArrowParallelRowGroupCount; // Number of parquet row groups to read in parallel, min == 1
+    NCommon::TConfSetting<bool, Static> ArrowRowGroupReordering;    // Allow to push rows from file in any order, default false, but usually it is OK
+    NCommon::TConfSetting<ui64, Static> ParallelDownloadCount;      // Number of files to read in parallel, min == 1
+    NCommon::TConfSetting<bool, Static> UseBlocksSource;            // Deprecated and has to be removed after config cleanup
+    NCommon::TConfSetting<bool, Static> UseBlocksSink;
+    NCommon::TConfSetting<bool, Static> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
+    NCommon::TConfSetting<bool, Static> UseConcurrentDirectoryLister;
+    NCommon::TConfSetting<ui64, Static> MaxDiscoveryFilesPerDirectory;
+    NCommon::TConfSetting<bool, Static> UseRuntimeListing; // Enables runtime listing
+    NCommon::TConfSetting<ui64, Static> FileQueueBatchSizeLimit; // Limits total size of files in one PathBatch from FileQueue
+    NCommon::TConfSetting<ui64, Static> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
+    NCommon::TConfSetting<ui64, Static> FileQueuePrefetchSize;
+    NCommon::TConfSetting<bool, Static> AsyncDecoding;  // Parse and decode input data at separate mailbox/thread of TaskRunner
+    NCommon::TConfSetting<bool, Static> UsePredicatePushdown;
+    NCommon::TConfSetting<bool, Static> AsyncDecompressing;  // Decompression and parsing input data in different mailbox/thread
 };
 
 struct TS3ClusterSettings {

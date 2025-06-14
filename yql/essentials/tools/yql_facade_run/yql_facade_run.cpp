@@ -443,7 +443,9 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
 
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
         .Handler1T<TString>([this](const TString& str) {
-            if (!ParseLangVersion(str, LangVer)) {
+            if (str == "unknown") {
+                LangVer = UnknownLangVersion;
+            } else if (!ParseLangVersion(str, LangVer)) {
                 throw yexception() << "Failed to parse language version: " << str;
             }
         });
@@ -468,7 +470,11 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
             QPlayerStorage_ = MakeFileQStorage(".");
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            try {
+                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+            } catch (...) {
+                throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
+            }
             ProgramFile = "-replay-";
             ProgramText = "";
         } else if (EQPlayerMode::Capture == QPlayerMode) {
@@ -650,13 +656,13 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
             Cerr << "udf-resolver path must be specified when use 'scan-udfs'";
             return -1;
         }
-
         udfResolver = NCommon::CreateOutProcUdfResolver(FuncRegistry_.Get(), FileStorage_, RunOptions_.UdfResolverPath, {}, {}, RunOptions_.UdfResolverFilterSyscalls, {});
 
         udfIndex = new TUdfIndex();
         if (EQPlayerMode::Replay != RunOptions_.QPlayerMode) {
+            THoldingFileStorage storage(FileStorage_);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << RunOptions_.UdfsPaths.size() << " udfs ...");
-            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex);
+            LoadRichMetadataToUdfIndex(*udfResolver, RunOptions_.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
             RunOptions_.PrintInfo(TStringBuilder() << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done.");
         }
 

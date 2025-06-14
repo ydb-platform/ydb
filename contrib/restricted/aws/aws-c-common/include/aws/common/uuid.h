@@ -17,7 +17,7 @@ struct aws_uuid {
 };
 
 /* 36 bytes for the UUID plus one more for the null terminator. */
-#define AWS_UUID_STR_LEN 37
+enum { AWS_UUID_STR_LEN = 37 };
 
 AWS_EXTERN_C_BEGIN
 

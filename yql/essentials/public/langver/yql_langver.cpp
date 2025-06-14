@@ -9,6 +9,8 @@ namespace NYql {
 
 namespace {
 
+constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 2);
+
 const std::pair<ui32,ui32> Versions[] = {
 #include "yql_langver_list.inc"
 };
@@ -65,6 +67,20 @@ bool FormatLangVersion(TLangVersion ver, TLangVersionBuffer& buffer, TStringBuf&
     buffer[7] = 0;
     result = TStringBuf(buffer.data(), buffer.size() - 1);
     return true;
+}
+
+TLangVersion GetMaxReleasedLangVersion() {
+    return MaxReleasedLangVersion;
+}
+
+TLangVersion GetMaxLangVersion() {
+    TLangVersion max = 0;
+    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
+        auto v = MakeLangVersion(Versions[i].first, Versions[i].second);
+        max = Max(max, v);
+    }
+
+    return max;
 }
 
 }

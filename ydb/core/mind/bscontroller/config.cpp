@@ -3,6 +3,8 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TNodeWardenUpdateNotifier {
@@ -10,6 +12,7 @@ namespace NKikimr::NBsController {
             TConfigState &State;
             THashMap<TNodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate> Services;
             THashSet<TPDiskId> DeletedPDiskIds;
+            NKikimrBlobStorage::TCacheUpdate CacheUpdate;
 
         public:
             TNodeWardenUpdateNotifier(TBlobStorageController *self, TConfigState &state)
@@ -33,6 +36,11 @@ namespace NKikimr::NBsController {
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
                         State.Outbox.emplace_back(nodeId, std::move(event), 0);
                     }
+                }
+
+                if (CacheUpdate.KeyValuePairsSize()) {
+                    State.Outbox.emplace_back(Self->SelfId().NodeId(), std::make_unique<NStorage::TEvNodeWardenUpdateCache>(
+                        std::move(CacheUpdate)), 0);
                 }
             }
 
@@ -258,9 +266,11 @@ namespace NKikimr::NBsController {
                 const TString storagePoolName = info.Name;
 
                 // push group information to each node that will receive VDisk status update
+                NKikimrBlobStorage::TGroupInfo proto;
+                SerializeGroupInfo(&proto, groupInfo, storagePoolName, scopeId);
                 for (TNodeId nodeId : nodes) {
                     NKikimrBlobStorage::TNodeWardenServiceSet *service = Services[nodeId].MutableServiceSet();
-                    SerializeGroupInfo(service->AddGroups(), groupInfo, storagePoolName, scopeId);
+                    service->AddGroups()->CopyFrom(proto);
                 }
 
                 // push group state notification to NodeWhiteboard (for virtual groups only)
@@ -274,6 +284,12 @@ namespace NKikimr::NBsController {
                         MakeIntrusive<TBlobStorageGroupInfo>(groupInfo.Topology, std::move(dynInfo), storagePoolName,
                         scopeId, NPDisk::DEVICE_TYPE_UNKNOWN)));
                 }
+
+                auto *kvp = CacheUpdate.AddKeyValuePairs();
+                kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
+                kvp->SetGeneration(groupInfo.Generation);
+                const bool success = proto.SerializeToString(kvp->MutableValue());
+                Y_DEBUG_ABORT_UNLESS(success);
             }
 
             void ApplyGroupDeleted(const TGroupId &groupId, const TGroupInfo& /*groupInfo*/) {
@@ -284,6 +300,10 @@ namespace NKikimr::NBsController {
                     item.SetGroupID(groupId.GetRawId());
                     item.SetEntityStatus(NKikimrBlobStorage::DESTROY);
                 }
+
+                auto *kvp = CacheUpdate.AddKeyValuePairs();
+                kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
+                kvp->SetGeneration(Max<ui32>());
             }
 
             void ApplyGroupDiff(const TGroupId &groupId, const TGroupInfo &prev, const TGroupInfo &cur) {
@@ -396,7 +416,7 @@ namespace NKikimr::NBsController {
                 if (!degraded.empty()) {
                     msg << "Degraded GroupIds# " << FormatList(degraded) << ' ';
                     if (response) {
-                        for (const auto& id: degraded) { 
+                        for (const auto& id: degraded) {
                             response->MutableGroupsGetDegraded()->Add(id.GetRawId());
                         }
                     }
@@ -956,6 +976,7 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
+            pb->SetDefaultGroupSizeInUnits(pool.DefaultGroupSizeInUnits);
 
             for (const auto &userId : pool.UserIds) {
                 pb->AddUserId(std::get<2>(userId));
@@ -1004,6 +1025,7 @@ namespace NKikimr::NBsController {
             pb->SetExpectedSerial(pdisk.ExpectedSerial);
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
+            pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {
@@ -1059,6 +1081,7 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
 
             const auto& status = group.Status;
             pb->SetOperatingStatus(status.OperatingStatus);
@@ -1186,23 +1209,25 @@ namespace NKikimr::NBsController {
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
+
+            group->SetGroupSizeInUnits(groupInfo.GroupSizeInUnits);
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {
-            settings->AddDefaultMaxSlots(DefaultMaxSlots);
-            settings->AddEnableSelfHeal(SelfHealEnable);
-            settings->AddEnableDonorMode(DonorMode);
-            settings->AddScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
-            settings->AddPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
-            settings->AddGroupReserveMin(GroupReserveMin);
-            settings->AddGroupReservePartPPM(GroupReservePart);
-            settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
-            settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
-            settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
-            // TODO: settings->AddSerialManagementStage(SerialManagementStage);
-            settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
-            settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
-            settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->SetDefaultMaxSlots(DefaultMaxSlots);
+            settings->SetEnableSelfHeal(SelfHealEnable);
+            settings->SetEnableDonorMode(DonorMode);
+            settings->SetScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
+            settings->SetPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
+            settings->SetGroupReserveMin(GroupReserveMin);
+            settings->SetGroupReservePartPPM(GroupReservePart);
+            settings->SetMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
+            settings->SetPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->SetEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
+            // TODO: settings->SetSerialManagementStage(SerialManagementStage);
+            settings->SetAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
+            settings->SetUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
+            settings->SetTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

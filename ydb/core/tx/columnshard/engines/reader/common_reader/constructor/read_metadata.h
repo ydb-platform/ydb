@@ -17,7 +17,7 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    const TInternalPathId PathId;
+    const NColumnShard::TUnifiedPathId PathId;
     std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
 
@@ -103,14 +103,14 @@ public:
         BrokenWithCommitted->Inc();
     }
 
-    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TSimpleRow& key) const;
     virtual std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const = 0;
 
     bool HasProcessingColumnIds() const {
         return GetProgram().HasProcessingColumnIds();
     }
 
-    TInternalPathId GetPathId() const {
+    NColumnShard::TUnifiedPathId GetPathId() const {
         return PathId;
     }
 

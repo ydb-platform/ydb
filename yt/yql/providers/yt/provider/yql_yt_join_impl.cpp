@@ -1418,7 +1418,7 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
     const TExprNode::TListType& rightKeyColumnNodes, const std::vector<TStringBuf>& rightOutputColumns,
     const THashMap<TStringBuf, TString>& rightOutputColumnSources, const THashSet<TString>& rightUsedSourceColumns,
     const TStructExprType* outItemType, TExprNode::TPtr joinType, TPositionHandle pos, bool needPayload, bool isUniqueKey,
-    TExprContext& ctx
+    size_t rightRowCount, TExprContext& ctx
 ) {
     THashSet<TStringBuf> leftSourceKeyDrops;
     for (auto& keyColumnNode : leftKeyColumnNodes) {
@@ -1643,6 +1643,15 @@ TExprNode::TPtr BuildBlockMapJoin(TExprNode::TPtr leftFlow, TExprNode::TPtr righ
 
     if (joinType->Content() != "Cross") {
         auto indexSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
+        indexSettingsBuilder
+            .Add()
+                .Name()
+                    .Value("rowCount")
+                .Build()
+                .Value<TCoAtom>()
+                    .Value(rightRowCount)
+                .Build()
+            .Build();
         if (isUniqueKey) {
             indexSettingsBuilder
                 .Add()
@@ -1715,18 +1724,6 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         YQL_CLOG(INFO, ProviderYt) << strategyName << " assumes unique keys for the small table";
     }
 
-    ui64 partCount = 1;
-    ui64 partRows = settings.RightRows;
-    if ((settings.RightSize > 0) && useShards) {
-        partCount = (settings.RightMemSize + settings.MapJoinLimit - 1) / settings.MapJoinLimit;
-        partRows = (settings.RightRows + partCount - 1) / partCount;
-    }
-
-    if (partCount > 1) {
-        YQL_ENSURE(!isLookupJoin);
-        YQL_CLOG(INFO, ProviderYt) << strategyName << " sharded into " << partCount << " parts, each " << partRows << " rows";
-    }
-
     auto leftKeyColumns = settings.SwapTables ? op.RightLabel : op.LeftLabel;
     auto rightKeyColumns = settings.SwapTables ? op.LeftLabel : op.RightLabel;
     auto joinTree = ctx.NewList(pos, {
@@ -1765,6 +1762,28 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         if (!outItemType) {
             return false;
         }
+    }
+
+    if (useBlocks) {
+        for (auto& [_, columnType] : columnTypes) {
+            if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
+                useBlocks = false;
+                YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
+                break;
+            }
+        }
+    }
+
+    ui64 partCount = 1;
+    ui64 partRows = settings.RightRows;
+    if ((settings.RightSize > 0) && useShards) {
+        partCount = std::min(((useBlocks ? settings.RightMemSizeUsingBlocks : settings.RightMemSize) + settings.MapJoinLimit - 1) / settings.MapJoinLimit, settings.RightRows);
+        partRows = (settings.RightRows + partCount - 1) / partCount;
+    }
+
+    if (partCount > 1) {
+        YQL_ENSURE(!isLookupJoin);
+        YQL_CLOG(INFO, ProviderYt) << strategyName << " sharded into " << partCount << " parts, each " << partRows << " rows";
     }
 
     auto mainPaths = MakeUnorderedSection(leftLeaf.Section, ctx).Paths();
@@ -2108,16 +2127,6 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
             }
         }
 
-        if (useBlocks) {
-            for (auto& [_, columnType] : columnTypes) {
-                if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
-                    useBlocks = false;
-                    YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
-                    break;
-                }
-            }
-        }
-
         TExprNode::TPtr joined;
         if (useBlocks) {
             TExprNode::TListType leftKeyColumnNodes;
@@ -2142,7 +2151,7 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
             joined = BuildBlockMapJoin(std::move(mapInput), std::move(tableContent),
                 leftKeyColumnNodes, leftOutputColumns, leftOutputColumnSources, leftUsedSourceColumns,
                 remappedMembers, rightOutputColumns, rightOutputColumnSources, rightUsedSourceColumns,
-                outItemType, joinType, pos, needPayload, isUniqueKey, ctx
+                outItemType, joinType, pos, needPayload, isUniqueKey, dictItemsCount, ctx
             );
         } else {
             if (!isCross) {

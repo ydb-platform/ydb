@@ -7,6 +7,7 @@
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
+#include <util/string/printf.h>
 
 #include <locale>
 
@@ -6674,7 +6675,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup5", true), {
             NLs::CheckPartCount("PQGroup5", 2, 1, 2, 2),
-        });        
+        });
     }
 
     Y_UNIT_TEST(AlterPersQueueGroupWithKeySchema) {
@@ -9533,7 +9534,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // case 2: add partition
         TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
             Name: "Solomon"
-            PartitionCount: 2    
+            PartitionCount: 2
             StorageConfig {
                 Channel {
                     PreferredPoolKind: "pool-kind-1"
@@ -10079,7 +10080,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(RejectSystemViewPath) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, 4, true, &CreateFlatTxSchemeShard, true);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemViews(true));
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
@@ -11862,5 +11863,33 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusSuccess);
             }
         }
+    }
+
+    Y_UNIT_TEST(PreserveColumnOrder) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        static constexpr ui32 columns = 29;
+
+        TStringBuilder schema;
+        for (ui32 i = 1; i <= columns; ++i) {
+            schema << "Columns { Name: \"" << Sprintf("col%0*" PRIu32, 2, i) << "\" Type: \"Utf8\" }" << Endl;
+        }
+        schema << "Name: \"Table\"" << Endl;
+        schema << "KeyColumnNames: [\"col01\"]" << Endl;
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", schema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::PathExist, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                const auto& table = record.GetPathDescription().GetTable();
+                UNIT_ASSERT_VALUES_EQUAL(table.ColumnsSize(), columns);
+                for (ui32 i = 1; i <= columns; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(table.GetColumns(i - 1).GetName(), Sprintf("col%0*" PRIu32, 2, i));
+                }
+            }
+        });
     }
 }

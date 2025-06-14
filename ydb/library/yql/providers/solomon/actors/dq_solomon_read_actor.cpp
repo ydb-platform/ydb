@@ -109,7 +109,7 @@ public:
         SOURCE_LOG_D("Init");
         IngressStats.Level = statsLevel;
 
-        UseMetricsQueue = ReadParams.Source.HasSelectors();
+        UseMetricsQueue = !ReadParams.Source.HasProgram();
 
         auto stringType = ProgramBuilder.NewDataType(NYql::NUdf::TDataType<char*>::Id);
         DictType = ProgramBuilder.NewDictType(stringType, stringType, false);
@@ -219,11 +219,10 @@ public:
             return;
         }
 
-        auto& metrics = batch.Metrics;
+        auto& metric = batch.Metric;
         auto& pointsCount = batch.Response.Result.PointsCount;
-        ParsePointsCount(metrics, pointsCount);
+        ParsePointsCount(metric, pointsCount);
 
-        SOURCE_LOG_D("HandlePointsCountBatch batch of size " << metrics.size());
         TryRequestData();
     }
 
@@ -317,7 +316,7 @@ public:
                 auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
 
                 if (auto it = Index.find(SOLOMON_SCHEME_VALUE); it != Index.end()) {
-                    items[it->second] = NUdf::TUnboxedValuePod(values[i]);
+                    items[it->second] = isnan(values[i]) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(values[i]).MakeOptional();
                 }
 
                 if (auto it = Index.find(SOLOMON_SCHEME_TYPE); it != Index.end()) {
@@ -412,21 +411,17 @@ private:
     }
 
     void RequestPointsCount() {
-        std::vector<NSo::TMetric> requestMetrics;
-        requestMetrics.reserve(std::min<ui64>(MetricsPerPointsCountQuery, ListedMetrics.size()));
-        while (!ListedMetrics.empty() && requestMetrics.size() < MetricsPerPointsCountQuery) {
-            requestMetrics.push_back(ListedMetrics.back());
-            ListedMetrics.pop_back();
-        }
+        NSo::TMetric requestMetric = ListedMetrics.back();
+        ListedMetrics.pop_back();
 
-        auto getPointsCountFuture = SolomonClient->GetPointsCount(std::move(requestMetrics));
+        auto getPointsCountFuture = SolomonClient->GetPointsCount(requestMetric.Labels);
 
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
-        getPointsCountFuture.Subscribe([actorSystem, metrics = std::move(requestMetrics), selfId = SelfId()](
+        getPointsCountFuture.Subscribe([actorSystem, metric = std::move(requestMetric), selfId = SelfId()](
             const NThreading::TFuture<NSo::TGetPointsCountResponse>& response) mutable -> void
         {
             actorSystem->Send(selfId, new TEvSolomonProvider::TEvPointsCountBatch(
-                std::move(metrics),
+                std::move(metric),
                 response.GetValue())
             );
         });
@@ -454,7 +449,7 @@ private:
             from = request.From;
             to = request.To;
 
-            getDataFuture = SolomonClient->GetData(metric, from, to);
+            getDataFuture = SolomonClient->GetData(metric.Labels, from, to);
         } else {
             getDataFuture = SolomonClient->GetData(
                 ReadParams.Source.GetProgram(),
@@ -476,18 +471,19 @@ private:
         });
     }
 
-    void ParsePointsCount(const std::vector<NSo::TMetric>& metrics, const std::vector<ui64>& pointsCount) {
+    void ParsePointsCount(const NSo::TMetric& metric, ui64 pointsCount) {
         TInstant from = TInstant::Seconds(ReadParams.Source.GetFrom());
         TInstant to = TInstant::Seconds(ReadParams.Source.GetTo());
 
-        for (size_t i = 0; i < metrics.size(); ++i) {
-            auto& metric = metrics[i];
-            auto& count = pointsCount[i];
+        auto ranges = SplitTimeIntervalIntoRanges(from, to, pointsCount);
 
-            auto ranges = SplitTimeIntervalIntoRanges(from, to, count);
-            for (const auto& [fromRange, toRange] : ranges) {
-                MetricsWithTimeRange.emplace_back(metric, fromRange, toRange);
-            }
+        if (ranges.empty()) {
+            CompletedMetricsCount++;
+            return;
+        }
+
+        for (const auto& [fromRange, toRange] : ranges) {
+            MetricsWithTimeRange.emplace_back(metric, fromRange, toRange);
         }
     }
 
@@ -535,7 +531,6 @@ private:
     std::deque<NSo::TTimeseries> MetricsData;
     size_t ListedMetricsCount = 0;
     size_t CompletedMetricsCount = 0;
-    const ui64 MetricsPerPointsCountQuery = 50;
     const ui64 MaxPointsPerOneMetric = 1000000;
 
     TString SourceId;

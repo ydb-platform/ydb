@@ -94,7 +94,7 @@ def start(argv):
 
 
 def _update_environment(port: int):
-    endpoint = "localhost"
+    endpoint = f"localhost:{port}"
     url = "localhost"
     set_env("SOLOMON_HOST", "localhost")
     set_env("SOLOMON_PORT", str(port))

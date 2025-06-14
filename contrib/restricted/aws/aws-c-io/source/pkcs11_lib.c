@@ -1332,7 +1332,7 @@ int aws_pkcs11_lib_sign(
                 digest_alg,
                 signature_alg,
                 out_signature);
-        case CKK_ECDSA:
+        case CKK_EC:
             return s_pkcs11_sign_ecdsa(
                 pkcs11_lib,
                 session_handle,

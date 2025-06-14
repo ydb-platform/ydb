@@ -44,7 +44,9 @@ TWorkerGraph::TWorkerGraph(
     const TString& LLVMSettings,
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
-    TMaybe<ui64> deterministicTimeProviderSeed
+    TMaybe<ui64> deterministicTimeProviderSeed,
+    TLangVersion langver,
+    bool insideEvaluation
 )
     : ScopedAlloc_(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
     , Env_(ScopedAlloc_)
@@ -77,7 +79,7 @@ TWorkerGraph::TWorkerGraph(
 
     // Setup struct types
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env_, FuncRegistry_);
+    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env_, FuncRegistry_, false, langver);
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder, typeMemoization));
         const auto* originalType = type;
@@ -126,7 +128,7 @@ TWorkerGraph::TWorkerGraph(
     };
 
     NKikimr::NMiniKQL::TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), Env_);
+    explorer.Walk(rootNode.GetNode(), Env_.GetNodeStack());
 
     auto compositeNodeFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(
         {NKikimr::NMiniKQL::GetYqlFactory(), NYql::GetPgFactory()}
@@ -136,6 +138,10 @@ TWorkerGraph::TWorkerGraph(
         NKikimr::NMiniKQL::TCallable& callable, const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx
         ) -> NKikimr::NMiniKQL::IComputationNode* {
         if (selfCallableNames.contains(callable.GetType()->GetNameStr())) {
+            if (insideEvaluation) {
+                throw TErrorException(0) << "Inputs aren't available during evaluation";
+            }
+
             YQL_ENSURE(callable.GetInputsCount() == 1, "Self takes exactly 1 argument");
             const auto inputIndex = AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, callable.GetInput(0))->AsValue().Get<ui32>();
             YQL_ENSURE(inputIndex < inputsCount, "Self index is out of range");
@@ -157,7 +163,10 @@ TWorkerGraph::TWorkerGraph(
         LLVMSettings,
         NKikimr::NMiniKQL::EGraphPerProcess::Multi,
         nullptr,
-        countersProvider);
+        countersProvider,
+        nullptr,
+        nullptr,
+        langver);
 
     ComputationPattern_ = NKikimr::NMiniKQL::MakeComputationPattern(
         explorer,
@@ -196,12 +205,13 @@ TWorker<TBase>::TWorker(
     const TString& LLVMSettings,
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
-    TMaybe<ui64> deterministicTimeProviderSeed
+    TMaybe<ui64> deterministicTimeProviderSeed,
+    TLangVersion langver
 )
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
          inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed)
+         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false)
 {
 }
 

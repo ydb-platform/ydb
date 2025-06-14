@@ -20,7 +20,7 @@ enum error_code {
   SUCCESS = 0,                ///< No error
   CAPACITY,                   ///< This parser can't support a document that big
   MEMALLOC,                   ///< Error allocating memory, most likely out of memory
-  TAPE_ERROR,                 ///< Something went wrong, this is a generic error
+  TAPE_ERROR,                 ///< Something went wrong, this is a generic error. Fatal/unrecoverable error.
   DEPTH_ERROR,                ///< Your document exceeds the user-specified depth limitation
   STRING_ERROR,               ///< Problem while parsing a string
   T_ATOM_ERROR,               ///< Problem while parsing an atom starting with the letter 't'
@@ -45,12 +45,20 @@ enum error_code {
   PARSER_IN_USE,              ///< parser is already in use.
   OUT_OF_ORDER_ITERATION,     ///< tried to iterate an array or object out of order (checked when SIMDJSON_DEVELOPMENT_CHECKS=1)
   INSUFFICIENT_PADDING,       ///< The JSON doesn't have enough padding for simdjson to safely parse it.
-  INCOMPLETE_ARRAY_OR_OBJECT, ///< The document ends early.
+  INCOMPLETE_ARRAY_OR_OBJECT, ///< The document ends early. Fatal/unrecoverable error.
   SCALAR_DOCUMENT_AS_VALUE,   ///< A scalar document is treated as a value.
   OUT_OF_BOUNDS,              ///< Attempted to access location outside of document.
   TRAILING_CONTENT,           ///< Unexpected trailing content in the JSON input
   NUM_ERROR_CODES
 };
+
+/**
+ * Some errors are fatal and invalidate the document. This function returns true if the
+ * error is fatal. It returns true for TAPE_ERROR and INCOMPLETE_ARRAY_OR_OBJECT.
+ * Once a fatal error is encountered, the on-demand document is no longer valid and
+ * processing should stop.
+ */
+ inline bool is_fatal(error_code error) noexcept;
 
 /**
  * It is the convention throughout the code that  the macro SIMDJSON_DEVELOPMENT_CHECKS determines whether
@@ -188,6 +196,7 @@ struct simdjson_result_base : protected std::pair<T, error_code> {
    * @throw simdjson_error if there was an error.
    */
   simdjson_inline operator T&&() && noexcept(false);
+
 #endif // SIMDJSON_EXCEPTIONS
 
   /**
@@ -244,7 +253,17 @@ struct simdjson_result : public internal::simdjson_result_base<T> {
    * @param value The variable to assign the value to. May not be set if there is an error.
    */
   simdjson_warn_unused simdjson_inline error_code get(T &value) && noexcept;
-
+//
+  /**
+   * Copy the value to a provided std::string, only enabled for std::string_view.
+   *
+   * @param value The variable to assign the value to. May not be set if there is an error.
+   */
+  simdjson_warn_unused simdjson_inline error_code get(std::string &value) && noexcept
+#if SIMDJSON_SUPPORTS_DESERIALIZATION
+  requires (!std::is_same_v<T, std::string>)
+#endif // SIMDJSON_SUPPORTS_DESERIALIZATION
+  ;
   /**
    * The error.
    */

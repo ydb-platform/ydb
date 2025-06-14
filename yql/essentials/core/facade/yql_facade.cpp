@@ -29,6 +29,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_logger.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/core/qplayer/udf_resolver/yql_qplayer_udf_resolver.h>
@@ -218,6 +219,10 @@ void TProgramFactory::SetArrowResolver(IArrowResolver::TPtr arrowResolver) {
     ArrowResolver_ = arrowResolver;
 }
 
+void TProgramFactory::SetUdfResolverLogfile(const TString& path) {
+    UdfResolverLogfile_ = path;
+}
+
 void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager) {
     UrlListerManager_ = std::move(urlListerManager);
 }
@@ -249,7 +254,16 @@ TProgramPtr TProgramFactory::Create(
     TUdfIndexPackageSet::TPtr udfIndexPackageSet = (UdfIndexPackageSet_ && hiddenMode == EHiddenMode::Disable) ? UdfIndexPackageSet_->Clone() : nullptr;
     IModuleResolver::TPtr moduleResolver = Modules_ ? Modules_->CreateMutableChild() : nullptr;
     IUrlListerManagerPtr urlListerManager = UrlListerManager_ ? UrlListerManager_->Clone() : nullptr;
-    auto udfResolver = udfIndex ? NCommon::CreateUdfResolverWithIndex(udfIndex, UdfResolver_, FileStorage_) : UdfResolver_;
+
+    auto udfResolver = UdfResolver_;
+
+    if (UdfResolverLogfile_) {
+        udfResolver = NCommon::CreateUdfResolverDecoratorWithLogger(FunctionRegistry_, udfResolver, *UdfResolverLogfile_, sessionId);
+    }
+
+    if (udfIndex) {
+        udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, FileStorage_);
+    }
 
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,

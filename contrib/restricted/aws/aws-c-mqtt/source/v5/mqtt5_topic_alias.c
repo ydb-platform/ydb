@@ -7,6 +7,7 @@
 
 #include <aws/common/lru_cache.h>
 #include <aws/common/string.h>
+#include <aws/mqtt/private/client_impl_shared.h>
 #include <aws/mqtt/private/v5/mqtt5_utils.h>
 
 int aws_mqtt5_inbound_topic_alias_resolver_init(
@@ -131,7 +132,7 @@ static struct aws_mqtt5_outbound_topic_alias_resolver *s_aws_mqtt5_outbound_topi
     struct aws_allocator *allocator);
 static struct aws_mqtt5_outbound_topic_alias_resolver *s_aws_mqtt5_outbound_topic_alias_resolver_lru_new(
     struct aws_allocator *allocator);
-static struct aws_mqtt5_outbound_topic_alias_resolver *s_aws_mqtt5_outbound_topic_alias_resolver_user_new(
+static struct aws_mqtt5_outbound_topic_alias_resolver *s_aws_mqtt5_outbound_topic_alias_resolver_manual_new(
     struct aws_allocator *allocator);
 
 struct aws_mqtt5_outbound_topic_alias_resolver *aws_mqtt5_outbound_topic_alias_resolver_new(
@@ -139,8 +140,8 @@ struct aws_mqtt5_outbound_topic_alias_resolver *aws_mqtt5_outbound_topic_alias_r
     enum aws_mqtt5_client_outbound_topic_alias_behavior_type outbound_alias_behavior) {
 
     switch (aws_mqtt5_outbound_topic_alias_behavior_type_to_non_default(outbound_alias_behavior)) {
-        case AWS_MQTT5_COTABT_USER:
-            return s_aws_mqtt5_outbound_topic_alias_resolver_user_new(allocator);
+        case AWS_MQTT5_COTABT_MANUAL:
+            return s_aws_mqtt5_outbound_topic_alias_resolver_manual_new(allocator);
 
         case AWS_MQTT5_COTABT_LRU:
             return s_aws_mqtt5_outbound_topic_alias_resolver_lru_new(allocator);
@@ -166,7 +167,7 @@ int aws_mqtt5_outbound_topic_alias_resolver_reset(
     uint16_t topic_alias_maximum) {
 
     if (resolver == NULL) {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     return (*resolver->vtable->reset_fn)(resolver, topic_alias_maximum);
@@ -242,60 +243,60 @@ static struct aws_mqtt5_outbound_topic_alias_resolver *s_aws_mqtt5_outbound_topi
 }
 
 /*
- * User resolver
+ * Manual resolver
  *
- * User resolution implies the user is controlling the topic alias assignments, but we still want to validate their
+ * Manual resolution implies the user is controlling the topic alias assignments, but we still want to validate their
  * actions.  In particular, we track the currently valid set of aliases (based on previous outbound publishes)
  * and only use an alias when the submitted publish is an exact match for the current assignment.
  */
 
-struct aws_mqtt5_outbound_topic_alias_resolver_user {
+struct aws_mqtt5_outbound_topic_alias_resolver_manual {
     struct aws_mqtt5_outbound_topic_alias_resolver base;
 
     struct aws_array_list aliases;
 };
 
-static void s_cleanup_user_aliases(struct aws_mqtt5_outbound_topic_alias_resolver_user *user_resolver) {
-    for (size_t i = 0; i < aws_array_list_length(&user_resolver->aliases); ++i) {
+static void s_cleanup_manual_aliases(struct aws_mqtt5_outbound_topic_alias_resolver_manual *manual_resolver) {
+    for (size_t i = 0; i < aws_array_list_length(&manual_resolver->aliases); ++i) {
         struct aws_string *alias = NULL;
-        aws_array_list_get_at(&user_resolver->aliases, &alias, i);
+        aws_array_list_get_at(&manual_resolver->aliases, &alias, i);
 
         aws_string_destroy(alias);
     }
 
-    aws_array_list_clean_up(&user_resolver->aliases);
-    AWS_ZERO_STRUCT(user_resolver->aliases);
+    aws_array_list_clean_up(&manual_resolver->aliases);
+    AWS_ZERO_STRUCT(manual_resolver->aliases);
 }
 
-static void s_aws_mqtt5_outbound_topic_alias_resolver_user_destroy(
+static void s_aws_mqtt5_outbound_topic_alias_resolver_manual_destroy(
     struct aws_mqtt5_outbound_topic_alias_resolver *resolver) {
     if (resolver == NULL) {
         return;
     }
 
-    struct aws_mqtt5_outbound_topic_alias_resolver_user *user_resolver = resolver->impl;
-    s_cleanup_user_aliases(user_resolver);
+    struct aws_mqtt5_outbound_topic_alias_resolver_manual *manual_resolver = resolver->impl;
+    s_cleanup_manual_aliases(manual_resolver);
 
-    aws_mem_release(resolver->allocator, user_resolver);
+    aws_mem_release(resolver->allocator, manual_resolver);
 }
 
-static int s_aws_mqtt5_outbound_topic_alias_resolver_user_reset(
+static int s_aws_mqtt5_outbound_topic_alias_resolver_manual_reset(
     struct aws_mqtt5_outbound_topic_alias_resolver *resolver,
     uint16_t topic_alias_maximum) {
-    struct aws_mqtt5_outbound_topic_alias_resolver_user *user_resolver = resolver->impl;
-    s_cleanup_user_aliases(user_resolver);
+    struct aws_mqtt5_outbound_topic_alias_resolver_manual *manual_resolver = resolver->impl;
+    s_cleanup_manual_aliases(manual_resolver);
 
     aws_array_list_init_dynamic(
-        &user_resolver->aliases, resolver->allocator, topic_alias_maximum, sizeof(struct aws_string *));
+        &manual_resolver->aliases, resolver->allocator, topic_alias_maximum, sizeof(struct aws_string *));
     for (size_t i = 0; i < topic_alias_maximum; ++i) {
         struct aws_string *invalid_alias = NULL;
-        aws_array_list_push_back(&user_resolver->aliases, &invalid_alias);
+        aws_array_list_push_back(&manual_resolver->aliases, &invalid_alias);
     }
 
     return AWS_OP_SUCCESS;
 }
 
-static int s_aws_mqtt5_outbound_topic_alias_resolver_user_resolve_outbound_publish_fn(
+static int s_aws_mqtt5_outbound_topic_alias_resolver_manual_resolve_outbound_publish_fn(
     struct aws_mqtt5_outbound_topic_alias_resolver *resolver,
     const struct aws_mqtt5_packet_publish_view *publish_view,
     uint16_t *topic_alias_out,
@@ -315,15 +316,15 @@ static int s_aws_mqtt5_outbound_topic_alias_resolver_user_resolve_outbound_publi
         return aws_raise_error(AWS_ERROR_MQTT5_INVALID_OUTBOUND_TOPIC_ALIAS);
     }
 
-    struct aws_mqtt5_outbound_topic_alias_resolver_user *user_resolver = resolver->impl;
+    struct aws_mqtt5_outbound_topic_alias_resolver_manual *manual_resolver = resolver->impl;
     uint16_t user_alias_index = user_alias - 1;
-    if (user_alias_index >= aws_array_list_length(&user_resolver->aliases)) {
+    if (user_alias_index >= aws_array_list_length(&manual_resolver->aliases)) {
         /* should have been caught by dynamic publish validation */
         return aws_raise_error(AWS_ERROR_MQTT5_INVALID_OUTBOUND_TOPIC_ALIAS);
     }
 
     struct aws_string *current_assignment = NULL;
-    aws_array_list_get_at(&user_resolver->aliases, &current_assignment, user_alias_index);
+    aws_array_list_get_at(&manual_resolver->aliases, &current_assignment, user_alias_index);
 
     *topic_alias_out = user_alias;
 
@@ -345,25 +346,25 @@ static int s_aws_mqtt5_outbound_topic_alias_resolver_user_resolve_outbound_publi
     if (!can_use_alias) {
         aws_string_destroy(current_assignment);
         current_assignment = aws_string_new_from_cursor(resolver->allocator, &publish_view->topic);
-        aws_array_list_set_at(&user_resolver->aliases, &current_assignment, user_alias_index);
+        aws_array_list_set_at(&manual_resolver->aliases, &current_assignment, user_alias_index);
     }
 
     return AWS_OP_SUCCESS;
 }
 
-static struct aws_mqtt5_outbound_topic_alias_resolver_vtable s_aws_mqtt5_outbound_topic_alias_resolver_user_vtable = {
-    .destroy_fn = s_aws_mqtt5_outbound_topic_alias_resolver_user_destroy,
-    .reset_fn = s_aws_mqtt5_outbound_topic_alias_resolver_user_reset,
-    .resolve_outbound_publish_fn = s_aws_mqtt5_outbound_topic_alias_resolver_user_resolve_outbound_publish_fn,
+static struct aws_mqtt5_outbound_topic_alias_resolver_vtable s_aws_mqtt5_outbound_topic_alias_resolver_manual_vtable = {
+    .destroy_fn = s_aws_mqtt5_outbound_topic_alias_resolver_manual_destroy,
+    .reset_fn = s_aws_mqtt5_outbound_topic_alias_resolver_manual_reset,
+    .resolve_outbound_publish_fn = s_aws_mqtt5_outbound_topic_alias_resolver_manual_resolve_outbound_publish_fn,
 };
 
-static struct aws_mqtt5_outbound_topic_alias_resolver *s_aws_mqtt5_outbound_topic_alias_resolver_user_new(
+static struct aws_mqtt5_outbound_topic_alias_resolver *s_aws_mqtt5_outbound_topic_alias_resolver_manual_new(
     struct aws_allocator *allocator) {
-    struct aws_mqtt5_outbound_topic_alias_resolver_user *resolver =
-        aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_outbound_topic_alias_resolver_user));
+    struct aws_mqtt5_outbound_topic_alias_resolver_manual *resolver =
+        aws_mem_calloc(allocator, 1, sizeof(struct aws_mqtt5_outbound_topic_alias_resolver_manual));
 
     resolver->base.allocator = allocator;
-    resolver->base.vtable = &s_aws_mqtt5_outbound_topic_alias_resolver_user_vtable;
+    resolver->base.vtable = &s_aws_mqtt5_outbound_topic_alias_resolver_manual_vtable;
     resolver->base.impl = resolver;
 
     aws_array_list_init_dynamic(&resolver->aliases, allocator, 0, sizeof(struct aws_string *));
@@ -450,13 +451,6 @@ static void s_destroy_assignment_value(void *value) {
     s_aws_topic_alias_assignment_destroy(value);
 }
 
-static bool s_topic_hash_equality_fn(const void *a, const void *b) {
-    const struct aws_byte_cursor *a_cursor = a;
-    const struct aws_byte_cursor *b_cursor = b;
-
-    return aws_byte_cursor_eq(a_cursor, b_cursor);
-}
-
 static int s_aws_mqtt5_outbound_topic_alias_resolver_lru_reset(
     struct aws_mqtt5_outbound_topic_alias_resolver *resolver,
     uint16_t topic_alias_maximum) {
@@ -471,7 +465,7 @@ static int s_aws_mqtt5_outbound_topic_alias_resolver_lru_reset(
         lru_resolver->lru_cache = aws_cache_new_lru(
             lru_resolver->base.allocator,
             aws_hash_byte_cursor_ptr,
-            s_topic_hash_equality_fn,
+            aws_mqtt_byte_cursor_hash_equality,
             NULL,
             s_destroy_assignment_value,
             topic_alias_maximum);

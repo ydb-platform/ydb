@@ -16,6 +16,8 @@ message PlainGrpcRequest {
 message PlainGrpcResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+
+    uint64 CallBackTs = 3;
 }
 
 // Go until GrpcProxy

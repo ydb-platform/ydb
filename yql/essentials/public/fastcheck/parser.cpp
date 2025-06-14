@@ -14,13 +14,13 @@ namespace NFastCheck {
 
 namespace {
 
-class TParserRunner : public ICheckRunner {
+class TParserRunner : public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "parser";
     }
 
-    TCheckResponse Run(const TChecksRequest& request) final {
+    TCheckResponse DoRun(const TChecksRequest& request) final {
         switch (request.Syntax) {
         case ESyntax::SExpr:
             return RunSExpr(request);

@@ -697,6 +697,7 @@ static inline bool containerptr_roaring64_bitmap_remove(roaring64_bitmap_t *r,
         container_free(container2, typecode2);
         bool erased = art_erase(&r->art, high48, (art_val_t *)leaf);
         assert(erased);
+        (void)erased;
         remove_container(r, *leaf);
         return true;
     }
@@ -754,6 +755,7 @@ void roaring64_bitmap_remove_bulk(roaring64_bitmap_t *r,
             leaf_t leaf;
             bool erased = art_erase(art, high48, (art_val_t *)&leaf);
             assert(erased);
+            (void)erased;
             remove_container(r, leaf);
         }
     } else {
@@ -798,6 +800,7 @@ static inline void remove_range_closed_at(roaring64_bitmap_t *r, art_t *art,
         } else {
             bool erased = art_erase(art, high48, NULL);
             assert(erased);
+            (void)erased;
             remove_container(r, *leaf);
         }
     }
@@ -837,6 +840,7 @@ void roaring64_bitmap_remove_range_closed(roaring64_bitmap_t *r, uint64_t min,
         leaf_t leaf;
         bool erased = art_iterator_erase(&it, (art_val_t *)&leaf);
         assert(erased);
+        (void)erased;
         container_free(get_container(r, leaf), get_typecode(leaf));
         remove_container(r, leaf);
     }
@@ -1256,6 +1260,7 @@ void roaring64_bitmap_and_inplace(roaring64_bitmap_t *r1,
             leaf_t leaf;
             bool erased = art_iterator_erase(&it1, (art_val_t *)&leaf);
             assert(erased);
+            (void)erased;
             container_free(get_container(r1, leaf), get_typecode(leaf));
             remove_container(r1, leaf);
         } else if (compare_result > 0) {
@@ -1556,6 +1561,7 @@ void roaring64_bitmap_xor_inplace(roaring64_bitmap_t *r1,
                     container_free(container2, typecode2);
                     bool erased = art_iterator_erase(&it1, NULL);
                     assert(erased);
+                    (void)erased;
                     remove_container(r1, *leaf1);
                 } else {
                     if (container2 != container1) {
@@ -1691,6 +1697,7 @@ void roaring64_bitmap_andnot_inplace(roaring64_bitmap_t *r1,
                     container_free(container2, typecode2);
                     bool erased = art_iterator_erase(&it1, NULL);
                     assert(erased);
+                    (void)erased;
                     remove_container(r1, *leaf1);
                 } else {
                     if (container2 != container1) {
@@ -1777,6 +1784,7 @@ static void roaring64_flip_leaf_inplace(roaring64_bitmap_t *r, uint8_t high48[],
     } else {
         bool erased = art_erase(&r->art, high48, NULL);
         assert(erased);
+        (void)erased;
         container_free(container2, typecode2);
         remove_container(r, *leaf);
     }

@@ -47,12 +47,12 @@
 
   ```cpp
   // Create driver instance.
-  auto driverConfig = TDriverConfig()
+  auto driverConfig = NYdb::TDriverConfig()
       .SetEndpoint(opts.Endpoint)
       .SetDatabase(opts.Database)
-      .SetAuthToken(GetEnv("YDB_TOKEN"));
+      .SetAuthToken(std::getenv("YDB_TOKEN"));
 
-  TDriver driver(driverConfig);
+  NYdb::TDriver driver(driverConfig);
   ```
 
   В этом примере используется аутентификационный токен, сохранённый в переменной окружения `YDB_TOKEN`. Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
@@ -60,7 +60,7 @@
   Фрагмент кода приложения для создания клиента:
 
   ```cpp
-  TTopicClient topicClient(driver);
+  NYdb::NTopic::TTopicClient topicClient(driver);
   ```
 
 - Java
@@ -411,8 +411,8 @@
   Пример создания сессии записи с интерфейсом `IWriteSession`.
 
   ```cpp
-  TString producerAndGroupID = "group-id";
-  auto settings = TWriteSessionSettings()
+  std::string producerAndGroupID = "group-id";
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
       .Path("my-topic")
       .ProducerId(producerAndGroupID)
       .MessageGroupId(producerAndGroupID);
@@ -540,15 +540,15 @@
   while (true) {
       // Get event
       // May block for a while if write session is busy
-      TMaybe<TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+      std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
 
-      if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+      if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
           session->Write(std::move(event.ContinuationToken), "This is yet another message.");
 
-      } else if (auto* ackEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&*event)) {
+      } else if (auto* ackEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TAcksEvent>(&*event)) {
           std::cout << ackEvent->DebugString() << std::endl;
 
-      } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+      } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
           break;
       }
   }
@@ -674,14 +674,14 @@
   Пример установки обработчика TAcksEvent для сессии записи:
 
   ```cpp
-  auto settings = TWriteSessionSettings()
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
     // other settings are set here
     .EventHandlers(
-      TWriteSessionSettings::TEventHandlers()
+      NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
         .AcksHandler(
-          [&](TWriteSessionEvent::TAcksEvent& event) {
+          [&](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
             for (const auto& ack : event.Acks) {
-              if (ack.State == TWriteAck::EEventState::EES_WRITTEN) {
+              if (ack.State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_WRITTEN) {
                 ackedSeqNo.insert(ack.SeqNo);
                 std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
               }
@@ -802,7 +802,7 @@
   Пример создания сессии записи без сжатия сообщений:
 
   ```cpp
-  auto settings = TWriteSessionSettings()
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
     // other settings are set here
     .Codec(ECodec::RAW);
 
@@ -864,7 +864,7 @@
   Пример создания такой сессии записи:
 
   ```cpp
-  auto settings = TWriteSessionSettings()
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
       .Path(myTopicPath);
 
   auto session = topicClient.CreateWriteSession(settings);
@@ -886,20 +886,20 @@
   Воспользоваться функцией записи метаданных можно с помощью метода `Write()`, принимающего `TWriteMessage` объект:
 
   ```cpp
-  auto settings = TWriteSessionSettings()
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
       .Path(myTopicPath)
-  //set all oter settings;
+  // set all other settings;
   ;
 
   auto session = topicClient.CreateWriteSession(settings);
 
-  TMaybe<TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
-  TWriteMessage message("This is yet another message").MessageMeta({
+  std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+  NYdb::NTopic::TWriteMessage message("This is yet another message").MessageMeta({
       {"meta-key", "meta-value"},
       {"another-key", "value"}
   });
 
-  if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+  if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
       session->Write(std::move(event.ContinuationToken), std::move(message));
   }
   ```
@@ -974,15 +974,25 @@
 
 - C++
 
-  Для записи в топик в транзакции необходимо передать ссылку на объект транзакции в метод `Write` сессии записи:
+  Для записи в топик в транзакции необходимо передать ссылку на объект транзакции в метод `Write` сессии записи.
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
 
   ```c++
-    auto tableSession = tableClient.GetSession().GetValueSync().GetSession();
-    auto transaction = tableSession.BeginTransaction().GetValueSync().GetTransaction();
-    NYdb::NTopic::TWriteMessage writeMessage("message");
+  NYdb::NQuery::TQueryClient queryClient(driver);
 
-    topicSession->Write(std::move(writeMessage), transaction);
-    transaction.Commit().GetValueSync();
+  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+      auto beginTxResult = session.BeginTransaction().GetValueSync();
+      if (!beginTxResult.IsSuccess()) {
+          return beginTxResult;
+      }
+      auto tx = beginTxResult.GetTransaction();
+
+      NYdb::NTopic::TWriteMessage writeMessage("message");
+
+      topicSession->Write(std::move(writeMessage), tx);
+      return tx.Commit().GetValueSync();
+  }));
   ```
 
 - Go
@@ -1182,7 +1192,8 @@
 
 ### Подключение к топику для чтения сообщений {#start-reader}
 
-Для чтения сообщений из топика необходимо наличие заранее созданного Consumer, связанного с этим топиком.
+Чтение сообщений из топика может выполнятся с указанием Consumer'а, связанного с этим топиком, а также без Consumer'а. Если Consumer не указан, то клиентское приложение должно самостоятельно рассчитывать offset для чтения сообщений. Более подробно пример чтения без Consumer'а рассмотрен в [соответствующей секции](#no-consumer).
+
 Создать Consumer можно при [создании](#create-topic) или [изменении](#alter-topic) топика.
 У топика может быть несколько Consumer'ов и для каждого из них сервер хранит свой прогресс чтения.
 
@@ -1197,7 +1208,7 @@
   Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
 
   ```cpp
-  auto settings = TReadSessionSettings()
+  auto settings = NYdb::NTopic::TReadSessionSettings()
       .ConsumerName("my-consumer")
       .AppendTopics("my-topic");
 
@@ -1220,7 +1231,7 @@
   Чтобы создать подключение к существующему топику `my-topic` через добавленного ранее читателя `my-consumer`, используйте следующий код:
 
   ```python
-  reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
+  reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
   ```
 
 - Java (sync)
@@ -1341,11 +1352,11 @@
 - C++
 
   ```cpp
-  auto settings = TReadSessionSettings()
+  auto settings = NYdb::NTopic::TReadSessionSettings()
       .ConsumerName("my-consumer")
       .AppendTopics("my-topic")
       .AppendTopics(
-          TTopicReadSettings("my-specific-topic")
+          NYdb::NTopic::TTopicReadSettings("my-specific-topic")
               .ReadFromTimestamp(someTimestamp)
       );
 
@@ -1522,17 +1533,17 @@
   При установке сессии чтения с настройкой `SimpleDataHandlers` достаточно передать обработчик для сообщений с данными. SDK будет вызывать этот обработчик на каждый принятый от сервера пакет сообщений.  Подтверждения чтения по умолчанию отправляться не будут.
 
   ```cpp
-  auto settings = TReadSessionSettings()
+  auto settings = NYdb::NTopic::TReadSessionSettings()
       .EventHandlers_.SimpleDataHandlers(
-          [](TReadSessionEvent::TDataReceivedEvent& event) {
-              std::cout << "Get data event " << DebugString(event);
+          [](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+              std::cout << "Get data event " << NYdb::NTopic::DebugString(event);
           }
       );
 
   auto session = topicClient.CreateReadSession(settings);
 
   // Wait SessionClosed event.
-  ReadSession->GetEvent(/* block = */true);
+  session->GetEvent(/* block = */true);
   ```
 
   В этом примере после создания сессии основной поток дожидается завершения сессии со стороны сервера в методе `GetEvent`, другие типы событий приходить не будут.
@@ -1706,10 +1717,10 @@
   Аналогично [примеру выше](#no-commit), при установке сессии чтения с настройкой `SimpleDataHandlers` достаточно передать обработчик для сообщений с данными. SDK будет вызывать этот обработчик на каждый принятый от сервера пакет сообщений. Передача параметра `commitDataAfterProcessing = true` означает, что SDK будет отправлять на сервер подтверждения чтения всех сообщений после выполнения обработчика.
 
   ```cpp
-  auto settings = TReadSessionSettings()
+  auto settings = NYdb::NTopic::TReadSessionSettings()
       .EventHandlers_.SimpleDataHandlers(
-          [](TReadSessionEvent::TDataReceivedEvent& event) {
-              std::cout << "Get data event " << DebugString(event);
+          [](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+              std::cout << "Get data event " << NYdb::NTopic::DebugString(event);
           }
           , /* commitDataAfterProcessing = */true
       );
@@ -1717,7 +1728,7 @@
   auto session = topicClient.CreateReadSession(settings);
 
   // Wait SessionClosed event.
-  ReadSession->GetEvent(/* block = */true);
+  session->GetEvent(/* block = */true);
   ```
 
 - Go
@@ -1823,7 +1834,7 @@
 
   ```cpp
   settings.EventHandlers_.StartPartitionSessionHandler(
-      [](TReadSessionEvent::TStartPartitionSessionEvent& event) {
+      [](NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
           auto readFromOffset = GetOffsetToReadFrom(event.GetPartitionId());
           event.Confirm(readFromOffset);
       }
@@ -1909,7 +1920,7 @@
 
 - Java
 
-  Для чтения без `Consumer`а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
+  Для чтения без Consumer'а следует в настройках читателя `ReaderSettings` это явно указать, вызвав `withoutConsumer()`:
 
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
@@ -1931,6 +1942,32 @@
   }
   ```
 
+- Python
+
+  Для чтения без Consumer'а следует создать читателя с помощью метода `reader` с указанием следующих аргументов:
+  * `topic` - объект `ydb.TopicReaderSelector` с указанными `path` и списком `partitions`;
+  * `consumer` - должен быть `None`;
+  * `event_handler` - наследник `ydb.TopicReaderEvents.EventHandler`, который реализует функцию `on_partition_get_start_offset`. Эта функция отвечает за возвращение начального смещения (offset) для чтения сообщений при старте читателя, а также во время переподключений. Клиентское приложение должно указать это смещение в параметре `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. Также функция может быть реализована как асинхронная.
+
+  Пример:
+
+  ```python
+  class CustomEventHandler(ydb.TopicReaderEvents.EventHandler):
+      def on_partition_get_start_offset(self, event: ydb.TopicReaderEvents.OnPartitionGetStartOffsetRequest):
+          return ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse(
+              start_offset=0,
+          )
+
+  reader = driver.topic_client.reader(
+      topic=ydb.TopicReaderSelector(
+          path="topic-path",
+          partitions=[0, 1, 2],
+      ),
+      consumer=None,
+      event_handler=CustomEventHandler(),
+  )
+  ```
+
 {% endlist %}
 
 ### Чтение в транзакции {#read-tx}
@@ -1941,25 +1978,30 @@
 
   Перед чтением из топика клиентский код должен передать в настройки получения событий из сессии ссылку на объект транзакции.
 
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_reader/transaction/application.cpp)
+
   ```cpp
-      ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
+  readSession->WaitEvent().Wait(TDuration::Seconds(1));
 
-      auto tableSettings = NYdb::NTable::TTxSettings::SerializableRW();
-      auto transactionResult = TableSession->BeginTransaction(tableSettings).GetValueSync();
-      auto Transaction = transactionResult.GetTransaction();
+  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&readSession](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+      auto beginTxResult = session.BeginTransaction(NYdb::Query::TTxSettings::SerializableRW()).GetValueSync();
+      if (!beginTxResult.IsSuccess()) {
+          return beginTxResult;
+      }
+      auto tx = beginTxResult.GetTransaction();
 
-      NYdb::NTopic::TReadSessionGetEventSettings topicSettings;
-      topicSettings.Block(false);
-      topicSettings.Tx(Transaction);
+      auto topicSettings = NYdb::NTopic::TReadSessionGetEventSettings()
+          .Block(false);
+          .Tx(tx);
 
-      auto events = ReadSession->GetEvents(topicSettings);
+      auto events = readSession->GetEvents(topicSettings);
 
       for (auto& event : events) {
           // обработать событие и записать результаты в таблицу
       }
 
-      NYdb::NTable::TCommitTxSettings commitSettings;
-      auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
+      return tx.Commit().GetValueSync();
+  }));
   ```
 
   {% note warning %}
@@ -1971,24 +2013,26 @@
   Подтверждение обработки события `TStopPartitionSessionEvent` надо делать после вызова `Commit`.
 
   ```cpp
-      std::optional<TStopPartitionSessionEvent> stopPartitionSession;
+  std::optional<NYdb::NTopic::TStopPartitionSessionEvent> stopPartitionSession;
 
-      auto events = ReadSession->GetEvents(topicSettings);
+  auto events = readSession->GetEvents(topicSettings);
 
-      for (auto& event : events) {
-          if (auto* e = std::get_if<TStopPartitionSessionEvent>(&event) {
-              stopPartitionSessionEvent = std::move(*e);
-          } else {
-              // обработать событие и записать результаты в таблицу
-          }
+  for (auto& event : events) {
+      if (auto* e = std::get_if<NYdb::NTopic::TStopPartitionSessionEvent>(&event)) {
+          stopPartitionSessionEvent = std::move(*e);
+      } else {
+          // обработать событие и записать результаты в таблицу
       }
+  }
 
-      NYdb::NTable::TCommitTxSettings commitSettings;
-      auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
+  auto commitResult = tx.Commit(commitSettings).GetValueSync();
+  if (!commitResult.IsSuccess()) {
+      return commitResult;
+  }
 
-      if (stopPartitionSessionEvent) {
-          stopPartitionSessionEvent->Commit();
-      }
+  if (stopPartitionSessionEvent) {
+      stopPartitionSessionEvent->Commit();
+  }
   ```
 
 - Go
@@ -2132,8 +2176,8 @@
   Фрагмент цикла событий может выглядеть так:
 
   ```cpp
-  auto event = ReadSession->GetEvent(/*block=*/true);
-  if (auto* stopPartitionSessionEvent = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+  auto event = readSession->GetEvent(/*block=*/true);
+  if (auto* stopPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
       stopPartitionSessionEvent->Confirm();
   } else {
     // other event types
@@ -2205,9 +2249,9 @@
   Фрагмент цикла событий может выглядеть так:
 
   ```cpp
-  auto event = ReadSession->GetEvent(/*block=*/true);
-  if (auto* partitionSessionClosedEvent = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
-      if (partitionSessionClosedEvent->GetReason() == TPartitionSessionClosedEvent::EReason::ConnectionLost) {
+  auto event = readSession->GetEvent(/*block=*/true);
+  if (auto* partitionSessionClosedEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+      if (partitionSessionClosedEvent->GetReason() == NYdb::NTopic::TPartitionSessionClosedEvent::EReason::ConnectionLost) {
           std::cout << "Connection with partition was lost" << std::endl;
       }
   } else {
@@ -2275,12 +2319,12 @@
   SDK поддерживает два режима чтения топиков с включенным автомасштабированием: режим полной поддержки и режим совместимости. Режим чтения задаётся в параметрах создания сессии чтения. По умолчанию используется режим совместимости.
 
   ```cpp
-  auto settings = TReadSessionSettings()
+  auto settings = NYdb::NTopic::TReadSessionSettings()
       .SetAutoscalingSupport(true); // full support is enabled
 
   // or
 
-  auto settings = TReadSessionSettings()
+  auto settings = NYdb::NTopic::TReadSessionSettings()
       .SetAutoscalingSupport(false); // compatibility mode is enabled
 
   auto readSession = topicClient.CreateReadSession(settings);
@@ -2293,13 +2337,13 @@
   Фрагмент цикла событий может выглядеть так:
 
   ```cpp
-  auto settings = TReadSessionSettings()
+  auto settings = NYdb::NTopic::TReadSessionSettings()
       .SetAutoscalingSupport(true);
 
   auto readSession = topicClient.CreateReadSession(settings);
 
   auto event = readSession->GetEvent(/*block=*/true);
-  if (auto* endPartitionSessionEvent = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+  if (auto* endPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
       endPartitionSessionEvent->Confirm();
   } else {
     // other event types
@@ -2364,5 +2408,26 @@
   ```
 
   С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
+
+{% endlist %}
+
+### Подтверждение обработки вне читателя {#commit-outside-the-reader}
+
+Чаще всего подтверждение обработки удобно выполнять в рамках читателя, получающего сообщения. Однако существуют сценарии, при которых подтверждение обработки должно производиться процессом, отличным от процесса чтения. В таком случае необходим способ подтверждения, находящийся вне читателя.
+
+{% list tabs group=lang %}
+
+- Python
+
+  Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
+
+  ```python
+  driver.topic_client.commit_offset(
+      topic_path,
+      consumer_name,
+      partition_id,
+      offset,
+  )
+  ```
 
 {% endlist %}

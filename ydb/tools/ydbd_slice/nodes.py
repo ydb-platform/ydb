@@ -37,7 +37,7 @@ class Nodes(object):
 
         return command
 
-    def _check_async_execution(self, running_jobs, check_retcode=True, results=None, retry_attemps=0):
+    def _check_async_execution(self, running_jobs, check_retcode=True, results=None, retry_attempts=0):
         if self._dry_run:
             return
 
@@ -60,7 +60,7 @@ class Nodes(object):
 
             retcode = process.poll()
             if retcode != 0:
-                status_line = "execution '{cmd}' finished with '{retcode}' retcode".format(
+                status_line = "execution '{cmd}' finished with '{retcode}' retcode\n".format(
                     cmd=cmd,
                     retcode=retcode,
                 )
@@ -76,7 +76,7 @@ class Nodes(object):
                     )
                 )
                 if check_retcode:
-                    if retry_attemps > 0:
+                    if retry_attempts > 0:
                         new_jobs.append((cmd, subprocess.Popen(cmd), host))
                     else:
                         sys.exit(status_line)
@@ -88,7 +88,7 @@ class Nodes(object):
                 }
 
             if len(new_jobs) > 0:
-                self._check_async_execution(new_jobs, check_retcode, results, retry_attemps - 1)
+                self._check_async_execution(new_jobs, check_retcode, results, retry_attempts - 1)
 
     def execute_async_ret(self, cmd, check_retcode=True, nodes=None, results=None):
         running_jobs = []
@@ -118,9 +118,9 @@ class Nodes(object):
 
         return running_jobs
 
-    def execute_async(self, cmd, check_retcode=True, nodes=None, results=None):
+    def execute_async(self, cmd, check_retcode=True, nodes=None, results=None, retry_attempts=5):
         running_jobs = self.execute_async_ret(cmd, check_retcode, nodes, results)
-        self._check_async_execution(running_jobs, check_retcode, results)
+        self._check_async_execution(running_jobs, check_retcode, results, retry_attempts=retry_attempts)
 
     def _copy_on_node(self, local_path, host, remote_path):
         self._logger.info(
@@ -166,23 +166,23 @@ class Nodes(object):
             process = subprocess.Popen(cmd)
             running_jobs.append((cmd, process, dst))
 
-        self._check_async_execution(running_jobs, retry_attemps=2)
+        self._check_async_execution(running_jobs, retry_attempts=2)
 
     def _download_sky(self, url, remote_path):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
-        tmp_path = url.split(":")[-1]
+        tmp_path = f'/tmp/sky_download_{url.split(":")[-1]}'
         script = (
             f'sky get -wu -d {tmp_path} {url} && '
             f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
             f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
         )
         running_jobs = self.execute_async_ret(script)
-        self._check_async_execution(running_jobs, retry_attemps=2)
+        self._check_async_execution(running_jobs, retry_attempts=2)
 
     def _download_script(self, script, remote_path):
         user_script = script[len('script:'):]
         self._logger.info(f"download by script '{user_script}' to '{remote_path}'")
-        tmp_path = f'tmp_{random.randint(0, 100500)}'
+        tmp_path = f'/tmp/script_download_{random.randint(0, 100500)}'
         full_script = (
             f'mkdir -p {tmp_path} && cd {tmp_path} && '
             f'( {user_script} ) && cd - && '
@@ -190,12 +190,12 @@ class Nodes(object):
             f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
         )
         running_jobs = self.execute_async_ret(full_script)
-        self._check_async_execution(running_jobs, retry_attemps=2)
+        self._check_async_execution(running_jobs, retry_attempts=2)
 
     def _download_http(self, url, remote_path):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
         running_jobs = self.execute_async_ret(f'sudo curl --output {remote_path} {url}')
-        self._check_async_execution(running_jobs, retry_attemps=2)
+        self._check_async_execution(running_jobs, retry_attempts=2)
 
     def copy(self, local_path: str, remote_path, directory=False, compressed_path=None):
         """

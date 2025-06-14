@@ -42,6 +42,8 @@ SRCS(
     blobstorage_pdisk_ut_run.cpp
     blobstorage_pdisk_ut_sectormap.cpp
     blobstorage_pdisk_util_ut.cpp
+    blobstorage_pdisk_ut_pdisk_config.cpp
+    blobstorage_pdisk_ut_chunk_tracker.cpp
     mock/pdisk_mock.cpp
 )
 

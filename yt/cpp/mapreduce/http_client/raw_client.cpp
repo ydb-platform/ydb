@@ -569,10 +569,10 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
 {
     TMutationId mutationId;
     THttpHeader header("GET", GetReadFileCommand(Context_.Config->ApiVersion));
-    header.AddTransactionId(transactionId);
     header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
-    header.MergeParameters(FormIORequestParameters(path, options));
     header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadFile(transactionId, options));
+    header.MergeParameters(FormIORequestParameters(path, options));
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -677,7 +677,14 @@ void THttpRawClient::InsertRows(
     const TNode::TListType& rows,
     const TInsertRowsOptions& options)
 {
-    NRawClient::InsertRows(Context_, path, rows, options);
+    TMutationId mutationId;
+    THttpHeader header("PUT", "insert_rows");
+    header.SetInputFormat(TFormat::YsonBinary());
+    header.MergeParameters(NRawClient::SerializeParametersForInsertRows(Context_.Config->Prefix, path, options));
+    auto body = NodeListToYsonString(rows);
+    TRequestConfig config;
+    config.IsHeavy = true;
+    RequestWithoutRetry(Context_, mutationId, header, body, config)->GetResponse();
 }
 
 void THttpRawClient::TrimRows(
@@ -701,7 +708,28 @@ TNode::TListType THttpRawClient::LookupRows(
     const TNode::TListType& keys,
     const TLookupRowsOptions& options)
 {
-    return NRawClient::LookupRows(Context_, path, keys, options);
+    TMutationId mutationId;
+    THttpHeader header("PUT", "lookup_rows");
+    header.AddPath(AddPathPrefix(path, Context_.Config->ApiVersion));
+    header.SetInputFormat(TFormat::YsonBinary());
+    header.SetOutputFormat(TFormat::YsonBinary());
+
+    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
+        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
+        })
+        .Item("keep_missing_rows").Value(options.KeepMissingRows_)
+        .Item("versioned").Value(options.Versioned_)
+        .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
+            fluent.Item("column_names").Value(*options.Columns_);
+        })
+    .EndMap());
+
+    auto body = NodeListToYsonString(keys);
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, body, config);
+    return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
 }
 
 TNode::TListType THttpRawClient::SelectRows(
@@ -712,23 +740,7 @@ TNode::TListType THttpRawClient::SelectRows(
     THttpHeader header("GET", "select_rows");
     header.SetInputFormat(TFormat::YsonBinary());
     header.SetOutputFormat(TFormat::YsonBinary());
-
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .Item("query").Value(query)
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .DoIf(options.InputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("input_row_limit").Value(*options.InputRowLimit_);
-        })
-        .DoIf(options.OutputRowLimit_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("output_row_limit").Value(*options.OutputRowLimit_);
-        })
-        .Item("range_expansion_limit").Value(options.RangeExpansionLimit_)
-        .Item("fail_on_incomplete_result").Value(options.FailOnIncompleteResult_)
-        .Item("verbose_logging").Value(options.VerboseLogging_)
-        .Item("enable_code_cache").Value(options.EnableCodeCache_)
-    .EndMap());
+    header.MergeParameters(NRawClient::SerializeParamsForSelectRows(query, options));
 
     TRequestConfig config;
     config.IsHeavy = true;
@@ -819,7 +831,15 @@ void THttpRawClient::DeleteRows(
     const TNode::TListType& keys,
     const TDeleteRowsOptions& options)
 {
-    NRawClient::DeleteRows(Context_, path, keys, options);
+    TMutationId mutationId;
+    THttpHeader header("PUT", "delete_rows");
+    header.SetInputFormat(TFormat::YsonBinary());
+    header.MergeParameters(NRawClient::SerializeParametersForDeleteRows(Context_.Config->Prefix, path, options));
+
+    auto body = NodeListToYsonString(keys);
+    TRequestConfig config;
+    config.IsHeavy = true;
+    RequestWithoutRetry(Context_, mutationId, header, body, config)->GetResponse();
 }
 
 void THttpRawClient::FreezeTable(

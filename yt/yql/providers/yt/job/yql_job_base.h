@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
@@ -74,6 +75,10 @@ public:
         RuntimeLogLevel = level;
     }
 
+    void SetLangVer(TLangVersion langver) {
+        LangVer = langver;
+    }
+
     void Do(const NYT::TRawJobContext& jobContext) override;
     void Save(IOutputStream& stream) const override;
     void Load(IInputStream& stream) override;
@@ -93,6 +98,7 @@ protected:
     TString OptLLVM;
     TVector<TString> TableNames;
     NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
+    TLangVersion LangVer = UnknownLangVersion;
     // End serializable part
 
     ui64 StartCycles = 0;

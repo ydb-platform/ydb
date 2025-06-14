@@ -1,6 +1,7 @@
 #pragma once
 
 #include "c3i.h"
+#include "pipeline.h"
 
 #include <yql/essentials/sql/v1/complete/text/word.h>
 
@@ -15,71 +16,72 @@
 
 namespace NSQLComplete {
 
-    template <class Lexer, class Parser>
-    struct TAntlrGrammar {
-        using TLexer = Lexer;
-        using TParser = Parser;
-
-        TAntlrGrammar() = delete;
-    };
-
     template <class G>
     class TC3Engine: public IC3Engine {
     public:
         explicit TC3Engine(TConfig config)
-            : Chars()
-            , Lexer(&Chars)
-            , Tokens(&Lexer)
-            , Parser(&Tokens)
-            , CompletionCore(&Parser)
+            : Chars_()
+            , Lexer_(&Chars_)
+            , Tokens_(&Lexer_)
+            , Parser_(&Tokens_)
+            , CompletionCore_(&Parser_)
+            , IgnoredRules_(std::move(config.IgnoredRules))
         {
-            Lexer.removeErrorListeners();
-            Parser.removeErrorListeners();
+            Lexer_.removeErrorListeners();
+            Parser_.removeErrorListeners();
 
-            CompletionCore.ignoredTokens = std::move(config.IgnoredTokens);
-            CompletionCore.preferredRules = std::move(config.PreferredRules);
+            CompletionCore_.ignoredTokens = std::move(config.IgnoredTokens);
+            CompletionCore_.preferredRules = std::move(config.PreferredRules);
+
+            for (TRuleId rule : IgnoredRules_) {
+                CompletionCore_.preferredRules.emplace(rule);
+            }
         }
 
-        TC3Candidates Complete(TStringBuf prefix) override {
-            Assign(prefix);
-            const auto caretTokenIndex = CaretTokenIndex(prefix);
-            auto candidates = CompletionCore.collectCandidates(caretTokenIndex);
+        TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) override {
+            Assign(text);
+            auto candidates = CompletionCore_.collectCandidates(caretTokenIndex);
             return Converted(std::move(candidates));
         }
 
     private:
         void Assign(TStringBuf prefix) {
-            Chars.load(prefix.Data(), prefix.Size(), /* lenient = */ false);
-            Lexer.reset();
-            Tokens.setTokenSource(&Lexer);
-            Tokens.fill();
+            Chars_.load(prefix.Data(), prefix.Size(), /* lenient = */ false);
+            Lexer_.reset();
+            Tokens_.setTokenSource(&Lexer_);
+            Tokens_.fill();
         }
 
-        size_t CaretTokenIndex(TStringBuf prefix) {
-            const auto tokensCount = Tokens.size();
-            if (2 <= tokensCount && !LastWord(prefix).Empty()) {
-                return tokensCount - 2;
-            }
-            return tokensCount - 1;
-        }
-
-        static TC3Candidates Converted(c3::CandidatesCollection candidates) {
+        TC3Candidates Converted(c3::CandidatesCollection candidates) const {
             TC3Candidates converted;
+
             for (auto& [token, following] : candidates.tokens) {
                 converted.Tokens.emplace_back(token, std::move(following));
             }
+
             for (auto& [rule, data] : candidates.rules) {
+                if (IsIgnored(rule, data.ruleList)) {
+                    continue;
+                }
+
                 converted.Rules.emplace_back(rule, std::move(data.ruleList));
                 converted.Rules.back().ParserCallStack.emplace_back(rule);
             }
+
             return converted;
         }
 
-        antlr4::ANTLRInputStream Chars;
-        G::TLexer Lexer;
-        antlr4::BufferedTokenStream Tokens;
-        G::TParser Parser;
-        c3::CodeCompletionCore CompletionCore;
+        bool IsIgnored(TRuleId head, const std::vector<TRuleId> tail) const {
+            return IgnoredRules_.contains(head) ||
+                   AnyOf(tail, [this](TRuleId r) { return IgnoredRules_.contains(r); });
+        }
+
+        antlr4::ANTLRInputStream Chars_;
+        G::TLexer Lexer_;
+        antlr4::BufferedTokenStream Tokens_;
+        G::TParser Parser_;
+        c3::CodeCompletionCore CompletionCore_;
+        std::unordered_set<TRuleId> IgnoredRules_;
     };
 
 } // namespace NSQLComplete

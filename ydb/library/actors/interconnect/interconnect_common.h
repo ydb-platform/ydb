@@ -22,6 +22,11 @@ namespace NActors {
         REQUIRED, // encryption is mandatory
     };
 
+    enum class ESocketSendOptimization {
+        DISABLED,
+        IC_MSG_ZEROCOPY,
+    };
+
     struct TInterconnectSettings {
         TDuration Handshake;
         TDuration DeadPeer;
@@ -56,6 +61,7 @@ namespace NActors {
         TDuration MaxErrorSleep = TDuration::Seconds(1);
         double ErrorSleepRetryMultiplier = 4.0;
         TDuration EventDelay = TDuration::Zero();
+        ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
     };
 
     struct TWhiteboardSessionStatus {
@@ -121,6 +127,7 @@ namespace NActors {
         TString Cookie; // unique random identifier of a node instance (generated randomly at every start)
         std::unordered_map<ui16, TString> ChannelName;
         std::optional<ui32> OutgoingHandshakeInflightLimit;
+        std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

@@ -196,7 +196,9 @@ private:
             case NYql::NProto::Interval:
             case NYql::NProto::Interval64:
             case NYql::NProto::Datetime64:
-            case NYql::NProto::Timestamp64: {
+            case NYql::NProto::TzDatetime64:
+            case NYql::NProto::Timestamp64:
+            case NYql::NProto::TzTimestamp64: {
                 auto value = uv.template Get<i64>();
                 HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
                 break;
@@ -218,8 +220,9 @@ private:
                 HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
                 break;
             }
+            case NYql::NProto::Uuid:
             case NYql::NProto::String:
-            case NYql::NProto::Utf8:{
+            case NYql::NProto::Utf8: {
                 auto value = uv.AsStringRef();
                 HashCalcer.Update(reinterpret_cast<const ui8*>(value.Data()), value.Size());
                 break;
@@ -229,9 +232,19 @@ private:
                 HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
                 break;
             }
-            default: {
-                Y_ENSURE(false, TStringBuilder{} << "HashFunc for HashShuffle isn't supported with such type: " << static_cast<ui64>(KeyColumnTypes[keyIdx]));
+            case NYql::NProto::JsonDocument:
+            case NYql::NProto::DyNumber:
+            case NYql::NProto::Yson:
+            case NYql::NProto::Json: {
+                auto typeStr = TypeIds_Name(KeyColumnTypes[keyIdx]);;
+                Y_ENSURE(false, TStringBuilder{} << "HashFunc for HashShuffle isn't supported with such type: " << typeStr);
                 break;
+            }
+            // we prefer not to use default to incentivize developers write implementations for hashfunc (otherwise code won't be compiled)
+            case NYql::NProto::TypeIds_INT_MAX_SENTINEL_DO_NOT_USE_:
+            case NYql::NProto::TypeIds_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NYql::NProto::UNUSED: {
+                Y_ENSURE(false, "Attempted to use internal sentinel/special type markers. These types are for system use only and not valid for actual values.");
             }
         }
     }

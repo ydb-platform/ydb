@@ -307,6 +307,7 @@ public:
                     .Config(State_->Configuration->Snapshot())
                     .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                     .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                    .LangVer(State_->Types->LangVer)
                     .Pos(x.second.first)
             );
             allFutures.push_back(result.IgnoreResult());

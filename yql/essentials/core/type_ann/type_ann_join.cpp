@@ -1095,14 +1095,28 @@ namespace NTypeAnnImpl {
         }
 
         auto settingsValidator = [&](TStringBuf settingName, TExprNode& node, TExprContext& ctx) {
-            if (node.ChildrenSize() != 1) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                    TStringBuilder() << "No extra parameters are expected by setting '" << settingName << "'"));
-                return false;
+            if (settingName == "any") {
+                if (node.ChildrenSize() != 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                        TStringBuilder() << "No extra parameters are expected by setting '" << settingName << "'"));
+                    return false;
+                }
+            } else if (settingName == "rowCount") {
+                if (node.ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                        TStringBuilder() << "Setting '" << settingName << "' requires 1 extra parameter"));
+                    return false;
+                }
+                if (!node.Child(1)->IsAtom()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Expected atom"));
+                    return false;
+                }
+            } else {
+                YQL_ENSURE(false, "unknown setting");
             }
             return true;
         };
-        if (!EnsureValidSettings(input->Tail(), {"any"}, settingsValidator, ctx.Expr)) {
+        if (!EnsureValidSettings(input->Tail(), {"any", "rowCount"}, settingsValidator, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 

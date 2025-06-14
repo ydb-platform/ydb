@@ -310,7 +310,9 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     }
     info->SetAvailableSize(pDiskInfo->Metrics.GetAvailableSize());
     info->SetTotalSize(pDiskInfo->Metrics.GetTotalSize());
-    info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo->Metrics.GetState()));
+    if (auto s = pDiskInfo->Metrics.GetState(); pDiskInfo->Operational || s != NKikimrBlobStorage::TPDiskState::Normal) {
+        info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(s));
+    }
     info->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(pDiskInfo->Status));
     if (pDiskInfo->StatusTimestamp != TInstant::Zero()) {
         info->SetStatusChangeTimestamp(pDiskInfo->StatusTimestamp.GetValue());
@@ -398,6 +400,8 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     }
 
     info->SetLayoutCorrect(groupInfo->LayoutCorrect);
+    info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.OperatingStatus));
+    info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.ExpectedStatus));
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {
@@ -501,8 +505,8 @@ void TBlobStorageController::UpdateSystemViews() {
                     vslot.VDiskStatus, vslot.VDiskKind, false);
             }
         }
-        if (StorageConfig.HasBlobStorageConfig()) {
-            if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+        if (StorageConfig && StorageConfig->HasBlobStorageConfig()) {
+            if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                 const auto& ss = bsConfig.GetServiceSet();
                 for (const auto& group : ss.GetGroups()) {
                     if (!SysViewChangedGroups.count(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID))) {
@@ -543,7 +547,7 @@ void TBlobStorageController::UpdateSystemViews() {
                         NLayoutChecker::TGroupLayout layout(groupInfo->GetTopology());
                         NLayoutChecker::TDomainMapper mapper;
                         TGroupGeometryInfo geom(groupInfo->Type, SelfManagementEnabled
-                            ? StorageConfig.GetSelfManagementConfig().GetGeometry()
+                            ? StorageConfig->GetSelfManagementConfig().GetGeometry()
                             : NKikimrBlobStorage::TGroupGeometry());
 
                         Y_DEBUG_ABORT_UNLESS(pdiskIds.size() == groupInfo->GetTotalVDisksNum());

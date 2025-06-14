@@ -48,26 +48,21 @@ public:
 class TReplaceKeyAdapter {
 private:
     bool Reverse = false;
-    NArrow::TComparablePosition Value;
+    NArrow::TSimpleRow Value;
 
 public:
-    const NArrow::TComparablePosition& GetValue() const {
+    const NArrow::TSimpleRow& GetValue() const {
         return Value;
     }
 
-    TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
+    TReplaceKeyAdapter(const NArrow::TSimpleRow& rk, const bool reverse)
         : Reverse(reverse)
         , Value(rk) {
     }
 
-    TReplaceKeyAdapter(const NArrow::TComparablePosition& pos, const bool reverse)
-        : Reverse(reverse)
-        , Value(pos) {
-    }
-
     std::partial_ordering Compare(const TReplaceKeyAdapter& item) const {
         AFL_VERIFY(Reverse == item.Reverse);
-        const std::partial_ordering result = Value.Compare(item.Value);
+        const std::partial_ordering result = Value.CompareNotNull(item.Value);
         if (result == std::partial_ordering::equivalent) {
             return std::partial_ordering::equivalent;
         } else if (result == std::partial_ordering::less) {
@@ -197,7 +192,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
-    const TReplaceKeyAdapter GetFinish() const {
+    const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
 
@@ -246,13 +241,19 @@ public:
         };
     };
 
-    virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const = 0;
+    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
     void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
+    }
+
+    void StartFetchingDuplicateFilter(std::shared_ptr<NDuplicateFiltering::IFilterSubscriber>&& subscriber) {
+        NActors::TActivationContext::AsActorContext().Send(
+            std::static_pointer_cast<TSpecialReadContext>(GetContext())->GetDuplicatesManagerVerified(),
+            new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
     virtual TInternalPathId GetPathId() const = 0;
@@ -264,6 +265,9 @@ public:
     }
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
+
+    virtual NArrow::TSimpleRow GetMinPK() const = 0;
+    virtual NArrow::TSimpleRow GetMaxPK() const = 0;
 
     void Abort() {
         DoAbort();
@@ -288,8 +292,8 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
-        const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
+    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TSimpleRow& start,
+        const NArrow::TSimpleRow& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
@@ -328,6 +332,9 @@ private:
     virtual TConclusion<bool> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
 
+    virtual TConclusion<bool> DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
+        const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& indexes,
+        const THashMap<ui32, IDataSource::TFetchHeaderContext>& headers, const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) override;
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
@@ -344,8 +351,6 @@ private:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
         result.InsertValue("info", Portion->DebugString());
-        result.InsertValue("commit", Portion->GetCommitSnapshotOptional().value_or(TSnapshot::Zero()).DebugString());
-        result.InsertValue("insert", (ui64)Portion->GetInsertWriteIdOptional().value_or(TInsertWriteId(0)));
         return result;
     }
 
@@ -387,40 +392,19 @@ public:
         return Schema;
     }
 
-    virtual std::optional<TSnapshot> GetDataSnapshot() const override {
-        if (Portion->HasInsertWriteId()) {
-            if (Portion->HasCommitSnapshot()) {
-                return Portion->GetCommitSnapshotVerified();
-            } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
-                return GetContext()->GetReadMetadata()->GetRequestSnapshot();
-            }
-        }
-        return std::nullopt;
-    }
-
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }
 
-    virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const override {
+    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            AFL_VERIFY(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows());
-            return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows() - 1, 1);
+            return Portion->IndexKeyEnd();
         } else {
-            return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(0, 1);
+            return Portion->IndexKeyStart();
         }
     }
 
-    virtual bool DoAddTxConflict() override {
-        if (Portion->HasCommitSnapshot() || !Portion->HasInsertWriteId()) {
-            GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-            return true;
-        } else if (!GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(Portion->GetInsertWriteIdVerified());
-            return true;
-        }
-        return false;
-    }
+    virtual bool DoAddTxConflict() override;
 
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const override {
         return Schema->GetIndexInfo().HasIndexes(indexIds);
@@ -453,6 +437,14 @@ public:
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const override {
         return GetStageData().GetPortionAccessor().GetIndexRawBytes(indexIds, false);
+    }
+
+    virtual NArrow::TSimpleRow GetMinPK() const override {
+        return Portion->GetMeta().IndexKeyStart();
+    }
+
+    virtual NArrow::TSimpleRow GetMaxPK() const override {
+        return Portion->GetMeta().IndexKeyEnd();
     }
 
     const TPortionInfo& GetPortionInfo() const {

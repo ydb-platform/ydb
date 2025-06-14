@@ -97,7 +97,7 @@ struct TAsyncExpiringCacheConfig
     //! Time since last update, if it failed, after which an entry is removed.
     TDuration ExpireAfterFailedUpdateTime;
 
-    //! Time before next (background) update.
+    //! Time before next (background) update. If nullopt - background updates are disabled.
     std::optional<TDuration> RefreshTime;
 
     //! If set to true, cache will invoke DoGetMany once instead of DoGet on every entry during an update.

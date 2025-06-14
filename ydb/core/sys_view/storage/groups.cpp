@@ -37,6 +37,8 @@ public:
             {T::PutUserDataLatency::ColumnId, {E::kInfoFieldNumber, V::kPutUserDataLatencyFieldNumber}},
             {T::GetFastLatency::ColumnId, {E::kInfoFieldNumber, V::kGetFastLatencyFieldNumber}},
             {T::LayoutCorrect::ColumnId, {E::kInfoFieldNumber, V::kLayoutCorrectFieldNumber}},
+            {T::OperatingStatus::ColumnId, {E::kInfoFieldNumber, V::kOperatingStatusFieldNumber}},
+            {T::ExpectedStatus::ColumnId, {E::kInfoFieldNumber, V::kExpectedStatusFieldNumber}},
         };
         return fieldMap;
     }

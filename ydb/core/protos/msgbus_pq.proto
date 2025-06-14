@@ -36,6 +36,7 @@ message TPersQueuePartitionRequest {
         optional uint64 PartitionSessionId = 16;
         optional int64 LastOffset = 17;
 
+        optional uint64 SizeEstimate = 18;
     }
 
     message TCmdPublishDirectRead {
@@ -66,9 +67,9 @@ message TPersQueuePartitionRequest {
         optional string ClientId = 1; // mandatory
         optional int64 Offset = 2; // mandatory
         optional string SessionId = 4; // if not set, then no checks
-
         optional bool MirrorerRequest = 10 [default = false];
         optional bool Strict = 11 [default = false];
+        optional string CommittedMetadata = 12; // optional
     }
 
     message TCmdGetClientOffset {

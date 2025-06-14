@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-07-08)
+VERSION(2024-09-20)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/8ab82a2dc308c27fbdd0a87b5be7dddc623f1b0e.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/6d66ac51a49af7ee46f1ccac45d312352d8b942e.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -34,7 +34,7 @@ ELSEIF (OS_IOS)
         contrib/libs/cxxsupp/builtins
     )
 ELSEIF (OS_LINUX OR OS_DARWIN)
-    IF (ARCH_ARM7)
+    IF (ARCH_ARM6 OR ARCH_ARM7)
         # libcxxrt support for ARM is currently broken, use libcxxabi instead
         SET(CXX_RT "libcxxabi")
     ELSE()

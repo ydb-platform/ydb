@@ -882,6 +882,96 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
          });
     }
 
+    Y_UNIT_TEST(TxnReadOnly) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("one", "first", etcd);
+            Put("two", "second", etcd);
+            Put("three", "third", etcd);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("three");
+                    compare->set_value("3");
+                }
+
+                txnRequest.add_success()->mutable_request_range()->set_key("one");
+                txnRequest.add_failure()->mutable_request_range()->set_key("two");
+
+                etcdserverpb::TxnResponse txnResponse;
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
+
+                UNIT_ASSERT(!txnResponse.succeeded());
+
+                const auto& resp = txnResponse.responses(0).response_range();
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs().size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).key(), "two");
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).value(), "second");
+            }
+
+            Put("three", "3", etcd);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("three");
+                    compare->set_value("3");
+                }
+
+                txnRequest.add_success()->mutable_request_range()->set_key("one");
+                txnRequest.add_failure()->mutable_request_range()->set_key("two");
+
+                etcdserverpb::TxnResponse txnResponse;
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
+
+                UNIT_ASSERT(txnResponse.succeeded());
+
+                const auto& resp = txnResponse.responses(0).response_range();
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs().size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).key(), "one");
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).value(), "first");
+            }
+
+            Delete("three", etcd);
+
+            {
+                grpc::ClientContext txnCtx;
+                etcdserverpb::TxnRequest txnRequest;
+
+                {
+                    const auto compare = txnRequest.add_compare();
+                    compare->set_result(etcdserverpb::Compare_CompareResult_EQUAL);
+                    compare->set_target(etcdserverpb::Compare_CompareTarget_VALUE);
+                    compare->set_key("three");
+                    compare->set_value("3");
+                }
+
+                txnRequest.add_success()->mutable_request_range()->set_key("one");
+                txnRequest.add_failure()->mutable_request_range()->set_key("two");
+
+                etcdserverpb::TxnResponse txnResponse;
+                UNIT_ASSERT(etcd->Txn(&txnCtx, txnRequest, &txnResponse).ok());
+
+                UNIT_ASSERT(!txnResponse.succeeded());
+
+                const auto& resp = txnResponse.responses(0).response_range();
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs().size(), 1U);
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).key(), "two");
+                UNIT_ASSERT_VALUES_EQUAL(resp.kvs(0).value(), "second");
+            }
+        });
+    }
+
     Y_UNIT_TEST(TxnMultiKeysAndOperations) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             Put("one", "first", etcd);
@@ -1050,6 +1140,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 grpc::ClientContext compactCtx;
                 etcdserverpb::CompactionRequest compactionRequest;
                 compactionRequest.set_revision(revForCompact);
+                compactionRequest.set_physical(true);
                 etcdserverpb::CompactionResponse compactionResponse;
                 UNIT_ASSERT(etcd->Compact(&compactCtx, compactionRequest, &compactionResponse).ok());
             }

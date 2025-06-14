@@ -7,6 +7,8 @@
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/conveyor/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/usage/common.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -57,7 +59,7 @@ private:
     const TComputeShardingPolicy ComputeShardingPolicy;
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
-    const NConveyor::TProcessGuard ConveyorProcessGuard;
+    const NConveyorComposite::TProcessGuard ConveyorProcessGuard;
     std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
 
 public:
@@ -67,7 +69,7 @@ public:
     }
 
     ui64 GetConveyorProcessId() const {
-        return ConveyorProcessGuard.GetProcessId();
+        return ConveyorProcessGuard.GetInternalProcessId();
     }
 
     template <class T>
@@ -87,8 +89,8 @@ public:
 
     void AbortWithError(const TString& errorMessage) {
         if (AbortionFlag->Inc() == 1) {
-            NActors::TActivationContext::Send(
-                ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage)));
+            NActors::TActivationContext::Send(ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(
+                                                               TConclusionStatus::Fail(errorMessage), Counters.GetAbortsGuard()));
         }
     }
 
@@ -148,7 +150,7 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId);
+        const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
 };
 
 class IDataReader {

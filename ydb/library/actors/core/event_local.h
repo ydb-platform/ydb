@@ -20,10 +20,6 @@ namespace NActors {
         bool IsSerializable() const override {
             return false;
         }
-
-        static IEventBase* Load(TEventSerializedData*) {
-            Y_ENSURE(false, "Loading of local event " << TypeName<TEv>() << " type " << TEventType);
-        }
     };
 
 }

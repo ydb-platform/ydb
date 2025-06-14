@@ -1,13 +1,21 @@
 #pragma once
 
+#include <yql/essentials/sql/v1/complete/core/name.h>
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
 
 namespace NSQLComplete {
+
+    struct TEditRange {
+        size_t Begin = 0;
+        size_t Length = 0;
+    };
 
     struct TLocalSyntaxContext {
         using TKeywords = THashMap<TString, TVector<TString>>;
@@ -24,21 +32,42 @@ namespace NSQLComplete {
             EStatementKind StatementKind;
         };
 
+        struct TCluster {
+            TString Provider;
+        };
+
+        struct TObject {
+            TString Provider;
+            TString Cluster;
+            TString Path;
+            THashSet<EObjectKind> Kinds;
+            bool IsQuoted = false;
+
+            bool HasCluster() const {
+                return !Cluster.empty();
+            }
+        };
+
         TKeywords Keywords;
-        std::optional<TPragma> Pragma;
-        bool IsTypeName;
-        std::optional<TFunction> Function;
-        std::optional<THint> Hint;
+        TMaybe<TPragma> Pragma;
+        bool Type = false;
+        TMaybe<TFunction> Function;
+        TMaybe<THint> Hint;
+        TMaybe<TObject> Object;
+        TMaybe<TCluster> Cluster;
+        bool Binding = false;
+        TEditRange EditRange;
     };
 
     class ILocalSyntaxAnalysis {
     public:
         using TPtr = THolder<ILocalSyntaxAnalysis>;
 
-        virtual TLocalSyntaxContext Analyze(TCompletionInput input) = 0;
         virtual ~ILocalSyntaxAnalysis() = default;
+        virtual TLocalSyntaxContext Analyze(TCompletionInput input) = 0;
     };
 
-    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(TLexerSupplier lexer);
+    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(
+        TLexerSupplier lexer, const THashSet<TString>& IgnoredRules);
 
 } // namespace NSQLComplete

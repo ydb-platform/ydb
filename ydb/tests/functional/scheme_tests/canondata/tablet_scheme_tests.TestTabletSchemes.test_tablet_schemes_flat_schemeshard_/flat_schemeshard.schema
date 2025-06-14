@@ -5120,6 +5120,21 @@
                 "ColumnId": 40,
                 "ColumnName": "ReadBytesProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 41,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 42,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 43,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -5165,7 +5180,10 @@
                     37,
                     38,
                     39,
-                    40
+                    40,
+                    41,
+                    42,
+                    43
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6269,6 +6287,16 @@
                 "ColumnId": 18,
                 "ColumnName": "EncryptionIV",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "SrcPath",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "Topic",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6292,7 +6320,9 @@
                     15,
                     16,
                     17,
-                    18
+                    18,
+                    19,
+                    20
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6864,6 +6894,11 @@
                 "ColumnId": 9,
                 "ColumnName": "ResolvedTimestampsIntervalMs",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "SchemaChanges",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6878,7 +6913,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6951,6 +6987,11 @@
                 "ColumnId": 9,
                 "ColumnName": "ResolvedTimestampsIntervalMs",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "SchemaChanges",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6965,7 +7006,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8404,6 +8446,56 @@
             {
                 "ColumnId": 3,
                 "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 119,
+        "TableName": "SysView",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "SysViewType",
                 "ColumnType": "Uint32"
             }
         ],

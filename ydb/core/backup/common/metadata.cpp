@@ -1,5 +1,7 @@
 #include "metadata.h"
 
+#include <ydb/core/base/path.h>
+
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 
@@ -21,14 +23,40 @@ ui64 TMetadata::GetVersion() const {
     return *Version;
 }
 
+void TMetadata::AddChangefeed(const TChangefeedMetadata& changefeed) {
+    if (!Changefeeds) {
+        Changefeeds.emplace();
+    }
+    Changefeeds->push_back(changefeed);
+}
+
+const std::optional<std::vector<TChangefeedMetadata>>& TMetadata::GetChangefeeds() const {
+    return Changefeeds;
+}
+
+void TMetadata::SetEnablePermissions(bool enablePermissions) {
+    EnablePermissions = enablePermissions;
+}
+
+bool TMetadata::HasEnablePermissions() const {
+    return EnablePermissions.has_value();
+}
+
+bool TMetadata::GetEnablePermissions() const {
+    return *EnablePermissions;
+}
+
 TString TMetadata::Serialize() const {
     NJson::TJsonMap m;
     if (Version.Defined()) {
         m["version"] = *Version;
     }
+    if (EnablePermissions) {
+        m["permissions"] = static_cast<int>(*EnablePermissions);
+    }
 
     NJson::TJsonArray fullBackups;
-    for (auto &[tp, b] : FullBackups) {
+    for (const auto& [tp, b] : FullBackups) {
         NJson::TJsonMap backupMap;
         NJson::TJsonArray vts;
         vts.AppendValue(tp.Step);
@@ -37,6 +65,19 @@ TString TMetadata::Serialize() const {
         fullBackups.AppendValue(std::move(backupMap));
     }
     m["full_backups"] = fullBackups;
+
+    NJson::TJsonArray changefeeds;
+    if (Changefeeds) {
+        for (const auto& changefeed : *Changefeeds) {
+            NJson::TJsonMap changefeedMap;
+            changefeedMap["prefix"] = changefeed.ExportPrefix;
+            changefeedMap["name"] = changefeed.Name;
+            changefeeds.AppendValue(std::move(changefeedMap));
+        }
+    }
+    // We always serialize changefeeds in order to list them explicitly during import
+    m["changefeeds"] = changefeeds;
+
     return NJson::WriteJson(&m, false);
 }
 
@@ -50,7 +91,49 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
         result.Version = value.GetUIntegerSafe();
     }
 
+    if (json.Has("permissions")) {
+        const int val = json["permissions"].GetInteger();
+        result.EnablePermissions = val != 0;
+    }
+
+    if (json.Has("changefeeds")) {
+        // Changefeeds can be absent in older versions of metadata
+        result.Changefeeds.emplace(); // explicitly say that the listing of changefeeds is throgh metadata
+        const NJson::TJsonValue& changefeeds = json["changefeeds"];
+        for (const NJson::TJsonValue& changefeed : changefeeds.GetArray()) {
+            result.AddChangefeed({
+                .ExportPrefix = changefeed["prefix"].GetString(),
+                .Name = changefeed["name"].GetString(),
+            });
+        }
+    }
+
     return result;
+}
+
+TString TSchemaMapping::Serialize() const {
+    TString content;
+    TStringOutput ss(content);
+    NJson::TJsonWriter writer(&ss, false);
+
+    writer.OpenMap();
+    writer.WriteKey("exportedObjects");
+    writer.OpenMap();
+    for (const auto& item : Items) {
+        writer.WriteKey(item.ObjectPath);
+        writer.OpenMap();
+        writer.Write("exportPrefix", item.ExportPrefix);
+        if (item.IV) {
+            writer.Write("iv", item.IV->GetHexString());
+        }
+        writer.CloseMap();
+    }
+    writer.CloseMap();
+    writer.CloseMap();
+
+    writer.Flush();
+    ss.Flush();
+    return content;
 }
 
 bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
@@ -95,6 +178,37 @@ bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
         }
     }
     return true;
+}
+
+TString NormalizeItemPath(const TString& path) {
+    TString result = CanonizePath(path);
+    if (result.size() > 1 && result.front() == '/') {
+        result.erase(0, 1);
+    }
+    return result;
+}
+
+TString NormalizeItemPrefix(TString prefix) {
+    // Cut slshes from the beginning and from the end
+    size_t toCut = 0;
+    while (toCut < prefix.size() && prefix[toCut] == '/') {
+        ++toCut;
+    }
+    if (toCut) {
+        prefix.erase(0, toCut);
+    }
+
+    while (prefix && prefix.back() == '/') {
+        prefix.pop_back();
+    }
+    return prefix;
+}
+
+TString NormalizeExportPrefix(TString prefix) {
+    while (prefix && prefix.back() == '/') {
+        prefix.pop_back();
+    }
+    return prefix;
 }
 
 }

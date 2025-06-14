@@ -249,6 +249,10 @@ public:
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
+        if (Context.ComputeCtx) {
+            Context.ComputeCtx->StartTs = &Stats->StartTs;
+            Context.ComputeCtx->InputConsumed = &InputConsumed;
+        }
         if (Y_UNLIKELY(CollectFull())) {
             Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
         }
@@ -325,7 +329,8 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr, ComputationLogProvider.Get());
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
+            ComputationLogProvider.Get(), task.GetProgram().GetLangVer());
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -785,27 +790,34 @@ public:
         }
 
         if (Y_LIKELY(CollectBasic())) {
+            auto now = TInstant::Now();
             switch (runStatus) {
                 case ERunStatus::Finished:
                     // finished => waiting for nothing
-                    Stats->CurrentWaitInputTime = TDuration::Zero();
-                    Stats->CurrentWaitOutputTime = TDuration::Zero();
-                    Stats->FinishTs = TInstant::Now();
+                    Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                    Stats->CurrentWaitOutputStartTime = TInstant::Zero();
+                    Stats->FinishTs = now;
                     break;
                 case ERunStatus::PendingInput:
                     // output is checked first => not waiting for output
-                    Stats->CurrentWaitOutputTime = TDuration::Zero();
+                    Stats->CurrentWaitOutputStartTime = TInstant::Zero();
                     if (Y_LIKELY(InputConsumed)) {
                         // did smth => waiting for nothing
-                        Stats->CurrentWaitInputTime = TDuration::Zero();
+                        Stats->CurrentWaitInputStartTime = TInstant::Zero();
                     } else {
                         StartWaitingInput();
+                        if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {
+                            Stats->CurrentWaitInputStartTime = now;
+                        }
                     }
                     break;
                 case ERunStatus::PendingOutput:
                     // waiting for output => not waiting for input
-                    Stats->CurrentWaitInputTime = TDuration::Zero();
+                    Stats->CurrentWaitInputStartTime = TInstant::Zero();
                     StartWaitingOutput();
+                    if (Y_LIKELY(!Stats->CurrentWaitOutputStartTime)) {
+                        Stats->CurrentWaitOutputStartTime = now;
+                    }
                     break;
             }
         }
@@ -1076,7 +1088,6 @@ private:
             } else {
                 Stats->WaitStartTime += delta;
             }
-            Stats->CurrentWaitInputTime += delta;
         }
         StartWaitInputTime = now;
     }
@@ -1086,7 +1097,6 @@ private:
         if (Y_LIKELY(StartWaitOutputTime)) {
             auto delta = now - *StartWaitOutputTime;
             Stats->WaitOutputTime += delta;
-            Stats->CurrentWaitOutputTime += delta;
         }
         StartWaitOutputTime = now;
     }
@@ -1100,14 +1110,12 @@ private:
             } else {
                 Stats->WaitStartTime += delta;
             }
-            Stats->CurrentWaitInputTime += delta;
             StartWaitInputTime.reset();
             TDuration::Zero();
         }
         if (StartWaitOutputTime) {
             auto delta = now - *StartWaitOutputTime;
             Stats->WaitOutputTime += delta;
-            Stats->CurrentWaitOutputTime += delta;
             StartWaitOutputTime.reset();
         }
     }

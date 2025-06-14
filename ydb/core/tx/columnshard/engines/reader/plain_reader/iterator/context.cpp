@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 std::unique_ptr<NArrow::NMerger::TMergePartialStream> TSpecialReadContext::BuildMerger() const {
     return std::make_unique<NArrow::NMerger::TMergePartialStream>(GetReadMetadata()->GetReplaceKey(), GetProgramInputColumns()->GetSchema(),
-        GetCommonContext()->IsReverse(), IIndexInfo::GetSnapshotColumnNames());
+        GetCommonContext()->IsReverse(), IIndexInfo::GetSnapshotColumnNames(), std::nullopt);
 }
 
 ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources) {
@@ -30,7 +30,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
         if (!AskAccumulatorsScript) {
             NCommon::TFetchingScriptBuilder acc(*this);
             if (ui64 size = source->PredictAccessorsMemory()) {
-                acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>(size, EStageFeaturesIndexes::Accessors));
+                acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>(size, NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors));
             }
             acc.AddStep(std::make_shared<TPortionAccessorFetchingStep>());
             acc.AddStep(std::make_shared<TDetectInMem>(*GetFFColumns()));
@@ -90,25 +90,25 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     bool hasFilterSharding = false;
     if (needFilterSharding && !GetShardingColumns()->IsEmpty()) {
         hasFilterSharding = true;
-        acc.AddFetchingStep(*GetShardingColumns(), EStageFeaturesIndexes::Filter);
+        acc.AddFetchingStep(*GetShardingColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         if (!exclusiveSource) {
-            acc.AddFetchingStep(*GetPKColumns(), EStageFeaturesIndexes::Filter);
-            acc.AddFetchingStep(*GetSpecColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetPKColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
+            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
-        acc.AddAssembleStep(acc.GetAddedFetchingColumns(), "SPEC_SHARDING", EStageFeaturesIndexes::Filter, false);
+        acc.AddAssembleStep(acc.GetAddedFetchingColumns(), "SPEC_SHARDING", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
         acc.AddStep(std::make_shared<TShardingFilter>());
     }
     if (!GetEFColumns()->GetColumnsCount() && !partialUsageByPredicate) {
         acc.SetBranchName("simple");
-        acc.AddFetchingStep(*GetFFColumns(), EStageFeaturesIndexes::Fetching);
+        acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
         if (needFilterDeletion) {
-            acc.AddFetchingStep(*GetDeletionColumns(), EStageFeaturesIndexes::Fetching);
+            acc.AddFetchingStep(*GetDeletionColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
         }
         if (needSnapshots) {
-            acc.AddFetchingStep(*GetSpecColumns(), EStageFeaturesIndexes::Fetching);
+            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
         }
         if (!exclusiveSource) {
-            acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Fetching);
+            acc.AddFetchingStep(*GetMergeColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
         } else {
             if (acc.GetAddedFetchingColumns().GetColumnsCount() == 1 && GetSpecColumns()->Contains(acc.GetAddedFetchingColumns()) && !hasFilterSharding) {
                 return nullptr;
@@ -116,76 +116,77 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
         if (acc.GetAddedFetchingColumns().GetColumnsCount() || hasFilterSharding || needFilterDeletion) {
             if (needSnapshots) {
-                acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Fetching, false);
+                acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
             }
             if (!exclusiveSource) {
-                acc.AddAssembleStep(*GetMergeColumns(), "LAST_PK", EStageFeaturesIndexes::Fetching, false);
+                acc.AddAssembleStep(*GetMergeColumns(), "LAST_PK", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
             }
             if (needSnapshots) {
                 acc.AddStep(std::make_shared<TSnapshotFilter>());
             }
             if (needFilterDeletion) {
-                acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", EStageFeaturesIndexes::Fetching, false);
+                acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
                 acc.AddStep(std::make_shared<TDeletionFilter>());
             }
-            acc.AddAssembleStep(acc.GetAddedFetchingColumns().GetColumnIds(), "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);
+            acc.AddAssembleStep(acc.GetAddedFetchingColumns().GetColumnIds(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching,
+                !exclusiveSource);
         } else {
             return nullptr;
         }
     } else if (exclusiveSource) {
         acc.SetBranchName("exclusive");
-        acc.AddFetchingStep(*GetEFColumns(), EStageFeaturesIndexes::Filter);
+        acc.AddFetchingStep(*GetEFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         if (needFilterDeletion) {
-            acc.AddFetchingStep(*GetDeletionColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetDeletionColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddFetchingStep(*GetSpecColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
         if (partialUsageByPredicate) {
-            acc.AddFetchingStep(*GetPredicateColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetPredicateColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
 
         AFL_VERIFY(acc.GetAddedFetchingColumns().GetColumnsCount());
 
         if (needFilterDeletion) {
-            acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", EStageFeaturesIndexes::Filter, false);
+            acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
         }
         if (partialUsageByPredicate) {
-            acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", EStageFeaturesIndexes::Filter, false);
+            acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
+            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         } else if (GetProgramInputColumns()->Cross(*GetSpecColumns())) {
             acc.AddStep(std::make_shared<TBuildFakeSpec>());
         }
-        acc.AddFetchingStep(*GetFFColumns(), EStageFeaturesIndexes::Fetching);
-        acc.AddAssembleStep(*GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);
+        acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
+        acc.AddAssembleStep(*GetFFColumns(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, !exclusiveSource);
     } else {
         acc.SetBranchName("merge");
-        acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Filter);
-        acc.AddFetchingStep(*GetEFColumns(), EStageFeaturesIndexes::Filter);
+        acc.AddFetchingStep(*GetMergeColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
+        acc.AddFetchingStep(*GetEFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         if (needFilterDeletion) {
-            acc.AddFetchingStep(*GetDeletionColumns(), EStageFeaturesIndexes::Filter);
+            acc.AddFetchingStep(*GetDeletionColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
         AFL_VERIFY(acc.GetAddedFetchingColumns().GetColumnsCount());
 
-        acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
-        acc.AddAssembleStep(*GetPKColumns(), "PK", EStageFeaturesIndexes::Filter, false);
+        acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
+        acc.AddAssembleStep(*GetPKColumns(), "PK", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
         if (needSnapshots) {
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
         if (needFilterDeletion) {
-            acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", EStageFeaturesIndexes::Filter, false);
+            acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
         }
         if (partialUsageByPredicate) {
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
-        acc.AddFetchingStep(*GetFFColumns(), EStageFeaturesIndexes::Fetching);
-        acc.AddAssembleStep(*GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);
+        acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
+        acc.AddAssembleStep(*GetFFColumns(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, !exclusiveSource);
     }
     acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
     return std::move(acc).Build();

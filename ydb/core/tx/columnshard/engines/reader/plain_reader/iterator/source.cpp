@@ -6,9 +6,10 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
@@ -36,8 +37,9 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
             return;
         }
         TFetchingScriptCursor cursor(FetchingPlan, 0);
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        const auto& commonContext = *GetContext()->GetCommonContext();
+        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     }
 }
 
@@ -85,7 +87,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         if (columnChunks.empty()) {
             continue;
         }
-        auto itFilter = cFilter.GetIterator(false, Portion->GetRecordsCount());
+        auto itFilter = cFilter.GetBegin(false, Portion->GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
             AFL_VERIFY(!itFinished);
@@ -140,10 +142,11 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
 
     std::optional<TSnapshot> ss;
-    if (Portion->HasInsertWriteId()) {
-        if (Portion->HasCommitSnapshot()) {
-            ss = Portion->GetCommitSnapshotVerified();
-        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
+    if (Portion->GetPortionType() == EPortionType::Written) {
+        const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
+        if (portion->HasCommitSnapshot()) {
+            ss = portion->GetCommitSnapshotVerified();
+        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -170,8 +173,9 @@ private:
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         AFL_VERIFY(Step.Next());
-        auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        const auto& commonContext = *Source->GetContext()->GetCommonContext();
+        auto task = std::make_shared<TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     }
 
 public:
@@ -194,60 +198,18 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     return true;
 }
 
-bool TCommittedDataSource::DoStartFetchingColumns(
-    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& /*columns*/) {
-    if (ReadStarted) {
-        return false;
-    }
-    ReadStarted = true;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
-
-    std::shared_ptr<IBlobsStorageOperator> storageOperator = GetContext()->GetCommonContext()->GetStoragesManager()->GetInsertOperator();
-    auto readAction = storageOperator->StartReadingAction(NBlobOperations::EConsumer::SCAN);
-
-    readAction->SetIsBackgroundProcess(false);
-    readAction->AddRange(CommittedBlob.GetBlobRange());
-
-    std::vector<std::shared_ptr<IBlobsReadingAction>> actions = { readAction };
-    auto constructor = std::make_shared<NCommon::TBlobsFetcherTask>(actions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
-    return true;
-}
-
-void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool /*sequential*/) {
-    TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    const ISnapshotSchema::TPtr batchSchema =
-        GetContext()->GetReadMetadata()->GetIndexVersions().GetSchemaVerified(GetCommitted().GetSchemaVersion());
-    const ISnapshotSchema::TPtr resultSchema = GetContext()->GetReadMetadata()->GetResultSchema();
-    if (!AssembledFlag) {
-        AssembledFlag = true;
-        AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
-        auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);
-        auto schema = GetContext()->GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaVersion());
-        auto rBatch = NArrow::DeserializeBatch(
-            bData, std::make_shared<arrow::Schema>(CommittedBlob.GetSchemaSubset().Apply(schema.begin(), schema.end())));
-        AFL_VERIFY(rBatch)("schema", schema.ToString());
-        auto batch = std::make_shared<NArrow::TGeneralContainer>(rBatch);
-        std::set<ui32> columnIdsToDelete = batchSchema->GetColumnIdsToDelete(resultSchema);
-        if (!columnIdsToDelete.empty()) {
-            batch->DeleteFieldsByIndex(batchSchema->ConvertColumnIdsToIndexes(columnIdsToDelete));
-        }
-        TSnapshot ss = TSnapshot::Zero();
-        if (CommittedBlob.IsCommitted()) {
-            ss = CommittedBlob.GetCommittedSnapshotVerified();
-        } else {
-            ss = GetContext()->GetReadMetadata()->IsMyUncommitted(CommittedBlob.GetInsertWriteId())
-                     ? GetContext()->GetReadMetadata()->GetRequestSnapshot()
-                     : TSnapshot::Zero();
-        }
-        GetContext()->GetReadMetadata()->GetIndexInfo().AddSnapshotColumns(*batch, ss, (ui64)CommittedBlob.GetInsertWriteId());
-        GetContext()->GetReadMetadata()->GetIndexInfo().AddDeleteFlagsColumn(*batch, CommittedBlob.GetIsDelete());
-        MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
-        if (CommittedBlob.GetIsDelete()) {
-            MutableStageData().AddFilter(NArrow::TColumnFilter::BuildDenyFilter());
+bool TPortionDataSource::DoAddTxConflict() {
+    if (Portion->IsCommitted()) {
+        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        return true;
+    } else {
+        const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
+        if (!GetContext()->GetReadMetadata()->IsMyUncommitted(wPortion->GetInsertWriteId())) {
+            GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
+            return true;
         }
     }
-    MutableStageData().SyncTableColumns(columns->GetSchema()->fields(), *resultSchema, GetRecordsCount());
+    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

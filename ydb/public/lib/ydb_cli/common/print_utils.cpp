@@ -54,7 +54,7 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
 
 TString PrettySize(ui64 size) {
     double sizeFormat = size;
-    return ToString(HumanReadableSize(sizeFormat, ESizeFormat::SF_QUANTITY)) + " B";
+    return ToString(HumanReadableSize(sizeFormat, ESizeFormat::SF_QUANTITY)) + "B";
 }
 
 TString PrettyNumber(ui64 number) {

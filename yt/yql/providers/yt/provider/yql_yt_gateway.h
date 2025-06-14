@@ -13,6 +13,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/file_storage/storage.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 
@@ -251,6 +252,7 @@ public:
         OPTION_FIELD(TPosition, Pos)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -360,6 +362,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
@@ -386,6 +389,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
     };
 
@@ -432,6 +436,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
+        OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
     };
 
     struct TCalcResult : public NCommon::TOperationResult {

@@ -180,4 +180,6 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
 bool IsCachedJoinOption(TStringBuf name);
 bool IsCachedJoinLinkOption(TStringBuf name);
 
+void GetPruneKeysColumnsForJoinLeaves(const NNodes::TCoEquiJoinTuple& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& columnsForPruneKeysExtractor);
+
 }

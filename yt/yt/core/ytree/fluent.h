@@ -167,7 +167,6 @@ private:
 public:
     class TFluentAny;
     template <class TParent> class TAny;
-    template <class TParent> class TToAttributes;
     template <class TParent> class TFluentAttributes;
     template <class TParent> class TFluentList;
     template <class TParent> class TFluentMap;
@@ -206,14 +205,14 @@ public:
         }
     };
 
-    template <template <class TParent> class TThis, class TParent, class TShallowThis>
+    // TDeepThis is the deepest type in the inheritance hierarchy.
+    // It may be an rvalue reference to that type when working with a move-only fluent object.
+    // TShallowThis is the type used in nested fluent function invocation to represent TDeepThis with all parents erased.
+    template <class TParent, class TDeepThis, class TShallowThis>
     class TFluentFragmentBase
         : public TFluentBase<TParent>
     {
     public:
-        using TDeepThis = TThis<TParent>;
-        using TUnwrappedParent = typename TFluentYsonUnwrapper<TParent>::TUnwrapped;
-
         explicit TFluentFragmentBase(NYson::IYsonConsumer* consumer, TParent parent = TParent())
             : TFluentBase<TParent>(consumer, std::move(parent))
         { }
@@ -418,86 +417,22 @@ public:
     };
 
     template <class TParent = TFluentYsonVoid>
-    class TFluentAttributes
-        : public TFluentFragmentBase<TFluentAttributes, TParent, TFluentMap<TFluentYsonVoid>>
-    {
-    public:
-        using TThis = TFluentAttributes<TParent>;
-        using TUnwrappedParent = typename TFluentYsonUnwrapper<TParent>::TUnwrapped;
-
-        explicit TFluentAttributes(NYson::IYsonConsumer* consumer, TParent parent = TParent())
-            : TFluentFragmentBase<TFluentYsonBuilder::TFluentAttributes, TParent, TFluentMap<TFluentYsonVoid>>(consumer, std::move(parent))
-        { }
-
-        template <size_t Size>
-        TAny<TThis> Item(const char (&key)[Size])
-        {
-            return Item(TStringBuf(key, Size - 1));
-        }
-
-        TAny<TThis> Item(TStringBuf key)
-        {
-            this->Consumer_->OnKeyedItem(key);
-            return TAny<TThis>(this->Consumer_, std::move(*this));
-        }
-
-        TThis& Items(const IMapNodePtr& map)
-        {
-            for (const auto& [key, child] : map->GetChildren()) {
-                this->Consumer_->OnKeyedItem(key);
-                VisitTree(child, this->Consumer_, true);
-            }
-            return *this;
-        }
-
-        TThis& Items(const IAttributeDictionary& attributes)
-        {
-            for (const auto& [key, value] : attributes.ListPairs()) {
-                this->Consumer_->OnKeyedItem(key);
-                this->Consumer_->OnRaw(value);
-            }
-            return *this;
-        }
-
-        TThis& Items(const NYson::TYsonString& attributes)
-        {
-            YT_VERIFY(attributes.GetType() == NYson::EYsonType::MapFragment);
-            this->Consumer_->OnRaw(attributes);
-            return *this;
-        }
-
-        TThis& OptionalItem(TStringBuf key, const auto& optionalValue, auto&&... extraArgs)
-        {
-            if (optionalValue) {
-                this->Consumer_->OnKeyedItem(key);
-                WriteValue(this->Consumer_, optionalValue, std::forward<decltype(extraArgs)>(extraArgs)...);
-            }
-            return *this;
-        }
-
-        TUnwrappedParent EndAttributes()
-        {
-            this->Consumer_->OnEndAttributes();
-            return this->GetUnwrappedParent();
-        }
-    };
-
-    template <class TParent = TFluentYsonVoid>
     class TFluentList
-        : public TFluentFragmentBase<TFluentList, TParent, TFluentList<TFluentYsonVoid>>
+        : public TFluentFragmentBase<TParent, TFluentList<TParent>, TFluentList<TFluentYsonVoid>>
     {
     public:
         using TThis = TFluentList<TParent>;
         using TUnwrappedParent = typename TFluentYsonUnwrapper<TParent>::TUnwrapped;
 
         explicit TFluentList(NYson::IYsonConsumer* consumer, TParent parent = TParent())
-            : TFluentFragmentBase<TFluentYsonBuilder::TFluentList, TParent, TFluentList<TFluentYsonVoid>>(consumer, std::move(parent))
+            : TFluentFragmentBase<TParent, TThis, TFluentList<TFluentYsonVoid>>(consumer, std::move(parent))
         { }
 
         TAny<TThis> Item()
         {
-            this->Consumer_->OnListItem();
-            return TAny<TThis>(this->Consumer_, std::move(*this));
+            auto* consumer = this->Consumer_;
+            consumer->OnListItem();
+            return TAny<TThis>(consumer, std::move(*this));
         }
 
         TThis& Items(const IListNodePtr& list)
@@ -525,63 +460,93 @@ public:
         }
     };
 
+    template <class TParent, class TDeepThis>
+    class TFluentMapFragmentBase
+        : public TFluentFragmentBase<TParent, TDeepThis, TFluentMap<TFluentYsonVoid>>
+    {
+    public:
+        explicit TFluentMapFragmentBase(NYson::IYsonConsumer* consumer, TParent parent = TParent())
+            : TFluentFragmentBase<TParent, TDeepThis, TFluentMap<TFluentYsonVoid>>(consumer, std::move(parent))
+        { }
+
+        template <size_t Size>
+        TAny<TDeepThis> Item(const char (&key)[Size])
+        {
+            return Item(TStringBuf(key, Size - 1));
+        }
+
+        TAny<TDeepThis> Item(TStringBuf key)
+        {
+            auto* consumer = this->Consumer_;
+            consumer->OnKeyedItem(key);
+            return TAny<TDeepThis>(consumer, static_cast<TDeepThis&&>(*this));
+        }
+
+        TDeepThis& Items(const IMapNodePtr& map)
+        {
+            for (const auto& [key, child] : map->GetChildren()) {
+                this->Consumer_->OnKeyedItem(key);
+                VisitTree(child, this->Consumer_, true);
+            }
+            return static_cast<TDeepThis&>(*this);
+        }
+
+        TDeepThis& Items(const IAttributeDictionary& attributes)
+        {
+            for (const auto& [key, value] : attributes.ListPairs()) {
+                this->Consumer_->OnKeyedItem(key);
+                this->Consumer_->OnRaw(value);
+            }
+            return static_cast<TDeepThis&>(*this);
+        }
+
+        TDeepThis& Items(const NYson::TYsonString& attributes)
+        {
+            YT_VERIFY(attributes.GetType() == NYson::EYsonType::MapFragment);
+            this->Consumer_->OnRaw(attributes);
+            return static_cast<TDeepThis&>(*this);
+        }
+
+        TDeepThis& OptionalItem(TStringBuf key, const auto& optionalValue, auto&&... extraArgs)
+        {
+            if (optionalValue) {
+                this->Consumer_->OnKeyedItem(key);
+                WriteValue(this->Consumer_, optionalValue, std::forward<decltype(extraArgs)>(extraArgs)...);
+            }
+            return static_cast<TDeepThis&>(*this);
+        }
+    };
+
+    template <class TParent = TFluentYsonVoid>
+    class TFluentAttributes
+        : public TFluentMapFragmentBase<TParent, TFluentAttributes<TParent>>
+    {
+    public:
+        using TThis = TFluentAttributes<TParent>;
+        using TUnwrappedParent = typename TFluentYsonUnwrapper<TParent>::TUnwrapped;
+
+        explicit TFluentAttributes(NYson::IYsonConsumer* consumer, TParent parent = TParent())
+            : TFluentMapFragmentBase<TParent, TThis>(consumer, std::move(parent))
+        { }
+
+        TUnwrappedParent EndAttributes()
+        {
+            this->Consumer_->OnEndAttributes();
+            return this->GetUnwrappedParent();
+        }
+    };
+
     template <class TParent = TFluentYsonVoid>
     class TFluentMap
-        : public TFluentFragmentBase<TFluentMap, TParent, TFluentMap<TFluentYsonVoid>>
+        : public TFluentMapFragmentBase<TParent, TFluentMap<TParent>>
     {
     public:
         using TThis = TFluentMap<TParent>;
         using TUnwrappedParent = typename TFluentYsonUnwrapper<TParent>::TUnwrapped;
 
         explicit TFluentMap(NYson::IYsonConsumer* consumer, TParent parent = TParent())
-            : TFluentFragmentBase<TFluentYsonBuilder::TFluentMap, TParent, TFluentMap<TFluentYsonVoid>>(consumer, std::move(parent))
+            : TFluentMapFragmentBase<TParent, TThis>(consumer, std::move(parent))
         { }
-
-        template <size_t Size>
-        TAny<TThis> Item(const char (&key)[Size])
-        {
-            return Item(TStringBuf(key, Size - 1));
-        }
-
-        TAny<TThis> Item(TStringBuf key)
-        {
-            this->Consumer_->OnKeyedItem(key);
-            return TAny<TThis>(this->Consumer_, std::move(*this));
-        }
-
-        TThis& Items(const IMapNodePtr& map)
-        {
-            for (const auto& [key, child] : map->GetChildren()) {
-                this->Consumer_->OnKeyedItem(key);
-                VisitTree(child, this->Consumer_, true);
-            }
-            return *this;
-        }
-
-        TThis& Items(const IAttributeDictionary& attributes)
-        {
-            for (const auto& [key, value] : attributes.ListPairs()) {
-                this->Consumer_->OnKeyedItem(key);
-                this->Consumer_->OnRaw(value);
-            }
-            return *this;
-        }
-
-        TThis& Items(const NYson::TYsonString& attributes)
-        {
-            YT_VERIFY(attributes.GetType() == NYson::EYsonType::MapFragment);
-            this->Consumer_->OnRaw(attributes);
-            return *this;
-        }
-
-        TThis& OptionalItem(TStringBuf key, const auto& optionalValue, auto&&... extraArgs)
-        {
-            if (optionalValue) {
-                this->Consumer_->OnKeyedItem(key);
-                WriteValue(this->Consumer_, optionalValue, std::forward<decltype(extraArgs)>(extraArgs)...);
-            }
-            return *this;
-        }
 
         TUnwrappedParent EndMap()
         {
@@ -672,7 +637,6 @@ private:
     TStringStream Output_;
     NYson::TYsonWriter Writer_;
     NYson::EYsonType Type_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -699,7 +663,6 @@ public:
 
 private:
     const std::unique_ptr<ITreeBuilder> Builder_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -747,7 +710,6 @@ public:
 
 private:
     const TIntrusivePtr<TState> State_;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

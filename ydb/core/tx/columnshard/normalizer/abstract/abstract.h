@@ -51,6 +51,7 @@ public:
     }
 };
 
+// DONT REMOVE AND DONT CHANGE PLACES! PERSISTENT! ADD Deprecated PREFIX FOR REMOVED NORMALIZER
 enum class ENormalizerSequentialId : ui32 {
     Granules = 1,
     Chunks,
@@ -59,15 +60,17 @@ enum class ENormalizerSequentialId : ui32 {
     DeprecatedPortionsMetadata,
     CleanGranuleId,
     DeprecatedEmptyPortionsCleaner,
-    CleanInsertionDedup,
+    DeprecatedCleanInsertionDedup,
     GCCountersNormalizer,
-    RestorePortionFromChunks,
+    DeprecatedRestorePortionFromChunks,
     SyncPortionFromChunks,
     DeprecatedRestoreV1Chunks,
-    SyncMinSnapshotFromChunks,
+    DeprecatedSyncMinSnapshotFromChunks,
     DeprecatedRestoreV1Chunks_V1,
     RestoreV1Chunks_V2,
     RestoreV2Chunks,
+    CleanDeprecatedSnapshot,
+    RestoreV0ChunksMeta,
 
     MAX
 };

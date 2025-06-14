@@ -16,6 +16,7 @@ ENDIF()
 SRCS(
     acceleration.cpp
     assimilation.cpp
+    backpressure.cpp
     block_race.cpp
     counting_events.cpp
     deadlines.cpp
@@ -41,6 +42,7 @@ SRCS(
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    self_heal.cpp
     shred.cpp
     snapshots.cpp
     space_check.cpp
@@ -48,6 +50,7 @@ SRCS(
     ut_helpers.cpp
     validation.cpp
     vdisk_malfunction.cpp
+    group_size_in_units.cpp
 )
 
 PEERDIR(
@@ -65,6 +68,7 @@ RECURSE_FOR_TESTS(
     ut_balancing
     ut_blob_depot
     ut_blob_depot_fat
+    ut_check_integrity
     ut_donor
     ut_group_reconfiguration
     ut_huge

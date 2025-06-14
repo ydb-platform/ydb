@@ -647,7 +647,20 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 42)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
+class IFunctionTypeInfoBuilder18: public IFunctionTypeInfoBuilder17 {
+public:
+    virtual void SetMinLangVer(ui32 langver) = 0;
+
+    virtual void SetMaxLangVer(ui32 langver) = 0;
+
+    virtual ui32 GetCurrentLangVer() const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 43)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder18;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 42)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder17;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 32)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder16;

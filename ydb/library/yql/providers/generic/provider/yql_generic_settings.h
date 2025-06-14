@@ -10,8 +10,12 @@ namespace NYql {
     struct TGenericSettings {
         using TConstPtr = std::shared_ptr<const TGenericSettings>;
 
-        NCommon::TConfSetting<bool, false> UsePredicatePushdown;
-        NCommon::TConfSetting<TString, false> DateTimeFormat;
+    private:
+        static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
+    public:
+
+        NCommon::TConfSetting<bool, Static> UsePredicatePushdown;
+        NCommon::TConfSetting<TString, Static> DateTimeFormat;
 
         struct TDefault {
             static constexpr bool UsePredicatePushdown = false;

@@ -10,6 +10,7 @@
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/http_client/raw_client.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <util/generic/size_literals.h>
 
@@ -99,15 +100,7 @@ void TRetryfulWriter::FlushBuffer(bool lastBlock)
 
 void TRetryfulWriter::Send(const TBuffer& buffer)
 {
-    THttpHeader header("PUT", Command_);
-    header.SetInputFormat(Format_);
-    header.MergeParameters(Parameters_);
-    header.SetRequestCompression(ToString(Context_.Config->ContentEncoding));
-
     auto transactionId = (WriteTransaction_ ? WriteTransaction_->GetId() : ParentTransactionId_);
-
-    NDetail::TRequestConfig config;
-    config.IsHeavy = true;
 
     NDetail::RequestWithRetry<void>(
         CreateDefaultRequestRetryPolicy(Context_.Config),
@@ -116,17 +109,26 @@ void TRetryfulWriter::Send(const TBuffer& buffer)
                 RawClient_, ClientRetryPolicy_, Context_,
                 transactionId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
 
-            auto input = std::make_unique<TBufferInput>(buffer);
-            header.AddTransactionId(attemptTx.GetId(), /* overwrite = */ true);
+            std::unique_ptr<IOutputStream> stream;
+            std::visit([this, &attemptTx, &stream] (const auto& options) -> void {
+                using TType = std::decay_t<decltype(options)>;
+                if constexpr (std::is_same_v<TType, TFileWriterOptions>) {
+                    stream = NDetail::NRawClient::WriteFile(Context_, attemptTx.GetId(), Path_, options);
+                } else if constexpr (std::is_same_v<TType, TTableWriterOptions>) {
+                    stream = NDetail::NRawClient::WriteTable(Context_, attemptTx.GetId(), Path_, Format_, options);
+                } else {
+                    static_assert(TDependentFalse<TType>);
+                }
+            }, Options_);
 
-            auto request = NDetail::StartRequestWithoutRetry(Context_, header, config);
-            TransferData(input.get(), request->GetStream());
-            request->Finish()->GetResponse();
+            auto input = std::make_unique<TBufferInput>(buffer);
+            TransferData(input.get(), stream.get());
+            stream->Finish();
 
             attemptTx.Commit();
         });
 
-    Parameters_ = SecondaryParameters_; // all blocks except the first one are appended
+    Path_ = SecondaryPath_; // all blocks except the first one are appended
 }
 
 void TRetryfulWriter::SendThread()

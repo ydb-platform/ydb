@@ -178,7 +178,7 @@ Below is the explanation of the configuration file structure:
          In case the Service Account authentication is used, either explicitly
          or through the YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS env, the key file
          must be generated as written in the following document:
-            https://cloud.yandex.com/en/docs/iam/operations/authorized-key/create
+            https://yandex.cloud/en/docs/iam/operations/authorized-key/create
         -->
         <!-- Custom TLS certificates, if needed -->
         <tls-certificate-file>ca.crt</tls-certificate-file>

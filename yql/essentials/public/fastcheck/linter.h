@@ -4,6 +4,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/set.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 namespace NYql {
 namespace NFastCheck {
@@ -40,6 +41,7 @@ struct TChecksRequest {
     THashMap<TString, TString> ClusterMapping;
     ESyntax Syntax = ESyntax::YQL;
     ui16 SyntaxVersion = 1;
+    TLangVersion LangVer = MinLangVersion;
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
     TMaybe<TVector<TCheckFilter>> Filters;

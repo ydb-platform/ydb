@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
     #include <tmmintrin.h>
     #include <nmmintrin.h>
     #include <wmmintrin.h>
@@ -12,7 +12,7 @@ namespace NYT::NCrc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifdef YT_USE_SSE42
+#ifdef __SSE4_2__
 
 inline __m128i _mm_shift_right_si128(__m128i v, ui8 offset)
 {

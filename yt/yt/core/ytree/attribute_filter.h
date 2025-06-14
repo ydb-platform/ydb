@@ -175,12 +175,12 @@ void FormatValue(
 struct TShrunkAttributeFilterView
 {
     const TAttributeFilter& AttributeFilter;
-    const size_t Limit;
+    const i64 Limit;
 };
 
 TShrunkAttributeFilterView MakeShrunkFormattableView(
     const TAttributeFilter& attributeFilter,
-    size_t limit);
+    i64 limit);
 
 void FormatValue(
     TStringBuilderBase* builder,

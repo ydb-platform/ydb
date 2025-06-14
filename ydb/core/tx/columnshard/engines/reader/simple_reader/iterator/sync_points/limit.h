@@ -59,11 +59,8 @@ private:
             , Reverse(Source->GetContext()->GetReadMetadata()->IsDescSorted())
             , Delta(Reverse ? -1 : 1) {
             AFL_VERIFY(Source);
-            auto arr = Source->GetStart().GetValue().GetArrays();
-            auto batch =
-                arrow::RecordBatch::Make(Source->GetSourceSchema()->GetIndexInfo().GetReplaceKey(), arr.front()->length(), std::move(arr));
-            SortableRecord =
-                std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Source->GetStart().GetValue().GetMonoPosition(), Reverse);
+            auto batch = Source->GetStart().GetValue().ToBatch();
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
         }
 
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
@@ -76,7 +73,7 @@ private:
             , Filter(filter ? filter : std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter())) {
             AFL_VERIFY(arrs.size());
             AFL_VERIFY(arrs.front()->GetRecordsCount());
-            FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(Reverse, arrs.front()->GetRecordsCount()));
+            FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetBegin(Reverse, arrs.front()->GetRecordsCount()));
             auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
             auto copyArrs = arrs;
             auto batch = std::make_shared<NArrow::TGeneralContainer>(prefixSchema->fields(), std::move(copyArrs));

@@ -5,7 +5,7 @@ on:
     branches:
       - 'main'
       - 'stable-**'
-    paths: 
+    paths:
       - 'ydb/docs/**'
   workflow_dispatch:
 
@@ -19,11 +19,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
+          cli-version: stable
+
   upload:
     needs: build
     runs-on: ubuntu-latest
@@ -41,6 +44,7 @@ jobs:
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
           storage-region: ${{ vars.DOCS_AWS_REGION }}
+
   release:
     needs: upload
     runs-on: ubuntu-latest
@@ -48,23 +52,36 @@ jobs:
       group: release-documentation-${{ github.ref }}
       cancel-in-progress: true
     steps:
-      - name: Extract version # cut off excessive symbols from the git branch name to create a short version name
-        shell: bash
-        run: echo "version=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" | sed -e 's|stable-|v|g' -e 's|-|.|g' >> $GITHUB_OUTPUT
+      - name: Extract version # turn branch name into version string
         id: extract_version
-      - name: Set update-only-version # commits to only one branch need to update the default docs revision
+        shell: bash
+        run: |
+          echo "version=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" \
+            | sed -e 's|stable-|v|g' -e 's|-|.|g' \
+            >> $GITHUB_OUTPUT
+
+      - name: Get default branch name
+        id: get_default
+        run: |
+          default=$(curl -fsS \
+            https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/docs/default-branch.txt)
+          echo "DEFAULT_BRANCH=$default" >> $GITHUB_ENV
+
+      - name: Set update-only-version # only skip default-branch commits
         id: set-update-only-version
         run: |
-          if [[ "${GITHUB_REF##*/}" == "main" ]]; then
+          current=${GITHUB_REF##*/}    # e.g. 'main' or 'stable-X'
+          if [[ "$current" == "$DEFAULT_BRANCH" ]]; then
             echo "update_only_version=false" >> $GITHUB_ENV
           else
-            echo "update_only_version=true" >> $GITHUB_ENV
+            echo "update_only_version=true"  >> $GITHUB_ENV
           fi
+
       - name: Release
         uses: diplodoc-platform/docs-release-action@v2
         with:
           revision: "${{ github.sha }}"
-          version: "${{ steps.extract_version.outputs.version }}"
+          version:  "${{ steps.extract_version.outputs.version }}"
           storage-bucket: ${{ secrets.DOCS_PROJECT_NAME }}
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}

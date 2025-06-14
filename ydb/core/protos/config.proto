@@ -161,6 +161,8 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
+
+        optional string BridgePileName = 9; // realm name for bridged installations (starting from 0)
     }
 
     repeated TNode Node = 1;
@@ -184,6 +186,15 @@ message TDynamicNameserviceConfig {
 
 message TDomainsConfig {
     message TStateStorage {
+        enum EPileState {
+            DISCONNECTED = 0; // this pile is disconnected from primary one
+            NOT_SYNCHRONIZED = 1; // this pile is connected to primary pile, but not yet fully synchronized
+            SYNCHRONIZED = 2; // this pile is connected to primary pile and in sync
+            PRIMARY = 3; // this is the primary pile
+            PROMOTED = 4; // this is the synchronized pile which is being promoted to become primary
+            DEMOTED = 5; // this is currently primary pile which is being demoted
+        }
+
         message TRing {
             optional uint32 NToSelect = 1;
             repeated TRing Ring = 2;
@@ -191,12 +202,18 @@ message TDomainsConfig {
             optional bool UseSingleNodeActorId = 4;
             optional bool UseRingSpecificNodeSelection = 5;
             optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
+            optional bool WriteOnly = 7 [default = false]; // used for ring groups
+            optional uint32 RingGroupActorIdOffset = 8 [default = 0]; // used for ActorId difference for multiple replicas on one node
+            optional uint32 BridgePileId = 9; // bridge pile id for this ring group when bridge mode is enabled
+            optional EPileState PileState = 10; // state for this ring group's pile
         }
 
         optional uint32 SSId = 1 [default = 1];
-        optional TRing Ring = 2;
+        optional TRing Ring = 2; // for compatibility, use RingGroups
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
+        repeated TRing RingGroups = 5;
+        optional uint64 ClusterStateGeneration = 6; // generation from current ClusterState
     }
 
     message TStoragePoolType {
@@ -278,6 +295,11 @@ message TDomainsConfig {
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
     optional TSecurityConfig SecurityConfig = 6;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
+
+    // then these configs are set, they override the default StateStorage config for each kind of entity
+    optional TStateStorage ExplicitStateStorageConfig = 8;
+    optional TStateStorage ExplicitStateStorageBoardConfig = 9;
+    optional TStateStorage ExplicitSchemeBoardConfig = 10;
 }
 
 message TBlobStorageConfig {
@@ -325,6 +347,8 @@ message TBlobStorageConfig {
     // filled in by config parser, not by user; required for correct distconf operation
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
+
+    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
  }
 
 message TSelfManagementConfig {
@@ -343,6 +367,10 @@ message TSelfManagementConfig {
     // some extra settings
     optional bool AutomaticBoxManagement = 21 [default = true]; // invoke BSC DefineHostConfig/DefineBox automatically
     optional bool AutomaticBootstrap = 22; // whether bootstrap should be performed automatically; PROHIBITED for production
+    optional bool AutomaticStaticGroupManagement = 23; // whether distconf/SelfHeal can change static group on its behalf
+    optional bool AutomaticStateStorageManagement = 24; // the same for state storage
+    optional bool AutomaticStateStorageBoardManagement = 25; // the same for state storage board
+    optional bool AutomaticSchemeBoardManagement = 26; // the same for scheme board
 }
 
 message TBlobStorageFormatConfig {
@@ -421,6 +449,11 @@ message TInterconnectConfig {
         REQUIRED = 2;
     };
 
+    enum ESocketSendOptimization {
+        IC_SO_DISABLED = 0;
+        IC_SO_MSG_ZEROCOPY = 1;
+    };
+
     repeated TChannel Channel = 1;
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
@@ -454,6 +487,7 @@ message TInterconnectConfig {
     optional bool EnableExternalDataChannel = 42 [default = true];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
+    optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -633,6 +667,29 @@ message TConveyorConfig {
     optional uint32 QueueSizeLimit = 3;
     optional double DefaultFractionOfThreadsCount = 4;
     optional double WorkersCountDouble = 5;
+}
+
+message TCompositeConveyorConfig {
+    message TCategory {
+        optional string Name = 1;
+        optional uint64 QueueSizeLimit = 2;
+    }
+
+    message TWorkerPoolCategoryLink {
+        optional string Category = 1;
+        optional double Weight = 2;
+    }
+
+    message TWorkersPool {
+        optional double WorkersCount = 1;
+        optional double DefaultFractionOfThreadsCount = 2;
+        repeated TWorkerPoolCategoryLink Links = 3;
+        optional string Name = 4;
+    }
+
+    optional bool Enabled = 1 [default = true];
+    repeated TWorkersPool WorkerPools = 2;
+    repeated TCategory Categories = 3;
 }
 
 message TPrioritiesQueueConfig {
@@ -1096,7 +1153,8 @@ message TQueryServiceConfig {
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
-    repeated string AvailableExternalDataSources = 22;
+    repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
 }
 
 // Config describes immediate controls and allows
@@ -1544,7 +1602,7 @@ message TImmediateControlsConfig {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
             MinValue: 1,
             MaxValue: 2,
-            DefaultValue: 2 }];
+            DefaultValue: 1 }];
 
         optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
@@ -1822,6 +1880,7 @@ message THiveConfig {
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
+    optional bool UseTabletUsageEstimate = 86 [default = true];
 }
 
 message THealthCheckConfig {
@@ -1908,6 +1967,8 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
+    optional bool PortionMetaV0Usage = 41 [default = true];
+    optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
 }
 
 message TSchemeShardConfig {
@@ -2240,6 +2301,14 @@ message TMetadataCacheConfig {
 
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
+    optional uint32 DrainTimeoutSeconds = 2;
+}
+
+message TBridgeConfig {
+    message TPile {
+        optional string Name = 1; // name (to be matched with node's BridgePileName)
+    }
+    repeated TPile Piles = 1; // order of realms must not change during config updates
 }
 
 message TLabel {
@@ -2333,6 +2402,7 @@ message TAppConfig {
     optional TDataErasureConfig DataErasureConfig = 88;
     optional THealthCheckConfig HealthCheckConfig = 89;
     optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
+    optional TBridgeConfig BridgeConfig = 91;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2344,12 +2414,14 @@ message TAppConfig {
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional string StartupConfigYaml = 107;
     optional string StartupStorageYaml = 108;
+    optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
 }
 
 message TYdbVersion {
     optional uint32 Year = 1;
     optional uint32 Major = 2;
     optional uint32 Minor = 3;
+    optional uint32 Patch = 5;
     optional uint32 Hotfix = 4;
 }
 

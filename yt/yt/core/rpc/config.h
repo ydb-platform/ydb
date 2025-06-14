@@ -150,6 +150,7 @@ struct TMethodConfig
     std::optional<int> ConcurrencyLimit;
     std::optional<i64> ConcurrencyByteLimit;
     std::optional<NLogging::ELogLevel> LogLevel;
+    std::optional<NLogging::ELogLevel> ErrorLogLevel;
     std::optional<TDuration> LoggingSuppressionTimeout;
     NConcurrency::TThroughputThrottlerConfigPtr RequestBytesThrottler;
     NConcurrency::TThroughputThrottlerConfigPtr RequestWeightThrottler;
@@ -421,8 +422,10 @@ struct TDispatcherConfig
     int HeavyPoolSize;
     int CompressionPoolSize;
     TDuration HeavyPoolPollingPeriod;
+    TDuration DefaultRequestTimeout;
 
     bool AlertOnMissingRequestInfo;
+    bool AlertOnUnsetRequestTimeout;
 
     bool SendTracingBaggage;
 
@@ -443,8 +446,10 @@ struct TDispatcherDynamicConfig
     std::optional<int> HeavyPoolSize;
     std::optional<int> CompressionPoolSize;
     std::optional<TDuration> HeavyPoolPollingPeriod;
+    std::optional<TDuration> DefaultRequestTimeout;
 
     std::optional<bool> AlertOnMissingRequestInfo;
+    std::optional<bool> AlertOnUnsetRequestTimeout;
 
     std::optional<bool> SendTracingBaggage;
 

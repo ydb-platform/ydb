@@ -24,7 +24,7 @@ private:
         return HeapSources.empty();
     }
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const override {
-        return std::make_shared<TSimpleScanCursor>(source->GetStartPKRecordBatch(), source->GetSourceId(), readyRecords);
+        return std::make_shared<TSimpleScanCursor>(std::make_shared<NArrow::TSimpleRow>(source->GetStartPKRecordBatch()), source->GetSourceId(), readyRecords);
     }
     virtual std::shared_ptr<IDataSource> DoExtractNext() override {
         AFL_VERIFY(HeapSources.size());

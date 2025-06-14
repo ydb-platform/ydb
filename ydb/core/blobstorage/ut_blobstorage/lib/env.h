@@ -34,17 +34,17 @@ struct TEnvironmentSetup {
         const ui32 NodeCount = 9;
         const bool VDiskReplPausedAtStart = false;
         const TBlobStorageGroupType Erasure = TBlobStorageGroupType::ErasureNone;
-        const TNodeWardenMockActor::TSetup::TPtr NodeWardenMockSetup;
+        const TNodeWardenMockActor::TSetup::TPtr NodeWardenMockSetup = nullptr;
         const bool Encryption = false;
-        const std::function<void(ui32, TNodeWardenConfig&)> ConfigPreprocessor;
-        const std::function<void(TTestActorSystem&)> PrepareRuntime;
+        const std::function<void(ui32, TNodeWardenConfig&)> ConfigPreprocessor = nullptr;
+        const std::function<void(TTestActorSystem&)> PrepareRuntime = nullptr;
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
         const ui32 NumDataCenters = 0;
-        const std::function<TNodeLocation(ui32)> LocationGenerator;
+        const std::function<TNodeLocation(ui32)> LocationGenerator = nullptr;
         const bool SetupHive = false;
         const bool SuppressCompatibilityCheck = false;
-        const TFeatureFlags FeatureFlags;
+        const TFeatureFlags FeatureFlags = {};
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
         const ui64 BurstThresholdNs = 0;
         const ui32 MinHugeBlobInBytes = 0;
@@ -56,6 +56,9 @@ struct TEnvironmentSetup {
         const ui32 MaxNumOfSlowDisks = 2;
         const ui32 ReplMaxQuantumBytes = 0;
         const ui32 ReplMaxDonorNotReadyCount = 0;
+        const ui64 PDiskSize = 10_TB;
+        const ui64 PDiskChunkSize = 0;
+        const bool TrackSharedQuotaInPDiskMock = false;
     };
 
     const TSettings Settings;
@@ -73,8 +76,12 @@ struct TEnvironmentSetup {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
-                        cfg->ReadOnly, Env.Settings.DiskType));
+                ui64 chunkSize = Env.Settings.PDiskChunkSize ? Env.Settings.PDiskChunkSize : cfg->ChunkSize;
+                TPDiskMockState::ESpaceColorPolicy spaceColorPolicy = Env.Settings.TrackSharedQuotaInPDiskMock
+                        ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
+                        : TPDiskMockState::ESpaceColorPolicy::None;
+                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
+                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
@@ -584,7 +591,7 @@ struct TEnvironmentSetup {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
-    void CreatePoolInBox(ui32 boxId, ui32 poolId, TString poolName) {
+    void CreatePoolInBox(ui32 boxId, ui32 poolId, TString poolName, ui32 defaultGroupSizeInUnits = 0) {
         NKikimrBlobStorage::TConfigRequest request;
 
         auto *cmd = request.AddCommand()->MutableDefineStoragePool();
@@ -595,6 +602,7 @@ struct TEnvironmentSetup {
         cmd->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
         cmd->SetVDiskKind("Default");
         cmd->SetNumGroups(1);
+        cmd->SetDefaultGroupSizeInUnits(defaultGroupSizeInUnits);
         cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
         if (Settings.Encryption) {
             cmd->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
@@ -667,13 +675,13 @@ struct TEnvironmentSetup {
                 for (const auto& [vdiskId, vdiskActorId] : vdisks) {
                     dyn.PushBackActorId(vdiskActorId);
                 }
-                return new TBlobStorageGroupInfo(std::move(topology), std::move(dyn), "storage_pool");
+                return new TBlobStorageGroupInfo(std::move(topology), std::move(dyn), "storage_pool", {}, NPDisk::DEVICE_TYPE_UNKNOWN, group.GetGroupSizeInUnits());
             }
         }
         return nullptr;
     }
 
-    TActorId CreateQueueActor(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 index) {
+    TActorId CreateQueueActor(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 index, ui32 nodeId = 0) {
         TBSProxyContextPtr bspctx = MakeIntrusive<TBSProxyContext>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto flowRecord = MakeIntrusive<NBackpressure::TFlowRecord>();
         auto groupInfo = GetGroupInfo(vdiskId.GroupID.GetRawId());
@@ -681,9 +689,9 @@ struct TEnvironmentSetup {
             MakeIntrusive<::NMonitoring::TDynamicCounters>(), bspctx,
             NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::DSProxy, index), TStringBuilder()
             << "test# " << index, 0, false, TDuration::Seconds(60), flowRecord, NMonitoring::TCountableBase::EVisibility::Private));
-        const ui32 nodeId = Settings.ControllerNodeId;
-        const TActorId edge = Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-        const TActorId actorId = Runtime->Register(actor.release(), edge, {}, {}, nodeId);
+        const ui32 chosenNodeId = nodeId ? nodeId : Settings.ControllerNodeId;
+        const TActorId edge = Runtime->AllocateEdgeActor(chosenNodeId, __FILE__, __LINE__);
+        const TActorId actorId = Runtime->Register(actor.release(), edge, {}, {}, chosenNodeId);
         const TInstant deadline = Runtime->GetClock() + TDuration::Minutes(1);
         for (;;) {
             auto ev = WaitForEdgeActorEvent<TEvProxyQueueState>(edge, false, deadline);
@@ -856,9 +864,9 @@ struct TEnvironmentSetup {
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand();
         auto *us = cmd->MutableUpdateSettings();
-        us->AddEnableSelfHeal(selfHeal);
-        us->AddEnableDonorMode(donorMode);
-        us->AddEnableGroupLayoutSanitizer(groupLayoutSanitizer);
+        us->SetEnableSelfHeal(selfHeal);
+        us->SetEnableDonorMode(donorMode);
+        us->SetEnableGroupLayoutSanitizer(groupLayoutSanitizer);
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }

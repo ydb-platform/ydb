@@ -7,4 +7,8 @@ SRCS(
     ic_test_cluster.h
 )
 
+PEERDIR(
+    ydb/library/actors/interconnect/ut/lib/tls
+)
+
 END()

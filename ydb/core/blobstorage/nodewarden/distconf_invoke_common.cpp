@@ -1,5 +1,7 @@
-#include "distconf_audit.h"
 #include "distconf_invoke.h"
+
+#include <ydb/core/audit/audit_log.h>
+#include <ydb/core/util/address_classifier.h>
 
 namespace NKikimr::NStorage {
 
@@ -10,6 +12,7 @@ namespace NKikimr::NStorage {
         : Self(self)
         , LifetimeToken(Self->LifetimeToken)
         , Scepter(Self->Scepter)
+        , ScepterCounter(Self->ScepterCounter)
         , Event(std::move(ev))
         , Sender(Event->Sender)
         , Cookie(Event->Cookie)
@@ -27,19 +30,30 @@ namespace NKikimr::NStorage {
         ParentId = parentId;
         Become(&TThis::StateFunc);
 
-        if (auto scepter = Scepter.lock()) {
+        if (Self->ScepterlessOperationInProgress) {
+            FinishWithError(TResult::ERROR, "an operation is already in progress");
+        } else if (Self->Binding) {
+            if (RequestSessionId) {
+                FinishWithError(TResult::ERROR, "no double-hop invokes allowed");
+            } else {
+                const ui32 root = Self->Binding->RootNodeId;
+                Send(MakeBlobStorageNodeWardenID(root), Event->Release(), IEventHandle::FlagSubscribeOnSession);
+                const auto [it, inserted] = Subscriptions.try_emplace(root);
+                Y_ABORT_UNLESS(inserted);
+                WaitingReplyFromNode = root;
+            }
+        } else if (!Scepter.expired() || CheckSwitchBridgeCommand()) {
+            if (Scepter.expired()) {
+                Self->ScepterlessOperationInProgress = IsScepterlessOperation = true;
+            }
             ExecuteQuery();
-        } else if (!Self->Binding) {
-            FinishWithError(TResult::NO_QUORUM, "no quorum obtained");
-        } else if (RequestSessionId) {
-            FinishWithError(TResult::ERROR, "no double-hop invokes allowed");
         } else {
-            const ui32 root = Self->Binding->RootNodeId;
-            Send(MakeBlobStorageNodeWardenID(root), Event->Release(), IEventHandle::FlagSubscribeOnSession);
-            const auto [it, inserted] = Subscriptions.try_emplace(root);
-            Y_ABORT_UNLESS(inserted);
-            WaitingReplyFromNode = root;
+            FinishWithError(TResult::NO_QUORUM, "no quorum obtained");
         }
+    }
+
+    bool TInvokeRequestHandlerActor::IsScepterExpired() const {
+        return Self->ScepterCounter != ScepterCounter;
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev) {
@@ -113,7 +127,8 @@ namespace NKikimr::NStorage {
 
             case TQuery::kFetchStorageConfig: {
                 const auto& request = record.GetFetchStorageConfig();
-                return FetchStorageConfig(request.GetManual(), request.GetMainConfig(), request.GetStorageConfig());
+                return FetchStorageConfig(request.GetMainConfig(), request.GetStorageConfig(),
+                    request.GetAddExplicitConfigs(), request.GetAddSectionsForMigrationToV1());
             }
 
             case TQuery::kReplaceStorageConfig:
@@ -122,8 +137,17 @@ namespace NKikimr::NStorage {
             case TQuery::kBootstrapCluster:
                 return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
 
+            case TQuery::kSwitchBridgeClusterState:
+                return SwitchBridgeClusterState(record.GetSwitchBridgeClusterState().GetNewClusterState());
+
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");
+            
+            case TQuery::kReconfigStateStorage:
+                return ReconfigStateStorage(record.GetReconfigStateStorage());
+
+            case TQuery::kGetStateStorageConfig:
+                return GetStateStorageConfig();
         }
 
         FinishWithError(TResult::ERROR, "unhandled request");
@@ -182,6 +206,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool updateFields) {
         if (updateFields) {
+            if (auto error = UpdateClusterState(config)) {
+                return FinishWithError(TResult::ERROR, *error);
+            }
             config->MutablePrevConfig()->CopyFrom(*Self->StorageConfig);
             config->MutablePrevConfig()->ClearPrevConfig();
             UpdateFingerprint(config);
@@ -191,20 +218,43 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
-        TStringBuilder oldConfig;
-        oldConfig << Self->MainConfigYaml << (Self->StorageConfigYaml ? *Self->StorageConfigYaml : "");
-        TStringBuilder newConfig;
-        newConfig << *NewYaml << (NewStorageYaml ? *NewStorageYaml : "");
-        NACLib::TUserToken userToken = NACLib::TUserToken{replaceConfig.GetUserToken()};
-        AuditLogReplaceConfig(
-            /* peer = */ replaceConfig.GetPeerName(),
-            /* userSID = */ userToken.GetUserSID(),
-            /* sanitizedToken = */ userToken.GetSanitizedToken(),
-            /* oldConfig = */ oldConfig,
-            /* newConfig = */ newConfig,
-            /* reason = */ {},
-            /* success = */ true);
+        if (const auto& record = Event->Get()->Record; record.HasReplaceStorageConfig()) {
+            AUDIT_LOG(
+                const auto& replaceConfig = record.GetReplaceStorageConfig();
+
+                const TString oldConfig = TStringBuilder()
+                    << Self->MainConfigYaml
+                    << Self->StorageConfigYaml.value_or("");
+
+                TStringBuilder newConfig;
+                if (replaceConfig.HasYAML()) {
+                    newConfig << replaceConfig.GetYAML();
+                } else {
+                    newConfig << Self->MainConfigYaml;
+                }
+                if (replaceConfig.HasStorageYAML()) {
+                    newConfig << replaceConfig.GetStorageYAML();
+                } else if (replaceConfig.HasSwitchDedicatedStorageSection() && !replaceConfig.GetSwitchDedicatedStorageSection()) {
+                    // dedicated storage YAML is switched off by this operation -- no storage config will be set
+                } else if (Self->StorageConfigYaml) {
+                    newConfig << *Self->StorageConfigYaml;
+                }
+
+                NACLib::TUserToken userToken(replaceConfig.GetUserToken());
+
+                auto wrapEmpty = [](const TString& value) { return value ? value : TString("{none}"); };
+
+                AUDIT_PART("component", TString("distconf"))
+                AUDIT_PART("remote_address", wrapEmpty(NKikimr::NAddressClassifier::ExtractAddress(replaceConfig.GetPeerName())))
+                AUDIT_PART("subject", wrapEmpty(userToken.GetUserSID()))
+                AUDIT_PART("sanitized_token", wrapEmpty(userToken.GetSanitizedToken()))
+                AUDIT_PART("status", TString("SUCCESS"))
+                AUDIT_PART("reason", TString(), false)
+                AUDIT_PART("operation", TString("REPLACE CONFIG"))
+                AUDIT_PART("old_config", oldConfig)
+                AUDIT_PART("new_config", newConfig)
+            );
+        }
 
         Self->CurrentProposedStorageConfig.emplace(std::move(*config));
 
@@ -212,7 +262,9 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(res->HasProposeStorageConfig());
             std::unique_ptr<TEvNodeConfigInvokeOnRootResult> ev;
 
-            const ERootState prevState = std::exchange(Self->RootState, ERootState::RELAX);
+            const ERootState prevState = std::exchange(Self->RootState, Self->Scepter
+                ? ERootState::RELAX
+                : ERootState::INITIAL);
             Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
 
             if (auto error = Self->ProcessProposeStorageConfig(res->MutableProposeStorageConfig())) {
@@ -248,11 +300,11 @@ namespace NKikimr::NStorage {
             FinishWithError(TResult::ERROR, "no agreed StorageConfig");
         } else if (Self->CurrentProposedStorageConfig) {
             FinishWithError(TResult::ERROR, "config proposition request in flight");
-        } else if (Self->RootState != ERootState::RELAX) {
+        } else if (Self->RootState != (IsScepterlessOperation ? ERootState::INITIAL : ERootState::RELAX)) {
             FinishWithError(TResult::ERROR, "something going on with default FSM");
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "current config validation failed: " << *error);
-        } else if (Scepter.expired()) {
+        } else if (IsScepterExpired()) {
             FinishWithError(TResult::ERROR, "scepter lost during query execution");
         } else {
             return true;
@@ -281,6 +333,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::PassAway() {
+        if (IsScepterlessOperation && !IsScepterExpired()) {
+            Self->ScepterlessOperationInProgress = false;
+        }
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0, ParentId, SelfId(), nullptr, 0));
         if (ControllerPipeId) {
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);

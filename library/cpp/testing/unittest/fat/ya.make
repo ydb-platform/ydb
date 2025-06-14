@@ -12,8 +12,6 @@ FORK_SUBTESTS()
 TAG(
     ya:fat
     ya:force_sandbox
-    ya:large_tests_on_multi_slots
-    ya:large_tests_on_ya_make_2
 )
 
 END()

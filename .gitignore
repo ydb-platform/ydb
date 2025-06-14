@@ -92,3 +92,4 @@ junk/
 
 # YDB CLI configuration file location is `~/ydb/config/config.yaml`
 config/config.yaml
+path.bash.inc

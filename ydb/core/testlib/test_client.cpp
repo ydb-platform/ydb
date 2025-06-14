@@ -127,6 +127,8 @@
 #include <ydb/services/ext_index/service/executor.h>
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
@@ -440,7 +442,8 @@ namespace Tests {
             return;
         }
 
-        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
+        const auto nodeCount = StaticNodes() + DynamicNodes();
+        Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount, Settings->UseRealThreads);
 
         if (init) {
             Initialize();
@@ -541,6 +544,7 @@ namespace Tests {
             appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
             appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
+            appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -1171,14 +1175,9 @@ namespace Tests {
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyor::TCompServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
+            auto* actor = NConveyorComposite::TServiceOperator::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), new ::NMonitoring::TDynamicCounters());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyor::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
-        }
-        {
-            auto* actor = NConveyor::TInsertServiceOperator::CreateService(NConveyor::TConfig(), new ::NMonitoring::TDynamicCounters());
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyor::TInsertServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
@@ -1450,8 +1449,8 @@ namespace Tests {
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
             
-            TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateKafkaTransactionsCoordinator(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NKafka::MakeKafkaTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
+            TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateTransactionsCoordinator(), nodeIdx, userPoolId);
+            Runtime->RegisterService(NKafka::MakeTransactionsServiceID(Runtime->GetNodeId(nodeIdx)), kafkaTxnCoordinatorActorId, nodeIdx);
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();

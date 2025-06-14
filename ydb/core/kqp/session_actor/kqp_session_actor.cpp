@@ -1169,7 +1169,7 @@ public:
 
         TKqpPhyTxHolder::TConstPtr tx;
         try {
-            tx = QueryState->GetCurrentPhyTx(isBatchQuery);
+            tx = QueryState->GetCurrentPhyTx(isBatchQuery, QueryState->TxCtx->TxAlloc->TypeEnv);
         } catch (const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
@@ -1181,7 +1181,12 @@ public:
         if (Settings.TableService.GetEnableOltpSink() && isBatchQuery) {
             if (!Settings.TableService.GetEnableBatchUpdates()) {
                 ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                        "Batch updates and deletes are disabled at current time.");
+                    "BATCH operations are disabled by EnableBatchUpdates flag.");
+            }
+
+            if (QueryState->TxCtx->HasOlapTable) {
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                    "BATCH operations are not supported for column tables at the current time.");
             }
 
             ExecutePartitioned(tx);

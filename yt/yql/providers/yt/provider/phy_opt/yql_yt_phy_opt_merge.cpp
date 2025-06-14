@@ -516,56 +516,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ForceTransform(TExprBas
         return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform, {}, ctx)));
     }
 
-    bool needTransform = false;
-    const auto cluster = merge.DataSink().Cluster().StringValue();
-
-    if (State_->Configuration->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
-        TStringBuf outGroup;
-        TMaybe<TString> expandedOutGroup;
-        if (auto setting = NYql::GetSetting(merge.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
-            outGroup = setting->Tail().Content();
-        }
-
-        for (const auto& path: merge.Input().Item(0).Paths()) {
-            if (auto table = path.Table().Maybe<TYtTable>()) {
-                if (auto tableDesc = State_->TablesData->FindTable(cluster, TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
-                    needTransform = outGroup.empty() != tableDesc->ColumnGroupSpecAlts.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
-                    if (needTransform && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
-                        if (!expandedOutGroup) {
-                            expandedOutGroup.ConstructInPlace();
-                            ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*merge.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), *expandedOutGroup);
-                        }
-                        needTransform = !*expandedOutGroup || !tableDesc->ColumnGroupSpecAlts.contains(*expandedOutGroup);
-                    }
-                }
-            } else if (auto out = path.Table().Maybe<TYtOutput>()) {
-                TStringBuf inGroup;
-                if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                    inGroup = setting->Tail().Content();
-                }
-                needTransform = outGroup != inGroup;
-            }
-            if (needTransform) {
-                break;
-            }
-        }
-    }
-
-    const auto erasureCodec = ToString(State_->Configuration->TemporaryErasureCodec.Get(cluster).GetOrElse(NYT::EErasureCodecAttr::EC_NONE_ATTR));
-    for (const auto& path: merge.Input().Item(0).Paths()) {
-        if (auto table = path.Table().Maybe<TYtTable>()) {
-            if (TYtTableBaseInfo::GetMeta(table.Cast())->Attrs.Value("erasure_codec", "none") != erasureCodec) {
-                needTransform = true;
-                break;
-            }
-        }
-    }
-
-    if (needTransform && !NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::SoftTransform)) {
-        return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::AddSetting(merge.Settings().Ref(), EYtSettingType::SoftTransform, {}, ctx)));
-    } else if (!needTransform && NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::SoftTransform)) {
-        return TExprBase(ctx.ChangeChild(merge.Ref(), TYtMerge::idx_Settings, NYql::RemoveSetting(merge.Settings().Ref(), EYtSettingType::SoftTransform, ctx)));
-    }
     return node;
 }
 

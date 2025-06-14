@@ -104,6 +104,7 @@ namespace NKikimr {
                         PARAM_V(CommitDuration);
                         PARAM_V(OtherDuration);
                         PARAM_V(PhantomDuration);
+                        PARAM_V(OutOfSpaceDelayDuration);
                     }
                     GROUP("VDisk Stats") {
                         PARAM_V(ProxyStat->VDiskReqs);

@@ -531,17 +531,52 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 .Build()
             .Build();
 
-        auto it = db.StreamExecuteScanQuery(R"(
-            DECLARE $key AS Uint64;
 
-            SELECT * FROM `/Root/EightShard` WHERE Key = $key;
-        )", params).GetValueSync();
+        {
+            auto it = db.StreamExecuteScanQuery(R"(
+                DECLARE $key AS Uint64;
 
-        UNIT_ASSERT(it.IsSuccess());
+                SELECT * FROM `/Root/EightShard` WHERE Key = $key;
+            )", params).GetValueSync();
 
-        CompareYson(R"([
-            [[1];[202u];["Value2"]]
-        ])", StreamResultToYson(it));
+            UNIT_ASSERT(it.IsSuccess());
+
+                   CompareYson(R"([
+                [[1];[202u];["Value2"]]
+            ])", StreamResultToYson(it));
+        }
+
+        {
+            auto it = db.StreamExecuteScanQuery(R"(
+                DECLARE $key AS Uint64;
+
+                SELECT * FROM `/Root/EightShard` WHERE Key = $key;
+            )", params).GetValueSync();
+
+            UNIT_ASSERT(it.IsSuccess());
+            auto part = it.ReadNext().GetValueSync();
+            UNIT_ASSERT(part.IsSuccess());
+
+
+            UNIT_ASSERT(part.HasVirtualTimestamp());
+            UNIT_ASSERT(part.GetVirtualTimestamp().GetStep() != 0);
+            UNIT_ASSERT(part.GetVirtualTimestamp().GetTxId() != 0);
+        }
+
+        {
+            auto it = db.StreamExecuteScanQuery(R"(
+                SELECT * FROM `/Root/EightShard` WHERE Key = 9876554123;
+            )", params).GetValueSync();
+
+            UNIT_ASSERT(it.IsSuccess());
+            auto part = it.ReadNext().GetValueSync();
+            UNIT_ASSERT(part.IsSuccess());
+
+
+            UNIT_ASSERT(part.HasVirtualTimestamp());
+            UNIT_ASSERT(part.GetVirtualTimestamp().GetStep() != 0);
+            UNIT_ASSERT(part.GetVirtualTimestamp().GetTxId() != 0);
+        }
     }
 
     Y_UNIT_TEST(AggregateByColumn) {

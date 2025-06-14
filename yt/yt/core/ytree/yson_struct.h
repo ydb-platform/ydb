@@ -68,17 +68,29 @@ public:
         INodePtr node,
         bool postprocess = true,
         bool setDefaults = true,
-        const NYPath::TYPath& path = {});
+        const std::function<NYPath::TYPath()>& pathGetter = {});
 
     void Load(
         NYson::TYsonPullParserCursor* cursor,
         bool postprocess = true,
         bool setDefaults = true,
-        const NYPath::TYPath& path = {});
+        const std::function<NYPath::TYPath()>& pathGetter = {});
+
+    void Load(
+        INodePtr node,
+        bool postprocess,
+        bool setDefaults,
+        const NYPath::TYPath& path);
+
+    void Load(
+        NYson::TYsonPullParserCursor* cursor,
+        bool postprocess,
+        bool setDefaults,
+        const NYPath::TYPath& path);
 
     void Load(IInputStream* input);
 
-    void Postprocess(const NYPath::TYPath& path = {});
+    void Postprocess(const std::function<NYPath::TYPath()>& pathGetter = {});
 
     void SetDefaults();
 
@@ -89,6 +101,9 @@ public:
     // by some kind of wrapper to be parsed in the wrapper
     // of the |Load| call.
     void SaveAsMapFragment(NYson::IYsonConsumer* consumer) const;
+
+    // Same as the above, but does not save local unrecognized parameters.
+    void SaveRecognizedAsMapFragment(NYson::IYsonConsumer* consumer) const;
 
     void Save(IOutputStream* output) const;
 
@@ -238,7 +253,7 @@ concept CYsonStructLoadableFieldFor =
         S source,
         bool postprocess,
         bool setDefaults,
-        const NYPath::TYPath& path,
+        const std::function<NYPath::TYPath()>& pathGetter,
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
     {
         // For YsonStruct.
@@ -246,7 +261,7 @@ concept CYsonStructLoadableFieldFor =
             source,
             postprocess,
             setDefaults,
-            path,
+            pathGetter,
             recursiveUnrecognizedStrategy);
     };
 

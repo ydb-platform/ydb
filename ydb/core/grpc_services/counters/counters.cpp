@@ -232,7 +232,7 @@ public:
             *GetResponseCounterByStatus(status) += 1;
         }
 
-        Histo->Collect(requestDuration.MilliSeconds());
+        Histo->Collect(requestDuration.MillisecondsFloat());
     }
 
     NYdbGrpc::ICounterBlockPtr Clone() override {

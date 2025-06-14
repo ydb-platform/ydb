@@ -432,14 +432,14 @@ public:
         return true;
     }
 
-    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(bool isBatchQuery = false) {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(bool isBatchQuery, NMiniKQL::TTypeEnvironment& txTypeEnv) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
         if (TxCtx->CanDeferEffects() && !isBatchQuery) {
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
-                QueryData->CreateKqpValueMap(tx);
+                QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
                 bool success = TxCtx->AddDeferredEffect(tx, QueryData);
                 YQL_ENSURE(success);
                 if (CurrentTx + 1 < phyQuery.TransactionsSize()) {

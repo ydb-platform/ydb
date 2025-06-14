@@ -42,7 +42,7 @@ Or on windows,
 * -DENABLE_SANITIZERS=ON - Enables gcc/clang sanitizers, by default this adds -fsanitizer=address,undefined to the compile flags for projects that call aws_add_sanitizers.
 * -DENABLE_FUZZ_TESTS=ON - Includes fuzz tests in the unit test suite. Off by default, because fuzz tests can take a long time. Set -DFUZZ_TESTS_MAX_TIME=N to determine how long to run each fuzz test (default 60s).
 * -DCMAKE_INSTALL_PREFIX=/path/to/install - Standard way of installing to a user defined path. If specified when configuring aws-c-common, ensure the same prefix is specified when configuring other aws-c-* SDKs.
-* -DSTATIC_CRT=ON - On MSVC, use /MT(d) to link MSVCRT
+* -DAWS_STATIC_MSVC_RUNTIME_LIBRARY=ON - Windows-only. Turn ON to use the statically-linked MSVC runtime lib, instead of the DLL.
 
 ### API style and conventions
 Every API has a specific set of styles and conventions. We'll outline them here. These conventions are followed in every
@@ -99,6 +99,8 @@ returning control to the caller, if you have an error to raise, use the `aws_rai
 * For APIs returning an allocated instance of an object, return the memory on success, and `NULL` on failure. Before
 returning control to the caller, if you have an error to raise, use the `aws_raise_error()` function.
 
+See [error-handling.md](docs/error-handling.md) for a longer tutorial.
+
 #### Log Subjects & Error Codes
 The logging & error handling infrastructure is designed to support multiple libraries. For this to work, AWS maintained libraries
 have pre-slotted log subjects & error codes for each library. The currently allocated ranges are:
@@ -121,8 +123,9 @@ have pre-slotted log subjects & error codes for each library. The currently allo
 | [0x3400, 0x3800) | aws-c-iot |
 | [0x3800, 0x3C00) | aws-c-s3 |
 | [0x3C00, 0x4000) | aws-c-sdkutils |
-| [0x4000, 0x4400) | (reserved for future project) |
-| [0x4400, 0x4800) | (reserved for future project) |
+| [0x4000, 0x4400) | aws-crt-kotlin |
+| [0x4400, 0x4800) | aws-crt-swift |
+| [0x4800, 0x4C00) | (reserved for future project) |
 
 Each library should begin its error and log subject values at the beginning of its range and follow in sequence (don't skip codes). Upon
 adding an AWS maintained library, a new enum range must be approved and added to the above table.
@@ -158,7 +161,7 @@ Example:
 * Avoid C99 features in header files. For some types such as bool, uint32_t etc..., these are defined if not available for the language
 standard being used in `aws/common/common.h`, so feel free to use them.
 * For C++ compatibility, don't put const members in structs.
-* Avoid C++ style comments e.g. `//`.
+* Avoid C++ style comments e.g. `//` in header files and prefer block style  (`/* */`) for long blocks of text. C++ style comments are fine in C files.
 * All public API functions need C++ guards and Windows dll semantics.
 * Use Unix line endings.
 * Where implementation hiding is desired for either ABI or runtime polymorphism reasons, use the `void *impl` pattern. v-tables
@@ -197,7 +200,7 @@ Example:
     Not this:
 
         typedef int(*fn_name_fn)(void *);
-        
+
 * If a callback may be async, then always have it be async.
   Callbacks that are sometimes async and sometimes sync are hard to code around and lead to bugs
   (see [this blog post](https://blog.ometer.com/2011/07/24/callbacks-synchronous-and-asynchronous/)).
@@ -228,18 +231,24 @@ Example:
     AWS_COMMON_API
  void aws_module_destroy(aws_module_t *module);
 
-* Avoid c-strings, and don't write code that depends on `NULL` terminators. Expose `struct aws_byte_buf` APIs
-and let the user figure it out.
+* Avoid c-strings, and don't write code that depends on `NULL` terminators.
+    * Pass strings via `struct aws_byte_cursor`. This is a non-owning view type. Pass it by value. Strings passed this way do not need a `NULL` terminator.
+    * Only pass `const char *` when thinly wrapping an OS function that *requires* a `NULL` terminator.
+    * Store const strings as `struct aws_string *`
+    * Store mutable string buffers as `struct aws_byte_buf`
+
 * There is only one valid character encoding-- UTF-8. Try not to ever need to care about character encodings, but
 where you do, the working assumption should always be UTF-8 unless it's something we don't get a choice in (e.g. a protocol
 explicitly mandates a character set).
+* If a function has many arguments, or any optional arguments use an options-struct.
+* If a variable is time-related, always include the unit of time in its name (e.g. `timeout_ms`).
 * If you are adding/using a compiler specific keyword, macro, or intrinsic, hide it behind a platform independent macro
 definition. This mainly applies to header files. Obviously, if you are writing a file that will only be built on a certain
 platform, you have more liberty on this.
 * When checking more than one error condition, check and log each condition separately with a unique message.
 
     Do this:
-    
+
         if (options->callback == NULL) {
             AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - callback is null");
             return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
@@ -251,7 +260,7 @@ platform, you have more liberty on this.
         }
 
     Not this:
-    
+
         if (options->callback == NULL || options->allocator == NULL) {
             AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - something is null");
             return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);

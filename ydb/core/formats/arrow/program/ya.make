@@ -48,6 +48,7 @@ SRCS(
     assign_internal.cpp
     custom_registry.cpp
     GLOBAL kernel_logic.cpp
+    reserve.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(abstract.h)
@@ -55,5 +56,9 @@ GENERATE_ENUM_SERIALIZATION(aggr_common.h)
 GENERATE_ENUM_SERIALIZATION(execution.h)
 
 YQL_LAST_ABI_VERSION()
+
+CFLAGS(
+    -Wno-unused-parameter
+)
 
 END()

@@ -516,6 +516,7 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
     if (TGroupInfo *group = FindGroup(vslot.GroupId)) {
         const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
         vDisk->SetStoragePoolName(info.Name);
+        vDisk->SetGroupSizeInUnits(group->GroupSizeInUnits);
 
         const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
             if (const TVSlotInfo *vslot = FindVSlot(vslotId)) {
@@ -620,7 +621,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
-            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now, false);
+            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono, now, false, this);
             timingQ.emplace_back(*it->second);
             updates.push_back({
                 .VDiskId = it->second->GetVDiskId(),

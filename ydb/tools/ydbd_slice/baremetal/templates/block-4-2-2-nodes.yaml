@@ -122,43 +122,43 @@ blob_storage_config:    # configuration of static blobstorage group.
       rings:           # in block-4-2 must have exactly 1 ring or availability zone.
       - fail_domains:
         - vdisk_locations:    # fail domains of the static group describe where each vdisk of the static group should be located.
-          - node_id: *host_1
+          - node_id: 1
             pdisk_category: &pdisk_category 1 # Set this option to 1, if cluster has SSD/NVME disks
             # or to 0, if cluster has HDD.
             path: *disk_path_1
             pdisk_guid: 1
         - vdisk_locations:
-          - node_id: *host_1
+          - node_id: 1
             pdisk_category: *pdisk_category
             path: *disk_path_2
             pdisk_guid: 2
         - vdisk_locations:
-          - node_id: *host_1
+          - node_id: 1
             pdisk_category: *pdisk_category
             path: *disk_path_3
             pdisk_guid: 3
         - vdisk_locations:
-          - node_id: *host_1
+          - node_id: 1
             pdisk_category: *pdisk_category
             path: *disk_path_4
             pdisk_guid: 4
         - vdisk_locations:
-          - node_id: *host_2
+          - node_id: 2
             pdisk_category: *pdisk_category
             path: *disk_path_1
             pdisk_guid: 5
         - vdisk_locations:
-          - node_id: *host_2
+          - node_id: 2
             pdisk_category: *pdisk_category
             path: *disk_path_2
             pdisk_guid: 6
         - vdisk_locations:
-          - node_id: *host_2
+          - node_id: 2
             pdisk_category: *pdisk_category
             path: *disk_path_3
             pdisk_guid: 7
         - vdisk_locations:
-          - node_id: *host_2
+          - node_id: 2
             pdisk_category: *pdisk_category
             path: *disk_path_4
             pdisk_guid: 8

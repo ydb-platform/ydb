@@ -1,4 +1,4 @@
-## {{ ydb-short-name }} documentation structure
+# {{ ydb-short-name }} documentation structure
 
 This article complements [{#T}](style-guide.md). It explains the current top-level folders of the documentation and what kind of content belongs in each. As a rule of thumb, most top-level sections focus either on a specific target audience (if named "For ...") or on a specific [genre](genres.md).
 

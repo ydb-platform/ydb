@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 namespace NYdb::inline Dev {
@@ -168,30 +169,75 @@ private:
     TSession Session_;
 };
 
-class TTransaction {
+class TTransaction : public TTransactionBase {
     friend class TQueryClient;
     friend class TExecuteQueryIterator::TReaderImpl;
-public:
-    const std::string& GetId() const {
-        return TxId_;
-    }
+    friend class TExecQueryImpl;
 
-    bool IsActive() const {
-        return !TxId_.empty();
-    }
+public:
+    bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
-    TSession GetSession() const {
-        return Session_;
-    }
+    TSession GetSession() const;
+
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb) override;
+    void AddOnFailureCallback(TOnFailureTransactionCallback cb) override;
 
 private:
     TTransaction(const TSession& session, const std::string& txId);
 
-    TSession Session_;
-    std::string TxId_;
+    TAsyncStatus Precommit() const;
+    NThreading::TFuture<void> ProcessFailure() const;
+
+    class TImpl;
+
+    std::shared_ptr<TImpl> TransactionImpl_;
+};
+
+class TTxControl {
+    friend class TExecQueryImpl;
+    friend class TExecQueryInternal;
+
+public:
+    using TSelf = TTxControl;
+
+    static TTxControl Tx(const TTransaction& tx) {
+        return TTxControl(tx);
+    }
+
+    [[deprecated("This is bug-provoking API. Use TTxControl::Tx(TTransaction) instead. "
+                 "This constructor will be removed in upcomming release")]]
+    static TTxControl Tx(const std::string& txId) {
+        return TTxControl(txId);
+    }
+
+    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
+        return TTxControl(settings);
+    }
+
+    static TTxControl NoTx() {
+        return TTxControl();
+    }
+
+    FLUENT_SETTING_FLAG(CommitTx);
+
+    bool HasTx() const { return !std::holds_alternative<std::monostate>(Tx_); }
+
+private:
+    TTxControl() {}
+
+    TTxControl(const TTransaction& tx)
+        : Tx_(tx) {}
+
+    TTxControl(const TTxSettings& txSettings)
+        : Tx_(txSettings) {}
+    
+    TTxControl(const std::string& txId)
+        : Tx_(txId) {}
+
+    const std::variant<std::monostate, TTransaction, TTxSettings, std::string> Tx_;
 };
 
 class TBeginTransactionResult : public TStatus {

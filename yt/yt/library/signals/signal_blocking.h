@@ -2,9 +2,11 @@
 
 #include <library/cpp/yt/error/error.h>
 
-#include <util/system/platform.h>
+#include <library/cpp/yt/misc/concepts.h>
 
-#include <limits>
+#include <library/cpp/yt/misc/static_initializer.h>
+
+#include <util/system/platform.h>
 
 namespace NYT::NSignals {
 
@@ -12,7 +14,20 @@ namespace NYT::NSignals {
 
 namespace NDetail {
 
+class TInitHelper
+{
+public:
+    template <CInvocable<void()> TFunc>
+    TInitHelper(const TFunc& func)
+    {
+        func();
+    }
+};
+
 void TryVerifyThreadIsOnly();
+
+template <CInvocable<void(bool ok, int threadCount)> TFunc>
+void BlockSignalAtProcessStart(int signal, const TFunc& func);
 
 } // namespace NDetail
 
@@ -22,22 +37,17 @@ YT_DEFINE_ERROR_ENUM(
     ((SetBlockedSignalError)     (20))
 );
 
-// Using constructor(std::numeric_limits<i32>::min()) to run before any thread can be spawned.
-#define YT_BLOCK_SIGNAL_FOR_PROCESS(signal) \
-    __attribute__((constructor(std::numeric_limits<i32>::min()))) void Block ## signal ## Signal() \
-    { \
-        try { \
-            ::NYT::NSignals::NDetail::TryVerifyThreadIsOnly(); \
-            ::NYT::NSignals::BlockSignal(signal); \
-        } catch (const std::exception& ex) { \
-            Cerr << "Failed to block signal " << #signal << ": " << ex.what() << Endl; \
-            ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError)); \
-        } catch (...) { \
-            Cerr << "Failed to block signal " << #signal << ": unknown exception" << Endl; \
-            ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError)); \
-        } \
-    }
+// NB(pogorelov): Using init_priority(101) to run before any thread can be spawned.
+// And also therefore this stuff was intentionally not moved to YT_STATIC_INITIALIZER.
+#define YT_TRY_BLOCK_SIGNAL_FOR_PROCESS(signal, ...) \
+    [[maybe_unused]] __attribute__((init_priority(101))) inline const ::NYT::NSignals::NDetail::TInitHelper Signal ## Blocked([] { \
+        NSignals::NDetail::BlockSignalAtProcessStart(signal, __VA_ARGS__); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSignals
+
+#define SIGNAL_BLOCKING_INL_H_
+#include "signal_blocking-inl.h"
+#undef SIGNAL_BLOCKING_INL_H_

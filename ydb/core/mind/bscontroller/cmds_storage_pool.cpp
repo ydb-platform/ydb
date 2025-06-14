@@ -93,6 +93,7 @@ namespace NKikimr::NBsController {
         storagePool.NumGroups = cmd.GetNumGroups();
         storagePool.EncryptionMode = cmd.GetEncryptionMode();
         storagePool.RandomizeGroupMapping = cmd.GetRandomizeGroupMapping();
+        storagePool.DefaultGroupSizeInUnits = cmd.GetDefaultGroupSizeInUnits();
 
         for (const auto &userId : cmd.GetUserId()) {
             storagePool.UserIds.emplace(boxId, storagePoolId, userId);
@@ -560,8 +561,8 @@ namespace NKikimr::NBsController {
                 x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR)));
                 x->SetReady(vslot.ReadySince <= mono);
             }
-            if (const auto& s = Self.StorageConfig; s.HasBlobStorageConfig()) {
-                if (const auto& bsConfig = s.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+            if (const auto& s = Self.StorageConfig; s && s->HasBlobStorageConfig()) {
+                if (const auto& bsConfig = s->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
                     const auto& ss = bsConfig.GetServiceSet();
                     for (const auto& group : ss.GetGroups()) {
                         auto *x = pb->AddGroup();

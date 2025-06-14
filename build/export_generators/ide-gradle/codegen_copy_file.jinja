@@ -16,7 +16,7 @@ val {{ varprefix }}{{ copy['_object_index'] }} = tasks.register<Copy>("{{ varpre
     into({{ PatchRoots(dst_path, false, true) }})
 {%-         if src_name != dst_name %}
     rename("{{ src_name }}", "{{ dst_name }}")
+{%-         endif %}
 }
-{%          endif -%}
-{%-     endfor -%}
+{%      endfor -%}
 {%- endif -%}

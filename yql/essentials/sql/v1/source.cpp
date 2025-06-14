@@ -488,12 +488,15 @@ TNodePtr ISource::BuildFlattenColumns(const TString& label) {
 
 namespace {
 
-TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& exprs) {
+TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& exprs, bool override) {
     auto structObj = BuildAtom(pos, "row", TNodeFlags::Default);
     for (const auto& exprNode: exprs) {
         const auto name = exprNode->GetLabel();
         YQL_ENSURE(name);
-        structObj = structObj->Y("ForceRemoveMember", structObj, structObj->Q(name));
+        if (override) {
+            structObj = structObj->Y("ForceRemoveMember", structObj, structObj->Q(name));
+        }
+
         if (dynamic_cast<const TSessionWindow*>(exprNode.Get())) {
             continue;
         }
@@ -515,12 +518,12 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 
     TNodePtr res;
     if (groupByExprs) {
-        auto body = BuildLambdaBodyForExprAliases(Pos, groupByExprs);
+        auto body = BuildLambdaBodyForExprAliases(Pos, groupByExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
         res = Y("FlatMap", "core", BuildLambda(Pos, Y("row"), body));
     }
 
     if (distinctAggrExprs) {
-        auto body = BuildLambdaBodyForExprAliases(Pos, distinctAggrExprs);
+        auto body = BuildLambdaBodyForExprAliases(Pos, distinctAggrExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
         auto lambda = BuildLambda(Pos, Y("row"), body);
         res = res ? Y("FlatMap", res,  lambda) : Y("FlatMap", "core", lambda);
     }
@@ -530,7 +533,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 TNodePtr ISource::BuildPreFlattenMap(TContext& ctx) {
     Y_UNUSED(ctx);
     YQL_ENSURE(IsFlattenByExprs());
-    return BuildLambdaBodyForExprAliases(Pos, Expressions(EExprSeat::FlattenByExpr));
+    return BuildLambdaBodyForExprAliases(Pos, Expressions(EExprSeat::FlattenByExpr), true);
 }
 
 TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {

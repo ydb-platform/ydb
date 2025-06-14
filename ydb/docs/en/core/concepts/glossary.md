@@ -16,7 +16,7 @@ A {{ ydb-short-name }} **cluster** is a set of interconnected {{ ydb-short-name 
 
 Like in most database management systems, a **database** in {{ ydb-short-name }} is a logical container for other entities like [tables](#table). However, in {{ ydb-short-name }}, the namespace inside databases is hierarchical like in [virtual file systems](https://en.wikipedia.org/wiki/Virtual_file_system), and thus [folders](#folder) allow for further organization of entities.
 
-Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating an additional database is usually done externally by [DevOps engineers](../devops/index.md) or automation rather than via a SQL query.
+Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating a database requires additional operations from [DevOps engineers](../devops/index.md).
 
 ### Node {#node}
 
@@ -100,7 +100,7 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
-The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
+The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
 ### Interactive transactions {#interactive-transaction}
 
@@ -162,9 +162,10 @@ A special type of **secondary index** is singled out separately - [vector index]
 
 #### Vector Index {#vector-index}
 
-A **vector index** is an additional data structure used to speed up the [nearest neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search), typically when the data is too large for the [index-less approach](../yql/reference/udf/list/knn.md) to handle the load. Unlike the primary index, vector indexes are managed independently of the underlying table data. Thus, a table can have multiple vector indexes for different scenarios. For more information about using vector indexes in {{ ydb-short-name }}, see [{#T}](vector_indexes.md).
+**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
-A **vector index** is allocated separately from the [secondary index] (#secondary-index), as it solves other tasks.
+**Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
+
 
 #### Column family {#column-family}
 
@@ -262,6 +263,28 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
+### Authentication token {#auth-token}
+
+An **authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
+
+{{ ydb-short-name }} supports various [authentication modes](../security/authentication.md) and token types.
+
+### Cluster scheme {#scheme}
+
+A **{{ ydb-short-name }} cluster scheme** is a hierarchical namespace of a {{ ydb-short-name }} cluster. The top-level element of the namespace is the [cluster scheme root](#scheme-root) that contains [databases](#database) as its children. Scheme objects inside databases can use nested directories to form a hierarchy.
+
+### Database scheme {#scheme-database}
+
+A **database scheme** is a subset of the hierarchical namespace of a {{ ydb-short-name }} cluster that belongs to a database.
+
+### Database root {#scheme-database-root}
+
+A **database root** is a path to a database in a {{ ydb-short-name }} cluster scheme.
+
+### Scheme root {#scheme-root}
+
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+
 ### Scheme object {#scheme-object}
 
 A database schema consists of **scheme objects**, which can be databases, [tables](#table) (including [external tables](#external-table)), [topics](#topic), [folders](#folder), and so on.
@@ -297,6 +320,24 @@ An **[access right](../security/authorization.md#right)** is an entity that repr
 
 An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
 
+### Access level {#access-level}
+
+An **access level** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
+
+{{ ydb-short-name }} uses three access levels:
+
+- viewer
+- operator
+- administrator
+
+An access level is granted by adding an access subject to an [access level list](#access-level-list).
+
+### Access level list {#access-level-list}
+
+An **access level list** is a list of [SIDs](#access-sid) that grants a certain [access level](#access-level) to the associated [access subjects](#access-subject).
+
+{{ ydb-short-name }} provides several [access level lists](../reference/configuration/security_config.md#security-access-levels) that collectively determine [access levels](#access-level) in the system.
+
 ### Owner {#access-owner}
 
 An **[owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) having full rights over a specific [access object](#access-object).
@@ -304,6 +345,21 @@ An **[owner](../security/authorization.md#owner)** is an [access subject](#acces
 ### User {#access-user}
 
 A **[user](../security/authorization.md#user)** is an individual utilizing {{ ydb-short-name }} to perform a specific function.
+
+{{ ydb-short-name }} has the following types of users depending on their source:
+
+- local users in {{ ydb-short-name }} databases
+- external users from third-party directory services
+
+{{ ydb-short-name }} users are identified by their [SIDs](#access-sid).
+
+#### Local user {#local-user}
+
+A **local user** is an individual whose {{ ydb-short-name }} account is created directly in {{ ydb-short-name }} using the `CREATE USER` command or during the [initial security configuration](../security/builtin-security.md).
+
+#### External user {#external-user}
+
+An **external user** is an individual whose {{ ydb-short-name }} account is created in a third-party directory service, for example, in LDAP or IAM.
 
 ### Group {#access-group}
 
@@ -343,7 +399,7 @@ An **ActorId** is a unique identifier of the actor or [tablet](#tablet) in the [
 
 #### Actor system interconnect {#actor-system-interconnect}
 
-The **actor system interconnect** or **interconnect** is the [cluster's](#cluster internal network layer. All [actors](#actor) interact with each other within the system via the interconnect.
+The **actor system interconnect** or **interconnect** is the [cluster's](#cluster) internal network layer. All [actors](#actor) interact with each other within the system via the interconnect.
 
 #### Local {#local}
 

@@ -7,6 +7,8 @@
 #include "yql_arrow_resolver.h"
 #include "yql_statistics.h"
 
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+
 #include <yql/essentials/public/udf/udf_validate.h>
 #include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/public/langver/yql_langver.h>
@@ -27,9 +29,12 @@
 #include <util/generic/vector.h>
 #include <util/digest/city.h>
 
+#include <functional>
 #include <vector>
 
 namespace NYql {
+
+using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
 class IUrlLoader : public TThrRefBase {
 public:
@@ -339,6 +344,8 @@ struct TUdfCachedInfo {
     const TTypeAnnotationNode* NormalizedUserType = nullptr;
     bool SupportsBlocks = false;
     bool IsStrict = false;
+    TLangVersion MinLangVer = UnknownLangVersion;
+    TLangVersion MaxLangVer = UnknownLangVersion;
 };
 
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
@@ -376,7 +383,8 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
-    TLangVersion LangVer = UnknownLangVersion;
+    TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
+    TLangVersion LangVer = MinLangVersion;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -447,11 +455,13 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 TimeOrderRecoverRowLimit = 1'000'000;
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
+    bool DeriveColumnOrder = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
     THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;
     ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
+    ui32 PruneKeysMemLimit = 128 * 1024 * 1024;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
@@ -463,6 +473,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
     EEngineType EngineType = EEngineType::Default;
+
+    // temporary flag to skip applying ExpandPg rules
+    bool IgnoreExpandPg = false;
 
     template <typename T>
     T GetRandom() const noexcept;
@@ -562,7 +575,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     /**
      * Helper method to fetch statistics from type annotation context
      */
-    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
+    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) const {
         return StatisticsMap.Value(input ? input->UniqueId() : 0, std::shared_ptr<TOptimizerStatistics>(nullptr));
     }
 

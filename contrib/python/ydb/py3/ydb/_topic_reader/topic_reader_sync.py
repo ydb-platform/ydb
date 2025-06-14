@@ -4,6 +4,7 @@ import logging
 import typing
 from typing import List, Union, Optional
 
+from ydb import issues
 from ydb._grpc.grpcwrapper.common_utils import SupportedDriverType
 from ydb._topic_common.common import (
     _get_shared_event_loop,
@@ -31,6 +32,7 @@ class TopicReaderSync:
     _caller: CallFromSyncToAsync
     _async_reader: PublicAsyncIOReader
     _closed: bool
+    _settings: PublicReaderSettings
     _parent: typing.Any  # need for prevent stop the client by GC
 
     def __init__(
@@ -54,6 +56,8 @@ class TopicReaderSync:
             return PublicAsyncIOReader(driver, settings)
 
         self._async_reader = asyncio.run_coroutine_threadsafe(create_reader(), loop).result()
+
+        self._settings = settings
 
         self._parent = _parent
 
@@ -154,6 +158,9 @@ class TopicReaderSync:
         """
         self._check_closed()
 
+        if self._settings.consumer is None:
+            raise issues.Error("Commit operations are not supported for topic reader without consumer.")
+
         self._caller.call_sync(lambda: self._async_reader.commit(mess))
 
     def commit_with_ack(
@@ -168,6 +175,9 @@ class TopicReaderSync:
         """
         self._check_closed()
 
+        if self._settings.consumer is None:
+            raise issues.Error("Commit operations are not supported for topic reader without consumer.")
+
         return self._caller.unsafe_call_with_result(self._async_reader.commit_with_ack(mess), timeout)
 
     def async_commit_with_ack(
@@ -177,6 +187,9 @@ class TopicReaderSync:
         write commit message to a buffer and return Future for wait result.
         """
         self._check_closed()
+
+        if self._settings.consumer is None:
+            raise issues.Error("Commit operations are not supported for topic reader without consumer.")
 
         return self._caller.unsafe_call_with_future(self._async_reader.commit_with_ack(mess))
 

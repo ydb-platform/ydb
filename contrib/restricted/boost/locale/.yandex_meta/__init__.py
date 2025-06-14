@@ -6,13 +6,13 @@ from devtools.yamaker.project import NixSourceProject
 def post_install(self):
     # fmt: off
     posix_srcs = set(fileutil.files(
-        f"{self.dstdir}/src/boost/locale/posix",
+        f"{self.dstdir}/src/posix",
         rel=self.dstdir,
         test=pathutil.is_source,
     ))
 
     win_srcs = set(fileutil.files(
-        f"{self.dstdir}/src/boost/locale/win32",
+        f"{self.dstdir}/src/win32",
         rel=self.dstdir,
         test=pathutil.is_source,
     ))

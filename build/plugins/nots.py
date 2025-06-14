@@ -194,6 +194,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
+        df.DockerImage.value,
     ),
     TsTestType.PLAYWRIGHT: (
         df.Size.from_unit,
@@ -204,6 +205,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
+        df.DockerImage.value,
     ),
     TsTestType.PLAYWRIGHT_LARGE: (
         df.ConfigPath.value,
@@ -321,8 +323,9 @@ def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
 def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_include_processor=False):
     hide_part = "hide" if hide else ""
     disable_ip_part = "context=TEXT" if disable_include_processor else ""
+    input_part = "input=TEXT" if disable_include_processor else "input"
 
-    return _build_directives([hide_part, disable_ip_part, "input"], paths)
+    return _build_directives([hide_part, disable_ip_part, input_part], paths)
 
 
 def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
@@ -408,16 +411,16 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
-    if major < 14:
+    if major < 16:
         raise Exception(
             "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
         )
 
-    if major < 18:
+    if major < 20:
         unit.message(
             [
                 "WARN",
-                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major),
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major),
             ]
         )
 
@@ -652,7 +655,6 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TSC_TYPECHECK
 
@@ -705,7 +707,6 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     recipes_value = unit.get("TEST_RECIPES_VALUE")
     unit.on_setup_install_node_modules_recipe()
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
 
     test_type = TsTestType.TS_STYLELINT
 
@@ -891,8 +892,13 @@ def on_ts_test_for_configure(
 
     for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
     unit.onpeerdir([for_mod_path])
+
+    # user-defined recipes should be in the end
+    user_recipes = unit.get("TEST_RECIPES_VALUE").replace("$TEST_RECIPES_VALUE", "").strip()
+    unit.set(["TEST_RECIPES_VALUE", ""])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
+    __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
 
     build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(build_root, for_mod_path, node_modules_filename)])
@@ -904,7 +910,7 @@ def on_ts_test_for_configure(
 
     test_files = df.TestFiles.ts_test_srcs(unit, (), {})[df.TestFiles.KEY]
     if not test_files:
-        ymake.report_configure_error("No tests found")
+        ymake.report_configure_error(f"No tests found for {test_runner}")
         return
 
     from lib.nots.package_manager import constants
@@ -942,7 +948,10 @@ def on_ts_test_for_configure(
 # noinspection PyUnusedLocal
 @_with_report_configure_error
 def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
-    # FBP-1085
+    if for_mod == "." or for_mod == "./":
+        ymake.report_configure_error(f"Tests should be for parent module but got path '{for_mod}'")
+        return
+
     is_arc_root = root == "${ARCADIA_ROOT}"
     is_rel_for_mod = for_mod.startswith(".")
 

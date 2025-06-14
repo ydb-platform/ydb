@@ -449,6 +449,7 @@ struct TShardedTableOptions {
         TMaybe<TDuration> ResolvedTimestamps;
         TMaybe<TString> AwsRegion;
         bool TopicAutoPartitioning = false;
+        bool SchemaChanges = false;
     };
 
     struct TFamily {
@@ -669,6 +670,12 @@ void CancelAddIndex(
         Tests::TServer::TPtr server,
         const TString& dbName,
         ui64 buildIndexId);
+
+ui64 AsyncMoveIndex(
+        Tests::TServer::TPtr server,
+        const TString& tablePath,
+        const TString& srcIndexName,
+        const TString& dstIndexName);
 
 ui64 AsyncAlterDropIndex(
         Tests::TServer::TPtr server,

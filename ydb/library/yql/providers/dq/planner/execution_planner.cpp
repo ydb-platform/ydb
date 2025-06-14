@@ -454,6 +454,7 @@ namespace NYql::NDqs {
             ui64 stageId, publicId;
             std::tie(programStr, stageId, publicId) = StagePrograms[task.StageId];
             program.SetRaw(programStr);
+            program.SetLangVer(TypeContext->LangVer);
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
@@ -622,6 +623,9 @@ namespace NYql::NDqs {
         settings.SetCacheLimit(FromString<ui64>(streamLookup.MaxCachedRows().StringValue()));
         settings.SetCacheTtlSeconds(FromString<ui64>(streamLookup.TTL().StringValue()));
         settings.SetMaxDelayedRows(FromString<ui64>(streamLookup.MaxDelayedRows().StringValue()));
+        if (auto maybeMultiget = streamLookup.IsMultiget()) {
+            settings.SetIsMultiget(FromString<bool>(maybeMultiget.Cast().StringValue()));
+        }
 
         const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
         const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
@@ -823,11 +827,13 @@ namespace NYql::NDqs {
         const TString& program,
         NActors::TActorId executerID,
         NActors::TActorId resultID,
-        const TTypeAnnotationNode* typeAnn)
+        const TTypeAnnotationNode* typeAnn,
+        TLangVersion langver)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
         , TypeAnn(typeAnn)
+        , LangVer(langver)
     { }
 
     TVector<TDqTask>& TDqsSingleExecutionPlanner::GetTasks()
@@ -855,6 +861,7 @@ namespace NYql::NDqs {
         auto& program = *task.MutableProgram();
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(Program);
+        program.SetLangVer(LangVer);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();

@@ -124,49 +124,49 @@ blob_storage_config:         # configuration of static blobstorage group.
       rings:          # in mirror-3-dc must have exactly 3 rings or availability zones
       - fail_domains:  # first record: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
-          - node_id: *host_1
+          - node_id: 1
             pdisk_category: &pdisk_category 1 # 1 - SSD, 0 - HDD
             path: *disk_path_1
             pdisk_guid: 1
         - vdisk_locations:
-          - node_id: *host_1
+          - node_id: 1
             pdisk_category: *pdisk_category
             path: *disk_path_2
             pdisk_guid: 2
         - vdisk_locations:
-          - node_id: *host_1
+          - node_id: 1
             pdisk_category: *pdisk_category
             path: *disk_path_3
             pdisk_guid: 3
       - fail_domains: # second ring: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
-          - node_id: *host_2
+          - node_id: 2
             pdisk_category: *pdisk_category
             path: *disk_path_1
             pdisk_guid: 4
         - vdisk_locations:
-          - node_id: *host_2
+          - node_id: 2
             pdisk_category: *pdisk_category
             path: *disk_path_2
             pdisk_guid: 5
         - vdisk_locations:
-          - node_id: *host_2
+          - node_id: 2
             pdisk_category: *pdisk_category
             path: *disk_path_3
             pdisk_guid: 6
       - fail_domains: # third ring: fail domains of the static group describe where each vdisk of the static group should be located.
         - vdisk_locations:
-          - node_id: *host_3
+          - node_id: 3
             pdisk_category: *pdisk_category
             path: *disk_path_1
             pdisk_guid: 7
         - vdisk_locations:
-          - node_id: *host_3
+          - node_id: 3
             pdisk_category: *pdisk_category
             path: *disk_path_2
             pdisk_guid: 8
         - vdisk_locations:
-          - node_id: *host_3
+          - node_id: 3
             pdisk_category: *pdisk_category
             path: *disk_path_3
             pdisk_guid: 9

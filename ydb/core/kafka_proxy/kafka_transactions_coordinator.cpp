@@ -1,16 +1,19 @@
 #include "kafka_transactions_coordinator.h"
 #include "actors/kafka_transaction_actor.h"
+#include "actors/txn_actor_response_builder.h"
+#include <ydb/core/kqp/common/simple/services.h>
 
 namespace NKafka {
     // Handles new transactional_id+producer_id+producer_epoch: 
     // 1. validates that producer is not a zombie (in case of parallel init_producer_requests)
     // 2. saves transactional_id+producer_id+producer_epoch for validation of future transactional requests
-    void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvSaveTxnProducerRequest::TPtr& ev, const TActorContext& ctx){
+    void TTransactionsCoordinator::Handle(TEvKafka::TEvSaveTxnProducerRequest::TPtr& ev, const TActorContext& ctx){
         TEvKafka::TEvSaveTxnProducerRequest* request = ev->Get();
 
-        if (ProducersByTransactionalId.contains(request->TransactionalId)) {
-            TProducerState& currentProducerState = ProducersByTransactionalId[request->TransactionalId];
-            TProducerState newProducerState = TProducerState(request->ProducerId, request->ProducerEpoch);
+        auto it = ProducersByTransactionalId.find(request->TransactionalId);
+        if (it != ProducersByTransactionalId.end()) {
+            TProducerInstanceId& currentProducerState = it->second;
+            const TProducerInstanceId& newProducerState = request->ProducerState;
 
             if (NewProducerStateIsOutdated(currentProducerState, newProducerState)) {
                 TString message = GetProducerIsOutdatedError(request->TransactionalId, currentProducerState, newProducerState);
@@ -18,57 +21,74 @@ namespace NKafka {
                 return;
             } 
 
-            currentProducerState.Id = request->ProducerId;
-            currentProducerState.Epoch = request->ProducerEpoch;
+            currentProducerState = std::move(newProducerState);
+            DeleteTransactionActor(request->TransactionalId);
         } else {
-            ProducersByTransactionalId[request->TransactionalId] = TProducerState(request->ProducerId, request->ProducerEpoch);
+            ProducersByTransactionalId.emplace(request->TransactionalId, request->ProducerState);
         }
         
         ctx.Send(ev->Sender, new TEvKafka::TEvSaveTxnProducerResponse(TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK, ""));
     };
 
-    void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
+    void TTransactionsCoordinator::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
         HandleTransactionalRequest<TAddPartitionsToTxnResponseData>(ev, ctx);
     };
 
-    void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx){
+    void TTransactionsCoordinator::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx){
         HandleTransactionalRequest<TAddOffsetsToTxnResponseData>(ev, ctx);
     };
 
-    void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
+    void TTransactionsCoordinator::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
         HandleTransactionalRequest<TTxnOffsetCommitResponseData>(ev, ctx);
     };
 
-    void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
+    void TTransactionsCoordinator::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         HandleTransactionalRequest<TEndTxnResponseData>(ev, ctx);
     };
 
-    void TKafkaTransactionsCoordinator::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
+    void TTransactionsCoordinator::Handle(TEvKafka::TEvTransactionActorDied::TPtr& ev, const TActorContext&) {
+        auto it = ProducersByTransactionalId.find(ev->Get()->TransactionalId);
+        const TProducerInstanceId& deadActorProducerState = ev->Get()->ProducerState;
+
+        if (it == ProducersByTransactionalId.end() || it->second != deadActorProducerState) {
+            // new actor was already registered, we can just ignore this event
+            KAFKA_LOG_D("Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already been reinitialized with new epoch or deleted. Ignoring this event");
+        } else {
+            KAFKA_LOG_D("Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId 
+                << " and producerId " << ev->Get()->ProducerState.Id 
+                << " and producerEpoch " << ev->Get()->ProducerState.Epoch
+                << ". Erasing info about this actor.");
+            // erase info about actor to prevent future zombie requests from this producer
+            TxnActorByTransactionalId.erase(ev->Get()->TransactionalId);
+        }
+    };
+
+    void TTransactionsCoordinator::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
         KAFKA_LOG_D("Got poison pill, killing all transaction actors");
         for (auto& [transactionalId, txnActorId]: TxnActorByTransactionalId) {
             ctx.Send(txnActorId, new TEvents::TEvPoison());
-            KAFKA_LOG_D(TStringBuilder() << "Sent poison pill to transaction actor for transactionalId " << transactionalId);
+            KAFKA_LOG_D("Sent poison pill to transaction actor for transactionalId " << transactionalId);
         }
         PassAway();
     };
 
-    void TKafkaTransactionsCoordinator::PassAway() {
+    void TTransactionsCoordinator::PassAway() {
         KAFKA_LOG_D("Killing myself");
         TBase::PassAway();
     };
 
     // Validates producer's id and epoch
-    // If valid: proxies requests to the relevant TKafkaTransactionActor
+    // If valid: proxies requests to the relevant TTransactionActor
     // If outdated or not initialized: returns PRODUCER_FENCED error
     template<class ErrorResponseType, class EventType>
-    void TKafkaTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
+    void TTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
         EventType* ev = evHandle->Get();
-        KAFKA_LOG_D(TStringBuilder() << "Receieved message for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+        KAFKA_LOG_D("Received message for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
         
         // create helper struct to simplify methods interaction
         auto txnRequest = TTransactionalRequest(
-            ev->Request->TransactionalId->c_str(),
-            TProducerState(ev->Request->ProducerId, ev->Request->ProducerEpoch),
+            *ev->Request->TransactionalId,
+            TProducerInstanceId(ev->Request->ProducerId, ev->Request->ProducerEpoch),
             ev->CorrelationId,
             ev->ConnectionId
         );
@@ -80,97 +100,55 @@ namespace NKafka {
     };
 
     template<class ErrorResponseType, class RequestType>
-    void TKafkaTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
+    void TTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
         KAFKA_LOG_W(error);
-        std::shared_ptr<ErrorResponseType> response = BuildProducerFencedResponse<ErrorResponseType>(kafkaRequest);
+        std::shared_ptr<ErrorResponseType> response = NKafkaTransactions::BuildResponse<ErrorResponseType>(kafkaRequest, EKafkaErrors::PRODUCER_FENCED);
         Send(txnRequestDetails.ConnectionId, new TEvKafka::TEvResponse(txnRequestDetails.CorrelationId, response, EKafkaErrors::PRODUCER_FENCED));
     };
 
     template<class EventType> 
-    void TKafkaTransactionsCoordinator::ForwardToTransactionActor(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
+    void TTransactionsCoordinator::ForwardToTransactionActor(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
         EventType* ev = evHandle->Get();
         
         TActorId txnActorId;
-        if (TxnActorByTransactionalId.contains(ev->Request->TransactionalId->c_str())) {
-            txnActorId = TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()];
+        if (TxnActorByTransactionalId.contains(*ev->Request->TransactionalId)) {
+            txnActorId = TxnActorByTransactionalId[*ev->Request->TransactionalId];
         } else {
-            txnActorId = ctx.Register(new TKafkaTransactionActor());
-            TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()] = txnActorId;
-            KAFKA_LOG_D(TStringBuilder() << "Registered TKafkaTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+            txnActorId = ctx.Register(new TTransactionActor(*ev->Request->TransactionalId, ev->Request->ProducerId, ev->Request->ProducerEpoch, ev->DatabasePath));
+            TxnActorByTransactionalId[*ev->Request->TransactionalId] = txnActorId;
+            KAFKA_LOG_D("Registered TTransactionActor with id " << txnActorId << " for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
         }
         TAutoPtr<IEventHandle> tmpPtr = evHandle.Release();
         ctx.Forward(tmpPtr, txnActorId);
-        KAFKA_LOG_D(TStringBuilder() << "Forwarded message to TKafkaTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+        KAFKA_LOG_D("Forwarded message to TTransactionActor with id " << txnActorId << " for transactionalId " << *ev->Request->TransactionalId << " and ApiKey " << ev->Request->ApiKey());
     };
 
-    template<class ResponseType, class RequestType>
-    std::shared_ptr<ResponseType> TKafkaTransactionsCoordinator::BuildProducerFencedResponse(TMessagePtr<RequestType> request) {
-        Y_UNUSED(request); // used in other template functions
-        auto response = std::make_shared<ResponseType>();
-        response->ErrorCode = EKafkaErrors::PRODUCER_FENCED;
-        return response;
+    void TTransactionsCoordinator::DeleteTransactionActor(const TString& transactionalId) {
+        auto it = TxnActorByTransactionalId.find(transactionalId);
+        if (it != TxnActorByTransactionalId.end()) {
+            Send(it->second, new TEvents::TEvPoison());
+            TxnActorByTransactionalId.erase(it);
+        } 
+        // we ignore case when there is no actor, cause it means that no actor was ever created for this transactionalId
+    }
+
+    bool TTransactionsCoordinator::NewProducerStateIsOutdated(const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState) {
+        return currentProducerState > newProducerState;
     };
 
-    template<>
-    std::shared_ptr<TAddPartitionsToTxnResponseData> TKafkaTransactionsCoordinator::BuildProducerFencedResponse<TAddPartitionsToTxnResponseData, TAddPartitionsToTxnRequestData>(TMessagePtr<TAddPartitionsToTxnRequestData> request) {
-        auto response = std::make_shared<TAddPartitionsToTxnResponseData>();
-        std::vector<TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult> topicsResponse;
-        topicsResponse.reserve(request->Topics.size());
-        for (const auto& requestTopic : request->Topics) {
-            TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult topicInResponse;
-            topicInResponse.Name = requestTopic.Name;
-            topicInResponse.Results.reserve(requestTopic.Partitions.size());
-            for (const auto& requestPartition : requestTopic.Partitions) {
-                TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult::TAddPartitionsToTxnPartitionResult partitionInResponse;
-                partitionInResponse.PartitionIndex = requestPartition;
-                partitionInResponse.ErrorCode = EKafkaErrors::PRODUCER_FENCED;
-                topicInResponse.Results.push_back(partitionInResponse);
-            }
-            topicsResponse.push_back(topicInResponse);
-        }
-        response->Results = std::move(topicsResponse);
-        return response;
-    };
+    TMaybe<TString> TTransactionsCoordinator::GetTxnRequestError(const TTransactionalRequest& request) {
+        auto it = ProducersByTransactionalId.find(request.TransactionalId);
 
-    template<>
-    std::shared_ptr<TTxnOffsetCommitResponseData> TKafkaTransactionsCoordinator::BuildProducerFencedResponse<TTxnOffsetCommitResponseData, TTxnOffsetCommitRequestData>(TMessagePtr<TTxnOffsetCommitRequestData> request) {
-        auto response = std::make_shared<TTxnOffsetCommitResponseData>();
-        std::vector<TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic> topicsResponse;
-        topicsResponse.reserve(request->Topics.size());
-        for (const auto& requestTopic : request->Topics) {
-            TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic topicInResponse;
-            topicInResponse.Name = requestTopic.Name;
-            topicInResponse.Partitions.reserve(requestTopic.Partitions.size());
-            for (const auto& requestPartition : requestTopic.Partitions) {
-                TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic::TTxnOffsetCommitResponsePartition partitionInResponse;
-                partitionInResponse.PartitionIndex = requestPartition.PartitionIndex;
-                partitionInResponse.ErrorCode = EKafkaErrors::PRODUCER_FENCED;
-                topicInResponse.Partitions.push_back(partitionInResponse);
-            }
-            topicsResponse.push_back(topicInResponse);
-        }
-        response->Topics = std::move(topicsResponse);;
-        return response;
-    };
-
-    bool TKafkaTransactionsCoordinator::NewProducerStateIsOutdated(const TProducerState& currentProducerState, const TProducerState& newProducerState) {
-        bool producerIdAlreadyGreater = currentProducerState.Id > newProducerState.Id;
-        bool producerIdsAreEqual = currentProducerState.Id == newProducerState.Id;
-        bool epochAlreadyGreater = currentProducerState.Epoch > newProducerState.Epoch;
-        return producerIdAlreadyGreater || (producerIdsAreEqual && epochAlreadyGreater);
-    };
-
-    TMaybe<TString> TKafkaTransactionsCoordinator::GetTxnRequestError(const TTransactionalRequest& request) {
-        if (!ProducersByTransactionalId.contains(request.TransactionalId)) {
+        if (it == ProducersByTransactionalId.end()) {
             return TStringBuilder() << "Producer with transactional id " << request.TransactionalId << " was not yet initailized.";
-        } else if (NewProducerStateIsOutdated(ProducersByTransactionalId[request.TransactionalId], request.ProducerState)) {
-            return GetProducerIsOutdatedError(request.TransactionalId, ProducersByTransactionalId[request.TransactionalId], request.ProducerState);
+        } else if (NewProducerStateIsOutdated(it->second, request.ProducerState)) {
+            return GetProducerIsOutdatedError(request.TransactionalId, it->second, request.ProducerState);
         } else {
             return {};
         }
     };
 
-    TString TKafkaTransactionsCoordinator::GetProducerIsOutdatedError(const TString& transactionalId, const TProducerState& currentProducerState, const TProducerState& newProducerState) {
+    TString TTransactionsCoordinator::GetProducerIsOutdatedError(const TString& transactionalId, const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState) {
         return TStringBuilder() << "Producer with transactional id " << transactionalId <<
                     "is outdated. Current producer id is " << currentProducerState.Id << 
                     " and producer epoch is " << currentProducerState.Epoch << ". Requested producer id is " << newProducerState.Id << 

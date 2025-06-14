@@ -497,7 +497,6 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
 void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
 {
     ui32 nodeId = info.GetVSlotId().GetNodeId();
-    Y_DEBUG_ABORT_UNLESS(HasNode(nodeId));
     if (!HasNode(nodeId)) {
         BLOG_ERROR("Got VDisk info from BSC base config for unknown node " << nodeId);
         return;
@@ -915,8 +914,10 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
-    for (ui32 ringId = 0; ringId < info->Rings.size(); ++ringId) {
-        auto &ring = info->Rings[ringId];
+    Y_ABORT_UNLESS(info->RingGroups.size() > 0);
+    auto& groupInfo = info->RingGroups[0];
+    for (ui32 ringId = 0; ringId < groupInfo.Rings.size(); ++ringId) {
+        auto &ring = groupInfo.Rings[ringId];
         TStateStorageRingInfoPtr ringInfo = MakeIntrusive<TStateStorageRingInfo>();
         ringInfo->RingId = ringId;
         if (ring.IsDisabled)

@@ -86,24 +86,23 @@ public:
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(PhysicalRequest.TxAlloc,
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
-        for (const auto& tx : PreparedQuery->GetTransactions()) {
-            for (const auto& stage : tx->GetStages()) {
-                for (const auto& sink : stage.GetSinks()) {
-                    FillTableMetaInfo(sink);
-
-                    if (!KeyColumnInfo.empty()) {
-                        break;
-                    }
-                }
-            }
-        }
-
         if (TableServiceConfig.HasBatchOperationSettings()) {
             BatchOperationSettings = SetBatchOperationSettings(TableServiceConfig.GetBatchOperationSettings());
         }
 
         PE_LOG_I("Created " << ActorName << " with MaxBatchSize = " << BatchOperationSettings.MaxBatchSize
             << ", PartitionExecutionLimit = " << BatchOperationSettings.PartitionExecutionLimit);
+
+        for (const auto& tx : PreparedQuery->GetTransactions()) {
+            for (const auto& stage : tx->GetStages()) {
+                for (const auto& sink : stage.GetSinks()) {
+                    FillTableMetaInfo(sink);
+                    if (!KeyColumnInfo.empty()) {
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     void Bootstrap() {
@@ -361,13 +360,14 @@ private:
         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
         switch (settings.GetType()) {
-            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
                 OperationType = TKeyDesc::ERowOperation::Erase;
                 break;
             default:
+                YQL_ENSURE(false);
                 break;
         }
 
@@ -682,7 +682,7 @@ private:
                 firstEmpty = std::min(firstEmpty, info.ParamIndex);
             }
 
-            FillRequestParameter(queryData, paramName, cellValue);
+            FillRequestParameter(queryData, paramName, cellValue, /* setDefault */ !cellValue.HasValue());
         }
 
         FillRequestParameter(queryData, prefixRangeName, firstEmpty);

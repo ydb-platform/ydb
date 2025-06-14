@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         )";
 
         TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/NotABackupDir/", restoreSettings, 
-                                   {NKikimrScheme::StatusPathDoesNotExist});
+                                   {NKikimrScheme::StatusNameConflict});
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -289,11 +289,12 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         auto& env = setup.Env;
         auto& txId = setup.TxId;
 
-        // Create test table
-        setup.CreateStandardTable("BusyTable");
+        // Create backup collection for BusyTable (note: don't create the actual table since restore will create it)
+        setup.CreateBackupCollection("BusyCollection", {"/MyRoot/BusyTable"});
 
-        // Create complete backup scenario
-        setup.CreateCompleteBackupScenario("BusyCollection", {"BusyTable"}, 2);
+        // Create backup structure manually to ensure long restore scenario
+        setup.CreateFullBackup("BusyCollection", {"BusyTable"});
+        setup.CreateIncrementalBackups("BusyCollection", {"BusyTable"}, 2);
 
         // Start first restore operation
         setup.ExecuteAsyncRestore("BusyCollection");

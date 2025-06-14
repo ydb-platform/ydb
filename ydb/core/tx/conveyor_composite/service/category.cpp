@@ -33,7 +33,8 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
     auto result = pMin->ExtractTaskWithPrediction(counters);
     if (pMin->GetTasksCount() == 0) {
         AFL_VERIFY(ProcessesWithTasks.erase(pMin->GetProcessId()));
-    } else if (scopeIds.emplace(pMin->GetScope()->GetScopeId()).second) {
+    } 
+    if (scopeIds.emplace(pMin->GetScope()->GetScopeId()).second) {
         pMin->GetScope()->IncInFlight();
     }
     Counters->WaitingQueueSize->Set(WaitingTasksCount->Val());

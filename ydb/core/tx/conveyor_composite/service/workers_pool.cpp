@@ -79,7 +79,7 @@ bool TWorkersPool::DrainTasks() {
                 procLocal.pop_back();
                 continue;
             }
-            tasks.emplace_back(*task);
+            tasks.emplace_back(std::move(*task));
             procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
             std::push_heap(procLocal.begin(), procLocal.end(), predHeap);

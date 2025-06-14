@@ -265,7 +265,6 @@ void TVectorRecallEvaluator::AddRecall(double recall) {
 }
 
 double TVectorRecallEvaluator::GetAverageRecall() const {
-    std::lock_guard<std::mutex> lock(Mutex);
     return ProcessedTargets > 0 ? TotalRecall / ProcessedTargets : 0.0;
 }
 
@@ -342,11 +341,14 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
-    queryInfo.GenericQueryResultCallback = std::bind(&TVectorWorkloadGenerator::RecallCallback, this, std::placeholders::_1, *ThreadLocalTargetIndex);
+    if (Params.Recall) {
+        queryInfo.GenericQueryResultCallback = std::bind(&TVectorWorkloadGenerator::RecallCallback, this, std::placeholders::_1, *ThreadLocalTargetIndex);
+    }
     return TQueryInfoList(1, queryInfo);
 }
 
 void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex) {
+    Y_ABORT_UNLESS(Params.Recall);
     if (!queryResult.IsSuccess()) {
         // Ignore the error. It's printed in the verbose mode
         return;
@@ -406,24 +408,24 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
 
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     auto addCommonParam = [&]() {
-        opts.AddLongOption(0, "table", "Table name.")
+        opts.AddLongOption( "table", "Table name.")
             .DefaultValue("vector_index_workload").StoreResult(&TableName);
-        opts.AddLongOption(0, "index", "Index name.")
+        opts.AddLongOption( "index", "Index name.")
             .DefaultValue("index").StoreResult(&IndexName);
     };
 
     auto addInitParam = [&]() {
-        opts.AddLongOption(0, "rows", "Number of vectors to init the table.")
+        opts.AddLongOption( "rows", "Number of vectors to init the table.")
             .Required().StoreResult(&VectorInitCount);
-        opts.AddLongOption(0, "distance", "Distance/similarity function")
+        opts.AddLongOption( "distance", "Distance/similarity function")
             .Required().StoreResult(&Distance);
-        opts.AddLongOption(0, "vector-type", "Type of vectors")
+        opts.AddLongOption( "vector-type", "Type of vectors")
             .Required().StoreResult(&VectorType);
-        opts.AddLongOption(0, "vector-dimension", "Vector dimension.")
+        opts.AddLongOption( "vector-dimension", "Vector dimension.")
             .Required().StoreResult(&VectorDimension);
-        opts.AddLongOption(0, "kmeans-tree-levels", "Number of levels in the kmeans tree")
+        opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree")
             .Required().StoreResult(&KmeansTreeLevels);
-        opts.AddLongOption(0, "kmeans-tree-clusters", "Number of cluster in kmeans")
+        opts.AddLongOption( "kmeans-tree-clusters", "Number of cluster in kmeans")
             .Required().StoreResult(&KmeansTreeClusters);
 
     };
@@ -432,12 +434,14 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     };
 
     auto addSelectParam = [&]() {
-        opts.AddLongOption(0, "targets", "Number of vectors to search as targets.")
-            .DefaultValue(1000).StoreResult(&Targets);
-        opts.AddLongOption(0, "top-k", "Number of top vector to return.")
+        opts.AddLongOption( "targets", "Number of vectors to search as targets.")
+            .DefaultValue(100).StoreResult(&Targets);
+        opts.AddLongOption( "top-k", "Number of top vector to return.")
             .DefaultValue(5).StoreResult(&TopK);
-        opts.AddLongOption(0, "kmeans-tree-clusters", " Number of top clusters during search.")
-            .DefaultValue(1).StoreResult(&KmeansTreeSearchClusters);    
+        opts.AddLongOption( "kmeans-tree-clusters", "Number of top clusters during search.")
+            .DefaultValue(1).StoreResult(&KmeansTreeSearchClusters);
+        opts.AddLongOption( "recall", "Measure recall metrics. It trains on 'targets' vector by bruce-force search.")
+            .StoreTrue(&Recall); 
     };
 
     switch (commandType) {
@@ -535,7 +539,9 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                     IndexPrefixColumn = GetIndexPrefixColumn();
                     VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>();
                     VectorRecallEvaluator->SampleExistingVectors(TableName.c_str(), Targets, *QueryClient);
-                    VectorRecallEvaluator->FillEtalons(TableName.c_str(), IndexPrefixColumn.has_value() ? IndexPrefixColumn->c_str() : nullptr, TopK, *QueryClient);
+                    if (Recall) {
+                        VectorRecallEvaluator->FillEtalons(TableName.c_str(), IndexPrefixColumn.has_value() ? IndexPrefixColumn->c_str() : nullptr, TopK, *QueryClient);
+                    }
                     break;
             }
             break;

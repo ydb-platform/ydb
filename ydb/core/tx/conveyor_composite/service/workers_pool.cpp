@@ -85,8 +85,9 @@ bool TWorkersPool::DrainTasks() {
             std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
         }
         newTask = true;
-        AFL_VERIFY(tasks.size());
-        RunTask(std::move(tasks));
+        if (tasks.size()) {
+            RunTask(std::move(tasks));
+        }
     }
     if (!Processes.front().GetCategory()->HasTasks()) {
         Counters->NoTasks->Add(1);

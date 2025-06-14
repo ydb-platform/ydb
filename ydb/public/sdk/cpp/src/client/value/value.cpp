@@ -1069,7 +1069,20 @@ public:
         , ProtoValue_{}
         , ArenaAllocatedValueProto_(arenaAllocatedValueProto) {}
 
+    const Ydb::Value& GetProto() const {
+        return ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_;
+    }
+
+    Ydb::Value& GetProto() {
+        return ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_;
+    }
+
+    Ydb::Value&& ExtractProto() && {
+        return std::move(ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_);
+    }
+
     TType Type_;
+private:
     Ydb::Value ProtoValue_;
     Ydb::Value* ArenaAllocatedValueProto_;
 };
@@ -1094,15 +1107,15 @@ TType & TValue::GetType() {
 }
 
 const Ydb::Value& TValue::GetProto() const {
-    return Impl_->ProtoValue_;
+    return Impl_->GetProto();
 }
 
 Ydb::Value& TValue::GetProto() {
-    return Impl_->ProtoValue_;
+    return Impl_->GetProto();
 }
 
 Ydb::Value&& TValue::ExtractProto() && {
-    return std::move(Impl_->ProtoValue_);
+    return std::move(std::move(*Impl_).ExtractProto());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1129,7 +1142,7 @@ public:
         : Value_(value.Impl_)
         , TypeParser_(value.GetType())
     {
-        Reset(Value_->ProtoValue_);
+        Reset(Value_->GetProto());
     }
 
     TImpl(const TType& type)

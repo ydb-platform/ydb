@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -159,14 +160,6 @@ struct TTaskOutputType {
     };
 };
 
-namespace NHashKind {
-    enum : ui32 {
-        EUndefined = 0,
-        EHashV1 = 1,
-        EColumnShardHashV1 = 2,
-    };
-};
-
 template <class TOutputMeta>
 struct TTaskOutput {
     ui32 Type = TTaskOutputType::Undefined;
@@ -177,8 +170,8 @@ struct TTaskOutput {
     TString SinkType;
     TOutputMeta Meta;
     TMaybe<TTransform> Transform;
-    
-    ui32 HashKind = NHashKind::EUndefined; // defined only for Type = TTaskOutputType::HashPartition
+
+    std::optional<EHashShuffleFuncType> HashKind; // defined only for Type = TTaskOutputType::HashPartition
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>

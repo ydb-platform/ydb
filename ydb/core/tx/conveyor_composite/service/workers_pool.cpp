@@ -83,7 +83,6 @@ bool TWorkersPool::DrainTasks() {
             procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
             std::push_heap(procLocal.begin(), procLocal.end(), predHeap);
-            scopes.emplace(tasks.back().GetScope()->GetScopeId(), tasks.back().GetScope());
         }
         newTask = true;
         AFL_VERIFY(tasks.size());

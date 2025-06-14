@@ -167,10 +167,7 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
         std::string embeddingBytes = vectorParser.ColumnParser("embedding").GetString();
         
         // Ensure we got a valid embedding
-        if (embeddingBytes.empty()) {
-            Cerr << "Warning: Empty embedding retrieved for id " << id << Endl;
-            continue;
-        }
+        Y_ABORT_UNLESS(!embeddingBytes.empty(), "Empty embedding retrieved for id %" PRIu64 , id);
         
         // Create target with the sampled vector
         TSelectTarget target;
@@ -181,8 +178,7 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
     }
     
     if (SelectTargets.size() < targetCount) {
-        Cerr << "Warning: Could only sample " << SelectTargets.size() << " vectors after " 
-             << attempts << " attempts." << Endl;
+        Cerr << "Warning: Could only sample " << SelectTargets.size() << " vectors after " << attempts << " attempts." << Endl;
     } else {
         Cout << "Successfully sampled " << SelectTargets.size() << " vectors from the dataset." << Endl;
     }
@@ -238,24 +234,15 @@ void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* inde
                 ui64 id = parser.ColumnParser("id").GetUint64();
                 SelectTargets[targetIndex].Etalons.push_back(id);
             }
+            if (SelectTargets[targetIndex].Etalons.empty()) {
+                Cerr << "Warning: target " << targetIndex << " have empty etalon sets" << Endl;
+            }
         }
         
         // Log progress for large datasets
         if (SelectTargets.size() > 100 && (batchEnd % 100 == 0 || batchEnd == SelectTargets.size())) {
             Cout << "Processed " << batchEnd << " of " << SelectTargets.size() << " targets..." << Endl;
         }
-    }
-    
-    // Verify all targets have etalons
-    size_t emptyEtalons = 0;
-    for (const auto& target : SelectTargets) {
-        if (target.Etalons.empty()) {
-            emptyEtalons++;
-        }
-    }
-    
-    if (emptyEtalons > 0) {
-        Cerr << "Warning: " << emptyEtalons << " targets have empty etalon sets" << Endl;
     }
     
     Cout << "Recall initialization completed for " << SelectTargets.size() << " targets." << Endl;
@@ -382,7 +369,7 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
     if (!indexResults.empty() && !etalons.empty()) {
         ui64 targetId = etalons[0]; // First etalon is the target ID itself
         
-        if (indexResults[0] != targetId) {
+        if (Params.Verbose && indexResults[0] != targetId) {
             Cerr << "Warning: Target ID " << targetId << " is not the first result for target " 
                  << targetIndex << ". Found " << indexResults[0] << " instead." << Endl;
         }
@@ -403,12 +390,13 @@ void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult 
         Params.VectorRecallEvaluator->AddRecall(recall);
         
         // Add warning when zero relevant results found
-        if (relevantRetrieved == 0 && !indexResults.empty()) {
+        if (Params.Verbose && relevantRetrieved == 0 && !indexResults.empty()) {
             Cerr << "Warning: Zero relevant results for target " << targetIndex << Endl;
         }
     } else {
         // Handle empty results or empty etalons
-        Cerr << "Warning: Empty results or etalons for target " << targetIndex << Endl;
+        if (Params.Verbose)
+            Cerr << "Warning: Empty results or etalons for target " << targetIndex << Endl;
     }
 
     // Update the thread-local index for the next query

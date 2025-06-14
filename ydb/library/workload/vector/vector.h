@@ -55,6 +55,7 @@ public:
     size_t VectorInitCount = 0;
     size_t KmeansTreeSearchClusters = 0;
     size_t TopK = 0;
+    bool Recall;
 private:
     size_t GetVectorDimension() const;
     std::optional<std::string> GetIndexPrefixColumn() const;

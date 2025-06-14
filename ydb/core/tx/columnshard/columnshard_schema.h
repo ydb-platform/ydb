@@ -83,7 +83,8 @@ struct Schema : NIceDb::Schema {
         GCBarrierPreparationGen = 16,
         GCBarrierPreparationStep = 17,
         SubDomainLocalPathId = 18,
-        SubDomainOutOfSpace = 19
+        SubDomainOutOfSpace = 19,
+        MaxInternalPathId = 20, //max internal path id ever known in this tablet
     };
 
     enum class EInsertTableIds : ui8 {

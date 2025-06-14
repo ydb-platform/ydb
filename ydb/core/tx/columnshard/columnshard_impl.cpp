@@ -292,7 +292,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     }
     const auto internalPathId = TablesManager.CreateInternalPathId(schemeShardLocalPathId);
 
-    LOG_S_DEBUG("EnsureTable for pathId: " << TUnifiedPathId(internalPathId, schemeShardLocalPathId)
+    LOG_S_INFO("EnsureTable for pathId: " << TUnifiedPathId(internalPathId, schemeShardLocalPathId)
                                            << " ttl settings: " << tableProto.GetTtlSettings()
                                            << " at tablet " << TabletID());
 

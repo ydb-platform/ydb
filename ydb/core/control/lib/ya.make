@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    ydb/core/control/lib/base
     util
     library/cpp/containers/absl_flat_hash
     library/cpp/deprecated/atomic
@@ -14,7 +15,6 @@ SRCS(
     defs.h
     dynamic_control_board_impl.cpp
     dynamic_control_board_impl.h
-    immediate_control_board_control.cpp
     immediate_control_board_control.h
     immediate_control_board_html_renderer.cpp
     immediate_control_board_impl.cpp

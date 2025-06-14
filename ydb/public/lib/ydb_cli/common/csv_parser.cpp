@@ -386,25 +386,6 @@ public:
         return false;
     }
 
-    bool TryParseValue(const TStringBuf& token, TPossibleType& possibleType) {
-        if (NullValue && token == NullValue) {
-            possibleType.SetHasNulls(true);
-            return true;
-        }
-        possibleType.SetHasNonNulls(true);
-        switch (Parser.GetKind()) {
-        case TTypeParser::ETypeKind::Primitive: {
-            return TryParsePrimitive(TString(token));
-        }
-        case TTypeParser::ETypeKind::Decimal: {
-            break;
-        }
-        default:
-            throw TCsvParseException() << "Unsupported type kind: " << Parser.GetKind();
-        }
-        return false;
-    }
-
     TValue Convert(const TStringBuf& token) {
         BuildValue(token);
         return Builder.Build();
@@ -443,16 +424,6 @@ TValue FieldToValue(TTypeParser& parser,
         return converter.Convert(token);
     } catch (std::exception& e) {
         throw FormatError(e, meta, columnName);
-    }
-}
-
-bool TryParse(TTypeParser& parser, const TStringBuf& token, const std::optional<TString>& nullValue, TPossibleType& possibleType) {
-    try {
-        TCsvToYdbConverter converter(parser, nullValue);
-        return converter.TryParseValue(token, possibleType);
-    } catch (std::exception& e) {
-        Cerr << "UNEXPECTED EXCEPTION: " << e.what() << Endl;
-        return false;
     }
 }
 
@@ -631,131 +602,6 @@ static const std::vector<TType> availableTypes = {
 static const auto availableTypesEnd = availableTypes.end();
 
 } // namespace
-
-TPossibleType::TPossibleType() {
-    CurrentType = availableTypes.begin();
-}
-
-TPossibleType::TPossibleType(std::vector<TType>::const_iterator currentType)
-: CurrentType(currentType)
-{
-}
-
-void TPossibleType::SetIterator(const std::vector<TType>::const_iterator& newIterator) {
-    CurrentType = newIterator;
-}
-
-std::vector<TType>::const_iterator& TPossibleType::GetIterator() {
-    return CurrentType;
-}
-
-const std::vector<TType>::const_iterator& TPossibleType::GetAvailableTypesEnd() {
-    return availableTypesEnd;
-}
-
-void TPossibleType::SetHasNulls(bool hasNulls) {
-    HasNulls = hasNulls;
-}
-
-bool TPossibleType::GetHasNulls() const {
-    return HasNulls;
-}
-
-void TPossibleType::SetHasNonNulls(bool hasNonNulls) {
-    HasNonNulls = hasNonNulls;
-}
-
-bool TPossibleType::GetHasNonNulls() const {
-    return HasNonNulls;
-}
-
-TPossibleTypes::TPossibleTypes(size_t size) {
-    ColumnPossibleTypes.resize(size);
-}
-
-TPossibleTypes::TPossibleTypes(std::vector<TPossibleType>& currentColumnTypes)
-: ColumnPossibleTypes(currentColumnTypes)
-{
-}
-
-// Pass this copy to a worker to parse his chunk of data with it to merge it later back into this main chunk
-TPossibleTypes TPossibleTypes::GetCopy() {
-    std::shared_lock<std::shared_mutex> ReadLock(Lock);
-    return TPossibleTypes(ColumnPossibleTypes);
-}
-
-// Merge this main chunk with another chunk that parsed a CSV batch and maybe dismissed some types
-void TPossibleTypes::MergeWith(TPossibleTypes& newTypes) {
-    auto newTypesVec = newTypes.GetColumnPossibleTypes();
-    {
-        std::shared_lock<std::shared_mutex> ReadLock(Lock);
-        bool changed = false;
-        for (size_t i = 0; i < ColumnPossibleTypes.size(); ++i) {
-            auto& currentPossibleType = ColumnPossibleTypes[i];
-            auto& newPossibleType = newTypesVec[i];
-            auto& currentIt = currentPossibleType.GetIterator();
-            const auto& newIt = newPossibleType.GetIterator();
-            if (newIt > currentIt) {
-                changed = true;
-                break;
-            }
-            if (currentPossibleType.GetHasNulls() != newPossibleType.GetHasNulls()
-                || currentPossibleType.GetHasNonNulls() != newPossibleType.GetHasNonNulls()) {
-                changed = true;
-                break;
-            }
-        }
-        if (!changed) {
-            return;
-        }
-    }
-    std::unique_lock<std::shared_mutex> WriteLock(Lock);
-    for (size_t i = 0; i < ColumnPossibleTypes.size(); ++i) {
-        auto& currentPossibleType = ColumnPossibleTypes[i];
-        auto& newPossibleType = newTypesVec[i];
-        const auto& newIt = newPossibleType.GetIterator();
-        if (newIt > currentPossibleType.GetIterator()) {
-            currentPossibleType.SetIterator(newIt);
-        }
-        if (newPossibleType.GetHasNulls()) {
-            currentPossibleType.SetHasNulls(true);
-        }
-        if (newPossibleType.GetHasNonNulls()) {
-            currentPossibleType.SetHasNonNulls(true);
-        }
-    }
-}
-
-std::vector<TPossibleType>& TPossibleTypes::GetColumnPossibleTypes() {
-    return ColumnPossibleTypes;
-}
-
-void TCsvParser::ParseLineTypes(TString& line, TPossibleTypes& possibleTypes, const TParseMetadata& meta) {
-    NCsvFormat::CsvSplitter splitter(line, Delimeter);
-    auto headerIt = Header.cbegin();
-    auto typesIt = possibleTypes.GetColumnPossibleTypes().begin();
-    do {
-        if (headerIt == Header.cend()) {
-            throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << line << "\"", meta);
-        }
-        TStringBuf token = Consume(splitter, meta, *headerIt);
-        TPossibleType& possibleType = *typesIt;
-        auto& typeIt = possibleType.GetIterator();
-        while (typeIt != availableTypesEnd) {
-            TTypeParser typeParser(*typeIt);
-            if (TryParse(typeParser, token, NullValue, possibleType)) {
-                break;
-            }
-            ++typeIt;
-        }
-        ++headerIt;
-        ++typesIt;
-    } while (splitter.Step());
-
-    if (headerIt != Header.cend()) {
-        throw FormatError(yexception() << "Header contains more fields than data. Header: \"" << HeaderRow << "\", data: \"" << line << "\"", meta);
-    }
-}
 
 const TVector<TString>& TCsvParser::GetHeader() {
     return Header;

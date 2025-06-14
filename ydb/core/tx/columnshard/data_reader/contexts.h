@@ -22,7 +22,7 @@ enum class EFetchingStage : ui32 {
 class TCurrentContext {
 private:
     std::optional<std::vector<TPortionDataAccessor>> Accessors;
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     std::shared_ptr<NGroupedMemoryManager::TProcessGuard> MemoryProcessGuard;
     std::shared_ptr<NGroupedMemoryManager::TScopeGuard> MemoryProcessScopeGuard;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryProcessGroupGuard;
@@ -66,6 +66,13 @@ public:
         return *Accessors;
     }
 
+    std::vector<TPortionDataAccessor> ExtractPortionAccessors() {
+        AFL_VERIFY(Accessors);
+        auto result = std::move(*Accessors);
+        Accessors.reset();
+        return result;
+    }
+
     void RegisterResourcesGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& g) {
         ResourceGuards.emplace_back(std::move(g));
     }
@@ -97,6 +104,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
 
 public:
+    TEnvironment(const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& accessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager)
+        : DataAccessorsManager(accessorsManager)
+        , StoragesManager(storagesManager) {
+    }
 };
 
 class TPortionsDataFetcher;

@@ -15,6 +15,15 @@ private:
     THashMap<ui64, TPortionDataAccessor> PortionsById;
 
 public:
+    TDataAccessorsResult() = default;
+
+    TDataAccessorsResult(std::vector<TPortionDataAccessor>&& portions) {
+        for (auto&& i : portions) {
+            const ui64 portionId = i.GetPortionInfo().GetPortionId();
+            PortionsById.emplace(portionId, std::move(i));
+        }
+    }
+
     const THashMap<ui64, TPortionDataAccessor>& GetPortions() const {
         return PortionsById;
     }

@@ -715,6 +715,52 @@ public:
     using TBase::TBase;
 };
 
+class TCompactionExecutor : public NDataFetcher::IFetchCallback {
+private:
+    const ui64 TabletId;
+    const NActors::TActorId ParentActorId;
+    std::shared_ptr<NOlap::TColumnEngineChanges> Changes;
+    std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+
+    virtual void DoOnFinished(TCurrentContext&& context) override {
+        NActors::TLogContextGuard g(
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
+        AFL_VERIFY(context.GetResourceGuards().size() == 2);
+        Changes->GroupResourcesGuard = context.GetResourceGuards().back();
+        Changes->Blobs = context.ExtractBlobs();
+        Changes->SetFetchedDataAccessors(
+            TDataAccessorsResult(context.ExtractPortionAccessors()), NOlap::TDataAccessorsInitializationContext(VersionedIndex));
+
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
+        {
+            NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters, LastCompletedTx);
+            Changes->ConstructBlobs(context).Validate();
+            if (!Changes->GetWritePortionsCount()) {
+                ev->SetPutStatus(NKikimrProto::OK);
+            }
+        }
+        TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
+    }
+    virtual void DoOnError(const TString& errorMessage) override {
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
+        ev->SetPutStatus(NKikimrProto::ERROR);
+        TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
+    }
+
+public:
+    TCompactionExecutor(const ui64 tabletId, const NActors::TActorId parentActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
+        const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
+        : TabletId()
+        , ParentActorId(parentActorId)
+        , Changes(changes)
+        , VersionedIndex(versionedIndex)
+    {
+    
+    }
+
+};
+
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
     Counters.GetCSCounters().OnSetupCompaction();
     BackgroundController.ResetWaitingPriority();
@@ -731,16 +777,11 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     compaction.Start(*this);
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    auto request = compaction.ExtractDataAccessorsRequest();
-    const ui64 accessorsMemory = request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()) +
-                                 indexChanges->CalcMemoryForUsage();
-    const auto subscriber = std::make_shared<TCompactionDataAccessorsSubscriber>(ResourceSubscribeActor, indexChanges, actualIndexInfo,
-        Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx(),
-        CompactTaskSubscription);
-    compaction.SetStage(NOlap::NChanges::EStage::AskResources);
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
-        std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, indexChanges->GetTaskIdentifier(), CompactTaskSubscription,
-            std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified(), indexChanges));
+    NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo, NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier());
+    auto env = std::make_shared<NDataFetcher::TEnvironment>(DataAccessorsManager, StoragesManager);
+    NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
+        std::make_shared<TCompactionExecutor>(TabletID(), SelfId(), indexChanges, actualIndexInfo),
+        env, NConveyorComposite::ESpecialTaskCategory::Compaction);
 }
 
 class TWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {

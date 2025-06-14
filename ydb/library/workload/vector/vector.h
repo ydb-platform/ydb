@@ -3,7 +3,10 @@
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
 #include <cctype>
-
+#include <mutex>
+#include <vector>
+#include <string>
+#include <atomic>
 
 namespace NYdbWorkload {
 
@@ -12,13 +15,24 @@ public:
     TVectorRecallEvaluator();
     ~TVectorRecallEvaluator();
     
+    // Core functionality for vector sampling and etalon generation
     void SampleExistingVectors(const char* tableName, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient);
     void FillEtalons(const char* tableName, const char* indexPrefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
+    
+    // Target access methods
     const std::string& GetTargetEmbedding(size_t index) const;
     const std::vector<ui64>& GetTargetEtalons(size_t index) const;
+    size_t GetTargetCount() const;
+    
+    // Recall metrics methods
     void AddRecall(double recall);
     double GetAverageRecall() const;
-    size_t GetTargetCount() const;
+    double GetTotalRecall() const;
+    size_t GetProcessedTargets() const;
+    
+    // Result processing method
+    void ProcessQueryResult(const NYdb::NQuery::TExecuteQueryResult& result, size_t targetIndex, bool verbose);
+
 private:
     struct TSelectTarget {
         std::string EmbeddingBytes;             // Sample targets to use in select workload
@@ -68,13 +82,11 @@ public:
     TVectorWorkloadGenerator(const TVectorWorkloadParams* params);
 
     std::string GetDDLQueries() const override;
-
     TQueryInfoList GetInitialData() override;
-
     TVector<std::string> GetCleanPaths() const override;
-
     TQueryInfoList GetWorkload(int type) override;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
+    
     enum class EType {
         Upsert,
         Select
@@ -84,9 +96,14 @@ private:
     TQueryInfoList Upsert();
     TQueryInfoList Select();
 
+    // Callback that uses the decoupled TVectorRecallEvaluator
     void RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex);
+    
+    // Helper method to get next target index
+    size_t GetNextTargetIndex(size_t currentIndex) const;
 
-    static thread_local std::optional<size_t> ThreadLocalTargetIndex;
+    // Using atomic for thread safety
+    static thread_local std::atomic<size_t> ThreadLocalTargetIndex;
 };
 
 } // namespace NYdbWorkload

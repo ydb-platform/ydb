@@ -1,0 +1,84 @@
+import ydb
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+
+
+class TestUpgradeToInternalPathId(object):
+    cluster = None
+    num_rows = 1000
+    config = KikimrConfigGenerator(
+        use_in_memory_pdisks=False,
+        column_shard_config={"generate_internal_path_id": False}
+    )
+
+    def start_cluster(self):
+        self.cluster = KiKiMR(self.config)
+        self.cluster.start()
+        driver = ydb.Driver(endpoint=f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", database="/Root")
+        self.session = ydb.QuerySessionPool(driver)
+        driver.wait(5, fail_fast=True)
+
+    def restart_cluster(self, generate_internal_path_id):
+        self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
+        self.cluster.update_configurator_and_restart(self.config)
+        driver = ydb.Driver(endpoint=f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", database="/Root")
+        self.session = ydb.QuerySessionPool(driver)
+        driver.wait(5, fail_fast=True)
+
+    def stop_cluster(self):
+        if self.cluster:
+            self.cluster.stop()
+            self.cluster = None
+
+    def create_table_with_data(self, table_name):
+        self.session.execute_with_retries(f"""
+                CREATE TABLE `{table_name}` (
+                    k Int32 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k)
+                ) WITH (STORE = COLUMN)
+            """)
+        self.session.execute_with_retries(f"""
+            $keys = ListFromRange(0, {self.num_rows});
+            $rows = ListMap($keys, ($i)->(<|k:$i, v: "value_" || CAST($i as String)|>));
+            INSERT INTO `{table_name}`
+            SELECT * FROM AS_TABLE($rows);
+            """)
+
+    def validate_table(self, table_name):
+        result = self.session.execute_with_retries(f"""
+            SELECT sum(k) AS c FROM `{table_name}`
+        """)
+        assert result[0].rows[0]["c"] == self.num_rows * (self.num_rows - 1) / 2
+
+    def get_path_ids(self, table_name):
+        result = self.session.execute_with_retries(f"""
+            SELECT PathId, InternalPathId FROM `{table_name}/.sys/primary_index_granule_stats` GROUP BY PathId, InternalPathId
+        """)
+        rows = [row for result_set in result for row in result_set.rows]
+        assert len(rows) == 1
+        return rows[0]
+
+    def test(self):
+        self.start_cluster()
+        self.create_table_with_data("table1")
+        self.validate_table("table1")
+        table1PathMapping = self.get_path_ids("table1")
+        assert table1PathMapping["PathId"] == table1PathMapping["InternalPathId"]
+
+        # restart using another configuration
+        self.restart_cluster(generate_internal_path_id=True)
+        self.validate_table("table1")
+        assert table1PathMapping == self.get_path_ids("table1")
+
+        self.create_table_with_data("table2")
+        self.validate_table("table2")
+        table2PathMapping = self.get_path_ids("table2")
+        assert table2PathMapping["PathId"] != table2PathMapping["InternalPathId"]
+
+        # restart using the same configuration as before
+        self.restart_cluster(generate_internal_path_id=True)
+        self.validate_table("table1")
+        assert table1PathMapping == self.get_path_ids("table1")
+        self.validate_table("table2")
+        assert table2PathMapping == self.get_path_ids("table2")

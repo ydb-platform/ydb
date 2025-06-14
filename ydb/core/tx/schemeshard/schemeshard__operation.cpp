@@ -1270,7 +1270,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropSysView(NextPartId(), txState);
 
     case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
-        Y_ABORT("TODO: implement");
+        return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();

@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         setup.ExecuteRestore("ValidCollection");
     }
 
-    Y_UNIT_TEST(CreateLongIncrementalRestoreOpDatabaseTableVerification) {
+    Y_UNIT_TEST(CreateLongIncrementalRestoreOpInternalStateVerification) {
         TLongOpTestSetup setup;
         auto& runtime = setup.Runtime;
         auto& env = setup.Env;
@@ -627,5 +627,58 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             Cerr << "No targets found in IncrementalRestoreTargets table" << Endl;
             UNIT_ASSERT_C(true, "Successfully queried IncrementalRestoreTargets table (no targets found)");
         }
+
+        // Now verify that path states are correctly set for incremental restore operations
+        Cerr << "Verifying path states during incremental restore..." << Endl;
+
+        // Check the target table state - it should be in EPathStateIncomingIncrementalRestore state
+        auto targetTableDesc = DescribePath(runtime, "/MyRoot/DatabaseTestTable");
+        auto targetState = targetTableDesc.GetPathDescription().GetSelf().GetPathState();
+        Cerr << "Target table state: " << NKikimrSchemeOp::EPathState_Name(targetState) << Endl;
+        
+        // Assert that target table is in the correct incoming incremental restore state
+        UNIT_ASSERT_VALUES_EQUAL_C(targetState, NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore,
+            TStringBuilder() << "Target table should be in EPathStateIncomingIncrementalRestore state, but got: " 
+                           << NKikimrSchemeOp::EPathState_Name(targetState));
+
+        // Check source table states in the backup collection
+        // Note: Source tables in backup collections are not directly involved in the restore transaction,
+        // so they should remain in their normal state (EPathStateNoChanges)
+        auto sourceTableDesc = DescribePath(runtime, "/MyRoot/.backups/collections/DatabaseTestCollection/backup_001_full/DatabaseTestTable");
+        auto sourceState = sourceTableDesc.GetPathDescription().GetSelf().GetPathState();
+        Cerr << "Source table (full backup) state: " << NKikimrSchemeOp::EPathState_Name(sourceState) << Endl;
+        
+        // Assert that full backup source table is in normal state (it's not directly involved in the transaction)
+        UNIT_ASSERT_VALUES_EQUAL_C(sourceState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
+            TStringBuilder() << "Source table (full backup) should be in EPathStateNoChanges state, but got: " 
+                           << NKikimrSchemeOp::EPathState_Name(sourceState));
+        
+        // Check incremental backup source table states
+        for (int i = 2; i <= 6; ++i) {
+            TString incrName = TStringBuilder() << "backup_" << Sprintf("%03d", i) << "_incremental";
+            TString incrTablePath = TStringBuilder() << "/MyRoot/.backups/collections/DatabaseTestCollection/" << incrName << "/DatabaseTestTable";
+            
+            auto incrTableDesc = DescribePath(runtime, incrTablePath);
+            auto actualState = incrTableDesc.GetPathDescription().GetSelf().GetPathState();
+            
+            Cerr << "Source table (" << incrName << ") state: " << NKikimrSchemeOp::EPathState_Name(actualState) << Endl;
+            
+            // Assert that incremental backup source tables are in normal state (they are not directly involved in the transaction)
+            UNIT_ASSERT_VALUES_EQUAL_C(actualState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
+                TStringBuilder() << "Source table (" << incrName << ") should be in EPathStateNoChanges state, but got: " 
+                               << NKikimrSchemeOp::EPathState_Name(actualState));
+        }
+
+        // Check the backup collection path state
+        // Note: The backup collection itself is not directly involved in the restore transaction,
+        // so it should remain in its normal state (EPathStateNoChanges)  
+        auto backupCollectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/DatabaseTestCollection");
+        auto collectionState = backupCollectionDesc.GetPathDescription().GetSelf().GetPathState();
+        Cerr << "Backup collection state: " << NKikimrSchemeOp::EPathState_Name(collectionState) << Endl;
+        
+        // Assert that backup collection is in normal state (it's not directly involved in the transaction)
+        UNIT_ASSERT_VALUES_EQUAL_C(collectionState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
+            TStringBuilder() << "Backup collection should be in EPathStateNoChanges state, but got: " 
+                           << NKikimrSchemeOp::EPathState_Name(collectionState));
     }
 }

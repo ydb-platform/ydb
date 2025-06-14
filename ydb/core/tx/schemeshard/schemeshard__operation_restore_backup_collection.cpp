@@ -199,6 +199,19 @@ public:
         // context.DbChanges.PersistSubDomainAlter(basenameId);
         txState.State = TTxState::Waiting;
 
+        // Add source tables from backup collection to transaction paths for proper state tracking
+        TString lastFullBackupName;
+        TVector<TString> incrBackupNames;
+
+        for (auto& [child, _] : bcPath.Base()->GetChildren()) {
+            if (child.EndsWith("_full")) {
+                lastFullBackupName = child;
+                incrBackupNames.clear();
+            } else if (child.EndsWith("_incremental")) {
+                incrBackupNames.push_back(child);
+            }
+        }
+
         context.DbChanges.PersistTxState(OperationId);
         context.OnComplete.ActivateTx(OperationId);
 
@@ -225,18 +238,6 @@ public:
             }
         }
 
-        TString lastFullBackupName;
-        TVector<TString> incrBackupNames;
-
-        for (auto& [child, _] : bcPath.Base()->GetChildren()) {
-            if (child.EndsWith("_full")) {
-                lastFullBackupName = child;
-                incrBackupNames.clear();
-            } else if (child.EndsWith("_incremental")) {
-                incrBackupNames.push_back(child);
-            }
-        }
-
         TStringBuf fullBackupName = lastFullBackupName;
         fullBackupName.ChopSuffix("_full"_sb);
 
@@ -246,7 +247,7 @@ public:
             TStringBuf incrBackupName = backupName;
             incrBackupName.ChopSuffix("_incremental"_sb);
 
-            op.SetFullBackupTrimmedName(TString(incrBackupName));
+            op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
 
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
@@ -293,6 +294,11 @@ bool CreateLongIncrementalRestoreOp(
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx) {
     // Create the control plane sub-operation directly for operation factory dispatch
     return new TCreateRestoreOpControlPlane(opId, tx);
+}
+
+ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, TTxState::ETxState state) {
+    // Create the control plane sub-operation for RestorePart dispatch
+    return new TCreateRestoreOpControlPlane(opId, state);
 }
 
 TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

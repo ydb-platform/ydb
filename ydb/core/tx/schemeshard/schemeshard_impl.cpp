@@ -4244,8 +4244,13 @@ void TSchemeShard::PersistRemovePublishingPath(NIceDb::TNiceDb& db, TTxId txId, 
 }
 
 void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
-    Y_UNUSED(db, op);
-    // TODO
+    TString data;
+    Y_PROTOBUF_SUPPRESS_NODISCARD op.SerializeToString(&data);
+
+    db.Table<Schema::IncrementalRestoreOperations>()
+        .Key(op.GetTxId())
+        .Update(
+            NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
 }
 
 TTabletId TSchemeShard::GetGlobalHive(const TActorContext& ctx) const {

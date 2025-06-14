@@ -1,6 +1,7 @@
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation.h"
 
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -59,49 +60,10 @@ public:
             return false;
         }
 
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropFileStore);
-        TPathId pathId = txState->TargetPathId;
-        auto path = context.SS->PathsById.at(pathId);
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        Y_ABORT_UNLESS(!path->Dropped());
-        path->SetDropped(step, OperationId.GetTxId());
-        context.SS->PersistDropStep(db, pathId, step, OperationId);
-        auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside(context.SS);
-        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
-
-        // KIKIMR-13173
-        // Repeat it here for a while, delete it from TDeleteParts after
-        // Initiate asynchronous deletion of all shards
-        for (auto shard : txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
-        }
-
-        TFileStoreInfo::TPtr fs = context.SS->FileStoreInfos.at(pathId);
-
-        const auto oldFileStoreSpace = fs->GetFileStoreSpace();
-        auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
-        domainDir->ChangeFileStoreSpaceCommit({ }, oldFileStoreSpace);
-
-        if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
-            context.SS->PersistRemoveFileStoreInfo(db, pathId);
-        }
-
-        context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
-        context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
-
-        ++parentDir->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentDir);
-        context.SS->ClearDescribePathCaches(parentDir);
-        context.SS->ClearDescribePathCaches(path);
-
-        if (!context.SS->DisablePublicationsOfDropping) {
-            context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-            context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-        }
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp);
+ 
+        // NIceDb::TNiceDb db(context.GetDB());
+        // TODO
 
         context.OnComplete.DoneOperation(OperationId);
 
@@ -117,7 +79,7 @@ public:
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropFileStore);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
@@ -299,16 +261,16 @@ bool CreateLongIncrementalRestoreOp(
     const TPath& bcPath,
     TVector<ISubOperation::TPtr>& result)
 {
-    // Create a control plane operation for long incremental restore
-    NKikimrSchemeOp::TModifyScheme longIncrementalRestoreOp;
-    longIncrementalRestoreOp.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
-    longIncrementalRestoreOp.SetInternal(true);
+    // Create a transaction for the long incremental restore operation
+    TTxTransaction tx;
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+    tx.SetInternal(true);
     
     // Set the backup collection path as the working directory for this operation
-    longIncrementalRestoreOp.SetWorkingDir(bcPath.PathString());
+    tx.SetWorkingDir(bcPath.PathString());
     
-    // Create the control plane sub-operation
-    result.push_back(new TCreateRestoreOpControlPlane(opId, longIncrementalRestoreOp));
+    // Use the factory function to create the control plane sub-operation
+    result.push_back(CreateLongIncrementalRestoreOpControlPlane(opId, tx));
     
     return true;
 }
@@ -393,9 +355,9 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
     }
 
-    CreateConsistentCopyTables(opId, consistentCopyTables, context, result);
+    CreateConsistentCopyTables(NextPartId(opId, result), consistentCopyTables, context, result);
 
-    CreateLongIncrementalRestoreOp(opId, bcPath, result);
+    CreateLongIncrementalRestoreOp(NextPartId(opId, result), bcPath, result);
 
     return result;
 }

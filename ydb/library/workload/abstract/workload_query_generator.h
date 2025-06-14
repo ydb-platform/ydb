@@ -198,6 +198,7 @@ public:
 public:
     ui64 BulkSize = 10000;
     std::string DbPath;
+    bool Verbose = false;
 
 protected:
     NYdb::NQuery::TQueryClient* QueryClient = nullptr;

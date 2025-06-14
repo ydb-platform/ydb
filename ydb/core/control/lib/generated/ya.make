@@ -2,7 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/protos
-    ydb/core/control/lib
+    ydb/core/control/lib/base
     library/cpp/threading/hot_swap
 )
 

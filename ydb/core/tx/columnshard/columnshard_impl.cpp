@@ -740,8 +740,7 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     compaction.SetStage(NOlap::NChanges::EStage::AskResources);
     NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
         std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, indexChanges->GetTaskIdentifier(), CompactTaskSubscription,
-                                    std::move(request),
-                                    subscriber, DataAccessorsManager.GetObjectPtrVerified(), indexChanges));
+            std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified(), indexChanges));
 }
 
 class TWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {

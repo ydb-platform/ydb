@@ -4,7 +4,7 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorOptional(const TString& storageId) const {
+std::shared_ptr<IBlobsStorageOperator> IStoragesManager::GetOperatorOptional(const TString& storageId) const {
     AFL_VERIFY(Initialized);
     AFL_VERIFY(storageId);
     TReadGuard rg(RWMutex);
@@ -16,7 +16,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOper
     }
 }
 
-std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) const {
+std::shared_ptr<IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) const {
     auto result = GetOperatorOptional(storageId);
     AFL_VERIFY(result)("storage_id", storageId);
     return result;

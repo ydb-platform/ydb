@@ -161,7 +161,7 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
                 assert log.count('"request_id":') == 1 and log.count(f'"request_id":"{none_value}"') == 0
                 assert log.count(f'"permission":"{permission}"') == 1
                 assert log.count('"id":') == 1 and log.count(f'"id":"{none_value}"') == 0
-                assert log.count(f'"issue":"{none_value}"') == 1
+                assert log.count('"reason":') == 0
                 assert log.count('"idempotency_id":') == 1 and log.count(f'"idempotency_id":"{none_value}"') == 0
                 assert log.count(f'"cloud_id":"{self.cloud_id}"') == 1
                 assert log.count('"masked_token":') == 1 and log.count(f'"masked_token":"{none_value}"') == 0

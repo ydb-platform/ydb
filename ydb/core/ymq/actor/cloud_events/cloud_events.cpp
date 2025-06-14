@@ -37,7 +37,6 @@ namespace NCloudEvents {
             AUDIT_PART("folder_id", (!evInfo.FolderId.empty() ? evInfo.FolderId : emptyValue))
             AUDIT_PART("request_id", evInfo.RequestId)
             AUDIT_PART("idempotency_id", (!evInfo.IdempotencyId.empty() ? evInfo.IdempotencyId : emptyValue))
-            AUDIT_PART("issue", (!evInfo.Issue.empty() ? evInfo.Issue : emptyValue))
             AUDIT_PART("queue", evInfo.QueueName)
             AUDIT_PART("labels", evInfo.Labels)
         );

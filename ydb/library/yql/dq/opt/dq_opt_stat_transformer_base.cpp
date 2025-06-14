@@ -18,10 +18,6 @@ void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnota
     auto inputNode = TExprBase(input);
     auto stats = typeCtx->GetStats(inputNode.Raw());
 
-    if (TCoExtractMembers::Match(inputNode.Raw())) {
-        Cout << "ExtractMembers:" << stats->TableAliases->ToString() << Endl;
-    }
-
     // Don't process these, already processed at the InferStatistics stage
     if (
         stats && stats->TableAliases &&
@@ -37,9 +33,6 @@ void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnota
     TTableAliasMap tableAliases;
     for (const auto& child: input->Children()) {
         auto childStats = typeCtx->GetStats(TExprBase(child).Raw());
-    if (TCoExtractMembers::Match(inputNode.Raw()) && childStats && childStats->TableAliases) {
-        Cout << "ExtractMembers child:" << child->Content() << ". " << childStats->TableAliases->ToString() << Endl;
-    }
         if (childStats && childStats->TableAliases) {
             tableAliases.Merge(*childStats->TableAliases);
         }
@@ -55,9 +48,6 @@ void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnota
         stats = std::make_shared<TOptimizerStatistics>(*stats);
     }
 
-    if (TCoExtractMembers::Match(inputNode.Raw())) {
-        Cout << "ExtractMembers input:" << tableAliases.ToString() << Endl;
-    }
     stats->TableAliases = MakeIntrusive<TTableAliasMap>(std::move(tableAliases));
     typeCtx->SetStats(inputNode.Raw(), std::move(stats));
 }

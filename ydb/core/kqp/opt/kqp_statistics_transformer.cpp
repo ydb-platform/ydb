@@ -1295,13 +1295,6 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
         matched = false;
     }
 
-
-    if (TCoExtractMembers::Match(input.Get())) {
-        auto stats = TypeCtx->GetStats(input.Get());
-        Cout << "after lambdas: " << stats->TableAliases->ToString() << Endl;
-        auto childStats = TypeCtx->GetStats(input->Child(0));
-        Cout << "after lambdas input: " << childStats->TableAliases->ToString() << Endl;
-    }
     return matched;
 }
 

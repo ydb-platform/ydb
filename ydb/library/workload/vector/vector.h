@@ -4,7 +4,6 @@
 
 #include <cctype>
 
-#include <random>
 
 namespace NYdbWorkload {
 

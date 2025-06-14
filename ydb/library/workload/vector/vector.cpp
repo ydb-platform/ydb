@@ -12,7 +12,6 @@ namespace NYdbWorkload {
 thread_local std::optional<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex = std::nullopt;
 
 std::string MakeSelect(const char* tableName, const char* indexName, const char* indexPrefixColumn, size_t kmeansTreeClusters) {
-    Y_UNUSED(indexName);
     return std::format(R"_(--!syntax_v1
         DECLARE $Embedding as String;
         pragma ydb.KMeansTreeSearchTopSize="{0}";
@@ -182,6 +181,7 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
     } else {
         Cout << "Successfully sampled " << SelectTargets.size() << " vectors from the dataset." << Endl;
     }
+    Y_ABORT_UNLESS(!SelectTargets.empty());
 }
 
 

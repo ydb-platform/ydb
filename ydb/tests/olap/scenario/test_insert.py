@@ -49,17 +49,39 @@ class TestInsert(BaseTestSet):
         cnt: str = sth.get_full_path("cnt" + table)
         for i in range(rows_count):
             logger.info("Insert")
+            conflicting_keys_position = 10
+            transaction_locks_position = 10
             for c in range(10):
                 try:
+                    # 1) Если по дебажным логам видно что Pk constraint violation не вызвано Transaction locks invalidate, 
+                    # тогда надо чинить Pk contraint violation
+                    # 2) Иначе, надо завести issue на Transaction locks invalidate и поправить тест чтобы эта ошибка не выстреливала
+
                     result = sth.execute_query(
-                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False
+                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=0, fail_on_error=True, return_error=True
                     )
-                    if result == 1:
-                        if c >= 9:
-                            raise Exception('Insert failed table {}'.format(table))
+                    if isinstance(result, tuple):
+                        result_ = result[0]
+                        error = result[1]
+                        if "Conflict with existing key" in error:
+                            conflicting_keys_position = min(conflicting_keys_position, c)
+                        elif "Transaction locks invalidated" in error:
+                            transaction_locks_position = min(transaction_locks_position, c)
                         else:
-                            time.sleep(1)
-                            continue
+                            if c >= 9:
+                                raise Exception(f'Query failed {error}')
+                            else:
+                                time.sleep(1)
+                                continue
+                        if conflicting_keys_position < transaction_locks_position:
+                            raise Exception(f'Insert failed table {table}: {error}')
+                    else:
+                        if result == 1:
+                            if c >= 9:
+                                raise Exception('Insert failed table {}'.format(table))
+                            else:
+                                time.sleep(1)
+                                continue
 
                     break
                 except Exception:

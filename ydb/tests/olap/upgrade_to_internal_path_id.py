@@ -3,7 +3,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 
-class TestUpgradeToInternalPathId(object):
+class TestUpgradeToInternalPathId:
     cluster = None
     num_rows = 1000
     config = KikimrConfigGenerator(
@@ -14,14 +14,14 @@ class TestUpgradeToInternalPathId(object):
     def start_cluster(self):
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
-        driver = ydb.Driver(endpoint=f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", database="/Root")
+        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
         self.session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)
 
     def restart_cluster(self, generate_internal_path_id):
         self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
         self.cluster.update_configurator_and_restart(self.config)
-        driver = ydb.Driver(endpoint=f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", database="/Root")
+        driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
         self.session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)
 

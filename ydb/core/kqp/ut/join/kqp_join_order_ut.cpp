@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     bool CheckNoSortings(const TString& plan) {
-        return !plan.Contains("Top") && !plan.Contains("SortBy");
+        return !plan.Contains("TopSort") && !plan.Contains("SortBy");
     }
 
     bool CheckSorting(const TString& plan) {
@@ -732,6 +732,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     // if a sort operator was deleted, otherwise we want topsort deleted
     Y_UNIT_TEST_TWIN(SortingsSimpleOrderByPKAlias, RemoveLimitOperator) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_pk_alias.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByAliasIndexDesc, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_alias_index_desc.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
         UNIT_ASSERT(CheckNoSortings(plan));
     }
 

@@ -19,6 +19,7 @@ PEERDIR(
     ydb/library/login
     ydb/library/testlib/service_mocks/ldap_mock
     yql/essentials/public/udf/service/exception_policy
+    ydb/core/testlib/audit_helpers
 )
 
 YQL_LAST_ABI_VERSION()

@@ -13,6 +13,8 @@
 
 #include <ydb/core/protos/key.pb.h>
 
+#include <ydb/core/testlib/audit_helpers/audit_helper.h>
+
 namespace NKikimr {
     struct TAppData;
 }
@@ -71,6 +73,7 @@ namespace NActors {
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
         TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntime(ui32 nodeCount = 1, bool useRealThreads = false);
+        TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, NKikimr::NAudit::TAuditLogBackends&& auditLogBackends);
 
         ~TTestActorRuntime();
 
@@ -138,6 +141,11 @@ namespace NActors {
         }
 
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
+
+    public:
+        NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
+    protected:
+        void AddAuditLogStuff();
 
     private:
         void Initialize() override;

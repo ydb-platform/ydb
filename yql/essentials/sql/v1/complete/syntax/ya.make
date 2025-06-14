@@ -2,15 +2,8 @@ LIBRARY()
 
 SRCS(
     ansi.cpp
-    cursor_token_context.cpp
     format.cpp
     grammar.cpp
-    local.cpp
-    parser_call_stack.cpp
-)
-
-ADDINCL(
-    yql/essentials/sql/v1/complete
 )
 
 PEERDIR(

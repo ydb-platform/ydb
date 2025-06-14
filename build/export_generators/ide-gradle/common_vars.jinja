@@ -34,4 +34,6 @@
 {#- Lombok -#}
 {%- set with_lombok_plugin = not(disable_lombok_plugin) and (all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) -%}
 
+{%- set package_prefix = package_prefix|select("ne", "")|first -%}
+
 {%- include "[generator]/jdk.jinja" -%}

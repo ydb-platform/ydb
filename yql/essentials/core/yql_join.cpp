@@ -348,6 +348,18 @@ namespace {
         for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
             auto leftKeyType = leftKeyTypes[i];
             auto rightKeyType = rightKeyTypes[i];
+            if (leftKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                leftKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (rightKeyType->HasErrors()) {
+                TErrorTypeVisitor visitor(ctx);
+                rightKeyType->Accept(visitor);
+                return IGraphTransformer::TStatus::Error;
+            }
+
             if (isMultiget) {
                 if (ETypeAnnotationKind::Optional == leftKeyType->GetKind()) {
                     leftKeyType = leftKeyType->Cast<TOptionalExprType>()->GetItemType();

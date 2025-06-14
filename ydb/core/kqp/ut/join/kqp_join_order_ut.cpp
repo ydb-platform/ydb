@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     bool CheckNoSortings(const TString& plan) {
-        return !plan.Contains("TopSort") && !plan.Contains("SortBy");
+        return !plan.Contains("Top") && !plan.Contains("SortBy");
     }
 
     bool CheckSorting(const TString& plan) {

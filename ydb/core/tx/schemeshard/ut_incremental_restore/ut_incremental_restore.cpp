@@ -200,10 +200,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpBasic) {
         TLongOpTestSetup setup;
 
-        // Create a test table
-        setup.CreateStandardTable("TestTable");
-
-        // Create complete backup scenario
+        // Create complete backup scenario (don't create the actual table since restore will create it)
         setup.CreateCompleteBackupScenario("TestCollection", {"TestTable"}, 3);
 
         // Verify backup collection exists
@@ -254,16 +251,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpWithMultipleTables) {
         TLongOpTestSetup setup;
 
-        // Create multiple test tables
-        setup.CreateStandardTable("Table1");
-        setup.CreateTable(R"(
-              Name: "Table2"
-              Columns { Name: "id"    Type: "Uint32" }
-              Columns { Name: "data"  Type: "String" }
-              KeyColumnNames: ["id"]
-        )");
-
-        // Create complete backup scenario with multiple tables
+        // Create complete backup scenario with multiple tables (don't create the actual tables since restore will create them)
         setup.CreateCompleteBackupScenario("MultiTableCollection", {"Table1", "Table2"}, 2);
 
         // Execute restore operation
@@ -273,10 +261,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpPermissions) {
         TLongOpTestSetup setup;
 
-        // Create test table
-        setup.CreateStandardTable("ProtectedTable");
-
-        // Create complete backup scenario
+        // Create complete backup scenario (don't create the actual table since restore will create it)
         setup.CreateCompleteBackupScenario("ProtectedCollection", {"ProtectedTable"}, 2);
 
         // Execute restore operation (should work with default permissions)
@@ -315,10 +300,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpFactoryDispatch) {
         TLongOpTestSetup setup;
 
-        // Create test table
-        setup.CreateStandardTable("DispatchTestTable");
-
-        // Create complete backup scenario
+        // Create complete backup scenario (don't create the actual table since restore will create it)
         setup.CreateCompleteBackupScenario("DispatchTestCollection", {"DispatchTestTable"}, 2);
 
         // Verify backup collection exists and has correct type
@@ -344,10 +326,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // This test verifies that the internal ESchemeOpCreateLongIncrementalRestoreOp
         // transaction can be created and processed without errors
 
-        // Create test table
-        setup.CreateStandardTable("InternalTestTable");
-
-        // Create backup collection
+        // Create backup collection (note: don't create the actual table since restore will create it)
         setup.CreateBackupCollection("InternalTestCollection", {"/MyRoot/InternalTestTable"});
 
         // Create backup structure with incremental backups to trigger long restore
@@ -377,10 +356,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // This test verifies that ESchemeOpCreateLongIncrementalRestoreOp operations
         // are properly handled in the audit log system
 
-        // Create test table
-        setup.CreateStandardTable("AuditTestTable");
-
-        // Create backup collection
+        // Create backup collection (note: don't create the actual table since restore will create it)
         setup.CreateBackupCollection("AuditTestCollection", {"/MyRoot/AuditTestTable"});
 
         // Create incremental backup structure
@@ -409,8 +385,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         setup.ExecuteRestore("EmptyCollection");
 
         // Test 2: Try to restore from backup collection that doesn't match expected format
-        setup.CreateStandardTable("TestTable");
-        
         setup.CreateBackupCollection("MalformedCollection", {"/MyRoot/TestTable"});
 
         // Create some directories that don't follow backup naming convention

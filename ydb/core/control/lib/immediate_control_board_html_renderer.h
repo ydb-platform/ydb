@@ -5,6 +5,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/stream/str.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr {
 

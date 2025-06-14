@@ -4,6 +4,7 @@
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -11,6 +12,157 @@
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
+// Common setup function for all long operation tests
+struct TLongOpTestSetup {
+    TTestBasicRuntime Runtime;
+    TTestEnv Env;
+    ui64 TxId;
+    
+    TLongOpTestSetup() 
+        : Env(Runtime, TTestEnvOptions().EnableBackupService(true))
+        , TxId(100)
+    {
+        // Setup backup infrastructure directories
+        TestMkDir(Runtime, ++TxId, "/MyRoot", ".backups");
+        Env.TestWaitNotification(Runtime, TxId);
+        TestMkDir(Runtime, ++TxId, "/MyRoot/.backups", "collections");
+        Env.TestWaitNotification(Runtime, TxId);
+    }
+    
+    // Create a test table with standard schema
+    void CreateStandardTable(const TString& tableName) {
+        TString tableSchema = TStringBuilder() << R"(
+              Name: ")" << tableName << R"("
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )";
+        
+        AsyncCreateTable(Runtime, ++TxId, "/MyRoot", tableSchema);
+        Env.TestWaitNotification(Runtime, TxId);
+    }
+    
+    // Create a test table with custom schema
+    void CreateTable(const TString& schema) {
+        AsyncCreateTable(Runtime, ++TxId, "/MyRoot", schema);
+        Env.TestWaitNotification(Runtime, TxId);
+    }
+    
+    // Create a backup collection with specified table paths
+    void CreateBackupCollection(const TString& collectionName, const TVector<TString>& tablePaths) {
+        TStringBuilder settingsBuilder;
+        settingsBuilder << R"(
+            Name: ")" << collectionName << R"("
+            ExplicitEntryList {)";
+        
+        for (const auto& tablePath : tablePaths) {
+            settingsBuilder << R"(
+                Entries {
+                    Type: ETypeTable
+                    Path: ")" << tablePath << R"("
+                })";
+        }
+        
+        settingsBuilder << R"(
+            }
+            Cluster: {}
+        )";
+        
+        TestCreateBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", settingsBuilder);
+        Env.TestWaitNotification(Runtime, TxId);
+    }
+    
+    // Create full backup structure for a collection
+    void CreateFullBackup(const TString& collectionName, const TVector<TString>& tableNames, const TString& backupName = "backup_001_full") {
+        TString backupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/" << backupName;
+        TestMkDir(Runtime, ++TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, backupName);
+        Env.TestWaitNotification(Runtime, TxId);
+        
+        for (const auto& tableName : tableNames) {
+            TString tableSchema = TStringBuilder() << R"(
+                  Name: ")" << tableName << R"("
+                  Columns { Name: "key"   Type: "Uint64" }
+                  Columns { Name: "value" Type: "Utf8" }
+                  KeyColumnNames: ["key"]
+            )";
+            
+            AsyncCreateTable(Runtime, ++TxId, backupPath, tableSchema);
+            Env.TestWaitNotification(Runtime, TxId);
+        }
+    }
+    
+    // Create incremental backup structure for a collection
+    void CreateIncrementalBackups(const TString& collectionName, const TVector<TString>& tableNames, ui32 count = 3, ui32 startIndex = 2) {
+        for (ui32 i = startIndex; i < startIndex + count; ++i) {
+            TString incrName = TStringBuilder() << "backup_" << Sprintf("%03d", i) << "_incremental";
+            TString backupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/" << incrName;
+            
+            TestMkDir(Runtime, ++TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, incrName);
+            Env.TestWaitNotification(Runtime, TxId);
+            
+            for (const auto& tableName : tableNames) {
+                TString tableSchema = TStringBuilder() << R"(
+                      Name: ")" << tableName << R"("
+                      Columns { Name: "key"   Type: "Uint64" }
+                      Columns { Name: "value" Type: "Utf8" }
+                      Columns { Name: "__ydb_deleted" Type: "Bool" }
+                      KeyColumnNames: ["key"]
+                )";
+                
+                AsyncCreateTable(Runtime, ++TxId, backupPath, tableSchema);
+                Env.TestWaitNotification(Runtime, TxId);
+            }
+        }
+    }
+    
+    // Execute restore operation
+    void ExecuteRestore(const TString& collectionName, const TVector<NSchemeShardUT_Private::TExpectedResult>& expectedResults = {}) {
+        TString restoreSettings = TStringBuilder() << R"(
+            Name: ")" << collectionName << R"("
+        )";
+        
+        if (expectedResults.empty()) {
+            TestRestoreBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", restoreSettings);
+        } else {
+            TestRestoreBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", restoreSettings, expectedResults);
+        }
+        Env.TestWaitNotification(Runtime, TxId);
+    }
+    
+    // Execute async restore operation (for testing concurrent operations)
+    void ExecuteAsyncRestore(const TString& collectionName) {
+        TString restoreSettings = TStringBuilder() << R"(
+            Name: ")" << collectionName << R"("
+        )";
+        
+        AsyncRestoreBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", restoreSettings);
+    }
+    
+    // Create a complete backup scenario (collection + full + incremental backups)
+    void CreateCompleteBackupScenario(const TString& collectionName, const TVector<TString>& tableNames, ui32 incrementalCount = 3) {
+        // Create backup collection
+        TVector<TString> tablePaths;
+        for (const auto& tableName : tableNames) {
+            tablePaths.push_back(TStringBuilder() << "/MyRoot/" << tableName);
+        }
+        CreateBackupCollection(collectionName, tablePaths);
+        
+        // Create full backup
+        CreateFullBackup(collectionName, tableNames);
+        
+        // Create incremental backups
+        CreateIncrementalBackups(collectionName, tableNames, incrementalCount);
+    }
+    
+    // Create custom backup directories (for testing specific scenarios)
+    void CreateCustomBackupDirectories(const TString& collectionName, const TVector<TString>& backupNames) {
+        for (const auto& backupName : backupNames) {
+            TestMkDir(Runtime, ++TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, backupName);
+            Env.TestWaitNotification(Runtime, TxId);
+        }
+    }
+};
 
 Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(CopyTableChangeStateSupport) {
@@ -46,53 +198,22 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpBasic) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Setup directories and tables
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        TLongOpTestSetup setup;
 
         // Create a test table
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "TestTable"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateStandardTable("TestTable");
 
-        // Create backup collection 
-        TString collectionSettings = R"(
-            Name: "TestCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/TestTable"
-                }
-            }
-            Cluster: {}
-        )";
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Create complete backup scenario
+        setup.CreateCompleteBackupScenario("TestCollection", {"TestTable"}, 3);
 
         // Verify backup collection exists
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/TestCollection"), {
+        TestDescribeResult(DescribePath(setup.Runtime, "/MyRoot/.backups/collections/TestCollection"), {
             NLs::PathExist,
             NLs::IsBackupCollection,
         });
 
-        // Now test the restore operation with long incremental restore
-        TString restoreSettings = R"(
-            Name: "TestCollection"
-        )";
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Execute restore operation
+        setup.ExecuteRestore("TestCollection");
 
         // The operation should complete successfully
         // We can't easily test the internal ESchemeOpCreateLongIncrementalRestoreOp dispatch
@@ -100,251 +221,113 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpNonExistentCollection) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Setup directories
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        TLongOpTestSetup setup;
 
         // Try to restore from non-existent backup collection
-        TString restoreSettings = R"(
-            Name: "NonExistentCollection"
-        )";
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings, 
-                                   {NKikimrScheme::StatusPathDoesNotExist});
-        env.TestWaitNotification(runtime, txId);
+        setup.ExecuteRestore("NonExistentCollection", {NKikimrScheme::StatusPathDoesNotExist});
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpInvalidPath) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
+        TLongOpTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& env = setup.Env;
+        auto& txId = setup.TxId;
+
+        // Create a regular directory that is not a backup collection directory
+        TestMkDir(runtime, ++txId, "/MyRoot", "NotABackupDir");
+        env.TestWaitNotification(runtime, txId);
+        
+        // Create a collection inside the wrong directory to make the path exist
+        TestMkDir(runtime, ++txId, "/MyRoot/NotABackupDir", "TestCollection");
+        env.TestWaitNotification(runtime, txId);
 
         // Try to restore from invalid path (not a backup collection directory)
         TString restoreSettings = R"(
             Name: "TestCollection"
         )";
 
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/", restoreSettings, 
-                                   {NKikimrScheme::StatusSchemeError});
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/NotABackupDir/", restoreSettings, 
+                                   {NKikimrScheme::StatusPathDoesNotExist});
         env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpWithMultipleTables) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Setup directories
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        TLongOpTestSetup setup;
 
         // Create multiple test tables
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "Table1"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
+        setup.CreateStandardTable("Table1");
+        setup.CreateTable(R"(
               Name: "Table2"
               Columns { Name: "id"    Type: "Uint32" }
               Columns { Name: "data"  Type: "String" }
               KeyColumnNames: ["id"]
         )");
-        env.TestWaitNotification(runtime, txId);
 
-        // Create backup collection with multiple tables
-        TString collectionSettings = R"(
-            Name: "MultiTableCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/Table1"
-                }
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/Table2"
-                }
-            }
-            Cluster: {}
-        )";
+        // Create complete backup scenario with multiple tables
+        setup.CreateCompleteBackupScenario("MultiTableCollection", {"Table1", "Table2"}, 2);
 
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
-
-        // Test restore operation
-        TString restoreSettings = R"(
-            Name: "MultiTableCollection"
-        )";
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Execute restore operation
+        setup.ExecuteRestore("MultiTableCollection");
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpPermissions) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Setup directories
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        TLongOpTestSetup setup;
 
         // Create test table
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "ProtectedTable"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateStandardTable("ProtectedTable");
 
-        // Create backup collection 
-        TString collectionSettings = R"(
-            Name: "ProtectedCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/ProtectedTable"
-                }
-            }
-            Cluster: {}
-        )";
+        // Create complete backup scenario
+        setup.CreateCompleteBackupScenario("ProtectedCollection", {"ProtectedTable"}, 2);
 
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
-
-        // Test restore operation (should work with default permissions)
-        TString restoreSettings = R"(
-            Name: "ProtectedCollection"
-        )";
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Execute restore operation (should work with default permissions)
+        setup.ExecuteRestore("ProtectedCollection");
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpOperationAlreadyInProgress) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Setup directories
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        TLongOpTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& env = setup.Env;
+        auto& txId = setup.TxId;
 
         // Create test table
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "BusyTable"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateStandardTable("BusyTable");
 
-        // Create backup collection 
-        TString collectionSettings = R"(
-            Name: "BusyCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/BusyTable"
-                }
-            }
-            Cluster: {}
-        )";
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Create complete backup scenario
+        setup.CreateCompleteBackupScenario("BusyCollection", {"BusyTable"}, 2);
 
         // Start first restore operation
-        TString restoreSettings = R"(
-            Name: "BusyCollection"
-        )";
-
-        AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
+        setup.ExecuteAsyncRestore("BusyCollection");
+        ui64 firstTxId = txId;
         
         // Try to start another restore operation on the same collection (should fail)
-        AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
+        setup.ExecuteAsyncRestore("BusyCollection");
+        ui64 secondTxId = txId;
         
         // First operation should succeed
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, firstTxId, NKikimrScheme::StatusAccepted);
         // Second operation should fail due to already in progress
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
+        TestModificationResult(runtime, secondTxId, NKikimrScheme::StatusMultipleModifications);
         
-        env.TestWaitNotification(runtime, {txId, txId-1});
+        env.TestWaitNotification(runtime, {firstTxId, secondTxId});
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpFactoryDispatch) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Setup directories and backup collection
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        TLongOpTestSetup setup;
 
         // Create test table
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "DispatchTestTable"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateStandardTable("DispatchTestTable");
 
-        // Create backup collection
-        TString collectionSettings = R"(
-            Name: "DispatchTestCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/DispatchTestTable"
-                }
-            }
-            Cluster: {}
-        )";
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Create complete backup scenario
+        setup.CreateCompleteBackupScenario("DispatchTestCollection", {"DispatchTestTable"}, 2);
 
         // Verify backup collection exists and has correct type
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/DispatchTestCollection"), {
+        TestDescribeResult(DescribePath(setup.Runtime, "/MyRoot/.backups/collections/DispatchTestCollection"), {
             NLs::PathExist,
             NLs::IsBackupCollection,
         });
 
-        // Create a mock backup structure to simulate incremental backups
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/DispatchTestCollection", "backup1_full");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/DispatchTestCollection", "backup2_incremental");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/DispatchTestCollection", "backup3_incremental");
-        env.TestWaitNotification(runtime, txId);
-
-        // Now test the restore which should internally dispatch CreateLongIncrementalRestoreOp
-        TString restoreSettings = R"(
-            Name: "DispatchTestCollection"
-        )";
-
-        // This should internally create and dispatch ESchemeOpCreateLongIncrementalRestoreOp
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Execute restore operation
+        setup.ExecuteRestore("DispatchTestCollection");
 
         // Verify that the operation completed successfully
         // The fact that it doesn't crash or return an error indicates that:
@@ -355,58 +338,28 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpInternalTransaction) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
+        TLongOpTestSetup setup;
 
         // This test verifies that the internal ESchemeOpCreateLongIncrementalRestoreOp
         // transaction can be created and processed without errors
 
-        // Setup basic environment
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
-
         // Create test table
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "InternalTestTable"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateStandardTable("InternalTestTable");
 
         // Create backup collection
-        TString collectionSettings = R"(
-            Name: "InternalTestCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/InternalTestTable"
-                }
-            }
-            Cluster: {}
-        )";
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateBackupCollection("InternalTestCollection", {"/MyRoot/InternalTestTable"});
 
         // Create backup structure with incremental backups to trigger long restore
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/InternalTestCollection", "base_backup_full");
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateFullBackup("InternalTestCollection", {"InternalTestTable"}, "base_backup_full");
         
         // Add multiple incremental backups to simulate a long restore scenario
-        for (int i = 1; i <= 5; ++i) {
-            TString incrName = TStringBuilder() << "incr_" << i << "_incremental";
-            TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/InternalTestCollection", incrName);
-            env.TestWaitNotification(runtime, txId);
-        }
+        setup.CreateCustomBackupDirectories("InternalTestCollection", {
+            "incr_1_incremental", "incr_2_incremental", "incr_3_incremental", 
+            "incr_4_incremental", "incr_5_incremental"
+        });
 
         // Execute restore operation
-        TString restoreSettings = R"(
-            Name: "InternalTestCollection"
-        )";
+        setup.ExecuteRestore("InternalTestCollection");
 
         // The restore should internally:
         // 1. Detect the presence of incremental backups
@@ -414,61 +367,27 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // 3. Dispatch it through the operation factory
         // 4. Execute the control plane operation
         // 5. Complete successfully without Y_UNREACHABLE() errors
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
-
         // If we reach this point without crashes, the operation dispatch is working correctly
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpAuditLog) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
+        TLongOpTestSetup setup;
 
         // This test verifies that ESchemeOpCreateLongIncrementalRestoreOp operations
         // are properly handled in the audit log system
 
-        // Setup environment
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        // Create test table
+        setup.CreateStandardTable("AuditTestTable");
 
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "AuditTestTable"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TString collectionSettings = R"(
-            Name: "AuditTestCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/AuditTestTable"
-                }
-            }
-            Cluster: {}
-        )";
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Create backup collection
+        setup.CreateBackupCollection("AuditTestCollection", {"/MyRoot/AuditTestTable"});
 
         // Create incremental backup structure
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/AuditTestCollection", "latest_full");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/AuditTestCollection", "incr1_incremental");
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateFullBackup("AuditTestCollection", {"AuditTestTable"}, "latest_full");
+        setup.CreateCustomBackupDirectories("AuditTestCollection", {"incr1_incremental"});
 
-        // Perform restore operation which will trigger the audit log for long incremental restore
-        TString restoreSettings = R"(
-            Name: "AuditTestCollection"
-        )";
-
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
+        // Execute restore operation
+        setup.ExecuteRestore("AuditTestCollection");
 
         // The key test is that this completes without error, indicating that:
         // 1. DefineUserOperationName handles ESchemeOpCreateLongIncrementalRestoreOp
@@ -478,89 +397,33 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpErrorHandling) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
+        TLongOpTestSetup setup;
 
         // Test error handling scenarios for the ESchemeOpCreateLongIncrementalRestoreOp
 
-        // Setup minimal environment
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
-
         // Test 1: Try to restore from empty backup collection (no backups)
-        TString emptyCollectionSettings = R"(
-            Name: "EmptyCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/NonExistentTable"
-                }
-            }
-            Cluster: {}
-        )";
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", emptyCollectionSettings);
-        env.TestWaitNotification(runtime, txId);
-
-        TString restoreSettings = R"(
-            Name: "EmptyCollection"
-        )";
-
+        setup.CreateBackupCollection("EmptyCollection", {"/MyRoot/NonExistentTable"});
+        
         // This should succeed even with no actual backup data (we're testing operation dispatch)
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
+        setup.ExecuteRestore("EmptyCollection");
 
         // Test 2: Try to restore from backup collection that doesn't match expected format
-        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
-              Name: "TestTable"
-              Columns { Name: "key"   Type: "Uint64" }
-              Columns { Name: "value" Type: "Utf8" }
-              KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TString collectionSettings = R"(
-            Name: "MalformedCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/TestTable"
-                }
-            }
-            Cluster: {}
-        )";
-
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
-        env.TestWaitNotification(runtime, txId);
+        setup.CreateStandardTable("TestTable");
+        
+        setup.CreateBackupCollection("MalformedCollection", {"/MyRoot/TestTable"});
 
         // Create some directories that don't follow backup naming convention
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/MalformedCollection", "invalid_backup_name");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/MalformedCollection", "another_invalid");
-        env.TestWaitNotification(runtime, txId);
-
-        TString malformedRestoreSettings = R"(
-            Name: "MalformedCollection"
-        )";
+        setup.CreateCustomBackupDirectories("MalformedCollection", {"invalid_backup_name", "another_invalid"});
 
         // Should handle malformed backup structure gracefully
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", malformedRestoreSettings);
-        env.TestWaitNotification(runtime, txId);
+        setup.ExecuteRestore("MalformedCollection");
     }
 
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpDatabaseTableVerification) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-
-        // Setup backup infrastructure
-        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
-        env.TestWaitNotification(runtime, txId);
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
-        env.TestWaitNotification(runtime, txId);
+        TLongOpTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& env = setup.Env;
+        auto& txId = setup.TxId;
 
         // Create backup collection (note: we don't create the target table since restore will create it)
         TString collectionSettings = R"(

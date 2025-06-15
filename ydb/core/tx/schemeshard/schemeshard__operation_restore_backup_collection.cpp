@@ -183,6 +183,8 @@ class TChangePathStateOp: public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch(state) {
         case TTxState::Waiting:
+            return TTxState::Propose;
+        case TTxState::Propose:
             return TTxState::Done;
         default:
             return TTxState::Invalid;

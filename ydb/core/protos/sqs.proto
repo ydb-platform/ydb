@@ -4,6 +4,8 @@ message TAuthentification {
     optional string UserName = 1; // Account or CloudId
     optional string FolderId = 2; // Cloud only
     optional string UserSID = 3;
+    optional string MaskedToken = 4;
+    optional string AuthType = 5;
 }
 
 message TCredentials {

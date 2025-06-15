@@ -4007,6 +4007,14 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
         const auto self = TCoFilterNullMembers(node);
         if (self.Members() && self.Members().Cast().Size() == 1) {
+            static const char optNameMember[] = "MemberNthOverFlatMap";
+            const bool canDropAssume = !IsOptimizerDisabled<optNameMember>(*optCtx.Types);
+            if (canDropAssume) {
+                if (auto maybeAssume = self.Input().Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
+                    YQL_CLOG(DEBUG, Core) << node->Content() << " with single member over " << maybeAssume.Cast().CallableName();
+                    return ctx.ChangeChild(*node, TCoFilterNullMembers::idx_Input, maybeAssume.Cast().Input().Ptr());
+                }
+            }
             if (auto maybeJust = self.Input().Maybe<TCoJust>()) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with single member over Just";
                 auto name = self.Members().Cast().Item(0);

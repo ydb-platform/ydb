@@ -495,6 +495,22 @@ private:
     const NOlap::TSnapshot SnapshotModification;
     const bool NeedBlobs = true;
 
+    virtual void OnStageStarting(const NOlap::NDataFetcher::EFetchingStage stage) override {
+        switch (stage) {
+            case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:
+                Changes->SetStage(NOlap::NChanges::EStage::AskAccessors);
+                break;
+            case NOlap::NDataFetcher::EFetchingStage::AskDataResources:
+            case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:
+                Changes->SetStage(NOlap::NChanges::EStage::AskResources);
+                break;
+            case NOlap::NDataFetcher::EFetchingStage::ReadBlobs:
+                Changes->SetStage(NOlap::NChanges::EStage::ReadBlobs);
+                break;
+            default:
+        }
+    }
+
     virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
         NActors::TLogContextGuard g(
             NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));

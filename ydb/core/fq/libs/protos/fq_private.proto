@@ -210,6 +210,7 @@ message NodeInfo {
     uint32 interconnect_port = 7;
     string node_address = 8;
     string data_center = 9;
+    uint64 cpu_usage = 10;
 }
 
 message NodesHealthCheckRequest {

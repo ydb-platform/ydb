@@ -117,7 +117,7 @@ public:
         for (auto& p : PortionsToEvict) {
             result.emplace_back(p.GetPortionInfo());
         }
-        for (auto& p : PortionsToRemove.GetPortionsToRemove()) {
+        for (auto& p : GetPortionsToRemove().GetPortionsToRemove()) {
             result.emplace_back(p.second);
         }
         return result;

@@ -513,7 +513,9 @@ private:
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
         {
             NOlap::TConstructionContext context(*VersionedIndex, Counters, SnapshotModification);
-            Changes->ConstructBlobs(context).Validate();
+            if (NeedBlobs) {
+                Changes->ConstructBlobs(context).Validate();
+            }
             if (!Changes->GetWritePortionsCount()) {
                 ev->SetPutStatus(NKikimrProto::OK);
             }

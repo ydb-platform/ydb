@@ -78,6 +78,15 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return ev;
         }
 
+        auto ReplicaLookup(const TActorId &replica, ui64 gen, ui64 guid) {
+            const TActorId edge = Runtime.AllocateEdgeActor(1);
+            Runtime.WrapInActorContext(edge, [&] {
+                Runtime.Send(new IEventHandle(replica, edge, new TEvStateStorage::TEvReplicaLookup(TabletId, 0, gen, guid), IEventHandle::FlagTrackDelivery));
+            });
+            auto ev = Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvReplicaInfo>(edge);
+            return ev;
+        }
+
     };
 
     Y_UNIT_TEST(TestProxyNotifyReplicaConfigChanged1) {
@@ -126,27 +135,23 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
                 UNIT_ASSERT(node && node->ActorSystem);
                 TActorId replicaId = node->ActorSystem->LookupLocalService(replicas[1]);
                 auto msg = ev->Get<NStorage::TEvNodeWardenNotifyConfigMismatch>();
-                if(ev->Sender == replicaId)
+                if (ev->Sender == replicaId) {
+                    UNIT_ASSERT_EQUAL(msg->ClusterStateGeneration, 3);
+                    UNIT_ASSERT_EQUAL(msg->ClusterStateGuid, 4);
                     nw1Cnt++; // replica notify nodewarden
-                else
+                } else {
                     UNIT_ASSERT_EQUAL(msg->ClusterStateGeneration, 1);
                     UNIT_ASSERT_EQUAL(msg->ClusterStateGuid, 2);
                     nw2Cnt++; // proxy notify nodewarden
+                }
             }
             return true;
         };
         UNIT_ASSERT_EQUAL(test.Lookup()->Get()->Status, NKikimrProto::EReplyStatus::ERROR);
         UNIT_ASSERT_EQUAL(nw1Cnt, 0);  
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
+        UNIT_ASSERT_EQUAL(test.ReplicaLookup(replicas[1], 3, 4)->Get()->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
+        UNIT_ASSERT_EQUAL(nw1Cnt, 1);  
+        UNIT_ASSERT_EQUAL(nw2Cnt, 1);
     }
-
-
-    //TODO: change pile state via distcof does not work
-    // Y_UNIT_TEST(TestRingGroupState) {
-    //     StateStorageTest test;
-    //     TString req = "{\"GetStateStorageConfig\": {}}";
-    //     auto res = test.SendRequest(req);
-    //     auto record = res->Get()->Record;
-    //     Cerr << "Response: " << record;
-    // }
 }

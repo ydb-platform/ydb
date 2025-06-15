@@ -112,6 +112,17 @@ public:
         PortionsToAccess->AddPortion(info);
     }
 
+    std::vector<TPortionInfo::TConstPtr> GetPortionsInfo() const {
+        std::vector<TPortionInfo::TConstPtr> result;
+        for (auto& p : PortionsToEvict) {
+            result.emplace_back(p.GetPortionInfo());
+        }
+        for (auto& p : PortionsToRemove.GetPortionsToRemove()) {
+            result.emplace_back(p.second);
+        }
+        return result;
+    }
+
     static TString StaticTypeName() {
         return "CS::TTL";
     }

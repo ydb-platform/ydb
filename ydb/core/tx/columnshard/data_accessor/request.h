@@ -52,6 +52,14 @@ public:
         return it->second;
     }
 
+    TPortionDataAccessor ExtractPortionAccessorVerified(const ui64 portionId) {
+        auto it = PortionsById.find(portionId);
+        AFL_VERIFY(it != PortionsById.end());
+        auto result = std::move(it->second);
+        PortionsById.erase(it);
+        return result;
+    }
+
     void AddData(THashMap<ui64, TPortionDataAccessor>&& accessors) {
         std::deque<TPortionDataAccessor> v;
         for (auto&& [portionId, i] : accessors) {

@@ -10,13 +10,8 @@ class TColumnShard;
 namespace NKikimr::NColumnShard::NSubscriber {
 
 class ISubscriber {
-private:
-    virtual bool DoOnEvent(const std::shared_ptr<ISubscriptionEvent>& ev, TColumnShard& shard) = 0;
 public:
-    bool OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev, TColumnShard& shard) {
-        return DoOnEvent(ev, shard);
-    }
-
+    virtual void OnEvent(const std::shared_ptr<ISubscriptionEvent>& ev, TColumnShard& shard) = 0;
     virtual std::set<EEventType> GetEventTypes() const = 0;
     virtual bool IsFinished() const = 0;
 

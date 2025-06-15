@@ -121,6 +121,14 @@ public:
         Versions.insert(snapshot);
     }
 
+    void UpdateLocalPathIdOnExecute(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId newPathId) {
+        Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
+    }
+
+    void UpdateLocalPathIdOnComplete(const TSchemeShardLocalPathId newPathId) {
+         SchemeShardLocalPathId = newPathId;
+    }
+
     bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
         if (!DropVersion) {
             return false;
@@ -199,6 +207,7 @@ class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal; // Paths that are being renamed
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -274,6 +283,11 @@ public:
     bool HasPrimaryIndex() const {
         return !!PrimaryIndex;
     }
+
+    void MoveTableProposeOnExecute(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    void MoveTableProgressOnExecute(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
+    void MoveTableProgressOnComplete(const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
+
 
     NOlap::IColumnEngine& MutablePrimaryIndex() {
         Y_ABORT_UNLESS(!!PrimaryIndex);

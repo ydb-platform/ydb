@@ -1036,7 +1036,6 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocatedU
             promise.SetValue(std::move(val));
         };
 
-    // TODO: make sure it is correct; see what server receives
     // don't give ownership of request to the function
     Connections_->RunDeferredOnArena<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
         request,

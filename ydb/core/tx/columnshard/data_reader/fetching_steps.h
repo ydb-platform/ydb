@@ -27,6 +27,7 @@ private:
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
+            FetchingContext->MutableScript().Next();
             FetchingContext->Resume(FetchingContext);
             return true;
         }
@@ -67,12 +68,13 @@ private:
             if (result.HasErrors()) {
                 Fetcher->OnError("cannot fetch accessors");
             } else {
-                auto accessors = result.ExtractPortionsVector();
-                AFL_VERIFY(accessors.size() == Fetcher->GetInput().GetPortions().size());
-                for (ui32 idx = 0; idx < accessors.size(); ++idx) {
-                    AFL_VERIFY(accessors[idx].GetPortionInfo().GetPortionId() == Fetcher->GetInput().GetPortions()[idx]->GetPortionInfo()->GetPortionId());
+                AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
+                std::vector<TPortionDataAccessor> accessors;
+                for (auto&& i : Fetcher->GetInput().GetPortions()) {
+                    accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
                 }
                 Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
+                Fetcher->MutableScript().Next();
                 Fetcher->Resume(Fetcher);
             }
         }
@@ -81,12 +83,16 @@ private:
         }
 
     public:
+        TSubscriber(const std::shared_ptr<TPortionsDataFetcher>& fetcher)
+            : Fetcher(fetcher) {
+        }
     };
 
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskAccessors);
         std::shared_ptr<TDataAccessorsRequest> request =
             std::make_shared<TDataAccessorsRequest>(::ToString(fetchingContext->GetInput().GetConsumer()));
+        request->RegisterSubscriber(std::make_shared<TSubscriber>(fetchingContext));
         for (auto&& i : fetchingContext->GetInput().GetPortions()) {
             request->AddPortion(i->GetPortionInfo());
         }
@@ -112,6 +118,7 @@ private:
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
+            FetchingContext->MutableScript().Next();
             FetchingContext->Resume(FetchingContext);
             return true;
         }
@@ -160,6 +167,7 @@ private:
     protected:
         virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) override {
             FetchingContext->MutableCurrentContext().SetBlobs(ExtractBlobsData());
+            FetchingContext->MutableScript().Next();
             FetchingContext->Resume(FetchingContext);
         }
         virtual bool DoOnError(

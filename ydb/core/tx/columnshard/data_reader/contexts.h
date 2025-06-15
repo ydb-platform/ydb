@@ -197,11 +197,11 @@ public:
 
 class TFullPortionInfo {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, PortionInfo);
+    YDB_READONLY_DEF(TPortionInfo::TConstPtr, PortionInfo);
     YDB_READONLY_DEF(ISnapshotSchema::TPtr, Schema);
 
 public:
-    TFullPortionInfo(const std::shared_ptr<TPortionInfo>& portionInfo, const ISnapshotSchema::TPtr& schema)
+    TFullPortionInfo(const TPortionInfo::TConstPtr& portionInfo, const ISnapshotSchema::TPtr& schema)
         : PortionInfo(portionInfo)
         , Schema(schema) {
     }
@@ -215,10 +215,11 @@ private:
     YDB_READONLY_DEF(TString, ExternalTaskId);
 
 public:
-    TRequestInput(const std::vector<std::shared_ptr<TPortionInfo>>& portions, const std::shared_ptr<TVersionedIndex>& versions,
+    TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
         const NBlobOperations::EConsumer consumer, const TString& externalTaskId)
         : Consumer(consumer)
         , ExternalTaskId(externalTaskId) {
+        AFL_VERIFY(portions.size());
         ActualSchema = versions->GetLastSchema();
         for (auto&& i : portions) {
             Portions.emplace_back(std::make_shared<TFullPortionInfo>(i, versions->GetSchemaVerified(i->GetSchemaVersionVerified())));

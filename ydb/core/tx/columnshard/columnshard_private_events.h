@@ -165,18 +165,16 @@ struct TEvPrivate {
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
     struct TEvWriteIndex: public TEventLocal<TEvWriteIndex, EvWriteIndex> {
-        std::shared_ptr<NOlap::TVersionedIndex> IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         bool GranuleCompaction{ false };
         TUsage ResourceUsage;
         bool CacheData{ false };
         TDuration Duration;
         TBlobPutResult::TPtr PutResult;
+        TString ErrorMessage;
 
-        TEvWriteIndex(
-            const std::shared_ptr<NOlap::TVersionedIndex>& indexInfo, std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges, bool cacheData)
-            : IndexInfo(indexInfo)
-            , IndexChanges(indexChanges)
+        TEvWriteIndex(std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges, bool cacheData)
+            : IndexChanges(indexChanges)
             , CacheData(cacheData) {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
         }

@@ -2,6 +2,10 @@ LIBRARY()
 
 SRCS(
     actor.cpp
+    fetcher.cpp
+    fetching_executor.cpp
+    fetching_steps.cpp
+    contexts.cpp
 )
 
 PEERDIR(

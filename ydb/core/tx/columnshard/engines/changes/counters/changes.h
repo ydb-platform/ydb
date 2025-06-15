@@ -13,8 +13,9 @@ namespace NKikimr::NOlap::NChanges {
 enum class EStage : ui32 {
     Created = 0,
     Started,
-    AskResources,
+    AskAccessorResources,
     AskAccessors,
+    AskDataResources,
     ReadBlobs,
     ReadyForConstruct,
     Constructed,

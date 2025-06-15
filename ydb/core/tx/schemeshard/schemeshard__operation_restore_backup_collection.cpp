@@ -28,6 +28,18 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 
 } // namespace NOperation
 
+// Forward declarations
+TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+void CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
+void CreateIncrementalBackupPathStateOps(
+    TOperationId opId,
+    const TTxTransaction& tx,
+    const TBackupCollectionInfo::TPtr& bc,
+    const TPath& bcPath,
+    const TVector<TString>& incrBackupNames,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result);
+
 class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
@@ -428,6 +440,11 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
     return result;
 }
 
+void CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
+    auto pathStateChangeOps = CreateChangePathState(opId, tx, context);
+    result.insert(result.end(), pathStateChangeOps.begin(), pathStateChangeOps.end());
+}
+
 bool CreateLongIncrementalRestoreOp(
     TOperationId opId,
     const TPath& bcPath,
@@ -532,47 +549,58 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
     }
 
-    if (incrBackupNames) {
-        for (const auto& incrBackupName : incrBackupNames) {
-            // Create path state change operations for each table in each incremental backup
-            for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-                std::pair<TString, TString> paths;
-                TString err;
-                if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
-                    result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
-                    return result;
-                }
-                auto& relativeItemPath = paths.second;
-
-                // Check if the incremental backup path exists and is in a valid state
-                TString incrBackupPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath});
-                const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, context.SS);
-                
-                // Only create path state change operation if the path exists and is not in EPathStateNoChanges
-                if (incrBackupPath.IsResolved() && incrBackupPath.Base()->PathState != TPathElement::EPathState::EPathStateNoChanges) {
-                    // Create transaction for path state change
-                    TTxTransaction pathStateChangeTx;
-                    pathStateChangeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
-                    pathStateChangeTx.SetInternal(true);
-                    pathStateChangeTx.SetWorkingDir(tx.GetWorkingDir());
-
-                    auto& changePathState = *pathStateChangeTx.MutableChangePathState();
-                    changePathState.SetPath(JoinPath({tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath}));
-                    changePathState.SetTargetState(NKikimrSchemeOp::EPathStateIncomingIncrementalRestore);
-
-                    // Create the path state change operation
-                    auto pathStateChangeOps = CreateChangePathState(NextPartId(opId, result), pathStateChangeTx, context);
-                    result.insert(result.end(), pathStateChangeOps.begin(), pathStateChangeOps.end());
-                }
-            }
-        }
-    }
-
     CreateConsistentCopyTables(NextPartId(opId, result), consistentCopyTables, context, result);
+
+    if (incrBackupNames) {
+        CreateIncrementalBackupPathStateOps(NextPartId(opId, result), tx, bc, bcPath, incrBackupNames, context, result);
+    }
 
     CreateLongIncrementalRestoreOp(NextPartId(opId, result), bcPath, result);
 
     return result;
+}
+
+void CreateIncrementalBackupPathStateOps(
+    TOperationId opId,
+    const TTxTransaction& tx,
+    const TBackupCollectionInfo::TPtr& bc,
+    const TPath& bcPath,
+    const TVector<TString>& incrBackupNames,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result)
+{
+    for (const auto& incrBackupName : incrBackupNames) {
+        // Create path state change operations for each table in each incremental backup
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+                result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+                return;
+            }
+            auto& relativeItemPath = paths.second;
+
+            // Check if the incremental backup path exists
+            TString incrBackupPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath});
+            const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, context.SS);
+            
+            // Only create path state change operation if the path exists
+            if (incrBackupPath.IsResolved()) {
+                // Create transaction for path state change
+                TTxTransaction pathStateChangeTx;
+                pathStateChangeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
+                pathStateChangeTx.SetInternal(true);
+                pathStateChangeTx.SetWorkingDir(tx.GetWorkingDir());
+
+                auto& changePathState = *pathStateChangeTx.MutableChangePathState();
+                changePathState.SetPath(JoinPath({tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath}));
+                changePathState.SetTargetState(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
+
+                // Create the path state change operation
+                CreateChangePathState(NextPartId(opId, result), pathStateChangeTx, context, result);
+            }
+        }
+    }
 }
 
 } // namespace NKikimr::NSchemeShard

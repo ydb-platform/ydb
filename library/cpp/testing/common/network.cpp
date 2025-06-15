@@ -183,7 +183,6 @@ namespace {
 
     private:
         THolder<NTesting::IPort> TryAcquirePort(ui16 port) const {
-			try {
             auto lock = MakeHolder<TFileLock>(TString(SyncDir_ / ::ToString(port)));
             if (!lock->TryAcquire()) {
                 return nullptr;
@@ -199,9 +198,6 @@ namespace {
                 return nullptr;
             }
             return MakeHolder<TPortGuard>(port, std::move(lock));
-			} catch (...) {
-				return nullptr;
-			}
         }
 
     private:

@@ -152,6 +152,33 @@ public:
     }
 };
 
+class TEmptyPropose: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder() << "TEmptyPropose, operationId " << OperationId << ", ";
+    }
+
+public:
+    TEmptyPropose(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+
+        LOG_I(DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+
+        return true;
+    }
+};
+
 class TChangePathStateOp: public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch(state) {
@@ -163,20 +190,15 @@ class TChangePathStateOp: public TSubOperation {
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
-        switch(state) {
-        case TTxState::Waiting:
-            return MakeHolder<TDone>(OperationId);
-        case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
-        default:
-            return nullptr;
-        }
+        Y_UNUSED(state);
+        Y_ABORT("Unreachable code: TChangePathStateOp should not call this method");
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
         switch(state) {
         case TTxState::Waiting:
-            return MakeHolder<TDone>(OperationId);
+        case TTxState::Propose:
+            return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::Done: {
             // Get target state from transaction and create TDone with it
             // This will cause TDone::Process to apply the path state change
@@ -189,6 +211,23 @@ class TChangePathStateOp: public TSubOperation {
         }
         default:
             return nullptr;
+        }
+    }
+
+    void StateDone(TOperationContext& context) override {
+        // When we reach Done state, don't try to advance to Invalid state
+        // Just complete the operation
+        if (GetState() == TTxState::Done) {
+            // Operation is complete, no need to advance state
+            return;
+        }
+        
+        // For other states, use normal state advancement
+        auto nextState = NextState(GetState());
+        SetState(nextState, context);
+        
+        if (nextState != TTxState::Invalid) {
+            context.OnComplete.ActivateTx(OperationId);
         }
     }
 
@@ -241,7 +280,7 @@ public:
         context.DbChanges.PersistTxState(OperationId);
         context.OnComplete.ActivateTx(OperationId);
 
-        SetState(NextState(TTxState::Waiting));
+        SetState(NextState(TTxState::Waiting), context);
         return result;
     }
 
@@ -282,7 +321,7 @@ class TCreateRestoreOpControlPlane: public TSubOperation {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId);
+            return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
             return MakeHolder<TWaitCopyTableBarrier>(OperationId);
         case TTxState::Done:
@@ -311,6 +350,9 @@ public:
         // Create in-flight operation object
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, bcPath.GetPathIdForDomain()); // Fix PathId to backup collection PathId
+
+        // Set the target path ID for coordinator communication
+        txState.TargetPathId = bcPath.Base()->PathId;
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
@@ -570,12 +612,9 @@ void CreateIncrementalBackupPathStateOps(
     TOperationContext& context,
     TVector<ISubOperation::TPtr>& result)
 {
-    // Pre-calculate all operation IDs needed to avoid conflicts
-    TVector<TOperationId> operationIds;
-    TVector<std::pair<TString, TString>> validOperations; // Store (incrBackupName, relativeItemPath) pairs
-    
-    // First pass: determine how many operations we need and collect valid combinations
+    // Create path state change operations immediately to ensure proper operation ID sequencing
     for (const auto& incrBackupName : incrBackupNames) {
+        // Create path state change operations for each table in each incremental backup
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
             std::pair<TString, TString> paths;
             TString err;
@@ -589,32 +628,22 @@ void CreateIncrementalBackupPathStateOps(
             TString incrBackupPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath});
             const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, context.SS);
             
-            // Only add to valid operations if the path exists
+            // Only create path state change operation if the path exists
             if (incrBackupPath.IsResolved()) {
-                validOperations.emplace_back(incrBackupName, relativeItemPath);
-                // Pre-calculate operation ID
-                TOperationId currentOpId = TOperationId(opId.GetTxId(), opId.GetSubTxId() + result.size() + operationIds.size());
-                operationIds.push_back(currentOpId);
+                // Create transaction for path state change
+                TTxTransaction pathStateChangeTx;
+                pathStateChangeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
+                pathStateChangeTx.SetInternal(true);
+                pathStateChangeTx.SetWorkingDir(tx.GetWorkingDir());
+
+                auto& changePathState = *pathStateChangeTx.MutableChangePathState();
+                changePathState.SetPath(JoinPath({tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath}));
+                changePathState.SetTargetState(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
+
+                // Create the operation immediately after calling NextPartId to maintain proper sequencing
+                CreateChangePathState(NextPartId(opId, result), pathStateChangeTx, context, result);
             }
         }
-    }
-    
-    // Second pass: create the actual operations using pre-calculated IDs
-    for (size_t i = 0; i < validOperations.size(); ++i) {
-        const auto& [incrBackupName, relativeItemPath] = validOperations[i];
-        
-        // Create transaction for path state change
-        TTxTransaction pathStateChangeTx;
-        pathStateChangeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
-        pathStateChangeTx.SetInternal(true);
-        pathStateChangeTx.SetWorkingDir(tx.GetWorkingDir());
-
-        auto& changePathState = *pathStateChangeTx.MutableChangePathState();
-        changePathState.SetPath(JoinPath({tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath}));
-        changePathState.SetTargetState(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
-
-        // Use the pre-calculated operation ID
-        CreateChangePathState(operationIds[i], pathStateChangeTx, context, result);
     }
 }
 

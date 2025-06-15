@@ -161,7 +161,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_T("Handle TEvUploadRowsResponse "
+        LOG_D("Handle TEvUploadRowsResponse "
               << Debug()
               << " Uploader: " << Uploader.ToString()
               << " ev->Sender: " << ev->Sender.ToString());

@@ -23,6 +23,7 @@ enum class EConsumer {
     CLEANUP_SHARED_BLOBS,
     EXPORT,
     SCAN,
+    SYS_VIEW_SCAN,
     GC,
     WRITING,
     WRITING_BUFFER,

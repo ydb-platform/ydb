@@ -497,7 +497,7 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
                     .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);

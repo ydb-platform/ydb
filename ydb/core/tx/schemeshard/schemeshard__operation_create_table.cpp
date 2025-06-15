@@ -500,7 +500,7 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .PathsLimit()
                     .DirChildrenLimit()
                     .IsValidACL(acl);

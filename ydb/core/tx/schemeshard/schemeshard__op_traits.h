@@ -19,6 +19,10 @@ struct TSchemeTxTraitsFallback {
     constexpr inline static bool CreateDirsFromName = false;
     constexpr inline static bool CreateAdditionalDirs = false;
     constexpr inline static bool NeedRewrite = false;
+
+    // constexpr inline static bool Create = false;
+    // constexpr inline static bool Alter = false;
+    // constexpr inline static bool Drop = false;
 };
 
 template <NKikimrSchemeOp::EOperationType opType>
@@ -174,6 +178,13 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCo
 };
 
 template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool CreateDirsFromName = true;
+};
+
+template <>
 struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>
     : public TSchemeTxTraitsFallback
 {
@@ -232,4 +243,9 @@ bool Rewrite(TTraits traits, TTxTransaction& tx) {
     return false;
 }
 
-}// namespace NKikimr::NSchemeShard
+bool IsCreateOperation(NKikimrSchemeOp::EOperationType op);
+bool IsAlterOperation(NKikimrSchemeOp::EOperationType op);
+bool IsDropOperation(NKikimrSchemeOp::EOperationType op);
+bool IsOtherOperation(NKikimrSchemeOp::EOperationType op);
+
+}  // namespace NKikimr::NSchemeShard

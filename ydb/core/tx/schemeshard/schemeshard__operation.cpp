@@ -86,14 +86,6 @@ struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TT
     }
 };
 
-NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme::TEvModifySchemeTransaction& record) {
-    auto recordForPrint = record;
-    if (record.HasUserToken()) {
-        recordForPrint.SetUserToken("***hide token***");
-    }
-    return recordForPrint;
-}
-
 bool TSchemeShard::ProcessOperationParts(
     const TVector<ISubOperation::TPtr>& parts,
     const TTxId& txId,
@@ -819,7 +811,7 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     return result;
 }
 
-bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, THashSet<TString>& createdPaths, TOperation::TSplitTransactionsResult& result) {
+bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, THashSet<TString>& createdPaths, TOperation::TSplitTransactionsResult& result/*, const TOperationContext& context*/) {
     auto initialSize = result.Transactions.size();
 
     while (path != parentPath) {
@@ -855,9 +847,9 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
                 .NotResolved();
         }
 
-        if (checks) {
-            checks.IsValidLeafName();
-        }
+        // if (checks) {
+        //     checks.IsValidLeafName(context.UserToken.Get());
+        // }
 
         if (!checks) {
             result.Status = checks.GetStatus();
@@ -951,9 +943,9 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
                     .NotResolved();
             }
 
-            if (checks && !exists) {
-                checks.IsValidLeafName();
-            }
+            // if (checks && !exists) {
+            //     checks.IsValidLeafName(context.UserToken.Get());
+            // }
 
             if (!checks) {
                 result.Status = checks.GetStatus();
@@ -983,7 +975,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             }
         }
 
-        if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+        if (!CreateDirs(tx, parentPath, path, createdPaths, result/*, context*/)) {
             return result;
         }
     }
@@ -1012,7 +1004,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
                 for (const auto& pathStr : pathStrs) {
                     TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
-                    if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+                    if (!CreateDirs(tx, parentPath, path, createdPaths, result/*, context*/)) {
                         return result;
                     }
                 }

@@ -76,7 +76,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TPath baseTablePath = workingDir.Child(baseTableDescription.GetName());
     {
         TString msg = "invalid table name: ";
-        if(!baseTablePath.IsValidLeafName(msg)) {
+        if(!baseTablePath.IsValidLeafName(context.UserToken.Get(), msg)) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
         }
     }
@@ -138,7 +138,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath indexPath = baseTablePath.Child(indexName);
         {
             TString msg = "invalid table index name: ";
-            if (!indexPath.IsValidLeafName(msg)) {
+            if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }
@@ -165,7 +165,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         TPath sequencePath = baseTablePath.Child(sequenceName);
         {
             TString msg = "invalid sequence name: ";
-            if (!sequencePath.IsValidLeafName(msg)) {
+            if (!sequencePath.IsValidLeafName(context.UserToken.Get(), msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
             }
         }

@@ -15,6 +15,7 @@ struct TStreamPaths {
 };
 
 std::variant<TStreamPaths, ISubOperation::TPtr> DoNewStreamPathChecks(
+    const TOperationContext& context,
     const TOperationId& opId,
     const TPath& workingDirPath,
     const TString& tableName,

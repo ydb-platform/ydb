@@ -20,7 +20,7 @@ class TestUpgradeToInternalPathId:
         driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
         self.session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)
-        
+
         yield
 
         self.session.stop()

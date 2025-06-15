@@ -48,32 +48,46 @@ class TestInsert(BaseTestSet):
         sth = ScenarioTestHelper(ctx)
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
+        ignore_error: tuple[str] = (
+            "Conflict with existing key",
+            "Transaction locks invalidated"
+        )
         for i in range(rows_count):
             if err_event.is_set():
                 break
 
             logger.info("Insert")
+            conflicting_keys_position = 10
+            transaction_locks_position = 10
             for c in range(10):
                 try:
                     result = sth.execute_query(
-                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False, return_error=True
+                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=0, fail_on_error=False, return_error=True, ignore_error=ignore_error
                     )
 
                     if isinstance(result, tuple):
-                        _, err = result
-                        err_msg = str(err)
-                        if ("Conflict with existing key" in err_msg or
-                            "Transaction locks invalidated" in err_msg
-                        ) :
-                            err_event.set()                       
-                            break
-                        raise err
-                    if result == 1:
-                        if c >= 9:
-                            raise Exception('Insert failed table {}'.format(table))
+                        error = str(result[1])
+                        if "Conflict with existing key" in error:
+                            conflicting_keys_position = min(conflicting_keys_position, c)
+                            err_event.set()
+                        elif "Transaction locks invalidated" in error:
+                            transaction_locks_position = min(transaction_locks_position, c)
+                            err_event.set()
                         else:
-                            time.sleep(1)
-                            continue
+                            if c >= 9:
+                                raise Exception(f'Query failed {error}')
+                            else:
+                                time.sleep(1)
+                                continue
+                        if conflicting_keys_position < transaction_locks_position:
+                            raise Exception(f'Insert failed table {table}: {error}')
+                    else:
+                        if result == 1:
+                            if c >= 9:
+                                raise Exception('Insert failed table {}'.format(table))
+                            else:
+                                time.sleep(1)
+                                continue
                     break
                 except Exception:
                     if c >= 9:

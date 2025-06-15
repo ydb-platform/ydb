@@ -2,7 +2,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <google/protobuf/arena.h>
-#include <google/protobuf/repeated_field.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
 

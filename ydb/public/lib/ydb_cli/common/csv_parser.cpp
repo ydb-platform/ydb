@@ -395,7 +395,6 @@ private:
     TValueBuilder Builder;
 };
 
-
 TCsvParseException FormatError(const std::exception& inputError,
                                const TCsvParser::TParseMetadata& meta,
                                const std::optional<std::string>& columnName = {}) {
@@ -550,8 +549,6 @@ TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& f
     // Return a TValue that takes ownership via move
     return TValue(ResultListType.value(), std::move(valueProto));
 }
-
-
 
 TValue TCsvParser::BuildListOnArena(
     const std::vector<TString>& lines,

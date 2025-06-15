@@ -140,7 +140,6 @@ public:
             TRequest,
             TResponse>::TAsyncRequest;
 
-
     template<typename TService, typename TRequest, typename TResponse>
     void Run(
         TRequest&& request,
@@ -158,134 +157,7 @@ public:
             requestSettings,
             std::move(context)
         );
-
-        // using NYdbGrpc::TGrpcStatus;
-        // using TConnection = std::unique_ptr<TServiceConnection<TService>>;
-        // Y_ABORT_UNLESS(dbState);
-
-        // if (!TryCreateContext(context)) {
-        //     TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
-        //     userResponseCb(nullptr, TPlainStatus{status.Status, std::move(status.Issues)});
-        //     return;
-        // }
-
-        // if (dbState->StatCollector.IsCollecting()) {
-        //     std::weak_ptr<TDbDriverState> weakState = dbState;
-        //     const auto startTime = TInstant::Now();
-        //     userResponseCb = std::move([cb = std::move(userResponseCb), weakState, startTime](TResponse* response, TPlainStatus status) {
-        //         const auto resultSize = response ? response->ByteSizeLong() : 0;
-        //         cb(response, status);
-
-        //         if (auto state = weakState.lock()) {
-        //             state->StatCollector.IncRequestLatency(TInstant::Now() - startTime);
-        //             state->StatCollector.IncResultSize(resultSize);
-        //         }
-        //     });
-        // }
-
-        // WithServiceConnection<TService>(
-        //     [this, request = std::forward<TRequest>(request), userResponseCb = std::move(userResponseCb), rpc, requestSettings, context = std::move(context), dbState]
-        //     (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
-        //         if (!status.Ok()) {
-        //             userResponseCb(
-        //                 nullptr,
-        //                 std::move(status));
-        //             return;
-        //         }
-
-        //         TCallMeta meta;
-        //         meta.Timeout = requestSettings.ClientTimeout;
-        // #ifndef YDB_GRPC_UNSECURE_AUTH
-        //         meta.CallCredentials = dbState->CallCredentials;
-        // #else
-        //         if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
-        //             try {
-        //                 meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
-        //             } catch (const std::exception& e) {
-        //                 userResponseCb(
-        //                    nullptr,
-        //                     TPlainStatus(
-        //                         EStatus::CLIENT_UNAUTHENTICATED,
-        //                         TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what()
-        //                     )
-        //                 );
-        //                 return;
-        //             }
-        //         }
-        // #endif
-        //         if (!requestSettings.TraceId.empty()) {
-        //             meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
-        //         }
-
-        //         if (!requestSettings.RequestType.empty()) {
-        //             meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
-        //         }
-
-        //         if (!dbState->Database.empty()) {
-        //             SetDatabaseHeader(meta, dbState->Database);
-        //         }
-
-        //         static const std::string clientPid = GetClientPIDHeaderValue();
-
-        //         meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
-        //         meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
-        //         meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
-
-        //         dbState->StatCollector.IncGRpcInFlight();
-        //         dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
-
-        //         NYdbGrpc::TAdvancedResponseCallback<TResponse> responseCbLow =
-        //             [this, context, userResponseCb = std::move(userResponseCb), endpoint, dbState]
-        //             (const grpc::ClientContext& ctx, TGrpcStatus&& grpcStatus, TResponse&& response) mutable -> void {
-        //                 dbState->StatCollector.DecGRpcInFlight();
-        //                 dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
-
-        //                 if (NYdbGrpc::IsGRpcStatusGood(grpcStatus)) {
-        //                     std::multimap<std::string, std::string> metadata;
-
-        //                     for (const auto& [name, value] : ctx.GetServerInitialMetadata()) {
-        //                         metadata.emplace(
-        //                             std::string(name.begin(), name.end()),
-        //                             std::string(value.begin(), value.end()));
-        //                     }
-        //                     for (const auto& [name, value] : ctx.GetServerTrailingMetadata()) {
-        //                         metadata.emplace(
-        //                             std::string(name.begin(), name.end()),
-        //                             std::string(value.begin(), value.end()));
-        //                     }
-
-        //                     auto resp = new TResult<TResponse>(
-        //                         std::move(response),
-        //                         std::move(grpcStatus),
-        //                         std::move(userResponseCb),
-        //                         this,
-        //                         std::move(context),
-        //                         endpoint.GetEndpoint(),
-        //                         std::move(metadata));
-
-        //                     EnqueueResponse(resp);
-        //                 } else {
-        //                     dbState->StatCollector.IncReqFailDueTransportError();
-        //                     dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
-
-        //                     auto resp = new TGRpcErrorResponse<TResponse>(
-        //                         std::move(grpcStatus),
-        //                         std::move(userResponseCb),
-        //                         this,
-        //                         std::move(context),
-        //                         endpoint.GetEndpoint());
-
-        //                     dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
-
-        //                     EnqueueResponse(resp);
-        //                 }
-        //             };
-
-        //         serviceConnection->DoAdvancedRequest(std::move(request), std::move(responseCbLow), rpc, meta,
-        //             context.get());
-        //     }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
-
 
     template<typename TService, typename TRequest, typename TResponse>
     void RunOnArena(
@@ -304,134 +176,6 @@ public:
             requestSettings,
             std::move(context)
         );
-
-        // using NYdbGrpc::TGrpcStatus;
-        // using TConnection = std::unique_ptr<TServiceConnection<TService>>;
-        // Y_ABORT_UNLESS(dbState);
-
-        // if (!TryCreateContext(context)) {
-        //     TPlainStatus status(EStatus::CLIENT_CANCELLED, "Client is stopped");
-        //     userResponseCb(nullptr, TPlainStatus{status.Status, std::move(status.Issues)});
-        //     return;
-        // }
-
-        // if (dbState->StatCollector.IsCollecting()) {
-        //     std::weak_ptr<TDbDriverState> weakState = dbState;
-        //     const auto startTime = TInstant::Now();
-        //     userResponseCb = std::move([cb = std::move(userResponseCb), weakState, startTime](TResponse* response, TPlainStatus status) {
-        //         const auto resultSize = response ? response->ByteSizeLong() : 0;
-        //         cb(response, status);
-
-        //         if (auto state = weakState.lock()) {
-        //             state->StatCollector.IncRequestLatency(TInstant::Now() - startTime);
-        //             state->StatCollector.IncResultSize(resultSize);
-        //         }
-        //     });
-        // }
-
-
-
-        // WithServiceConnection<TService>(
-        //     [this, request, userResponseCb = std::move(userResponseCb), rpc, requestSettings, context = std::move(context), dbState]
-        //     (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
-        //         if (!status.Ok()) {
-        //             userResponseCb(
-        //                 nullptr,
-        //                 std::move(status));
-        //             return;
-        //         }
-
-        //         TCallMeta meta;
-        //         meta.Timeout = requestSettings.ClientTimeout;
-        // #ifndef YDB_GRPC_UNSECURE_AUTH
-        //         meta.CallCredentials = dbState->CallCredentials;
-        // #else
-        //         if (requestSettings.UseAuth && dbState->CredentialsProvider && dbState->CredentialsProvider->IsValid()) {
-        //             try {
-        //                 meta.Aux.push_back({ YDB_AUTH_TICKET_HEADER, GetAuthInfo(dbState) });
-        //             } catch (const std::exception& e) {
-        //                 userResponseCb(
-        //                     nullptr,
-        //                     TPlainStatus(
-        //                         EStatus::CLIENT_UNAUTHENTICATED,
-        //                         TStringBuilder() << "Can't get Authentication info from CredentialsProvider. " << e.what()
-        //                     )
-        //                 );
-        //                 return;
-        //             }
-        //         }
-        // #endif
-        //         if (!requestSettings.TraceId.empty()) {
-        //             meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
-        //         }
-
-        //         if (!requestSettings.RequestType.empty()) {
-        //             meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
-        //         }
-
-        //         if (!dbState->Database.empty()) {
-        //             SetDatabaseHeader(meta, dbState->Database);
-        //         }
-
-        //         static const std::string clientPid = GetClientPIDHeaderValue();
-
-        //         meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
-        //         meta.Aux.push_back({YDB_CLIENT_PID, clientPid});
-        //         meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
-
-        //         dbState->StatCollector.IncGRpcInFlight();
-        //         dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
-
-        //         NYdbGrpc::TAdvancedResponseCallback<TResponse> responseCbLow =
-        //             [this, context, userResponseCb = std::move(userResponseCb), endpoint, dbState]
-        //             (const grpc::ClientContext& ctx, TGrpcStatus&& grpcStatus, TResponse&& response) mutable -> void {
-        //                 dbState->StatCollector.DecGRpcInFlight();
-        //                 dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
-
-        //                 if (NYdbGrpc::IsGRpcStatusGood(grpcStatus)) {
-        //                     std::multimap<std::string, std::string> metadata;
-
-        //                     for (const auto& [name, value] : ctx.GetServerInitialMetadata()) {
-        //                         metadata.emplace(
-        //                             std::string(name.begin(), name.end()),
-        //                             std::string(value.begin(), value.end()));
-        //                     }
-        //                     for (const auto& [name, value] : ctx.GetServerTrailingMetadata()) {
-        //                         metadata.emplace(
-        //                             std::string(name.begin(), name.end()),
-        //                             std::string(value.begin(), value.end()));
-        //                     }
-
-        //                     auto resp = new TResult<TResponse>(
-        //                         std::move(response),
-        //                         std::move(grpcStatus),
-        //                         std::move(userResponseCb),
-        //                         this,
-        //                         std::move(context),
-        //                         endpoint.GetEndpoint(),
-        //                         std::move(metadata));
-
-        //                     EnqueueResponse(resp);
-        //                 } else {
-        //                     dbState->StatCollector.IncReqFailDueTransportError();
-        //                     dbState->StatCollector.IncTransportErrorsByHost(endpoint.GetEndpoint());
-
-        //                     auto resp = new TGRpcErrorResponse<TResponse>(
-        //                         std::move(grpcStatus),
-        //                         std::move(userResponseCb),
-        //                         this,
-        //                         std::move(context),
-        //                         endpoint.GetEndpoint());
-
-        //                     dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
-
-        //                     EnqueueResponse(resp);
-        //                 }
-        //             };
-
-        //         serviceConnection->DoAdvancedRequest(*request, std::move(responseCbLow), rpc, meta,
-        //             context.get());
-        //     }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
     template<typename TService, typename TRequest, typename TResponse>
@@ -563,9 +307,6 @@ template<typename TService, typename TRequest, typename TResponse>
             true, // poll
             context);
     }
-
-
-
 
     template<class TService, class TRequest, class TResponse, template<typename TA, typename TB, typename TC> class TStream>
     using TStreamRpc =

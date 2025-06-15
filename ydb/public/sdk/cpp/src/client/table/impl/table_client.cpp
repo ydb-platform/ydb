@@ -1020,7 +1020,6 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     return promise.GetFuture();
 }
 
-
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocatedUnsafe(
     const std::string& table,
     TValue&& rows,
@@ -1053,8 +1052,6 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsertUnretryableArenaAllocatedU
     return promise.GetFuture();
 }
 
-
-
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
     auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
     request.set_table(TStringType{table});
@@ -1080,7 +1077,6 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
 
     return promise.GetFuture();
 }
-
 
 TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, EDataFormat format,
     const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings)

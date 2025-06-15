@@ -706,7 +706,6 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
     for (size_t fileOrderNumber = 0; fileOrderNumber < filePathsSize; ++fileOrderNumber) {
         const auto& filePath = filePaths[fileOrderNumber];
         std::shared_ptr<TProgressFile> progressFile = LoadOrStartImportProgress(filePath);
-
         auto func = [&, fileOrderNumber, progressFile, this] {
             std::unique_ptr<TFileInput> fileInput;
             std::optional<ui64> fileSizeHint;
@@ -900,7 +899,6 @@ inline
 TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc) {
     // For the first attempt values are built before acquiring request inflight semaphore
     std::optional<TValue> prebuiltValue = buildFunc();
-
     auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc), prebuiltValue = std::move(prebuiltValue)]
             (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
         auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue]() {
@@ -941,9 +939,7 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
         });
 }
 
-
-inline
-TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
+inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
     const TString& dbPath,
     std::shared_ptr<arrow::RecordBatch> batch,
     const arrow::ipc::IpcWriteOptions& writeOptions
@@ -982,10 +978,7 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
         });
 }
 
-
-
-inline
-TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
+inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
     const TString& dbPath, std::function<TValue(google::protobuf::Arena*)>&& buildFunc) {
     auto arena = std::make_shared<google::protobuf::Arena>();
 
@@ -1036,11 +1029,6 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
             return asyncStatus;
         });
 }
-
-
-
-
-
 
 TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                                      const TString& dbPath,
@@ -1197,7 +1185,6 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
                 }
             };
 
-            // TODO: create arena here and pass it to UpsertTValueBufferOnArena?
             UpsertTValueBufferOnArena(dbPath, std::move(buildOnArenaFunc))
                 .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
                     jobInflightManager->ReleaseJob();

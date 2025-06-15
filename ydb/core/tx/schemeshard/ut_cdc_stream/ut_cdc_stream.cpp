@@ -1083,6 +1083,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Shared");
+        const auto localPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
             Name: "Shared"
             StoragePools {
@@ -1107,9 +1110,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             Name: "Serverless"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard));
+        )", TTestTxConfig::SchemeShard, localPathId));
         env.TestWaitNotification(runtime, txId);
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -1928,6 +1931,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Shared");
+        const auto localPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
             Name: "Shared"
             StoragePools {
@@ -1958,9 +1964,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             Name: "Serverless"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, localPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(

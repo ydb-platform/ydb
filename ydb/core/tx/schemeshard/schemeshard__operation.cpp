@@ -1269,6 +1269,10 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropSysView:
         return CreateDropSysView(NextPartId(), txState);
 
+    // ChangePathState
+    case TTxState::ETxType::TxChangePathState:
+        return CreateChangePathState(NextPartId(), txState);
+
     case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
         return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
 
@@ -1578,6 +1582,10 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateNewSysView(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         return {CreateDropSysView(op.NextPartId(), tx)};
+
+    // ChangePathState
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return CreateChangePathState(op.NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

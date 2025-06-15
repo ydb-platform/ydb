@@ -280,6 +280,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "CREATE SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         return "DROP SYSTEM VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return "CHANGE PATH STATE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -626,6 +628,9 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
         break;
     }
 

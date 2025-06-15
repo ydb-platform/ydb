@@ -140,6 +140,88 @@ public:
     }
 };
 
+class TChangePathStateOp: public TSubOperation {
+    TTxState::ETxState NextState(TTxState::ETxState state) const override {
+        switch(state) {
+        case TTxState::Waiting:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
+        }
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        switch(state) {
+        case TTxState::Waiting:
+        case TTxState::Done:
+            return MakeHolder<TDone>(OperationId);
+        default:
+            return nullptr;
+        }
+    }
+
+public:
+    using TSubOperation::TSubOperation;
+
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        const auto& tx = Transaction;
+        const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
+        
+        LOG_I("TChangePathStateOp Propose"
+            << ", opId: " << OperationId
+        );
+
+        const auto& changePathState = tx.GetChangePathState();
+        TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
+        
+        const TPath& path = TPath::Resolve(pathStr, context.SS);
+        
+        {
+            auto checks = path.Check();
+            checks
+                .NotEmpty()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotUnderDeleting();
+
+            if (!checks) {
+                return MakeHolder<TProposeResponse>(checks.GetStatus(), ui64(OperationId.GetTxId()), ui64(schemeshardTabletId), checks.GetError());
+            }
+        }
+
+        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
+        
+        // Change the path state immediately
+        NIceDb::TNiceDb db(context.GetDB());
+        auto pathInfo = path.Base();
+        pathInfo->PathState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
+        context.SS->PersistPath(db, pathInfo->PathId);
+        
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+
+        txState.State = TTxState::Waiting;
+        context.DbChanges.PersistTxState(OperationId);
+        context.OnComplete.ActivateTx(OperationId);
+
+        SetState(NextState(TTxState::Waiting));
+        return result;
+    }
+
+    void AbortPropose(TOperationContext&) override {
+        Y_ABORT("no AbortPropose for TChangePathStateOp");
+    }
+
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        LOG_N("TChangePathStateOp AbortUnsafe"
+            << ", opId: " << OperationId
+            << ", forceDropId: " << forceDropTxId
+        );
+
+        context.OnComplete.DoneOperation(OperationId);
+    }
+};
+
 class TCreateRestoreOpControlPlane: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Waiting;
@@ -271,6 +353,55 @@ public:
         context.OnComplete.DoneOperation(OperationId);
     }
 };
+
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx) {
+    return new TChangePathStateOp(opId, tx);
+}
+
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state) {
+    return new TChangePathStateOp(opId, state);
+}
+
+TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+
+    if (!tx.HasChangePathState()) {
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing ChangePathState")};
+        return result;
+    }
+
+    const auto& changePathState = tx.GetChangePathState();
+    
+    if (!changePathState.HasPath()) {
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing Path in ChangePathState")};
+        return result;
+    }
+
+    if (!changePathState.HasTargetState()) {
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing TargetState in ChangePathState")};
+        return result;
+    }
+
+    TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
+    const TPath& path = TPath::Resolve(pathStr, context.SS);
+    
+    {
+        auto checks = path.Check();
+        checks
+            .NotEmpty()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotUnderDeleting();
+
+        if (!checks) {
+            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return result;
+        }
+    }
+
+    result.push_back(CreateChangePathState(opId, tx));
+    return result;
+}
 
 bool CreateLongIncrementalRestoreOp(
     TOperationId opId,

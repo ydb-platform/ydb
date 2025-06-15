@@ -1797,6 +1797,8 @@ message TModifyScheme {
 
     optional TSysViewDescription CreateSysView = 81;
 
+    optional TChangePathState ChangePathState = 82;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -2243,4 +2245,9 @@ message TLongIncrementalRestoreOp {
     repeated string TablePathList = 4;
     optional string FullBackupTrimmedName = 5;
     repeated string IncrementalBackupTrimmedNames = 6;
+}
+
+message TChangePathState {
+    optional string Path = 1;
+    optional EPathState TargetState = 2;
 }

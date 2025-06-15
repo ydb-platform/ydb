@@ -960,7 +960,11 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TTypeAnnotationCont
 
     auto topStats = std::make_shared<TOptimizerStatistics>(*inputStats);
     auto orderingInfo = GetTopBaseSortingOrderingInfo(topBase, typeCtx->SortingsFSM, topStats->TableAliases.Get());
-    if (typeCtx->SortingsFSM && !topStats->SortingOrderings.ContainsSorting(orderingInfo.OrderingIdx)) {
+    if (
+        typeCtx->SortingsFSM &&
+        !topStats->SortingOrderings.ContainsSorting(orderingInfo.OrderingIdx) &&
+        inputNode.Maybe<TCoTopSort>() // TopBase can be Top, which doesn't sort the input
+    ) {
         topStats->SortingOrderings = typeCtx->SortingsFSM->CreateState(orderingInfo.OrderingIdx);
     }
     topStats->SortingOrderingIdx = orderingInfo.OrderingIdx;

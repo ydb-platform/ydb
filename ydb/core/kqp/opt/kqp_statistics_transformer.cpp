@@ -143,11 +143,6 @@ void InferStatisticsForKqpTable(
     }
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
-    // if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
-    //     YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for table: " << path.Value();
-    //     return;
-    // }
-
     TSimpleSharedPtr<THashSet<TString>> aliases;
     if (auto tablePrevStats = typeCtx->GetStats(inputNode.Raw())) {
         aliases = tablePrevStats->Aliases;
@@ -935,7 +930,6 @@ public:
             }
         );
 
-        Cout << InterestingOrderingsCollector.FDStorage.ToString() << Endl;
         auto shufflingsFsm = MakeSimpleShared<TOrderingsStateMachine>(InterestingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
         auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
 
@@ -1093,10 +1087,7 @@ private:
 
             if (!ascOnly) { // we may have desc direction in topsort - so we will consider two cases : asc and desc table reads
                 if (auto maybeReadTable = GetReadTable(sortCallable.Input().Raw())) {
-                    Cout << "OK" << Endl;
                     CollectKqpReadTable<GetDescDirections>(*maybeReadTable);
-                } else {
-                    Cout << "Kal" << Endl;
                 }
             }
 

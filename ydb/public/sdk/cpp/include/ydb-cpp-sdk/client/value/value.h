@@ -280,12 +280,10 @@ public:
     Ydb::Value& GetProto();
 
     Ydb::Value&& ExtractProto() &&;
-
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
-
 
 class TValueParser : public TMoveOnly {
     friend class TResultSetParser;

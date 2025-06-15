@@ -178,6 +178,7 @@ public:
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
 
         CheckDuplicateRows = tableServiceConfig.GetEnableRowsDuplicationCheck();
+        EnableParallelPointReadConsolidation = tableServiceConfig.GetEnableParallelPointReadConsolidation();
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -1280,16 +1281,17 @@ protected:
 
         auto addPartiton = [&](
             ui64 taskLocation,
+            TMaybe<ui64> nodeId,
             TMaybe<ui64> shardId,
             const TShardInfo& shardInfo,
             TMaybe<ui64> maxInFlightShards = Nothing())
         {
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
-            const auto nodeIdPtr = ShardIdToNodeId.FindPtr(taskLocation);
-            const auto nodeId = nodeIdPtr
-                ? TMaybe<ui64>{*nodeIdPtr}
-                : Nothing();
+            if (!nodeId) {
+                const auto nodeIdPtr = ShardIdToNodeId.FindPtr(taskLocation);
+                nodeId = nodeIdPtr ? TMaybe<ui64>{*nodeIdPtr} : Nothing();
+            }
 
             YQL_ENSURE(!ShardsResolved || nodeId);
             YQL_ENSURE(Stats);
@@ -1364,7 +1366,10 @@ protected:
             Counters->Counters->FullScansExecuted->Inc();
         }
 
-        if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
+        bool isParallelPointRead = EnableParallelPointReadConsolidation && !source.GetSorted() && IsParallelPointReadPossible(partitions);
+        bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+
+        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
 
             YQL_ENSURE(Stats);
@@ -1373,8 +1378,14 @@ protected:
                 Stats->AffectedShards.insert(shardId);
             }
 
+            TMaybe<ui64> inFlightShards = Nothing();
+            if (isSequentialInFlight) {
+                inFlightShards = source.GetSequentialInFlightShards();
+            }
+
             if (shardInfo.KeyReadRanges) {
-                addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
+                const TMaybe<ui64> nodeId = (isParallelPointRead) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
+                addPartiton(startShard, nodeId, {}, shardInfo, inFlightShards);
                 fillRangesForTasks();
                 buildSinks();
                 return Nothing();
@@ -1383,7 +1394,7 @@ protected:
             }
         } else {
             for (auto& [shardId, shardInfo] : partitions) {
-                addPartiton(shardId, shardId, shardInfo, {});
+                addPartiton(shardId, {}, shardId, shardInfo, {});
             }
             fillRangesForTasks();
             buildSinks();
@@ -2286,6 +2297,8 @@ protected:
     ui64 StatFinishInflightBytes = 0;
 
     TMaybe<TBatchOperationSettings> BatchOperationSettings;
+
+    bool EnableParallelPointReadConsolidation = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

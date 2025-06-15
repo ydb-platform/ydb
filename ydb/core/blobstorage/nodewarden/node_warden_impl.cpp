@@ -165,6 +165,7 @@ STATEFN(TNodeWarden::StateOnline) {
 
         hFunc(TEvNodeWardenQueryBaseConfig, Handle);
         hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
+        hFunc(TEvNodeWardenNotifyConfigMismatch, Handle);
 
         fFunc(TEvents::TSystem::Gone, HandleGone);
 

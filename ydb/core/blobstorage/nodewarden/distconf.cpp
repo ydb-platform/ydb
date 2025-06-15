@@ -454,6 +454,14 @@ namespace NKikimr::NStorage {
 
                 // copy cluster state generation
                 pb->SetClusterStateGeneration(clusterState.GetGeneration());
+                
+                auto &history = config->GetClusterStateHistory();
+                if (history.UnsyncedEntriesSize() > 0) {
+                    auto &entry = history.GetUnsyncedEntries(0);
+                    pb->SetClusterStateGuid(entry.GetOperationGuid());
+                } else {
+                    pb->SetClusterStateGuid(0);
+                }
 
                 if (!pb->RingGroupsSize() || pb->HasRing()) {
                     return "configuration has Ring field set or no RingGroups";
@@ -496,6 +504,7 @@ namespace NKikimr::NStorage {
                             return "can't determine correct pile state for ring group";
                         }
                         group->SetPileState(*state);
+                        
                         if (*state != T::PRIMARY) { // TODO(alexvru): HACK!!!
                             group->SetWriteOnly(true);
                         }

@@ -1,3 +1,4 @@
+import pytest
 import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -5,18 +6,25 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 class TestUpgradeToInternalPathId:
     cluster = None
+    session = None
     num_rows = 1000
     config = KikimrConfigGenerator(
         use_in_memory_pdisks=False,
         column_shard_config={"generate_internal_path_id": False}
     )
 
-    def start_cluster(self):
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
         driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
         self.session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)
+        
+        yield
+
+        self.session.stop()
+        self.cluster.stop()
 
     def restart_cluster(self, generate_internal_path_id):
         self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
@@ -24,11 +32,6 @@ class TestUpgradeToInternalPathId:
         driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
         self.session = ydb.QuerySessionPool(driver)
         driver.wait(5, fail_fast=True)
-
-    def stop_cluster(self):
-        if self.cluster:
-            self.cluster.stop()
-            self.cluster = None
 
     def create_table_with_data(self, table_name):
         self.session.execute_with_retries(f"""
@@ -60,7 +63,6 @@ class TestUpgradeToInternalPathId:
         return rows[0]
 
     def test(self):
-        self.start_cluster()
         self.create_table_with_data("table1")
         self.validate_table("table1")
         table1PathMapping = self.get_path_ids("table1")

@@ -189,32 +189,6 @@ message TEvNotifyTxCompletionResult {
     optional uint64 TxId = 1;
 }
 
-message TSchemeLimits {
-    optional uint64 MaxDepth = 1;
-    optional uint64 MaxPaths = 2;
-    optional uint64 MaxChildrenInDir = 3;
-    optional uint64 MaxAclBytesSize = 4;
-
-    optional uint64 MaxTableColumns = 5;
-    optional uint64 MaxTableColumnNameLength = 6;
-    optional uint64 MaxTableKeyColumns = 7;
-    optional uint64 MaxTableIndices = 8;
-    optional uint64 MaxShards = 9;
-    optional uint64 MaxShardsInPath = 10;
-    optional uint64 MaxConsistentCopyTargets = 11;
-
-    optional uint64 MaxPathElementLength = 12;
-    optional string ExtraPathSymbolsAllowed = 13;
-
-    optional uint64 MaxPQPartitions = 14;
-    optional uint64 MaxTableCdcStreams = 15;
-
-    optional uint64 MaxExports = 16;
-    optional uint64 MaxImports = 17;
-
-    optional uint64 MaxColumnTableColumns = 18;
-}
-
 message TEvInitTenantSchemeShard {
     optional fixed64 DomainSchemeShard = 1;
     optional fixed64 DomainPathId = 2;
@@ -230,7 +204,7 @@ message TEvInitTenantSchemeShard {
     repeated NKikimrSchemeOp.TUserAttribute UserAttributes = 9;
     optional uint64 UserAttributesVersion = 10;
 
-    optional TSchemeLimits SchemeLimits = 11;
+    optional NKikimrSubDomains.TSchemeLimits SchemeLimits = 11;
 
     optional bool InitiateMigration = 12;
 
@@ -414,6 +388,7 @@ message TEvUpdateTenantSchemeShard {
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;
+    optional NKikimrSubDomains.TSchemeLimits SchemeLimits = 20;
 
     optional string UpdateTenantRootACL = 13;
 

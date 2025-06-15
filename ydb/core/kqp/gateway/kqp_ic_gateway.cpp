@@ -897,45 +897,9 @@ public:
     }
 
     TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            auto alterDatabasePromise = NewPromise<TGenericResult>();
-
-            auto ev = MakeHolder<TRequest>();
-
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-
-            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
-
-            NKikimrSchemeOp::TModifyScheme* modifyScheme = ev->Record.MutableTransaction()->MutableModifyScheme();
-            modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
-            modifyScheme->SetWorkingDir(dirname);
-            modifyScheme->MutableModifyACL()->SetNewOwner(settings.Owner.value());
-            modifyScheme->MutableModifyACL()->SetName(basename);
-
-            auto condition = modifyScheme->AddApplyIf();
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
-
-            SendSchemeRequest(ev.Release()).Apply(
-                [alterDatabasePromise](const TFuture<TGenericResult>& future) mutable {
-                    alterDatabasePromise.SetValue(future.GetValue());
-                }
-            );
-
-            return alterDatabasePromise.GetFuture();
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+        Y_UNUSED(cluster);
+        Y_UNUSED(settings);
+        return NotImplemented<TGenericResult>();
     }
 
     TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata,

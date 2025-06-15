@@ -3,13 +3,16 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 
 namespace NKikimr::NKqp::NSchemeHelpers {
 
 using namespace NKikimrSchemeOp;
 using namespace NKikimrExternalSources;
+using namespace NYql;
 
 TString CanonizePath(const TString& path) {
     if (path.empty()) {
@@ -81,7 +84,7 @@ TString SelectDatabaseForAlterLoginOperations(const TAppData* appData, const TSt
 void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                        const TString& name,
                                        bool replaceIfExists,
-                                       const NYql::TCreateExternalTableSettings& settings)
+                                       const TCreateExternalTableSettings& settings)
 {
     externalTableDesc.SetName(name);
     externalTableDesc.SetDataSourcePath(settings.DataSourcePath);
@@ -106,6 +109,39 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
         attributes.insert({key, value});
     }
     externalTableDesc.SetContent(general.SerializeAsString());
+}
+
+bool Validate(const TAlterDatabaseSettings& settings, TIssue& error) {
+    const int settingsToAlter = (settings.Owner ? 1 : 0) + (settings.SchemeLimits ? 1 : 0);
+    if (settingsToAlter > 1) {
+        error.SetMessage("Multiple setting classes cannot be altered simultaneously.");
+        error.SetCode(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, TSeverityIds_ESeverityId_S_ERROR);
+        return false;
+    }
+    if (settingsToAlter == 0) {
+        error.SetMessage("No settings to alter.");
+        error.SetCode(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, TSeverityIds_ESeverityId_S_ERROR);
+        return false;
+    }
+    return true;
+}
+
+void FillAlterDatabaseOwner(TModifyScheme& modifyScheme, const TString& name, const TString& newOwner) {
+    modifyScheme.SetOperationType(ESchemeOpModifyACL);
+    auto& modifyACL = *modifyScheme.MutableModifyACL();
+    modifyACL.SetNewOwner(newOwner);
+    modifyACL.SetName(name);
+
+    auto* condition = modifyScheme.AddApplyIf();
+    condition->AddPathTypes(EPathType::EPathTypeSubDomain);
+    condition->AddPathTypes(EPathType::EPathTypeExtSubDomain);
+}
+
+void FillAlterDatabaseSchemeLimits(TModifyScheme& modifyScheme, const TString& name, const NKikimrSubDomains::TSchemeLimits& in) {
+    modifyScheme.SetOperationType(ESchemeOpAlterExtSubDomain);
+    auto& subdomain = *modifyScheme.MutableSubDomain();
+    subdomain.SetName(name);
+    *subdomain.MutableSchemeLimits() = in;
 }
 
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {

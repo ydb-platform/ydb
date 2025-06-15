@@ -100,18 +100,62 @@ namespace {
         return permissionsSettings;
     }
 
+    bool ParseInteger(const TMaybeNode<TExprBase>& value, ui64& extracted) {
+        if (!value.Maybe<TCoIntegralCtor>()) {
+            return false;
+        }
+        bool hasSign;
+        bool isSigned;
+        ExtractIntegralValue(value.Ref(), false, hasSign, isSigned, extracted);
+        if (hasSign || extracted == 0) {
+            return false;
+        }
+        return true;
+    }
+
     TAlterDatabaseSettings ParseAlterDatabaseSettings(TKiAlterDatabase alterDatabase) {
         TAlterDatabaseSettings alterDatabaseSettings;
         YQL_ENSURE(alterDatabase.DatabasePath().Value().size() > 0);
         alterDatabaseSettings.DatabasePath = alterDatabase.DatabasePath().Value();
+        auto& schemeLimits = alterDatabaseSettings.SchemeLimits;
 
         for (auto setting : alterDatabase.Settings()) {
             const auto& name = setting.Name().Value();
 
             if (name == "owner") {
                 alterDatabaseSettings.Owner = setting.Value().Cast<TCoAtom>().StringValue();
-            } else {
-                YQL_ENSURE(false);
+            }
+            if (name == "MAX_SHARDS") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxShards(value);
+            }
+            if (name == "MAX_SHARDS_IN_PATH") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxShardsInPath(value);
+            }
+            if (name == "MAX_PATHS") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxPaths(value);
+            }
+            if (name == "MAX_CHILDREN_IN_DIR") {
+                ui64 value;
+                YQL_ENSURE(ParseInteger(setting.Value(), value));
+                if (!schemeLimits) {
+                    schemeLimits.emplace();
+                }
+                schemeLimits->SetMaxChildrenInDir(value);
             }
         }
 

@@ -104,6 +104,27 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
     return convertStatus;
 }
 
+bool ValidateInteger(TExprContext& ctx, const TMaybeNode<TExprBase>& value, TStringBuf setting) {
+    if (!value.Maybe<TCoIntegralCtor>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(value.Ref().Pos()),
+            TStringBuilder() << "Value of the " << setting << " must be an integer."
+        ));
+        return false;
+    }
+
+    ui64 extracted;
+    bool hasSign;
+    bool isSigned;
+    ExtractIntegralValue(value.Ref(), false, hasSign, isSigned, extracted);
+    if (hasSign || extracted == 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(value.Ref().Pos()),
+            TStringBuilder() << "Value of the " << setting << " must be positive."
+        ));
+        return false;
+    }
+    return true;
+}
+
 class TKiSourceTypeAnnotationTransformer : public TKiSourceVisitorTransformer {
 public:
     TKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
@@ -1924,20 +1945,41 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         }
 
         const THashSet<TString> supportedSettings = {
-            "owner"
+            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
         };
 
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
+            auto value = setting.Value();
 
             if (!supportedSettings.contains(name)) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown create user setting: " << name));
+                    TStringBuilder() << "Unknown ALTER DATABASE setting: " << name));
                 return TStatus::Error;
             }
 
-            if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+            if (name == "owner" && !EnsureAtom(value.Ref(), ctx)) {
                 return TStatus::Error;
+            }
+            if (name == "MAX_SHARDS") {
+                if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "MAX_SHARDS_IN_PATH") {
+                if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "MAX_PATHS") {
+                if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "MAX_CHILDREN_IN_DIR") {
+                if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
             }
         }
 

@@ -22,7 +22,7 @@ void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TStr
     ).ExtractValueSync();
     AssertSuccessResult(result);
 
-    Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);    
+    Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
 }
 
 void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
@@ -31,7 +31,7 @@ void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject) {
     .SetDatabase("/Root")
     .SetAuthToken(subject));
 
-    NYdb::NQuery::TQueryClient client(driver);            
+    NYdb::NQuery::TQueryClient client(driver);
     while(true) {
         auto result = client.ExecuteScript("SELECT 1").ExtractValueSync();
         NYdb::EStatus scriptStatus = result.Status().GetStatus();
@@ -655,7 +655,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         }
 
         AddConnectPermission(kikimr, UserName);
-        
+
         for (const auto permission : {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"}) {
             AddPermissions(kikimr, "/Root/test_acl", UserName, {"ydb.deprecated.describe_schema", "ydb.deprecated.update_row"});
 
@@ -693,6 +693,85 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             }
 
             driver.Stop(true);
+        }
+    }
+
+    NQuery::TSession CreateSession(NQuery::TQueryClient& client) {
+        auto result = client.GetSession().GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return result.GetSession();
+    }
+
+    void AllowUserCreation(Tests::TClient& client, TString&& subject) {
+        client.TestGrant("/", "Root", subject, NACLib::EAccessRights::AlterSchema);
+    }
+
+    void AllowDatabaseAltering(Tests::TClient& client, TString&& subject) {
+        client.TestGrant("/Root", "Test", subject,
+            static_cast<NACLib::EAccessRights>(NACLib::EAccessRights::AlterSchema | NACLib::EAccessRights::CreateDatabase)
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(AlterDatabasePrivilegesRequiredToChangeSchemeLimits, AsClusterAdmin) {
+        /* Default Kikimr runner can not create extsubdomain. */
+        TTestExtEnv::TEnvSettings settings;
+        settings.FeatureFlags.SetEnableAlterDatabase(true);
+
+        TTestExtEnv env(settings);
+        env.CreateDatabase("Test");
+
+        auto& runtime = *env.GetServer().GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+
+        runtime.GetAppData().AdministrationAllowedSIDs.emplace_back("cluster_admin@builtin");
+        NQuery::TQueryClient clusterAdmin(env.GetDriver(), NQuery::TClientSettings().AuthToken("cluster_admin@builtin"));
+        auto clusterAdminSession = CreateSession(clusterAdmin);
+
+        {
+            env.GetClient().SetSecurityToken("cluster_admin@builtin"); // must be a cluster admin
+            AllowUserCreation(env.GetClient(), "cluster_admin@builtin");
+
+            auto result = clusterAdminSession.ExecuteQuery(R"(
+                    CREATE USER databaseadmin ENCRYPTED PASSWORD 'secret_password';
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        NQuery::TQueryClient databaseAdmin(env.GetDriver(), NQuery::TClientSettings().CredentialsProviderFactory(
+            CreateLoginCredentialsProviderFactory({
+                .User = "databaseadmin",
+                .Password = "secret_password",
+            })
+        ));
+        auto databaseAdminSession = CreateSession(databaseAdmin);
+
+        {
+            auto result = clusterAdminSession.ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` OWNER TO databaseadmin;
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            TTableClient client(env.GetDriver());
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            CheckOwner(session, "/Root/Test", "databaseadmin");
+        }
+
+        {
+            if (AsClusterAdmin) {
+                AllowDatabaseAltering(env.GetClient(), "cluster_admin@builtin");
+            }
+
+            auto result = (AsClusterAdmin ? clusterAdminSession : databaseAdminSession).ExecuteQuery(R"(
+                    ALTER DATABASE `/Root/Test` SET (MAX_PATHS = 10, MAX_SHARDS = 20);
+                )", NQuery::TTxControl::NoTx()
+            ).ExtractValueSync();
+
+            if (AsClusterAdmin) {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            }
         }
     }
 }

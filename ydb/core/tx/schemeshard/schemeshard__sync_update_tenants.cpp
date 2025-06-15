@@ -113,6 +113,11 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                 Self->PersistSubDomainDatabaseQuotas(db, Self->RootPathId(), *subdomain);
             }
 
+            if (record.HasSchemeLimits()) {
+                subdomain->MergeSchemeLimits(record.GetSchemeLimits(), Self);
+                Self->PersistSchemeLimits(db, Self->RootPathId(), *subdomain);
+            }
+
             if (record.HasAuditSettings()) {
                 subdomain->SetAuditSettings(record.GetAuditSettings());
                 Self->PersistSubDomainAuditSettings(db, Self->RootPathId(), *subdomain);

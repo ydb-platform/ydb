@@ -11,8 +11,7 @@
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp::NSchedulerOld {
 
 class TSchedulerEntity;
 class TSchedulerEntityHandle {
@@ -23,7 +22,7 @@ public:
     TSchedulerEntityHandle(TSchedulerEntity*);
 
     TSchedulerEntityHandle();
-    TSchedulerEntityHandle(TSchedulerEntityHandle&&); 
+    TSchedulerEntityHandle(TSchedulerEntityHandle&&);
 
     TSchedulerEntityHandle& operator = (TSchedulerEntityHandle&&);
 
@@ -61,7 +60,7 @@ public:
 
     void ReportCounters(TIntrusivePtr<TKqpCounters>);
 
-    
+
     void SetCapacity(ui64 cores);
 
     void UpdateGroupShare(TString name, double share, TMonotonic now, std::optional<double> resourceWeight);
@@ -182,7 +181,7 @@ public:
         }
     }
 
-    void DoBoostrap() {
+    void DoBootstrap() {
         if (!SelfHandle.Defined()) {
             return;
         }
@@ -335,5 +334,4 @@ struct TSchedulerActorOptions {
 
 IActor* CreateSchedulerActor(TSchedulerActorOptions);
 
-} // namespace NKqp
-} // namespace NKikimR
+} // namespace NKikimr::NKqp::NSchedulerOld

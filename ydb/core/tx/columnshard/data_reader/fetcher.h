@@ -68,6 +68,7 @@ public:
     }
 
     void SetStage(const EFetchingStage stage) {
+        Callback->OnStageStarting(stage);
         Stage = stage;
     }
 

@@ -95,6 +95,10 @@ private:
 public:
     virtual ~IFetchCallback() = default;
 
+    virtual void OnStageStarting(const EFetchingStage /*stage*/) {
+    
+    }
+
     void OnFinished(TCurrentContext&& context) {
         AFL_VERIFY(!IsFinished);
         IsFinished = true;

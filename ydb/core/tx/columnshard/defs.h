@@ -62,9 +62,9 @@ public:
     TLimits();
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(MinInsertBytes, "ColumnShardControls.MinBytesToIndex");
-        icb.RegisterSharedControl(MaxInsertBytes, "ColumnShardControls.MaxBytesToIndex");
-        icb.RegisterSharedControl(InsertTableSize, "ColumnShardControls.InsertTableCommittedSize");
+        icb.RegisterSharedControl(MinInsertBytes, EStaticControlType::ColumnShardControlsMinBytesToIndex);
+        icb.RegisterSharedControl(MaxInsertBytes, EStaticControlType::ColumnShardControlsMaxBytesToIndex);
+        icb.RegisterSharedControl(InsertTableSize, EStaticControlType::ColumnShardControlsInsertTableCommittedSize);
     }
 };
 
@@ -89,11 +89,11 @@ struct TCompactionLimits {
     {}
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(GoodBlobSize, "ColumnShardControls.IndexGoodBlobSize");
-        icb.RegisterSharedControl(GranuleOverloadSize, "ColumnShardControls.GranuleOverloadBytes");
-        icb.RegisterSharedControl(InGranuleCompactSeconds, "ColumnShardControls.CompactionDelaySec");
-        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, "ColumnShardControls.GranuleIndexedPortionsSizeLimit");
-        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, "ColumnShardControls.GranuleIndexedPortionsCountLimit");
+        icb.RegisterSharedControl(GoodBlobSize, EStaticControlType::ColumnShardControlsIndexGoodBlobSize);
+        icb.RegisterSharedControl(GranuleOverloadSize, EStaticControlType::ColumnShardControlsGranuleOverloadBytes);
+        icb.RegisterSharedControl(InGranuleCompactSeconds, EStaticControlType::ColumnShardControlsCompactionDelaySec);
+        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsSizeLimit);
+        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsCountLimit);
     }
 
     NOlap::TCompactionLimits Get() const {

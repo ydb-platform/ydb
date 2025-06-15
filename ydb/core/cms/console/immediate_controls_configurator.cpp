@@ -157,7 +157,11 @@ void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> boa
     // is properly configured. It can currently only happen in configurator
     // tests, where it is created very late after some tablets have already
     // started.
-    auto res = board->RegisterSharedControl(Controls[name], name);
+    bool res = true;
+    if (auto controlId = board->GetStaticControlId(name)) {
+        res = board->RegisterSharedControl(Controls[name], *controlId);
+    }
+
     Y_VERIFY_S(res || allowExisting,
             "Immediate Control " << name << " was registered before "
             << "TImmediateControlsConfigurator creation");
@@ -220,15 +224,20 @@ void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Messa
                 }
                 AddControl(board, fieldDesc, prefix, true);
             }
-            
+            auto controlId = board->GetStaticControlId(name);
+            if (!controlId) {
+                // unknown static control
+                // can't apply
+                continue;
+            }
             if (reflection->HasField(cfg, fieldDesc)) {
                 TAtomicBase prev;
                 if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)
-                    board->SetValue(name, reflection->GetUInt64(cfg, fieldDesc), prev);
+                    board->SetValue(*controlId, reflection->GetUInt64(cfg, fieldDesc), prev);
                 else
-                    board->SetValue(name, reflection->GetInt64(cfg, fieldDesc), prev);
+                    board->SetValue(*controlId, reflection->GetInt64(cfg, fieldDesc), prev);
             } else {
-                board->RestoreDefault(name);
+                board->RestoreDefault(*controlId);
             }
         } else {
             Y_ABORT_UNLESS(fieldType == google::protobuf::FieldDescriptor::TYPE_MESSAGE,

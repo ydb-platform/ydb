@@ -25,6 +25,7 @@
 #include "shared_sausagecache.h"
 #include "util_fmt_abort.h"
 #include "util_fmt_desc.h"
+#include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
@@ -174,9 +175,10 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
-    TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
-    AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
-    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+    if (auto logFlushDelayOverrideUsecControlType = NUtil::GetLogFlushDelayOverrideUsecTabletTypeControl(Owner->TabletType())) {
+        AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, *logFlushDelayOverrideUsecControlType);
+    }
+    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, EStaticControlType::TabletControlsMaxCommitRedoMB);
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);

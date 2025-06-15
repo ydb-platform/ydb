@@ -675,6 +675,11 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx);
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, TTxState::ETxState state);
 
+// ChangePathState
+TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
+
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 

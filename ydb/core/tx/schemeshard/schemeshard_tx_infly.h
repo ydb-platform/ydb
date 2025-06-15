@@ -150,6 +150,7 @@ struct TTxState {
         item(TxCreateSysView, 103) \
         item(TxDropSysView, 104) \
         item(TxCreateLongIncrementalRestoreOp, 105) \
+        item(TxChangePathState, 106) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -453,6 +454,7 @@ struct TTxState {
         case TxAlterResourcePool:
         case TxRestoreIncrementalBackupAtTable:
         case TxAlterBackupCollection:
+        case TxChangePathState:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -570,6 +572,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
+        case TxChangePathState:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -691,6 +694,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
+        case TxChangePathState:
             return false;
         case TxInvalid:
         case TxAllocatePQ:
@@ -810,6 +814,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;
             case NKikimrSchemeOp::ESchemeOpCreateSysView: return TxCreateSysView;
             case NKikimrSchemeOp::ESchemeOpDropSysView: return TxDropSysView;
+            case NKikimrSchemeOp::ESchemeOpChangePathState: return TxChangePathState;
             default: return TxInvalid;
         }
     }

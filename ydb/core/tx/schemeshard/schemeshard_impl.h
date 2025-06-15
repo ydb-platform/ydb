@@ -874,6 +874,8 @@ public:
     void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
 
+    void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
+
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 
     enum class EHiveSelection : uint8_t {

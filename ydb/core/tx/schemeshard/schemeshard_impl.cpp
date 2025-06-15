@@ -1646,6 +1646,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterContinuousBackup:
     case TTxState::TxAlterResourcePool:
     case TTxState::TxAlterBackupCollection:
+    case TTxState::TxChangePathState:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1698,6 +1699,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxMoveSequence:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxRestoreIncrementalBackupAtTable:
+    case TTxState::TxCreateLongIncrementalRestoreOp: // Set this state for now, maybe we need to be more precise
         return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
     }
     return oldState;
@@ -2460,6 +2462,13 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         }
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
+    } else if (txState.TxType == TTxState::TxChangePathState) {
+        if (txState.TargetPathTargetState) {
+            NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+            proto.MutableTxCopyTableExtraData()->SetTargetPathTargetState(*txState.TargetPathTargetState);
+            bool serializeRes = proto.SerializeToString(&extraData);
+            Y_ABORT_UNLESS(serializeRes);
+        }
     }
 
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(
@@ -4240,6 +4249,16 @@ void TSchemeShard::PersistRemovePublishingPath(NIceDb::TNiceDb& db, TTxId txId, 
     db.Table<Schema::MigratedPublishingPaths>()
         .Key(txId, pathId.OwnerId, pathId.LocalPathId, version)
         .Delete();
+}
+
+void TSchemeShard::PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
+    TString data;
+    Y_PROTOBUF_SUPPRESS_NODISCARD op.SerializeToString(&data);
+
+    db.Table<Schema::IncrementalRestoreOperations>()
+        .Key(op.GetTxId())
+        .Update(
+            NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(data));
 }
 
 TTabletId TSchemeShard::GetGlobalHive(const TActorContext& ctx) const {

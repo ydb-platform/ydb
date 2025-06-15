@@ -716,3 +716,10 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
 #else
     #define Y_RETURNS_NONNULL
 #endif
+
+/**
+ * Temp addition, to force tests rerun
+ */
+#ifdef SOME_UNUSED_DEFINE
+#error "Some unused define"
+#endif

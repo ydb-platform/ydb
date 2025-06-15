@@ -501,11 +501,16 @@ private:
                 Changes->SetStage(NOlap::NChanges::EStage::AskAccessors);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskDataResources:
+                Changes->SetStage(NOlap::NChanges::EStage::AskDataResources);
+                break;
             case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:
-                Changes->SetStage(NOlap::NChanges::EStage::AskResources);
+                Changes->SetStage(NOlap::NChanges::EStage::AskAccessorResources);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::ReadBlobs:
                 Changes->SetStage(NOlap::NChanges::EStage::ReadBlobs);
+                break;
+            case NOlap::NDataFetcher::EFetchingStage::Finished:
+                Changes->SetStage(NOlap::NChanges::EStage::ReadyForConstruct);
                 break;
             default:
                 break;

@@ -216,12 +216,15 @@ public:
 
 TConclusionStatus TStatsIterator::Start() {
     std::vector<TPortionInfo::TConstPtr> portions;
-    auto actualIndexInfo = ReadMetadata->GetIndexVersionsPtr();
+    std::shared_ptr<TVersionedIndex> actualIndexInfo;
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(Context->GetDataAccessorsManager(), Context->GetStoragesManager());
     for (auto&& i : IndexGranules) {
         for (auto&& p : i.GetPortions()) {
             portions.emplace_back(p);
             if (portions.size() == 100) {
+                if (!actualIndexInfo) {
+                    actualIndexInfo = ReadMetadata->GetIndexVersionsPtr();
+                }
                 NOlap::NDataFetcher::TRequestInput rInput(
                     std::move(portions), actualIndexInfo, NOlap::NBlobOperations::EConsumer::SYS_VIEW_SCAN, ::ToString(ReadMetadata->GetTxId()));
                 NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(
@@ -231,6 +234,9 @@ TConclusionStatus TStatsIterator::Start() {
         }
     }
     if (portions.size()) {
+        if (!actualIndexInfo) {
+            actualIndexInfo = ReadMetadata->GetIndexVersionsPtr();
+        }
         NOlap::NDataFetcher::TRequestInput rInput(
             std::move(portions), actualIndexInfo, NOlap::NBlobOperations::EConsumer::SYS_VIEW_SCAN, ::ToString(ReadMetadata->GetTxId()));
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(

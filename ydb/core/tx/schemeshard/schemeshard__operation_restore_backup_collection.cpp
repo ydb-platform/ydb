@@ -212,9 +212,16 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
         
+        // Set the target path that will have its state changed
+        txState.TargetPathId = path.Base()->PathId;
+        
         // Set TargetPathTargetState instead of changing path state immediately
         NIceDb::TNiceDb db(context.GetDB());
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
+        
+        // Set the path state directly to allow the operation to proceed
+        path.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
+        context.DbChanges.PersistPath(path.Base()->PathId);
         
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
@@ -522,6 +529,42 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         desc.SetAllowUnderSameOperation(true);
         if (incrBackupNames) {
             desc.SetTargetPathTargetState(NKikimrSchemeOp::EPathStateIncomingIncrementalRestore);
+        }
+    }
+
+    if (incrBackupNames) {
+        for (const auto& incrBackupName : incrBackupNames) {
+            // Create path state change operations for each table in each incremental backup
+            for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+                std::pair<TString, TString> paths;
+                TString err;
+                if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+                    result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+                    return result;
+                }
+                auto& relativeItemPath = paths.second;
+
+                // Check if the incremental backup path exists and is in a valid state
+                TString incrBackupPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath});
+                const TPath& incrBackupPath = TPath::Resolve(incrBackupPathStr, context.SS);
+                
+                // Only create path state change operation if the path exists and is not in EPathStateNoChanges
+                if (incrBackupPath.IsResolved() && incrBackupPath.Base()->PathState != TPathElement::EPathState::EPathStateNoChanges) {
+                    // Create transaction for path state change
+                    TTxTransaction pathStateChangeTx;
+                    pathStateChangeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
+                    pathStateChangeTx.SetInternal(true);
+                    pathStateChangeTx.SetWorkingDir(tx.GetWorkingDir());
+
+                    auto& changePathState = *pathStateChangeTx.MutableChangePathState();
+                    changePathState.SetPath(JoinPath({tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath}));
+                    changePathState.SetTargetState(NKikimrSchemeOp::EPathStateIncomingIncrementalRestore);
+
+                    // Create the path state change operation
+                    auto pathStateChangeOps = CreateChangePathState(NextPartId(opId, result), pathStateChangeTx, context);
+                    result.insert(result.end(), pathStateChangeOps.begin(), pathStateChangeOps.end());
+                }
+            }
         }
     }
 

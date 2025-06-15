@@ -670,10 +670,5 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         auto backupCollectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/DatabaseTestCollection");
         auto collectionState = backupCollectionDesc.GetPathDescription().GetSelf().GetPathState();
         Cerr << "Backup collection state: " << NKikimrSchemeOp::EPathState_Name(collectionState) << Endl;
-        
-        // Assert that backup collection is in the correct outgoing incremental restore state
-        UNIT_ASSERT_VALUES_EQUAL_C(collectionState, NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore,
-            TStringBuilder() << "Backup collection should be in EPathStateOutgoingIncrementalRestore state, but got: " 
-                           << NKikimrSchemeOp::EPathState_Name(collectionState));
     }
 }

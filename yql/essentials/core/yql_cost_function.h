@@ -37,9 +37,11 @@ struct TJoinColumn {
     TString RelName{};  // TODO: this should be a list. now list of relations is separated by comma in this string
     TString AttributeName{};
     TString AttributeNameWithAliases{};
-    std::optional<TString> OriginalRelName;
+    std::optional<TString> OriginalRelName{};
     std::optional<ui32> EquivalenceClass{};
     bool IsConstant = false;
+
+    TJoinColumn() = default;
 
     TJoinColumn(TString relName, TString attributeName) :
         RelName(relName),
@@ -48,6 +50,16 @@ struct TJoinColumn {
 
     bool operator == (const TJoinColumn& other) const {
         return RelName == other.RelName && AttributeName == other.AttributeName;
+    }
+
+    static TJoinColumn FromString(const TString& column) {
+        if (column.find('.') != TString::npos) {
+            TString relName = column.substr(0, column.find('.'));
+            TString attrName = column.substr(column.find('.') + 1);
+            return TJoinColumn(std::move(relName), std::move(attrName));
+        }
+
+        return TJoinColumn("", column);
     }
 
     struct THashFunction

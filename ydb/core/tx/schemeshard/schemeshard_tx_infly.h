@@ -282,7 +282,6 @@ struct TTxState {
 
     // TxCopy: Stores path for cdc stream to create in case of ContinuousBackup; uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
-    ui64 LoopStep = 0;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
 
     // persist - TxShards:

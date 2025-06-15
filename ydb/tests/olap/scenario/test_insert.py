@@ -12,6 +12,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 
 import random
 import logging
+import threading
 logger = logging.getLogger(__name__)
 
 
@@ -40,27 +41,54 @@ class TestInsert(BaseTestSet):
             logger.info("Upsert")
             time.sleep(random.uniform(min_time, max_time))
 
-    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str):
+    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str, err_event: threading.Event):
         min_time = 1.0 / rows_count
         max_time = min_time * 10
 
         sth = ScenarioTestHelper(ctx)
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
+        ignore_error: tuple[str] = (
+            "Conflict with existing key",
+            "Transaction locks invalidated"
+        )
         for i in range(rows_count):
+            if err_event.is_set():
+                break
+
             logger.info("Insert")
+            conflicting_keys_position = 10
+            transaction_locks_position = 10
             for c in range(10):
                 try:
                     result = sth.execute_query(
-                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False
+                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)',
+                        retries=0, fail_on_error=False, return_error=True, ignore_error=ignore_error,
                     )
-                    if result == 1:
-                        if c >= 9:
-                            raise Exception('Insert failed table {}'.format(table))
-                        else:
-                            time.sleep(1)
-                            continue
 
+                    if isinstance(result, tuple):
+                        error = str(result[1])
+                        if "Conflict with existing key" in error:
+                            conflicting_keys_position = min(conflicting_keys_position, c)
+                            err_event.set()
+                        elif "Transaction locks invalidated" in error:
+                            transaction_locks_position = min(transaction_locks_position, c)
+                            err_event.set()
+                        else:
+                            if c >= 9:
+                                raise Exception(f'Query failed {error}')
+                            else:
+                                time.sleep(1)
+                                continue
+                        if conflicting_keys_position < transaction_locks_position:
+                            raise Exception(f'Insert failed table {table}: {error}')
+                    else:
+                        if result == 1:
+                            if c >= 9:
+                                raise Exception('Insert failed table {}'.format(table))
+                            else:
+                                time.sleep(1)
+                                continue
                     break
                 except Exception:
                     if c >= 9:
@@ -75,6 +103,7 @@ class TestInsert(BaseTestSet):
         rows_count = int(get_external_param("rows_count", "1000"))
         inserts_count = int(get_external_param("inserts_count", str(self.def_inserts_count)))
         tables_count = int(get_external_param("tables_count", "1"))
+        err_event = threading.Event()
         for table in range(tables_count):
             sth.execute_scheme_query(
                 CreateTable(cnt_table_name + str(table)).with_schema(self.schema_cnt)
@@ -95,13 +124,16 @@ class TestInsert(BaseTestSet):
         for table in range(tables_count):
             thread1.append(TestThread(target=self._loop_upsert, args=[ctx, data, str(table)]))
         for table in range(tables_count):
-            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table)]))
-
+            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table), err_event]))
         thread1.start_all()
         thread2.start_all()
 
         thread2.join_all()
         thread1.join_all()
+
+        if err_event.is_set():
+            logger.info("Acceptable error was detected")
+            return
 
         for table in range(tables_count):
             cnt_table_name0 = cnt_table_name + str(table)

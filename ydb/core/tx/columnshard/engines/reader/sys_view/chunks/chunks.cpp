@@ -1,6 +1,8 @@
 #include "chunks.h"
 
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/tx/columnshard/data_reader/contexts.h>
+#include <ydb/core/tx/columnshard/data_reader/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 
 namespace NKikimr::NOlap::NReader::NSysView::NChunks {
@@ -215,8 +217,7 @@ public:
 TConclusionStatus TStatsIterator::Start() {
     std::vector<TPortionInfo::TConstPtr> portions;
     auto actualIndexInfo = ReadMetadata->GetIndexVersionsPtr();
-    Context->GetDataAccessorsManager() auto env =
-        std::make_shared<NOlap::NDataFetcher::TEnvironment>(Context->GetDataAccessorsManager(), Context->GetStoragesManager());
+    auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(Context->GetDataAccessorsManager(), Context->GetStoragesManager());
     for (auto&& i : IndexGranules) {
         for (auto&& p : i.GetPortions()) {
             portions.emplace_back(p);
@@ -224,7 +225,7 @@ TConclusionStatus TStatsIterator::Start() {
                 NOlap::NDataFetcher::TRequestInput rInput(
                     std::move(portions), actualIndexInfo, NOlap::NBlobOperations::EConsumer::SYS_VIEW_SCAN, ::ToString(ReadMetadata->GetTxId()));
                 NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(
-                    std::move(rInput), std::make_shared<TFetchingExecutor>(OwnerId), env, NConveyorComposite::ESpecialTaskCategory::Scan);
+                    std::move(rInput), std::make_shared<TFetchingExecutor>(Context), env, NConveyorComposite::ESpecialTaskCategory::Scan);
                 portions.clear();
             }
         }
@@ -233,7 +234,7 @@ TConclusionStatus TStatsIterator::Start() {
         NOlap::NDataFetcher::TRequestInput rInput(
             std::move(portions), actualIndexInfo, NOlap::NBlobOperations::EConsumer::SYS_VIEW_SCAN, ::ToString(ReadMetadata->GetTxId()));
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(
-            std::move(rInput), std::make_shared<TFetchingExecutor>(OwnerId), env, NConveyorComposite::ESpecialTaskCategory::Scan);
+            std::move(rInput), std::make_shared<TFetchingExecutor>(Context), env, NConveyorComposite::ESpecialTaskCategory::Scan);
     }
     return TConclusionStatus::Success();
 }
@@ -260,8 +261,10 @@ void TStatsIterator::Apply(const std::shared_ptr<IApplyAction>& task) {
     }
     auto result = std::dynamic_pointer_cast<TApplyResult>(task);
     AFL_VERIFY(result);
-    AFL_VERIFY(result->GetAccessors().size() == 1);
-    FetchedAccessors.emplace(result->GetAccessors().front().GetPortionInfo().GetPortionId(), result->GetAccessors().front());
+    for (auto&& i : result->GetAccessors()) {
+        FetchedAccessors.emplace(i.GetPortionInfo().GetPortionId(), i);
+    }
+    
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

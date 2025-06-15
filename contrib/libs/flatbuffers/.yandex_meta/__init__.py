@@ -17,9 +17,7 @@ def post_install(self):
             )
             """,
         )
-
         m.SRCS.add("src/idl_gen_cpp_yandex_maps_iter.cpp")
-        m.PEERDIR.add("contrib/restricted/abseil-cpp/absl/base")
 
     with self.yamakes["."] as m:
         # Remove ADDINCL GLOBAL to keep status quo.

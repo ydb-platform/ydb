@@ -497,7 +497,7 @@ private:
 
     virtual void OnStageStarting(const NOlap::NDataFetcher::EFetchingStage stage) override {
         switch (stage) {
-            case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:
+            case NOlap::NDataFetcher::EFetchingStage::AskAccessors:
                 Changes->SetStage(NOlap::NChanges::EStage::AskAccessors);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskDataResources:
@@ -508,6 +508,7 @@ private:
                 Changes->SetStage(NOlap::NChanges::EStage::ReadBlobs);
                 break;
             default:
+                break;
         }
     }
 

@@ -500,8 +500,17 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
-            return self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status,
-                                                   fail_on_error=fail_on_error, return_error=return_error, ignore_error=ignore_error)
+            return self._run_with_expected_status(
+                lambda: pool.execute_with_retries(
+                    yql,
+                    None,
+                    ydb.RetrySettings(max_retries=retries),
+                ),
+                expected_status,
+                fail_on_error=fail_on_error,
+                return_error=return_error,
+                ignore_error=ignore_error,
+            )
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.

@@ -62,8 +62,8 @@ class TestInsert(BaseTestSet):
             for c in range(10):
                 try:
                     result = sth.execute_query(
-                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=0,
-                          fail_on_error=False, return_error=True, ignore_error=ignore_error
+                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)',
+                        retries=0, fail_on_error=False, return_error=True, ignore_error=ignore_error,
                     )
 
                     if isinstance(result, tuple):

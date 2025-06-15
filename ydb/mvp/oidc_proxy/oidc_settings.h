@@ -2,6 +2,7 @@
 
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NMVP::NOIDC {
 
@@ -16,12 +17,15 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
+    static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
+    static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;
     TString ClientId = DEFAULT_CLIENT_ID;
     TString SessionServiceEndpoint;
     TString SessionServiceTokenName;
     TString AuthorizationServerAddress;
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
+    TString WhoamiExtendedInfoEndpoint;
 
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;

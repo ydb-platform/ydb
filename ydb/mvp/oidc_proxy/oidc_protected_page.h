@@ -7,6 +7,7 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
+#include "openid_connect.h"
 
 namespace NMVP::NOIDC {
 
@@ -18,14 +19,10 @@ protected:
     const NHttp::THttpIncomingRequestPtr Request;
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
-    const TString ProtectedPageUrl;
+    const TCrackedPage ProtectedPage;
     TString RequestedPageScheme;
     NHttp::THttpOutgoingResponsePtr StreamResponse;
     NActors::TActorId StreamConnection;
-
-    const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
-    const static inline TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
-    const static inline TStringBuf AUTH_HEADER_NAME = "Authorization";
 
 public:
     THandlerSessionServiceCheck(const NActors::TActorId& sender,
@@ -55,8 +52,7 @@ protected:
     virtual void ForwardUserRequest(TStringBuf authHeader, bool secure = false);
     virtual bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const = 0;
 
-    bool CheckRequestedHost();
-    void ForwardRequestHeaders(NHttp::THttpOutgoingRequestPtr& request) const;
+    NHttp::THeadersBuilder FilterHeaders(const TStringBuf& headers, const TVector<TStringBuf>& whitelist) const;
     void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
 
     static bool IsAuthorizedRequest(TStringBuf authHeader);
@@ -64,10 +60,7 @@ protected:
     static TString FixReferenceInHtml(TStringBuf html, TStringBuf host);
 
 private:
-    NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response);
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response);
-    TString GetFixedLocationHeader(TStringBuf location);
-    NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost();
     NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const TString& errorMessage);
 };
 

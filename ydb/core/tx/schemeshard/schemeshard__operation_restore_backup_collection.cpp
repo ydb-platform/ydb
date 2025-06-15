@@ -153,8 +153,28 @@ class TChangePathStateOp: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch(state) {
         case TTxState::Waiting:
+            return MakeHolder<TDone>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
+        default:
+            return nullptr;
+        }
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
+        switch(state) {
+        case TTxState::Waiting:
+            return MakeHolder<TDone>(OperationId);
+        case TTxState::Done: {
+            // Get target state from transaction and create TDone with it
+            // This will cause TDone::Process to apply the path state change
+            const auto* txState = context.SS->FindTx(OperationId);
+            if (txState && txState->TargetPathTargetState.Defined()) {
+                auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
+                return MakeHolder<TDone>(OperationId, targetState);
+            }
+            return MakeHolder<TDone>(OperationId);
+        }
         default:
             return nullptr;
         }
@@ -192,11 +212,9 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
         
-        // Change the path state immediately
+        // Set TargetPathTargetState instead of changing path state immediately
         NIceDb::TNiceDb db(context.GetDB());
-        auto pathInfo = path.Base();
-        pathInfo->PathState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
-        context.SS->PersistPath(db, pathInfo->PathId);
+        txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
         
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 

@@ -12,6 +12,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 
 import random
 import logging
+import threading
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +41,7 @@ class TestInsert(BaseTestSet):
             logger.info("Upsert")
             time.sleep(random.uniform(min_time, max_time))
 
-    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str):
+    def _loop_insert(self, ctx: TestContext, rows_count: int, table: str, err_event: threading.Event):
         min_time = 1.0 / rows_count
         max_time = min_time * 10
 
@@ -48,19 +49,31 @@ class TestInsert(BaseTestSet):
         log: str = sth.get_full_path("log" + table)
         cnt: str = sth.get_full_path("cnt" + table)
         for i in range(rows_count):
+            if err_event.is_set():
+                break
+
             logger.info("Insert")
             for c in range(10):
                 try:
                     result = sth.execute_query(
-                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False
+                        yql=f'$cnt = SELECT CAST(COUNT(*) AS INT64) from `{log}`; INSERT INTO `{cnt}` (key, c) values({i}, $cnt)', retries=20, fail_on_error=False, return_error=True
                     )
+
+                    if isinstance(result, tuple):
+                        _, err = result
+                        err_msg = str(err)
+                        if ("Conflict with existing key" in err_msg or
+                            "Transaction locks invalidated" in err_msg
+                        ) :
+                            err_event.set()                       
+                            break
+                        raise err
                     if result == 1:
                         if c >= 9:
                             raise Exception('Insert failed table {}'.format(table))
                         else:
                             time.sleep(1)
                             continue
-
                     break
                 except Exception:
                     if c >= 9:
@@ -75,6 +88,7 @@ class TestInsert(BaseTestSet):
         rows_count = int(get_external_param("rows_count", "1000"))
         inserts_count = int(get_external_param("inserts_count", str(self.def_inserts_count)))
         tables_count = int(get_external_param("tables_count", "1"))
+        err_event = threading.Event()
         for table in range(tables_count):
             sth.execute_scheme_query(
                 CreateTable(cnt_table_name + str(table)).with_schema(self.schema_cnt)
@@ -95,13 +109,16 @@ class TestInsert(BaseTestSet):
         for table in range(tables_count):
             thread1.append(TestThread(target=self._loop_upsert, args=[ctx, data, str(table)]))
         for table in range(tables_count):
-            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table)]))
-
+            thread2.append(TestThread(target=self._loop_insert, args=[ctx, inserts_count, str(table), err_event]))
         thread1.start_all()
         thread2.start_all()
 
         thread2.join_all()
         thread1.join_all()
+
+        if err_event.is_set():
+            logger.info("Acceptable error was detected")
+            return
 
         for table in range(tables_count):
             cnt_table_name0 = cnt_table_name + str(table)

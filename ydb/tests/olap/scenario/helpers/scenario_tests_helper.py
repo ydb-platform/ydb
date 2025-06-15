@@ -329,6 +329,11 @@ class ScenarioTestHelper:
         retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
         n_retries=0,
         fail_on_error=True,
+        return_error=False,
+        ignore_error: tuple[str, ...] = (
+            "Conflict with existing key",
+            "Transaction locks invalidated"
+        ),
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -348,6 +353,9 @@ class ScenarioTestHelper:
                 error = e
                 status = error.status
                 allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
+
+            if any(sub in str(error) for sub in ignore_error):
+                return (result, error) if return_error else result
 
             if status in expected_status:
                 return result
@@ -474,7 +482,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False
     ):
         """Run a query on the tested database.
 
@@ -490,7 +498,7 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
-            return self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status, fail_on_error=fail_on_error)
+            return self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status, fail_on_error=fail_on_error, return_error=return_error)
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.

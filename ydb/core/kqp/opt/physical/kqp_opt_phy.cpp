@@ -185,7 +185,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildStreamIdxLookupJoinStagesKeepSorted(TExprBase node, TExprContext& ctx) {
-        bool ruleEnabled = KqpCtx.Config->OrderPreservingLookupJoinEnabled();
+        bool ruleEnabled = true;
         TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSorted(node, ctx, TypesCtx, ruleEnabled);
         DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSorted", node.Ptr(), output.Ptr(), ctx);
         return output;

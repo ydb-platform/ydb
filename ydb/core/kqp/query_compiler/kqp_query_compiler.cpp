@@ -1524,7 +1524,7 @@ private:
 
             auto settings = TKqpStreamLookupSettings::Parse(streamLookup);
             streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(settings.Strategy));
-            streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
+            streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingStreamLookupEnabled());
             if (settings.AllowNullKeysPrefixSize) {
                 streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);
             }

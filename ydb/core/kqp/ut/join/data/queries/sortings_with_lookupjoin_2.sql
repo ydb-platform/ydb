@@ -1,4 +1,4 @@
-PRAGMA ydb.EnableOrderPreservingLookupJoin="true";
+PRAGMA ydb.EnableOrderPreservingStreamLookup="true";
 PRAGMA ydb.CostBasedOptimizationLevel="1";
 
 

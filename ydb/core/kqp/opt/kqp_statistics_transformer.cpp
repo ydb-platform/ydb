@@ -250,7 +250,11 @@ void InferStatisticsForKqpTable(
  *
  * In the future it would be better to compute the actual cardinality
 */
-void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForSteamLookup(
+    const TExprNode::TPtr& input,
+    TTypeAnnotationContext* typeCtx,
+    const TKqpOptimizeContext kqpCtx
+) {
     auto inputNode = TExprBase(input);
     auto streamLookup = inputNode.Cast<TKqpCnStreamLookup>();
 
@@ -276,20 +280,12 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
     );
     res->SortingOrderings = inputStats->SortingOrderings;
 
-    // if (inputStats->TableAliases && columns) {
-    //     for (const auto& column: *columns) {
-    //         if (inputStats->Aliases && inputStats->Aliases->size() == 1) {
-    //             TString alias = *inputStats->Aliases->begin();
-    //             TString from = alias + "." + column.StringValue();
-    //             TString to = column.StringValue();
-    //             inputStats->TableAliases->AddRename(from, to);
-    //         }
-    //     }
-    // }
+    if (!kqpCtx.Config->OrderPreservingStreamLookupEnabled()) {
+        res->SortingOrderings.RemoveState();
+    }
 
-    typeCtx->SetStats(input.Get(), res);
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for KqpCnStreamLookup: " << res->ToString();
-
+    typeCtx->SetStats(input.Get(), std::move(res));
 }
 
 /**
@@ -459,8 +455,7 @@ void InferStatisticsForReadTableIndexRanges(
 
 void InferStatisticsForLookupJoin(
     const TExprNode::TPtr& input,
-    TTypeAnnotationContext* typeCtx,
-    TKqpOptimizeContext& kqpCtx
+    TTypeAnnotationContext* typeCtx
 ) {
     auto lookupJoin = TKqlIndexLookupJoinBase(input);
 
@@ -492,10 +487,6 @@ void InferStatisticsForLookupJoin(
 
     propagateAliases(propagateAliases, lookupJoin.Input().Ptr());
     auto outputStats = *inputStats;
-
-    if (!kqpCtx.Config->OrderPreservingLookupJoinEnabled()) {
-        outputStats.SortingOrderings.RemoveState();
-    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for lookup join: " << outputStats.ToString();
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)));
@@ -1261,10 +1252,10 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
         InferStatisticsForRowsSourceSettings(input, TypeCtx, KqpCtx);
     }
     else if (TKqpCnStreamLookup::Match(input.Get())) {
-        InferStatisticsForSteamLookup(input, TypeCtx);
+        InferStatisticsForSteamLookup(input, TypeCtx, KqpCtx);
     }
     else if (TKqlIndexLookupJoinBase::Match(input.Get())) {
-        InferStatisticsForLookupJoin(input, TypeCtx, KqpCtx);
+        InferStatisticsForLookupJoin(input, TypeCtx);
     }
 
     // Match a result binding atom and connect it to a stage

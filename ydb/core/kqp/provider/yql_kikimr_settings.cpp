@@ -89,7 +89,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
-    REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
+    REGISTER_SETTING(*this, EnableOrderPreservingStreamLookup);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -128,8 +128,8 @@ bool TKikimrSettings::SpillingEnabled() const {
     return GetFlagValue(_KqpEnableSpilling.Get());
 }
 
-bool TKikimrSettings::OrderPreservingLookupJoinEnabled() const {
-    return GetFlagValue(EnableOrderPreservingLookupJoin.Get());
+bool TKikimrSettings::OrderPreservingStreamLookupEnabled() const {
+    return GetFlagValue(EnableOrderPreservingStreamLookup.Get());
 }
 
 bool TKikimrSettings::DisableLlvmForUdfStages() const {

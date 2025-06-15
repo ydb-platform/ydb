@@ -862,15 +862,6 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         std::cerr << "Elapsed: " << std::setprecision(3) << duration.SecondsFloat() << " sec. Total read size: "
             << PrettifyBytes(TotalBytesRead) << ". Average processing speed: "
             << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
-
-        // print strcture for the pipeline:
-        //    elapsed_time_sec: [float]
-        //    total_read_size_byte: [integer]
-        //    avg_processing_speed_bytes_per_sec: [integer]
-        std::cout << "elapsed_time_sec: " << std::setprecision(5) << duration.SecondsFloat() << std::endl;
-        std::cout << "total_read_size_byte: " << TotalBytesRead << std::endl;
-        std::cout << "avg_processing_speed_MiB_per_sec: " << std::setprecision(5)
-                  << ((double)TotalBytesRead / duration.SecondsFloat()) / (1024 * 1024) << std::endl;
     }
 
     // Removing all progress files that were a part of this import
@@ -1157,11 +1148,6 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     ui64 skippedBytes = 0;
     ui64 nextSkipBorder = VerboseModeStepSize;
 
-    std::cerr << "Settings.Header_: " << Settings.Header_ << std::endl;
-    std::cerr << "Settings.SkipRows_: " << Settings.SkipRows_ << std::endl;
-    std::cerr << "rowsToSkip: " << rowsToSkip << std::endl;
-    std::cerr << "row: " << row << std::endl;
-
     TString line;
     std::vector<TAsyncStatus> inFlightRequests;
     std::vector<TString> buffer;
@@ -1197,11 +1183,6 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
     // Note: table = dbPath (path to the table on the server)
     auto columns = DbTableInfo->GetTableColumns();
-
-    std::cerr << "columns: " << columns.size() << std::endl;
-    for (const auto& column : columns) {
-        std::cerr << "column: " << column.Name << " " << column.Type.ToString() << std::endl;
-    }
 
     const Ydb::Formats::CsvSettings csvSettings = ([this]() {
         Ydb::Formats::CsvSettings settings;

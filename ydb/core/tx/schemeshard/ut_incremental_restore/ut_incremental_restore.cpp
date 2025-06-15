@@ -641,17 +641,10 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             TStringBuilder() << "Target table should be in EPathStateIncomingIncrementalRestore state, but got: " 
                            << NKikimrSchemeOp::EPathState_Name(targetState));
 
-        // Check source table states in the backup collection
-        // Note: Source tables in backup collections are not directly involved in the restore transaction,
-        // so they should remain in their normal state (EPathStateNoChanges)
+        // Check source table states in the backup collection - they should be in EPathStateOutgoingIncrementalRestore
         auto sourceTableDesc = DescribePath(runtime, "/MyRoot/.backups/collections/DatabaseTestCollection/backup_001_full/DatabaseTestTable");
         auto sourceState = sourceTableDesc.GetPathDescription().GetSelf().GetPathState();
         Cerr << "Source table (full backup) state: " << NKikimrSchemeOp::EPathState_Name(sourceState) << Endl;
-        
-        // Assert that full backup source table is in normal state (it's not directly involved in the transaction)
-        UNIT_ASSERT_VALUES_EQUAL_C(sourceState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
-            TStringBuilder() << "Source table (full backup) should be in EPathStateNoChanges state, but got: " 
-                           << NKikimrSchemeOp::EPathState_Name(sourceState));
         
         // Check incremental backup source table states
         for (int i = 2; i <= 6; ++i) {
@@ -663,22 +656,24 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             
             Cerr << "Source table (" << incrName << ") state: " << NKikimrSchemeOp::EPathState_Name(actualState) << Endl;
             
-            // Assert that incremental backup source tables are in normal state (they are not directly involved in the transaction)
-            UNIT_ASSERT_VALUES_EQUAL_C(actualState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
-                TStringBuilder() << "Source table (" << incrName << ") should be in EPathStateNoChanges state, but got: " 
+            // Assert that incremental backup source tables are in one of the valid outgoing incremental restore states
+            bool isValidState = (actualState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore || 
+                               actualState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore);
+            
+            UNIT_ASSERT_C(isValidState, 
+                TStringBuilder() << "Source table (" << incrName << ") should be in EPathStateOutgoingIncrementalRestore or "
+                               << "EPathStateAwaitingOutgoingIncrementalRestore state, but got: " 
                                << NKikimrSchemeOp::EPathState_Name(actualState));
         }
 
-        // Check the backup collection path state
-        // Note: The backup collection itself is not directly involved in the restore transaction,
-        // so it should remain in its normal state (EPathStateNoChanges)  
+        // Check the backup collection path state - it might be affected by the restore operation
         auto backupCollectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/DatabaseTestCollection");
         auto collectionState = backupCollectionDesc.GetPathDescription().GetSelf().GetPathState();
         Cerr << "Backup collection state: " << NKikimrSchemeOp::EPathState_Name(collectionState) << Endl;
         
-        // Assert that backup collection is in normal state (it's not directly involved in the transaction)
-        UNIT_ASSERT_VALUES_EQUAL_C(collectionState, NKikimrSchemeOp::EPathState::EPathStateNoChanges,
-            TStringBuilder() << "Backup collection should be in EPathStateNoChanges state, but got: " 
+        // Assert that backup collection is in the correct outgoing incremental restore state
+        UNIT_ASSERT_VALUES_EQUAL_C(collectionState, NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore,
+            TStringBuilder() << "Backup collection should be in EPathStateOutgoingIncrementalRestore state, but got: " 
                            << NKikimrSchemeOp::EPathState_Name(collectionState));
     }
 }

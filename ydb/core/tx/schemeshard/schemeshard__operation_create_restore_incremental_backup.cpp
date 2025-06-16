@@ -13,31 +13,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-void DoCreateLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock);
-    outTx.SetFailOnExist(false);
-    outTx.SetInternal(true);
-    auto cfg = outTx.MutableLockConfig();
-    cfg->SetName(tablePath.LeafName());
-
-    result.push_back(CreateLock(NextPartId(opId, result), outTx));
-}
-
-void DoDropLock(const TOperationId opId, const TPath& workingDirPath, const TPath& tablePath, TVector<ISubOperation::TPtr>& result)
-{
-    auto outTx = TransactionTemplate(workingDirPath.PathString(),
-        NKikimrSchemeOp::EOperationType::ESchemeOpDropLock);
-    outTx.SetFailOnExist(true);
-    outTx.SetInternal(true);
-    auto cfg = outTx.MutableLockConfig();
-    cfg->SetName(tablePath.LeafName());
-    outTx.MutableLockGuard()->SetOwnerTxId(ui64(opId.GetTxId()));
-
-    result.push_back(DropLock(NextPartId(opId, result), outTx));
-}
-
 namespace NIncrRestore {
 
 class TConfigurePartsAtTable : public TSubOperationState {
@@ -279,7 +254,54 @@ private:
     const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
 };
 
-// TCopyTableBarrier is now defined as TWaitCopyTableBarrier in schemeshard__operation_states.h
+class TCopyTableBarrier: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
+    TString DebugHint() const override {
+        return TStringBuilder()
+                << "NIncrRestoreState::TCopyTableBarrier"
+                << " operationId: " << OperationId;
+    }
+
+public:
+    TCopyTableBarrier(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(), {
+            TEvPrivate::TEvOperationPlan::EventType,
+        });
+    }
+
+    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
+                               << ", msg: " << ev->Get()->ToString()
+                               << ", at tablet# " << ssId);
+
+        NIceDb::TNiceDb db(context.GetDB());
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_ABORT_UNLESS(txState);
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << "ProgressState, operation type "
+                            << TTxState::TypeName(txState->TxType));
+
+        context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
+        return false;
+    }
+};
 
 class TNewRestoreFromAtTable : public TSubOperation {
     static TTxState::ETxState InitialState() {
@@ -325,7 +347,7 @@ class TNewRestoreFromAtTable : public TSubOperation {
         switch (state) {
         case TTxState::Waiting:
         case TTxState::CopyTableBarrier:
-            return MakeHolder<TWaitCopyTableBarrier>(OperationId, "NIncrRestoreState", TTxState::ConfigureParts);
+            return MakeHolder<NIncrRestore::TCopyTableBarrier>(OperationId);
         case TTxState::ConfigureParts: {
             auto* txState = context.SS->FindTx(OperationId);
             Y_ABORT_UNLESS(txState);

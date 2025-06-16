@@ -445,7 +445,6 @@ bool TDone::Process(TOperationContext& context) {
     Y_VERIFY_S(TargetState || path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
         << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
         << ", PathId: " << path->PathId
-        << ", PathName: " << path->Name
         << ", TargetState: " << (TargetState ? NKikimrSchemeOp::EPathState_Name(*TargetState) : "null")
         << ", OperationId: " << OperationId);
 

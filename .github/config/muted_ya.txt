@@ -318,4 +318,3 @@ ydb/tests/stress/mixedpy test_mixed.py.TestYdbMixedWorkload.test[column]
 ydb/tests/stress/reconfig_state_storage_workload/tests sole chunk chunk
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
-ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

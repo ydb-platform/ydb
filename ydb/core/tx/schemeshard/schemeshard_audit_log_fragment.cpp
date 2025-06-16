@@ -274,7 +274,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "RESTORE";
     // long incremental restore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
-        return "RESTORE INCREMENTAL LONG";
+        return "RESTORE INCREMENTAL";
     // system view
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         return "CREATE SYSTEM VIEW";

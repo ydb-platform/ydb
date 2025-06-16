@@ -252,7 +252,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateSysView = 197     [(CounterOpts) = {Name: "InFlightOps/CreateSysView"}];
     COUNTER_IN_FLIGHT_OPS_TxDropSysView = 198       [(CounterOpts) = {Name: "InFlightOps/DropSysView"}];
 
-    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalRestoreOp = 199       [(CounterOpts) = {Name: "InFlightOps/TxCreateLongIncrementalRestoreOp"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateLongIncrementalRestoreOp = 199       [(CounterOpts) = {Name: "InFlightOps/CreateLongIncrementalRestoreOp"}];
     COUNTER_IN_FLIGHT_OPS_TxChangePathState = 200                     [(CounterOpts) = {Name: "InFlightOps/ChangePathState"}];
 }
 
@@ -408,7 +408,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateSysView = 119              [(CounterOpts) = {Name: "FinishedOps/CreateSysView"}];
     COUNTER_FINISHED_OPS_TxDropSysView = 120                [(CounterOpts) = {Name: "FinishedOps/DropSysView"}];
 
-    COUNTER_FINISHED_OPS_TxCreateLongIncrementalRestoreOp = 121       [(CounterOpts) = {Name: "FinishedOps/TxCreateLongIncrementalRestoreOp"}];
+    COUNTER_FINISHED_OPS_TxCreateLongIncrementalRestoreOp = 121       [(CounterOpts) = {Name: "FinishedOps/CreateLongIncrementalRestoreOp"}];
     COUNTER_FINISHED_OPS_TxChangePathState = 122                     [(CounterOpts) = {Name: "FinishedOps/ChangePathState"}];
 }
 

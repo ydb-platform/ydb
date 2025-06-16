@@ -258,16 +258,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         setup.ExecuteRestore("MultiTableCollection");
     }
 
-    Y_UNIT_TEST(CreateLongIncrementalRestoreOpPermissions) {
-        TLongOpTestSetup setup;
-
-        // Create complete backup scenario (don't create the actual table since restore will create it)
-        setup.CreateCompleteBackupScenario("ProtectedCollection", {"ProtectedTable"}, 2);
-
-        // Execute restore operation (should work with default permissions)
-        setup.ExecuteRestore("ProtectedCollection");
-    }
-
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpOperationAlreadyInProgress) {
         TLongOpTestSetup setup;
         auto& runtime = setup.Runtime;

@@ -13,6 +13,9 @@ import re
 import tempfile
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
+from difflib import SequenceMatcher
+import math
 
 # Отключаем предупреждения о непроверенных HTTPS запросах
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -39,6 +42,246 @@ def setup_logging():
         handlers=[logging.StreamHandler()],
         force=True  # Гарантируем, что настройки применятся
     )
+
+class ErrorPatternCache:
+    """Кеш паттернов ошибок для переиспользования"""
+    
+    def __init__(self, cache_file="error_patterns_cache.json"):
+        self.cache_file = cache_file
+        self.patterns = self.load_cache()
+        self.new_patterns_count = 0
+    
+    def load_cache(self):
+        """Загружает кеш паттернов с диска"""
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    logging.debug(f"Loaded {len(data)} error patterns from cache")
+                    return data
+            except Exception as e:
+                logging.warning(f"Failed to load error patterns cache: {e}")
+        return {}
+    
+    def save_cache(self):
+        """Сохраняет кеш паттернов на диск"""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.patterns, f, ensure_ascii=False, indent=2)
+            logging.debug(f"Saved {len(self.patterns)} error patterns to cache")
+        except Exception as e:
+            logging.warning(f"Failed to save error patterns cache: {e}")
+    
+    def normalize_log(self, log_text):
+        """Нормализует лог для поиска паттернов - убирает все переменные данные"""
+        if not log_text:
+            return ""
+        
+        # Сначала фильтруем неинформативные строки
+        lines = log_text.split('\n')
+        filtered_lines = []
+        
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+                
+            # Исключаем информационные строки, которые не содержат ошибок
+            skip_patterns = [
+                r' - DEBUG - ',  # DEBUG
+                r' - INFO - ',  # INFO
+            ]
+            
+            # Проверяем, нужно ли пропустить эту строку
+            should_skip = False
+            for pattern in skip_patterns:
+                if re.search(pattern, line_stripped):
+                    should_skip = True
+                    break
+            
+            if not should_skip:
+                filtered_lines.append(line_stripped)
+        
+        # Объединяем отфильтрованные строки
+        normalized = '\n'.join(filtered_lines)
+        
+        # Применяем существующую нормализацию переменных данных
+        # Временные метки (все форматы)
+        normalized = re.sub(r'\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[,.]\d+', '[TIMESTAMP]', normalized)
+        normalized = re.sub(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', '[TIMESTAMP]', normalized)
+        
+        # Пути к файлам (все длинные пути)
+        normalized = re.sub(r'/[a-zA-Z0-9/_.-]{20,}', '[PATH]', normalized)
+        normalized = re.sub(r'[a-zA-Z0-9/_.-]*build_root[a-zA-Z0-9/_.-]*', '[BUILD_PATH]', normalized)
+        
+        # PID в разных форматах
+        normalized = re.sub(r'\(pid\s+\d+\)', '(pid [PID])', normalized)
+        normalized = re.sub(r'pid:?\s*\d+', 'pid:[PID]', normalized)
+        
+        # Все порты в YDB командах  
+        normalized = re.sub(r'--grpc-port=\d+', '--grpc-port=[PORT]', normalized)
+        normalized = re.sub(r'--mon-port=\d+', '--mon-port=[PORT]', normalized)
+        normalized = re.sub(r'--ic-port=\d+', '--ic-port=[PORT]', normalized)
+        normalized = re.sub(r'--interconnect-port=\d+', '--interconnect-port=[PORT]', normalized)
+        
+        # Общие порты
+        normalized = re.sub(r':\d{4,5}\b', ':[PORT]', normalized)
+        normalized = re.sub(r'port\s+\d+', 'port [PORT]', normalized)
+        
+        # Номера узлов в разных форматах
+        normalized = re.sub(r'--node=\d+', '--node=[N]', normalized)
+        normalized = re.sub(r'node\s*=?\s*\d+', 'node=[N]', normalized)
+        normalized = re.sub(r'node\s+\d+', 'node [N]', normalized)
+        
+        # Хеши и идентификаторы
+        normalized = re.sub(r'\b[a-f0-9]{16,}\b', '[HASH]', normalized)
+        normalized = re.sub(r'\b[A-Fa-f0-9]{8,}\b', '[ID]', normalized)
+        
+        # IP адреса
+        normalized = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP]', normalized)
+        normalized = re.sub(r'localhost:\d+', 'localhost:[PORT]', normalized)
+        
+        # Thread/процесс номера
+        normalized = re.sub(r'thread-\d+', 'thread-[N]', normalized)
+        normalized = re.sub(r'Thread-\d+', 'Thread-[N]', normalized)
+        
+        # Номера сессий/соединений
+        normalized = re.sub(r'session-\d+', 'session-[ID]', normalized)
+        normalized = re.sub(r'connection-\d+', 'connection-[ID]', normalized)
+        
+        # Временные файлы и директории
+        normalized = re.sub(r'/tmp/[a-zA-Z0-9_.-]+', '/tmp/[TEMP]', normalized)
+        normalized = re.sub(r'CFG_DIR_PATH="[^"]*"', 'CFG_DIR_PATH="[PATH]"', normalized)
+        
+        # Специфичные для YDB переменные
+        normalized = re.sub(r'--log-file-name=[^\s]*', '--log-file-name=[PATH]', normalized)
+        normalized = re.sub(r'--yaml-config=[^\s]*', '--yaml-config=[CONFIG]', normalized)
+        
+        # Убираем повторяющиеся пробелы и пустые строки
+        normalized = re.sub(r'\s+', ' ', normalized)
+        #normalized = re.sub(r'\n\s*\n', '\n', normalized)  # Убираем пустые строки
+        
+        return normalized.strip()
+    
+    def extract_error_signature(self, log_text):
+        """Извлекает сигнатуру ошибки для поиска совпадений"""
+        normalized = self.normalize_log(log_text)
+        
+        # Ищем ключевые части ошибки
+        signature_parts = []
+        lines = normalized.split('\n')
+        
+        for line in lines:
+            line_lower = line.lower()
+            # Добавляем в сигнатуру строки с ошибками, но без технических деталей
+            if any(keyword in line_lower for keyword in [
+                'error', 'exception', 'failed', 'timeout', 'assertion', 
+                'unknown field', 'config', 'daemon failed'
+            ]):
+                # Убираем оставшиеся технические детали из сигнатуры
+                clean_line = re.sub(r'\[[A-Z_]+\]', '', line)  # Убираем наши маркеры
+                clean_line = re.sub(r'\s+', ' ', clean_line).strip()
+                if len(clean_line) > 20:  # Только содержательные строки
+                    signature_parts.append(clean_line)
+                
+                if len(signature_parts) >= 5:  # Максимум 5 строк в сигнатуре
+                    break
+        
+        return '\n'.join(signature_parts)
+    
+    def find_matching_pattern(self, log_text, similarity_threshold=0.7):
+        """Ищет подходящий паттерн в кеше"""
+        signature = self.extract_error_signature(log_text)
+        if not signature:
+            return None
+        
+        best_match = None
+        best_score = 0
+        
+        for pattern_id, pattern_data in self.patterns.items():
+            stored_signature = pattern_data.get('signature', '')
+            if not stored_signature:
+                continue
+            
+            # Вычисляем схожесть сигнатур
+            similarity = SequenceMatcher(None, signature, stored_signature).ratio()
+            
+            if similarity > similarity_threshold and similarity > best_score:
+                best_score = similarity
+                best_match = pattern_data
+        
+        if best_match:
+            logging.debug(f"Found matching pattern with similarity {best_score:.2f}")
+            return best_match['meaningful_error']
+        
+        return None
+    
+    def add_pattern(self, log_text, meaningful_error):
+        """Добавляет новый паттерн в кеш"""
+        signature = self.extract_error_signature(log_text)
+        if not signature or not meaningful_error:
+            return
+        
+        # Создаем ID паттерна
+        pattern_id = hashlib.md5(signature.encode('utf-8')).hexdigest()[:12]
+        
+        self.patterns[pattern_id] = {
+            'signature': signature,
+            'meaningful_error': meaningful_error,
+            'usage_count': 1,
+            'created_at': datetime.now().isoformat()
+        }
+        
+        self.new_patterns_count += 1
+        logging.debug(f"Added new error pattern {pattern_id}")
+    
+    def clear_cache(self):
+        """Очищает кеш паттернов"""
+        if os.path.exists(self.cache_file):
+            os.remove(self.cache_file)
+            logging.info(f"Cache file {self.cache_file} removed")
+        self.patterns = {}
+        self.new_patterns_count = 0
+        logging.info("Cache cleared")
+    
+    def analyze_cache_effectiveness(self):
+        """Анализирует эффективность кеширования"""
+        logging.info(f"=== АНАЛИЗ ЭФФЕКТИВНОСТИ КЕША ===")
+        logging.info(f"Всего паттернов: {len(self.patterns)}")
+        
+        # Группируем паттерны по типам ошибок
+        error_types = {}
+        for pattern_id, pattern_data in self.patterns.items():
+            signature = pattern_data.get('signature', '')
+            
+            # Определяем тип ошибки
+            if 'unknown field' in signature.lower():
+                error_type = 'CONFIG_ERROR'
+            elif 'timeout' in signature.lower():
+                error_type = 'TIMEOUT'
+            elif 'final command' in signature.lower():
+                error_type = 'STARTUP_COMMAND'
+            elif 'daemon failed' in signature.lower():
+                error_type = 'DAEMON_FAILED'
+            else:
+                error_type = 'OTHER'
+            
+            if error_type not in error_types:
+                error_types[error_type] = []
+            error_types[error_type].append(pattern_data)
+        
+        for error_type, patterns in error_types.items():
+            total_usage = sum(p.get('usage_count', 1) for p in patterns)
+            logging.info(f"{error_type}: {len(patterns)} паттернов, {total_usage} использований")
+            
+            # Показываем возможные дубликаты
+            if len(patterns) > 3:
+                logging.warning(f"Много паттернов для {error_type} - возможны дубликаты!")
+                for i, pattern in enumerate(patterns[:3]):
+                    logging.info(f"  Пример {i+1}: {pattern['signature'][:100]}...")
+
+# Глобальный кеш паттернов
+error_cache = ErrorPatternCache()
 
 def save_json(data, filename):
     try:
@@ -145,6 +388,10 @@ def parse_test_type_and_versions(test_name):
 
 
 def enrich_mute_records_with_logs(test_data):
+    """ЭТАП 2: Умное обогащение с кешированием паттернов ошибок"""
+    return smart_error_extraction_with_cache(test_data)
+
+def enrich_mute_records_with_logs_old(test_data):
     """ЭТАП 2: Заменяет status_description у всех mute результатов тестов из log этого запуска"""
     logging.debug("Ищем mute записи с логами для обогащения...")
     
@@ -867,6 +1114,222 @@ def fetch_log_content_safe(args):
     except Exception as e:
         logging.warning(f"Failed to fetch log for {test_name} run {run_idx}: {e}")
         return (test_name, run_idx, None)
+
+
+def fetch_log_content_safe_simple(args):
+    """Упрощенная версия для нового подхода"""
+    log_url, idx = args
+    try:
+        content = fetch_log_content(log_url)
+        return (idx, content)
+    except Exception as e:
+        logging.warning(f"Failed to fetch log {idx}: {e}")
+        return (idx, None)
+
+
+def needs_ai_processing(basic_result):
+    """Определяет, нужна ли AI обработка для результата базовой обработки"""
+    if not basic_result or len(basic_result) < 100:
+        return True  # Слишком мало информации
+    
+    # Проверяем качество базовой обработки
+    quality_indicators = [
+        'CONFIG ERRORS:' in basic_result,
+        'STARTUP ERRORS:' in basic_result, 
+        'ERRORS:' in basic_result,
+        'TIMEOUTS:' in basic_result,
+        'EXCEPTIONS:' in basic_result
+    ]
+    
+    if sum(quality_indicators) >= 1:
+        # Базовая обработка нашла структурированную информацию
+        return len(basic_result) > 1200  # AI только если результат слишком длинный
+    
+    # Базовая обработка не справилась со структурированием
+    return True
+
+
+def process_error_batch_with_ai(batch_data):
+    """Обрабатывает батч ошибок через AI"""
+    
+    prompt = """
+Обработай каждый лог ошибки и извлеки ключевую информацию максимально сжато.
+
+Для каждого лога верни объект с ключевой информацией об ошибке:
+- Убери повторяющиеся строки
+- Убери технические пути и хеши  
+- Сохрани суть проблемы
+- Максимум 800 символов на лог
+
+Формат ответа (строго JSON):
+{
+  "log_0": "сжатая ключевая информация об ошибке",
+  "log_1": "сжатая ключевая информация об ошибке",
+  ...
+}
+
+Отвечай ТОЛЬКО JSON, без дополнительных комментариев.
+"""
+    
+    try:
+        response = call_single_ai_request(prompt, batch_data)
+        if response:
+            # Пытаемся распарсить JSON
+            cleaned_response = response.strip()
+            if cleaned_response.startswith('```json'):
+                cleaned_response = cleaned_response[7:-3]
+            elif cleaned_response.startswith('```'):
+                cleaned_response = cleaned_response[3:-3]
+            
+            return json.loads(cleaned_response)
+    except Exception as e:
+        logging.warning(f"AI batch processing failed: {e}")
+    
+    return None
+
+
+def smart_error_extraction_with_cache(test_data):
+    """Умное извлечение ошибок с кешированием паттернов"""
+    logging.debug("=== УМНОЕ ИЗВЛЕЧЕНИЕ ОШИБОК С КЕШИРОВАНИЕМ ===")
+    
+    mute_records = [r for r in test_data if r.get('status') == 'mute' and r.get('log')]
+    if not mute_records:
+        return test_data
+    
+    logging.debug(f"Обрабатываем {len(mute_records)} mute записей")
+    
+    # Шаг 1: Скачиваем все логи параллельно
+    logging.debug("Шаг 1: Скачивание логов...")
+    tasks = [(record.get('log'), idx) for idx, record in enumerate(mute_records)]
+    
+    log_contents = {}
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_task = {executor.submit(fetch_log_content_safe_simple, t): t for t in tasks}
+        for future in as_completed(future_to_task):
+            idx, content = future.result()
+            if content:
+                log_contents[idx] = content
+    
+    # Шаг 2: Проверяем кеш для каждого лога
+    logging.debug("Шаг 2: Проверка кеша паттернов...")
+    cache_hits = 0
+    unknown_logs = []  # Логи, для которых не нашли паттернов
+    
+    for idx, record in enumerate(mute_records):
+        if idx not in log_contents:
+            continue
+            
+        log_content = log_contents[idx]
+        
+        # Пробуем найти в кеше
+        cached_error = error_cache.find_matching_pattern(log_content)
+        
+        if cached_error:
+            # Найден паттерн в кеше
+            record['status_description'] = cached_error
+            cache_hits += 1
+            logging.debug(f"Cache HIT для теста {idx}")
+        else:
+            # Паттерн не найден, нужна обработка
+            unknown_logs.append((idx, record, log_content))
+            logging.debug(f"Cache MISS для теста {idx}")
+    
+    logging.debug(f"Кеш: {cache_hits} попаданий, {len(unknown_logs)} промахов")
+    
+    # Шаг 3: Обрабатываем неизвестные логи
+    if unknown_logs:
+        logging.debug("Шаг 3: Обработка неизвестных логов...")
+        
+        # Сначала базовая обработка
+        basic_processed = []
+        ai_needed = []
+        
+        for idx, record, log_content in unknown_logs:
+            # Hybrid подход: сначала базовая обработка
+            basic_result = extract_meaningful_error_info(log_content, max_length=1500)
+            
+            # Определяем, нужен ли AI
+            if needs_ai_processing(basic_result):
+                ai_needed.append((idx, record, log_content, basic_result))
+            else:
+                # Базовой обработки достаточно
+                record['status_description'] = basic_result
+                error_cache.add_pattern(log_content, basic_result)
+                basic_processed.append(idx)
+        
+        logging.debug(f"Базовая обработка: {len(basic_processed)}, AI нужен: {len(ai_needed)}")
+        
+        # Шаг 4: Обрабатываем через AI батчами
+        if ai_needed:
+            logging.debug("Шаг 4: AI обработка батчами...")
+            
+            batch_size = 6  # Оптимальный размер батча
+            batches = [ai_needed[i:i+batch_size] for i in range(0, len(ai_needed), batch_size)]
+            
+            api_calls_made = 0
+            
+            for batch in batches:
+                # Подготавливаем данные для батча
+                batch_data = {}
+                for i, (idx, record, log_content, basic_result) in enumerate(batch):
+                    batch_data[f"log_{i}"] = {
+                        'original_log': log_content[:8000],  # Ограничиваем размер
+                        'basic_processing': basic_result
+                    }
+                
+                # AI запрос для батча
+                ai_results = process_error_batch_with_ai(batch_data)
+                api_calls_made += 1
+                
+                if ai_results:
+                    # Применяем результаты AI
+                    for i, (idx, record, log_content, _) in enumerate(batch):
+                        ai_result = ai_results.get(f"log_{i}")
+                        if ai_result:
+                            record['status_description'] = ai_result
+                            error_cache.add_pattern(log_content, ai_result)
+                        else:
+                            # Fallback на базовую обработку
+                            record['status_description'] = basic_result
+                            error_cache.add_pattern(log_content, basic_result)
+                else:
+                    # AI не сработал, используем базовую обработку
+                    for idx, record, log_content, basic_result in batch:
+                        record['status_description'] = basic_result
+                        error_cache.add_pattern(log_content, basic_result)
+            
+            logging.debug(f"Сделано {api_calls_made} AI запросов для {len(ai_needed)} логов")
+    
+    # Сохраняем кеш
+    error_cache.save_cache()
+    
+    # Статистика
+    total_processed = len(mute_records)
+    logging.info(f"=== СТАТИСТИКА ОБРАБОТКИ ОШИБОК ===")
+    logging.info(f"Всего записей: {total_processed}")
+    logging.info(f"Кеш попадания: {cache_hits} ({cache_hits/total_processed*100:.1f}%)")
+    logging.info(f"Новых паттернов: {error_cache.new_patterns_count}")
+    logging.info(f"Всего паттернов в кеше: {len(error_cache.patterns)}")
+    
+    return test_data
+
+
+def rebuild_cache_with_improved_normalization():
+    """Очищает и пересоздает кеш с улучшенной нормализацией"""
+    logging.info("=== ПЕРЕСОЗДАНИЕ КЕША С УЛУЧШЕННОЙ НОРМАЛИЗАЦИЕЙ ===")
+    
+    # Анализируем текущий кеш
+    if len(error_cache.patterns) > 0:
+        logging.info("Анализ текущего кеша:")
+        error_cache.analyze_cache_effectiveness()
+        
+        # Очищаем кеш
+        logging.info("Очищаем кеш для пересоздания...")
+        error_cache.clear_cache()
+    else:
+        logging.info("Кеш пуст, будет создан новый")
+    
+    return True
 
 
 def generate_compatibility_report():

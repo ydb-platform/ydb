@@ -35,6 +35,14 @@ public:
         return MemoryProcessId;
     }
 
+    ui64 GetMemoryScopeId() const {
+        return MemoryProcessScopeGuard->GetScopeId();
+    }
+
+    ui64 GetMemoryGroupId() const {
+        return MemoryProcessGroupGuard->GetGroupId();
+    }
+
     void SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs&& blobs) {
         AFL_VERIFY(!Blobs);
         Blobs = std::move(blobs);

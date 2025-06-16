@@ -26,6 +26,11 @@ private:
     EFetchingStage Stage = EFetchingStage::Created;
 
 public:
+    void AskMemoryAllocation(const std::shared_ptr<NGroupedMemoryManager::IAllocation>& task) {
+        NGroupedMemoryManager::TCompMemoryLimiterOperator::SendToAllocation(
+            CurrentContext.GetMemoryProcessId(), CurrentContext.GetMemoryScopeId(), CurrentContext.GetMemoryGroupId(), { task }, 0);
+    }
+
     TPortionsDataFetcher(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback, const std::shared_ptr<TEnvironment>& environment,
         const std::shared_ptr<TScript>& script, const NConveyorComposite::ESpecialTaskCategory conveyorCategory)
         : Input(std::move(input))

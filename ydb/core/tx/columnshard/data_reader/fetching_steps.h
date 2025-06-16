@@ -49,8 +49,7 @@ private:
         if (!memory) {
             return IFetchingStep::EStepResult::Continue;
         }
-        NGroupedMemoryManager::TCompMemoryLimiterOperator::SendToAllocation(
-            fetchingContext->GetCurrentContext().GetMemoryProcessId(), 1, 1, { std::make_shared<TSubscriber>(memory, fetchingContext) }, 0);
+        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(memory, fetchingContext));
         return IFetchingStep::EStepResult::Detached;
     }
 
@@ -143,8 +142,7 @@ private:
         if (!memory) {
             return IFetchingStep::EStepResult::Continue;
         }
-        NGroupedMemoryManager::TCompMemoryLimiterOperator::SendToAllocation(
-            fetchingContext->GetCurrentContext().GetMemoryProcessId(), 1, 1, { std::make_shared<TSubscriber>(memory, fetchingContext) }, 0);
+        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(memory, fetchingContext));
         return IFetchingStep::EStepResult::Detached;
     }
 

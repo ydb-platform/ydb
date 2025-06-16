@@ -73,23 +73,48 @@ class ErrorPatternCache:
             logging.warning(f"Failed to save error patterns cache: {e}")
     
     def normalize_log(self, log_text):
-        """Нормализует лог для поиска паттернов - убирает все переменные данные"""
+        """Нормализует лог для поиска паттернов - берет только полезную часть после ERROR"""
         if not log_text:
             return ""
         
-        # Сначала фильтруем неинформативные строки
+        # Ищем первую строку с ERROR и берем все начиная с нее
         lines = log_text.split('\n')
-        filtered_lines = []
+        error_start_index = -1
         
-        for line in lines:
-            line_stripped = line.strip()
+        for i, line in enumerate(lines):
+            if ' - ERROR - ' in line:
+                error_start_index = i
+                break
+        
+        # Если ERROR не найден, ищем другие критичные маркеры
+        if error_start_index == -1:
+            critical_markers = [' - EXCEPTION - ', ' - FATAL - ', ' - CRITICAL - ', 'Exception:', 'Error:']
+            for marker in critical_markers:
+                for i, line in enumerate(lines):
+                    if marker in line:
+                        error_start_index = i
+                        break
+                if error_start_index != -1:
+                    break
+        
+        # Если никаких ошибок не найдено, возвращаем пустую строку
+        if error_start_index == -1:
+            return ""
+        
+        # Берем полезную часть лога (от первой ошибки до конца)
+        useful_lines = lines[error_start_index:]
+        
+        # Фильтруем информационные строки среди полезных
+        filtered_lines = []
+        for line in useful_lines:
+            line_stripped = line #.strip()
             if not line_stripped:
                 continue
                 
-            # Исключаем информационные строки, которые не содержат ошибок
+            # Исключаем информационные строки даже в секции ошибок
             skip_patterns = [
                 r' - DEBUG - ',  # DEBUG
-                r' - INFO - ',  # INFO
+                r' - INFO - ',   # INFO (но не ERROR)
             ]
             
             # Проверяем, нужно ли пропустить эту строку
@@ -102,17 +127,21 @@ class ErrorPatternCache:
             if not should_skip:
                 filtered_lines.append(line_stripped)
         
+        # Если после фильтрации ничего не осталось, возвращаем пустую строку
+        if not filtered_lines:
+            return ""
+        
         # Объединяем отфильтрованные строки
         normalized = '\n'.join(filtered_lines)
         
-        # Применяем существующую нормализацию переменных данных
+        # Применяем нормализацию переменных данных
         # Временные метки (все форматы)
         normalized = re.sub(r'\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}[,.]\d+', '[TIMESTAMP]', normalized)
         normalized = re.sub(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', '[TIMESTAMP]', normalized)
         
-        # Пути к файлам (все длинные пути)
-        normalized = re.sub(r'/[a-zA-Z0-9/_.-]{20,}', '[PATH]', normalized)
-        normalized = re.sub(r'[a-zA-Z0-9/_.-]*build_root[a-zA-Z0-9/_.-]*', '[BUILD_PATH]', normalized)
+        # Пути к файлам (только очень длинные пути)
+        #normalized = re.sub(r'/[a-zA-Z0-9/_.-]{40,}', '[LONG_PATH]', normalized)
+        normalized = re.sub(r'([a-zA-Z0-9/_.-]*)build_root/[a-zA-Z0-9/_.-]+', '[BUILD_PATH]', normalized)
         
         # PID в разных форматах
         normalized = re.sub(r'\(pid\s+\d+\)', '(pid [PID])', normalized)
@@ -133,9 +162,9 @@ class ErrorPatternCache:
         normalized = re.sub(r'node\s*=?\s*\d+', 'node=[N]', normalized)
         normalized = re.sub(r'node\s+\d+', 'node [N]', normalized)
         
-        # Хеши и идентификаторы
+        # Хеши и идентификаторы (только длинные)
         normalized = re.sub(r'\b[a-f0-9]{16,}\b', '[HASH]', normalized)
-        normalized = re.sub(r'\b[A-Fa-f0-9]{8,}\b', '[ID]', normalized)
+        normalized = re.sub(r'\b[A-Fa-f0-9]{12,}\b', '[ID]', normalized)
         
         # IP адреса
         normalized = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP]', normalized)
@@ -157,9 +186,8 @@ class ErrorPatternCache:
         normalized = re.sub(r'--log-file-name=[^\s]*', '--log-file-name=[PATH]', normalized)
         normalized = re.sub(r'--yaml-config=[^\s]*', '--yaml-config=[CONFIG]', normalized)
         
-        # Убираем повторяющиеся пробелы и пустые строки
-        normalized = re.sub(r'\s+', ' ', normalized)
-        #normalized = re.sub(r'\n\s*\n', '\n', normalized)  # Убираем пустые строки
+        # Убираем повторяющиеся пробелы
+        #normalized = re.sub(r'\s+', ' ', normalized)
         
         return normalized.strip()
     
@@ -1189,7 +1217,7 @@ def process_error_batch_with_ai(batch_data):
 
 
 def smart_error_extraction_with_cache(test_data):
-    """Умное извлечение ошибок с кешированием паттернов"""
+    """Умное извлечение ошибок с кешированием паттернов - обработка по одному логу"""
     logging.debug("=== УМНОЕ ИЗВЛЕЧЕНИЕ ОШИБОК С КЕШИРОВАНИЕМ ===")
     
     mute_records = [r for r in test_data if r.get('status') == 'mute' and r.get('log')]
@@ -1198,116 +1226,90 @@ def smart_error_extraction_with_cache(test_data):
     
     logging.debug(f"Обрабатываем {len(mute_records)} mute записей")
     
-    # Шаг 1: Скачиваем все логи параллельно
-    logging.debug("Шаг 1: Скачивание логов...")
-    tasks = [(record.get('log'), idx) for idx, record in enumerate(mute_records)]
-    
-    log_contents = {}
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_task = {executor.submit(fetch_log_content_safe_simple, t): t for t in tasks}
-        for future in as_completed(future_to_task):
-            idx, content = future.result()
-            if content:
-                log_contents[idx] = content
-    
-    # Шаг 2: Проверяем кеш для каждого лога
-    logging.debug("Шаг 2: Проверка кеша паттернов...")
+    # Статистика
     cache_hits = 0
-    unknown_logs = []  # Логи, для которых не нашли паттернов
+    basic_processed = 0
+    ai_processed = 0
+    failed_downloads = 0
     
+    # Обрабатываем каждый лог по отдельности
     for idx, record in enumerate(mute_records):
-        if idx not in log_contents:
-            continue
-            
-        log_content = log_contents[idx]
+        log_url = record.get('log')
+        test_name = f"{record.get('suite_folder', '')}/{record.get('test_name', '')}"
         
-        # Пробуем найти в кеше
+        logging.debug(f"Обрабатываем лог {idx+1}/{len(mute_records)}: {test_name}")
+        
+        # Шаг 1: Скачиваем лог
+        log_content = fetch_log_content(log_url)
+        if not log_content:
+            logging.debug(f"  Не удалось скачать лог")
+            failed_downloads += 1
+            continue
+        
+        # Шаг 2: Проверяем кеш
         cached_error = error_cache.find_matching_pattern(log_content)
         
         if cached_error:
-            # Найден паттерн в кеше
+            # Найден в кеше
             record['status_description'] = cached_error
             cache_hits += 1
-            logging.debug(f"Cache HIT для теста {idx}")
+            logging.debug(f"  Cache HIT - используем кешированный результат")
         else:
-            # Паттерн не найден, нужна обработка
-            unknown_logs.append((idx, record, log_content))
-            logging.debug(f"Cache MISS для теста {idx}")
-    
-    logging.debug(f"Кеш: {cache_hits} попаданий, {len(unknown_logs)} промахов")
-    
-    # Шаг 3: Обрабатываем неизвестные логи
-    if unknown_logs:
-        logging.debug("Шаг 3: Обработка неизвестных логов...")
-        
-        # Сначала базовая обработка
-        basic_processed = []
-        ai_needed = []
-        
-        for idx, record, log_content in unknown_logs:
-            # Hybrid подход: сначала базовая обработка
+            # Не найден в кеше - обрабатываем
+            logging.debug(f"  Cache MISS - обрабатываем лог")
+            
+            # Шаг 3: Базовая обработка
             basic_result = extract_meaningful_error_info(log_content, max_length=1500)
             
-            # Определяем, нужен ли AI
+            # Шаг 4: Определяем, нужен ли AI
             if needs_ai_processing(basic_result):
-                ai_needed.append((idx, record, log_content, basic_result))
-            else:
-                # Базовой обработки достаточно
-                record['status_description'] = basic_result
-                error_cache.add_pattern(log_content, basic_result)
-                basic_processed.append(idx)
-        
-        logging.debug(f"Базовая обработка: {len(basic_processed)}, AI нужен: {len(ai_needed)}")
-        
-        # Шаг 4: Обрабатываем через AI батчами
-        if ai_needed:
-            logging.debug("Шаг 4: AI обработка батчами...")
-            
-            batch_size = 6  # Оптимальный размер батча
-            batches = [ai_needed[i:i+batch_size] for i in range(0, len(ai_needed), batch_size)]
-            
-            api_calls_made = 0
-            
-            for batch in batches:
-                # Подготавливаем данные для батча
-                batch_data = {}
-                for i, (idx, record, log_content, basic_result) in enumerate(batch):
-                    batch_data[f"log_{i}"] = {
+                # Нужна AI обработка
+                logging.debug(f"  Требуется AI обработка")
+                
+                # Подготавливаем данные для AI
+                ai_data = {
+                    "log_0": {
                         'original_log': log_content[:8000],  # Ограничиваем размер
                         'basic_processing': basic_result
                     }
+                }
                 
-                # AI запрос для батча
-                ai_results = process_error_batch_with_ai(batch_data)
-                api_calls_made += 1
+                # AI запрос
+                ai_results = process_error_batch_with_ai(ai_data)
                 
-                if ai_results:
-                    # Применяем результаты AI
-                    for i, (idx, record, log_content, _) in enumerate(batch):
-                        ai_result = ai_results.get(f"log_{i}")
-                        if ai_result:
-                            record['status_description'] = ai_result
-                            error_cache.add_pattern(log_content, ai_result)
-                        else:
-                            # Fallback на базовую обработку
-                            record['status_description'] = basic_result
-                            error_cache.add_pattern(log_content, basic_result)
+                if ai_results and ai_results.get("log_0"):
+                    # AI успешно обработал
+                    final_result = ai_results["log_0"]
+                    ai_processed += 1
+                    logging.debug(f"  AI обработка успешна")
                 else:
                     # AI не сработал, используем базовую обработку
-                    for idx, record, log_content, basic_result in batch:
-                        record['status_description'] = basic_result
-                        error_cache.add_pattern(log_content, basic_result)
+                    final_result = basic_result
+                    basic_processed += 1
+                    logging.debug(f"  AI не сработал, используем базовую обработку")
+            else:
+                # Базовой обработки достаточно
+                final_result = basic_result
+                basic_processed += 1
+                logging.debug(f"  Базовая обработка достаточна")
             
-            logging.debug(f"Сделано {api_calls_made} AI запросов для {len(ai_needed)} логов")
+            # Шаг 5: Устанавливаем результат и добавляем в кеш
+            record['status_description'] = final_result
+            error_cache.add_pattern(log_content, final_result)
+            logging.debug(f"  Добавлено в кеш")
     
     # Сохраняем кеш
     error_cache.save_cache()
     
     # Статистика
-    total_processed = len(mute_records)
+    total_processed = len(mute_records) - failed_downloads
     logging.info(f"=== СТАТИСТИКА ОБРАБОТКИ ОШИБОК ===")
-    logging.info(f"Всего записей: {total_processed}")
-    logging.info(f"Кеш попадания: {cache_hits} ({cache_hits/total_processed*100:.1f}%)")
+    logging.info(f"Всего записей: {len(mute_records)}")
+    logging.info(f"Не удалось скачать: {failed_downloads}")
+    logging.info(f"Успешно обработано: {total_processed}")
+    logging.info(f"Кеш попадания: {cache_hits} ({cache_hits/total_processed*100:.1f}% если total_processed > 0)")
+    logging.info(f"Базовая обработка: {basic_processed}")
+    logging.info(f"AI обработка: {ai_processed}")
     logging.info(f"Новых паттернов: {error_cache.new_patterns_count}")
     logging.info(f"Всего паттернов в кеше: {len(error_cache.patterns)}")
     
@@ -1353,7 +1355,7 @@ def generate_compatibility_report():
         
         # ===== ЭТАП 1: ПОЛУЧИТЬ ДАННЫЕ ТЕСТОВ ИЗ БД =====
         logging.debug("=== ЭТАП 1: ПОЛУЧЕНИЕ ДАННЫХ ИЗ БД ===")
-        test_data = get_compatibility_tests_data(driver, days_back=7)
+        test_data = get_compatibility_tests_data(driver, days_back=1)
         
         if not test_data:
             logging.debug("No compatibility test data found")
@@ -1621,7 +1623,7 @@ def generate_version_mock_report(version_data, error_clustering_result=None, ai_
         report += f"\n## Нестабильные тесты за последние 24 часа ({len(version_data['unstable_tests_24h'])})\n\n"
         report += "| Тест | Статус | Частота падений | Ошибка |\n|------|--------|-----------------|--------|\n"
         for test in sorted(version_data['unstable_tests_24h'], key=lambda x: x['fail_rate'], reverse=True):
-            err = (test['error_description'] or '').replace('\n', ' ')[:100]
+            err = extract_error_for_display(test['error_description'])
             report += f"| {test['name']} | {test['latest_status']} | {test['fail_rate']:.1%} | {err} |\n"
     
     # Кластеризация ошибок LLM
@@ -1723,7 +1725,8 @@ def call_single_ai_request(prompt, data):
     logging.debug(f"Final request size: {final_size} characters ({final_tokens} tokens)")
     
     payload = {
-        'model': 'claude-3-7-sonnet-20250219',
+        'model': 'internal-soy-yagpt',
+        #'model': 'claude-3-7-sonnet-20250219',
         'max_tokens': 8192,
         'messages': [
             {
@@ -1810,6 +1813,51 @@ def call_single_ai_request(prompt, data):
     except Exception as e:
         logging.debug(f"AI API Exception: {e}")
         return None
+
+
+def extract_error_for_display(error_description, max_length=400):
+    """Извлекает важную часть ошибки для отображения в отчете (аналогично normalize_log)"""
+    if not error_description:
+        return 'No error description'
+    
+    lines = error_description.split('\n')
+    error_start_index = -1
+    
+    # Ищем первую строку с ERROR (аналогично normalize_log)
+    for i, line in enumerate(lines):
+        if ' - ERROR - ' in line:
+            error_start_index = i
+            break
+    
+    # Если ERROR не найден, ищем другие критичные маркеры
+    if error_start_index == -1:
+        critical_markers = [' - EXCEPTION - ', ' - CRITICAL - ', ' - FATAL - ', 'Exception:', 'Error:', 'Unknown field', 'Failed']
+        for marker in critical_markers:
+            for i, line in enumerate(lines):
+                if marker in line:
+                    error_start_index = i
+                    break
+            if error_start_index != -1:
+                break
+    
+    # Берем полезную часть (от первой ошибки)
+    if error_start_index != -1:
+        useful_lines = lines[error_start_index:error_start_index+3]  # Максимум 3 строки от ошибки
+        # Фильтруем DEBUG/INFO строки
+        filtered_lines = []
+        for line in useful_lines:
+            if not any(pattern in line for pattern in [' - DEBUG - ', ' - INFO - ']):
+                filtered_lines.append(line.strip())
+        
+        result = ' | '.join(filtered_lines) if filtered_lines else 'Error details filtered'
+    else:
+        # Если критичных маркеров не найдено, берем первые непустые строки
+        first_lines = [line.strip() for line in lines if line.strip()][:2]
+        result = ' | '.join(first_lines) if first_lines else 'No clear error found'
+    
+    # Ограничиваем длину и очищаем
+    #result = result.replace('\n', ' ')[:max_length]
+    return result
 
 
 if __name__ == "__main__":

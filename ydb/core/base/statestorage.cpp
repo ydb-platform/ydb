@@ -327,8 +327,9 @@ ERingGroupState GetRingGroupState(const NKikimrConfig::TDomainsConfig::TStateSto
             return ERingGroupState::NOT_SYNCHRONIZED;
         case NKikimrConfig::TDomainsConfig::TStateStorage::DISCONNECTED:
             return ERingGroupState::DISCONNECTED;
+        default:
+            Y_ABORT("Unsupported ring group pile state");
     }
-    Y_ABORT();
 }
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefix, 
         const NKikimrConfig::TDomainsConfig::TStateStorage& config) {

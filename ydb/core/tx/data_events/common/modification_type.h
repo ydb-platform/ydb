@@ -104,7 +104,6 @@ public:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
             case NEvWrite::EModificationType::Increment:
                 Y_VERIFY(false);
-                //return NKikimrTxColumnShard::TEvWrite::OPERATION_INCREMENT;
 
         }
     }
@@ -121,9 +120,6 @@ public:
                 return NEvWrite::EModificationType::Delete;
             case NKikimrTxColumnShard::TEvWrite::OPERATION_REPLACE:
                 return NEvWrite::EModificationType::Replace;
-            case NKikimrTxColumnShard::TEvWrite::OPERATION_INCREMENT:
-                Y_VERIFY(false);
-                //return NEvWrite::EModificationType::Increment; 
         }
     }
 };

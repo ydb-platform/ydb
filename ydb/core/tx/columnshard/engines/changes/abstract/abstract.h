@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/data_reader/contexts.h>
 #include <ydb/core/tx/columnshard/engines/changes/counters/changes.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
@@ -380,7 +381,7 @@ public:
     void Compile(TFinalizationContext& context) noexcept;
 
     NBlobOperations::NRead::TCompositeReadBlobs Blobs;
-    NOlap::NDataFetcher::TCurrentContext FetchingContext;
+    std::optional<NOlap::NDataFetcher::TCurrentContext> FetchingContext;
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();

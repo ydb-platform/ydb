@@ -537,7 +537,7 @@ private:
             NOlap::TDataAccessorsResult(context.ExtractPortionAccessors()), NOlap::TDataAccessorsInitializationContext(VersionedIndex));
 
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
-        Changes->FetchingContext = std::move(context);
+        Changes->FetchingContext.emplace(std::move(context));
         {
             NOlap::TConstructionContext context(*VersionedIndex, Counters, SnapshotModification);
             if (NeedBlobs) {

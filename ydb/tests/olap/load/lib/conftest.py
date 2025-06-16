@@ -342,8 +342,7 @@ class LoadSuiteBase:
 
     @classmethod
     def setup_class(cls) -> None:
-        start_time = time()
-        cls._setup_start_time = start_time
+        cls._setup_start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
         result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))))
@@ -354,12 +353,12 @@ class LoadSuiteBase:
             except BaseException as e:
                 result.add_error(str(e))
                 result.traceback = e.__traceback__
-        result.iterations[0].time = time() - start_time
+        result.iterations[0].time = time() - cls._setup_start_time
         query_name = '_Verification'
         result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)
         nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
-        result.start_time = max(start_time - 600, first_node_start_time)
+        result.start_time = max(cls._setup_start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
 
     @classmethod

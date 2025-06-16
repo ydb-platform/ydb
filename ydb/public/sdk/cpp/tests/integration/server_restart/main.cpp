@@ -139,7 +139,7 @@ protected:
             .RegisterService(DisoveryService_.get())
             .RegisterService(QueryService_.get())
             .BuildAndStart();
-        
+
         DisoveryService_->SetPort(port);
 
         Driver_ = std::make_unique<TDriver>(TDriverConfig()

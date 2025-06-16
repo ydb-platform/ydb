@@ -43,7 +43,7 @@ public:
     }
 
     ~TPortionsDataFetcher() {
-        AFL_VERIFY(IsFinished);
+        AFL_VERIFY(IsFinished || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage);
     }
 
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,

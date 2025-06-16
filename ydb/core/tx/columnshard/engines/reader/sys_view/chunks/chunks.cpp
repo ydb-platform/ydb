@@ -193,6 +193,11 @@ class TFetchingExecutor: public NOlap::NDataFetcher::IFetchCallback {
 private:
     const NActors::TActorId ParentActorId;
     NColumnShard::TCounterGuard WaitingCountersGuard;
+    std::shared_ptr<const TAtomicCounter> AbortionFlag;
+
+    virtual bool IsAborted() const override {
+        return AbortionFlag->Val();
+    }
 
     virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
         NActors::TActivationContext::AsActorContext().Send(
@@ -208,7 +213,9 @@ private:
 public:
     TFetchingExecutor(const std::shared_ptr<TReadContext>& context)
         : ParentActorId(context->GetScanActorId())
-        , WaitingCountersGuard(context->GetCounters().GetFetcherAcessorsGuard()) {
+        , WaitingCountersGuard(context->GetCounters().GetFetcherAcessorsGuard())
+        , AbortionFlag(context->GetAbortionFlag())
+    {
     }
 };
 

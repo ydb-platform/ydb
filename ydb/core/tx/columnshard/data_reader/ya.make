@@ -16,4 +16,6 @@ PEERDIR(
     ydb/core/kqp/compute_actor
 )
 
+GENERATE_ENUM_SERIALIZATION(contexts.h)
+
 END()

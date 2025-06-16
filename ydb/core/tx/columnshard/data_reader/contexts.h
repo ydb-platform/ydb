@@ -103,6 +103,8 @@ private:
 public:
     virtual ~IFetchCallback() = default;
 
+    virtual bool IsAborted() const = 0;
+
     virtual void OnStageStarting(const EFetchingStage /*stage*/) {
     
     }

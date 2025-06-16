@@ -12,6 +12,8 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+
 namespace NKikimr::NReplication {
 
 using namespace NKikimrReplication;
@@ -392,7 +394,18 @@ private:
 
         for (auto& result : readResult.GetResult()) {
             gotOffset = std::max(gotOffset, result.GetOffset());
-            messages.emplace_back(result.GetOffset(), GetDeserializedData(result.GetData()).GetData());
+            auto proto = GetDeserializedData(result.GetData());
+
+            Cerr << ">>>>> !!!!! " << proto.codec() << Endl << Flush;
+
+            if (proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
+                const  NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
+                TString decompressed = codecImpl->Decompress(proto.GetData());
+                messages.emplace_back(result.GetOffset(), decompressed);
+            } else {
+                messages.emplace_back(result.GetOffset(), proto.GetData());
+            }
+            Cerr << ">>>>> !!! " << messages.back().GetData() << Endl << Flush;
         }
         SentOffset = gotOffset + 1;
 

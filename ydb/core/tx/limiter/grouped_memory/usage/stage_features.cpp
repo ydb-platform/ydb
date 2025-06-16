@@ -22,9 +22,11 @@ TStageFeatures::TStageFeatures(const TString& name, const ui64 limit, const std:
     , HardLimit(hardLimit)
     , Owner(owner)
     , Counters(counters) {
-    Counters->ValueSoftLimit->Set(Limit);
-    if (HardLimit) {
-        Counters->ValueHardLimit->Set(*HardLimit);
+    if (Counters) {
+        Counters->ValueSoftLimit->Set(Limit);
+        if (HardLimit) {
+            Counters->ValueHardLimit->Set(*HardLimit);
+        }
     }
 }
 

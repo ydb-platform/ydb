@@ -281,6 +281,15 @@ void TDataShardUserDb::IncrementRowInt(
     Y_ENSURE(row.Size() == ops.size());
     const NTable::TScheme& scheme = Db.GetScheme();
     const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
+    
+    int bufSize = 0;
+    for(size_t i = 0; i < ops.size(); i ++)
+    {
+        auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
+        bufSize += NKikimr::NScheme::GetFixedSize(vtype);
+    }
+    
+    TMemoryPool pool(bufSize);
 
     for(size_t i = 0; i < ops.size(); i ++)
     {
@@ -288,17 +297,13 @@ void TDataShardUserDb::IncrementRowInt(
        
         auto current = row.Get(i);
         auto add  = ops[i].AsCell();
-        TCell value(ops[i].AsRef());
+        TCell value;
         
-        TString message;
-        auto success = NFormats::AddTwoCell(current, add, value, vtype, message);
-        
-        if(! success)
-            return; // todo
-        
-        //value.CopyDataInto(ops[i].Value.AsRef()); todo for proper several columns
-    
-        TRawTypeValue rawTypeValue(value.Data(), NKikimr::NScheme::GetFixedSize(vtype), vtype);
+        NFormats::AddTwoCell(current, add, value, vtype);
+            
+        auto ptr = pool.Allocate(NKikimr::NScheme::GetFixedSize(vtype)); 
+        value.CopyDataInto(static_cast<char *> (ptr));
+        TRawTypeValue rawTypeValue(ptr, NKikimr::NScheme::GetFixedSize(vtype), vtype);
         NIceDb::TUpdateOp extOp(ops[i].Tag, ops[i].Op, rawTypeValue);
         newOps.emplace_back(extOp);
     }
@@ -340,11 +345,10 @@ NTable::TRowState TDataShardUserDb::GetRowState (
             return std::move(rowState);
         }
         case NTable::EReady::Gone: {
-            return rowState; // размер 0  - игнорируем
+            return NTable::TRowState();
         }
     }
 }
-
 
 TSmallVec<TCell> TDataShardUserDb::ConvertTableKeys(const TArrayRef<const TRawTypeValue> key)
 {

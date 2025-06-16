@@ -77,7 +77,6 @@ message TEvWrite {
         OPERATION_UPDATE = 3;
         OPERATION_REPLACE = 4;
         OPERATION_DELETE = 5;
-        OPERATION_INCREMENT = 6;
     }
     optional EModificationType ModificationType = 11;
 

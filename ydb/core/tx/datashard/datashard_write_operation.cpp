@@ -159,6 +159,29 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         }
     }
 
+    if(OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT)
+    {
+        for (ui32 columnTag : ColumnIds) {
+            auto* col = tableInfo.Columns.FindPtr(columnTag);
+            if(col->IsKey)
+                continue;
+            auto type = col->Type.GetTypeId();
+            switch(type)
+            {
+                case NScheme::NTypeIds::Uint8:
+                case NScheme::NTypeIds::Int8:
+                case NScheme::NTypeIds::Uint16:
+                case NScheme::NTypeIds::Int16: 
+                case NScheme::NTypeIds::Uint32:
+                case NScheme::NTypeIds::Int32:
+                case NScheme::NTypeIds::Uint64:
+                case NScheme::NTypeIds::Int64:
+                    break;
+                default:
+                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only integer types are supported by increment" << columnTag};
+            }        
+        }
+    }
     TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
 
     SetTxKeys(tableInfo, tabletId, keyValidator);

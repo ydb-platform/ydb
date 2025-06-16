@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NEvWrite {
 enum class EModificationType {
@@ -102,7 +103,8 @@ public:
             case NEvWrite::EModificationType::Update:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
             case NEvWrite::EModificationType::Increment:
-                return NKikimrTxColumnShard::TEvWrite::OPERATION_INCREMENT;
+                Y_VERIFY(false);
+                //return NKikimrTxColumnShard::TEvWrite::OPERATION_INCREMENT;
 
         }
     }
@@ -120,7 +122,8 @@ public:
             case NKikimrTxColumnShard::TEvWrite::OPERATION_REPLACE:
                 return NEvWrite::EModificationType::Replace;
             case NKikimrTxColumnShard::TEvWrite::OPERATION_INCREMENT:
-                return NEvWrite::EModificationType::Increment; 
+                Y_VERIFY(false);
+                //return NEvWrite::EModificationType::Increment; 
         }
     }
 };

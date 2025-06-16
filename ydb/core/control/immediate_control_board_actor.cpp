@@ -83,8 +83,9 @@ private:
             TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
             TAtomicBase prevValue = newValue;
             bool isDefault = false;
-            if (auto controlId = Icb->GetStaticControlId(paramName)) {
-                isDefault = Icb->SetValue(*controlId, newValue, prevValue);
+            if (auto control = Icb->GetControlByName(paramName)) {
+                prevValue = control->SetFromHtmlRequest(newValue);
+                isDefault = control->IsDefault();
             } else {
                 isDefault = Dcb->SetValue(paramName, newValue, prevValue);
             }

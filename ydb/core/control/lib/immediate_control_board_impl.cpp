@@ -10,82 +10,48 @@ namespace NKikimr {
 
 // TControlBoard
 
-size_t TControlBoard::GetIndex(EStaticControlType type) const {
-    auto idx = static_cast<size_t>(type);
-    Y_ENSURE(idx < GetEnumItemsCount<EStaticControlType>());
-    return idx;
-}
-
-bool TControlBoard::RegisterLocalControl(TControlWrapper control, EStaticControlType type) {
-    auto& ourControl = StaticControls[GetIndex(type)];
-    auto prevValue = ourControl.AtomicLoad();
-    if (!prevValue) {
-        ourControl.AtomicStore(control.Control);
-        return true;
-    }
-
-    ourControl.AtomicStore(control.Control);
-    return false;
-}
-
-bool TControlBoard::RegisterSharedControl(TControlWrapper& control, EStaticControlType type) {
-    auto& ourControl = StaticControls[GetIndex(type)];
-    auto valueBefore = ourControl.AtomicLoad();
-    if (valueBefore) {
-        control.Control = valueBefore;
-        return false;
-    }
-    ourControl.AtomicStore(control.Control);
-
-    return true;
-}
-
-void TControlBoard::RestoreDefault(EStaticControlType type) {
-    if (auto control = StaticControls[GetIndex(type)].AtomicLoad()) {
-        control->RestoreDefault();
-    }
-}
-
 void TControlBoard::RestoreDefaults() {
-    for (auto& controlPtr: StaticControls) {
-        if (auto control = controlPtr.AtomicLoad()) {
+    for (auto& [_, control]: GetAllAvailableControls()) {
+        if (control) {
             control->RestoreDefault();
         }
     }
 }
 
-bool TControlBoard::SetValue(EStaticControlType type, TAtomic value, TAtomic &outPrevValue) {
-    if (auto control = StaticControls[GetIndex(type)].AtomicLoad()) {
-        outPrevValue = control->SetFromHtmlRequest(value);
-        return control->IsDefault();
-    }
-    return true;
-}
-
-// Only for tests
-void TControlBoard::GetValue(EStaticControlType type, TAtomic &outValue, bool &outIsControlExists) const {
-    outIsControlExists = false;
-    if (auto control = StaticControls[GetIndex(type)].AtomicLoad()) {
-        outIsControlExists = true;
-        outValue = control->Get();
-    }
-}
-
 void TControlBoard::RenderAsHtml(TControlBoardTableHtmlRenderer& renderer) const {
-    for (const auto& [idx, controlPtr]: Enumerate(StaticControls)) {
-        if (auto control = controlPtr.AtomicLoad()) {
-            auto name = ToString(static_cast<EStaticControlType>(idx));
+    auto availableControls = GetAllAvailableControls();
+    TMap<TString, TIntrusivePtr<TControl>> soredControls(availableControls.begin(), availableControls.end());
+    for (const auto& [name, control]: soredControls) {
+        if (control) {
             renderer.AddTableItem(name, control);
         }
     }
 }
 
-TMaybe<EStaticControlType> TControlBoard::GetStaticControlId(const TStringBuf name) const {
-    EStaticControlType res;
-    if (TryFromString<EStaticControlType>(name, res)) {
-        return res;
+TIntrusivePtr<TControl> TControlBoard::GetControlByName(const TString& name) const {
+    const auto allControls = GetAllAvailableControls();
+    if (auto control = MapFindPtr(allControls, name)) {
+        return *control;
     }
-    return Nothing();
+    return nullptr;
+}
+
+void TControlBoard::RegisterSharedControl(TControlWrapper& newControl, THotSwap<TControl>& icbControl) {
+    auto oldControlValue = icbControl.AtomicLoad();
+    if (oldControlValue) {
+        newControl.Control = oldControlValue;
+    }
+    icbControl.AtomicStore(newControl.Control);
+}
+
+void TControlBoard::RegisterLocalControl(TControlWrapper control, THotSwap<TControl>& icbControl) {
+    icbControl.AtomicStore(control.Control);
+}
+
+void TControlBoard::SetValue(TAtomicBase value, THotSwap<TControl>& icbControl) {
+    if (auto control = icbControl.AtomicLoad()) {
+        control->SetFromHtmlRequest(value);
+    }
 }
 
 } // NKikimr

@@ -12,23 +12,22 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(fmr-table_data_service-local)
+add_library(table_data_service-local-impl)
 
 
-target_compile_options(fmr-table_data_service-local PRIVATE
+target_compile_options(table_data_service-local-impl PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(fmr-table_data_service-local PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(table_data_service-local-impl PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-threading-future
-  fmr-table_data_service-interface
+  table_data_service-local-interface
   yt-fmr-utils
+  essentials-utils-log
 )
 
-target_sources(fmr-table_data_service-local PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/table_data_service/local/yql_yt_table_data_service_local.cpp
+target_sources(table_data_service-local-impl PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.cpp
 )
 

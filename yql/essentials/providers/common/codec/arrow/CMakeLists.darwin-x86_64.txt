@@ -15,10 +15,15 @@
 add_library(common-codec-arrow)
 
 
+target_compile_options(common-codec-arrow PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
 target_link_libraries(common-codec-arrow PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
+  essentials-minikql-arrow
   providers-common-codec
   public-udf-arrow
 )

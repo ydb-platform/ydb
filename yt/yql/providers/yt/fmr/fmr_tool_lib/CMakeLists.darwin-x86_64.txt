@@ -27,9 +27,10 @@ target_link_libraries(yt-fmr-fmr_tool_lib PUBLIC
   fmr-coordinator-impl
   coordinator-yt_coordinator_service-file
   coordinator-yt_coordinator_service-impl
+  fmr-gc_service-impl
   fmr-job-impl
   fmr-job_factory-impl
-  fmr-table_data_service-local
+  table_data_service-local-impl
   fmr-worker-impl
   fmr-yt_job_service-file
   fmr-yt_job_service-impl

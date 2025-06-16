@@ -38,6 +38,7 @@ target_link_libraries(fmr-coordinator-impl PUBLIC
   fmr-coordinator-interface
   coordinator-yt_coordinator_service-interface
   coordinator-yt_coordinator_service-impl
+  fmr-gc_service-impl
   yql-essentials-utils
   essentials-utils-log
 )
@@ -68,20 +69,21 @@ target_link_libraries(fmr-coordinator-impl.global PUBLIC
   fmr-coordinator-interface
   coordinator-yt_coordinator_service-interface
   coordinator-yt_coordinator_service-impl
+  fmr-gc_service-impl
   yql-essentials-utils
   essentials-utils-log
 )
 
 target_sources(fmr-coordinator-impl.global PRIVATE
-  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/87f8577cda5a4636761985e0b9ff7afb.cpp
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/b15dd0b0d2c9d5dc8728d90e15e0b6b6.cpp
 )
 
 
 resources(fmr-coordinator-impl.global
-  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/87f8577cda5a4636761985e0b9ff7afb.cpp
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/b15dd0b0d2c9d5dc8728d90e15e0b6b6.cpp
   INPUTS
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/default_coordinator_settings.yson
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/coordinator/impl/default_operation_settings.yson
   KEYS
-  default_coordinator_settings.yson
+  default_operation_settings.yson
   OPTS
 )

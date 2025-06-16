@@ -283,6 +283,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/null_consumer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/parser.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/producer.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/protobuf_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/protobuf_interop.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/protobuf_interop_options.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/yson/protobuf_interop_unknown_fields.cpp

@@ -17,7 +17,7 @@ add_library(digest_udf INTERFACE)
 
 target_compile_options(digest_udf INTERFACE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_MINOR=43
   -DUDF_ABI_VERSION_PATCH=0
 )
 
@@ -49,7 +49,7 @@ add_global_library_for(digest_udf.global
 
 target_compile_options(digest_udf.global PRIVATE
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_MINOR=43
   -DUDF_ABI_VERSION_PATCH=0
 )
 

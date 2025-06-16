@@ -27,6 +27,7 @@ target_link_libraries(fmr-worker-impl PUBLIC
   fmr-coordinator-interface
   fmr-job_factory-interface
   yql-essentials-utils
+  essentials-utils-log
 )
 
 target_sources(fmr-worker-impl PRIVATE

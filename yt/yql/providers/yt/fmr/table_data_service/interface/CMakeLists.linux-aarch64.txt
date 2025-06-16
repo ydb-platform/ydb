@@ -24,6 +24,7 @@ target_link_libraries(fmr-table_data_service-interface PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-threading-future
+  yql-essentials-utils
 )
 
 target_sources(fmr-table_data_service-interface PRIVATE

@@ -15,15 +15,16 @@
 add_library(complete-analysis-yql)
 
 
+target_compile_options(complete-analysis-yql PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
 target_link_libraries(complete-analysis-yql PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   yql-essentials-ast
   yql-essentials-core
-  essentials-core-services
-  yql-essentials-minikql
-  essentials-minikql-invoke_builtins
 )
 
 target_sources(complete-analysis-yql PRIVATE

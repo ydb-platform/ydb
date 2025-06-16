@@ -39,11 +39,13 @@ target_link_libraries(yt-fmr-proto PUBLIC
 target_proto_messages(yt-fmr-proto PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/proto/coordinator.proto
   ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/proto/request_options.proto
+  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/proto/table_data_service.proto
 )
 
 target_sources(yt-fmr-proto PRIVATE
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/proto/coordinator.pb.h
   ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/proto/request_options.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yql/providers/yt/fmr/proto/table_data_service.pb.h
 )
 
 

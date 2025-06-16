@@ -175,10 +175,11 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
-    if (auto logFlushDelayOverrideUsecControlType = NUtil::GetLogFlushDelayOverrideUsecTabletTypeControl(Owner->TabletType())) {
-        AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, *logFlushDelayOverrideUsecControlType);
+    auto& icb = *AppData()->Icb;
+    if (static_cast<size_t>(Owner->TabletType()) < icb.LogFlushDelayOverrideUsec.size()) {
+        TControlBoard::RegisterSharedControl(LogFlushDelayOverrideUsec, icb.LogFlushDelayOverrideUsec[static_cast<size_t>(Owner->TabletType())]);
     }
-    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, EStaticControlType::TabletControlsMaxCommitRedoMB);
+    TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);

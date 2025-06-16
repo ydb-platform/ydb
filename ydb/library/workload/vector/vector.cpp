@@ -13,8 +13,37 @@ namespace NYdbWorkload {
 // Initialize thread local atomic
 thread_local std::atomic<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex{0};
 
+// Utility function to get metric info for SQL query
+// Returns a tuple of (function_name, is_ascending)
+std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::EMetric metric) {
+    switch (metric) {
+        case NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct:
+            return {"InnerProductSimilarity", false}; // Similarity, higher is better (DESC)
+        
+        case NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity:
+            return {"CosineSimilarity", false}; // Similarity, higher is better (DESC)
+            
+        case NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance:
+            return {"CosineDistance", true}; // Distance, lower is better (ASC)
+            
+        case NYdb::NTable::TVectorIndexSettings::EMetric::Manhattan:
+            return {"ManhattanDistance", true}; // Distance, lower is better (ASC)
+            
+        case NYdb::NTable::TVectorIndexSettings::EMetric::Euclidean:
+            return {"EuclideanDistance", true}; // Distance, lower is better (ASC)
+            
+        case NYdb::NTable::TVectorIndexSettings::EMetric::Unspecified:
+        default:
+            Y_ABORT("Unspecified metric");
+    }
+}
+
+
 // Utility function to create select query
-std::string MakeSelect(const char* tableName, const char* indexName, const char* prefixColumn, size_t kmeansTreeClusters) {
+std::string MakeSelect(const char* tableName, const char* indexName, const char* prefixColumn, 
+                     size_t kmeansTreeClusters, NYdb::NTable::TVectorIndexSettings::EMetric metric) {
+    auto [functionName, isAscending] = GetMetricInfo(metric);
+    
     return std::format(R"_(--!syntax_v1
         DECLARE $Embedding as String;
         {0}
@@ -23,16 +52,19 @@ std::string MakeSelect(const char* tableName, const char* indexName, const char*
         FROM {2}
         {3}
         {4}
-        ORDER BY Knn::CosineDistance(embedding, $Embedding)
+        ORDER BY Knn::{5}(embedding, $Embedding) {6}
         LIMIT $K;
     )_", 
         prefixColumn ? "DECLARE $PrefixValue as Int64;" : "",
         kmeansTreeClusters,
         tableName,
         indexName ? std::format("VIEW {0}", indexName) : "",
-        prefixColumn ? std::format("WHERE {0} = $PrefixValue", prefixColumn) : ""
+        prefixColumn ? std::format("WHERE {0} = $PrefixValue", prefixColumn) : "",
+        functionName,
+        isAscending ? "ASC" : "DESC"
     );
 }
+
 
 // Utility function to create parameters for select query
 NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 topK) {
@@ -245,11 +277,11 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, const 
     Y_ABORT_UNLESS(!SelectTargets.empty(), "Failed to sample any vectors from the dataset");
 }
 
-void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* prefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
+void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* prefixColumn, NYdb::NTable::TVectorIndexSettings::EMetric metric, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
     Cout << "Recall initialization..." << Endl;
     
     // Prepare the query template
-    std::string queryTemplate = MakeSelect(tableName, nullptr, prefixColumn, 0);
+    std::string queryTemplate = MakeSelect(tableName, nullptr, prefixColumn, 0, metric);
     
     // Maximum number of concurrent queries to execute
     const size_t MAX_CONCURRENT_QUERIES = 20;
@@ -459,9 +491,10 @@ size_t TVectorWorkloadGenerator::GetNextTargetIndex(size_t currentIndex) const {
 TQueryInfoList TVectorWorkloadGenerator::Select() {
     // Initialize thread-local target index if needed
     if (ThreadLocalTargetIndex.load() == 0) {
-        // Use the thread address as a starting point
-        uintptr_t threadValue = reinterpret_cast<uintptr_t>(&ThreadLocalTargetIndex);
-        ThreadLocalTargetIndex.store(threadValue % Params.VectorRecallEvaluator->GetTargetCount());
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<size_t> dist(0, Params.VectorRecallEvaluator->GetTargetCount() - 1);
+        ThreadLocalTargetIndex.store(dist(gen));
     }
     
     // Get current target index
@@ -472,7 +505,8 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
         Params.TableName.c_str(), 
         Params.IndexName.c_str(), 
         Params.PrefixColumn.has_value() ? Params.PrefixColumn->c_str() : nullptr,
-        Params.KmeansTreeSearchClusters
+        Params.KmeansTreeSearchClusters,
+        Params.Metric
     );
     
     // Get the embedding for the specified target
@@ -569,32 +603,7 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     }
 }
 
-size_t TVectorWorkloadParams::GetVectorDimension() const {
-    std::string query = std::format(R"_(--!syntax_v1
-        SELECT Unwrap(ListLength(Knn::FloatFromBinaryString(embedding))) FROM {0} LIMIT 1;
-    )_", TableName.c_str());
-
-    std::optional<NYdb::TResultSet> resultSet;
-    NYdb::NStatusHelpers::ThrowOnError(QueryClient->RetryQuerySync([&query, &resultSet](NYdb::NQuery::TSession session) {
-        auto result = session.ExecuteQuery(
-            query,
-            NYdb::NQuery::TTxControl::NoTx())
-            .GetValueSync();
-        
-        if (!result.IsSuccess()) {
-            return result;
-        }
-        resultSet = result.GetResultSet(0);
-        return result;
-    })); 
-
-    NYdb::TResultSetParser parser(*resultSet);
-    Y_ABORT_UNLESS(parser.TryNextRow());
-    ui64 dimension = parser.ColumnParser(0).GetUint64();
-    return dimension;
-}
-
-std::optional<std::string> TVectorWorkloadParams::GetPrefixColumn() const {
+void TVectorWorkloadParams::GetIndexInfo() {
     // Build the full path to the table
     std::string tablePath = DbPath + "/" + TableName;
 
@@ -607,7 +616,6 @@ std::optional<std::string> TVectorWorkloadParams::GetPrefixColumn() const {
     
     // Find the specified index
     bool indexFound = false;
-    std::optional<std::string> prefixColumn;
     
     for (const auto& index : tableDescription.GetIndexDescriptions()) {
         if (index.GetIndexName() == IndexName) {
@@ -617,34 +625,36 @@ std::optional<std::string> TVectorWorkloadParams::GetPrefixColumn() const {
             const auto& keyColumns = index.GetIndexColumns();
             if (keyColumns.size() > 1) {
                 // The first column is the prefix column, the last column is the embedding
-                prefixColumn = keyColumns[0];
+                PrefixColumn = keyColumns[0];
             }
+            
+            // Extract the distance metric from index settings
+            const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
+            Metric = indexSettings.Settings.Metric;
+            VectorDimension = indexSettings.Settings.VectorDimension;
             
             break;
         }
     }
 
     // If a prefix column was found, verify that it has an integer type
-    if (prefixColumn.has_value()) {
+    if (PrefixColumn.has_value()) {
         // Find the column in table schema
         for (const auto& column : tableDescription.GetColumns()) {
-            if (column.Name == prefixColumn.value()) {
+            if (column.Name == PrefixColumn.value()) {
                 // Check column type
                 const NYdb::TType& typeInfo = column.Type;
                 
                 // Check if it's an integer type
                 Y_ABORT_UNLESS(typeInfo.ToString().contains("int") || typeInfo.ToString().contains("Int"), 
                     "Prefix column '%s' in index '%s' must be an integer type. Found type: %s", 
-                    prefixColumn->c_str(), IndexName.c_str(), typeInfo.ToString().c_str());          
+                    PrefixColumn->c_str(), IndexName.c_str(), typeInfo.ToString().c_str());          
             }
         }
     }
     
     Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableName.c_str());
-    
-    return prefixColumn;
 }
-
 
 void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
     switch (commandType) {
@@ -655,15 +665,15 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                 case TVectorWorkloadGenerator::EType::Upsert:
                     break;
                 case TVectorWorkloadGenerator::EType::Select:
-                    VectorDimension = GetVectorDimension();
-                    PrefixColumn = GetPrefixColumn();
+                    GetIndexInfo();
                     VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>();
                     const char* prefixColumn = PrefixColumn.has_value() ? PrefixColumn->c_str() : nullptr;
                     VectorRecallEvaluator->SampleExistingVectors(TableName.c_str(), prefixColumn, Targets, *QueryClient);
                     if (Recall) {
                         VectorRecallEvaluator->FillEtalons(
                             TableName.c_str(), 
-                            prefixColumn, 
+                            prefixColumn,
+                            Metric,
                             TopK, 
                             *QueryClient
                         );

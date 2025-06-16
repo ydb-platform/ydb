@@ -1203,6 +1203,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         }
+
         {
             auto query = TStringBuilder() << R"(
             --!syntax_v1

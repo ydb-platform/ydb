@@ -144,7 +144,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
                 AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
             }
-            owner.TablesManager.MoveTableProposeOnExecute(srcSchemeShardLocalPathId);
+            owner.TablesManager.MoveTablePropose(srcSchemeShardLocalPathId);
             break;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
@@ -268,7 +268,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
 
             AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId));
             AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId));
-            AFL_VERIFY(false); //TODO recover txIdsToWait
+            //TODO recover txIdsToWait
             //WaitOnPropose = std::make_shared<TWaitTransactions>(GetTxId(), txIds);
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
@@ -284,23 +284,6 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
 }
 
 void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
-    switch (SchemaTxBody.TxBody_case()) {
-        case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
-        case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
-        case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
-        case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
-        case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
-            break;
-        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
-        {
-            // const auto srcPathId = TLocalPathId::FromLocalPathIdValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
-            // const auto dstPathId = TLocalPathId::FromLocalPathIdValue(SchemaTxBody.GetMoveTable().GetDstPathId());
-            // owner.TablesManager.MoveTableProgressOnComplete(srcPathId, dstPathId);
-            break;
-        }
-        case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
-            break;
-    }
 }
 
 } //namespace NKikimr::NColumnShard

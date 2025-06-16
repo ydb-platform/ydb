@@ -408,8 +408,7 @@ void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, c
 
     const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
     const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
-    TablesManager.MoveTableProgressOnExecute(db, srcPathId, dstPathId);
-    TablesManager.MoveTableProgressOnComplete(srcPathId, dstPathId); //TODO FIX ME
+    TablesManager.MoveTableProgress(db, srcPathId, dstPathId);
 }
 
 

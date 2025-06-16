@@ -121,12 +121,9 @@ public:
         Versions.insert(snapshot);
     }
 
-    void UpdateLocalPathIdOnExecute(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId newPathId) {
+    void UpdateLocalPathId(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId newPathId) {
         Schema::SaveTableSchemeShardLocalPathId(db, InternalPathId, newPathId);
-    }
-
-    void UpdateLocalPathIdOnComplete(const TSchemeShardLocalPathId newPathId) {
-         SchemeShardLocalPathId = newPathId;
+        SchemeShardLocalPathId = newPathId;
     }
 
     bool IsDropped(const std::optional<NOlap::TSnapshot>& minReadSnapshot = std::nullopt) const {
@@ -284,9 +281,8 @@ public:
         return !!PrimaryIndex;
     }
 
-    void MoveTableProposeOnExecute(const TSchemeShardLocalPathId schemeShardLocalPathId);
-    void MoveTableProgressOnExecute(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
-    void MoveTableProgressOnComplete(const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
+    void MoveTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    void MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId);
 
 
     NOlap::IColumnEngine& MutablePrimaryIndex() {

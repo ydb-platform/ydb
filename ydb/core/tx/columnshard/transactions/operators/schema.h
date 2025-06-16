@@ -8,12 +8,6 @@
 
 namespace NKikimr::NColumnShard {
 
-namespace NSubscriber {
-
-class ISubscriber;
-
-} //namespace NSubscriber
-
 class TSchemaTransactionOperator: public IProposeTxOperator, public TMonitoringObjectsCounter<TSchemaTransactionOperator> {
 private:
     using TBase = IProposeTxOperator;

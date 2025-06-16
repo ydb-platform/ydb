@@ -430,34 +430,29 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     return true;
 }
 
-void TTablesManager::MoveTableProposeOnExecute(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+void TTablesManager::MoveTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("scheme_shard_local_path_id", schemeShardLocalPathId);
     const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     AFL_VERIFY(RenamingLocalToInternal.emplace(schemeShardLocalPathId, *internalPathId).second)("internal_path_id", internalPathId);
-    //AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+    AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
 }
 
-void TTablesManager::MoveTableProgressOnExecute(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
+void TTablesManager::MoveTableProgress(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)
-        ("event", "move_table_progress_on_execute")("old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
-    const auto& internalPathId = ResolveInternalPathId(oldSchemeShardLocalPathId);
+        ("event", "move_table_progress")("old_path_id", oldSchemeShardLocalPathId)("new_path_id", newSchemeShardLocalPathId);
+    AFL_VERIFY(!ResolveInternalPathId(oldSchemeShardLocalPathId));
+    AFL_VERIFY(!ResolveInternalPathId(newSchemeShardLocalPathId));
+    const auto* internalPathId = RenamingLocalToInternal.FindPtr(oldSchemeShardLocalPathId);
     AFL_VERIFY(internalPathId);
     AFL_VERIFY(HasTable(*internalPathId));
-    auto& table = Tables.at(*internalPathId);
-    table.UpdateLocalPathIdOnExecute(db, newSchemeShardLocalPathId);
-}
-
-void TTablesManager::MoveTableProgressOnComplete(const TSchemeShardLocalPathId oldSchemeShardLocalPathId, const TSchemeShardLocalPathId newSchemeShardLocalPathId) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)
-        ("event", "move_table_progress_on_complete")("old_local_path_id", oldSchemeShardLocalPathId)("new_local_path_id", newSchemeShardLocalPathId);
-    const auto& internalPathId = ResolveInternalPathId(oldSchemeShardLocalPathId);
-    AFL_VERIFY(internalPathId);
-    AFL_VERIFY(HasTable(*internalPathId));
-    auto& table = Tables.at(*internalPathId);
-    table.UpdateLocalPathIdOnComplete(newSchemeShardLocalPathId);
+    auto* table = Tables.FindPtr(*internalPathId);
+    AFL_VERIFY(table);
+    table->UpdateLocalPathId(db, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, *internalPathId).second);
+    NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, {*internalPathId, oldSchemeShardLocalPathId});
+    NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(TabletId, table->GetPathId());
 }
 
 }   // namespace NKikimr::NColumnShard

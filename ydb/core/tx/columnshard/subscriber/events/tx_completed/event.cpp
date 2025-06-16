@@ -1,2 +1,9 @@
 #include "event.h"
-#include <util/string/join.h>
+
+namespace NKikimr::NColumnShard::NSubscriber {
+
+TString TEventTxCompleted::DoDebugString() const {
+        return "tx_id=" + std::to_string(TxId);
+}
+
+} //namespace NKikimr::NColumnShard::NSubscriber

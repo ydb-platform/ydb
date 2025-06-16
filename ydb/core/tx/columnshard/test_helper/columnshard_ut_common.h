@@ -386,7 +386,6 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         tx.MutableMoveTable()->SetSrcPathId(srcPathId);
         tx.MutableMoveTable()->SetDstPathId(dstPathId);
-        // tx.MutableSeqNo()->SetGeneration(seqNo.Generation);
         tx.MutableSeqNo()->SetRound(version);
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);

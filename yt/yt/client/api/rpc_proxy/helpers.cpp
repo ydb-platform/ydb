@@ -928,6 +928,7 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     if (job.Statistics) {
         protoJob->set_statistics(ToProto(job.Statistics));
     }
+    YT_OPTIONAL_SET_PROTO(protoJob, gang_rank, job.GangRank);
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -1030,6 +1031,7 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->Statistics = TYsonString();
     }
+    job->GangRank = YT_OPTIONAL_FROM_PROTO(protoJob, gang_rank);
 }
 
 void ToProto(

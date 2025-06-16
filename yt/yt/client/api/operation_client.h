@@ -420,6 +420,7 @@ struct TJob
     NYson::TYsonString ArchiveFeatures;
     std::optional<std::string> OperationIncarnation;
     std::optional<NScheduler::TAllocationId> AllocationId;
+    std::optional<i64> GangRank;
     std::optional<bool> IsStale;
 
     // Service flags which are used to compute "is_stale" attribute in "list_jobs".

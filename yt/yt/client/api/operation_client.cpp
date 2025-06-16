@@ -314,6 +314,7 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("archive_features", job.ArchiveFeatures)
             .OptionalItem("operation_incarnation", job.OperationIncarnation)
             .OptionalItem("allocation_id", job.AllocationId)
+            .OptionalItem("gang_rank", job.GangRank)
         .EndMap();
 }
 

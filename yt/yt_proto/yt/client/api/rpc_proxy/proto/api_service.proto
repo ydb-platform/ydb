@@ -3289,6 +3289,7 @@ message TJob
     optional NNodeTrackerClient.NProto.TAddressMap addresses = 33;
     optional bytes events = 34; // YSON
     optional bytes statistics = 35; // YSON
+    optional int64 gang_rank = 36;
 }
 
 message TListJobsStatistics

@@ -10,13 +10,14 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
     NMonitoring::TDynamicCounters::TCounterPtr Allocations;
     NMonitoring::TDynamicCounters::TCounterPtr Free;
-    NMonitoring::TDynamicCounters::TCounterPtr ValueHardLimit;
-    NMonitoring::TDynamicCounters::TCounterPtr ValueSoftLimit;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingBytes;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingChunks;
     NMonitoring::TDynamicCounters::TCounterPtr AllocationFailCount;
 
 public:
+    const NMonitoring::TDynamicCounters::TCounterPtr ValueHardLimit;
+    const NMonitoring::TDynamicCounters::TCounterPtr ValueSoftLimit;
+
     TStageCounters(const TCommonCountersOwner& owner, const TString& name)
         : TBase(owner, "stage", name)
         , AllocatedBytes(TBase::GetValue("Allocated/Bytes"))

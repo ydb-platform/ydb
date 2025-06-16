@@ -90,43 +90,25 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         }
     }
 
-    template <typename TControlBoard, typename TControlId>
-    void TestLocalControlRegistrationImpl(const TControlId& localControlId) {
-        TIntrusivePtr<TControlBoard> controlBoard(new TControlBoard);
+    Y_UNIT_TEST(TestRegisterLocalControl) {
+        TIntrusivePtr<TDynamicControlBoard> controlBoard(new TDynamicControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control2(2, 2, 2);
-        UNIT_ASSERT(controlBoard->RegisterLocalControl(control1, localControlId));
-        UNIT_ASSERT(!controlBoard->RegisterLocalControl(control2, localControlId));
+        UNIT_ASSERT(controlBoard->RegisterLocalControl(control1, "localControl"));
+        UNIT_ASSERT(!controlBoard->RegisterLocalControl(control2, "localControl"));
         UNIT_ASSERT_EQUAL(1, 1);
     }
 
-    Y_UNIT_TEST(TestRegisterLocalControl) {
-        TestLocalControlRegistrationImpl<TDynamicControlBoard, TString>("localControl");
-    }
-
-    Y_UNIT_TEST(TestRegisterLocalControlInStaticControlBoard) {
-        TestLocalControlRegistrationImpl<TControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
-    }
-
-    template <typename TControlBoard, typename TControlId>
-    void TestSharedControlRegistrationImpl(const TControlId& sharedControlId) {
-        TIntrusivePtr<TControlBoard> controlBoard(new TControlBoard);
+    Y_UNIT_TEST(TestRegisterSharedControl) {
+        TIntrusivePtr<TDynamicControlBoard> controlBoard(new TDynamicControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control1_origin(control1);
         TControlWrapper control2(2, 2, 2);
         TControlWrapper control2_origin(control2);
-        controlBoard->RegisterSharedControl(control1, sharedControlId);
+        controlBoard->RegisterSharedControl(control1, "sharedControl");
         UNIT_ASSERT(control1.IsTheSame(control1_origin));
-        controlBoard->RegisterSharedControl(control2, sharedControlId);
+        controlBoard->RegisterSharedControl(control2, "sharedControl");
         UNIT_ASSERT(control2.IsTheSame(control1_origin));
-    }
-
-    Y_UNIT_TEST(TestRegisterSharedControl) {
-        TestSharedControlRegistrationImpl<TDynamicControlBoard, TString>("sharedControl");
-    }
-
-    Y_UNIT_TEST(TestRegisterSharedControlInStaticControlBoard) {
-        TestSharedControlRegistrationImpl<TControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
     }
 
     Y_UNIT_TEST(TestParallelRegisterSharedControl) {

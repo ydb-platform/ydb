@@ -176,30 +176,8 @@ public:
         IgnoreMessages(DebugHint(), {});
     }
 
-    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvProposeTransactionResult"
-                               << " at tabletId# " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvProposeTransactionResult"
-                                << " message# " << ev->Get()->Record.ShortDebugString());
-
-        if (!NTableState::CollectProposeTransactionResults(OperationId, ev, context)) {
-            return false;
-        }
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
-        Y_ABORT_UNLESS(txState->MinStep);
-
-        return true;
-
-    }
-
-    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -219,6 +197,14 @@ public:
         Y_ABORT_UNLESS(txState->MinStep); // we have to have right minstep
 
         return true;
+    }
+
+    bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -322,15 +308,16 @@ public:
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvColumnShard::TEvProposeTransactionResult::EventType});
     }
 
-    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
         TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
+                     DebugHint() << " HandleReply SchemaChanged"
                      << " at tablet: " << ssId);
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
+                    DebugHint() << " HandleReply SchemaChanged"
                      << " triggered early"
                      << ", message: " << evRecord.ShortDebugString());
 
@@ -339,19 +326,11 @@ public:
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        const auto& evRecord = ev->Get()->Record;
+        return HandleReplyImpl(ev, context);
+    }
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvSchemaChanged"
-                     << " at tablet: " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
-                     << " triggered early"
-                     << ", message: " << evRecord.ShortDebugString());
-
-        NTableState::CollectSchemaChanged(OperationId, ev, context);
-        return false;
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -455,32 +434,24 @@ public:
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvDataShard::TEvSchemaChanged"
+                   DebugHint() << " HandleReply SchemaChanged"
                                << ", save it"
                                << ", at schemeshard: " << ssId);
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
     }
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        const auto& evRecord = ev->Get()->Record;
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
-                     << " at tablet: " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
-                     << " triggered early"
-                     << ", message: " << evRecord.ShortDebugString());
-
-        NTableState::CollectSchemaChanged(OperationId, ev, context);
-        return false;
+        return HandleReplyImpl(ev, context);
     }
 
     bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
@@ -551,11 +522,12 @@ public:
         IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvDataShard::TEvSchemaChanged"
+                   DebugHint() << " HandleReply SchemaChanged"
                                << ", save it"
                                << ", at schemeshard: " << ssId);
 
@@ -563,20 +535,12 @@ public:
         return false;
     }
 
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
+
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        const auto& evRecord = ev->Get()->Record;
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
-                     << " at tablet: " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
-                     << " triggered early"
-                     << ", message: " << evRecord.ShortDebugString());
-
-        NTableState::CollectSchemaChanged(OperationId, ev, context);
-        return false;
+        return HandleReplyImpl(ev, context);
     }
 
     bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
@@ -655,13 +619,13 @@ public:
     {
         IgnoreMessages(DebugHint(), AllIncomingEvents());
     }
-
-    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+    template<typename TEvent>
+    bool HandleReplyImpl(TEvent& ev, TOperationContext& context) {
         TTabletId ssId = context.SS->SelfTabletId();
         const TActorId& ackTo = ev->Sender;
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TProposedDeletePart"
+                   DebugHint() << " HandleReply SchemaChanged"
                                << " repeated message, ack it anyway"
                                << " at tablet: " << ssId);
 
@@ -671,22 +635,15 @@ public:
         context.OnComplete.Send(ackTo, std::move(event));
         return false;
     }
+    
+    bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
+        return HandleReplyImpl(ev, context);
+    }
 
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        const auto& evRecord = ev->Get()->Record;
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
-                     << " at tablet: " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
-                     << " triggered early"
-                     << ", message: " << evRecord.ShortDebugString());
-
-        NTableState::CollectSchemaChanged(OperationId, ev, context);
-        return false;
+        return HandleReplyImpl(ev, context);
     }
+
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();

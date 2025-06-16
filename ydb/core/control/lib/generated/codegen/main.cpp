@@ -30,6 +30,7 @@ struct TImmediateControl {
     TMaybe<uint64_t> MinValue;
     TMaybe<uint64_t> MaxValue;
     TMaybe<uint64_t> DefaultValue;
+    bool IsConfigBasedControl = true;
 };
 
 
@@ -60,6 +61,7 @@ namespace jinja2 {
                 {"has_full_path", [](const TImmediateControl& control) { return Reflect(control.FullPath.Defined()); }},
                 {"html_name", [](const TImmediateControl& control) { return Reflect(std::string(*control.HtmlName)); }},
                 {"has_html_name", [](const TImmediateControl& control) { return Reflect(control.HtmlName.Defined()); }},
+                {"is_config_based_control", [](const TImmediateControl& control) { return Reflect(control.IsConfigBasedControl); }},
                 {"max_value", [](const TImmediateControl& control) { return Reflect(control.MaxValue); }},
                 {"min_value", [](const TImmediateControl& control) { return Reflect(control.MinValue); }},
                 {"default_value", [](const TImmediateControl& control) { return Reflect(control.DefaultValue); }}
@@ -229,9 +231,10 @@ const TImmediateControlsClass* CodeGenClass(const ::google::protobuf::FieldDescr
 
 
 void CodeGenRequestConfigsInner(TCodeGenContext& context) {
-    TImmediateControlsClass controlClass;
-    controlClass.Name = "RequestConfigs";
-    controlClass.ClassName = RequestConfigsClassName;
+    TImmediateControlsClass controlClass {
+        .Name = "RequestConfigs",
+        .ClassName = RequestConfigsClassName
+    };
     auto protoClassDescriptor = NKikimrConfig::TImmediateControlsConfig_TGRpcControls_TRequestConfig::descriptor();
     controlClass.ProtoConfigClassName = GetConfigFullName(protoClassDescriptor->full_name());
 
@@ -257,13 +260,153 @@ void CodeGenControlsForTablets(TCodeGenContext& context) {
         TImmediateControl control {
             .Name = {},
             .FullPath = TStringBuilder() << "LogFlushDelayOverrideUsec[" <<  ToString(enumValue->number())  <<  "]",
-            .HtmlName = TStringBuilder() << enumValue->name() << "_LogFlushDelayOverrideUsec"
+            .HtmlName = TStringBuilder() << enumValue->name() << "_LogFlushDelayOverrideUsec",
+            .IsConfigBasedControl = false
         };
         auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
         context.JinjaControls.push_back(emplacedControlPtr);
     }
 }
 
+void CodeGenKqpSessionControls(TCodeGenContext& context) {
+    TImmediateControlsClass kqpControlClass {
+        .Name = "KqpSession",
+        .ClassName = "TKqpSessionControls",
+    };
+    for (const auto& field: {"MkqlInitialMemoryLimit", "MkqlMaxMemoryLimit"}) {
+        auto fieldPath = TStringBuilder() << kqpControlClass.Name << "." << field;
+        TImmediateControl control {
+            .Name = field,
+            .FullPath = fieldPath,
+            .HtmlName = fieldPath,
+            .IsConfigBasedControl = false
+        };
+        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
+        context.JinjaControls.push_back(emplacedControlPtr);
+        kqpControlClass.Controls.push_back(emplacedControlPtr);
+    }
+    auto* res = &context.ControlClasses.emplace_back(std::move(kqpControlClass));
+    context.JinjaControlClasses.push_back(res);
+    context.JinjaRootControlClasses.push_back(res);
+}
+
+void CodeGenColumnShardControls(TCodeGenContext& context) {
+    TImmediateControlsClass columnShardControls {
+        .Name = "ColumnShardControls",
+        .ClassName = "TColumnShardControls",
+    };
+    for (const auto& field: {
+        "MinBytesToIndex",
+        "MaxBytesToIndex",
+        "InsertTableCommittedSize",
+        "IndexGoodBlobSize",
+        "GranuleOverloadBytes",
+        "CompactionDelaySec",
+        "GranuleIndexedPortionsSizeLimit",
+        "GranuleIndexedPortionsCountLimit",
+        "BlobWriteGrouppingEnabled",
+        "CacheDataAfterIndexing",
+        "CacheDataAfterCompaction"
+    }) {
+        auto fieldPath = TStringBuilder() << columnShardControls.Name << "." << field;
+        TImmediateControl control {
+            .Name = field,
+            .FullPath = fieldPath,
+            .HtmlName = fieldPath,
+            .IsConfigBasedControl = false
+        };
+        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
+        context.JinjaControls.push_back(emplacedControlPtr);
+        columnShardControls.Controls.push_back(emplacedControlPtr);
+    }
+    auto* res = &context.ControlClasses.emplace_back(std::move(columnShardControls));
+    context.JinjaControlClasses.push_back(res);
+    context.JinjaRootControlClasses.push_back(res);
+}
+
+void CodeGenBlobCacheControls(TCodeGenContext& context) {
+    TImmediateControlsClass blobCacheControls {
+        .Name = "BlobCache",
+        .ClassName = "TBlobCacheControls",
+    };
+    for (const auto& field: {
+        "MaxCacheDataSize",
+        "MaxInFlightDataSize"
+    }) {
+        auto fieldPath = TStringBuilder() << blobCacheControls.Name << "." << field;
+        TImmediateControl control {
+            .Name = field,
+            .FullPath = fieldPath,
+            .HtmlName = fieldPath,
+            .IsConfigBasedControl = false
+        };
+        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
+        context.JinjaControls.push_back(emplacedControlPtr);
+        blobCacheControls.Controls.push_back(emplacedControlPtr);
+    }
+    auto* res = &context.ControlClasses.emplace_back(std::move(blobCacheControls));
+    context.JinjaControlClasses.push_back(res);
+    context.JinjaRootControlClasses.push_back(res);
+}
+
+void CodeGenBlobStorageNonConfigControls(TCodeGenContext& context) {
+    TImmediateControlsClass blobStorageControls {
+        .Name = "BlobStorage",
+        .ClassName = "TBlobStorageNonConfigControls",
+    };
+    for (const auto& field: {
+        "EnablePutBatching",
+        "EnableVPatch"
+    }) {
+        TImmediateControl control {
+            .Name = field,
+            .FullPath = TStringBuilder() << blobStorageControls.Name << "." << field,
+            .HtmlName = TStringBuilder() << blobStorageControls.Name << "_" << field,
+            .IsConfigBasedControl = false
+        };
+        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
+        context.JinjaControls.push_back(emplacedControlPtr);
+        blobStorageControls.Controls.push_back(emplacedControlPtr);
+    }
+    auto* res = &context.ControlClasses.emplace_back(std::move(blobStorageControls));
+    context.JinjaControlClasses.push_back(res);
+    context.JinjaRootControlClasses.push_back(res);
+}
+
+void CodeGenSchemeShardNonConfigControls(TCodeGenContext& context) {
+    TImmediateControlsClass schemeShardNonConfigControls {
+        .Name = "SchemeShard",
+        .ClassName = "TSchemeShardNonConfigControls",
+    };
+    for (const auto& field: {
+        "AllowConditionalEraseOperations",
+        "AllowDataColumnForIndexTable",
+        "AllowServerlessStorageBilling",
+        "DisablePublicationsOfDropping",
+        "FastSplitSizeThreshold",
+        "FastSplitRowCountThreshold",
+        "FastSplitCpuPercentageThreshold",
+        "FillAllocatePQ",
+        "MergeByLoadMinUptimeSec",
+        "MergeByLoadMinLowLoadDurationSec",
+        "SplitMergePartCountLimit",
+        "SplitByLoadEnabled",
+        "SplitByLoadMaxShardsDefault"
+    }) {
+        TImmediateControl control {
+            .Name = field,
+            .FullPath = TStringBuilder() << schemeShardNonConfigControls.Name << "." << field,
+            .HtmlName = TStringBuilder() << schemeShardNonConfigControls.Name << "_" << field,
+            .IsConfigBasedControl = false
+        };
+        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
+        context.JinjaControls.push_back(emplacedControlPtr);
+        schemeShardNonConfigControls.Controls.push_back(emplacedControlPtr);
+    }
+    auto* res = &context.ControlClasses.emplace_back(std::move(schemeShardNonConfigControls));
+    context.JinjaControlClasses.push_back(res);
+    context.JinjaRootControlClasses.push_back(res);
+}
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -282,7 +425,11 @@ int main(int argc, char** argv) {
         }
         CodeGenClass(*protoField, TVector<TString>{}, codeGenContext, true);
     }
-
+    CodeGenKqpSessionControls(codeGenContext);
+    CodeGenColumnShardControls(codeGenContext);
+    CodeGenBlobCacheControls(codeGenContext);
+    CodeGenBlobStorageNonConfigControls(codeGenContext);
+    CodeGenSchemeShardNonConfigControls(codeGenContext);
     CodeGenControlsForTablets(codeGenContext);
 
 

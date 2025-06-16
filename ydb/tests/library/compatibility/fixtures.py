@@ -12,7 +12,11 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 def string_version_to_tuple(s):
     result = []
-    for elem in s.split("-"):
+    s = s.replace('.', '-')
+    for idx, elem in enumerate(s.split("-")):
+        # skipping 'stable' in stable-25-1-1 version
+        if idx == 0 and elem == 'stable':
+            continue
         try:
             result.append(int(elem))
         except ValueError:
@@ -29,46 +33,46 @@ except Exception:
     current_name = "current"
     current_binary_version = (float("+inf"), )
 
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
-prelast_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable")
+inter_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-stable")
+init_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-stable")
 
-last_stable_version = None
-prelast_stable_version = None
+inter_stable_version = None
+init_stable_version = None
 
-last_stable_name = "last"
-if last_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
-    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable-name")) as f:
-        last_stable_name = f.read().strip()
-        last_stable_version = string_version_to_tuple(last_stable_name)
-prelast_stable_name = "prelast"
-if prelast_stable_binary_path:  # in import_test yatest.common.binary_path returns None
-    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-prelast-stable-name")) as f:
-        prelast_stable_name = f.read().strip()
-        prelast_stable_version = string_version_to_tuple(prelast_stable_name)
+inter_stable_name = "intermediate"
+if inter_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-stable-name")) as f:
+        inter_stable_name = f.read().strip()
+        inter_stable_version = string_version_to_tuple(inter_stable_name)
+init_stable_name = "initial"
+if init_stable_binary_path:  # in import_test yatest.common.binary_path returns None
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-stable-name")) as f:
+        init_stable_name = f.read().strip()
+        init_stable_version = string_version_to_tuple(init_stable_name)
 
 path_to_version = {
     current_binary_path: current_binary_version,
-    last_stable_binary_path: last_stable_version,
-    prelast_stable_binary_path: prelast_stable_version,
+    inter_stable_binary_path: inter_stable_version,
+    init_stable_binary_path: init_stable_version,
 }
 
 all_binary_combinations_restart = [
-    [[last_stable_binary_path], [current_binary_path]],
-    [[current_binary_path], [last_stable_binary_path]],
+    [[inter_stable_binary_path], [current_binary_path]],
+    [[current_binary_path], [inter_stable_binary_path]],
     [[current_binary_path], [current_binary_path]],
 
-    [[prelast_stable_binary_path], [last_stable_binary_path]],
-    [[last_stable_binary_path], [prelast_stable_binary_path]],
-    [[last_stable_binary_path], [last_stable_binary_path]],
+    [[init_stable_binary_path], [inter_stable_binary_path]],
+    [[inter_stable_binary_path], [init_stable_binary_path]],
+    [[inter_stable_binary_path], [inter_stable_binary_path]],
 ]
 all_binary_combinations_ids_restart = [
-    "restart_{}_to_{}".format(last_stable_name, current_name),
-    "restart_{}_to_{}".format(current_name, last_stable_name),
+    "restart_{}_to_{}".format(inter_stable_name, current_name),
+    "restart_{}_to_{}".format(current_name, inter_stable_name),
     "restart_{}_to_{}".format(current_name, current_name),
 
-    "restart_{}_to_{}".format(prelast_stable_name, last_stable_name),
-    "restart_{}_to_{}".format(last_stable_name, prelast_stable_name),
-    "restart_{}_to_{}".format(last_stable_name, last_stable_name),
+    "restart_{}_to_{}".format(init_stable_name, inter_stable_name),
+    "restart_{}_to_{}".format(inter_stable_name, init_stable_name),
+    "restart_{}_to_{}".format(inter_stable_name, inter_stable_name),
 ]
 
 
@@ -125,15 +129,15 @@ class RestartToAnotherVersionFixture:
 
 all_binary_combinations_mixed = [
     [current_binary_path],
-    [last_stable_binary_path],
-    [current_binary_path, last_stable_binary_path],
-    [last_stable_binary_path, prelast_stable_binary_path],
+    [inter_stable_binary_path],
+    [current_binary_path, inter_stable_binary_path],
+    [inter_stable_binary_path, init_stable_binary_path],
 ]
 all_binary_combinations_ids_mixed = [
     "mixed_{}".format(current_name),
-    "mixed_{}".format(last_stable_name),
-    "mixed_{}".format(current_name + "_and_" + last_stable_name),
-    "mixed_{}".format(last_stable_name + "_and_" + prelast_stable_name),
+    "mixed_{}".format(inter_stable_name),
+    "mixed_{}".format(current_name + "_and_" + inter_stable_name),
+    "mixed_{}".format(inter_stable_name + "_and_" + init_stable_name),
 ]
 
 
@@ -166,12 +170,12 @@ class MixedClusterFixture:
 
 
 all_binary_combinations_rolling = [
-    [last_stable_binary_path, current_binary_path],
-    [prelast_stable_binary_path, last_stable_binary_path],
+    [inter_stable_binary_path, current_binary_path],
+    [init_stable_binary_path, inter_stable_binary_path],
 ]
 all_binary_combinations_ids_rolling = [
-    "rolling_{}_to_{}".format(last_stable_name, current_name),
-    "rolling_{}_to_{}".format(prelast_stable_name, last_stable_name),
+    "rolling_{}_to_{}".format(inter_stable_name, current_name),
+    "rolling_{}_to_{}".format(init_stable_name, inter_stable_name),
 ]
 
 

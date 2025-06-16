@@ -17,7 +17,7 @@ public:
     
     // Core functionality for vector sampling and etalon generation
     void SampleExistingVectors(const char* tableName, const char* prefixColumn, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient);
-    void FillEtalons(const char* tableName, const char* prefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
+    void FillEtalons(const char* tableName, const char* prefixColumn, NYdb::NTable::TVectorIndexSettings::EMetric metric, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
 
     // Target access methods
     const std::string& GetTargetEmbedding(size_t index) const;
@@ -38,7 +38,7 @@ private:
     struct TSelectTarget {
         std::string EmbeddingBytes;             // Sample targets to use in select workload
         std::vector<ui64> Etalons;              // Etalon vector Ids for recall measurement
-        i64 PrefixValue;                        // Sample prefix value
+        i64 PrefixValue = 0;                    // Sample prefix value
     };
     std::vector<TSelectTarget> SelectTargets;
 
@@ -61,6 +61,7 @@ public:
     TString TableName;
     TString IndexName;
     std::optional<std::string> PrefixColumn;
+    NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;
     TString VectorType;
     size_t KmeansTreeLevels = 0;
@@ -72,8 +73,7 @@ public:
     size_t TopK = 0;
     bool Recall;
 private:
-    size_t GetVectorDimension() const;
-    std::optional<std::string> GetPrefixColumn() const;
+    void GetIndexInfo();
 
     THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
 };

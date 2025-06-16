@@ -17,6 +17,7 @@ RECURSE(
     global_plugins
     grpc
     http_proxy
+    intersection_tree
     keys
     lockfree_bucket
     logger
@@ -38,6 +39,7 @@ RECURSE(
     table_creator
     testlib
     time_series_vec
+    union_copy_set
     wilson_ids
     workload
     workload

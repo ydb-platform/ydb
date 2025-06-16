@@ -77,6 +77,12 @@ std::string TYPathRequest::GetService() const
     return FromProto<std::string>(Header_.service());
 }
 
+const std::optional<std::string>& TYPathRequest::GetRequestInfo() const
+{
+    static const std::optional<std::string> Empty = std::nullopt;
+    return Empty;
+}
+
 void TYPathRequest::DeclareClientFeature(int featureId)
 {
     Header_.add_declared_client_feature_ids(featureId);

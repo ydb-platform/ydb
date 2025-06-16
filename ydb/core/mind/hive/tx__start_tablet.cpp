@@ -9,6 +9,7 @@ class TTxStartTablet : public TTransactionBase<THive> {
     TActorId Local;
     ui64 Cookie;
     bool External;
+    bool BootingSuppressed;
     TSideEffects SideEffects;
     bool Success;
 
@@ -19,6 +20,7 @@ public:
         , Local(local)
         , Cookie(cookie)
         , External(external)
+        , BootingSuppressed(false)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_START_TABLET; }
@@ -42,7 +44,8 @@ public:
             // increase generation
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
-                if (leader.IsStarting() || leader.IsBootingSuppressed() && External) {
+                BootingSuppressed = leader.IsBootingSuppressed();
+                if (leader.IsStarting() || BootingSuppressed && External) {
                     leader.IncreaseGeneration();
                     db.Table<Schema::Tablet>().Key(leader.Id).Update<Schema::Tablet::KnownGeneration>(leader.KnownGeneration);
                 } else {
@@ -54,7 +57,7 @@ public:
             db.Table<Schema::Metrics>().Key(tablet->GetFullTabletId()).Update<Schema::Metrics::UsageImpact>(0.);
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
-                if (leader.IsStartingOnNode(Local.NodeId()) || leader.IsBootingSuppressed() && External) {
+                if (leader.IsStartingOnNode(Local.NodeId()) || BootingSuppressed && External) {
                     if (!leader.DeletedHistory.empty()) {
                         if (!leader.WasAliveSinceCutHistory) {
                             BLOG_ERROR("THive::TTxStartTablet::Execute Tablet " << TabletId << " failed to start after cutting history - will restore history");
@@ -118,7 +121,8 @@ public:
     void Complete(const TActorContext& ctx) override {
         BLOG_D("THive::TTxStartTablet::Complete Tablet " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
-        if (Success) {
+        bool legitExternalBoot = External && BootingSuppressed;
+        if (Success && !legitExternalBoot) {
             Self->UpdateCounterTabletsStarting(+1);
         }
     }

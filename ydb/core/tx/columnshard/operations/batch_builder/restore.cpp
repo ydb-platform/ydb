@@ -4,14 +4,16 @@
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/builder.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap {
 
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, Snapshot, WriteData.GetWriteMeta().GetLockIdOptional());
+    const auto& writeMetaData = WriteData.GetWriteMeta();
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(writeMetaData.GetPathId(), Snapshot, writeMetaData.GetLockIdOptional());
     request->TaskIdentifier = GetTaskId();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)(
-        "task_id", WriteData.GetWriteMeta().GetId());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")(
+        "count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)("task_id", WriteData.GetWriteMeta().GetId());
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
     request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData);
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
@@ -25,9 +27,12 @@ TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<
     if (result.IsFail()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
             "tablet_id", GetTabletId())("message", result.GetErrorMessage());
-        SendErrorMessage(result.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+        SendErrorMessage(result.GetErrorMessage(), result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED
+                                                       ? NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::ConstraintViolation
+                                                       : NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+        return TConclusionStatus::Fail(result.GetErrorMessage());
     }
-    return result;
+    return TConclusionStatus::Success();
 }
 
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
@@ -37,39 +42,35 @@ void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
-    {
-        auto result = Merger->Finish();
-        if (result.IsFail()) {
-            OnError("cannot finish merger: " + result.GetErrorMessage());
-            return result;
-        }
+    auto result = Merger->Finish();
+    if (result.IsFail()) {
+        OnError("cannot finish merger: " + result.GetErrorMessage());
+        return TConclusionStatus::Fail(result.GetErrorMessage());
     }
 
     auto batchResult = Merger->BuildResultBatch();
-    if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
+    if (!Context.GetNoTxWrite()) {
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batchResult.GetContainer(), Context);
-        NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+        NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
     } else {
-        NActors::TActivationContext::ActorSystem()->Send(
-            Context.GetBufferizationPortionsActorId(), new NWritingPortions::TEvAddInsertedDataToBuffer(
-                               std::make_shared<NEvWrite::TWriteData>(WriteData), batchResult, std::make_shared<TWritingContext>(Context)));
+        NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
+            new NWritingPortions::TEvAddInsertedDataToBuffer(
+                std::make_shared<NEvWrite::TWriteData>(WriteData), batchResult, std::make_shared<TWritingContext>(Context)));
     }
     return TConclusionStatus::Success();
 }
 
 TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-    const TSnapshot actualSnapshot, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData,
-    const TWritingContext& context)
+    const TSnapshot actualSnapshot, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context)
     : TBase(context.GetTabletId(), context.GetTabletActorId(),
           writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
     , WriteData(std::move(writeData))
     , Merger(merger)
-    , LocalPathId(WriteData.GetWriteMeta().GetTableId())
     , Snapshot(actualSnapshot)
     , IncomingData(incomingData)
     , Context(context) {
-        AFL_VERIFY(actualSnapshot.Valid());
+    AFL_VERIFY(actualSnapshot.Valid());
 }
 
 void TModificationRestoreTask::SendErrorMessage(

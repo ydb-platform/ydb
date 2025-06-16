@@ -354,6 +354,8 @@ private:
     std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> ResultsForSourceCount = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> ResultsForReplyGuard = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> FilterFetchingGuard = std::make_shared<TAtomicCounter>();
+    std::shared_ptr<TAtomicCounter> AbortsGuard = std::make_shared<TAtomicCounter>();
     std::shared_ptr<TAtomicCounter> TotalExecutionDurationUs = std::make_shared<TAtomicCounter>();
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> SkipNodesCount;
     THashMap<ui32, std::shared_ptr<TAtomicCounter>> ExecuteNodesCount;
@@ -393,7 +395,9 @@ public:
                                 << "ReadTasksCount:" << ReadTasksCount->Val() << ";"
                                 << "ResourcesAllocationTasksCount:" << ResourcesAllocationTasksCount->Val() << ";"
                                 << "ResultsForSourceCount:" << ResultsForSourceCount->Val() << ";"
-                                << "ResultsForReplyGuard:" << ResultsForReplyGuard->Val() << ";";
+                                << "ResultsForReplyGuard:" << ResultsForReplyGuard->Val() << ";"
+                                << "FilterFetchingGuard:" << FilterFetchingGuard->Val() << ";"
+                                << "AbortsGuard:" << AbortsGuard->Val() << ";";
     }
 
     TCounterGuard GetResultsForReplyGuard() const {
@@ -428,9 +432,18 @@ public:
         return TCounterGuard(AssembleTasksCount);
     }
 
+    TCounterGuard GetFilterFetchingGuard() const {
+        return TCounterGuard(FilterFetchingGuard);
+    }
+
+    TCounterGuard GetAbortsGuard() const {
+        return TCounterGuard(AbortsGuard);
+    }
+
     bool InWaiting() const {
         return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
-               FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val();
+               FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val() ||
+               FilterFetchingGuard->Val() || AbortsGuard->Val();
     }
 
     const THashMap<ui32, std::shared_ptr<TAtomicCounter>>& GetSkipStats() const {

@@ -11,6 +11,9 @@ from abc import abstractmethod, ABC
 from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class TestContext:
     """Scenario test execution context.
@@ -329,6 +332,8 @@ class ScenarioTestHelper:
         retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
         n_retries=0,
         fail_on_error=True,
+        return_error=False,
+        ignore_error=tuple(),
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -341,13 +346,18 @@ class ScenarioTestHelper:
         for _ in range(n_retries + 1):
             try:
                 result = operation()
+                logger.info("Success operation")
                 error = None
                 status = ydb.StatusCode.SUCCESS
             except ydb.issues.Error as e:
                 result = None
                 error = e
+                logger.info(e)
                 status = error.status
                 allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
+
+            if any(sub in str(error) for sub in ignore_error):
+                return (result, error) if return_error else result
 
             if status in expected_status:
                 return result
@@ -363,13 +373,18 @@ class ScenarioTestHelper:
         self, tablename: str, data_generator: ScenarioTestHelper.IDataGenerator, expected_status: ydb.StatusCode | Set[ydb.StatusCode]
     ):
         fullpath = self.get_full_path(tablename)
+        expect_success = (expected_status == ydb.StatusCode.SUCCESS)
+
+        def _call_upsert(data):
+            YdbCluster.get_ydb_driver().table_client.bulk_upsert(fullpath, data, data_generator.get_bulk_upsert_columns())
 
         def _upsert():
             data = data_generator.generate_data_portion(1000)
             allure.attach(repr(data), 'data', allure.attachment_type.TEXT)
-            YdbCluster.get_ydb_driver().table_client.bulk_upsert(
-                fullpath, data, data_generator.get_bulk_upsert_columns()
-            )
+            if expect_success:
+                ydb.retry_operation_sync(lambda: _call_upsert(data))
+            else:
+                _call_upsert(data)
 
         while not data_generator.EOF():
             self._run_with_expected_status(
@@ -434,7 +449,7 @@ class ScenarioTestHelper:
     @classmethod
     @allure.step('Execute scan query')
     def execute_scan_query(
-        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS
+        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, timeout=None
     ):
         """Run a scanning query on the tested database.
 
@@ -454,7 +469,7 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         it = cls._run_with_expected_status(
-            lambda: YdbCluster.get_ydb_driver().table_client.scan_query(yql), expected_status
+            lambda: YdbCluster.get_ydb_driver().table_client.scan_query(yql, settings=ydb.BaseRequestSettings().with_timeout(timeout)), expected_status
         )
         rows = None
         ret = None
@@ -469,7 +484,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error=tuple()
     ):
         """Run a query on the tested database.
 
@@ -485,7 +500,17 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
-            return self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status, fail_on_error=fail_on_error)
+            return self._run_with_expected_status(
+                lambda: pool.execute_with_retries(
+                    yql,
+                    None,
+                    ydb.RetrySettings(max_retries=retries),
+                ),
+                expected_status,
+                fail_on_error=fail_on_error,
+                return_error=return_error,
+                ignore_error=ignore_error,
+            )
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.

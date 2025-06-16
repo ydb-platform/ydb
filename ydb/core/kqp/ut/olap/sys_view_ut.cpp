@@ -12,13 +12,124 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapSysView) {
+
+
+    Y_UNIT_TEST(GranulePathId_Store) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto helper = TLocalHelper(kikimr);
+        const ui32 storeShardsCount = 101;
+        const ui32 tableShardsCount = 17;
+        const ui32 tablesCount = 1013;
+        TVector<TString> tableNames;
+        for (ui32 i = 0; i < tablesCount; ++i) {
+            tableNames.push_back(TStringBuilder() << "table" << i);
+        }
+        helper.CreateTestOlapTables(tableNames, "columnStore", storeShardsCount, tableShardsCount);
+        const auto tablets = csController->GetActiveTablets();
+        UNIT_ASSERT_VALUES_EQUAL(tablets.size(), storeShardsCount);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            //check the store
+            auto selectQuery = TString(R"(
+                SELECT PathId, TabletId, InternalPathId, 
+                FROM `/Root/columnStore/.sys/store_primary_index_granule_stats`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery, true);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), tableShardsCount * tablesCount);
+            THashMap<NColumnShard::TSchemeShardLocalPathId, THashMap<ui64, NColumnShard::TInternalPathId>> result;
+            for (const auto& row : rows) {
+                result[NColumnShard::TSchemeShardLocalPathId::FromRawValue(GetUint64(row.at("PathId")))][GetUint64(row.at("TabletId"))] =
+                    NColumnShard::TInternalPathId::FromRawValue(GetUint64(row.at("InternalPathId")));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), tablesCount);
+
+            for (const auto& [tabletId, pathIdTranslator]  : tablets) {
+                const auto& pathIds = pathIdTranslator->GetSchemeShardLocalPathIds();
+                for (const auto& pathId : pathIds) {
+                    const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+                    UNIT_ASSERT(internalPathId.has_value());
+                    UNIT_ASSERT(result.contains(pathId) && result[pathId].contains(tabletId));
+                    UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
+                }
+            }
+        }
+
+        {
+            //check a table in the store
+            auto selectQuery = TString(R"(
+                SELECT PathId, TabletId, InternalPathId, 
+                FROM `/Root/columnStore/table2/.sys/primary_index_granule_stats`
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery, true);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), tableShardsCount);
+            THashMap<NColumnShard::TSchemeShardLocalPathId, THashMap<ui64, NColumnShard::TInternalPathId>> result;
+            for (const auto& row : rows) {
+                result[NColumnShard::TSchemeShardLocalPathId::FromRawValue(GetUint64(row.at("PathId")))][GetUint64(row.at("TabletId"))] =
+                    NColumnShard::TInternalPathId::FromRawValue(GetUint64(row.at("InternalPathId")));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            const auto& pathId = result.begin()->first;
+            UNIT_ASSERT_VALUES_EQUAL(result[pathId].size(), tableShardsCount);
+
+            for (const auto& [tabletId, pathIdTranslator]  : tablets) {
+                if (const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId)) {
+                    UNIT_ASSERT(result[pathId].contains(tabletId));
+                    UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(GranulePathId_Standalone) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        auto helper = TLocalHelper(kikimr);
+        const ui32 tableShardsCount = 1201;
+        helper.CreateTestOlapStandaloneTable("table", tableShardsCount);
+        const auto tablets = csController->GetActiveTablets();
+        UNIT_ASSERT_VALUES_EQUAL(tablets.size(), tableShardsCount);
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            SELECT PathId, TabletId, InternalPathId, 
+            FROM `/Root/table/.sys/primary_index_granule_stats`
+        )");
+        auto rows = ExecuteScanQuery(tableClient, selectQuery, true);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), tableShardsCount);
+        THashMap<NColumnShard::TSchemeShardLocalPathId, THashMap<ui64, NColumnShard::TInternalPathId>> result;
+        for (const auto& row : rows) {
+            result[NColumnShard::TSchemeShardLocalPathId::FromRawValue(GetUint64(row.at("PathId")))][GetUint64(row.at("TabletId"))] =
+                NColumnShard::TInternalPathId::FromRawValue(GetUint64(row.at("InternalPathId")));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        const auto& pathId = result.begin()->first;
+        UNIT_ASSERT_VALUES_EQUAL(result[pathId].size(), tableShardsCount);
+
+        for (const auto& [tabletId, pathIdTranslator]  : tablets) {
+            const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+            UNIT_ASSERT(internalPathId.has_value());
+            UNIT_ASSERT(result[pathId].contains(tabletId));
+            UNIT_ASSERT_VALUES_EQUAL(result[pathId][tabletId], *internalPathId);
+        }
+    }
+
     Y_UNIT_TEST(StatsSysView) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
         }
@@ -633,13 +744,14 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     }
 
     Y_UNIT_TEST(StatsSysViewAggregation) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_1");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_2");
-        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable("olapTable_3");
+        TLocalHelper helper(kikimr.GetTestServer());
+        helper.CreateTestOlapTable("olapTable_1");
+        helper.CreateTestOlapTable("olapTable_2");
+        helper.CreateTestOlapTable("olapTable_3");
+        helper.SetForcedCompaction();
 
         for (ui64 i = 0; i < 100; ++i) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);

@@ -27,8 +27,8 @@ namespace NKikimr::NStorage {
                 (StateStorageConfig, cmd));
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-        if (cmd.HasStateStorageBoardConfig() || cmd.HasSchemeBoardConfig()) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "Board and SchemeBoard are not supported");
+        if (cmd.HasSchemeBoardConfig()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "SchemeBoard are not supported");
             return;   
         }
         if (!cmd.HasStateStorageConfig() && !cmd.HasStateStorageBoardConfig() && !cmd.HasSchemeBoardConfig()) {
@@ -99,19 +99,41 @@ namespace NKikimr::NStorage {
                     }
                 }
 
-                bool found = false;
                 Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
-                auto& firstGroup = newSSInfo->RingGroups[0];
-                for (auto& rg : oldSSInfo->RingGroups) {
-                    if (firstGroup == rg) {
-                        found = true;
-                        break;
+                
+                for (auto& newGroup : newSSInfo->RingGroups) {
+                    if (newGroup.WriteOnly) {
+                        continue;
+                    }
+                    bool found = false;
+                    for (auto& rg : oldSSInfo->RingGroups) {
+                        if (newGroup.SameConfiguration(rg)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        FinishWithError(TResult::ERROR, TStringBuilder() << 
+                            "New introduced ring group should be WriteOnly old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
+                        return false;
                     }
                 }
-                if (!found) {
-                    FinishWithError(TResult::ERROR, TStringBuilder() << 
-                        "New " << name << " configuration first ring group should be equal to old config old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
-                    return false;
+                for (auto& oldGroup : oldSSInfo->RingGroups) {
+                    if (oldGroup.WriteOnly) {
+                        continue;
+                    }
+                    bool found = false;
+                    for (auto& rg : newSSInfo->RingGroups) {
+                        if (oldGroup.SameConfiguration(rg)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        FinishWithError(TResult::ERROR, TStringBuilder() << 
+                            "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
+                        return false;
+                    }
                 }
             } catch(std::exception &e) {
                 FinishWithError(TResult::ERROR, TStringBuilder() << "Can not build " << name << " info from config. " << e.what());

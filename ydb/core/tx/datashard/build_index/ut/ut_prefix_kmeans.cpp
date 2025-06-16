@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         VectorIndexSettings settings;
         settings.set_vector_dimension(2);
-        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
         settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
         *rec.MutableSettings() = settings;
 
@@ -65,6 +65,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         rec.SetEmbeddingColumn("embedding");
         rec.SetPrefixColumns(1);
+        rec.AddSourcePrimaryKeyColumns("key");
+
+        rec.SetPrefixName(kPrefixTable);
         
         rec.SetLevelName(kLevelTable);
         rec.SetOutputName(kPostingTable);
@@ -130,6 +133,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
                 rec.SetPrefixColumns(1);
+                rec.AddSourcePrimaryKeyColumns("key");
 
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
@@ -250,6 +254,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             TPathId(0, 0).ToProto(request.MutablePathId());
         }, "{ <main>: Error: Unknown table id: 0 }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
+            request.ClearSourcePrimaryKeyColumns();
+        }, "{ <main>: Error: Request should include source primary key columns }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);

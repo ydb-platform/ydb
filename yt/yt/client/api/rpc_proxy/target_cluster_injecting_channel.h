@@ -6,8 +6,8 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NYT::NRpc::IChannelPtr CreateTargetClusterInjectingChannel(
-    NYT::NRpc::IChannelPtr underlying,
+NRpc::IChannelPtr CreateTargetClusterInjectingChannel(
+    NRpc::IChannelPtr underlying,
     std::optional<std::string> cluster);
 
 ////////////////////////////////////////////////////////////////////////////////

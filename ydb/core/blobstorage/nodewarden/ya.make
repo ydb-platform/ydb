@@ -6,6 +6,7 @@ SRCS(
     distconf.cpp
     distconf.h
     distconf_binding.cpp
+    distconf_cache.cpp
     distconf_console.cpp
     distconf_dynamic.cpp
     distconf_generate.cpp
@@ -18,6 +19,7 @@ SRCS(
     distconf_invoke_storage_config.cpp
     distconf_mon.cpp
     distconf_persistent_storage.cpp
+    distconf_quorum.h
     distconf_scatter_gather.cpp
     distconf_validate.cpp
     node_warden.h

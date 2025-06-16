@@ -72,7 +72,6 @@ enum EMasterReadKind
     MRK_LEADER = 0;
     MRK_FOLLOWER = 1;
     MRK_CACHE = 2;
-    MRK_MASTER_CACHE = 3;
 }
 
 enum ERowsetKind
@@ -440,6 +439,7 @@ message TReqCommitTransaction
     required NYT.NProto.TGuid transaction_id = 1;
     reserved 6;
     repeated NYT.NProto.TGuid additional_participant_cell_ids = 7;
+    optional uint64 max_allowed_commit_timestamp = 8;
 
     optional TPrerequisiteOptions prerequisite_options = 101;
     optional TMutatingOptions mutating_options = 103;
@@ -809,6 +809,8 @@ message TReqCreateQueueProducerSession
     optional bytes queue_path = 2; // RichYPath
     optional string session_id = 3;
     optional bytes user_meta = 4; // YSON
+
+    optional TMutatingOptions mutating_options = 103;
 }
 
 message TRspCreateQueueProducerSession
@@ -3601,7 +3603,7 @@ message TRspStartShuffle
 
 message TReqReadShuffleData
 {
-    message IndexRange
+    message TIndexRange
     {
         required int32 begin = 1;
         required int32 end = 2;
@@ -3610,7 +3612,7 @@ message TReqReadShuffleData
     required bytes signed_shuffle_handle = 1; // Opaque TSignature with YSON-serialized TShuffleHandle
     optional bytes reader_config = 2; // YSON-serialized TTableReaderConfig
     required int32 partition_index = 3;
-    optional IndexRange writer_index_range = 4;
+    optional TIndexRange writer_index_range = 4;
 }
 
 message TRspReadShuffleData

@@ -17,6 +17,8 @@ SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
+#SIZE(MEDIUM)
+#TIMEOUT(600)
 SIZE(LARGE)
 TAG(ya:fat)
 

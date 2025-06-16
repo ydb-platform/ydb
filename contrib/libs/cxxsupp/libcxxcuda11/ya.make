@@ -18,11 +18,6 @@ VERSION(2023-10-05)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/dc129d6f715cf83a2072fc8de8b4e4c70bca6935.tar.gz)
 
-SUBSCRIBER(
-    g:cpp-committee
-    g:cpp-contrib
-)
-
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxxcuda11/include
     contrib/libs/cxxsupp/libcxxcuda11/src

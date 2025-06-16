@@ -1,11 +1,13 @@
 #include "transactions.h"
 
-#include <util/generic/singleton.h>
-#include <util/string/printf.h>
-
 #include "constants.h"
 #include "log.h"
 #include "util.h"
+
+#include <library/cpp/time_provider/monotonic.h>
+
+#include <util/generic/singleton.h>
+#include <util/string/printf.h>
 
 #include <format>
 #include <unordered_map>
@@ -38,7 +40,7 @@ struct TSqlHelper {
                 ss << Sprintf("DECLARE $item%d AS Int32;\n", j);
             }
 
-            ss << "SELECT I_ID, I_PRICE, I_NAME, I_DATA FROM item WHERE I_ID IN (";
+            ss << "SELECT I_ID, I_PRICE, I_NAME, I_DATA FROM `" << TABLE_ITEM << "` WHERE I_ID IN (";
             for (int j = 1; j <= i; ++j) {
                 if (j == 1) {
                     ss << "$item1";
@@ -68,7 +70,7 @@ struct TSqlHelper {
             ss << "SELECT S_W_ID, S_I_ID, S_QUANTITY, S_DATA, S_YTD, S_ORDER_CNT, S_REMOTE_CNT, " <<
                             "S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05, " <<
                             "S_DIST_06, S_DIST_07, S_DIST_08, S_DIST_09, S_DIST_10 " <<
-                            "FROM stock WHERE (S_W_ID, S_I_ID) IN (";
+                            "FROM `" << TABLE_STOCK << "` WHERE (S_W_ID, S_I_ID) IN (";
 
             for (int j = 1; j <= i; ++j) {
                 if (j == 1) {
@@ -149,11 +151,11 @@ TAsyncExecuteQueryResult GetCustomer(
         DECLARE $c_id AS Int32;
 
         SELECT C_DISCOUNT, C_LAST, C_CREDIT
-          FROM `customer`
+          FROM `{}`
          WHERE C_W_ID = $c_w_id
            AND C_D_ID = $c_d_id
            AND C_ID = $c_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_CUSTOMER);
 
     auto params = TParamsBuilder()
         .AddParam("$c_w_id").Int32(warehouseID).Build()
@@ -167,7 +169,7 @@ TAsyncExecuteQueryResult GetCustomer(
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for customer result for "
-        << warehouseID << ", " << districtID << ", " << customerID);
+        << warehouseID << ", " << districtID << ", " << customerID << ", session: " << session.GetId());
     return result;
 }
 
@@ -183,9 +185,9 @@ TAsyncExecuteQueryResult GetWarehouseTax(
         DECLARE $w_id AS Int32;
 
         SELECT W_TAX
-          FROM `warehouse`
+          FROM `{}`
          WHERE W_ID = $w_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_WAREHOUSE);
 
     auto params = TParamsBuilder()
         .AddParam("$w_id").Int32(warehouseID).Build()
@@ -196,7 +198,7 @@ TAsyncExecuteQueryResult GetWarehouseTax(
         TTxControl::Tx(tx),
         std::move(params));
 
-    LOG_T("Terminal " << context.TerminalID << " waiting for warehouse result for " << warehouseID);
+    LOG_T("Terminal " << context.TerminalID << " waiting for warehouse result for " << warehouseID << ", session: " << session.GetId());
     return result;
 }
 
@@ -213,10 +215,10 @@ TAsyncExecuteQueryResult GetDistrict(
         DECLARE $d_id AS Int32;
 
         SELECT D_NEXT_O_ID, D_TAX
-          FROM `district`
+          FROM `{}`
          WHERE D_W_ID = $d_w_id
            AND D_ID = $d_id;
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -229,7 +231,7 @@ TAsyncExecuteQueryResult GetDistrict(
         std::move(params));
 
     LOG_T("Terminal " << context.TerminalID << " waiting for district result for "
-        << warehouseID << ", " << districtID);
+        << warehouseID << ", " << districtID << ", session: " << session.GetId());
     return result;
 }
 
@@ -251,9 +253,9 @@ TAsyncExecuteQueryResult UpdateDistrict(
         DECLARE $d_id AS Int32;
         DECLARE $d_next_o_id AS Int32;
 
-        UPSERT INTO `district` (D_W_ID, D_ID, D_NEXT_O_ID)
+        UPSERT INTO `{}` (D_W_ID, D_ID, D_NEXT_O_ID)
         VALUES ($d_w_id, $d_id, $d_next_o_id);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_DISTRICT);
 
     auto params = TParamsBuilder()
         .AddParam("$d_w_id").Int32(warehouseID).Build()
@@ -288,9 +290,9 @@ TAsyncExecuteQueryResult InsertNewOrder(
         DECLARE $no_d_id AS Int32;
         DECLARE $no_w_id AS Int32;
 
-        INSERT INTO `new_order` (NO_O_ID, NO_D_ID, NO_W_ID)
+        UPSERT INTO `{}` (NO_O_ID, NO_D_ID, NO_W_ID)
         VALUES ($no_o_id, $no_d_id, $no_w_id);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_NEW_ORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$no_o_id").Int32(orderID).Build()
@@ -332,9 +334,9 @@ TAsyncExecuteQueryResult InsertOpenOrder(
         DECLARE $o_ol_cnt AS Int32;
         DECLARE $o_all_local AS Int32;
 
-        INSERT INTO `oorder` (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)
+        UPSERT INTO `{}` (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)
         VALUES ($o_id, $o_d_id, $o_w_id, $o_c_id, $o_entry_d, $o_ol_cnt, $o_all_local);
-    )", context.Path.c_str());
+    )", context.Path.c_str(), TABLE_OORDER);
 
     auto params = TParamsBuilder()
         .AddParam("$o_id").Int32(orderID).Build()
@@ -435,8 +437,8 @@ TAsyncExecuteQueryResult UpdateStocks(
             $row.p4 as S_YTD, $row.p5 as S_ORDER_CNT,
             $row.p6 as S_REMOTE_CNT));
 
-        UPSERT INTO `stock` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
-    )", context.Path.c_str());
+        UPSERT INTO `{}` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
+    )", context.Path.c_str(), TABLE_STOCK);
 
     auto paramsBuilder = TParamsBuilder();
     auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();
@@ -477,8 +479,8 @@ TAsyncExecuteQueryResult InsertOrderLines(
             $row.p6 as OL_DELIVERY_D, $row.p7 as OL_AMOUNT, $row.p8 as OL_SUPPLY_W_ID, $row.p9 as OL_QUANTITY,
             $row.p10 as OL_DIST_INFO));
 
-        UPSERT INTO order_line SELECT * FROM AS_TABLE(ListMap($values, $mapper));
-    )", context.Path.c_str());
+        UPSERT INTO `{}` SELECT * FROM AS_TABLE(ListMap($values, $mapper));
+    )", context.Path.c_str(), TABLE_ORDER_LINE);
 
     auto paramsBuilder = TParamsBuilder();
     auto& listBuilder = paramsBuilder.AddParam("$values").BeginList();
@@ -530,8 +532,11 @@ TString GetDistInfo(int districtID, const Stock& stock) {
 
 NThreading::TFuture<TStatus> GetNewOrderTask(
     TTransactionContext& context,
+    TDuration& latency,
     TSession session)
 {
+    TMonotonic startTs = TMonotonic::Now();
+
     TTransactionInflightGuard guard;
     co_await TTaskReady(context.TaskQueue, context.TerminalID);
 
@@ -542,7 +547,7 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     const int customerID = GetRandomCustomerID();
 
     LOG_T("Terminal " << context.TerminalID << " started NewOrder transaction in "
-        << warehouseID << ", " << districtID << " for " << customerID);
+        << warehouseID << ", " << districtID << " for " << customerID << ", session: " << session.GetId());
 
     // Generate order line items
 
@@ -585,9 +590,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!customerResult.IsSuccess()) {
         if (ShouldExit(customerResult)) {
             LOG_E("Terminal " << context.TerminalID << " customer query failed: " << customerResult.GetStatus() << ", "
-                << customerResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " customer query failed: " << customerResult.GetStatus() << ", "
+            << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return customerResult;
     }
 
@@ -601,9 +609,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!warehouseResult.IsSuccess()) {
         if (ShouldExit(warehouseResult)) {
             LOG_E("Terminal " << context.TerminalID << " warehouse query failed: "
-                << warehouseResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << warehouseResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " warehouse query failed: "
+            << warehouseResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return warehouseResult;
     }
 
@@ -613,10 +624,13 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     auto districtResult = co_await TSuspendWithFuture(districtFuture, context.TaskQueue, context.TerminalID);
     if (!districtResult.IsSuccess()) {
         if (ShouldExit(districtResult)) {
-            LOG_E("Terminal " << context.TerminalID << " district query failed: "
-                << districtResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+            LOG_E("Terminal " << context.TerminalID << " district query (neworder) failed: "
+                << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " district query (neworder) failed: "
+            << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return districtResult;
     }
 
@@ -624,7 +638,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!districtParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID
             << ", warehouseId " << warehouseID << ", districtId " <<  districtID << " not found");
-        std::quick_exit(1);
+        RequestStop();
+        co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
     }
     int nextOrderID = *districtParser.ColumnParser("D_NEXT_O_ID").GetOptionalInt32();
 
@@ -635,9 +650,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!updateDistrictResult.IsSuccess()) {
         if (ShouldExit(updateDistrictResult)) {
             LOG_E("Terminal " << context.TerminalID << " district update failed: "
-                << updateDistrictResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << updateDistrictResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " district update failed: "
+            << updateDistrictResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return updateDistrictResult;
     }
 
@@ -648,9 +666,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!newOrderResult.IsSuccess()) {
         if (ShouldExit(newOrderResult)) {
             LOG_E("Terminal " << context.TerminalID << " new order insert failed: "
-                << newOrderResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << newOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " new order insert failed: "
+            << newOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return newOrderResult;
     }
 
@@ -662,9 +683,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!openOrderResult.IsSuccess()) {
         if (ShouldExit(openOrderResult)) {
             LOG_E("Terminal " << context.TerminalID << " open order insert failed: "
-                << openOrderResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << openOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " open order insert failed: "
+            << openOrderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return openOrderResult;
     }
 
@@ -675,9 +699,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!itemsResult.IsSuccess()) {
         if (ShouldExit(itemsResult)) {
             LOG_E("Terminal " << context.TerminalID << " items query failed: "
-                << itemsResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << itemsResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " items query failed: "
+            << itemsResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return itemsResult;
     }
 
@@ -707,9 +734,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!stocksResult.IsSuccess()) {
         if (ShouldExit(stocksResult)) {
             LOG_E("Terminal " << context.TerminalID << " stocks query failed: "
-                << stocksResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << stocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " stocks query failed: "
+            << stocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return stocksResult;
     }
 
@@ -756,7 +786,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         auto itemIter = itemPrices.find(ol_i_id);
         if (itemIter == itemPrices.end()) {
             LOG_E("Terminal " << context.TerminalID << " item not found: " << ol_i_id);
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         double i_price = itemIter->second;
         double ol_amount = ol_quantity * i_price;
@@ -766,7 +797,8 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
         if (stockIter == stocks.end()) {
             LOG_E("Terminal " << context.TerminalID << " stock not found: W_ID=" << ol_supply_w_id
                     << ", I_ID=" << ol_i_id);
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         Stock& stock = stockIter->second;
 
@@ -810,9 +842,12 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!updateStocksResult.IsSuccess()) {
         if (ShouldExit(updateStocksResult)) {
             LOG_E("Terminal " << context.TerminalID << " stocks update failed: "
-                << updateStocksResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << updateStocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " stocks update failed: "
+            << updateStocksResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return updateStocksResult;
     }
 
@@ -823,16 +858,24 @@ NThreading::TFuture<TStatus> GetNewOrderTask(
     if (!orderLinesResult.IsSuccess()) {
         if (ShouldExit(orderLinesResult)) {
             LOG_E("Terminal " << context.TerminalID << " order lines insert failed: "
-                << orderLinesResult.GetIssues().ToOneLineString());
-            std::quick_exit(1);
+                << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
+        LOG_T("Terminal " << context.TerminalID << " order lines insert failed: "
+            << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return orderLinesResult;
     }
 
-    LOG_T("Terminal " << context.TerminalID << " is committing NewOrder transaction");
+    LOG_T("Terminal " << context.TerminalID << " is committing NewOrder transaction, session: " << session.GetId());
 
     auto commitFuture = tx.Commit();
-    co_return co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+    auto commitResult = co_await TSuspendWithFuture(commitFuture, context.TaskQueue, context.TerminalID);
+
+    TMonotonic endTs = TMonotonic::Now();
+    latency = endTs - startTs;
+
+    co_return commitResult;
 }
 
 } // namespace NYdb::NTPCC

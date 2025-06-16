@@ -16,7 +16,7 @@ struct TWriteActorSettings : TAtomicRefCount<TWriteActorSettings> {
     double UnsertaintyRatio = 0.5;
     double Multiplier = 2.0;
 
-    ui64 MaxWriteAttempts = 100;
+    ui64 MaxWriteAttempts = 5;
     ui64 MaxResolveAttempts = 5;
 };
 

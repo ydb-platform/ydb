@@ -281,11 +281,12 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(!InitialConfig->GetFingerprint() || CheckFingerprint(*InitialConfig));
 
         if (Scepter) {
-            Y_ABORT_UNLESS(HasQuorum());
+            Y_ABORT_UNLESS(StorageConfig && HasQuorum(*StorageConfig));
             Y_ABORT_UNLESS(RootState != ERootState::INITIAL && RootState != ERootState::ERROR_TIMEOUT);
             Y_ABORT_UNLESS(!Binding);
         } else {
-            Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT);
+            Y_ABORT_UNLESS(RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ||
+                ScepterlessOperationInProgress);
 
             // we can't have connection to the Console without being the root node
             Y_ABORT_UNLESS(!ConsolePipeId);
@@ -390,6 +391,9 @@ namespace NKikimr::NStorage {
             hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, Handle);
             hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, Handle);
+            hFunc(TEvNodeWardenUpdateCache, Handle);
+            hFunc(TEvNodeWardenQueryCache, Handle);
+            hFunc(TEvNodeWardenUnsubscribeFromCache, Handle);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -447,9 +451,14 @@ namespace NKikimr::NStorage {
         if (config->HasClusterState()) {
             auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
                 auto& clusterState = config->GetClusterState();
+
+                // copy cluster state generation
+                pb->SetClusterStateGeneration(clusterState.GetGeneration());
+
                 if (!pb->RingGroupsSize() || pb->HasRing()) {
                     return "configuration has Ring field set or no RingGroups";
                 }
+
                 auto *groups = pb->MutableRingGroups();
                 for (int i = 0, count = groups->size(); i < count; ++i) {
                     auto *group = groups->Mutable(i);
@@ -487,6 +496,9 @@ namespace NKikimr::NStorage {
                             return "can't determine correct pile state for ring group";
                         }
                         group->SetPileState(*state);
+                        if (*state != T::PRIMARY) { // TODO(alexvru): HACK!!!
+                            group->SetWriteOnly(true);
+                        }
                     } else {
                         return "bridge pile id is out of bounds";
                     }

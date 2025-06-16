@@ -15,6 +15,10 @@ private:
     const bool StrictOneLayer = true;
     std::shared_ptr<TSimplePortionsGroupInfo> SummaryPortionsInfo;
 
+    virtual ui64 GetExpectedPortionSize() const override {
+        return ExpectedPortionSize;
+    }
+
     ui64 GetLevelBlobBytesLimit() const {
         return std::max<ui64>(SizeLimitGuarantee, SummaryPortionsInfo->GetBlobBytes() * BytesLimitFraction);
     }
@@ -59,12 +63,27 @@ private:
         if (!GetNextLevel()) {
             return 0;
         }
-        if ((ui64)GetPortionsInfo().GetBlobBytes() > GetLevelBlobBytesLimit() && GetPortionsInfo().GetCount() > 2 &&
-            (ui64)GetPortionsInfo().GetBlobBytes() > ExpectedPortionSize * 2) {
-            return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();
-        } else {
+        if ((ui64)GetPortionsInfo().GetBlobBytes() < GetLevelBlobBytesLimit()) {
             return 0;
         }
+        if (GetPortionsInfo().GetCount() < 2) {
+            return 0;
+        }
+        if ((ui64)GetPortionsInfo().GetBlobBytes() < std::max(GetNextLevel()->GetExpectedPortionSize(), GetExpectedPortionSize())) {
+            return 0;
+        }
+        return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();
+    }
+
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& info) const override {
+        if (info.GetTotalBlobBytes() < GetExpectedPortionSize()) {
+            return false;
+        }
+        return !GetAffectedPortionBytes(info.GetFirstPK(), info.GetLastPK());
+    }
+
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& /*info*/) const override {
+        return true;
     }
 
     virtual TInstant DoGetWeightExpirationInstant() const override {
@@ -83,10 +102,6 @@ public:
         , StrictOneLayer(strictOneLayer)
         , SummaryPortionsInfo(summaryPortionsInfo)
     {
-    }
-
-    ui64 GetExpectedPortionSize() const {
-        return ExpectedPortionSize;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
@@ -128,7 +143,8 @@ public:
         return result;
     }
 
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override;
+    virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 

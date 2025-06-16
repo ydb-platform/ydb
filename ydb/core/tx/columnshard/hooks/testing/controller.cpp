@@ -3,7 +3,6 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -90,23 +89,6 @@ void TController::DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumn
 void TController::DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
     AFL_VERIFY(ShardActuals.erase(shard.TabletID()));
-}
-
-std::vector<NKikimr::NColumnShard::TInternalPathId> TController::GetPathIds(const ui64 tabletId) const {
-    TGuard<TMutex> g(Mutex);
-    std::vector<NKikimr::NColumnShard::TInternalPathId> result;
-    for (auto&& i : ShardActuals) {
-        if (i.first == tabletId) {
-            const auto& index = i.second->GetIndexAs<NOlap::TColumnEngineForLogs>();
-            std::vector<std::shared_ptr<NOlap::TGranuleMeta>> granules = index.GetTables({}, {});
-
-            for (auto&& g : granules) {
-                result.emplace_back(g->GetPathId());
-            }
-            break;
-        }
-    }
-    return result;
 }
 
 bool TController::IsTrivialLinks() const {

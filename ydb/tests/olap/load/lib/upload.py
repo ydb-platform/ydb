@@ -6,6 +6,7 @@ from time import time
 import yatest.common
 import allure
 
+
 class UploadSuiteBase(LoadSuiteBase):
     def init(self):
         pass

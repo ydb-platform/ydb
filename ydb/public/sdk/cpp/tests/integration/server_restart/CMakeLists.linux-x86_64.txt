@@ -67,7 +67,7 @@ set_property(
   public-sdk-cpp-tests-integration-server_restart
   PROPERTY
   ENVIRONMENT
-  "YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+  "YDB_TEST_ROOT=sdk_tests;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
 )
 
 set_property(

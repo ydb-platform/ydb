@@ -80,7 +80,6 @@ target_sources(ydb-public-sdk-cpp-src-client-topic-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/describe_topic_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/local_partition_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/topic_to_table_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/trace_ut.cpp
   ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/595c8d08f14d8e7791461abe94aa0089.cpp
 )
 

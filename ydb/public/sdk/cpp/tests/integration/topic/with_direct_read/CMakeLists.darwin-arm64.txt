@@ -12,54 +12,54 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(public-sdk-cpp-tests-integration-sessions_pool)
+add_executable(topic_direct_read_it)
 
 
-target_compile_options(public-sdk-cpp-tests-integration-sessions_pool PRIVATE
+target_compile_options(topic_direct_read_it PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(public-sdk-cpp-tests-integration-sessions_pool PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(topic_direct_read_it PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-cpuid_check
   cpp-testing-gtest
   cpp-testing-gtest_main
-  sdk-library-grpc-client-v3
-  src-client-table
+  src-client-persqueue_public
+  src-client-topic
+  integration-topic-setup
+  integration-topic-utils
 )
 
-target_allocator(public-sdk-cpp-tests-integration-sessions_pool
-  cpp-malloc-tcmalloc
-  libs-tcmalloc-no_percpu_cache
+target_allocator(topic_direct_read_it
+  system_allocator
 )
 
-target_link_options(public-sdk-cpp-tests-integration-sessions_pool PRIVATE
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
+target_link_options(topic_direct_read_it PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
-  -lrt
-  -ldl
+  -framework
+  CoreFoundation
 )
 
-target_sources(public-sdk-cpp-tests-integration-sessions_pool PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/sessions_pool/main.cpp
+target_sources(topic_direct_read_it PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/basic_usage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/describe_topic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/direct_read.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/local_partition.cpp
 )
 
 
 add_test(
   NAME
-  public-sdk-cpp-tests-integration-sessions_pool
+  topic_direct_read_it
   COMMAND
-  public-sdk-cpp-tests-integration-sessions_pool
+  topic_direct_read_it
 )
 
 set_property(
   TEST
-  public-sdk-cpp-tests-integration-sessions_pool
+  topic_direct_read_it
   PROPERTY
   LABELS
   MEDIUM
@@ -67,17 +67,17 @@ set_property(
 
 set_property(
   TEST
-  public-sdk-cpp-tests-integration-sessions_pool
+  topic_direct_read_it
   PROPERTY
   ENVIRONMENT
-  "YDB_TEST_ROOT=sdk_tests;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+  "YDB_TEST_ROOT=sdk_tests;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd;PQ_EXPERIMENTAL_DIRECT_READ=1"
 )
 
-vcs_info(public-sdk-cpp-tests-integration-sessions_pool)
+vcs_info(topic_direct_read_it)
 
 set_property(
   TEST
-  public-sdk-cpp-tests-integration-sessions_pool
+  topic_direct_read_it
   PROPERTY
   PROCESSORS
   1

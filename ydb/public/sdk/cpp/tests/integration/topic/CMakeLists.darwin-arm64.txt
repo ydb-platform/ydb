@@ -12,27 +12,33 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_executable(ydb-public-sdk-cpp-tests-integration-topic)
+add_subdirectory(setup)
+add_subdirectory(utils)
+add_subdirectory(with_direct_read)
+
+add_executable(topic_it)
 
 
-target_compile_options(ydb-public-sdk-cpp-tests-integration-topic PRIVATE
+target_compile_options(topic_it PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(ydb-public-sdk-cpp-tests-integration-topic PUBLIC
+target_link_libraries(topic_it PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-testing-gtest
   cpp-testing-gtest_main
   src-client-persqueue_public
   src-client-topic
+  integration-topic-setup
+  integration-topic-utils
 )
 
-target_allocator(ydb-public-sdk-cpp-tests-integration-topic
+target_allocator(topic_it
   system_allocator
 )
 
-target_link_options(ydb-public-sdk-cpp-tests-integration-topic PRIVATE
+target_link_options(topic_it PRIVATE
   -Wl,-platform_version,macos,11.0,11.0
   -fPIC
   -fPIC
@@ -40,21 +46,24 @@ target_link_options(ydb-public-sdk-cpp-tests-integration-topic PRIVATE
   CoreFoundation
 )
 
-target_sources(ydb-public-sdk-cpp-tests-integration-topic PRIVATE
+target_sources(topic_it PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/basic_usage.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/describe_topic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/local_partition.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/trace.cpp
 )
 
 
 add_test(
   NAME
-  ydb-public-sdk-cpp-tests-integration-topic
+  topic_it
   COMMAND
-  ydb-public-sdk-cpp-tests-integration-topic
+  topic_it
 )
 
 set_property(
   TEST
-  ydb-public-sdk-cpp-tests-integration-topic
+  topic_it
   PROPERTY
   LABELS
   MEDIUM
@@ -62,17 +71,17 @@ set_property(
 
 set_property(
   TEST
-  ydb-public-sdk-cpp-tests-integration-topic
+  topic_it
   PROPERTY
   ENVIRONMENT
-  "YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+  "YDB_TEST_ROOT=sdk_tests;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
 )
 
-vcs_info(ydb-public-sdk-cpp-tests-integration-topic)
+vcs_info(topic_it)
 
 set_property(
   TEST
-  ydb-public-sdk-cpp-tests-integration-topic
+  topic_it
   PROPERTY
   PROCESSORS
   1

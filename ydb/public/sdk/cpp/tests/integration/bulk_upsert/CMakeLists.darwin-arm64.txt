@@ -62,7 +62,7 @@ set_property(
   ydb-public-sdk-cpp-tests-integration-bulk_upsert
   PROPERTY
   ENVIRONMENT
-  "YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+  "YDB_TEST_ROOT=sdk_tests;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
 )
 
 set_property(

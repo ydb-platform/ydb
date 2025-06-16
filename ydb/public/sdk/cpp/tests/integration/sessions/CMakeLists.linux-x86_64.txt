@@ -71,7 +71,7 @@ set_property(
   ydb-public-sdk-cpp-tests-integration-sessions
   PROPERTY
   ENVIRONMENT
-  "YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
+  "YDB_TEST_ROOT=sdk_tests;YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
 )
 
 vcs_info(ydb-public-sdk-cpp-tests-integration-sessions)

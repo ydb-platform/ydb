@@ -1,4 +1,5 @@
 #pragma once
+#include "util/generic/yexception.h"
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -103,7 +104,7 @@ public:
             case NEvWrite::EModificationType::Update:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
             case NEvWrite::EModificationType::Increment:
-                Y_VERIFY(false);
+                Y_ENSURE(false);
 
         }
     }

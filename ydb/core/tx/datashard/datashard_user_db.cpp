@@ -173,15 +173,16 @@ void TDataShardUserDb::IncrementRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
 
-    auto currentRow = NTable::TRowState();
- 
     TVector<NTable::TTag> columns;
-    for(auto op : ops)
-        columns.push_back(op.Tag);        
-    currentRow = GetRowState(tableId, key, columns);
+    for (auto op : ops) {
+        columns.push_back(op.Tag);
+    }
 
-    if(currentRow.Size() == 0)
+    auto currentRow = GetRowState(tableId, key, columns);
+    
+    if (currentRow.Size() == 0) {
         return;
+    }
     
     IncrementRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, currentRow);
 
@@ -274,38 +275,26 @@ void TDataShardUserDb::IncrementRowInt(
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    NTable::TRowState row) 
+    const NTable::TRowState &row) 
 {
     TVector<NIceDb::TUpdateOp> newOps;
 
     Y_ENSURE(row.Size() == ops.size());
     const NTable::TScheme& scheme = Db.GetScheme();
     const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
-    
-    int bufSize = 0;
-    for(size_t i = 0; i < ops.size(); i ++)
-    {
-        auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
-        bufSize += NKikimr::NScheme::GetFixedSize(vtype);
-    }
-    
-    TMemoryPool pool(bufSize);
 
-    for(size_t i = 0; i < ops.size(); i ++)
-    {
+    TStackVec<TCell> incrementResults(ops.size());
+
+    for (size_t i = 0; i < ops.size(); i++) {
         auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
        
         auto current = row.Get(i);
-        auto add  = ops[i].AsCell();
-        TCell value;
+        auto add = ops[i].AsCell();
         
-        NFormats::AddTwoCell(current, add, value, vtype);
+        NFormats::AddTwoCells(incrementResults[i], current, add, vtype);
             
-        auto ptr = pool.Allocate(NKikimr::NScheme::GetFixedSize(vtype)); 
-        value.CopyDataInto(static_cast<char *> (ptr));
-        TRawTypeValue rawTypeValue(ptr, NKikimr::NScheme::GetFixedSize(vtype), vtype);
-        NIceDb::TUpdateOp extOp(ops[i].Tag, ops[i].Op, rawTypeValue);
-        newOps.emplace_back(extOp);
+        TRawTypeValue rawTypeValue(incrementResults[i].InlineData(), incrementResults[i].Size(), vtype);
+        newOps.emplace_back(ops[i].Tag, ops[i].Op, rawTypeValue);
     }
 
     UpsertRowInt(rowOp, tableId, localTableId, key, newOps);

@@ -675,7 +675,7 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Bool:
             res += r.AsValue<bool>() ? "true" : "false";
             break;
-            case NScheme::NTypeIds::Int8:
+        case NScheme::NTypeIds::Int8:
             res += ToString(r.AsValue<i8>());
             break;
         case NScheme::NTypeIds::Byte:

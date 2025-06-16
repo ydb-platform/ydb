@@ -283,42 +283,38 @@ namespace {
 
 } // anonymous
 
-void AddTwoCell(const TCell& cell1, const TCell& cell2, TCell& result, const NScheme::TTypeId& typeId) {
+void AddTwoCells(TCell& result, const TCell& cell1, const TCell& cell2, const NScheme::TTypeId& typeId) {
 
-    Y_VERIFY(cell1.Size() == NScheme::GetFixedSize(typeId));
-    Y_VERIFY(cell2.Size() == NScheme::GetFixedSize(typeId));
+    Y_ENSURE(cell1.Size() == NScheme::GetFixedSize(typeId));
+    Y_ENSURE(cell2.Size() == NScheme::GetFixedSize(typeId));
 
     switch (typeId) {
     case NScheme::NTypeIds::Int8:
-        result = TCell::Make(cell1.AsValue<i8>() + cell2.AsValue<i8>());
+        result = TCell::Make(i8(cell1.AsValue<i8>() + cell2.AsValue<i8>()));
         break;
     case NScheme::NTypeIds::Uint8:
-        result = TCell::Make(cell1.AsValue<ui8>() + cell2.AsValue<ui8>());
+        result = TCell::Make(ui8(cell1.AsValue<ui8>() + cell2.AsValue<ui8>()));
         break;
     case NScheme::NTypeIds::Int16:
-        result = TCell::Make(cell1.AsValue<i16>() + cell2.AsValue<i16>());
+        result = TCell::Make(i16(cell1.AsValue<i16>() + cell2.AsValue<i16>()));
         break;
     case NScheme::NTypeIds::Uint16:
-        result = TCell::Make(cell1.AsValue<ui16>() + cell2.AsValue<ui16>());
+        result = TCell::Make(ui16(cell1.AsValue<ui16>() + cell2.AsValue<ui16>()));
         break;
     case NScheme::NTypeIds::Int32:
-        result = TCell::Make(cell1.AsValue<i32>() + cell2.AsValue<i32>());
+        result = TCell::Make(i32(cell1.AsValue<i32>() + cell2.AsValue<i32>()));
         break;
     case NScheme::NTypeIds::Uint32:
-        result = TCell::Make(cell1.AsValue<ui32>() + cell2.AsValue<ui32>());
+        result = TCell::Make(ui32(cell1.AsValue<ui32>() + cell2.AsValue<ui32>()));
         break;
     case NScheme::NTypeIds::Int64:
-        result = TCell::Make(cell1.AsValue<i64>() + cell2.AsValue<i64>());
+        result = TCell::Make(i64(cell1.AsValue<i64>() + cell2.AsValue<i64>()));
         break;
     case NScheme::NTypeIds::Uint64:
-        result = TCell::Make(cell1.AsValue<ui64>() + cell2.AsValue<ui64>());
+        result = TCell::Make(ui64(cell1.AsValue<ui64>() + cell2.AsValue<ui64>()));
         break;
     case NScheme::NTypeIds::Float:
-        result = TCell::Make(cell1.AsValue<float>() + cell2.AsValue<float>());
-        break;
     case NScheme::NTypeIds::Double:
-        result = TCell::Make(cell1.AsValue<double>() + cell2.AsValue<double>());
-        break;
     case NScheme::NTypeIds::Date:
     case NScheme::NTypeIds::Datetime:
     case NScheme::NTypeIds::Timestamp:

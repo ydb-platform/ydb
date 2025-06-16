@@ -392,6 +392,7 @@ public:
     void IncrementRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
         UserDb.IncrementRow(tableId, key, ops);
     }
+    
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);

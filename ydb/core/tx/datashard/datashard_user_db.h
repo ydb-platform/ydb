@@ -58,9 +58,9 @@ public:
             const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
 
     virtual void IncrementRow(
-                const TTableId& tableId,
-                const TArrayRef<const TRawTypeValue> key,
-                const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
     
     virtual void EraseRow(
             const TTableId& tableId,
@@ -138,9 +138,9 @@ public:
             const TArrayRef<const NIceDb::TUpdateOp> ops) override;
         
     void IncrementRow(
-                const TTableId& tableId,
-                const TArrayRef<const TRawTypeValue> key,
-                const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
 
     void EraseRow(
             const TTableId& tableId,
@@ -194,7 +194,7 @@ private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
     void UpsertRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
-    void IncrementRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, NTable::TRowState row);
+    void IncrementRowInt(NTable::ERowOp rowOp, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const NTable::TRowState &row);
     bool RowExists(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key);
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, TVector<NTable::TTag> columns);
 

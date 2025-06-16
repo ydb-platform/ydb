@@ -223,12 +223,18 @@ public:
         TThreadStats& operator=(TThreadStats&& other) = delete;
 
         void Collect(TThreadStats& dst) {
-            dst.InternalTasksSleeping.fetch_add(InternalTasksSleeping.load(std::memory_order_relaxed), std::memory_order_relaxed);
-            dst.InternalTasksWaitingInflight.fetch_add(InternalTasksWaitingInflight.load(std::memory_order_relaxed), std::memory_order_relaxed);
-            dst.InternalTasksReady.fetch_add(InternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
-            dst.ExternalTasksReady.fetch_add(ExternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
-            dst.InternalTasksResumed.fetch_add(InternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
-            dst.ExternalTasksResumed.fetch_add(ExternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksSleeping.fetch_add(
+                InternalTasksSleeping.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksWaitingInflight.fetch_add(
+                InternalTasksWaitingInflight.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksReady.fetch_add(
+                InternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.ExternalTasksReady.fetch_add(
+                ExternalTasksReady.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.InternalTasksResumed.fetch_add(
+                InternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            dst.ExternalTasksResumed.fetch_add(
+                ExternalTasksResumed.load(std::memory_order_relaxed), std::memory_order_relaxed);
 
             dst.ExecutingTime.fetch_add(ExecutingTime.load(std::memory_order_relaxed), std::memory_order_relaxed);
             dst.TotalTime.fetch_add(TotalTime.load(std::memory_order_relaxed), std::memory_order_relaxed);

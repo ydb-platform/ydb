@@ -9,11 +9,12 @@
 namespace NKikimr::NOlap::NReader::NSysView::NGranules {
 
 bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
-    NArrow::Append<arrow::UInt64Type>(*builders[0], granule.GetPathId().GetRawValue());
+    NArrow::Append<arrow::UInt64Type>(*builders[0], granule.GetPathId().SchemeShardLocalPathId.GetRawValue());
     NArrow::Append<arrow::UInt64Type>(*builders[1], ReadMetadata->GetTabletId());
     NArrow::Append<arrow::UInt64Type>(*builders[2], granule.GetPortions().size());
     NArrow::Append<arrow::StringType>(*builders[3], HostNameField);
     NArrow::Append<arrow::UInt64Type>(*builders[4], NActors::TActivationContext::AsActorContext().SelfID.NodeId());
+    NArrow::Append<arrow::UInt64Type>(*builders[5], granule.GetPathId().InternalPathId.GetRawValue());
     return false;
 }
 

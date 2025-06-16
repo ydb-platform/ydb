@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap::NExport {
 
 NKikimr::TConclusionStatus TIdentifier::DeserializeFromProto(const NKikimrColumnShardExportProto::TIdentifier& proto) {
-    PathId = TInternalPathId::FromRawValue(proto.GetPathId());
+    PathId = TInternalPathId::FromProto(proto);
     if (!PathId) {
         return TConclusionStatus::Fail("Incorrect pathId (zero)");
     }
@@ -33,7 +33,7 @@ NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFro
 
 NKikimrColumnShardExportProto::TIdentifier TIdentifier::SerializeToProto() const {
     NKikimrColumnShardExportProto::TIdentifier result;
-    result.SetPathId(PathId.GetRawValue());
+    PathId.ToProto(result);
     return result;
 }
 

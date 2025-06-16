@@ -98,7 +98,7 @@ namespace TEvColumnShard {
 
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
-        YDB_READONLY_DEF(NColumnShard::TInternalPathId, PathId);
+        YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
@@ -114,7 +114,7 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
+        TEvInternalScan(const NColumnShard::TUnifiedPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
             , Snapshot(snapshot)
             , LockId(lockId)
@@ -238,57 +238,6 @@ namespace TEvColumnShard {
             Record.SetTxId(txId);
         }
     };
-
-    struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
-        TEvWrite() = default;
-
-        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
-                 const TString& dedupId, const TString& data, const ui32 writePartId,
-                const NEvWrite::EModificationType modificationType) {
-            ActorIdToProto(source, Record.MutableSource());
-            Record.SetTableId(tableId);
-            Record.SetDedupId(dedupId);
-            Record.SetData(data);
-            Record.SetWritePartId(writePartId);
-            Record.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(modificationType));
-            longTxId.ToProto(Record.MutableLongTxId());
-        }
-
-        // Optionally set schema to deserialize data with
-        void SetArrowSchema(const TString& arrowSchema) {
-            Record.MutableMeta()->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
-            Record.MutableMeta()->SetSchema(arrowSchema);
-        }
-
-        void SetArrowData(const TString& arrowSchema, const TString& arrowData) {
-            Record.MutableMeta()->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
-            Record.MutableMeta()->SetSchema(arrowSchema);
-            Record.SetData(arrowData);
-        }
-    };
-
-    struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult, TEvColumnShard::EvWriteResult> {
-        TEvWriteResult() = default;
-
-        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, ui32 status)
-            : TEvWriteResult(origin, writeMeta, writeMeta.GetWriteId(), status)
-        {
-        }
-
-        TEvWriteResult(ui64 origin, const NEvWrite::TWriteMeta& writeMeta, const i64 writeId, ui32 status) {
-            Record.SetOrigin(origin);
-            Record.SetTxInitiator(0);
-            Record.SetWriteId(writeId);
-            Record.SetTableId(writeMeta.GetTableId().GetRawValue());
-            Record.SetDedupId(writeMeta.GetDedupId());
-            Record.SetStatus(status);
-        }
-
-        Ydb::StatusIds::StatusCode GetYdbStatus() const  {
-            const auto status = (NKikimrTxColumnShard::EResultStatus)Record.GetStatus();
-            return NColumnShard::ConvertToYdbStatus(status);
-        }
-    };
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {
@@ -300,14 +249,6 @@ inline auto& Proto(TEvColumnShard::TEvCheckPlannedTransaction* ev) {
 }
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransactionResult* ev) {
-    return ev->Record;
-}
-
-inline auto& Proto(TEvColumnShard::TEvWrite* ev) {
-    return ev->Record;
-}
-
-inline auto& Proto(TEvColumnShard::TEvWriteResult* ev) {
     return ev->Record;
 }
 

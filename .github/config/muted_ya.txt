@@ -34,10 +34,6 @@ ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
-ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
-ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
-ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
@@ -96,6 +92,9 @@ ydb/tests/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/compatibility [test_example.py */*] chunk chunk
 ydb/tests/compatibility [test_statistics.py */*] chunk chunk
 ydb/tests/compatibility sole chunk chunk
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_24-4_to_25-1]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_24-4_to_25-1]
+ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_update[rolling_25-1_to_current]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_24-4_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_24-4_to_25-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_25-1_to_24-4-column]
@@ -138,8 +137,6 @@ ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_25
 ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_25-1_to_current]
 ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_current_to_25-1]
 ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_current_to_current]
-ydb/tests/compatibility test_datetime2.py.TestDatetime2.test_all[25-1_and_24-4]
-ydb/tests/compatibility test_datetime2.py.TestDatetime2.test_all[current_and_25-1]
 ydb/tests/compatibility test_example.py.TestExampleMixedClusterFixture.test_example[mixed_25-1_and_24-4]
 ydb/tests/compatibility test_example.py.TestExampleRestartToAnotherVersion.test_example[restart_24-4_to_25-1]
 ydb/tests/compatibility test_example.py.TestExampleRestartToAnotherVersion.test_example[restart_25-1_to_24-4]
@@ -213,8 +210,8 @@ ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluste
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageBadCases.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageMultipleRingGroup.test_cluster_change_state_storage
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageReuseSameNodes.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageNoChanges.test_cluster_change_state_storage
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageReuseSameNodes.test_cluster_change_state_storage
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/functional/serializable sole chunk chunk
@@ -238,8 +235,6 @@ ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]

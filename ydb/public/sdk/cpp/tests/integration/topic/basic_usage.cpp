@@ -1,3 +1,5 @@
+#include "setup/fixture.h"
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
@@ -8,15 +10,13 @@
 #include <util/generic/overloaded.h>
 #include <util/stream/zlib.h>
 
-#include <gtest/gtest.h>
-
 #include <future>
 
 
 static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
 
 
-namespace NYdb::NPersQueue::NTests {
+namespace NYdb::inline Dev::NPersQueue::NTests {
 
 class TSimpleWriteSessionTestAdapter {
 public:
@@ -40,7 +40,7 @@ std::uint64_t TSimpleWriteSessionTestAdapter::GetAcquiredMessagesCount() const {
 
 }
 
-namespace NYdb::NTopic::NTests {
+namespace NYdb::inline Dev::NTopic::NTests {
 
 class TManagedExecutor : public IExecutor {
 public:
@@ -171,65 +171,6 @@ TIntrusivePtr<TManagedExecutor> CreateSyncManagedExecutor()
 {
     return MakeIntrusive<TManagedExecutor>(NYdb::NTopic::CreateSyncExecutor());
 }
-
-class TTopicTestFixture : public ::testing::Test {
-protected:
-    void SetUp() override {
-        TTopicClient client(MakeDriver());
-        client.DropTopic(GetTopicPath()).GetValueSync();
-
-        CreateTopic(GetTopicPath());
-    }
-
-    void TearDown() override {
-        DropTopic(GetTopicPath());
-    }
-
-    void CreateTopic(const std::string& path, const std::string& consumer = "test-consumer", size_t partitionCount = 1,
-                     std::optional<size_t> maxPartitionCount = std::nullopt) {
-        TTopicClient client(MakeDriver());
-
-        TCreateTopicSettings topics;
-        topics
-            .BeginConfigurePartitioningSettings()
-            .MinActivePartitions(partitionCount)
-            .MaxActivePartitions(maxPartitionCount.value_or(partitionCount));
-
-        if (maxPartitionCount.has_value() && maxPartitionCount.value() > partitionCount) {
-            topics
-                .BeginConfigurePartitioningSettings()
-                .BeginConfigureAutoPartitioningSettings()
-                .Strategy(EAutoPartitioningStrategy::ScaleUp);
-        }
-
-        TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
-        topics.AppendConsumers(consumers);
-
-        auto status = client.CreateTopic(path, topics).GetValueSync();
-        ASSERT_TRUE(status.IsSuccess());
-    }
-
-    std::string GetTopicPath() {
-        const testing::TestInfo* const testInfo = testing::UnitTest::GetInstance()->current_test_info();
-
-        return std::string(testInfo->test_suite_name()) + "/" + std::string(testInfo->name()) + "/test-topic";
-    }
-
-    void DropTopic(const std::string& path) {
-        TTopicClient client(MakeDriver());
-        auto status = client.DropTopic(path).GetValueSync();
-        ASSERT_TRUE(status.IsSuccess());
-    }
-
-    TDriver MakeDriver() {
-        auto cfg = NYdb::TDriverConfig()
-            .SetEndpoint(std::getenv("YDB_ENDPOINT"))
-            .SetDatabase(std::getenv("YDB_DATABASE"))
-            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
-
-        return NYdb::TDriver(cfg);
-    }
-};
 
 class BasicUsage : public TTopicTestFixture {};
 

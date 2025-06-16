@@ -120,6 +120,16 @@ namespace NKikimr::NStorage {
                     }
                 }
 
+                if (Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo()) {
+                    if (const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo(); nodeInfo.HasBridgePileId()) {
+                        const ui32 pileId = nodeInfo.GetBridgePileId();
+                        Y_ABORT_UNLESS(pileId < bridgeInfo->Piles.size());
+                        bridgeInfo->SelfNodePile = &bridgeInfo->Piles[pileId];
+                    }
+                }
+
+                Y_ABORT_UNLESS(bridgeInfo->SelfNodePile);
+
                 Y_ABORT_UNLESS(state.PerPileStateSize() == Cfg->BridgeConfig->PilesSize());
                 for (size_t i = 0; i < state.PerPileStateSize(); ++i) {
                     auto& pile = bridgeInfo->Piles[i];

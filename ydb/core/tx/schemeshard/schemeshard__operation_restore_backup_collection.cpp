@@ -3,6 +3,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__operation_states.h"
+#include "schemeshard__operation_restore_backup_collection.h"
 
 #include <util/generic/guid.h>
 
@@ -28,18 +29,6 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 }
 
 } // namespace NOperation
-
-// Forward declarations
-bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
-
-bool CreateIncrementalBackupPathStateOps(
-    TOperationId opId,
-    const TTxTransaction& tx,
-    const TBackupCollectionInfo::TPtr& bc,
-    const TPath& bcPath,
-    const TVector<TString>& incrBackupNames,
-    TOperationContext& context,
-    TVector<ISubOperation::TPtr>& result);
 
 class TPropose: public TSubOperationState {
 private:

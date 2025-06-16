@@ -1101,21 +1101,19 @@ private:
             text(speedSs.str())
         });
 
-        auto topRow = hbox({
-            importDetails | flex,
-            separator()
-        });
+        auto topRow = window(text("TPC-C data upload"), hbox({
+            importDetails
+        }));
 
         // Index progress section (always shown)
 
         Elements indexElements;
         TString indexText;
         if (LoadState.IndexBuildStates.empty()) {
-            indexText = "Index Creation Progress didn't start";
+            indexText = "Index Creation Didn't Start";
         } else {
-            indexText = "Index Creation Progress:";
+            indexText = "Index Creation";
         }
-        indexElements.push_back(text(indexText));
 
         if (LoadState.IndexBuildStates.empty()) {
             // Index building not started yet, need to leave enough space
@@ -1152,11 +1150,13 @@ private:
             }
         }
 
+        auto indicesRow = window(text(indexText), vbox(indexElements));
+
         // Create scrollable logs panel
 
         Elements logElements;
         LogBackend->GetLogLines([&](const std::string& line) {
-            logElements.push_back(text(line));
+            logElements.push_back(paragraph(line));
         });
 
         auto logsContent = vbox(logElements);
@@ -1166,9 +1166,7 @@ private:
 
         auto layout = vbox({
             topRow,
-            separator(),
-            vbox(indexElements),
-            separator(),
+            indicesRow,
             logsPanel | flex
         });
 

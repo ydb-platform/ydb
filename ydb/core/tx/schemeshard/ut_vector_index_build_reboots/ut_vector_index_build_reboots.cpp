@@ -38,8 +38,14 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
                 WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", true, 4, 350, 400);
             }
 
-            AsyncBuildVectorIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", "embedding", {"value"});
-            ui64 buildIndexId = t.TxId;
+            ui64 buildIndexId = ++t.TxId;
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexId, "/MyRoot", "/MyRoot/dir/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {"value"}
+            });
+            // with too many scan events, the test works infinite time
+            request->Record.MutableSettings()->MutableScanSettings()->Clear();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
 
             {
                 auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);

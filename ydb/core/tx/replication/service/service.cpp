@@ -369,7 +369,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto it = YdbProxies.find(params);
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
-                            ? CreateLocalYdbProxy(params.Database())
+                            ? CreateLocalYdbProxy("local") // TODO params.Database())
                             : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...);
             auto ydbProxy = Register(actor);
             auto res = YdbProxies.emplace(std::move(params), std::move(ydbProxy));

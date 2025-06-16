@@ -47,9 +47,9 @@ protected:
 
 private:
     void DoDescribe() {
-        Cerr << ">>>>> TopicName " << TopicName << Endl << Flush;
+        Cerr << ">>>>> TopicName " << "/" << Database << TopicName << Endl << Flush;
         auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(TStringBuilder() << Database << TopicName, TNavigate::OpTopic));
+        request->ResultSet.emplace_back(MakeNavigateEntry(TStringBuilder() << "/" << Database << TopicName, TNavigate::OpTopic));
         IActor::Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateDescribe);
     }
@@ -58,6 +58,8 @@ private:
         static const TString errorMarket = "LocalYdbProxy";
 
         auto& result = ev->Get()->Request;
+
+        Cerr << ">>>>> result->DatabaseName " << result->DatabaseName << Endl << Flush;
 
         if (!CheckNotEmpty(errorMarket, result, LeaveOnError())) {
             return;

@@ -24,6 +24,7 @@ class TSchedulableActorHelper {
 public:
     struct TOptions {
         TSchedulableTaskPtr SchedulableTask;
+        bool IsSchedulable;
     };
 
 protected:
@@ -45,6 +46,7 @@ protected:
 
 private:
     TSchedulableTaskPtr SchedulableTask;
+    const bool Schedulable;
     THPTimer Timer;
     bool Throttled = false;
     TMonotonic StartThrottle;

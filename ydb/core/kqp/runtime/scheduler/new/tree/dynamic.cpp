@@ -45,8 +45,20 @@ TQuery::TQuery(const TQueryId& id, const TStaticAttributes& attrs)
 }
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() const {
+    const auto ForgetInteval = TDuration::Seconds(2);
+    const auto now = TMonotonic::Now();
+    const auto usage = BurstUsage.load();
+    const auto share = GetSnapshot() ? GetSnapshot()->FairShare : 0;
+    const auto timestamp = GetSnapshot() ? TMonotonic(GetSnapshot()->Timestamp) : now;
+    const auto adjusted = GetSnapshot() ? GetSnapshot()->AdjustedUsage : 0;
+
     auto* newQuery = new NSnapshot::TQuery(GetId(), const_cast<TQuery*>(this));
     newQuery->Demand = Demand.load();
+    newQuery->AdjustedUsage =
+        Max<ssize_t>(
+            usage - ForgetInteval.MicroSeconds() * share,
+            Min<ssize_t>((now - timestamp).MicroSeconds() * share + adjusted, usage)
+        );
     return newQuery;
 }
 

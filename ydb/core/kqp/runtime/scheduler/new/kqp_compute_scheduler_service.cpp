@@ -73,6 +73,8 @@ public:
             Cerr << ss.Str();
         }
 
+        Y_ASSERT(!poolId.empty());
+
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {false, resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
@@ -310,13 +312,13 @@ TQueryPtr TComputeScheduler::GetQuery(const NHdrf::TQueryId& queryId) {
         }
     }
 
-    auto query = std::make_shared<TQuery>(queryId);
-    {
-        TWriteGuard lock(Mutex);
-        DetachedQueries.emplace(queryId, query);
-        DetachedPool->AddQuery(query);
+    TWriteGuard lock(Mutex);
+    auto [query, isEmplaced] = DetachedQueries.emplace(queryId, std::make_shared<TQuery>(queryId));
+    if (isEmplaced) {
+        DetachedPool->AddQuery(query->second);
     }
-    return query;
+
+    return query->second;
 }
 
 } // namespace NScheduler

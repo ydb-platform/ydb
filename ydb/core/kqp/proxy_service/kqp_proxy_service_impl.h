@@ -488,9 +488,9 @@ public:
         auto it = PoolsCache.find(GetPoolKey(databaseId, poolId));
         if (it == PoolsCache.end()) {
 #if defined(USE_HDRF_SCHEDULER)
-            if (poolId != NResourcePool::DEFAULT_POOL_ID && !poolId.empty()) {
-                actorContext.Send(MakeKqpSchedulerServiceId(actorContext.SelfID.NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
-            }
+            Y_ASSERT(!poolId.empty());
+
+            actorContext.Send(MakeKqpSchedulerServiceId(actorContext.SelfID.NodeId()), new NScheduler::TEvAddPool(databaseId, poolId));
 #endif
             actorContext.Send(MakeKqpWorkloadServiceId(actorContext.SelfID.NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
             return std::nullopt;

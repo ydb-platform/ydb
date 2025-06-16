@@ -133,9 +133,8 @@ public:
 
         auto&& schedulableOptions = args.SchedulableOptions;
 #if defined(USE_HDRF_SCHEDULER)
-        if (/* TODO: check if actor is eligible for scheduling */ true) {
-            schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
-        }
+        schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
+        schedulableOptions.IsSchedulable = !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
 #endif
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);

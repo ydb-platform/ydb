@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_actor.h>
 #include <ydb/core/kqp/runtime/scheduler/old/kqp_compute_scheduler.h>
 
 namespace NKikimr::NKqp {

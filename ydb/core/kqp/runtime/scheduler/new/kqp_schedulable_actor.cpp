@@ -22,7 +22,6 @@ TSchedulableTask::~TSchedulableTask() {
 }
 
 void TSchedulableTask::IncreaseUsage(const TDuration& burstThrottle) {
-    Y_ENSURE(Query);
     for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         ++parent->Usage;
         parent->BurstThrottle += burstThrottle.MicroSeconds();
@@ -30,7 +29,6 @@ void TSchedulableTask::IncreaseUsage(const TDuration& burstThrottle) {
 }
 
 void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
-    Y_ENSURE(Query);
     for (TTreeElementBase* parent = Query.get(); parent; parent = parent->Parent) {
         --parent->Usage;
         parent->BurstUsage += burstUsage.MicroSeconds();
@@ -41,8 +39,10 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage) {
 
 TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
     : SchedulableTask(std::move(options.SchedulableTask))
+    , Schedulable(options.IsSchedulable)
     , BatchTime(AverageBatchTime)
 {
+    Y_ENSURE(SchedulableTask);
 }
 
 // static
@@ -51,19 +51,15 @@ TMonotonic TSchedulableActorHelper::Now() {
 }
 
 bool TSchedulableActorHelper::IsSchedulable() const {
-    return !!SchedulableTask;
+    return Schedulable;
 }
 
 void TSchedulableActorHelper::StartExecution(const TDuration& burstThrottle) {
-    Y_ASSERT(SchedulableTask);
-
     Timer.Reset();
     SchedulableTask->IncreaseUsage(burstThrottle);
 }
 
 void TSchedulableActorHelper::StopExecution() {
-    Y_ASSERT(SchedulableTask);
-
     TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
     SchedulableTask->Query->DelayedSumBatches += (timePassed - BatchTime).MicroSeconds();
     BatchTime = timePassed;
@@ -99,6 +95,12 @@ std::optional<TDuration> TSchedulableActorHelper::CalculateDelay(TMonotonic now)
 
     const auto query = SchedulableTask->Query;
     const auto snapshot = query->GetSnapshot();
+
+    if (!snapshot) {
+        // TODO: no snapshot yet - no delay.
+        return {};
+    }
+
     const auto usage = query->BurstUsage.load();
     const auto share = snapshot->FairShare;
     const auto limit = share * (now - snapshot->Timestamp + SmoothPeriod).MicroSeconds() + snapshot->AdjustedUsage;

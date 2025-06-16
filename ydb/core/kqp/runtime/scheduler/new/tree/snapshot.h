@@ -18,7 +18,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
         ui64 FairShare = 0;
 
         ui64 Demand = 0;
-        ui64 AdjustedUsage = 0; // also known as TrackedBefore // TODO(scheduler): initialize
+        i64 AdjustedUsage = 0; // also known as TrackedBefore
 
         TTreeElementBase* Parent = nullptr;
         std::vector<TTreeElementPtr> Children;

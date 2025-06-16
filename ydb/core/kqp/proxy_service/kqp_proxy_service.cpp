@@ -1662,9 +1662,8 @@ private:
         }
 
 #if defined(USE_HDRF_SCHEDULER)
-        if (poolId != NResourcePool::DEFAULT_POOL_ID && !poolId.empty()) {
-            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
-        }
+        Y_ASSERT(!poolId.empty());
+        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddPool(databaseId, poolId, poolConfig));
 #endif
 
         return true;

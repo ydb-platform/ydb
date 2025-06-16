@@ -169,6 +169,8 @@ private:
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
 #if defined(USE_HDRF_SCHEDULER)
+        Y_ASSERT(!msg.GetPoolId().empty());
+
         const auto& databaseId = msg.GetDatabaseId();
         const auto& poolId = msg.GetPoolId();
 

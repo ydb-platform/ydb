@@ -24,7 +24,7 @@ namespace NKikimr::NKqp::NScheduler {
             // TODO: implement this
         }
 
-        // Magic state function name to overload
+        // Magic state-function name to overload
         STATEFN(BaseStateFuncBody) {
             // TODO: account mailbox usage?
             // we assume that exceptions are handled in parents/descendants
@@ -59,20 +59,20 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
         void DoExecuteImpl() override {
-            if (!IsSchedulable()) {
-                return TBase::DoExecuteImpl();
-            }
-
             // TODO: use single "now" moment for delay, throttle and resume?
             // TODO: account waiting on mailbox?
 
-            if (auto delay = CalculateDelay(Now())) {
-                Throttle();
-                this->Schedule(*delay, new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
-                return;
+            if (IsSchedulable()) {
+                if (auto delay = CalculateDelay(Now())) {
+                    if (!IsThrottled()) {
+                        Throttle();
+                    }
+                    this->Schedule(*delay, new NActors::TEvents::TEvWakeup(TAG_WAKEUP_RESUME));
+                    return;
+                }
             }
 
-            StartExecution(IsThrottled() ? Resume() : 0);
+            StartExecution(IsThrottled() ? Resume() : TDuration::Zero());
             TBase::DoExecuteImpl();
             if (!PassedAway) {
                 StopExecution();

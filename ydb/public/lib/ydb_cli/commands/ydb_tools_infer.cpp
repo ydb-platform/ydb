@@ -29,7 +29,7 @@ TCommandToolsInferCsv::TCommandToolsInferCsv()
 void TCommandToolsInferCsv::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    config.Opts->SetTrailingArgTitle("<input files...>",
+    config.Opts->GetOpts().SetTrailingArgTitle("<input files...>",
             "One or more file paths to infer from. Or CSV data can be passed to stdin instead");
     config.Opts->AddLongOption('p', "path", "Database path to table that should be created")
         .RequiredArgument("STRING").DefaultValue("table").StoreResult(&Path);
@@ -38,14 +38,14 @@ void TCommandToolsInferCsv::Config(TConfig& config) {
         .RequiredArgument("NAMES").StoreResult(&ColumnNames);
     config.Opts->AddLongOption("gen-columns",
         "Explicitly indicates that table column names should be generated automatically.")
-        .NoArgument().SetFlag(&GenerateColumnNames);
+        .NoArgument().StoreTrue(&GenerateColumnNames);
     config.Opts->AddLongOption("header", "Explicitly indicates that the first row in the CSV contains column names.")
-        .NoArgument().SetFlag(&HeaderHasColumnNames);
+        .NoArgument().StoreTrue(&HeaderHasColumnNames);
     config.Opts->AddLongOption("rows-to-analyze", "Number of rows to analyze. "
         "0 means unlimited. Reading will be stopped soon after this number of rows is read.")
         .DefaultValue(500000).StoreResult(&RowsToAnalyze);
     config.Opts->AddLongOption("execute", "Execute CREATE TABLE request right after generation.")
-        .NoArgument().SetFlag(&Execute);
+        .NoArgument().StoreTrue(&Execute);
 }
 
 void TCommandToolsInferCsv::Parse(TConfig& config) {

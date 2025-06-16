@@ -18,6 +18,7 @@
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
@@ -3011,53 +3012,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
 }; // TImportInfo
 // } // NImport
-
-class TBillingStats {
-public:
-    TBillingStats() = default;
-    TBillingStats(const TBillingStats& other) = default;
-    TBillingStats& operator = (const TBillingStats& other) = default;
-
-    TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes);
-
-    TBillingStats operator - (const TBillingStats& other) const;
-    TBillingStats& operator -= (const TBillingStats& other) {
-        return *this = *this - other;
-    }
-
-    TBillingStats operator + (const TBillingStats& other) const;
-    TBillingStats& operator += (const TBillingStats& other) {
-        return *this = *this + other;
-    }
-
-    bool operator == (const TBillingStats& other) const = default;
-
-    explicit operator bool () const {
-        return *this != TBillingStats{};
-    }
-
-    TString ToString() const;
-
-    ui64 GetUploadRows() const {
-        return UploadRows;
-    }
-    ui64 GetUploadBytes() const {
-        return UploadBytes;
-    }
-
-    ui64 GetReadRows() const {
-        return ReadRows;
-    }
-    ui64 GetReadBytes() const {
-        return ReadBytes;
-    }
-
-private:
-    ui64 UploadRows = 0;
-    ui64 UploadBytes = 0;
-    ui64 ReadRows = 0;
-    ui64 ReadBytes = 0;
-};
 
 // TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {

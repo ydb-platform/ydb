@@ -960,6 +960,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasBridgeConfig()) {
         nodeWardenConfig->BridgeConfig.emplace(Config.GetBridgeConfig());
     }
+    if (Config.HasDynamicNodeConfig()) {
+        nodeWardenConfig->DynamicNodeConfig.emplace(Config.GetDynamicNodeConfig());
+    }
 
     if (Config.HasConfigDirPath()) {
         nodeWardenConfig->ConfigDirPath = Config.GetConfigDirPath();

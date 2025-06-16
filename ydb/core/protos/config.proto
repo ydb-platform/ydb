@@ -1701,7 +1701,6 @@ message TImmediateControlsConfig {
             DefaultValue: 2 }];
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
-
     }
 
     message TPDiskControls {

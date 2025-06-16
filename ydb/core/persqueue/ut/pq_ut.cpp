@@ -2653,6 +2653,97 @@ Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
                   "the PQ tablet did not delete the '" << firstMessageKey << "' key during startup");
 }
 
+Y_UNIT_TEST(The_Value_Of_CreationUnixTime_Must_Not_Decrease)
+{
+    auto simulateSleep = [](TDuration d, TTestContext& tc) {
+        tc.Runtime->AdvanceCurrentTime(d);
+        tc.Runtime->SimulateSleep(TDuration::MilliSeconds(1));
+    };
+
+    auto writeMessages = [&](ui64 begin, ui64 end, size_t size, TTestContext& tc) {
+        for (ui64 offset = begin; offset < end; ++offset) {
+            TVector<std::pair<ui64, TString>> data;
+            data.emplace_back(offset, TString(size, 'x'));
+
+            CmdWrite(0, "sourceId", data, tc, false, {}, true, "", -1, offset);
+
+            simulateSleep(TDuration::MilliSeconds(1234), tc);
+        }
+    };
+
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    //tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+
+    // Turn off the asynchronous compactor
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(50_MB);
+
+    // Create a topic with a single batch. Blobs will not be deleted by retention
+    PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {}, tc);
+
+    // Write multiple messages so that three zones appear
+    writeMessages(1, 20, 1_MB, tc);
+    writeMessages(20, 25, 40_KB, tc);
+
+    // The asynchronous compactor will start working after restarting the tablet
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
+
+    PQTabletRestart(tc);
+
+    // Let the asynchronous compactor work
+    Sleep(TDuration::Seconds(5));
+
+    // We can read any of the written messages
+    for (i32 i = 1; i < 25; ++i) {
+        CmdRead(0, i, 1, Max<i32>(), 1, false, tc, {i});
+    }
+
+    // The list of keys in the PQ tablet
+    TVector<TString> keys;
+
+    for (auto& key : GetTabletKeys(tc)) {
+        keys.push_back(std::move(key));
+    }
+    std::sort(keys.begin(), keys.end());
+
+    // The value of `CreationUnixTime` must not decrease
+    ui64 currentCreationUnixTime = 0;
+    for (const auto& key : keys) {
+        Y_ABORT_UNLESS(!key.empty());
+        if (key.front() != 'd') {
+            continue;
+        }
+
+        Cerr << ">>> " << key << Endl;
+
+        auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+        auto read = request->Record.AddCmdReadRange();
+        auto range = read->MutableRange();
+        range->SetFrom(key);
+        range->SetIncludeFrom(true);
+        range->SetTo(key);
+        range->SetIncludeTo(true);
+
+        tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.ReadRangeResultSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetReadRangeResult(0).PairSize(), 1);
+        UNIT_ASSERT_LE_C(currentCreationUnixTime, result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime(),
+                       "key=" << key <<
+                       ", currentCreationUnixTime=" << currentCreationUnixTime <<
+                       ", result.CreationUnixTime=" << result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime());
+
+        currentCreationUnixTime = result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime();
+
+        Cerr << result->Record << Endl;
+    }
+}
+
 Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 {
     // The test verifies that the block is not deleted until the reading is finished. We write

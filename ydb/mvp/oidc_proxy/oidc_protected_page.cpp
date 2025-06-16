@@ -212,7 +212,7 @@ NHttp::THttpOutgoingRequestPtr THandlerSessionServiceCheck::CreateProxiedRequest
     return request;
 }
 
-NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateProxiedResponse(const NHttp::THttpIncomingResponsePtr& response) {
+void THandlerSessionServiceCheck::ProxyResponseHeaders(const NHttp::THeadersBuilder& headers, NHttp::THeadersBuilder& outHeaders) {
     static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
         "Content-Type",
         "Connection",
@@ -224,25 +224,34 @@ NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateProxiedRespon
         "Access-Control-Allow-Methods",
         "traceresponse"
     };
-    NHttp::THeadersBuilder headers(response->Headers);
-    NHttp::THeadersBuilder resultHeaders;
     for (const auto& header : HEADERS_WHITE_LIST) {
         if (headers.Has(header)) {
-            resultHeaders.Set(header, headers.Get(header));
+            outHeaders.Set(header, headers.Get(header));
         }
     }
-    static const TString LOCATION_HEADER_NAME = "Location";
-    if (headers.Has(LOCATION_HEADER_NAME)) {
-        resultHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
-    }
+}
 
+TString THandlerSessionServiceCheck::ProxyResponseBody(const NHttp::THttpIncomingResponsePtr& response) {
+    NHttp::THeadersBuilder headers(response->Headers);
     TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
     if (contentType == "text/html") {
-        TString newBody = FixReferenceInHtml(response->Body, response->GetRequest()->Host);
-        return Request->CreateResponse(response->Status, response->Message, resultHeaders, newBody);
+        return FixReferenceInHtml(response->Body, response->GetRequest()->Host);
     } else {
-        return Request->CreateResponse(response->Status, response->Message, resultHeaders, response->Body);
+        return TString(response->Body);
     }
+}
+
+NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateProxiedResponse(const NHttp::THttpIncomingResponsePtr& response) {
+    NHttp::THeadersBuilder headers(response->Headers);
+    NHttp::THeadersBuilder outHeaders;
+    ProxyResponseHeaders(headers, outHeaders);
+
+    static const TString LOCATION_HEADER_NAME = "Location";
+    if (headers.Has(LOCATION_HEADER_NAME)) {
+        outHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
+    }
+
+    return Request->CreateResponse(response->Status, response->Message, outHeaders, ProxyResponseBody(response));
 }
 
 void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) {

@@ -64,6 +64,7 @@ target_sources(core-kqp-opt PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_statistics_transformer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_column_statistics_requester.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_constant_folding_transformer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_hash_func_propagate_transformer.cpp
 )
 
 

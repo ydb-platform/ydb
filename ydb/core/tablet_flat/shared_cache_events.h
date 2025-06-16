@@ -34,6 +34,11 @@ namespace NKikimr::NSharedCache {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
+    enum class ECacheMode {
+        Regular,
+        TryKeepInMemory,
+    };
+
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
@@ -55,11 +60,11 @@ namespace NKikimr::NSharedCache {
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        bool InMemory;
+        ECacheMode CacheMode;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, bool inMemory)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode)
             : PageCollection(std::move(pageCollection))
-            , InMemory(inMemory)
+            , CacheMode(cacheMode)
         {
         }
     };
@@ -70,11 +75,9 @@ namespace NKikimr::NSharedCache {
     struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TIntrusivePtr<TPage>> Pages;
-        bool InMemory;
 
-        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, bool inMemory)
+        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
             : PageCollection(std::move(pageCollection))
-            , InMemory(inMemory)
         {
         }
     };

@@ -119,6 +119,10 @@ public:
         }
     }
 
+    ui64 GetLimit() const override {
+        return Limit;
+    }
+
     ui64 GetSize() const override {
         return SizeHot + SizeCold;
     }

@@ -1,4 +1,6 @@
 #pragma once
+
+#include "shared_cache_tiered.h"
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/util/cache_cache.h>
@@ -6,9 +8,14 @@
 
 namespace NKikimr::NSharedCache {
 
+enum ECacheTiers {
+    RegularCacheTier = 1,
+    TryInMemoryCacheTier = 2,
+};
+
 using TSharedCacheConfig = NKikimrSharedCache::TSharedCacheConfig;
 
-struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters> {
+struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters>, public ITieredCacheCounters {
     using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
     using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
@@ -35,10 +42,6 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr CacheMissBytes;
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
-    const TCounterPtr ActiveRegularPages;
-    const TCounterPtr ActiveRegularBytes;
-    const TCounterPtr ActiveInMemoryPages;
-    const TCounterPtr ActiveInMemoryBytes;
 
     // page collection counters:
     const TCounterPtr PageCollections;
@@ -53,6 +56,9 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
     TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);
+
+    TCounterPtr ActivePagesTier(ui32 tier) override;
+    TCounterPtr ActiveBytesTier(ui32 tier) override;
 };
 
 IActor* CreateSharedPageCache(

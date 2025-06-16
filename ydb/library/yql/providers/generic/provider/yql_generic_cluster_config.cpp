@@ -194,6 +194,14 @@ namespace NYql {
             return;
         }
 
+        if (IsIn({
+                EGenericDataSourceKind::OPENSEARCH,
+                }, 
+               clusterConfig.GetKind())) {
+            clusterConfig.SetProtocol(EGenericProtocol::HTTP);
+            return;
+        }
+
         // For the rest, parse the property into typed enum value
         auto it = properties.find("protocol");
         if (it == properties.cend()) {

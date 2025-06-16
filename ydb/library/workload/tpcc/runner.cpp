@@ -8,6 +8,7 @@
 #include "transactions.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/logger/log.h>
@@ -351,7 +352,7 @@ void TPCCRunner::Join() {
 }
 
 void TPCCRunner::RunSync() {
-    Config.SetDisplayUpdateInterval();
+    Config.SetDisplay();
 
     Clock::time_point now = Clock::now();
 
@@ -363,14 +364,14 @@ void TPCCRunner::RunSync() {
     // We don't want to start all terminals at the same time, because then there will be
     // a huge queue of ready terminals, which we can't handle
     bool forcedWarmup = false;
-    int minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
-    int minWarmupMinutes = (minWarmupSeconds + 59) / 60;
-    int warmupMinutes;
-    if (Config.WarmupMinutes < minWarmupMinutes) {
+    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
+    uint32_t minWarmupMinutes = (minWarmupSeconds + 59) / 60;
+    uint32_t warmupMinutes;
+    if (Config.WarmupDuration.Minutes() < minWarmupMinutes) {
         forcedWarmup = true; // we must print log message later after display update
         warmupMinutes = minWarmupMinutes;
     } else {
-        warmupMinutes = Config.WarmupMinutes;
+        warmupMinutes = Config.WarmupDuration.Minutes();
     }
 
     WarmupStartTs = Clock::now();
@@ -411,14 +412,14 @@ void TPCCRunner::RunSync() {
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
-    LOG_I("Measuring during " << Config.RunMinutes << " minutes");
+    LOG_I("Measuring during " << Config.RunDuration);
 
     MeasurementsStartTs = Clock::now();
 
     // reset statistics
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(PerThreadTerminalStats.size(), MeasurementsStartTs);
 
-    StopDeadline = MeasurementsStartTs + std::chrono::minutes(Config.RunMinutes);
+    StopDeadline = MeasurementsStartTs + std::chrono::minutes(Config.RunDuration.Minutes());
     while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
             break;
@@ -900,6 +901,32 @@ void TPCCRunner::PrintFinalResultPretty() {
 }
 
 } // anonymous
+
+//-----------------------------------------------------------------------------
+
+void TRunConfig::SetDisplay() {
+    if (NoTui) {
+        DisplayMode = EDisplayMode::Text;
+    } else {
+        if (NConsoleClient::IsStdoutInteractive()) {
+            DisplayMode = EDisplayMode::Tui;
+        } else {
+            DisplayMode = EDisplayMode::Text;
+        }
+    }
+
+    switch (DisplayMode) {
+    case EDisplayMode::None:
+        return;
+    case EDisplayMode::Text:
+        DisplayUpdateInterval = DisplayUpdateTextInterval;
+        return;
+    case EDisplayMode::Tui:
+        DisplayUpdateInterval = DisplayUpdateTuiInterval;
+        return;
+        break;
+    }
+}
 
 //-----------------------------------------------------------------------------
 

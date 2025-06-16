@@ -792,7 +792,7 @@ public:
     }
 
     void ImportSync() {
-        Config.SetDisplayUpdateInterval();
+        Config.SetDisplay();
         CalculateApproximateDataSize();
 
         // we want to switch buffers and draw UI ASAP to properly display logs

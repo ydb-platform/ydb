@@ -34,8 +34,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     ui64 ClusterStateGeneration;
     ui64 ClusterStateGuid;
 
-    static constexpr int MAX_REPLICAS_COUNT_EXP = 32;
-    static constexpr int MAX_REPLICAS_GROUP_COUNT_EXP = 16;
+    static constexpr int MAX_REPLICAS_COUNT_EXP = 32; // ReplicaGroups[i].Replicas.size() <= 2**MAX_REPLICAS_GROUP_COUNT_EXP
+    static constexpr int MAX_REPLICAS_GROUP_COUNT_EXP = 16; // ReplicaGroups.size() <= 2**MAX_REPLICAS_COUNT_EXP
 
     struct TEvPrivate {
         enum EEv {

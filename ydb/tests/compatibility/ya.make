@@ -33,7 +33,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 DEPENDS(
     ydb/tests/library/compatibility/binaries
 )
-IF(${COMPAT_TARGET_REF} == "current")
+IF(${YDB_COMPAT_TARGET_REF} == "current" OR NOT ${YDB_COMPAT_TARGET_REF})
     DEPENDS(
         ydb/apps/ydb
         ydb/apps/ydbd

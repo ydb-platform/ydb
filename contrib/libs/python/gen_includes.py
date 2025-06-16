@@ -1,67 +1,91 @@
 #!/usr/bin/env python3
 
-import sys
-import os
+import pathlib
 import re
-import errno
-from os import listdir
-from os.path import dirname, relpath, join
-
-
-def ensure_dir_exists(path):
-    try:
-        os.makedirs(path)
-    except OSError as e:
-        if e.errno == errno.EEXIST and os.path.isdir(path):
-            pass
-        else:
-            raise
-
-
-def make_dir(directory):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
 
 
 def files(directory):
-    for dirpath, dirnames, filenames in os.walk(directory):
+    for dirpath, dirnames, filenames in directory.walk():
         for name in filenames:
-            yield relpath(join(dirpath, name), directory)
+            yield str((dirpath / name).relative_to(directory))
 
 
 def headers_set(directory):
     return {
-        f for f in files(directory)
-        if f.endswith('.h') and (not f.startswith('internal/') or f.startswith('internal/pycore_frame.h')) and not re.match(r'^pyconfig[.-].+\.h$', f)
+        f
+        for f in files(directory)
+        if f.endswith(".h")
+        and (not f.startswith("internal/") or f.startswith("internal/pycore_frame.h"))
+        and not re.match(r"^pyconfig[.-].+\.h$", f)
     }
 
 
+def write_headers(
+    all_headers,
+    only_headers2,
+    only_headers3,
+    arcadia_root,
+    output_path,
+    python2_path,
+    python3_path,
+    define,
+):
+    for header in all_headers:
+        path = output_path / header
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as f:
+            f.write("#pragma once\n\n")
+            f.write(f"#ifdef {define}\n")
+            if header in only_headers3:
+                f.write(f"#include <{(python3_path / header).relative_to(arcadia_root)}>\n")
+            else:
+                f.write(f'#error "No <{header}> in Python3"\n')
+            f.write("#else\n")
+            if header in only_headers2:
+                f.write(f"#include <{(python2_path / header).relative_to(arcadia_root)}>\n")
+            else:
+                f.write(f'#error "No <{header}> in Python2"\n')
+            f.write("#endif\n")
+
+
 if __name__ == "__main__":
+    cur_dir = pathlib.Path.cwd()
+    arcadia_root = cur_dir.parent.parent.parent
 
-    python2_path = sys.argv[1]
-    python3_path = sys.argv[2]
-    output_path = sys.argv[3]
+    python2_path = arcadia_root / "contrib" / "tools" / "python" / "src" / "Include"
+    python3_path = arcadia_root / "contrib" / "tools" / "python3" / "Include"
+    output_path = arcadia_root / "contrib" / "libs" / "python" / "Include"
 
-    ensure_dir_exists(join('.', python2_path))
-    ensure_dir_exists(join('.', python3_path))
+    python3_prev_path = arcadia_root / "contrib" / "tools" / "python3_prev" / "Include"
+    output_prev_path = arcadia_root / "contrib" / "libs" / "python" / "Include_prev"
 
     only_headers2 = headers_set(python2_path)
     only_headers3 = headers_set(python3_path)
+
     all_headers = only_headers2 | only_headers3
 
-    for header in all_headers:
-        path = join(output_path, header)
-        make_dir(dirname(path))
-        f = open(path, 'w')
-        f.write('#pragma once\n\n')
-        f.write('#ifdef USE_PYTHON3\n')
-        if (header in only_headers3):
-            f.write('#include <' + join(python3_path, header) + '>\n')
-        else:
-            f.write('#error "No <' + header + '> in Python3"\n')
-        f.write('#else\n')
-        if (header in only_headers2):
-            f.write('#include <' + join(python2_path, header) + '>\n')
-        else:
-            f.write('#error "No <' + header + '> in Python2"\n')
-        f.write('#endif\n')
+    write_headers(
+        all_headers,
+        only_headers2,
+        only_headers3,
+        arcadia_root,
+        output_path,
+        python2_path,
+        python3_path,
+        "USE_PYTHON3",
+    )
+
+    if python3_prev_path.exists():
+        only_headers3_prev = headers_set(python3_prev_path)
+        all_headers_prev = only_headers2 | only_headers3_prev
+
+        write_headers(
+            all_headers_prev,
+            only_headers2,
+            only_headers3_prev,
+            arcadia_root,
+            output_prev_path,
+            python2_path,
+            python3_prev_path,
+            "USE_PYTHON3_PREV",
+        )

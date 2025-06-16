@@ -1067,8 +1067,9 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 
 // Transport packer
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
+TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type, TMaybe<size_t> bufferPageAllocSize, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
+    , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
@@ -1078,8 +1079,9 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
 }
 
 template<bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
+TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type, TMaybe<size_t> bufferPageAllocSize, arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
+    , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
     , State_(ScanTypeProperties(Type_, false))
     , IncrementalState_(ScanTypeProperties(Type_, true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
@@ -1146,7 +1148,7 @@ template<bool Fast>
 TChunkedBuffer TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) const {
     MKQL_ENSURE(ItemCount_ == 0, "Can not mix Pack() and AddItem() calls");
     MKQL_ENSURE(!IsBlock_, "Pack() should not be used for blocks");
-    TPagedBuffer::TPtr result = std::make_shared<TPagedBuffer>();
+    TPagedBuffer::TPtr result = std::make_shared<TPagedBuffer>(BufferPageAllocSize_);
     if constexpr (Fast) {
         PackImpl<Fast, false>(Type_, *result, value, State_);
     } else {
@@ -1160,7 +1162,7 @@ TChunkedBuffer TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& v
 
 template<bool Fast>
 void TValuePackerTransport<Fast>::StartPack() {
-    Buffer_ = std::make_shared<TPagedBuffer>();
+    Buffer_ = std::make_shared<TPagedBuffer>(BufferPageAllocSize_);
     if constexpr (Fast) {
         // reserve place for list item count
         Buffer_->ReserveHeader(sizeof(ItemCount_));
@@ -1442,7 +1444,7 @@ void TValuePackerTransport<Fast>::BuildMeta(TPagedBuffer::TPtr& buffer, bool add
     } else {
         s.OptionalMaskReserve = maskSize;
 
-        TPagedBuffer::TPtr resultBuffer = std::make_shared<TPagedBuffer>();
+        TPagedBuffer::TPtr resultBuffer = std::make_shared<TPagedBuffer>(BufferPageAllocSize_);
         SerializeMeta(*resultBuffer, useMask, s.OptionalUsageMask, fullLen, s.Properties.Test(EPackProps::SingleOptional));
         if (addItemCount) {
             PackData<Fast>(ItemCount_, *resultBuffer);

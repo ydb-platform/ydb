@@ -1,0 +1,45 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "sha512";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "Tf9Oo0DwqCPxXT9PAati6uDl2lecy4Ufjbnf6ExYsrN7iZA6dA4e4XLaeTpuedVg5ff5vQWKEqKAQz7W+kZRCg=="
+                        ]
+                    ];
+                    [
+                        [
+                            "QLJEESZB3XjdT5O2yRkN1G4AmRlNWkQle3761u+f9Gg9oe2gJERIyzQ6poj10+/XMU2v5YCsC8vxFa7Kno3BFA=="
+                        ]
+                    ];
+                    [
+                        [
+                            "O6+/CIgqLRATMJOhuEM/UFY7k8FKzQW3kCjrHRJ5kCckFFCYBlGZRQFCOmbCdq4mxDtzm8ZcThaxDDr2wgKuuw=="
+                        ]
+                    ];
+                    [
+                        [
+                            "z4PhNX7vuL3xVChQ1m2AB9Yg5AULVxXcg/SpIdNs6c5H0NE8XYXysP+DGNKHfuwvY7kxvUdBeoGlODJ6+SfaPg=="
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -67,7 +67,10 @@ namespace NSQLComplete {
             },
             MakeDefaultRanking());
 
-        auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
+        auto engine = MakeSqlCompletionEngine(
+            MakePureLexerSupplier(),
+            std::move(service),
+            MakeYQLConfiguration());
 
         for (size_t i = 0, j = 0; i < Attempts && j < MaxAttempts; ++j) {
             size_t pos = RandomNumber<size_t>(query.size() + 1);
@@ -92,17 +95,14 @@ namespace NSQLComplete {
     bool CheckComplete(TStringBuf query, NYql::TExprNode::TPtr root, NYql::TExprContext& ctx, NYql::TIssues& issues) try {
         return CheckComplete(query, MakeYqlAnalysis()->Analyze(root, ctx));
     } catch (...) {
-        issues.AddIssue(CurrentExceptionMessage());
+        issues.AddIssue(FormatCurrentException());
         return false;
     }
 
     bool CheckComplete(TStringBuf query, NYql::TAstNode& root, NYql::TIssues& issues) try {
-        return MakeYqlAnalysis()
-            ->Analyze(root, issues)
-            .Transform([&](auto&& ctx) { return CheckComplete(query, std::move(ctx)); })
-            .GetOrElse(false);
+        return CheckComplete(query, MakeYqlAnalysis()->Analyze(root, issues).GetOrElse({}));
     } catch (...) {
-        issues.AddIssue(CurrentExceptionMessage());
+        issues.AddIssue(FormatCurrentException());
         return false;
     }
 

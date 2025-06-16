@@ -119,8 +119,7 @@ private:
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
             FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
             FetchingContext->MutableScript().Next();
-            FetchingContext->Resume(FetchingContext);
-            return true;
+            return FetchingContext->Resume(FetchingContext);
         }
 
     public:

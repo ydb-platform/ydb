@@ -90,8 +90,12 @@ public:
         Callback->OnFinished(std::move(CurrentContext));
     }
 
-    void Resume(std::shared_ptr<TPortionsDataFetcher>& selfPtr) {
+    bool Resume(std::shared_ptr<TPortionsDataFetcher>& selfPtr) {
+        if (IsFinished) {
+            return false;
+        }
         NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0);
+        return true;
     }
 };
 

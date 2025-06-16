@@ -116,7 +116,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final {
         try {
-            LOG_D("Seek " << seq << " " << Debug());
+            LOG_T("Seek " << seq << " " << Debug());
 
             lead = Lead;
 
@@ -131,7 +131,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
         try {
-            LOG_T("Feed " << Debug());
+            // LOG_T("Feed " << Debug());
 
             ++ReadRows;
             ReadBytes += CountBytes(key, row);
@@ -156,7 +156,7 @@ public:
     EScan Exhausted() noexcept final
     {
         try {
-            LOG_D("Exhausted " << Debug());
+            LOG_T("Exhausted " << Debug());
 
             return EScan::Final;
         } catch (const std::exception& exc) {

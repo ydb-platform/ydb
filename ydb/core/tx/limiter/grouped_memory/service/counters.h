@@ -24,11 +24,12 @@ public:
         , AllocatedChunks(TBase::GetValue("Allocated/Count"))
         , Allocations(TBase::GetDeriviative("Allocated/Count"))
         , Free(TBase::GetDeriviative("Free/Count"))
-        , ValueHardLimit(TBase::GetValue("Limit/Hard/Bytes"))
-        , ValueSoftLimit(TBase::GetValue("Limit/Soft/Bytes"))
         , WaitingBytes(TBase::GetValue("Waiting/Bytes"))
         , WaitingChunks(TBase::GetValue("Waiting/Count"))
-        , AllocationFailCount(TBase::GetValue("AllocationFails/Count")) {
+        , AllocationFailCount(TBase::GetValue("AllocationFails/Count")) 
+        , ValueHardLimit(TBase::GetValue("Limit/Hard/Bytes"))
+        , ValueSoftLimit(TBase::GetValue("Limit/Soft/Bytes"))
+    {
     }
 
     void OnCannotAllocate() {

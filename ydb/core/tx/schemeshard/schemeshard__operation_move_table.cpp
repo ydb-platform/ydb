@@ -22,7 +22,7 @@ public:
     {}
     virtual ~TBaseShardMoveHelper() = default;
     virtual TTabletTypes::EType GetTabletType() const = 0;
-    virtual std::vector<TShardIdx> GetSrcShards() const = 0;//TODO Move me to ss
+    virtual std::vector<TShardIdx> GetSrcShards() const = 0;
     virtual TString GetSerializedTxMsg(const TMessageSeqNo& seqNo) const = 0;
     virtual TAutoPtr<::NActors::IEventBase> MakeProposalEvent(const TPathId& targetPathId, const TOperationId& operationId, const TString& txBody, const TMessageSeqNo& seqNo, const TActorContext& actorCtx) = 0;
     virtual TPath CopyTable(NIceDb::TNiceDb& db) = 0;
@@ -193,7 +193,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
-        //Y_ABORT_UNLESS(txState->MinStep); // we have to have right minstep
+        Y_ABORT_UNLESS(txState->MinStep);
 
         return true;
 

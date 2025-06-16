@@ -60,6 +60,8 @@ private:
                 << "NTableState::TProposedWaitParts"
                 << " operationId# " << OperationId;
     }
+    template<typename TEvent>
+    bool HandleReplyImpl(const TEvent& ev, TOperationContext& context);
 
 public:
     TProposedWaitParts(TOperationId id, TTxState::ETxState nextState = TTxState::Done);

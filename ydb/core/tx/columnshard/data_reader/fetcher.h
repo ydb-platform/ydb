@@ -22,7 +22,7 @@ private:
     TCurrentContext CurrentContext;
     std::shared_ptr<TEnvironment> Environment;
     const NConveyorComposite::ESpecialTaskCategory ConveyorCategory;
-    bool IsFinished = false;
+    bool IsFinishedFlag = false;
     EFetchingStage Stage = EFetchingStage::Created;
 
 public:
@@ -42,8 +42,12 @@ public:
         AFL_VERIFY(Callback);
     }
 
+    bool IsFinished() {
+        return IsFinishedFlag;
+    }
+
     ~TPortionsDataFetcher() {
-        AFL_VERIFY(IsFinished || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage);
+        AFL_VERIFY(IsFinishedFlag || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage);
     }
 
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,
@@ -84,8 +88,8 @@ public:
     void OnError(const TString& errMessage) {
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_error")("consumer", Input.GetConsumer())(
             "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
-        AFL_VERIFY(!IsFinished);
-        IsFinished = true;
+        AFL_VERIFY(!IsFinishedFlag);
+        IsFinishedFlag = true;
         SetStage(EFetchingStage::Error);
         Callback->OnError(errMessage);
     }
@@ -93,14 +97,18 @@ public:
     void OnFinished() {
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "on_finished")("consumer", Input.GetConsumer())(
             "task_id", Input.GetExternalTaskId())("script", Script.GetScriptClassName());
-        AFL_VERIFY(!IsFinished);
-        IsFinished = true;
+        AFL_VERIFY(!IsFinishedFlag);
+        IsFinishedFlag = true;
         SetStage(EFetchingStage::Finished);
         Callback->OnFinished(std::move(CurrentContext));
     }
 
     bool Resume(std::shared_ptr<TPortionsDataFetcher>& selfPtr) {
-        if (IsFinished) {
+        if (IsFinishedFlag) {
+            return false;
+        }
+        if (Callback->IsAborted()) {
+            OnError("aborted");
             return false;
         }
         NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0);

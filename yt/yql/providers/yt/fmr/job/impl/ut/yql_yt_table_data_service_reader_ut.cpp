@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/local/yql_yt_table_data_service_local.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
 
 namespace NYql::NFmr {
 
@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
     Y_UNIT_TEST(ReadOneChunkSmallPart) {
         size_t chunkSize = 1024;
 
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{chunkSize};
         TFmrTableDataServiceWriter outputWriter("tableId", "partId", tableDataServicePtr, settings);
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
     Y_UNIT_TEST(ReadAllOneChunk) {
         size_t chunkSize = 1024;
 
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{.ChunkSize= chunkSize, .MaxInflightChunks = 2};
         TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
 
     Y_UNIT_TEST(ReadAllMultipleChunks) {
         size_t chunkSize = 32;
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{.ChunkSize= chunkSize, .MaxInflightChunks = 2};
         TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
 
     Y_UNIT_TEST(ReadAllMultipleChunksBigReadAhead) {
         size_t chunkSize = 32;
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         TFmrWriterSettings settings{chunkSize};
         TFmrTableDataServiceWriter outputStream("tableId", "partId", tableDataServicePtr, settings);

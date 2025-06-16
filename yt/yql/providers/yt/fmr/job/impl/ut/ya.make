@@ -10,7 +10,7 @@ PEERDIR(
     yt/cpp/mapreduce/common
     yt/yql/providers/yt/fmr/job/impl
     yt/yql/providers/yt/fmr/yt_job_service/mock
-    yt/yql/providers/yt/fmr/table_data_service/local
+    yt/yql/providers/yt/fmr/table_data_service/local/impl
     yql/essentials/utils/log
     yql/essentials/parser/pg_wrapper
     yql/essentials/parser/pg_wrapper/interface

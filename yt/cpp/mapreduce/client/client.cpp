@@ -65,18 +65,13 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<TString, TString> ParseProxyUrlAliasingRules(TString envConfig)
+void ApplyProxyUrlAliasingRules(
+    TString& url,
+    const THashMap<TString, TString>& proxyUrlAliasingRules)
 {
-    if (envConfig.empty()) {
-        return {};
-    }
-    return NYTree::ConvertTo<THashMap<TString, TString>>(NYson::TYsonString(envConfig));
-}
-
-void ApplyProxyUrlAliasingRules(TString& url)
-{
-    static auto rules = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
-    if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
+    if (auto ruleIt = proxyUrlAliasingRules.find(url);
+        ruleIt != proxyUrlAliasingRules.end()
+    ) {
         url = ruleIt->second;
     }
 }
@@ -1566,7 +1561,7 @@ void SetupClusterContext(
 {
     context.ServerName = serverName;
     context.MultiproxyTargetCluster = serverName;
-    ApplyProxyUrlAliasingRules(context.ServerName);
+    ApplyProxyUrlAliasingRules(context.ServerName, context.Config->ProxyUrlAliasingRules);
 
     if (context.ServerName.find('.') == TString::npos &&
         context.ServerName.find(':') == TString::npos &&

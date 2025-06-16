@@ -201,8 +201,6 @@ static bool operator == (const TStructField& lhs, const TStructField& rhs)
 class TLogicalTypeParser
 {
 public:
-    TLogicalTypeParser() = default;
-
     TLogicalTypePtr ParseTypeAndValidate(TStringBuf typeString)
     {
         *this = {};
@@ -425,7 +423,7 @@ private:
             }
 
             if (!identifierClosed) {
-                THROW_ERROR_EXCEPTION("Invalid enclosure: %Qv", Str_.SubStr(start, Index_ - start))
+                THROW_ERROR_EXCEPTION("Encountered invalid enclosure %Qv", Str_.SubStr(start, Index_ - start))
                     << TErrorAttribute("type_string", Str_);
             }
 
@@ -532,7 +530,7 @@ private:
             Step();
             ConsumeWhitespaces();
         } else {
-            THROW_ERROR_EXCEPTION("Expected %Qv", character);
+            THROW_ERROR_EXCEPTION("Expected %qv", character);
         }
     }
 
@@ -573,9 +571,10 @@ TString ToString(const TLogicalType& logicalType)
             } else {
                 destination->append(',');
             }
+            auto escapedName = EscapeCAndSingleQuotes(field.Name);
             destination
                 ->append('\'')
-                .append(EscapeCAndSingleQuotes(field.Name))
+                .append(escapedName)
                 .append('\'')
                 .append(':')
                 .append(ToString(*field.Type));
@@ -639,10 +638,11 @@ TString ToString(const TLogicalType& logicalType)
 
         case ELogicalMetatype::Tagged: {
             const auto& taggedType = logicalType.AsTaggedTypeRef();
+            auto escapedTag = EscapeCAndSingleQuotes(taggedType.GetTag());
             return TString("Tagged<")
                 .append(ToString(*taggedType.GetElement()))
                 .append(",'")
-                .append(EscapeCAndSingleQuotes(taggedType.GetTag()))
+                .append(escapedTag)
                 .append("'>");
         }
     }

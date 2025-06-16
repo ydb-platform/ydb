@@ -8,6 +8,7 @@
 #include <yt/yt/core/misc/collection_helpers.h>
 
 #include <yt/yt/core/yson/string.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/yson_struct.h>
@@ -412,7 +413,7 @@ void ToProto(
     }
 
     if (options.IncludeReplicatedTableOptions && replicationCard.ReplicatedTableOptions) {
-        protoReplicationCard->set_replicated_table_options(ConvertToYsonString(replicationCard.ReplicatedTableOptions).ToString());
+        protoReplicationCard->set_replicated_table_options(ToProto(ConvertToYsonString(replicationCard.ReplicatedTableOptions)));
     }
 
     protoReplicationCard->set_era(replicationCard.Era);

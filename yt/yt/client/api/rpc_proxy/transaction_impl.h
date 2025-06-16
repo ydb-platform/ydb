@@ -248,9 +248,9 @@ public:
     // Custom methods.
 
     //! Returns proxy address this transaction is sticking to.
-    //! Empty for non-sticky transactions (e.g.: master) or
+    //! Null for non-sticky transactions (e.g.: master) or
     //! if address resolution is not supported by the implementation.
-    const TString& GetStickyProxyAddress() const;
+    const std::optional<std::string>& GetStickyProxyAddress() const;
 
     //! Flushes all modifications to RPC proxy.
     //!
@@ -278,7 +278,7 @@ private:
     const TDuration Timeout_;
     const bool PingAncestors_;
     const std::optional<TDuration> PingPeriod_;
-    const TString StickyProxyAddress_;
+    const std::optional<std::string> StickyProxyAddress_;
     const i64 SequenceNumberSourceId_;
 
     const NLogging::TLogger Logger;

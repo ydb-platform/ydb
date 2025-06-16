@@ -2155,7 +2155,12 @@ void TSchemeShard::PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pat
                 NIceDb::TNull<Schema::SubDomainsAlterData::DatabaseQuotas>());
     }
 
-    PersistSubDomainSchemeLimitsAlter(db, pathId, subDomain);
+    if (subDomain.GetTenantSchemeShardID()) {
+        // Scheme limits protect SchemeShard tablets from overload.
+        // Regular (non-external) subdomains use the root SchemeShard and its limits,
+        // so they don't need to persist their scheme limits.
+        PersistSubDomainSchemeLimitsAlter(db, pathId, subDomain);
+    }
     PersistSubDomainAuditSettingsAlter(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesModeAlter(db, pathId, subDomain);
 
@@ -2219,6 +2224,9 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
     PersistSubDomainDeclaredSchemeQuotas(db, pathId, subDomain);
     PersistSubDomainDatabaseQuotas(db, pathId, subDomain);
     if (subDomain.GetTenantSchemeShardID()) {
+        // Scheme limits protect SchemeShard tablets from overload.
+        // Regular (non-external) subdomains use the root SchemeShard and its limits,
+        // so they don't need to persist their scheme limits.
         PersistSchemeLimits(db, pathId, subDomain);
     }
     PersistSubDomainState(db, pathId, subDomain);

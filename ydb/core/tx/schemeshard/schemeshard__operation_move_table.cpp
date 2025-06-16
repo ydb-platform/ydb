@@ -9,156 +9,6 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-class TBaseShardMoveHelper {
-protected:
-    TSchemeShard* SS;
-    const TPath& SrcPath;
-    const TPath& DstPath;
-public:
-    TBaseShardMoveHelper(TSchemeShard* ss, const TPath& srcPath, const TPath& dstPath)
-        : SS(ss)
-        , SrcPath(srcPath)
-        , DstPath(dstPath)
-    {}
-    virtual ~TBaseShardMoveHelper() = default;
-    virtual TTabletTypes::EType GetTabletType() const = 0;
-    virtual std::vector<TShardIdx> GetSrcShards() const = 0;
-    virtual TString GetSerializedTxMsg(const TMessageSeqNo& seqNo) const = 0;
-    virtual TAutoPtr<::NActors::IEventBase> MakeProposalEvent(const TPathId& targetPathId, const TOperationId& operationId, const TString& txBody, const TMessageSeqNo& seqNo, const TActorContext& actorCtx) = 0;
-    virtual TPath CopyTable(NIceDb::TNiceDb& db) = 0;
-};
-
-class TDataShardMoveHelper: public TBaseShardMoveHelper {
-private:
-    TTableInfo::TPtr SrcTable;
-public:
-    TDataShardMoveHelper(TSchemeShard* ss, const TPath& srcPath, const TPath& dstPath)
-        : TBaseShardMoveHelper(ss, srcPath, dstPath)
-        , SrcTable(ss->Tables.at(srcPath->PathId))
-    {}
-    TTabletTypes::EType GetTabletType() const override {
-        return ETabletType::DataShard;
-    }
-    std::vector<TShardIdx> GetSrcShards() const override {
-        std::vector<TShardIdx> idxs;
-        for (const auto& shard : SrcTable->GetPartitions()) {
-            idxs.emplace_back(shard.ShardIdx);
-        }
-        return idxs;
-    }
-    TString GetSerializedTxMsg(const TMessageSeqNo& seqNo) const override {
-        NKikimrTxDataShard::TFlatSchemeTransaction tx;
-        SS->FillSeqNo(tx, seqNo);
-        auto move = tx.MutableMoveTable();
-        SrcPath->PathId.ToProto(move->MutablePathId());
-        move->SetTableSchemaVersion(SrcTable->AlterVersion+1);
-
-        DstPath->PathId.ToProto(move->MutableDstPathId());
-        move->SetDstPath(TPath::Init(DstPath->PathId, SS).PathString());
-
-        for (const auto& child: SrcPath->GetChildren()) {
-            auto name = child.first;
-
-            TPath srcChildPath = SrcPath.Child(name);
-            Y_ABORT_UNLESS(srcChildPath.IsResolved());
-
-            if (srcChildPath.IsDeleted()) {
-                continue;
-            }
-            if (srcChildPath.IsSequence()) {
-                continue;
-            }
-
-            TPath dstIndexPath = DstPath.Child(name);
-            Y_ABORT_UNLESS(dstIndexPath.IsResolved());
-
-            auto remap = move->AddReMapIndexes();
-            srcChildPath->PathId.ToProto(remap->MutableSrcPathId());
-            dstIndexPath->PathId.ToProto(remap->MutableDstPathId());
-        }
-        TString result;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&result);
-        return result;
-    }
-    TAutoPtr<::NActors::IEventBase> MakeProposalEvent(const TPathId& targetPathId, const TOperationId& operationId, const TString& txBody, const TMessageSeqNo& seqNo, const TActorContext& actorCtx) override {
-        Y_UNUSED(seqNo); //???
-        return SS->MakeDataShardProposal(targetPathId, operationId, txBody, actorCtx).Release();
-    }
-    TPath CopyTable(NIceDb::TNiceDb& db) override {
-        Y_ABORT_UNLESS(SS->Tables.contains(SrcPath.Base()->PathId));
-        TTableInfo::TPtr tableInfo = TTableInfo::DeepCopy(*SS->Tables.at(SrcPath.Base()->PathId));
-        tableInfo->ResetDescriptionCache();
-        tableInfo->AlterVersion += 1;
-        // copy table info
-        SS->Tables[DstPath.Base()->PathId] = tableInfo;
-        SS->PersistTable(db, DstPath.Base()->PathId);
-        SS->PersistTablePartitionStats(db, DstPath.Base()->PathId, tableInfo);
-        return DstPath;
-    }
-};
-
-class TColumnShardMoveHelper: public TBaseShardMoveHelper {
-private:
-    NKikimr::NSchemeShard::TTablesStorage::TTableReadGuard SrcTable;
-public:
-    TColumnShardMoveHelper(TSchemeShard* ss, const TPath& srcPath, const TPath& dstPath)
-        : TBaseShardMoveHelper(ss, srcPath, dstPath)
-        , SrcTable(ss->ColumnTables.GetVerified(srcPath.Base()->PathId))
-    {}
-    TTabletTypes::EType GetTabletType() const override {
-        return ETabletType::ColumnShard;
-    }
-
-    std::vector<TShardIdx> GetSrcShards() const override {
-        std::vector<TShardIdx> idxs;
-        for (const auto& id: SrcTable->GetShardIdsSet()) {
-            idxs.emplace_back(SS->TabletIdToShardIdx.at(TTabletId(id)));
-        }
-        return idxs;
-    }
-    TString GetSerializedTxMsg(const TMessageSeqNo& seqNo) const override {
-        NKikimrTxColumnShard::TSchemaTxBody tx;
-        SS->FillSeqNo(tx, seqNo);
-        auto move = tx.MutableMoveTable();
-        move->SetSrcPathId(SrcPath->PathId.LocalPathId);
-        move->SetDstPathId(DstPath->PathId.LocalPathId);
-        TString result;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&result);
-        return result;
-    }
-    TAutoPtr<::NActors::IEventBase> MakeProposalEvent(const TPathId& targetPathId, const TOperationId& operationId, const TString& txBody, const TMessageSeqNo& seqNo, const TActorContext& actorCtx) override {
-        return std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-            NKikimrTxColumnShard::TX_KIND_SCHEMA,
-            SS->TabletID(),
-            actorCtx.SelfID,
-            ui64(operationId.GetTxId()),
-            txBody, seqNo,
-            SS->SelectProcessingParams(targetPathId),
-            0, 0
-        ).release();
-    }
-    TPath CopyTable(NIceDb::TNiceDb& db) override {
-        auto srcTable = SS->ColumnTables.GetVerified(SrcPath.Base()->PathId);
-        auto tableInfo = SS->ColumnTables.BuildNew(DstPath.Base()->PathId, srcTable.GetPtr());
-        //tableInfo->ResetDescriptionCache();
-        tableInfo->AlterVersion += 1;
-        SS->PersistColumnTable(db, DstPath.Base()->PathId, *tableInfo, false);
-        //SS->PersistTablePartitionStats(db, DstPath.Base()->PathId, tableInfo.GetPtr());
-        return DstPath;
-    }
-};
-
-std::unique_ptr<TBaseShardMoveHelper> MakeMoveHelper(TSchemeShard* ss, const TPath& srcPath, const TPath& dstPath) {
-    if (srcPath->IsTable()) {
-        return std::make_unique<TDataShardMoveHelper>(ss, srcPath, dstPath);
-    }
-    if (srcPath->IsColumnTable()) {
-        return std::make_unique<TColumnShardMoveHelper>(ss, srcPath, dstPath);
-    }
-    AFL_VERIFY(false);
-    return {};
-}
-
 class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
@@ -225,34 +75,84 @@ public:
         Y_ABORT_UNLESS(srcPath.IsResolved());
 
         NIceDb::TNiceDb db(context.GetDB());
-        const auto moveHelper = MakeMoveHelper(context.SS, srcPath, dstPath);
+
         // txState catches table shards
         if (!txState->Shards) {
-            const auto shards = moveHelper->GetSrcShards();
-            txState->Shards.reserve(shards.size());
-            for (const auto& idx: shards) {
-                auto& shardInfo = context.SS->ShardInfos[idx];
+            if (srcPath->IsTable()) {
+                TTableInfo::TPtr srcTable = context.SS->Tables.at(srcPath->PathId);
+                txState->Shards.reserve(srcTable->GetPartitions().size());
+                for (const auto& shard : srcTable->GetPartitions()) {
+                    auto shardIdx = shard.ShardIdx;
+                    TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
 
-                txState->Shards.emplace_back(idx, moveHelper->GetTabletType(), TTxState::ConfigureParts);
+                    txState->Shards.emplace_back(shardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
 
-                shardInfo.CurrentTxId = OperationId.GetTxId();
-                context.SS->PersistShardTx(db, idx, OperationId.GetTxId());
+                    shardInfo.CurrentTxId = OperationId.GetTxId();
+                    context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
+                }
+                context.SS->PersistTxState(db, OperationId);
+            } else {
+                NKikimr::NSchemeShard::TTablesStorage::TTableReadGuard srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
+                txState->Shards.reserve(srcTable->GetShardIdsSet().size());
+                for (const auto& id : srcTable->GetShardIdsSet()) {
+                    const auto shardIdx = context.SS->TabletIdToShardIdx.at(TTabletId(id));
+                    TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
+
+                    txState->Shards.emplace_back(shardIdx, ETabletType::ColumnShard, TTxState::ConfigureParts);
+
+                    shardInfo.CurrentTxId = OperationId.GetTxId();
+                    context.SS->PersistShardTx(db, shardIdx, OperationId.GetTxId());
+                }
             }
-            context.SS->PersistTxState(db, OperationId);
         }
         Y_ABORT_UNLESS(txState->Shards.size());
+
         const auto& seqNo = context.SS->StartRound(*txState);
-        TString txBody = moveHelper->GetSerializedTxMsg(seqNo);
+        TString txBody;
+        if (srcPath->IsTable()) {
+            TTableInfo::TPtr srcTable = context.SS->Tables.at(srcPath->PathId);
+
+            NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            context.SS->FillSeqNo(tx, seqNo);
+            auto move = tx.MutableMoveTable();
+            srcPath->PathId.ToProto(move->MutablePathId());
+            move->SetTableSchemaVersion(srcTable->AlterVersion+1);
+
+            dstPath->PathId.ToProto(move->MutableDstPathId());
+            move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
+
+            for (const auto& child: srcPath->GetChildren()) {
+                auto name = child.first;
+
+                TPath srcChildPath = srcPath.Child(name);
+                Y_ABORT_UNLESS(srcChildPath.IsResolved());
+
+                if (srcChildPath.IsDeleted()) {
+                    continue;
+                }
+                if (srcChildPath.IsSequence()) {
+                    continue;
+                }
+
+                TPath dstIndexPath = dstPath.Child(name);
+                Y_ABORT_UNLESS(dstIndexPath.IsResolved());
+
+                auto remap = move->AddReMapIndexes();
+                srcChildPath->PathId.ToProto(remap->MutableSrcPathId());
+                dstIndexPath->PathId.ToProto(remap->MutableDstPathId());
+            }
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        } else {
+            NKikimrTxColumnShard::TSchemaTxBody tx;
+            context.SS->FillSeqNo(tx, seqNo);
+            auto move = tx.MutableMoveTable();
+            move->SetSrcPathId(srcPath->PathId.LocalPathId);
+            move->SetDstPathId(dstPath->PathId.LocalPathId);
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        }
         // send messages
         txState->ClearShardsInProgress();
-        //TODO moveto moveHelper
-        if (srcPath->IsColumnTable()) {
-            for (const auto& shard: txState->Shards) {
-                const auto& tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-                auto event = moveHelper->MakeProposalEvent(txState->TargetPathId, OperationId, txBody, seqNo, context.Ctx);
-                context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event);
-            }
-        } else {
+        if (srcPath->IsTable()) {
             for (ui32 i = 0; i < txState->Shards.size(); ++i) {
                 auto idx = txState->Shards[i].Idx;
                 auto datashardId = context.SS->ShardInfos[idx].TabletID;
@@ -260,8 +160,21 @@ public:
                 auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
                 context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
             }
+        } else {
+            for (const auto& shard: txState->Shards) {
+                const auto& tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
+                auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                        NKikimrTxColumnShard::TX_KIND_SCHEMA,
+                        context.SS->TabletID(),
+                        context.Ctx.SelfID,
+                        ui64(OperationId.GetTxId()),
+                        txBody, seqNo,
+                        context.SS->SelectProcessingParams(dstPath.Base()->PathId),
+                        0, 0
+                ).release();
+                context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event);
+            }
         }
-
         txState->UpdateShardsInProgress(TTxState::ConfigureParts);
         return false;
     }
@@ -281,8 +194,6 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     if (srcPath->IsTable()) {
         context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
-    } else {
-        //TODO
     }
     context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
@@ -369,8 +280,23 @@ public:
         }
 
         Y_ABORT_UNLESS(!context.SS->Tables.contains(dstPath.Base()->PathId));
-        const auto moveHelper = MakeMoveHelper(context.SS, srcPath, dstPath);
-        moveHelper->CopyTable(db);
+        if (srcPath->IsTable()) {
+            Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
+
+            TTableInfo::TPtr tableInfo = TTableInfo::DeepCopy(*context.SS->Tables.at(srcPath.Base()->PathId));
+            tableInfo->ResetDescriptionCache();
+            tableInfo->AlterVersion += 1;
+
+            // copy table info
+            context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
+            context.SS->PersistTable(db, dstPath.Base()->PathId);
+            context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
+        } else {
+            auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
+            auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
+            tableInfo->AlterVersion += 1;
+            context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
+        }
         context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "move table info");
 
         dstPath->StepCreated = step;
@@ -396,7 +322,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxMoveTable);
         Y_ABORT_UNLESS(txState->SourcePathId);
-        //Y_ABORT_UNLESS(txState->MinStep);
+        Y_ABORT_UNLESS(txState->MinStep);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -578,9 +504,6 @@ public:
                     context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
                 }
             }
-        } else {
-            const auto tableInfo = context.SS->ColumnTables.GetVerified(dstPath.Base()->PathId);
-            Y_ABORT_UNLESS(tableInfo);
         }
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
@@ -643,7 +566,6 @@ public:
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         return HandleReplyImpl(ev, context);
     }
-
 
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
@@ -894,19 +816,13 @@ public:
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);
 
-        const bool isColumnTable = srcPath->IsColumnTable();
         // wait splits
-        if (isColumnTable) {
-            auto columnTableInfo = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
-            //TODO handle ongoing resharding
-            Y_UNUSED(columnTableInfo);
-        } else {
+        if (srcPath->IsTable()) {
             TTableInfo::TPtr tableSrc = context.SS->Tables.at(srcPath.Base()->PathId);
             for (auto splitTx: tableSrc->GetSplitOpsInFlight()) {
                 context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
             }
         }
-
         context.OnComplete.ActivateTx(OperationId);
 
         SetState(NextState());

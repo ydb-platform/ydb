@@ -288,8 +288,8 @@ public:
         return TStringBuilder() << "TBuildIndexScan TabletId: " << DataShardId << " Id: " << BuildIndexId
             << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry)
             << ", last acked point: " << DebugPrintPoint(KeyTypes, LastUploadedKey.GetCells(), *AppData()->TypeRegistry)
-            << Stats.ToString()
-            << UploadStatus.ToString();
+            << " " << Stats.ToString()
+            << " " << UploadStatus.ToString();
     }
 
     EScan PageFault() override {

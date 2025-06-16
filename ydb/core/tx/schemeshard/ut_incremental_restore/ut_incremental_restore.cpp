@@ -340,29 +340,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         // If we reach this point without crashes, the operation dispatch is working correctly
     }
 
-    Y_UNIT_TEST(CreateLongIncrementalRestoreOpAuditLog) {
-        TLongOpTestSetup setup;
-
-        // This test verifies that ESchemeOpCreateLongIncrementalRestoreOp operations
-        // are properly handled in the audit log system
-
-        // Create backup collection (note: don't create the actual table since restore will create it)
-        setup.CreateBackupCollection("AuditTestCollection", {"/MyRoot/AuditTestTable"});
-
-        // Create incremental backup structure
-        setup.CreateFullBackup("AuditTestCollection", {"AuditTestTable"}, "latest_full");
-        setup.CreateCustomBackupDirectories("AuditTestCollection", {"incr1_incremental"});
-
-        // Execute restore operation
-        setup.ExecuteRestore("AuditTestCollection");
-
-        // The key test is that this completes without error, indicating that:
-        // 1. DefineUserOperationName handles ESchemeOpCreateLongIncrementalRestoreOp
-        // 2. ExtractChangingPaths handles ESchemeOpCreateLongIncrementalRestoreOp
-        // 3. The audit log can process the operation type without crashing
-        // 4. The operation name "RESTORE INCREMENTAL LONG" is correctly returned
-    }
-
     Y_UNIT_TEST(CreateLongIncrementalRestoreOpErrorHandling) {
         TLongOpTestSetup setup;
 

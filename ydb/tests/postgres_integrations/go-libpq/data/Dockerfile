@@ -1,6 +1,6 @@
 # For docker context at root git directory
 
-FROM cr.yandex/crpq25pvu31gqulohlbv/golang:1.20-amd64
+FROM cr.yandex/crp9h1qbla5olt8ugd4m/golang:1.20-amd64
 
 WORKDIR /project/sources/
 

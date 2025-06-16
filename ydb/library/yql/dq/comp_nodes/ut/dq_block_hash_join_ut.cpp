@@ -146,7 +146,6 @@ void RunTestDqBlockHashJoin(
         joinKind
     );
     
-    // Для нашей минимальной реализации просто проверим что результат есть
     UNIT_ASSERT(got.HasValue());
     CompareResults(expectedType, expected, got);
 }

@@ -32,6 +32,7 @@ runs:
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+        -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake \
         -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \
         -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \
         ../ydb
@@ -51,6 +52,7 @@ runs:
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+        -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES=./cmake/conan_provider.cmake \
         -DCMAKE_C_FLAGS="${{ inputs.extra_compile_flags }}" \
         -DCMAKE_CXX_FLAGS="${{ inputs.extra_compile_flags }}" \
         ../ydb

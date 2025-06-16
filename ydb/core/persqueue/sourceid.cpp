@@ -101,7 +101,7 @@ void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
     SourceIdsWithHeartbeat.erase(sourceId);
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<i32> producerEpoch)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<i16> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
@@ -111,7 +111,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat, TMaybe<i32> producerEpoch)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartbeat&& heartbeat, TMaybe<i16> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
@@ -122,7 +122,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, THeartb
 {
 }
 
-TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit, TMaybe<i32> producerEpoch)
+TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit, TMaybe<i16> producerEpoch)
     : SeqNo(seqNo)
     , MinSeqNo(seqNo)
     , Offset(offset)
@@ -136,7 +136,7 @@ TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<
     }
 }
 
-TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TMaybe<i32> producerEpoch) const {
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, TMaybe<i16> producerEpoch) const {
     auto copy = *this;
     copy.SeqNo = seqNo;
     if (copy.MinSeqNo == 0) {
@@ -149,7 +149,7 @@ TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, 
     return copy;
 }
 
-TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat, TMaybe<i32> producerEpoch) const {
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat, TMaybe<i16> producerEpoch) const {
     auto copy = Updated(seqNo, offset, writeTs, producerEpoch);
     copy.LastHeartbeat = std::move(heartbeat);
 
@@ -165,12 +165,10 @@ TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
     result.Offset = ReadAs<ui64>(data, pos);
     result.WriteTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
     result.CreateTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
-    result.ProducerEpoch = ReadAs<TMaybe<ui32>>(data, pos);
+    result.ProducerEpoch = ReadAs<TMaybe<i16>>(data, pos);
 
     Y_ABORT_UNLESS(result.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, result.SeqNo);
     Y_ABORT_UNLESS(result.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, result.Offset);
-    Y_ABORT_UNLESS(result.ProducerEpoch.Empty() ||
-                   result.ProducerEpoch <= (ui32)Max<i16>(), "ProducerEpoch is too big: %" PRIu32, *result.ProducerEpoch);
 
     return result;
 }
@@ -186,7 +184,7 @@ void TSourceIdInfo::Serialize(TBuffer& data) const {
     Write<ui64>(Offset, data, pos);
     Write<ui64>(WriteTimestamp.MilliSeconds(), data, pos);
     Write<ui64>(CreateTimestamp.MilliSeconds(), data, pos);
-    Write<TMaybe<ui32>>(ProducerEpoch, data, pos);
+    Write<TMaybe<i16>>(ProducerEpoch, data, pos);
 }
 
 TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {

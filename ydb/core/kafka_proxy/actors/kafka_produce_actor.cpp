@@ -560,17 +560,16 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                         metricsErrorCode = Convert(msg->GetError().Code);
                         partitionResponse.ErrorMessage = msg->GetError().Reason;
 
-                        // TODO(qyryq) More elegant error passing.
                         if (partitionResponse.ErrorMessage.has_value()) {
-                            if (msg->Record.GetErrorReason().StartsWith("Epoch of producer")) {
+                            if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::PRECONDITION_FAILED) {
                                 partitionResponse.ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
                                 metricsErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
                                 partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
-                            } else if (msg->Record.GetErrorReason().StartsWith("Duplicate sequence")) {
+                            } else if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::VALIDATION_ERROR) {
                                 partitionResponse.ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER;
                                 metricsErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER;
                                 partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
-                            } else if (msg->Record.GetErrorReason().StartsWith("Out of order sequence")) {
+                            } else if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::INVALID_ARGUMENT) {
                                 partitionResponse.ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
                                 metricsErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
                                 partitionResponse.ErrorMessage = msg->Record.GetErrorReason();

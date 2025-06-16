@@ -926,35 +926,60 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
             // TODO(qyryq) Kafka does not respond with DUPLICATE_SEQUENCE_NUMBER at all.
-            // If you send several ProduceRequests to a partition, then if you repeat any of the last 5 requests,
+            // If you send several ProduceRequests to a partition, then resend any of the last 5 requests,
             // you'll just get the same response. But if you resend an older request, then you'll get an OUT_OF_ORDER_SEQUENCE_NUMBER error.
             // You will get the same error if you send any other seqnos, even if they cover the seqnos within the last 5 requests.
-            // E.g ProduceRequests with seqnos (3) (4) (5) (6 7 8) (9) (10).
-            // If you repeat any of the (4) - (10) requests, the same response will be returned as the first one for that particular request.
-            // Any other request will result in an OUT_OF_ORDER_SEQUENCE_NUMBER error: (1), (3), even (6 7).
+            // E.g after sending ProduceRequests with seqnos (3) (4) (5) (6 7 8) (9) (10),
+            // if you repeat any of the (4) - (10) requests, the same response will be returned as the first one for that particular request.
+            // Any other request will result in an OUT_OF_ORDER_SEQUENCE_NUMBER error: (1), (3), even (4 5) or (6 7).
 
             // Send the same message twice, it should be written only once:
 
             auto topic = *topicMetadata.Name;
 
-            // Kafka allows any seqno if the producer ID is unknown, so we can send seqno 5 here.
-            auto batch1 = MakeBatch(id, epoch, { .BaseSequence = 5 });
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, -1, { .BaseSequence = 0 })),
+                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
 
-            auto res1 = client.Produce(topic, 0, batch1);
-            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            // Kafka allows any seqno if the producer ID is unknown, so we can send seqno=5 here.
 
-            auto res2 = client.Produce(topic, 0, batch1);  // Duplicate message
-            CheckResponse(res2, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER });
-
-            // We didn't send seqno = 1, but it still should respond with DUPLICATE_SEQUENCE_NUMBER:
-            auto res3 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1 }));
-            CheckResponse(res3, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER });
-
-            // Write a message with the correct seqno.
-            auto res4 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 6 }));
-            CheckResponse(res4, { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 5 })),
+                { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
 
             AssertOffset(topic, 2);
+
+            // Duplicate message
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 5 })),
+                { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 6 })),
+                { .BaseOffset = 2, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 7 })),
+                { .BaseOffset = 3, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 4);
+
+            // We should return OUT_OF_ORDER_SEQUENCE_NUMBER, but it will be done later.
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 4 })),
+                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            // We simply guess the base offset, as we store in memory only offsets of the last message.
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 5 })),
+                { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            //
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1 })),
+                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER });
+
+            AssertOffset(topic, 4);
         });
 
         WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
@@ -1005,19 +1030,41 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             auto topic = *topicMetadata.Name;
 
-            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1, .RecordCount = 3 }));
-            CheckResponse(res1, {
-                .BaseOffset = 0,
-                .ErrorCode = EKafkaErrors::NONE_ERROR,
-            });
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1, .RecordCount = 3 })),
+                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
 
-            // TODO(qyryq) We should not accept the second batch at all. There's no way to respond with errors and success at the same time.
-            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 2, .RecordCount = 3 }));
-            CheckResponse(res2, {
-                .BaseOffset = 0,
-                .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER,
-            });
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 2, .RecordCount = 3 })),
+                { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
             AssertOffset(topic, 4);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write messages in different epochs.
+
+            auto topic = *topicMetadata.Name;
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 3, .RecordCount = 5 })),
+                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 5);
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch + 1, { .BaseSequence = 0, .RecordCount = 2 })),
+                { .BaseOffset = 5, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 7);
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 8 })),
+                { .ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH });
+            AssertOffset(topic, 7);
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch + 1, { .BaseSequence = 2 })),
+                { .BaseOffset = 7, .ErrorCode = EKafkaErrors::NONE_ERROR });
+            AssertOffset(topic, 8);
         });
 
         WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
@@ -1074,6 +1121,36 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             AssertOffset(topic, 2);
         });
 
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write messages with producer epoch = -1. Any seqnos are allowed in any order.
+            // Then write a message with proper epoch.
+            // Then check that epoch -1 is not allowed anymore.
+
+            auto topic = *topicMetadata.Name;
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, -1, { .BaseSequence = 10 })),
+                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, -1, { .BaseSequence = 5 })),
+                { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 2);
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 3 })),
+                { .BaseOffset = 2, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 3);
+
+            CheckResponse(
+                client.Produce(topic, 0, MakeBatch(id, -1, { .BaseSequence = 4 })),
+                { .ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH });
+
+            AssertOffset(topic, 3);
+        });
+
         // TODO(qyryq) The same tests but with the tablet restarting in between the producer requests.
 
         WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
@@ -1089,19 +1166,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             });
 
             // Kill topic tablet:
-            TString oldPath = GetEnv("OLDPATH", topic);  // TODO(qyryq) Delete this var.
             NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
-            auto pathDescr = kikimrClient.Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
+            auto pathDescr = kikimrClient.Ls(topic)->Record.GetPathDescription().GetPersQueueGroup();
             auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
             kikimrClient.KillTablet(testServer.KikimrServer->GetServer(), tabletId);
 
             while (true) {
                 auto res2 = client.Produce(topic, 0, batch1);  // Duplicate message
                 if (res2->Responses[0].PartitionResponses[0].ErrorCode != EKafkaErrors::NOT_LEADER_OR_FOLLOWER) {
-                    CheckResponse(res2, {
-                        .BaseOffset = 0,
-                        .ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER,
-                    });
+                    CheckResponse(res2, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
                     break;
                 }
             }

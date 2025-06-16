@@ -52,5 +52,8 @@ enum EErrorCode {
 
     PRECONDITION_FAILED = 31;
 
+    INVALID_ARGUMENT = 40;
+    VALIDATION_ERROR = 80;
+
     ERROR = 100;
 }

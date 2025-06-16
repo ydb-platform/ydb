@@ -137,7 +137,7 @@ std::optional<ui64> TPartitionSourceManager::TSourceManager::SeqNo() const {
     return Info.State == TSourceIdInfo::EState::Unknown ? std::nullopt : std::optional(Info.SeqNo);
 }
 
-std::optional<TMaybe<i32>> TPartitionSourceManager::TSourceManager::ProducerEpoch() const {
+std::optional<TMaybe<i16>> TPartitionSourceManager::TSourceManager::ProducerEpoch() const {
     return Info.State == TSourceIdInfo::EState::Unknown ? std::nullopt : std::optional(Info.ProducerEpoch);
 }
 
@@ -153,7 +153,7 @@ std::optional<ui64> TPartitionSourceManager::TSourceManager::UpdatedSeqNo() cons
     return InWriter == WriteStorage().end() ? std::nullopt : std::optional(InWriter->second.SeqNo);
 }
 
-void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TInstant timestamp, TMaybe<i32> producerEpoch) {
+void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TInstant timestamp, TMaybe<i16> producerEpoch) {
     if (InMemory == MemoryStorage().end()) {
         Batch.SourceIdWriter.RegisterSourceId(SourceId, seqNo, offset, timestamp, producerEpoch);
     } else {

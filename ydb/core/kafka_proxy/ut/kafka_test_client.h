@@ -74,9 +74,13 @@ class TKafkaTestClient {
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 
-        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs, std::optional<TString> transactionalId = {});
+        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId = {});
         
-        TMessagePtr<TProduceResponseData> Produce(const TTopicPartition topicPartition, const std::vector<std::pair<TString, TString>> keyValueMessages, ui32 baseSequence = 0, std::optional<TProducerInstanceId> producerInstanceId = {}, std::optional<TString> transactionalId = {});
+        TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition, 
+                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages, 
+                                                            ui32 baseSequence = 0, 
+                                                            const std::optional<TProducerInstanceId>& producerInstanceId = {}, 
+                                                            const std::optional<TString>& transactionalId = {});
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
 
@@ -108,7 +112,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
 
-        TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
+        TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(const std::vector<TTopicConfig>& topicsToCreate, bool validateOnly = false);
 
         TMessagePtr<TAlterConfigsResponseData> AlterConfigs(std::vector<TTopicConfig> topicsToModify, bool validateOnly = false);
 

@@ -36,7 +36,7 @@ TWriteId GetWriteIdImpl(const T& m)
     const auto& writeId = m.GetWriteId();
     if (writeId.GetKafkaTransaction()) {
         const auto& kafkaProducerInstanceId = writeId.GetKafkaProducerInstanceId();
-        return {NKafka::TProducerInstanceId{kafkaProducerInstanceId.GetId(), kafkaProducerInstanceId.GetEpoch()}};
+        return TWriteId{NKafka::TProducerInstanceId{kafkaProducerInstanceId.GetId(), kafkaProducerInstanceId.GetEpoch()}};
     } else {
         return {writeId.GetNodeId(), writeId.GetKeyId()};
     }

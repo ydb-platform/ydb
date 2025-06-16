@@ -114,7 +114,7 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return Produce(topicName, msgs);
 }
 
-TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs, std::optional<TString> transactionalId) {
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId) {
     Cerr << ">>>>> TProduceRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
@@ -135,11 +135,11 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return WriteAndRead<TProduceResponseData>(header, request);
 }
 
-TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition topicPartition, 
-                                                            const std::vector<std::pair<TString, TString>> keyValueMessages, 
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition, 
+                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages, 
                                                             ui32 baseSequence, 
-                                                            std::optional<TProducerInstanceId> producerInstanceId, 
-                                                            std::optional<TString> transactionalId) {
+                                                            const std::optional<TProducerInstanceId>& producerInstanceId, 
+                                                            const std::optional<TString>& transactionalId) {
     TKafkaRecordBatch batch;
     batch.BaseSequence = baseSequence;
     batch.Magic = TKafkaRecordBatch::MagicMeta::Default;
@@ -154,7 +154,7 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartitio
         batch.ProducerEpoch = producerInstanceId->Epoch;
     }
     std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs;
-    msgs.emplace_back(topicPartition.PartitionId, batch);
+    msgs.emplace_back(topicPartition.PartitionId, std::move(batch));
     return Produce(topicPartition.TopicPath, msgs, transactionalId);
 }
 
@@ -483,7 +483,7 @@ TMessagePtr<TCreateTopicsResponseData> TKafkaTestClient::CreateTopics(std::vecto
     return WriteAndRead<TCreateTopicsResponseData>(header, request);
 }
 
-TMessagePtr<TCreatePartitionsResponseData> TKafkaTestClient::CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly) {
+TMessagePtr<TCreatePartitionsResponseData> TKafkaTestClient::CreatePartitions(const std::vector<TTopicConfig>& topicsToCreate, bool validateOnly) {
     Cerr << ">>>>> TCreateTopicsRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::CREATE_PARTITIONS, 3);

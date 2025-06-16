@@ -23,7 +23,7 @@ If this class represents transaction from the Kafka API, then KafkaProducerInsta
 struct TWriteId {
     TWriteId() = default;
     TWriteId(ui64 nodeId, ui64 keyId);
-    TWriteId(NKafka::TProducerInstanceId kafkaProducerInstanceId);
+    explicit TWriteId(NKafka::TProducerInstanceId kafkaProducerInstanceId);
 
     bool operator==(const TWriteId& rhs) const;
     bool operator<(const TWriteId& rhs) const;

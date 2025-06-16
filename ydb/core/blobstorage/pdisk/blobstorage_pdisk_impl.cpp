@@ -2858,8 +2858,8 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeSsd);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeRot);
-            icb->RegisterSharedControl(UseNoopSchedulerHDD, EStaticControlType::PDiskControlsUseNoopSchedulerHDD);
-            icb->RegisterSharedControl(UseNoopSchedulerSSD, EStaticControlType::PDiskControlsUseNoopSchedulerSSD);
+            TControlBoard::RegisterSharedControl(UseNoopSchedulerHDD, icb->PDiskControls.UseNoopSchedulerHDD);
+            TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
 
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();

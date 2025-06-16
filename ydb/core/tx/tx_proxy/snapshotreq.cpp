@@ -132,7 +132,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs, EStaticControlType::TxLimitControlsDefaultTimeoutMs);
+        TControlBoard::RegisterSharedControl(DefaultTimeoutMs, AppData(ctx)->Icb->TxLimitControls.DefaultTimeoutMs);
 
         WallClockAccepted = Now();
 
@@ -1168,7 +1168,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AppData(ctx)->Icb->RegisterSharedControl(DefaultTimeoutMs, EStaticControlType::TxLimitControlsDefaultTimeoutMs);
+        TControlBoard::RegisterSharedControl(DefaultTimeoutMs, AppData(ctx)->Icb->TxLimitControls.DefaultTimeoutMs);
 
         WallClockAccepted = Now();
 

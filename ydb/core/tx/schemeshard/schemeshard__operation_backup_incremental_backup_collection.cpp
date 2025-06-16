@@ -71,20 +71,6 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         }
         auto& relativeItemPath = paths.second;
 
-        // Add CreateChangePathState with target state EPathStateAwaitingOutgoingIncrementalRestore for each incremental table
-        NKikimrSchemeOp::TModifyScheme changePathStateScheme;
-        changePathStateScheme.SetWorkingDir(tx.GetWorkingDir());
-        changePathStateScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
-        changePathStateScheme.SetInternal(true);
-        auto& changePathState = *changePathStateScheme.MutableChangePathState();
-        changePathState.SetPath(relativeItemPath);
-        changePathState.SetTargetState(NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore);
-
-        auto changePathStateOps = CreateChangePathState(opId, changePathStateScheme, context);
-        for (auto& op : changePathStateOps) {
-            result.push_back(op);
-        }
-
         NKikimrSchemeOp::TModifyScheme modifyScheme;
         modifyScheme.SetWorkingDir(tx.GetWorkingDir());
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);

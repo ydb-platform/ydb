@@ -37,6 +37,10 @@ public:
         AFL_VERIFY(Callback);
     }
 
+    ~TPortionsDataFetcher() {
+        AFL_VERIFY(IsFinished);
+    }
+
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,
         const std::shared_ptr<TEnvironment>& environment, const NConveyorComposite::ESpecialTaskCategory conveyorCategory);
 

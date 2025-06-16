@@ -18,9 +18,11 @@ add_library(columnshard-blobs_action-common)
 target_link_libraries(columnshard-blobs_action-common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  ydb-core-protos
 )
 
 target_sources(columnshard-blobs_action-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/common/const.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/common/statistics.cpp
 )
 

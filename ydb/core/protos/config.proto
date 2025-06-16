@@ -1371,6 +1371,27 @@ message TImmediateControlsConfig {
           MinValue: 0,
           MaxValue: 1,
           DefaultValue: 0 }];
+
+        optional uint64 CpuUsageReportThresholdPercent = 22 [(ControlOptions) = {
+          Description: "Cpu usage threshold about high datashard load",
+          MinValue: 0,
+          MaxValue: 146,
+          DefaultValue: 60 }];
+        optional uint64 CpuUsageReportIntervalSeconds = 23 [(ControlOptions) = {
+          Description: "Cpu usage report interval in seconds about high datashard load",
+          MinValue: 0,
+          MaxValue: 31536000, // 365 * 86400
+          DefaultValue: 60 }];
+        optional uint64 HighDataSizeReportThresholdBytes = 24 [(ControlOptions) = {
+          Description: "Data size threshold about high data shard load",
+          MinValue: 0,
+          MaxValue: 9223372036854775807, // 2 ** 63 - 1
+          DefaultValue: 10737418240 }]; // 10 << 30
+        optional uint64 HighDataSizeReportIntervalSeconds = 25 [(ControlOptions) = {
+          Description: "Data size report interval about high data shard load",
+          MinValue: 0,
+          MaxValue: 31536000, // 365 * 86400
+          DefaultValue: 60 }];
     }
 
     message TTxLimitControls {
@@ -1394,6 +1415,16 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 3600000,
             DefaultValue: 60000 }];
+        optional uint64 MaxShardCount = 5 [(ControlOptions) = {
+            Description: "Maximum number of shards  in transaction",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 10000}];
+        optional uint64 MaxReadSetCount = 6 [(ControlOptions) = {
+            Description: "Maximum number of readsets in transaction",
+            MinValue: 0,
+            MaxValue: 10000000,
+            DefaultValue: 100000}];
     }
 
     message TCoordinatorControls {
@@ -1717,6 +1748,7 @@ message TImmediateControlsConfig {
             DefaultValue: 2 }];
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
+
     }
 
     message TPDiskControls {

@@ -2,14 +2,13 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/control/lib/base
+    ydb/core/control/lib/generated
     util
     library/cpp/containers/absl_flat_hash
     library/cpp/deprecated/atomic
     library/cpp/monlib/service/pages
     library/cpp/threading/hot_swap
 )
-
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(defs.h)
 
 SRCS(
     defs.h

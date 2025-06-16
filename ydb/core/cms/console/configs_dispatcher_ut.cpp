@@ -910,12 +910,12 @@ config:
 )";
         CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
         auto& icb = *runtime.GetAppData().Icb;
-        bool isControlExists = false;
         TAtomic controlValue;
-        icb.GetValue(EStaticControlType::DataShardControlsEnableLeaderLeases, controlValue, isControlExists);
+        UNIT_ASSERT(!!icb.DataShardControls.EnableLeaderLeases.AtomicLoad());
+        controlValue = icb.DataShardControls.EnableLeaderLeases.AtomicLoad()->Get();
         UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
-        isControlExists = false;
-        icb.GetValue(EStaticControlType::DataShardControlsEnableLockedWrites, controlValue, isControlExists);
+        UNIT_ASSERT(!!icb.DataShardControls.EnableLockedWrites.AtomicLoad());
+        controlValue = icb.DataShardControls.EnableLockedWrites.AtomicLoad()->Get();
         UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
     }
 }

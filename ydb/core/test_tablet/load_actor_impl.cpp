@@ -26,7 +26,7 @@ namespace NKikimr::NTestShard {
         }
 
         auto *appData = AppData();
-        appData->Icb->RegisterSharedControl(DisableWrites, EStaticControlType::TestShardControlsDisableWrites);
+        TControlBoard::RegisterSharedControl(DisableWrites, appData->Icb->TestShardControls.DisableWrites);
     }
 
     void TLoadActor::ClearKeys() {

@@ -798,8 +798,8 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     if (auto *appData = AppData()) {
         if (appData->Icb) {
             EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
-            appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
-                EStaticControlType::BlobStorageControllerControlsEnableSelfHealWithDegraded);
+            TControlBoard::RegisterSharedControl(*EnableSelfHealWithDegraded,
+                appData->Icb->BlobStorageControllerControls.EnableSelfHealWithDegraded);
         }
     }
     Y_ABORT_UNLESS(!SelfHealId);

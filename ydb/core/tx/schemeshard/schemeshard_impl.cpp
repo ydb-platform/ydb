@@ -5103,22 +5103,23 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
     }
+    auto& icb = *appData->Icb;
 
-    appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, EStaticControlType::SchemeShardAllowConditionalEraseOperations);
-    appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, EStaticControlType::SchemeShardDisablePublicationsOfDropping);
-    appData->Icb->RegisterSharedControl(FillAllocatePQ, EStaticControlType::SchemeShardFillAllocatePQ);
+    TControlBoard::RegisterSharedControl(AllowConditionalEraseOperations, icb.SchemeShard.AllowConditionalEraseOperations);
+    TControlBoard::RegisterSharedControl(DisablePublicationsOfDropping, icb.SchemeShard.DisablePublicationsOfDropping);
+    TControlBoard::RegisterSharedControl(FillAllocatePQ, icb.SchemeShard.FillAllocatePQ);
 
-    appData->Icb->RegisterSharedControl(MaxCommitRedoMB, EStaticControlType::TabletControlsMaxCommitRedoMB);
+    TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
-    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, EStaticControlType::SchemeShardAllowDataColumnForIndexTable);
+    TControlBoard::RegisterSharedControl(AllowDataColumnForIndexTable, icb.SchemeShard.AllowDataColumnForIndexTable);
 
     for (const auto& sid : appData->MeteringConfig.GetSystemBackupSIDs()) {
         SystemBackupSIDs.insert(sid);
     }
 
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
-    appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, EStaticControlType::SchemeShardAllowServerlessStorageBilling);
+    TControlBoard::RegisterSharedControl(AllowServerlessStorageBilling, icb.SchemeShard.AllowServerlessStorageBilling);
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 

@@ -38,8 +38,8 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
                     cutLocalSyncLogControls.emplace_back(0, 0, 1);
                     compressChunksControls.emplace_back(1, 0, 1);
                     TAppData* appData = env.Runtime->GetNode(nodeId)->AppData.get();
-                    appData->Icb->RegisterSharedControl(cutLocalSyncLogControls.back(), EStaticControlType::VDiskControlsEnableLocalSyncLogDataCutting);
-                    appData->Icb->RegisterSharedControl(compressChunksControls.back(), EStaticControlType::VDiskControlsEnableSyncLogChunkCompressionHDD);
+                    TControlBoard::RegisterSharedControl(cutLocalSyncLogControls.back(), appData->Icb->VDiskControls.EnableLocalSyncLogDataCutting);
+                    TControlBoard::RegisterSharedControl(compressChunksControls.back(), appData->Icb->VDiskControls.EnableSyncLogChunkCompressionHDD);
                     edges.push_back(env.Runtime->AllocateEdgeActor(nodeId));
                 }
 

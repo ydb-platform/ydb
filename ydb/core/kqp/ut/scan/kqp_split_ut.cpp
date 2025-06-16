@@ -77,8 +77,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
     }
 
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
-        TAtomic prev;
-        runtime->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardSplitMergePartCountLimit, val, prev);
+        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShardSplitMergePartCountLimit);
         return prev;
     }
 

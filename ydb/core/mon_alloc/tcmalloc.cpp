@@ -597,10 +597,10 @@ class TTcMallocMonitor : public IAllocMonitor {
         {}
 
         void Register(TIntrusivePtr<TControlBoard> icb) {
-            icb->RegisterSharedControl(ProfileSamplingRate, EStaticControlType::TCMallocControlsProfileSamplingRate);
-            icb->RegisterSharedControl(GuardedSamplingRate, EStaticControlType::TCMallocControlsGuardedSamplingRate);
-            icb->RegisterSharedControl(PageCacheTargetSize, EStaticControlType::TCMallocControlsPageCacheTargetSize);
-            icb->RegisterSharedControl(PageCacheReleaseRate, EStaticControlType::TCMallocControlsPageCacheReleaseRate);
+            TControlBoard::RegisterSharedControl(ProfileSamplingRate, icb->TCMallocControls.ProfileSamplingRate);
+            TControlBoard::RegisterSharedControl(GuardedSamplingRate, icb->TCMallocControls.GuardedSamplingRate);
+            TControlBoard::RegisterSharedControl(PageCacheTargetSize, icb->TCMallocControls.PageCacheTargetSize);
+            TControlBoard::RegisterSharedControl(PageCacheReleaseRate, icb->TCMallocControls.PageCacheReleaseRate);
         }
     };
     TControls Controls;

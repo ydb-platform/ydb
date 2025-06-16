@@ -14,30 +14,36 @@ namespace NYdbWorkload {
 thread_local std::atomic<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex{0};
 
 // Utility function to create select query
-std::string MakeSelect(const char* tableName, const char* indexName, const char* indexPrefixColumn, size_t kmeansTreeClusters) {
+std::string MakeSelect(const char* tableName, const char* indexName, const char* prefixColumn, size_t kmeansTreeClusters) {
     return std::format(R"_(--!syntax_v1
         DECLARE $Embedding as String;
-        pragma ydb.KMeansTreeSearchTopSize="{0}";
+        {0}
+        pragma ydb.KMeansTreeSearchTopSize="{1}";
         SELECT id
-        FROM {1}
-        {2}
+        FROM {2}
         {3}
+        {4}
         ORDER BY Knn::CosineDistance(embedding, $Embedding)
         LIMIT $K;
     )_", 
+        prefixColumn ? "DECLARE $PrefixValue as Int64;" : "",
         kmeansTreeClusters,
         tableName,
         indexName ? std::format("VIEW {0}", indexName) : "",
-        indexPrefixColumn ? std::format("WHERE {0} = 30", indexPrefixColumn) : ""
+        prefixColumn ? std::format("WHERE {0} = $PrefixValue", prefixColumn) : ""
     );
 }
 
 // Utility function to create parameters for select query
-NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, ui64 topK) {
+NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 topK) {
     NYdb::TParamsBuilder paramsBuilder;
     
     paramsBuilder.AddParam("$Embedding").String(embeddingBytes).Build();
     paramsBuilder.AddParam("$K").Uint64(topK).Build();
+
+    if (prefixValue.has_value()) {
+        paramsBuilder.AddParam("$PrefixValue").Int64(*prefixValue).Build();
+    }
 
     return paramsBuilder.Build();
 }
@@ -50,7 +56,7 @@ TVectorRecallEvaluator::~TVectorRecallEvaluator() {
         Cout << "Average recall: " << GetAverageRecall() << Endl;
 }
 
-void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient) {
+void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, const char* prefixColumn, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient) {
     Cout << "Sampling " << targetCount << " vectors from dataset..." << Endl;
     
     // Create a local random generator
@@ -140,10 +146,21 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
         sampleIds.insert(randomId);
         attempts++;
         
-        // Query to get vector by ID
-        std::string vectorQuery = std::format(R"_(--!syntax_v1
-            SELECT id, Unwrap(embedding) as embedding FROM {0} WHERE id = {1};
-        )_", tableName, randomId);
+        // Create query string based on whether we have a prefix column
+        std::string vectorQuery;
+        if (prefixColumn) {
+            vectorQuery = std::format(R"_(--!syntax_v1
+                SELECT id, Unwrap(embedding) as embedding, Unwrap({0}) as prefix_value 
+                FROM {1} 
+                WHERE id = {2};
+            )_", prefixColumn, tableName, randomId);
+        } else {
+            vectorQuery = std::format(R"_(--!syntax_v1
+                SELECT id, Unwrap(embedding) as embedding 
+                FROM {0} 
+                WHERE id = {1};
+            )_", tableName, randomId);
+        }
         
         std::optional<NYdb::TResultSet> vectorResultSet;
         NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&vectorQuery, &vectorResultSet](NYdb::NQuery::TSession session) {
@@ -169,12 +186,53 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
         std::string embeddingBytes = vectorParser.ColumnParser("embedding").GetString();
         
         // Ensure we got a valid embedding
-        Y_ABORT_UNLESS(!embeddingBytes.empty(), "Empty embedding retrieved for id %" PRIu64 , id);
+        Y_ABORT_UNLESS(!embeddingBytes.empty(), "Empty embedding retrieved for id %" PRIu64, id);
         
         // Create target with the sampled vector
         TSelectTarget target;
         target.EmbeddingBytes = std::move(embeddingBytes);
         target.Etalons.push_back(id);  // The vector's own ID is an etalon
+        
+        // Get prefix value if column was specified
+        if (prefixColumn) {
+            const auto& prefixCell = vectorParser.ColumnParser("prefix_value");
+            NYdb::EPrimitiveType primitiveType = prefixCell.GetPrimitiveType();
+            
+            // Handle different integer types based on primitive type
+            switch (primitiveType) {
+                case NYdb::EPrimitiveType::Int8:
+                    target.PrefixValue = prefixCell.GetInt8();
+                    break;
+                case NYdb::EPrimitiveType::Int16:
+                    target.PrefixValue = prefixCell.GetInt16();
+                    break;
+                case NYdb::EPrimitiveType::Int32:
+                    target.PrefixValue = prefixCell.GetInt32();
+                    break;
+                case NYdb::EPrimitiveType::Int64:
+                    target.PrefixValue = prefixCell.GetInt64();
+                    break;
+                case NYdb::EPrimitiveType::Uint8:
+                    target.PrefixValue = prefixCell.GetUint8();
+                    break;
+                case NYdb::EPrimitiveType::Uint16:
+                    target.PrefixValue = prefixCell.GetUint16();
+                    break;
+                case NYdb::EPrimitiveType::Uint32:
+                    target.PrefixValue = prefixCell.GetUint32();
+                    break;
+                case NYdb::EPrimitiveType::Uint64: {
+                    ui64 uvalue = prefixCell.GetUint64();
+                    Y_ABORT_UNLESS(uvalue <= static_cast<ui64>(std::numeric_limits<i64>::max()), 
+                                  "Prefix value %" PRIu64 " is too large for i64", uvalue);
+                    target.PrefixValue = static_cast<i64>(uvalue);
+                    break;
+                }
+                default:
+                    Y_ABORT_UNLESS(false, "Unexpected primitive type for prefix column: %d", 
+                                  static_cast<int>(primitiveType));
+            }
+        }
         
         SelectTargets.push_back(std::move(target));
     }
@@ -184,14 +242,14 @@ void TVectorRecallEvaluator::SampleExistingVectors(const char* tableName, size_t
     } else {
         Cout << "Successfully sampled " << SelectTargets.size() << " vectors from the dataset." << Endl;
     }
-    Y_ABORT_UNLESS(!SelectTargets.empty());
+    Y_ABORT_UNLESS(!SelectTargets.empty(), "Failed to sample any vectors from the dataset");
 }
 
-void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* indexPrefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
+void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* prefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient) {
     Cout << "Recall initialization..." << Endl;
     
     // Prepare the query template
-    std::string queryTemplate = MakeSelect(tableName, nullptr, indexPrefixColumn, 0);
+    std::string queryTemplate = MakeSelect(tableName, nullptr, prefixColumn, 0);
     
     // Maximum number of concurrent queries to execute
     const size_t MAX_CONCURRENT_QUERIES = 20;
@@ -205,7 +263,13 @@ void TVectorRecallEvaluator::FillEtalons(const char* tableName, const char* inde
         asyncQueries.reserve(batchEnd - batchStart);
         
         for (size_t i = batchStart; i < batchEnd; i++) {
-            NYdb::TParams params = MakeSelectParams(SelectTargets[i].EmbeddingBytes, topK);
+            const auto& targetEmbedding = GetTargetEmbedding(i);
+            std::optional<i64> prefixValue;
+            if (prefixColumn) {
+                prefixValue = GetPrefixValue(i);
+            };
+
+            NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, topK);
             
             auto asyncResult = queryClient.RetryQuery([queryTemplate, params](NYdb::NQuery::TSession session) {
                 return session.ExecuteQuery(
@@ -277,6 +341,10 @@ size_t TVectorRecallEvaluator::GetProcessedTargets() const {
 
 size_t TVectorRecallEvaluator::GetTargetCount() const {
     return SelectTargets.size();
+}
+
+i64 TVectorRecallEvaluator::GetPrefixValue(size_t targetIndex) const {
+    return SelectTargets.at(targetIndex).PrefixValue;
 }
 
 // Process query results
@@ -403,13 +471,20 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     std::string query = MakeSelect(
         Params.TableName.c_str(), 
         Params.IndexName.c_str(), 
-        Params.IndexPrefixColumn.has_value() ? Params.IndexPrefixColumn->c_str() : nullptr, 
+        Params.PrefixColumn.has_value() ? Params.PrefixColumn->c_str() : nullptr,
         Params.KmeansTreeSearchClusters
     );
     
     // Get the embedding for the specified target
     const auto& targetEmbedding = Params.VectorRecallEvaluator->GetTargetEmbedding(targetIndex);
-    NYdb::TParams params = MakeSelectParams(targetEmbedding, Params.TopK);
+    
+    // Get the prefix value if needed
+    std::optional<i64> prefixValue;
+    if (Params.PrefixColumn.has_value()) {
+        prefixValue = Params.VectorRecallEvaluator->GetPrefixValue(targetIndex);
+    }
+    
+    NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.TopK);
     
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
@@ -427,6 +502,7 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     
     return TQueryInfoList(1, queryInfo);
 }
+
 
 void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex) {
     // Use the evaluator to process the result and calculate recall
@@ -518,7 +594,7 @@ size_t TVectorWorkloadParams::GetVectorDimension() const {
     return dimension;
 }
 
-std::optional<std::string> TVectorWorkloadParams::GetIndexPrefixColumn() const {
+std::optional<std::string> TVectorWorkloadParams::GetPrefixColumn() const {
     // Build the full path to the table
     std::string tablePath = DbPath + "/" + TableName;
 
@@ -580,13 +656,14 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
                     break;
                 case TVectorWorkloadGenerator::EType::Select:
                     VectorDimension = GetVectorDimension();
-                    IndexPrefixColumn = GetIndexPrefixColumn();
+                    PrefixColumn = GetPrefixColumn();
                     VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>();
-                    VectorRecallEvaluator->SampleExistingVectors(TableName.c_str(), Targets, *QueryClient);
+                    const char* prefixColumn = PrefixColumn.has_value() ? PrefixColumn->c_str() : nullptr;
+                    VectorRecallEvaluator->SampleExistingVectors(TableName.c_str(), prefixColumn, Targets, *QueryClient);
                     if (Recall) {
                         VectorRecallEvaluator->FillEtalons(
                             TableName.c_str(), 
-                            IndexPrefixColumn.has_value() ? IndexPrefixColumn->c_str() : nullptr, 
+                            prefixColumn, 
                             TopK, 
                             *QueryClient
                         );

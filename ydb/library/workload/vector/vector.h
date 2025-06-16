@@ -16,13 +16,14 @@ public:
     ~TVectorRecallEvaluator();
     
     // Core functionality for vector sampling and etalon generation
-    void SampleExistingVectors(const char* tableName, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient);
-    void FillEtalons(const char* tableName, const char* indexPrefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
-    
+    void SampleExistingVectors(const char* tableName, const char* prefixColumn, size_t targetCount, NYdb::NQuery::TQueryClient& queryClient);
+    void FillEtalons(const char* tableName, const char* prefixColumn, size_t topK, NYdb::NQuery::TQueryClient& queryClient);
+
     // Target access methods
     const std::string& GetTargetEmbedding(size_t index) const;
     const std::vector<ui64>& GetTargetEtalons(size_t index) const;
     size_t GetTargetCount() const;
+    i64 GetPrefixValue(size_t targetIndex) const;
     
     // Recall metrics methods
     void AddRecall(double recall);
@@ -37,6 +38,7 @@ private:
     struct TSelectTarget {
         std::string EmbeddingBytes;             // Sample targets to use in select workload
         std::vector<ui64> Etalons;              // Etalon vector Ids for recall measurement
+        i64 PrefixValue;                        // Sample prefix value
     };
     std::vector<TSelectTarget> SelectTargets;
 
@@ -58,7 +60,7 @@ public:
 
     TString TableName;
     TString IndexName;
-    std::optional<std::string> IndexPrefixColumn;
+    std::optional<std::string> PrefixColumn;
     TString Distance;
     TString VectorType;
     size_t KmeansTreeLevels = 0;
@@ -71,7 +73,7 @@ public:
     bool Recall;
 private:
     size_t GetVectorDimension() const;
-    std::optional<std::string> GetIndexPrefixColumn() const;
+    std::optional<std::string> GetPrefixColumn() const;
 
     THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
 };

@@ -872,13 +872,20 @@ private:
 
             }
 
-            TVector<NScheme::TTypeInfo> keyTypes;
-            if (Self->Tables.contains(info.TablePathId)) {
-                TTableInfo::TPtr tableInfo = Self->Tables.at(info.TablePathId);
-                for (ui32 keyPos: tableInfo->KeyColumnIds) {
-                    keyTypes.push_back(tableInfo->Columns.at(keyPos).PType);
+            auto getKeyTypes = [&](TPathId pathId) {
+                TVector<NScheme::TTypeInfo> keyTypes;
+                
+                auto tableInfo = Self->Tables.FindPtr(pathId);
+                if (!tableInfo) {
+                    return keyTypes;
                 }
-            }
+
+                for (ui32 keyPos: tableInfo->Get()->KeyColumnIds) {
+                    keyTypes.push_back(tableInfo->Get()->Columns.at(keyPos).PType);
+                }
+
+                return keyTypes;
+            };
 
             {
                 TAG(TH3) {str << "Shards : " << info.Shards.size() << "\n";}
@@ -907,23 +914,31 @@ private:
                                 if (Self->ShardInfos.contains(idx)) {
                                     str << Self->ShardInfos.at(idx).TabletID;
                                 } else {
-                                    str << "shard " << idx << " has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
-                                if (keyTypes) {
-                                    str << DebugPrintRange(keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry);
+                                if (Self->ShardInfos.contains(idx)) {
+                                    if (auto keyTypes = getKeyTypes(Self->ShardInfos.at(idx).PathId)) {
+                                        str << DebugPrintRange(keyTypes, status.Range.ToTableRange(), *AppData()->TypeRegistry);
+                                    } else {
+                                        str << "deleted table";
+                                    }
                                 } else {
-                                    str << "table has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {
-                                if (keyTypes) {
-                                    TSerializedCellVec vec;
-                                    vec.Parse(status.LastKeyAck);
-                                    str << DebugPrintPoint(keyTypes, vec.GetCells(), *AppData()->TypeRegistry);
+                                if (Self->ShardInfos.contains(idx)) {
+                                    if (auto keyTypes = getKeyTypes(Self->ShardInfos.at(idx).PathId)) {
+                                        TSerializedCellVec vec;
+                                        vec.Parse(status.LastKeyAck);
+                                        str << DebugPrintPoint(keyTypes, vec.GetCells(), *AppData()->TypeRegistry);
+                                    } else {
+                                        str << "deleted table";
+                                    }
                                 } else {
-                                    str << "table has been dropped";
+                                    str << "deleted shard";
                                 }
                             }
                             TABLED() {

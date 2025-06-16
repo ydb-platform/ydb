@@ -399,7 +399,8 @@ void TVectorRecallEvaluator::ProcessQueryResult(const NYdb::NQuery::TExecuteQuer
     
     // Get the etalons for the specified target
     const auto& etalons = GetTargetEtalons(targetIndex);
-    
+    std::unordered_set<ui64> etalonSet(etalons.begin(), etalons.end());
+
     // Check if target ID is first in results
     if (!indexResults.empty() && !etalons.empty()) {
         ui64 targetId = etalons[0]; // First etalon is the target ID itself
@@ -412,8 +413,7 @@ void TVectorRecallEvaluator::ProcessQueryResult(const NYdb::NQuery::TExecuteQuer
         // Calculate recall
         size_t relevantRetrieved = 0;
         for (const auto& id : indexResults) {
-            // Check if this ID is in the etalon results
-            if (std::find(etalons.begin(), etalons.end(), id) != etalons.end()) {
+            if (etalonSet.count(id)) {
                 relevantRetrieved++;
             }
         }

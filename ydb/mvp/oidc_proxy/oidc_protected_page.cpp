@@ -212,7 +212,9 @@ NHttp::THttpOutgoingRequestPtr THandlerSessionServiceCheck::CreateProxiedRequest
     return request;
 }
 
-void THandlerSessionServiceCheck::ProxyResponseHeaders(const NHttp::THeadersBuilder& headers, NHttp::THeadersBuilder& outHeaders) {
+NHttp::THeadersBuilder THandlerSessionServiceCheck::ProxyResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
+    NHttp::THeadersBuilder headers(response->Headers);
+    NHttp::THeadersBuilder outHeaders;
     static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
         "Content-Type",
         "Connection",
@@ -229,6 +231,13 @@ void THandlerSessionServiceCheck::ProxyResponseHeaders(const NHttp::THeadersBuil
             outHeaders.Set(header, headers.Get(header));
         }
     }
+
+    static const TString LOCATION_HEADER_NAME = "Location";
+    if (headers.Has(LOCATION_HEADER_NAME)) {
+        outHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
+    }
+
+    return outHeaders;
 }
 
 TString THandlerSessionServiceCheck::ProxyResponseBody(const NHttp::THttpIncomingResponsePtr& response) {
@@ -242,16 +251,9 @@ TString THandlerSessionServiceCheck::ProxyResponseBody(const NHttp::THttpIncomin
 }
 
 NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateProxiedResponse(const NHttp::THttpIncomingResponsePtr& response) {
-    NHttp::THeadersBuilder headers(response->Headers);
-    NHttp::THeadersBuilder outHeaders;
-    ProxyResponseHeaders(headers, outHeaders);
-
-    static const TString LOCATION_HEADER_NAME = "Location";
-    if (headers.Has(LOCATION_HEADER_NAME)) {
-        outHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
-    }
-
-    return Request->CreateResponse(response->Status, response->Message, outHeaders, ProxyResponseBody(response));
+    auto outHeaders = ProxyResponseHeaders(response);
+    auto outBody = ProxyResponseBody(response);
+    return Request->CreateResponse(response->Status, response->Message, outHeaders, outBody);
 }
 
 void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) {

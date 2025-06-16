@@ -64,7 +64,7 @@ protected:
     static TString FixReferenceInHtml(TStringBuf html, TStringBuf host);
 
 private:
-    void ProxyResponseHeaders(const NHttp::THeadersBuilder& headers, NHttp::THeadersBuilder& outHeaders);
+    NHttp::THeadersBuilder ProxyResponseHeaders(const NHttp::THttpIncomingResponsePtr& response);
     TString ProxyResponseBody(const NHttp::THttpIncomingResponsePtr& response);
     NHttp::THttpOutgoingResponsePtr CreateProxiedResponse(const NHttp::THttpIncomingResponsePtr& response);
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response);

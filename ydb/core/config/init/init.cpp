@@ -332,6 +332,73 @@ public:
     }
 };
 
+namespace {
+
+struct RetryResult {
+    bool Success;
+    int TotalAttempts;
+    int Rounds;
+};
+
+template <typename TAttemptFn>
+RetryResult RetryWithJitter(
+    const TVector<TString>& addrs,
+    const IEnv& env,
+    TAttemptFn attempt)
+{
+    const int maxRounds = 10;
+    const TDuration baseRoundDelay = TDuration::MilliSeconds(500);
+    const TDuration maxIntraAddrDelay = TDuration::Minutes(3);
+    const TDuration maxDelay = TDuration::Minutes(5);
+    const TDuration baseAddressDelay = TDuration::MilliSeconds(250);
+
+    auto sleepWithJitteredExponentialDelay = [&env](TDuration baseDelay, TDuration maxDelay, int exponent) {
+        ui64 multiplier = 1ULL << exponent;
+        TDuration delay = baseDelay * multiplier;
+        delay = Min(delay, maxDelay);
+        
+        ui64 maxMs = delay.MilliSeconds();
+        ui64 jitteredMs = RandomNumber<ui64>(maxMs + 1);
+        TDuration jitteredDelay = TDuration::MilliSeconds(jitteredMs);
+        
+        env.Sleep(jitteredDelay);
+    };
+
+    int round = 0;
+    int totalAttempts = 0;
+    bool success = false;
+
+    while (!success && round < maxRounds) {
+        int addressIndex = 0;
+        for (const auto& addr : addrs) {
+            success = attempt(addr);
+            ++totalAttempts;
+            
+            if (success) {
+                break;
+            }
+            
+            // Exponential delay between individual addresses - delay grows with each address in the round
+            if (addrs.size() > 1) {
+                sleepWithJitteredExponentialDelay(baseAddressDelay, maxIntraAddrDelay, Max(addressIndex, round));
+            }
+            
+            ++addressIndex;
+        }
+        
+        if (!success) {
+            ++round;
+            
+            if (round < maxRounds) {
+                sleepWithJitteredExponentialDelay(baseRoundDelay, maxDelay, round - 1);
+            }
+        }
+    }
+    return {success, totalAttempts, round};
+}
+
+} // namespace
+
 class TDefaultDynConfigClient
     : public IDynConfigClient
 {
@@ -383,62 +450,23 @@ public:
         IInitLogger& logger) const override
     {
         std::shared_ptr<IConfigurationResult> res;
-        bool success = false;
         TString error;
         SetRandomSeed(TInstant::Now().MicroSeconds());
 
-        const int maxRounds = 10;
-        const TDuration baseRoundDelay = TDuration::MilliSeconds(500);
-        const TDuration maxIntraAddrDelay = TDuration::Minutes(3);
-        const TDuration maxDelay = TDuration::Minutes(5);
-        const TDuration baseAddressDelay = TDuration::MilliSeconds(250);
-
-        auto sleepWithJitteredExponentialDelay = [&env](TDuration baseDelay, TDuration maxDelay, int exponent) {
-            ui64 multiplier = 1ULL << exponent;
-            TDuration delay = baseDelay * multiplier;
-            delay = Min(delay, maxDelay);
-            
-            ui64 maxMs = delay.MilliSeconds();
-            ui64 jitteredMs = RandomNumber<ui64>(maxMs + 1);
-            TDuration jitteredDelay = TDuration::MilliSeconds(jitteredMs);
-            
-            env.Sleep(jitteredDelay);
+        auto attempt = [&](const TString& addr) {
+            logger.Out() << "Trying to get dynamic config from " << addr << Endl;
+            bool success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, logger, res, error);
+            if (success) {
+                logger.Out() << "Success. Got dynamic config from " << addr << Endl;
+            }
+            return success;
         };
 
-        int round = 0;
-        int totalAttempts = 0;
+        const auto result = RetryWithJitter(addrs, env, attempt);
 
-        while (!success && round < maxRounds) {
-            int addressIndex = 0;
-            for (auto addr : addrs) {
-                // internal timeout is 5 seconds
-                success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, logger, res, error);
-                ++totalAttempts;
-                
-                if (success) {
-                    break;
-                }
-                
-                // Exponential delay between individual addresses - delay grows with each address in the round
-                if (addrs.size() > 1) {
-                    sleepWithJitteredExponentialDelay(baseAddressDelay, maxIntraAddrDelay, Max(addressIndex, round));
-                }
-                
-                ++addressIndex;
-            }
-            
-            if (!success) {
-                ++round;
-                
-                if (round < maxRounds) {
-                    sleepWithJitteredExponentialDelay(baseRoundDelay, maxDelay, round - 1);
-                }
-            }
-        }
-
-        if (!success) {
+        if (!result.Success) {
             logger.Err() << "WARNING: couldn't load config from Console after " 
-                        << totalAttempts << " attempts across " << round 
+                        << result.TotalAttempts << " attempts across " << result.Rounds 
                         << " rounds: " << error << Endl;
         }
 
@@ -505,22 +533,25 @@ private:
         IInitLogger& logger)
     {
         NYdb::NConfig::TFetchConfigResult result;
-        TBackoffTimer backoffTimer(1000, 3600000);
+        SetRandomSeed(TInstant::Now().MicroSeconds());
 
-        while (!result.IsSuccess()) {
-            for (const auto& addr : addrs) {
-                logger.Out() << "Trying to fetch config from " << addr << Endl;
-                result = TryToFetchConfig(grpcSettings, addr, env);
-                if (result.IsSuccess()) {
-                    logger.Out() << "Success. Fetched config from " << addr << Endl;
-                    break;
-                }
-                logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(result) << Endl;
+        auto attempt = [&](const TString& addr) {
+            logger.Out() << "Trying to fetch config from " << addr << Endl;
+            result = TryToFetchConfig(grpcSettings, addr, env);
+            if (result.IsSuccess()) {
+                logger.Out() << "Success. Fetched config from " << addr << Endl;
+                return true;
             }
-            if (!result.IsSuccess()) {
-                ui64 backoffMs = backoffTimer.NextBackoffMs();
-                env.Sleep(TDuration::MilliSeconds(backoffMs));
-            }
+            logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(result) << Endl;
+            return false;
+        };
+
+        const auto retryResult = RetryWithJitter(addrs, env, attempt);
+
+        if (!retryResult.Success) {
+             logger.Err() << "WARNING: couldn't fetch config from Console after " 
+                        << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds 
+                        << " rounds. Last error: " << static_cast<NYdb::TStatus>(result) << Endl;
         }
         return result;
     }

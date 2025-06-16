@@ -247,6 +247,8 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
                                 AppData()->SystemPoolId));
                         } else if (which == &StateStorageInfo && !newActorIds.contains(replicaId)) {
                             Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
+                        } else if (which == &BoardInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, info, nullptr));
                         } else {
                             // TODO(alexvru): update other kinds of replicas
                         }

@@ -4,6 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -27,12 +28,16 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     const TString Path;
     const TActorId Owner;
     const ui64 Cookie;
+    ui16 ReplicasCookie;
     const EBoardLookupMode Mode;
     const bool Subscriber;
     TBoardRetrySettings BoardRetrySettings;
+    ui64 ClusterStateGeneration;
+    ui64 ClusterStateGuid;
 
-    static constexpr int MAX_REPLICAS_COUNT_EXP = 32; // ReplicaGroups[i].Replicas.size() <= 2**MAX_REPLICAS_GROUP_COUNT_EXP
-    static constexpr int MAX_REPLICAS_GROUP_COUNT_EXP = 16; // ReplicaGroups.size() <= 2**MAX_REPLICAS_COUNT_EXP
+    static constexpr int MAX_COOKIE_EXP = 48;
+    static constexpr int MAX_REPLICAS_COUNT_EXP = 32;
+    static constexpr int MAX_REPLICAS_GROUP_COUNT_EXP = 16;
 
     struct TEvPrivate {
         enum EEv {
@@ -113,7 +118,22 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     TVector<TStats> Stats;
 
+    bool CheckConfigVersion(const TActorId &sender, const auto *msg) {
+        ui64 msgGeneration = msg->Record.GetClusterStateGeneration();
+        ui64 msgGuid = msg->Record.GetClusterStateGuid();
+        if (ClusterStateGeneration < msgGeneration || (ClusterStateGeneration == msgGeneration && ClusterStateGuid != msgGuid)) {
+            BLOG_D("LookupReplica TEvNodeWardenNotifyConfigMismatch: Info->ClusterStateGeneration=" << ClusterStateGeneration << " msgGeneration=" << msgGeneration <<" Info->ClusterStateGuid=" << ClusterStateGuid << " msgGuid=" << msgGuid);
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), msgGeneration, msgGuid));
+            return false;
+        }
+        return true;
+    }
+
     void PassAway() override {
+        BLOG_D("TBoardLookupActor::PassAway");
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
+            nullptr, 0));
         for (const auto &rg : ReplicaGroups)
             for (const auto &replica : rg.Replicas) {
                 if (Subscriber) {
@@ -213,13 +233,29 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
         auto *msg = ev->Get();
+        if (!Subscriber && CurrentStateFunc() != &TThis::StateResolve) {
+            return;
+        }
+        ReplicasCookie++;
+        BLOG_D("TBoardLookupActorTEvResolveReplicasList " << ReplicasCookie);
 
         if (msg->ReplicaGroups.empty()) {
             BLOG_ERROR("lookup on unconfigured statestorage board service");
             return NotAvailable();
         }
+        ClusterStateGeneration = msg->ClusterStateGeneration;
+        ClusterStateGuid = msg->ClusterStateGuid;
+        THashSet<TActorId> oldReplicas;
+        THashSet<TActorId> newReplicas;
+        for (const auto &rg : ReplicaGroups) {
+            for (const auto &replica : rg.Replicas) {
+                oldReplicas.insert(replica.Replica);
+            }
+        }
         ReplicaGroups.clear();
         Stats.clear();
+        Info.clear();
+        InfoReplicas.clear();
         Stats.resize(msg->ReplicaGroups.size());
         ReplicaGroups.resize(msg->ReplicaGroups.size());
         for (ui32 replicaGroupIdx : xrange(msg->ReplicaGroups.size())) {
@@ -227,14 +263,15 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             auto &replicaGroups = ReplicaGroups[replicaGroupIdx];
             replicaGroups.Replicas.resize(msgReplicaGroups.Replicas.size());
             replicaGroups.WriteOnly = msgReplicaGroups.WriteOnly;
-            if (msgReplicaGroups.WriteOnly)
+            if (msgReplicaGroups.WriteOnly || msgReplicaGroups.State != ERingGroupState::PRIMARY)
                 continue;
             for (auto idx : xrange(msgReplicaGroups.Replicas.size())) {
                 const TActorId &msgReplica = msgReplicaGroups.Replicas[idx];
+                newReplicas.insert(msgReplica);
                 Send(msgReplica,
-                    new TEvStateStorage::TEvReplicaBoardLookup(Path, Subscriber),
+                    new TEvStateStorage::TEvReplicaBoardLookup(Path, Subscriber, ClusterStateGeneration, ClusterStateGuid),
                     IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-                    EncodeCookie(replicaGroupIdx, idx, 0));
+                    EncodeCookie(replicaGroupIdx, idx, 0, ReplicasCookie));
                 replicaGroups.Replicas[idx].Replica = msgReplica;
                 replicaGroups.Replicas[idx].State = EReplicaState::Unknown;
             }
@@ -257,13 +294,24 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             }
             BLOG_D("Handle TEvResolveReplicasList: Mode: " << (ui32)Mode << " groupIdx: " << replicaGroupIdx << " Group: " << replicaGroups.ToString() << " Path: " << Path);
         }
+        for (const auto &replica : oldReplicas) {
+            if (newReplicas.contains(replica)) {
+                continue;
+            }
+            if (Subscriber) {
+                Send(replica, new TEvStateStorage::TEvReplicaBoardUnsubscribe());
+            }
+            if (replica.NodeId() != SelfId().NodeId()) {
+                Send(TActivationContext::InterconnectProxy(replica.NodeId()), new TEvents::TEvUnsubscribe());
+            }
+        }
         Become(&TThis::StateLookup);
     }
 
     void Handle(TEvStateStorage::TEvReplicaBoardInfoUpdate::TPtr &ev) {
-        const auto [groupIdx, idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+        const auto [groupIdx, idx, reconnectNumber, replicasCookie] = DecodeCookie(ev->Cookie);
 
-        if (groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size())
+        if (replicasCookie != ReplicasCookie || groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size() || !CheckConfigVersion(ev->Sender, ev->Get()))
             return;
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
 
@@ -323,11 +371,12 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaBoardInfo::TPtr &ev) {
-        const auto [groupIdx, idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+        const auto [groupIdx, idx, reconnectNumber, replicasCookie] = DecodeCookie(ev->Cookie);
 
-        if (groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size()) {
+        if (replicasCookie != ReplicasCookie || groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size() || !CheckConfigVersion(ev->Sender, ev->Get())) {
             return;
         }
+
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
         BLOG_D("Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: " 
             << reconnectNumber << " replica.ReconnectNumber: " << replica.ReconnectNumber);
@@ -420,9 +469,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaShutdown::TPtr &ev) {
-        const auto [groupIdx, idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+        const auto [groupIdx, idx, reconnectNumber, replicasCookie] = DecodeCookie(ev->Cookie);
 
-        if (groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size())
+        if (replicasCookie != ReplicasCookie || groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size())
             return;
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
 
@@ -455,9 +504,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         if (msg->SourceType != TEvStateStorage::TEvReplicaBoardLookup::EventType)
             return;
 
-        const auto [groupIdx, idx, reconnectNumber] = DecodeCookie(ev->Cookie);
+        const auto [groupIdx, idx, reconnectNumber, replicasCookie] = DecodeCookie(ev->Cookie);
 
-        if (groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size())
+        if (replicasCookie != ReplicasCookie || groupIdx >= ReplicaGroups.size() || idx >= ReplicaGroups[groupIdx].Replicas.size())
             return;
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
 
@@ -510,9 +559,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         replica.ReconnectNumber++;
         replica.State = EReplicaState::Reconnect;
         Send(replica.Replica,
-            new TEvStateStorage::TEvReplicaBoardLookup(Path, Subscriber),
+            new TEvStateStorage::TEvReplicaBoardLookup(Path, Subscriber, ClusterStateGeneration, ClusterStateGuid),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-            EncodeCookie(groupIdx, replicaIdx, replica.ReconnectNumber));
+            EncodeCookie(groupIdx, replicaIdx, replica.ReconnectNumber, ReplicasCookie));
 
         replica.LastReconnectAt = now;
     }
@@ -524,16 +573,17 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ReconnectReplica(groupIdx, idx, true);
     }
 
-    std::tuple<ui64, ui64, ui64> DecodeCookie(ui64 cookie) {
+    std::tuple<ui64, ui64, ui64, ui16> DecodeCookie(ui64 cookie) {
         ui64 groupAndIdx = ((1ULL << MAX_REPLICAS_COUNT_EXP) - 1) & cookie;
         ui64 idx = ((1ULL << MAX_REPLICAS_GROUP_COUNT_EXP) - 1) & groupAndIdx;
         ui64 groupIdx = groupAndIdx >> MAX_REPLICAS_GROUP_COUNT_EXP;
-        ui64 retries = cookie >> MAX_REPLICAS_COUNT_EXP;
-        return {groupIdx, idx, retries};
+        ui64 retries = (((1ULL << MAX_COOKIE_EXP) - 1) & cookie) >> MAX_REPLICAS_COUNT_EXP;
+        ui64 cookieRes = cookie >> MAX_COOKIE_EXP;
+        return {groupIdx, idx, retries, cookieRes};
     }
 
-    ui64 EncodeCookie(ui64 groupIdx, ui64 idx, ui64 reconnectNumber) {
-        return idx | (groupIdx << MAX_REPLICAS_GROUP_COUNT_EXP) | (reconnectNumber << MAX_REPLICAS_COUNT_EXP);
+    ui64 EncodeCookie(ui64 groupIdx, ui64 idx, ui64 reconnectNumber, ui64 cookie) {
+        return idx | (groupIdx << MAX_REPLICAS_GROUP_COUNT_EXP) | (reconnectNumber << MAX_REPLICAS_COUNT_EXP) | (cookie << MAX_COOKIE_EXP);
     }
 
     void ClearInfosByReplica(ui32 groupIdx, ui32 replicaIdx) {
@@ -575,6 +625,7 @@ public:
         : Path(path)
         , Owner(owner)
         , Cookie(cookie)
+        , ReplicasCookie(0)
         , Mode(mode)
         , Subscriber(Mode == EBoardLookupMode::Subscription)
         , BoardRetrySettings(std::move(boardRetrySettings))
@@ -582,7 +633,7 @@ public:
 
     void Bootstrap() {
         const TActorId proxyId = MakeStateStorageProxyID();
-        Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path), IEventHandle::FlagTrackDelivery);
+        Send(proxyId, new TEvStateStorage::TEvResolveBoard(Path, Subscriber), IEventHandle::FlagTrackDelivery);
         Become(&TThis::StateResolve);
     }
 
@@ -596,6 +647,7 @@ public:
 
     STATEFN(StateLookup) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TEvStateStorage::TEvReplicaBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvReplicaBoardInfoUpdate, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -608,6 +660,7 @@ public:
 
     STATEFN(StateSubscribe) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvStateStorage::TEvResolveReplicasList, Handle);
             hFunc(TEvStateStorage::TEvReplicaBoardInfo, Handle);
             hFunc(TEvStateStorage::TEvReplicaBoardInfoUpdate, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);

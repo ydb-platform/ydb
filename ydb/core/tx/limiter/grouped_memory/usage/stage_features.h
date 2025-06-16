@@ -10,7 +10,7 @@ class TStageFeatures {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(ui64, Limit, 0);
-    YDB_READONLY(std::optional<ui64>, HardLimit);
+    YDB_READONLY_DEF(std::optional<ui64>, HardLimit);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;

@@ -44,6 +44,7 @@
 #include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_factory.h>
@@ -236,6 +237,7 @@ void Init(
         RegisterGenericProviderFactories(*asyncIoFactory, credentialsFactory, connectorClient);
         RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, yqCounters->GetSubgroup("subsystem", "DqSinkTracker"));
         RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
+        RegisterDQSolomonReadActorFactory(*asyncIoFactory, credentialsFactory);
     }
 
     ui64 mkqlInitialMemoryLimit = 8_GB;

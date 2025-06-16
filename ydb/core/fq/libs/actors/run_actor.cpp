@@ -1911,15 +1911,20 @@ private:
         *gatewaysConfig.MutableGeneric() = Params.Config.GetGateways().GetGeneric();
         gatewaysConfig.MutableGeneric()->ClearClusterMapping();
 
+        *gatewaysConfig.MutableSolomon() = Params.Config.GetGateways().GetSolomon();
+        gatewaysConfig.MutableSolomon()->ClearClusterMapping();
+
         THashMap<TString, TString> clusters;
 
-        TString monitoringEndpoint = Params.Config.GetCommon().GetMonitoringEndpoint();
+        TString monitoringHttpEndpoint = Params.Config.GetCommon().GetMonitoringReadHttpEndpoint();
+        TString monitoringGrpcEndpoint = Params.Config.GetCommon().GetMonitoringReadGrpcEndpoint();
 
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
         AddClustersFromConnections(Params.Config.GetCommon(),
             YqConnections,
-            monitoringEndpoint,
+            monitoringHttpEndpoint,
+            monitoringGrpcEndpoint,
             Params.AuthToken,
             Params.AccountIdSignatures,
             // out params:

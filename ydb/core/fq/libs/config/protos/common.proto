@@ -29,4 +29,6 @@ message TCommonConfig {
     bool KeepInternalErrors = 13;
     bool UseNativeProtocolForClickHouse = 14;
     bool DisableSslForGenericDataSources = 15;
+    string MonitoringReadHttpEndpoint = 16;
+    string MonitoringReadGrpcEndpoint = 17;
 }

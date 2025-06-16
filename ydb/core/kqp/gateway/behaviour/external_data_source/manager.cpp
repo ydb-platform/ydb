@@ -79,7 +79,6 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         "schema", // managed PG, GP
         "service_name", // oracle
         "folder_id", // logging
-        "use_ssl", // solomon
         "grpc_location", // solomon
         "project", // solomon
         "cluster" // solomon

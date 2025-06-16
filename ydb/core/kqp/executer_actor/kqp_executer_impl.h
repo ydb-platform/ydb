@@ -518,6 +518,11 @@ protected:
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
+        ParticipantNodes.emplace(computeActor.NodeId());
+        if (TxManager) {
+            TxManager->AddParticipantNode(computeActor.NodeId());
+        }
+
         bool populateChannels = HandleComputeStats(ev);
 
         switch (state.GetState()) {
@@ -1366,8 +1371,8 @@ protected:
             Counters->Counters->FullScansExecuted->Inc();
         }
 
-        bool isParallelPointRead = EnableParallelPointReadConsolidation && !source.GetSorted() && IsParallelPointReadPossible(partitions);
         bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+        bool isParallelPointRead = EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
 
         if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());

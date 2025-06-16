@@ -472,7 +472,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     std::cout << ss.str();
 
     // Per thread statistics (two columns)
-    std::cout << "\nPer thread statistics:" << std::endl;
+    std::cout << "\n\nPer thread statistics:" << std::endl;
 
     size_t threadCount = LastStatisticsSnapshot->StatVec.size();
     size_t halfCount = (threadCount + 1) / 2;
@@ -530,7 +530,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     std::cout << std::string(totalWidth, '-') << std::endl;
 
     // Transaction statistics
-    std::cout << "\n\n";
+    std::cout << "\n";
     PrintTransactionStatisticsPretty(std::cout);
 }
 

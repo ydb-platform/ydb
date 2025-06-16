@@ -66,7 +66,8 @@ public:
 
     TCurrentContext() {
         static std::shared_ptr<NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            std::make_shared<NGroupedMemoryManager::TStageFeatures>("DEFAULT", 1000000000, 5000000000, nullptr, nullptr);
+            NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
+        
         MemoryProcessGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard(MemoryProcessId, { stageFeatures });
         MemoryProcessScopeGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildScopeGuard(MemoryProcessId, 1);
         MemoryProcessGroupGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildGroupGuard(MemoryProcessId, 1);

@@ -322,16 +322,44 @@ class TCreateRestoreOpControlPlane: public TSubOperation {
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
+        Y_UNUSED(state);
+        Y_ABORT("Unreachable code: TCreateRestoreOpControlPlane should not call this method");
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
             return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
             return MakeHolder<TWaitCopyTableBarrier>(OperationId);
-        case TTxState::Done:
+        case TTxState::Done: {
+            const auto* txState = context.SS->FindTx(OperationId);
+            if (txState && txState->TargetPathTargetState.Defined()) {
+                auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
+                return MakeHolder<TDone>(OperationId, targetState);
+            }
             return MakeHolder<TDone>(OperationId);
+        }
         default:
             return nullptr;
+        }
+    }
+
+    void StateDone(TOperationContext& context) override {
+        // When we reach Done state, don't try to advance to Invalid state
+        // Just complete the operation
+        if (GetState() == TTxState::Done) {
+            // Operation is complete, no need to advance state
+            return;
+        }
+        
+        // For other states, use normal state advancement
+        auto nextState = NextState(GetState());
+        SetState(nextState, context);
+        
+        if (nextState != TTxState::Invalid) {
+            context.OnComplete.ActivateTx(OperationId);
         }
     }
 
@@ -355,8 +383,11 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLongIncrementalRestoreOp, bcPath.GetPathIdForDomain()); // Fix PathId to backup collection PathId
 
+        txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
+
         // Set the target path ID for coordinator communication
         txState.TargetPathId = bcPath.Base()->PathId;
+        bcPath.Base()->PathState = *txState.TargetPathTargetState;
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
@@ -418,7 +449,7 @@ public:
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state
-        SetState(NextState());
+        SetState(NextState(), context);
 
         return result;
     }

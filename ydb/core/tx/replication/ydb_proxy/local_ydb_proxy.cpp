@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_scheme.h>
+#include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -784,7 +785,29 @@ private:
         auto& settings = std::get<NYdb::NTopic::TDescribeTopicSettings>(args);
         Y_UNUSED(settings);
 
+        auto request = std::make_unique<Ydb::Topic::DescribeTopicRequest>();
+        request.get()->set_path(TStringBuilder() << "/" << Database << path);
+
         Cerr << ">>>>> TEvDescribeTopicRequest" << path << Endl << Flush;
+        auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+            NYdb::NIssue::TIssues issues;
+            Ydb::Topic::DescribeTopicResult describe;
+            if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
+                const auto* v = dynamic_cast<const Ydb::Topic::DescribeTopicResult*>(result);
+                if (v) {
+                    describe = *v;
+                } else {
+                    statusCode = Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
+                    issues.AddIssue(TStringBuilder() << "Unexpected result type " << result->GetTypeName());
+                }
+            }
+
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            NYdb::NTopic::TDescribeTopicResult r(std::move(status), std::move(describe));
+            Send(replyTo, new TEvYdbProxy::TEvDescribeTopicResponse(r), 0, cookie);
+        };
+
+        NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
     }
 
     void Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
@@ -800,10 +823,9 @@ private:
             NYdb::NIssue::TIssues issues;
             NYdb::NScheme::TSchemeEntry entry;
             if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
-                const Ydb::Scheme::DescribePathResult* v = dynamic_cast<const Ydb::Scheme::DescribePathResult*>(result);
+                const auto* v = dynamic_cast<const Ydb::Scheme::DescribePathResult*>(result);
                 if (v) {
-                    entry.Name = v->self().name();
-                    entry.Type = static_cast<NYdb::NScheme::ESchemeEntryType>(v->self().type());
+                    entry = v->self();
                 } else {
                     statusCode = Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
                     issues.AddIssue(TStringBuilder() << "Unexpected result type " << result->GetTypeName());
@@ -811,7 +833,7 @@ private:
             }
 
             NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
-            NYdb::NScheme::TDescribePathResult r(std::move(status), entry);
+            NYdb::NScheme::TDescribePathResult r(std::move(status), std::move(entry));
             Send(replyTo, new TEvYdbProxy::TEvDescribePathResponse(r), 0, cookie);
         };
 

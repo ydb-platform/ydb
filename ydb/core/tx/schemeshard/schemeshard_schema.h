@@ -2058,39 +2058,6 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    // Detail table for each target table within an incremental restore operation
-    struct IncrementalRestoreTargets : Table<121> {
-        struct OperationId :         Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; }; // Foreign key to IncrementalRestoreOperations::Id
-        struct TargetIndex :         Column<2, NScheme::NTypeIds::Uint32> {}; // To order/identify targets within an operation
-
-        struct TargetOwnerId :       Column<3, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
-        struct TargetLocalId :       Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
-        struct TargetPathName :      Column<5, NScheme::NTypeIds::Utf8> {}; // Full path string of the target table
-
-        struct State :               Column<6, NScheme::NTypeIds::Byte> {};
-        struct Issue :               Column<7, NScheme::NTypeIds::Utf8> {};
-
-        // Shows amount of incremental tables processed + 1 (0 means we still in a process of consistent copy tables)
-        struct ProgressTables :       Column<8, NScheme::NTypeIds::Uint64> {};
-
-        struct StartTime :           Column<9, NScheme::NTypeIds::Timestamp> {};
-        struct EndTime :             Column<10, NScheme::NTypeIds::Timestamp> {};
-
-        using TKey = TableKey<OperationId, TargetIndex>;
-        using TColumns = TableColumns<
-            OperationId,
-            TargetIndex,
-            TargetOwnerId,
-            TargetLocalId,
-            TargetPathName,
-            State,
-            Issue,
-            ProgressTables,
-            StartTime,
-            EndTime
-        >;
-    };
-
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2209,8 +2176,7 @@ struct Schema : NIceDb::Schema {
         TenantDataErasureGenerations,
         WaitingDataErasureShards,
         SysView,
-        IncrementalRestoreOperations,
-        IncrementalRestoreTargets
+        IncrementalRestoreOperations
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

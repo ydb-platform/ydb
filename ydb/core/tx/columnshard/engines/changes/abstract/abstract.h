@@ -380,8 +380,7 @@ public:
     void Compile(TFinalizationContext& context) noexcept;
 
     NBlobOperations::NRead::TCompositeReadBlobs Blobs;
-    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> GroupResourcesGuard;
+    NOlap::NDataFetcher::TCurrentContext FetchingContext;
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();

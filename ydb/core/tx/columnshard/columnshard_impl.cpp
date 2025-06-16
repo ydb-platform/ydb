@@ -530,7 +530,6 @@ private:
         } else {
             AFL_VERIFY(context.GetResourceGuards().size() == 1);
         }
-        Changes->GroupResourcesGuard = context.GetResourceGuards().back();
         if (NeedBlobs) {
             Changes->Blobs = context.ExtractBlobs();
         }
@@ -538,6 +537,7 @@ private:
             NOlap::TDataAccessorsResult(context.ExtractPortionAccessors()), NOlap::TDataAccessorsInitializationContext(VersionedIndex));
 
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
+        Changes->FetchingContext = std::move(context);
         {
             NOlap::TConstructionContext context(*VersionedIndex, Counters, SnapshotModification);
             if (NeedBlobs) {

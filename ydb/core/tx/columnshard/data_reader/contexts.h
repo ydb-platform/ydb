@@ -19,7 +19,7 @@ enum class EFetchingStage : ui32 {
     Error
 };
 
-class TCurrentContext {
+class TCurrentContext: TMoveOnly {
 private:
     std::optional<std::vector<TPortionDataAccessor>> Accessors;
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);

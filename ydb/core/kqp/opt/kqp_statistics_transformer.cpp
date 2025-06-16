@@ -224,10 +224,12 @@ void InferStatisticsForKqpTable(
             sortedBy[i].AttributeName = keyColumns[i];
         }
 
-        std::int64_t orderingIdx = sortingsFSM->FDStorage.FindSorting(sortedBy, GetAscDirections(sortedBy.size()), nullptr);
+        auto sorting = TSorting(sortedBy, GetAscDirections(sortedBy.size()));
+        std::int64_t orderingIdx = sortingsFSM->FDStorage.FindSorting(sorting, nullptr);
         stats->SortingOrderings = sortingsFSM->CreateState(orderingIdx);
 
-        std::int64_t reversedOrderingIdx = sortingsFSM->FDStorage.FindSorting(sortedBy, GetDescDirections(sortedBy.size()), nullptr);
+        auto reversedSorting = TSorting(sortedBy, GetDescDirections(sortedBy.size()));
+        std::int64_t reversedOrderingIdx = sortingsFSM->FDStorage.FindSorting(reversedSorting, nullptr);
         stats->ReversedSortingOrderings = sortingsFSM->CreateState(reversedOrderingIdx);
     }
 
@@ -275,7 +277,7 @@ void InferStatisticsForSteamLookup(
     );
     res->SortingOrderings = inputStats->SortingOrderings;
 
-    if (!kqpCtx.Config->OrderPreservingStreamLookupEnabled()) {
+    if (!kqpCtx.Config->OrderPreservingLookupJoinEnabled()) {
         res->SortingOrderings.RemoveState();
     }
 
@@ -434,7 +436,8 @@ void InferStatisticsForReadTableIndexRanges(
 
     if (typeCtx->SortingsFSM) {
         auto sortedBy = indexColumnsPtr->ToJoinColumns(alias);
-        std::int64_t orderingIdx = typeCtx->SortingsFSM->FDStorage.FindSorting(sortedBy, GetAscDirections(sortedBy.size()));
+        auto sorting = TSorting(sortedBy, GetAscDirections(sortedBy.size()));
+        std::int64_t orderingIdx = typeCtx->SortingsFSM->FDStorage.FindSorting(sorting);
         stats->SortingOrderings = typeCtx->SortingsFSM->CreateState(orderingIdx);
     }
 
@@ -1019,12 +1022,14 @@ private:
 
                 if (stats->KeyColumns) {
                     TVector<TJoinColumn> sortedBy = stats->KeyColumns->ToJoinColumns(*stats->Aliases->begin());
-                    TString idx = ToString(FDStorage.AddSorting(sortedBy, GetDirs(sortedBy.size()), nullptr));
+                    auto sorting = TSorting(sortedBy, GetDirs(sortedBy.size()));
+                    TString idx = ToString(FDStorage.AddSorting(sorting, nullptr));
                     sortingsOrderingIdxes.push_back(std::move(idx));
                 }
             } else if (stats->KeyColumns) {
                 auto sortedBy = stats->KeyColumns->ToJoinColumns("");
-                TString idx = ToString(FDStorage.AddSorting(sortedBy, GetDirs(sortedBy.size()), nullptr));
+                auto sorting = TSorting(sortedBy, GetDirs(sortedBy.size()));
+                TString idx = ToString(FDStorage.AddSorting(sorting, nullptr));
                 sortingsOrderingIdxes.push_back(std::move(idx));
             }
 
@@ -1091,7 +1096,8 @@ private:
                 }
             }
 
-            std::size_t sortingsOrderingIdx = FDStorage.AddSorting(orderingInfo.Ordering, orderingInfo.Directions, tableAliases);
+            auto sorting = TSorting(orderingInfo.Ordering, orderingInfo.Directions);
+            std::size_t sortingsOrderingIdx = FDStorage.AddSorting(sorting, tableAliases);
 
             YQL_CLOG(TRACE, CoreDq) << "Collected " << sortCallable.CallableName() << " interesting ordering idx: " << sortingsOrderingIdx << ", TableAliases: " << TableAliasToString(tableAliases);
         }
@@ -1130,7 +1136,8 @@ private:
             }
 
             auto sortedBy = stats->KeyColumns->ToJoinColumns(alias);
-            std::size_t orderingIdx = FDStorage.AddSorting(sortedBy, GetDirs(sortedBy.size()), nullptr);
+            auto sorting = TSorting(sortedBy, GetDirs(sortedBy.size()));
+            std::size_t orderingIdx = FDStorage.AddSorting(sorting);
             YQL_CLOG(TRACE, CoreDq) << "Collected KqlReadTableIndexRanges interesting ordering idx: " << orderingIdx;
         }
     private:

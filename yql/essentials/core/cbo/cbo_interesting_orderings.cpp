@@ -104,13 +104,6 @@ void TTableAliasMap::AddRename(TString from, TString to) {
         TString baseTable = GetBaseTableByAlias(alias);
         TString columnName = from.substr(pointIdx + 1);
 
-        // if (auto it = BaseColumnByRename.find(columnName); it != BaseColumnByRename.end()) {
-        //     auto baseColumn = it->second;
-        //     BaseColumnByRename[to] = BaseColumnByRename[from] = it->second;
-        //     return;
-        // }
-
-
         if (pointIdx == 0) {
             from = from.substr(1);
         }
@@ -126,9 +119,6 @@ void TTableAliasMap::AddRename(TString from, TString to) {
     if (BaseColumnByRename.contains(from)) {
         BaseColumnByRename[to] = BaseColumnByRename[from];
     }
-    //  else {
-    //     BaseColumnByRename[to] = TBaseColumn("", from);
-    // }
 }
 
 TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const TString& renamedColumn) {
@@ -330,20 +320,18 @@ i64 TFDStorage::FindInterestingOrderingIdx(
 }
 
 std::size_t TFDStorage::FindSorting(
-    const std::vector<TJoinColumn>& interestingOrdering,
-    const std::vector<TOrdering::TItem::EDirection>& directions,
+    const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, TOrdering::ESorting, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::AddSorting(
-    const std::vector<TJoinColumn>& interestingOrdering,
-    std::vector<TOrdering::TItem::EDirection> directions,
+    const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    return AddInterestingOrdering(interestingOrdering, TOrdering::ESorting, directions, tableAliases);
+    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, tableAliases);
 }
 
 std::size_t TFDStorage::AddShuffling(
@@ -405,6 +393,18 @@ TVector<TJoinColumn> TFDStorage::GetInterestingOrderingsColumnNamesByIdx(std::si
     }
 
     return columns;
+}
+
+TSorting TFDStorage::GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const {
+    Y_ENSURE(interestingOrderingIdx < InterestingOrderings.size());
+
+    TVector<TJoinColumn> columns;
+    columns.reserve(InterestingOrderings[interestingOrderingIdx].Items.size());
+    for (std::size_t columnIdx: InterestingOrderings[interestingOrderingIdx].Items) {
+        columns.push_back(ColumnByIdx[columnIdx]);
+    }
+
+    return {columns, InterestingOrderings[interestingOrderingIdx].Directions};
 }
 
 TString TFDStorage::ToString() const {
@@ -544,6 +544,10 @@ void TOrderingsStateMachine::TLogicalOrderings::RemoveState() {
     *this = TLogicalOrderings(DFSM);
 }
 
+i64 TOrderingsStateMachine::TLogicalOrderings::GetInitOrderingIdx() const {
+    return InitOrderingIdx;
+}
+
 void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
     if (!IsInitialized() || orderingIdx < 0 || orderingIdx >= static_cast<i64>(DFSM->InitStateByOrderingIdx.size())) {
         RemoveState();
@@ -554,6 +558,7 @@ void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
         return;
     }
 
+    InitOrderingIdx = orderingIdx;
     auto state = DFSM->InitStateByOrderingIdx[orderingIdx];
     State = state.StateIdx;
     ShuffleHashFuncArgsCount = state.ShuffleHashFuncArgsCount;

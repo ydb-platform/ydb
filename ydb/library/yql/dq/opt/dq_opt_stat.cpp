@@ -1136,7 +1136,7 @@ TOrderingInfo GetSortingOrderingInfoImpl(
 
     std::int64_t orderingIdx = -1;
     if (sortingsFSM) {
-        orderingIdx = sortingsFSM->FDStorage.FindSorting(sorting, directions, tableAlias);
+        orderingIdx = sortingsFSM->FDStorage.FindSorting(TSorting(sorting, directions), tableAlias);
     }
 
     return TOrderingInfo{

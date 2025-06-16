@@ -29,8 +29,6 @@
                         "Index1B",
                         "Key1"
                     ],
-                    "limit": "2",
-                    "reverse": true,
                     "scan_by": [
                         "Index1A (-\u221e, +\u221e)",
                         "Index1B (-\u221e, +\u221e)",

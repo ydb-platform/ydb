@@ -8,6 +8,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
+#include <library/cpp/iterator/zip.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -220,26 +222,37 @@ TExprBase KqpBuildTopStageRemoveSort(
         return node;
     }
 
-    TVector<TString> sortKeys;
-    if (auto body = keySelector.Body().Maybe<TCoMember>()) {
-        sortKeys.push_back(body.Cast().Name().StringValue());
-    } else if (auto body = keySelector.Body().Maybe<TExprList>()) {
-        for (size_t i = 0; i < body.Cast().Size(); ++i) {
-            auto item = body.Cast().Item(i);
-            if (auto member = item.Maybe<TCoMember>()) {
-                sortKeys.push_back(member.Cast().Name().StringValue());
-            }
-        }
+    auto orderingInfo =
+        maybeSortBase?
+            GetSortBaseSortingOrderingInfo(maybeSortBase.Cast(), nullptr, nullptr) :
+            GetTopBaseSortingOrderingInfo(maybeTopBase.Cast(), nullptr, nullptr)   ;
+
+    if (orderingInfo.Directions.size() != orderingInfo.Ordering.size()) {
+        return node;
     }
 
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
-    for (auto columnName : sortKeys ) {
+    for (const auto& [dir, column] : Zip(orderingInfo.Directions, orderingInfo.Ordering)) {
+        TString columnName = column.AttributeName;
+
+        if (column.RelName) {
+            columnName = column.RelName + "." + columnName;
+        }
+
+        TString topSortDir;
+        switch (dir) {
+            using enum NYql::NDq::TOrdering::TItem::EDirection;
+            case EDescending: { topSortDir = TTopSortSettings::AscendingSort; break; }
+            case EAscending: { topSortDir = TTopSortSettings::DescendingSort; break; }
+            case ENone: { return node; }
+        }
+
         builder
             .Add<TDqSortColumn>()
                 .Column<TCoAtom>()
-            .Build(columnName)
+            .Build(std::move(columnName))
                 .SortDirection()
-                .Build(TTopSortSettings::AscendingSort)
+                .Build(std::move(topSortDir))
             .Build();
     }
     auto columnList = builder.Build().Value();

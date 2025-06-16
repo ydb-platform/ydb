@@ -4323,6 +4323,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
                     exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);
 
+                    if (rowset.HaveValue<Schema::Exports::ExportMetadata>()) {
+                        exportInfo->ExportMetadata = rowset.GetValue<Schema::Exports::ExportMetadata>();
+                    }
+
                     Self->Exports[id] = exportInfo;
                     if (uid) {
                         Self->ExportsByUid[uid] = exportInfo;
@@ -4426,6 +4430,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     switch (importInfo->State) {
+                    case TImportInfo::EState::DownloadExportMetadata:
                     case TImportInfo::EState::Waiting:
                     case TImportInfo::EState::Cancellation:
                         ImportsToResume.push_back(importInfo->Id);
@@ -4502,6 +4507,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
+                    item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
+                    item.SrcPath = rowset.GetValueOrDefault<Schema::ImportItems::SrcPath>(TString());
+                    if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
+                        item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
+                    }
 
                     if (item.WaitTxId != InvalidTxId) {
                         Self->TxIdToImport[item.WaitTxId] = {importId, itemIdx};

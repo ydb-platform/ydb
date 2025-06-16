@@ -3144,6 +3144,11 @@
                 "ColumnId": 18,
                 "ColumnName": "EnablePermissions",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ExportMetadata",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3167,7 +3172,8 @@
                     15,
                     16,
                     17,
-                    18
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6271,6 +6277,21 @@
                 "ColumnId": 16,
                 "ColumnName": "NextChangefeedIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "SrcPrefix",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "EncryptionIV",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "SrcPath",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -6292,7 +6313,10 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,

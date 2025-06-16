@@ -200,6 +200,7 @@ message TFeatureFlags {
     optional bool EnableKafkaNativeBalancing = 175 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
+    optional bool EnableEncryptedExport = 181 [default = false];
     optional bool EnableExportAutoDropping = 183 [default = false];
     optional bool EnableThrottlingReport = 184 [default = false];
     optional bool EnableAccessToIndexImplTables = 186 [default = false];

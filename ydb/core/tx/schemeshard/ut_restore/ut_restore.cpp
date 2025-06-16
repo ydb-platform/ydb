@@ -1534,9 +1534,10 @@ value {
         }
     }
 
-    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+    void ExportImportOnSupportedDatatypesImpl(bool encrypted, bool commonPrefix, bool emptyTable = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
@@ -1570,55 +1571,217 @@ value {
         )_");
         env.TestWaitNotification(runtime, txId);
 
-        const int partitionIdx = 0;
+        if (!emptyTable) {
+            const int partitionIdx = 0;
 
-        const TVector<TCell> keys = {TCell::Make(1ull)};
+            const TVector<TCell> keys = {TCell::Make(1ull)};
 
-        const TString string = "test string";
-        const TString json = R"({"key": "value"})";
-        auto binaryJson = NBinaryJson::SerializeToBinaryJson(json);
-        Y_ABORT_UNLESS(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJson));
-        const auto& binaryJsonValue = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+            const TString string = "test string";
+            const TString json = R"({"key": "value"})";
+            auto binaryJson = NBinaryJson::SerializeToBinaryJson(json);
+            Y_ABORT_UNLESS(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJson));
+            const auto& binaryJsonValue = std::get<NBinaryJson::TBinaryJson>(binaryJson);
 
-        const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
-        const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
-        const TString dynumber = *NDyNumber::ParseDyNumberString("18");
+            const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
+            const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
+            const TString dynumber = *NDyNumber::ParseDyNumberString("18");
 
-        char uuid[16];
-        NUuid::ParseUuidToArray(TString("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), reinterpret_cast<ui16*>(uuid), false);
+            char uuid[16];
+            NUuid::ParseUuidToArray(TString("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), reinterpret_cast<ui16*>(uuid), false);
 
-        const TVector<TCell> values = {
-            TCell::Make<i32>(-1), // Int32
-            TCell::Make<ui32>(2), // Uint32
-            TCell::Make<i64>(-3), // Int64
-            TCell::Make<ui64>(4), // Uint64
-            TCell::Make<ui8>(5), // Uint8
-            TCell::Make<bool>(true), // Bool
-            TCell::Make<double>(6.66), // Double
-            TCell::Make<float>(7.77), // Float
-            TCell::Make<ui16>(8), // Date
-            TCell::Make<ui32>(9), // Datetime
-            TCell::Make<ui64>(10), // Timestamp
-            TCell::Make<i64>(-11), // Interval
-            TCell::Make<i32>(-12), // Date32
-            TCell::Make<i64>(-13), // Datetime64
-            TCell::Make<i64>(-14), // Timestamp64
-            TCell::Make<i64>(-15), // Interval64
-            TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
-            TCell::Make<std::pair<ui64, ui64>>(decimal35), // Decimal
-            TCell(dynumber.data(), dynumber.size()), // Dynumber
-            TCell(string.data(), string.size()), // String
-            TCell(string.data(), string.size()), // Utf8
-            TCell(json.data(), json.size()), // Json
-            TCell(binaryJsonValue.Data(), binaryJsonValue.Size()), // JsonDocument
-            TCell(uuid, sizeof(uuid)), // Uuid
-        };
+            const TVector<TCell> values = {
+                TCell::Make<i32>(-1), // Int32
+                TCell::Make<ui32>(2), // Uint32
+                TCell::Make<i64>(-3), // Int64
+                TCell::Make<ui64>(4), // Uint64
+                TCell::Make<ui8>(5), // Uint8
+                TCell::Make<bool>(true), // Bool
+                TCell::Make<double>(6.66), // Double
+                TCell::Make<float>(7.77), // Float
+                TCell::Make<ui16>(8), // Date
+                TCell::Make<ui32>(9), // Datetime
+                TCell::Make<ui64>(10), // Timestamp
+                TCell::Make<i64>(-11), // Interval
+                TCell::Make<i32>(-12), // Date32
+                TCell::Make<i64>(-13), // Datetime64
+                TCell::Make<i64>(-14), // Timestamp64
+                TCell::Make<i64>(-15), // Interval64
+                TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
+                TCell::Make<std::pair<ui64, ui64>>(decimal35), // Decimal
+                TCell(dynumber.data(), dynumber.size()), // Dynumber
+                TCell(string.data(), string.size()), // String
+                TCell(string.data(), string.size()), // Utf8
+                TCell(json.data(), json.size()), // Json
+                TCell(binaryJsonValue.Data(), binaryJsonValue.Size()), // JsonDocument
+                TCell(uuid, sizeof(uuid)), // Uuid
+            };
 
-        const TVector<ui32> keyTags = {1};
-        TVector<ui32> valueTags(values.size());
-        std::iota(valueTags.begin(), valueTags.end(), 2);
+            const TVector<ui32> keyTags = {1};
+            TVector<ui32> valueTags(values.size());
+            std::iota(valueTags.begin(), valueTags.end(), 2);
 
-        UploadRow(runtime, "/MyRoot/Table", partitionIdx, keyTags, valueTags, keys, values);
+            UploadRow(runtime, "/MyRoot/Table", partitionIdx, keyTags, valueTags, keys, values);
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TString encryptionSettings;
+        if (encrypted) {
+            encryptionSettings = R"(encryption_settings {
+                encryption_algorithm: "ChaCha20-Poly1305"
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
+            })";
+        }
+        TString exportItems, importItems;
+        if (commonPrefix) {
+            exportItems = R"(
+                source_path: "/MyRoot"
+                destination_prefix: "BackupPrefix"
+                items {
+                    source_path: "Table"
+                }
+            )";
+            importItems = R"(
+                source_prefix: "BackupPrefix"
+                destination_path: "/MyRoot/Restored"
+            )";
+        } else {
+            exportItems = R"(
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "Backup1"
+                }
+            )";
+            importItems = R"(
+                items {
+                    source_prefix: "Backup1"
+                    destination_path: "/MyRoot/Restored"
+                }
+            )";
+        }
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              %s
+              %s
+            }
+        )", port, exportItems.c_str(), encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              %s
+              %s
+            }
+        )", port, importItems.c_str(), encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        if (!emptyTable) {
+            TString expectedJson = TStringBuilder() << "[[[[["
+                << "[%true];" // bool
+                << "[\"" << -12 << "\"];" // date32
+                << "[\"" << 8 << "\"];" // date
+                << "[\"" << -13 << "\"];" // datetime64
+                << "[\"" << 9 << "\"];" // datetime
+                << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
+                << "[\"" << "16.17" << "\"];" // decimal
+                << "[\"" << 6.66 << "\"];" // double
+                << "[\"" << ".18e2" << "\"];" // dynumber
+                << "[\"" << 7.77f << "\"];" // float
+                << "[\"" << -1 << "\"];" // int32
+                << "[\"" << -3 << "\"];" // int64
+                << "[\"" << -15 << "\"];" // interval64
+                << "[\"" << -11 << "\"];" // interval
+                << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
+                << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
+                << "[\"" << 1 << "\"];" // key
+                << "[\"" << "test string" << "\"];" // string
+                << "[\"" << -14 << "\"];" // timestamp64
+                << "[\"" << 10 << "\"];" // timestamp
+                << "[\"" << 2 << "\"];" // uint32
+                << "[\"" << 4 << "\"];" // uint64
+                << "[\"" << 5 << "\"];" // uint8
+                << "[\"" << "test string" << "\"];" // utf8
+                << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
+            << "]];\%false]]]";
+
+            const TVector<TString> readColumns = {
+                "key",
+                "int32_value",
+                "uint32_value",
+                "int64_value",
+                "uint64_value",
+                "uint8_value",
+                "bool_value",
+                "double_value",
+                "float_value",
+                "date_value",
+                "datetime_value",
+                "timestamp_value",
+                "interval_value",
+                "date32_value",
+                "datetime64_value",
+                "timestamp64_value",
+                "interval64_value",
+                "decimal_value",
+                "decimal35_value",
+                "dynumber_value",
+                "string_value",
+                "utf8_value",
+                "json_value",
+                "jsondoc_value",
+                "uuid_value",
+            };
+
+            auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, readColumns);
+            NKqp::CompareYson(expectedJson, contentOriginalTable);
+
+            auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", {"key"}, readColumns);
+            NKqp::CompareYson(expectedJson, contentRestoredTable);
+        }
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+        ExportImportOnSupportedDatatypesImpl(false, false);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesWithCommonDestPrefix) {
+        ExportImportOnSupportedDatatypesImpl(false, true);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesEncrypted) {
+        ExportImportOnSupportedDatatypesImpl(true, true);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesEncryptedNoData) {
+        ExportImportOnSupportedDatatypesImpl(true, true, true);
+    }
+
+    Y_UNIT_TEST(ZeroLengthEncryptedFileTreatedAsCorrupted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )_");
+        env.TestWaitNotification(runtime, txId);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -1630,89 +1793,69 @@ value {
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: "Backup1"
+              source_path: "/MyRoot"
+                destination_prefix: "BackupPrefix"
+                items {
+                    source_path: "Table"
+                }
+              encryption_settings {
+                encryption_algorithm: "ChaCha20-Poly1305"
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
               }
             }
         )", port));
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        // Successfully imports
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_prefix: "Backup1"
-                destination_path: "/MyRoot/Restored"
+              source_prefix: "BackupPrefix"
+              destination_path: "/MyRoot/Restored"
+              encryption_settings {
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
               }
             }
         )", port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
-        TString expectedJson = TStringBuilder() << "[[[[["
-            << "[%true];" // bool
-            << "[\"" << -12 << "\"];" // date32
-            << "[\"" << 8 << "\"];" // date
-            << "[\"" << -13 << "\"];" // datetime64
-            << "[\"" << 9 << "\"];" // datetime
-            << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
-            << "[\"" << "16.17" << "\"];" // decimal
-            << "[\"" << 6.66 << "\"];" // double
-            << "[\"" << ".18e2" << "\"];" // dynumber
-            << "[\"" << 7.77f << "\"];" // float
-            << "[\"" << -1 << "\"];" // int32
-            << "[\"" << -3 << "\"];" // int64
-            << "[\"" << -15 << "\"];" // interval64
-            << "[\"" << -11 << "\"];" // interval
-            << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
-            << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
-            << "[\"" << 1 << "\"];" // key
-            << "[\"" << "test string" << "\"];" // string
-            << "[\"" << -14 << "\"];" // timestamp64
-            << "[\"" << 10 << "\"];" // timestamp
-            << "[\"" << 2 << "\"];" // uint32
-            << "[\"" << 4 << "\"];" // uint64
-            << "[\"" << 5 << "\"];" // uint8
-            << "[\"" << "test string" << "\"];" // utf8
-            << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
-        << "]];\%false]]]";
+        // Delete data from different files
+        auto checkFailsIfFileIsEmpty = [&](const TString& fileName) {
+            TString& data = s3Mock.GetData()[fileName];
+            UNIT_ASSERT(!data.empty());
+            TString srcData = data;
+            data.clear();
 
-        const TVector<TString> readColumns = {
-            "key",
-            "int32_value",
-            "uint32_value",
-            "int64_value",
-            "uint64_value",
-            "uint8_value",
-            "bool_value",
-            "double_value",
-            "float_value",
-            "date_value",
-            "datetime_value",
-            "timestamp_value",
-            "interval_value",
-            "date32_value",
-            "datetime64_value",
-            "timestamp64_value",
-            "interval64_value",
-            "decimal_value",
-            "decimal35_value",
-            "dynumber_value",
-            "string_value",
-            "utf8_value",
-            "json_value",
-            "jsondoc_value",
-            "uuid_value",
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+              ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                source_prefix: "BackupPrefix"
+                destination_path: "/MyRoot/Restored2"
+                encryption_settings {
+                  symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                  }
+                }
+              }
+            )", port));
+            env.TestWaitNotification(runtime, txId);
+            TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+            data = srcData;
         };
 
-        auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, readColumns);
-        NKqp::CompareYson(expectedJson, contentOriginalTable);
-
-        auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key"}, readColumns);
-        NKqp::CompareYson(expectedJson, contentRestoredTable);
+        checkFailsIfFileIsEmpty("/BackupPrefix/SchemaMapping/metadata.json.enc");
+        checkFailsIfFileIsEmpty("/BackupPrefix/SchemaMapping/mapping.json.enc");
+        checkFailsIfFileIsEmpty("/BackupPrefix/001/data_00.csv.enc");
+        checkFailsIfFileIsEmpty("/BackupPrefix/001/metadata.json.enc");
     }
 
     Y_UNIT_TEST(ExportImportPg) {

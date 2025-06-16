@@ -296,7 +296,6 @@ IF (OS_WINDOWS)
 ELSE()
     SRCS(
         export_s3_buffer.cpp
-        export_s3_buffer_zstd.cpp
         export_s3_uploader.cpp
         extstorage_usage_config.cpp
         import_s3.cpp
@@ -314,6 +313,7 @@ RECURSE_FOR_TESTS(
     ut_compaction
     ut_data_cleanup
     ut_erase_rows
+    ut_export
     ut_external_blobs
     ut_followers
     ut_incremental_backup

@@ -31,7 +31,6 @@ SRCS(
     bootstrapper.proto
     change_exchange.proto
     channel_purpose.proto
-    checksum.proto
     cms.proto
     compaction.proto
     compile_service_config.proto
@@ -68,6 +67,7 @@ SRCS(
     database_basic_sausage_metainfo.proto
     datashard_config.proto
     datashard_load.proto
+    datashard_backup.proto
     db_metadata_cache.proto
     drivemodel.proto
     export.proto

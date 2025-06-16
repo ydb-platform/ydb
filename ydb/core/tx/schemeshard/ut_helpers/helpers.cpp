@@ -1038,9 +1038,28 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
         TVector<TString> result;
-
-        for (auto &item : request.GetExportToS3Settings().items()) {
-            result.push_back(item.destination_prefix());
+        for (const auto& item : request.GetExportToS3Settings().items()) {
+            TStringBuilder dest;
+            if (request.GetExportToS3Settings().destination_prefix()) {
+                dest << request.GetExportToS3Settings().destination_prefix() << '/';
+            }
+            if (item.destination_prefix()) {
+                dest << item.destination_prefix();
+            } else if (request.GetExportToS3Settings().has_encryption_settings()) {
+                continue; // validated separately
+            } else if (item.destination_prefix() || request.GetExportToS3Settings().destination_prefix()) {
+                TString src = item.source_path();
+                if (size_t pos = src.find_last_of('/'); pos != TString::npos) {
+                    dest << src.substr(pos + 1);
+                } else {
+                    if (src[0] == '/') {
+                        dest << src.substr(1);
+                    } else {
+                        dest << src;
+                    }
+                }
+            }
+            result.push_back(dest);
         }
 
         return result;

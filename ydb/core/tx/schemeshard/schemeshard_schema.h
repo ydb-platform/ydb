@@ -1204,6 +1204,8 @@ struct Schema : NIceDb::Schema {
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
 
+        struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1223,7 +1225,8 @@ struct Schema : NIceDb::Schema {
             EndTime,
             PeerName,
             EnableChecksums,
-            EnablePermissions
+            EnablePermissions,
+            ExportMetadata
         >;
     };
 
@@ -1600,6 +1603,9 @@ struct Schema : NIceDb::Schema {
         struct NextIndexIdx : Column<9, NScheme::NTypeIds::Uint32> {};
         struct NextChangefeedIdx : Column<16, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct SrcPrefix : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
+        struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1618,7 +1624,10 @@ struct Schema : NIceDb::Schema {
             WaitTxId,
             NextIndexIdx,
             NextChangefeedIdx,
-            Issue
+            Issue,
+            SrcPrefix,
+            EncryptionIV,
+            SrcPath
         >;
     };
 

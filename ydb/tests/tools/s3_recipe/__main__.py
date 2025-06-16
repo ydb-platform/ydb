@@ -18,7 +18,8 @@ def start(argv):
     logging.debug("Starting S3 recipe")
     pm = PortManager()
     port = pm.get_port()
-    url = "http://localhost:{port}".format(port=port)
+    url = "http://localhost:{port}".format(port=port)  # S3 libs require DNS name for S3 endpoint
+    check_url = "http://[::1]:{port}".format(port=port)
     cmd = [
         yatest.common.binary_path(MOTO_SERVER_PATH),
         "s3",
@@ -28,7 +29,7 @@ def start(argv):
 
     def is_s3_ready():
         try:
-            response = requests.get(url)
+            response = requests.get(check_url)
             response.raise_for_status()
             return True
         except requests.RequestException as err:

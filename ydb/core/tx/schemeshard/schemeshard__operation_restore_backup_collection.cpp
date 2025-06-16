@@ -29,9 +29,9 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 } // namespace NOperation
 
 // Forward declarations
-TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
-void CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
-void CreateIncrementalBackupPathStateOps(
+bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
+
+bool CreateIncrementalBackupPathStateOps(
     TOperationId opId,
     const TTxTransaction& tx,
     const TBackupCollectionInfo::TPtr& bc,
@@ -262,7 +262,9 @@ public:
             }
         }
 
-        Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
+        Y_VERIFY_S(!context.SS->FindTx(OperationId), 
+            "TChangePathStateOp Propose: operation already exists"
+            << ", opId: " << OperationId);
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
         
         // Set the target path that will have its state changed
@@ -436,31 +438,29 @@ public:
 };
 
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx) {
-    return new TChangePathStateOp(opId, tx);
+    return MakeSubOperation<TChangePathStateOp>(opId, tx);
 }
 
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state) {
-    return new TChangePathStateOp(opId, state);
+    return MakeSubOperation<TChangePathStateOp>(opId, state);
 }
 
-TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    TVector<ISubOperation::TPtr> result;
-
+bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
     if (!tx.HasChangePathState()) {
         result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing ChangePathState")};
-        return result;
+        return false;
     }
 
     const auto& changePathState = tx.GetChangePathState();
     
     if (!changePathState.HasPath()) {
         result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing Path in ChangePathState")};
-        return result;
+        return false;
     }
 
     if (!changePathState.HasTargetState()) {
         result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing TargetState in ChangePathState")};
-        return result;
+        return false;
     }
 
     TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
@@ -476,17 +476,18 @@ TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxT
 
         if (!checks) {
             result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-            return result;
+            return false;
         }
     }
 
-    result.push_back(CreateChangePathState(opId, tx));
-    return result;
+    result.push_back(CreateChangePathState(NextPartId(opId, result), tx));
+    return true;
 }
 
-void CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
-    auto pathStateChangeOps = CreateChangePathState(opId, tx, context);
-    result.insert(result.end(), pathStateChangeOps.begin(), pathStateChangeOps.end());
+TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+    CreateChangePathState(opId, tx, context, result);
+    return result;
 }
 
 bool CreateLongIncrementalRestoreOp(
@@ -503,19 +504,19 @@ bool CreateLongIncrementalRestoreOp(
     tx.SetWorkingDir(bcPath.PathString());
     
     // Use the factory function to create the control plane sub-operation
-    result.push_back(CreateLongIncrementalRestoreOpControlPlane(opId, tx));
+    result.push_back(CreateLongIncrementalRestoreOpControlPlane(NextPartId(opId, result), tx));
     
     return true;
 }
 
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx) {
     // Create the control plane sub-operation directly for operation factory dispatch
-    return new TCreateRestoreOpControlPlane(opId, tx);
+    return MakeSubOperation<TCreateRestoreOpControlPlane>(opId, tx);
 }
 
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, TTxState::ETxState state) {
     // Create the control plane sub-operation for RestorePart dispatch
-    return new TCreateRestoreOpControlPlane(opId, state);
+    return MakeSubOperation<TCreateRestoreOpControlPlane>(opId, state);
 }
 
 TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
@@ -593,20 +594,22 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
     }
 
-    CreateConsistentCopyTables(NextPartId(opId, result), consistentCopyTables, context, result);
+    CreateConsistentCopyTables(opId, consistentCopyTables, context, result);
 
     if (incrBackupNames) {
         // op id increased internally
-        CreateIncrementalBackupPathStateOps(opId, tx, bc, bcPath, incrBackupNames, context, result);
+        if(!CreateIncrementalBackupPathStateOps(opId, tx, bc, bcPath, incrBackupNames, context, result)) {
+            return result;
+        }
 
         // we don't need long op when we don't have incremental backups
-        CreateLongIncrementalRestoreOp(NextPartId(opId, result), bcPath, result);
+        CreateLongIncrementalRestoreOp(opId, bcPath, result);
     }
 
     return result;
 }
 
-void CreateIncrementalBackupPathStateOps(
+bool CreateIncrementalBackupPathStateOps(
     TOperationId opId,
     const TTxTransaction& tx,
     const TBackupCollectionInfo::TPtr& bc,
@@ -615,7 +618,6 @@ void CreateIncrementalBackupPathStateOps(
     TOperationContext& context,
     TVector<ISubOperation::TPtr>& result)
 {
-    // Create path state change operations immediately to ensure proper operation ID sequencing
     for (const auto& incrBackupName : incrBackupNames) {
         // Create path state change operations for each table in each incremental backup
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
@@ -623,7 +625,7 @@ void CreateIncrementalBackupPathStateOps(
             TString err;
             if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
                 result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
-                return;
+                return false;
             }
             auto& relativeItemPath = paths.second;
 
@@ -644,10 +646,13 @@ void CreateIncrementalBackupPathStateOps(
                 changePathState.SetTargetState(NKikimrSchemeOp::EPathStateAwaitingOutgoingIncrementalRestore);
 
                 // Create the operation immediately after calling NextPartId to maintain proper sequencing
-                CreateChangePathState(NextPartId(opId, result), pathStateChangeTx, context, result);
+                if (!CreateChangePathState(opId, pathStateChangeTx, context, result)) {
+                    return false;
+                }
             }
         }
     }
+    return true;
 }
 
 } // namespace NKikimr::NSchemeShard

@@ -5173,6 +5173,11 @@ TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TP
     if (sourcePath) {
         IncrementPathDbRefCount(sourcePath, "transaction source path");
     }
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CreateTx for txid " << opId
+                    << " type: " << TTxState::TypeName(txType)
+                    << " target path: " << targetPath
+                    << " source path: " << sourcePath);
     return txState;
 }
 

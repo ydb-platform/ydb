@@ -2426,39 +2426,6 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
     return FillKeySchema(proto, unused);
 }
 
-TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
-}
-
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ENSURE(UploadRows >= other.UploadRows);
-    Y_ENSURE(UploadBytes >= other.UploadBytes);
-    Y_ENSURE(ReadRows >= other.ReadRows);
-    Y_ENSURE(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
-}
-
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
-}
-
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
-}
-
 TSequenceInfo::TSequenceInfo(
         ui64 alterVersion,
         NKikimrSchemeOp::TSequenceDescription&& description,

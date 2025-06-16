@@ -82,7 +82,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         SendScanError("task_error:" + result.GetErrorMessage());
         Finish(NColumnShard::TScanCounters::EStatusFinish::ConveyorInternalError);
     } else {
-        ACFL_ERROR("event", "TEvTaskProcessedResult");
+        ACFL_DEBUG("event", "TEvTaskProcessedResult");
         auto t = static_pointer_cast<IApplyAction>(result.GetResult());
         if (!ScanIterator->Finished()) {
             ScanIterator->Apply(t);
@@ -101,7 +101,7 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
 
     ChunksLimiter = TChunksLimiter(ev->Get()->FreeSpace, ev->Get()->MaxChunksCount);
     AFL_VERIFY(ev->Get()->MaxChunksCount == 1);
-    ACFL_ERROR("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
+    ACFL_DEBUG("event", "TEvScanDataAck")("info", ChunksLimiter.DebugString());
     if (ScanIterator) {
         if (!!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
             ScanCountersPool.OnEmptyAck();

@@ -24,7 +24,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribePathResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_E("Handle " << ev->Get()->ToString());
 
         auto it = Pending.find(ev->Cookie);
         if (it == Pending.end()) {
@@ -177,7 +177,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe topic succeeded"
+            LOG_E("Describe topic succeeded"
                 << ": path# " << path.first);
 
             const auto& targetConf = Config.GetTransferSpecific().GetTarget();

@@ -793,32 +793,26 @@ private:
         auto& settings = std::get<NYdb::NScheme::TDescribePathSettings>(args);
         Y_UNUSED(settings);
 
-        Cerr << ">>>>> TEvDescribePathRequest " <<  "/" << Database << path << Endl << Flush;
-
         auto request = std::make_unique<Ydb::Scheme::DescribePathRequest>();
         request.get()->set_path(TStringBuilder() << "/" << Database << path);
 
-        auto callback = [&, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
-            Y_UNUSED(statusCode);
-            Y_UNUSED(result);
-            Y_UNUSED(this);
-            Cerr << ">>>>> TEvDescribePathRequest RESPONSE " << path << " : " << statusCode << " : " << (result ? result->DebugString() : "null")<< Endl << Flush;
-
+        auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+            NYdb::NIssue::TIssues issues;
             NYdb::NScheme::TSchemeEntry entry;
             if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
-                const Ydb::Scheme::DescribePathResponse* v = dynamic_cast<const Ydb::Scheme::DescribePathResponse*>(result);
-                    auto deferred = v->operation();
-                    Ydb::Scheme::DescribePathResult r;
-                    deferred.result().UnpackTo(&r);
-
-                entry.Name = r.self().name();
-                entry.Type = static_cast<NYdb::NScheme::ESchemeEntryType>(r.self().type());
+                const Ydb::Scheme::DescribePathResult* v = dynamic_cast<const Ydb::Scheme::DescribePathResult*>(result);
+                if (v) {
+                    entry.Name = v->self().name();
+                    entry.Type = static_cast<NYdb::NScheme::ESchemeEntryType>(v->self().type());
+                } else {
+                    statusCode = Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
+                    issues.AddIssue(TStringBuilder() << "Unexpected result type " << result->GetTypeName());
+                }
             }
 
-            NYdb::NIssue::TIssues issues;
             NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
             NYdb::NScheme::TDescribePathResult r(std::move(status), entry);
-            Send(ev->Sender, new TEvYdbProxy::TEvDescribePathResponse(r));
+            Send(replyTo, new TEvYdbProxy::TEvDescribePathResponse(r), 0, cookie);
         };
 
         NGRpcService::DoDescribePathRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
@@ -833,8 +827,7 @@ private:
             hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         default:
-            Cerr << ">>>>> Unknown " << ev->GetTypeName() << Endl << Flush;
-            Y_UNREACHABLE();
+            Y_VERIFY_DEBUG(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
         }
     }
 

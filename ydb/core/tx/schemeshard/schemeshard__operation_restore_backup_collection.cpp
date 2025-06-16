@@ -4,6 +4,7 @@
 #include "schemeshard__operation.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard__operation_restore_backup_collection.h"
+#include "schemeshard__operation_change_path_state.h"
 
 #include <util/generic/guid.h>
 
@@ -87,131 +88,6 @@ public:
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
-    }
-};
-
-// TEmptyPropose and TWaitCopyTableBarrier are now defined in schemeshard__operation_states.h
-
-class TChangePathStateOp: public TSubOperation {
-    TTxState::ETxState NextState(TTxState::ETxState state) const override {
-        switch(state) {
-        case TTxState::Waiting:
-            return TTxState::Propose;
-        case TTxState::Propose:
-            return TTxState::Done;
-        default:
-            return TTxState::Invalid;
-        }
-    }
-
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
-        Y_UNUSED(state);
-        Y_ABORT("Unreachable code: TChangePathStateOp should not call this method");
-    }
-
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
-        switch(state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TEmptyPropose>(OperationId);
-        case TTxState::Done: {
-            // Get target state from transaction and create TDone with it
-            // This will cause TDone::Process to apply the path state change
-            const auto* txState = context.SS->FindTx(OperationId);
-            if (txState && txState->TargetPathTargetState.Defined()) {
-                auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
-                return MakeHolder<TDone>(OperationId, targetState);
-            }
-            return MakeHolder<TDone>(OperationId);
-        }
-        default:
-            return nullptr;
-        }
-    }
-
-    void StateDone(TOperationContext& context) override {
-        // When we reach Done state, don't try to advance to Invalid state
-        // Just complete the operation
-        if (GetState() == TTxState::Done) {
-            // Operation is complete, no need to advance state
-            return;
-        }
-        
-        // For other states, use normal state advancement
-        auto nextState = NextState(GetState());
-        SetState(nextState, context);
-        
-        if (nextState != TTxState::Invalid) {
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
-public:
-    using TSubOperation::TSubOperation;
-
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const auto& tx = Transaction;
-        const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
-        
-        LOG_I("TChangePathStateOp Propose"
-            << ", opId: " << OperationId
-        );
-
-        const auto& changePathState = tx.GetChangePathState();
-        TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
-        
-        const TPath& path = TPath::Resolve(pathStr, context.SS);
-        
-        {
-            auto checks = path.Check();
-            checks
-                .NotEmpty()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotUnderDeleting();
-
-            if (!checks) {
-                return MakeHolder<TProposeResponse>(checks.GetStatus(), ui64(OperationId.GetTxId()), ui64(schemeshardTabletId), checks.GetError());
-            }
-        }
-
-        Y_VERIFY_S(!context.SS->FindTx(OperationId), 
-            "TChangePathStateOp Propose: operation already exists"
-            << ", opId: " << OperationId);
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
-        
-        // Set the target path that will have its state changed
-        txState.TargetPathId = path.Base()->PathId;
-        
-        // Set TargetPathTargetState instead of changing path state immediately
-        NIceDb::TNiceDb db(context.GetDB());
-        txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
-        
-        // Set the path state directly to allow the operation to proceed
-        path.Base()->PathState = *txState.TargetPathTargetState;
-        context.DbChanges.PersistPath(path.Base()->PathId);
-        
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
-
-        txState.State = TTxState::Waiting;
-        context.DbChanges.PersistTxState(OperationId);
-        context.OnComplete.ActivateTx(OperationId);
-
-        SetState(NextState(TTxState::Waiting), context);
-        return result;
-    }
-
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TChangePathStateOp");
-    }
-
-    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TChangePathStateOp AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-        );
-
-        context.OnComplete.DoneOperation(OperationId);
     }
 };
 
@@ -381,58 +257,7 @@ public:
     }
 };
 
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx) {
-    return MakeSubOperation<TChangePathStateOp>(opId, tx);
-}
-
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state) {
-    return MakeSubOperation<TChangePathStateOp>(opId, state);
-}
-
-bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {
-    if (!tx.HasChangePathState()) {
-        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing ChangePathState")};
-        return false;
-    }
-
-    const auto& changePathState = tx.GetChangePathState();
-    
-    if (!changePathState.HasPath()) {
-        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing Path in ChangePathState")};
-        return false;
-    }
-
-    if (!changePathState.HasTargetState()) {
-        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Missing TargetState in ChangePathState")};
-        return false;
-    }
-
-    TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
-    const TPath& path = TPath::Resolve(pathStr, context.SS);
-    
-    {
-        auto checks = path.Check();
-        checks
-            .NotEmpty()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotUnderDeleting();
-
-        if (!checks) {
-            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
-            return false;
-        }
-    }
-
-    result.push_back(CreateChangePathState(NextPartId(opId, result), tx));
-    return true;
-}
-
-TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    TVector<ISubOperation::TPtr> result;
-    CreateChangePathState(opId, tx, context, result);
-    return result;
-}
+// CreateChangePathState functions are now defined in schemeshard__operation_change_path_state.h/.cpp
 
 bool CreateLongIncrementalRestoreOp(
     TOperationId opId,

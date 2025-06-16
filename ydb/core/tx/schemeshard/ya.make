@@ -88,9 +88,9 @@ SRCS(
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__notify.cpp
+    schemeshard__op_traits.h
     schemeshard__operation.cpp
     schemeshard__operation.h
-    schemeshard__op_traits.h
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -113,10 +113,10 @@ SRCS(
     schemeshard__operation_assign_bsv.cpp
     schemeshard__operation_backup_backup_collection.cpp
     schemeshard__operation_backup_incremental_backup_collection.cpp
-    schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_blob_depot.cpp
     schemeshard__operation_cancel_tx.cpp
     schemeshard__operation_cansel_build_index.cpp
+    schemeshard__operation_change_path_state.cpp
     schemeshard__operation_common.cpp
     schemeshard__operation_common.h
     schemeshard__operation_common_bsv.cpp
@@ -192,6 +192,7 @@ SRCS(
     schemeshard__operation_move_tables.cpp
     schemeshard__operation_part.cpp
     schemeshard__operation_part.h
+    schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
     schemeshard__operation_side_effects.cpp
     schemeshard__operation_side_effects.h
@@ -199,16 +200,16 @@ SRCS(
     schemeshard__operation_upgrade_subdomain.cpp
     schemeshard__pq_stats.cpp
     schemeshard__publish_to_scheme_board.cpp
+    schemeshard__root_data_erasure_manager.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
+    schemeshard__tenant_data_erasure_manager.cpp
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
-    schemeshard__root_data_erasure_manager.cpp
-    schemeshard__tenant_data_erasure_manager.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp

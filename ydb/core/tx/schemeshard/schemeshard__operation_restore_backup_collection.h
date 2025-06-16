@@ -8,17 +8,6 @@ namespace NKikimr::NSchemeShard {
 // Forward declarations for restore backup collection operations
 
 /**
- * Creates a change path state operation for modifying path states during restore operations.
- * 
- * @param opId Operation ID
- * @param tx Transaction containing the change path state operation
- * @param context Operation context
- * @param result Vector to store the created sub-operations
- * @return true if the operation was created successfully, false otherwise
- */
-bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
-
-/**
  * Creates incremental backup path state operations for each table in each incremental backup.
  * This is used to set up the proper path states for incremental restore operations.
  * 
@@ -41,24 +30,6 @@ bool CreateIncrementalBackupPathStateOps(
     TVector<ISubOperation::TPtr>& result);
 
 /**
- * Factory function to create a change path state sub-operation from a transaction.
- * 
- * @param opId Operation ID
- * @param tx Transaction containing the change path state operation
- * @return Sub-operation pointer
- */
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
-
-/**
- * Factory function to create a change path state sub-operation from a state.
- * 
- * @param opId Operation ID
- * @param state Transaction state
- * @return Sub-operation pointer
- */
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
-
-/**
  * Factory function to create a long incremental restore operation control plane.
  * 
  * @param opId Operation ID
@@ -75,16 +46,6 @@ ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId
  * @return Sub-operation pointer
  */
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, TTxState::ETxState state);
-
-/**
- * Creates a vector of change path state operations from a transaction.
- * 
- * @param opId Operation ID
- * @param tx Transaction containing the change path state operation
- * @param context Operation context
- * @return Vector of sub-operations
- */
-TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 /**
  * Creates the restore backup collection operations.

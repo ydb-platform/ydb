@@ -144,7 +144,13 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderOperation();
+                .NotUnderDeleting();
+
+            // Allow CDC operations on tables that are under incremental backup/restore
+            if (tablePath.IsUnderOperation() && 
+                !tablePath.IsUnderOutgoingIncrementalRestore()) {
+                checks.NotUnderOperation();
+            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -374,8 +380,13 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderDeleting()
-                .NotUnderOperation();
+                .NotUnderDeleting();
+
+            // Allow CDC operations on tables that are under incremental backup/restore
+            if (tablePath.IsUnderOperation() && 
+                !tablePath.IsUnderOutgoingIncrementalRestore()) {
+                checks.NotUnderOperation();
+            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();
@@ -498,8 +509,13 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
             .IsResolved()
             .NotDeleted()
             .IsTable()
-            .NotAsyncReplicaTable()
-            .NotUnderOperation();
+            .NotAsyncReplicaTable();
+
+        // Allow CDC operations on tables that are under incremental backup/restore
+        if (tablePath.IsUnderOperation() && 
+            !tablePath.IsUnderOutgoingIncrementalRestore()) {
+            checks.NotUnderOperation();
+        }
 
         if (checks && !tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();

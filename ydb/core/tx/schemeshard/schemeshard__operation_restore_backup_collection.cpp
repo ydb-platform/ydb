@@ -273,7 +273,7 @@ public:
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
         
         // Set the path state directly to allow the operation to proceed
-        path.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
+        path.Base()->PathState = *txState.TargetPathTargetState;
         context.DbChanges.PersistPath(path.Base()->PathId);
         
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
@@ -333,45 +333,6 @@ class TCreateRestoreOpControlPlane: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
-        switch(state) {
-        case TTxState::Waiting:
-        case TTxState::Propose:
-            return MakeHolder<TEmptyPropose>(OperationId);
-        case TTxState::CopyTableBarrier:
-            return MakeHolder<TWaitCopyTableBarrier>(OperationId);
-        case TTxState::Done: {
-            // Get target state from transaction and create TDone with it
-            // This will cause TDone::Process to apply the path state change
-            const auto* txState = context.SS->FindTx(OperationId);
-            if (txState && txState->TargetPathTargetState.Defined()) {
-                auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
-                return MakeHolder<TDone>(OperationId, targetState);
-            }
-            return MakeHolder<TDone>(OperationId);
-        }
-        default:
-            return nullptr;
-        }
-    }
-
-    void StateDone(TOperationContext& context) override {
-        // When we reach Done state, don't try to advance to Invalid state
-        // Just complete the operation
-        if (GetState() == TTxState::Done) {
-            // Operation is complete, no need to advance state
-            return;
-        }
-        
-        // For other states, use normal state advancement
-        auto nextState = NextState(GetState());
-        SetState(nextState, context);
-        
-        if (nextState != TTxState::Invalid) {
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -394,9 +355,6 @@ public:
 
         // Set the target path ID for coordinator communication
         txState.TargetPathId = bcPath.Base()->PathId;
-        
-        // Set the target state for the backup collection path to outgoing incremental restore
-        txState.TargetPathTargetState = NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore;
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
@@ -458,7 +416,7 @@ public:
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state
-        SetState(NextState(), context);
+        SetState(NextState());
 
         return result;
     }
@@ -640,9 +598,10 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     if (incrBackupNames) {
         // op id increased internally
         CreateIncrementalBackupPathStateOps(opId, tx, bc, bcPath, incrBackupNames, context, result);
-    }
 
-    CreateLongIncrementalRestoreOp(NextPartId(opId, result), bcPath, result);
+        // we don't need long op when we don't have incremental backups
+        CreateLongIncrementalRestoreOp(NextPartId(opId, result), bcPath, result);
+    }
 
     return result;
 }
@@ -682,7 +641,7 @@ void CreateIncrementalBackupPathStateOps(
 
                 auto& changePathState = *pathStateChangeTx.MutableChangePathState();
                 changePathState.SetPath(JoinPath({tx.GetRestoreBackupCollection().GetName(), incrBackupName, relativeItemPath}));
-                changePathState.SetTargetState(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
+                changePathState.SetTargetState(NKikimrSchemeOp::EPathStateAwaitingOutgoingIncrementalRestore);
 
                 // Create the operation immediately after calling NextPartId to maintain proper sequencing
                 CreateChangePathState(NextPartId(opId, result), pathStateChangeTx, context, result);

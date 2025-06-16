@@ -23,6 +23,7 @@ END()
 RECURSE(
     analysis
     antlr4
+    bench
     check
     core
     name

@@ -19,6 +19,7 @@
 
 #include <yt/yt/core/yson/format.h>
 #include <yt/yt/core/yson/tokenizer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
 
@@ -489,7 +490,7 @@ TFuture<void> AsyncYPathSet(
     bool recursive)
 {
     auto request = TYPathProxy::Set(path);
-    request->set_value(value.ToString());
+    request->set_value(ToProto(value));
     request->set_recursive(recursive);
     return ExecuteVerb(service, request).AsVoid();
 }

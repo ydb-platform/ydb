@@ -419,11 +419,8 @@ int BuildAST(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     try {
         return BuildAST(argc, argv);
-    } catch (const yexception& e) {
-        Cerr << "Caught exception:" << e.what() << Endl;
-        return 1;
     } catch (...) {
-        Cerr << "Caught exception" << Endl;
+        Cerr << "Caught exception: " << FormatCurrentException() << Endl;
         return 1;
     }
     return 0;

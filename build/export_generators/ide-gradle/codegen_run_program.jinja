@@ -1,4 +1,5 @@
 {%- if current_target.custom_runs|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.custom_runs|map(attribute='_object_index') -%}
 {%-     for custom_run in current_target.custom_runs %}
 
 val {{ varprefix }}{{ custom_run['_object_index'] }} = task<Exec>("{{ varprefix }}{{ custom_run['_object_index'] }}") {

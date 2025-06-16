@@ -9,6 +9,7 @@
 #include "pycore_pylifecycle.h"   // _Py_PreInitializeFromConfig()
 #include "pycore_pymem.h"         // _PyMem_SetDefaultAllocator()
 #include "pycore_pystate.h"       // _PyThreadState_GET()
+#include "pycore_sysmodule.h"     // _PySys_GetOptionalAttrString()
 
 #include "osdefs.h"               // DELIM
 
@@ -43,7 +44,7 @@ Options (and corresponding environment variables):\n\
 -h     : print this help message and exit (also -? or --help)\n\
 -i     : inspect interactively after running script; forces a prompt even\n\
          if stdin does not appear to be a terminal; also PYTHONINSPECT=x\n\
--I     : isolate Python from the user's environment (implies -E and -s)\n\
+-I     : isolate Python from the user's environment (implies -E, -P and -s)\n\
 -m mod : run library module as a script (terminates option list)\n\
 -O     : remove assert and __debug__-dependent statements; add .opt-1 before\n\
          .pyc extension; also PYTHONOPTIMIZE=x\n\
@@ -3144,10 +3145,13 @@ _Py_DumpPathConfig(PyThreadState *tstate)
 
 #define DUMP_SYS(NAME) \
         do { \
-            obj = PySys_GetObject(#NAME); \
             PySys_FormatStderr("  sys.%s = ", #NAME); \
+            if (_PySys_GetOptionalAttrString(#NAME, &obj) < 0) { \
+                PyErr_Clear(); \
+            } \
             if (obj != NULL) { \
                 PySys_FormatStderr("%A", obj); \
+                Py_DECREF(obj); \
             } \
             else { \
                 PySys_WriteStderr("(not set)"); \
@@ -3165,7 +3169,8 @@ _Py_DumpPathConfig(PyThreadState *tstate)
     DUMP_SYS(exec_prefix);
 #undef DUMP_SYS
 
-    PyObject *sys_path = PySys_GetObject("path");  /* borrowed reference */
+    PyObject *sys_path;
+    (void) _PySys_GetOptionalAttrString("path", &sys_path);
     if (sys_path != NULL && PyList_Check(sys_path)) {
         PySys_WriteStderr("  sys.path = [\n");
         Py_ssize_t len = PyList_GET_SIZE(sys_path);
@@ -3175,6 +3180,7 @@ _Py_DumpPathConfig(PyThreadState *tstate)
         }
         PySys_WriteStderr("  ]\n");
     }
+    Py_XDECREF(sys_path);
 
     _PyErr_SetRaisedException(tstate, exc);
 }

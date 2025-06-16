@@ -6,6 +6,7 @@
 #include <yt/yt/client/table_client/unversioned_row.h>
 
 #include <yt/yt/core/misc/bit_packed_unsigned_vector.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <library/cpp/yt/memory/chunked_output_stream.h>
 
@@ -91,6 +92,7 @@ private:
         DictionaryByteSize_ = 0;
         DirectBuffer_ = std::make_unique<TChunkedOutputStream>(
             GetRefCountedTypeCookie<TConverterTag>(),
+            GetNullMemoryUsageTracker(), // TODO(nadya02): YT-25327.
             256_KB,
             1_MB);
 

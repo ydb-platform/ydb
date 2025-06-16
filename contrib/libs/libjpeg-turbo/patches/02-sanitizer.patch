@@ -9,8 +9,8 @@ For more info see:
 * https://github.com/libjpeg-turbo/libjpeg-turbo#memory-debugger-pitfalls
 * http://clang.llvm.org/docs/MemorySanitizer.html#handling-external-code
 
---- b/jinclude.h
-+++ a/jinclude.h
+--- b/src/jinclude.h
++++ a/src/jinclude.h
 @@ -130,6 +130,10 @@
  #endif /* _WIN32 */
  
@@ -24,68 +24,43 @@ For more info see:
  #endif /* JINCLUDE_H */
 --- b/simd/x86_64/jsimd.c
 +++ a/simd/x86_64/jsimd.c
-@@ -116,6 +116,7 @@ jsimd_can_ycc_rgb(void)
+@@ -116,6 +116,9 @@ jsimd_can_ycc_rgb(void)
  {
    init_simd();
 
-+#ifndef WITH_SANITIZER
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
    /* The code is optimised for these values only */
    if (BITS_IN_JSAMPLE != 8)
      return 0;
-@@ -130,6 +131,7 @@ jsimd_can_ycc_rgb(void)
-   if ((simd_support & JSIMD_SSE2) &&
-       IS_ALIGNED_SSE(jconst_ycc_rgb_convert_sse2))
-     return 1;
-+#endif
-
-   return 0;
- }
-@@ -997,6 +999,7 @@ jsimd_can_huff_encode_one_block(void)
+@@ -997,6 +999,9 @@ jsimd_can_huff_encode_one_block(void)
  {
    init_simd();
 
-+#ifndef WITH_SANITIZER
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
    if (DCTSIZE != 8)
      return 0;
    if (sizeof(JCOEF) != 2)
-@@ -1005,6 +1008,7 @@ jsimd_can_huff_encode_one_block(void)
-   if ((simd_support & JSIMD_SSE2) && simd_huffman &&
-       IS_ALIGNED_SSE(jconst_huff_encode_one_block))
-     return 1;
-+#endif
-
-   return 0;
- }
-@@ -1023,6 +1027,7 @@ jsimd_can_encode_mcu_AC_first_prepare(void)
+@@ -1023,6 +1027,9 @@ jsimd_can_encode_mcu_AC_first_prepare(void)
  {
    init_simd();
 
-+#ifndef WITH_SANITIZER
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
    if (DCTSIZE != 8)
      return 0;
    if (sizeof(JCOEF) != 2)
-@@ -1029,6 +1034,7 @@ jsimd_can_encode_mcu_AC_first_prepare(void)
-     return 0;
-   if (simd_support & JSIMD_SSE2)
-     return 1;
-+#endif
-
-   return 0;
- }
-@@ -1047,6 +1053,7 @@ jsimd_can_encode_mcu_AC_refine_prepare(void)
+@@ -1047,6 +1053,9 @@ jsimd_can_encode_mcu_AC_refine_prepare(void)
  {
    init_simd();
 
-+#ifndef WITH_SANITIZER
++#ifdef WITH_SANITIZER
++  return 0;
++#endif
    if (DCTSIZE != 8)
      return 0;
    if (sizeof(JCOEF) != 2)
-@@ -1053,6 +1060,7 @@ jsimd_can_encode_mcu_AC_refine_prepare(void)
-     return 0;
-   if (simd_support & JSIMD_SSE2)
-     return 1;
-+#endif
-
-   return 0;
- }
-

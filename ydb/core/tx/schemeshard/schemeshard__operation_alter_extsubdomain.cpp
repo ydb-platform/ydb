@@ -2,6 +2,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__operation_states.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/subdomain.h>
@@ -561,32 +562,7 @@ public:
     }
 };
 
-class TEmptyPropose: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder() << "TEmptyPropose, operationId " << OperationId << ", ";
-    }
-
-public:
-    TEmptyPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {});
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        LOG_I(DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
-
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
-
-        return true;
-    }
-};
+// TEmptyPropose is now defined in schemeshard__operation_states.h
 
 class TAlterExtSubDomainCreateHive: public TSubOperation {
     static TTxState::ETxState NextState() {

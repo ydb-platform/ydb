@@ -2,6 +2,7 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation.h"
+#include "schemeshard__operation_states.h"
 
 #include <util/generic/guid.h>
 
@@ -100,84 +101,7 @@ public:
     }
 };
 
-class TWaitCopyTableBarrier: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCreateRestoreOpControlPlane::TWaitCopyTableBarrier"
-                << " operationId: " << OperationId;
-    }
-
-public:
-    TWaitCopyTableBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
-            , TEvDataShard::TEvProposeTransactionResult::EventType
-            , TEvPrivate::TEvOperationPlan::EventType
-            , TEvDataShard::TEvSchemaChanged::EventType }
-        );
-    }
-
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
-                               << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet# " << ssId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << "ProgressState, operation type "
-                            << TTxState::TypeName(txState->TxType));
-
-        context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
-        return false;
-    }
-};
-
-class TEmptyPropose: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder() << "TEmptyPropose, operationId " << OperationId << ", ";
-    }
-
-public:
-    TEmptyPropose(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {});
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        LOG_I(DebugHint() << "ProgressState, operation type " << TTxState::TypeName(txState->TxType));
-
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
-
-        return true;
-    }
-};
+// TEmptyPropose and TWaitCopyTableBarrier are now defined in schemeshard__operation_states.h
 
 class TChangePathStateOp: public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
@@ -332,7 +256,7 @@ class TCreateRestoreOpControlPlane: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
-            return MakeHolder<TWaitCopyTableBarrier>(OperationId);
+            return MakeHolder<TWaitCopyTableBarrier>(OperationId, "TCreateRestoreOpControlPlane");
         case TTxState::Done: {
             const auto* txState = context.SS->FindTx(OperationId);
             if (txState && txState->TargetPathTargetState.Defined()) {

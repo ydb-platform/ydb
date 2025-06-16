@@ -7,11 +7,6 @@
 namespace NSQLComplete {
 
     TMaybe<TString> ToTablePath(const NYql::TExprNode& node) {
-        if (node.IsCallable("MrTableConcat")) {
-            Y_ENSURE(node.ChildrenSize() < 2);
-            return ToTablePath(*node.Child(0));
-        }
-
         if (!node.IsCallable("Key") || node.ChildrenSize() < 1) {
             return Nothing();
         }
@@ -34,6 +29,24 @@ namespace NSQLComplete {
         return TString(string->Child(0)->Content());
     }
 
+    THashSet<TString> ToTablePaths(const NYql::TExprNode& node) {
+        if (node.IsCallable("MrTableConcat")) {
+            THashSet<TString> paths;
+            for (const auto& child : node.Children()) {
+                if (auto path = ToTablePath(*child)) {
+                    paths.emplace(std::move(*path));
+                }
+            }
+            return paths;
+        }
+
+        if (auto path = ToTablePath(node)) {
+            return {std::move(*path)};
+        }
+
+        return {};
+    }
+
     THashMap<TString, THashSet<TString>> CollectTablesByCluster(const NYql::TExprNode& node) {
         THashMap<TString, THashSet<TString>> tablesByCluster;
         NYql::VisitExpr(node, [&](const NYql::TExprNode& node) -> bool {
@@ -45,12 +58,10 @@ namespace NSQLComplete {
             }
 
             TString cluster = ToCluster(*node.Child(1)).GetOrElse("");
-            TMaybe<TString> table = ToTablePath(*node.Child(2));
-            if (table.Empty()) {
-                return true;
+            for (TString table : ToTablePaths(*node.Child(2))) {
+                tablesByCluster[cluster].emplace(std::move(table));
             }
 
-            tablesByCluster[std::move(cluster)].emplace(std::move(*table));
             return true;
         });
         return tablesByCluster;

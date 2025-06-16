@@ -100,10 +100,7 @@ namespace NSQLComplete {
     }
 
     bool CheckComplete(TStringBuf query, NYql::TAstNode& root, NYql::TIssues& issues) try {
-        return MakeYqlAnalysis()
-            ->Analyze(root, issues)
-            .Transform([&](auto&& ctx) { return CheckComplete(query, std::move(ctx)); })
-            .GetOrElse(false);
+        return CheckComplete(query, MakeYqlAnalysis()->Analyze(root, issues).GetOrElse({}));
     } catch (...) {
         issues.AddIssue(FormatCurrentException());
         return false;

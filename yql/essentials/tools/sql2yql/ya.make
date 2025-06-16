@@ -6,12 +6,14 @@ PEERDIR(
     contrib/libs/antlr3_cpp_runtime
     library/cpp/getopt
     library/cpp/testing/unittest
+    yql/essentials/minikql/invoke_builtins/no_llvm
     yql/essentials/parser/lexer_common
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub
     yql/essentials/sql
     yql/essentials/sql/v1
     yql/essentials/sql/pg
+    yql/essentials/sql/v1/complete/check
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/lexer/check
     yql/essentials/sql/v1/lexer/antlr4
@@ -31,4 +33,3 @@ SRCS(
 END()
 
 ENDIF()
-

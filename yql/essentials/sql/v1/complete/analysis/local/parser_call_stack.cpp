@@ -1,6 +1,6 @@
 #include "parser_call_stack.h"
 
-#include "grammar.h"
+#include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>

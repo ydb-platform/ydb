@@ -55,7 +55,7 @@ public:
     }
 
     i64 ForceHardLimit(TOwner ownerId, i64 limit) {
-        Y_ABORT_UNLESS(limit >= 0);
+        Y_VERIFY(limit >= 0);
         return QuotaForOwner[ownerId].ForceHardLimit(limit, ColorLimits);
     }
 
@@ -73,8 +73,8 @@ public:
 
     void AddOwner(TOwner id, TVDiskID vdiskId) {
         TQuotaRecord &record = QuotaForOwner[id];
-        Y_ABORT_UNLESS(record.GetHardLimit() == 0);
-        Y_ABORT_UNLESS(record.GetFree() == 0);
+        Y_VERIFY(record.GetHardLimit() == 0);
+        Y_VERIFY(record.GetFree() == 0);
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
 
@@ -94,14 +94,14 @@ public:
                 break;
             }
         }
-        Y_ABORT_UNLESS(isFound);
+        Y_VERIFY(isFound);
         ForceHardLimit(id, 0);
     }
 
     i64 AddSystemOwner(TOwner id, i64 quota, TString name) {
         TQuotaRecord &record = QuotaForOwner[id];
-        Y_ABORT_UNLESS(record.GetHardLimit() == 0);
-        Y_ABORT_UNLESS(record.GetFree() == 0);
+        Y_VERIFY(record.GetHardLimit() == 0);
+        Y_VERIFY(record.GetFree() == 0);
         record.SetName(name);
         i64 inc = ForceHardLimit(id, quota);
         ActiveOwnerIds.push_back(id);
@@ -134,7 +134,7 @@ public:
     }
 
     bool InitialAllocate(TOwner id, i64 count) {
-        Y_ABORT_UNLESS(count >= 0);
+        Y_VERIFY(count >= 0);
         return QuotaForOwner[id].ForceAllocate(count);
     }
 
@@ -345,12 +345,12 @@ public:
     }
 
     void AddOwner(TOwner owner, TVDiskID vdiskId) {
-        Y_ABORT_UNLESS(IsOwnerUser(owner));
+        Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->AddOwner(owner, vdiskId);
     }
 
     void RemoveOwner(TOwner owner) {
-        Y_ABORT_UNLESS(IsOwnerUser(owner));
+        Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->RemoveOwner(owner);
     }
 

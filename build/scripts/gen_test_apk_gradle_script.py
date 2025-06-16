@@ -4,7 +4,12 @@ import tarfile
 import xml.etree.ElementTree as etree
 
 FLAT_DIRS_REPO_TEMPLATE = 'flatDir {{ dirs {dirs} }}\n'
-MAVEN_REPO_TEMPLATE = 'maven {{ url "{repo}" }}\n'
+MAVEN_REPO_TEMPLATE = '''
+    maven {{
+        url "{repo}"
+        allowInsecureProtocol true
+    }}\n
+'''
 KEYSTORE_TEMLATE = 'signingConfigs {{ debug {{ storeFile file("{keystore}") }} }}\n'
 
 TEST_APK_TEMPLATE = """\
@@ -22,31 +27,29 @@ ext.bundles = [
 ]
 
 buildscript {{
-//    repositories {{
-//        jcenter()
-//    }}
+    //repositories {{
+    //    jcenter()
+    //    google()
+    //    mavenCentral()
+    //}}
 
     repositories {{
         {maven_repos}
     }}
 
     dependencies {{
-        classpath 'com.android.tools.build:gradle:3.5.3'
+        classpath 'com.android.tools.build:gradle:8.6.0'
     }}
 }}
 
 apply plugin: 'com.android.application'
 
 repositories {{
-//     maven {{
-//         url "http://maven.google.com/"
-//     }}
-//    maven {{
-//        url "http://artifactory.yandex.net/artifactory/public/"
-//    }}
-//    flatDir {{
-//        dirs System.env.PKG_ROOT + '/bundle'
-//    }}
+    //google()
+    //mavenCentral()
+    flatDir {{
+        dirs System.env.PKG_ROOT + '/bundle'
+    }}
 
     {flat_dirs_repo}
 
@@ -55,15 +58,17 @@ repositories {{
 
 dependencies {{
     for (bundle in bundles) {{
-        compile("$bundle")
+        implementation("$bundle")
     }}
 }}
 
 android {{
+    namespace = "com.yandex.test.unittests"
+
     {keystore}
 
-    compileSdkVersion 34
-    buildToolsVersion "34.0.0"
+    compileSdkVersion 35
+    buildToolsVersion "35.0.0"
 
     compileOptions {{
         sourceCompatibility 1.8
@@ -72,7 +77,7 @@ android {{
 
     defaultConfig {{
         minSdkVersion 26
-        targetSdkVersion 34
+        targetSdkVersion 35
         applicationId "{app_id}"
     }}
 
@@ -94,8 +99,6 @@ android {{
 
     dependencies {{
         implementation 'com.google.android.gms:play-services-location:21.0.1'
-        implementation 'com.google.android.gms:play-services-gcm:17.0.0'
-        implementation 'com.evernote:android-job:1.2.6'
         implementation 'androidx.annotation:annotation:1.1.0'
         implementation 'androidx.core:core:1.1.0'
     }}
@@ -187,7 +190,7 @@ if __name__ == '__main__':
         f.write(
             '''android.enableJetifier=true
         android.useAndroidX=true
-        org.gradle.jvmargs=-Xmx8192m -XX:MaxPermSize=512m'''
+        org.gradle.jvmargs=-Xmx8192m -XX:MaxMetaspaceSize=512m'''
         )
 
     if args.bundle_name:

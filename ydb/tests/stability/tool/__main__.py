@@ -1256,14 +1256,12 @@ def main():
                 )
             stability_cluster.get_state()
         if action == "start_workload_oltp_workload":
-            first_node = stability_cluster.kikimr_cluster.nodes[1]
-            stability_cluster.stop_workload('oltp_workload')
-
-            stability_cluster._clean_and_start_workload(
-                first_node,
-                'oltp_workload',
-                '/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 120'
-            )
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    'oltp_workload',
+                    f'/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path {node_id} --duration 250'
+                )
             stability_cluster.get_state()
         if action == "stop_workloads":
             stability_cluster.stop_workloads()

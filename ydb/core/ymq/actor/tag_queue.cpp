@@ -138,9 +138,9 @@ private:
                 << "\"" << UserSID_ << "\"" << ","
                 << "\"" << MaskedToken_ << "\"" << ","
                 << "\"" << AuthType_ << "\"" << ","
-                << "\"" << "DEFAULT_PeerName" << "\"" << ","
+                << "\"" << "" << "\"" << ","
                 << "\"" << RequestId_ << "\"" << ","
-                << "\"" << "DEFAULT_IdempotencyId" << "\"" << ","
+                << "\"" << "" << "\"" << ","
                 << "\"" << TagsToJson(*QueueTags_) << "\""
             << ");" << "\n";
 

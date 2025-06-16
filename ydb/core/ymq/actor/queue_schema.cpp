@@ -1070,9 +1070,9 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
             .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
             .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-            .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
+            .Utf8("CLOUD_EVENT_PEERNAME", "")
             .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-            .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "default_value_of_idempotency_id");
+            .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
     } else {
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("NAME", QueuePath_.QueueName)
@@ -1580,9 +1580,9 @@ void TDeleteQueueSchemaActorV2::NextAction() {
                     .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-                    .Utf8("CLOUD_EVENT_PEERNAME", "default_value_of_peername")
+                    .Utf8("CLOUD_EVENT_PEERNAME", "")
                     .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
-                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "default_value_of_idempotency_id");
+                    .Utf8("CLOUD_EVENT_IDEMPOTENCY_ID", "");
             } else {
                 TParameters(trans->MutableParams()->MutableProto())
                     .Utf8("NAME", QueuePath_.QueueName)

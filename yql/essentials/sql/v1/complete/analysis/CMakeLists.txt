@@ -13,3 +13,5 @@
 # changes in this file.
 
 add_subdirectory(global)
+add_subdirectory(local)
+add_subdirectory(yql)

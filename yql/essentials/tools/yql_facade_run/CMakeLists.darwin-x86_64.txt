@@ -53,6 +53,7 @@ target_link_libraries(essentials-tools-yql_facade_run PUBLIC
   essentials-utils-log
   yql-essentials-protos
   essentials-sql-settings
+  v1-complete-check
   sql-v1-format
   v1-lexer-check
   v1-lexer-antlr4

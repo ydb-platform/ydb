@@ -18,6 +18,7 @@ add_subdirectory(name)
 add_subdirectory(core)
 add_subdirectory(syntax)
 add_subdirectory(analysis)
+add_subdirectory(check)
 
 add_library(sql-v1-complete)
 
@@ -30,6 +31,7 @@ target_link_libraries(sql-v1-complete PUBLIC
   complete-name-service
   v1-complete-syntax
   complete-analysis-global
+  complete-analysis-local
   v1-complete-text
   name-service-ranking
   name-service-binding

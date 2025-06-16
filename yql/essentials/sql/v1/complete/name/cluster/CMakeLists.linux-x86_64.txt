@@ -12,27 +12,15 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(v1-complete-syntax)
+add_subdirectory(static)
+
+add_library(complete-name-cluster INTERFACE)
 
 
-target_link_libraries(v1-complete-syntax PUBLIC
+target_link_libraries(complete-name-cluster INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  essentials-core-issue
-  antlr_ast-gen-v1_ansi_antlr4
-  antlr_ast-gen-v1_antlr4
-  essentials-parser-lexer_common
-  essentials-sql-settings
-  sql-v1-lexer
-  sql-v1-reflect
-  v1-complete-core
-  v1-complete-text
-)
-
-target_sources(v1-complete-syntax PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/ansi.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/format.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/grammar.cpp
+  cpp-threading-future
 )
 

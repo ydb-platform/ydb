@@ -17,6 +17,7 @@ add_subdirectory(binding)
 add_subdirectory(static)
 add_subdirectory(union)
 add_subdirectory(schema)
+add_subdirectory(cluster)
 
 add_library(complete-name-service)
 

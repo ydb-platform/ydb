@@ -14,3 +14,4 @@
 
 add_subdirectory(service)
 add_subdirectory(object)
+add_subdirectory(cluster)

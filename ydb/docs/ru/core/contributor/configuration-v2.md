@@ -15,33 +15,78 @@
 
 [Distconf](../concepts/glossary.md#distributed-configuration) — это система управления конфигурацией V2 кластера {{ ydb-short-name }}, основанная на [Node warden](../concepts/glossary.md#node-warden), [узлах хранения](../concepts/glossary.md#storage-node) и их [PDisk](../concepts/glossary.md#pdisk)'ах. Все изменения конфигурации V2, включая первоначальную инициализацию, проходят через неё.
 
-### Внутренние процессы Distconf
+### Кворум и источник правды
 
-- **Binding**
-  Узлы хранения формируют ациклический граф. Каждый узел подключается к случайному соседнему таким образом, чтобы не было циклов. В итоге получается дерево из узлов с явно выделенной вершиной-корнем — узлом, который не может никуда подключиться, т.к. все уже подключены к нему. Корневой узел становится **лидером**, через который проходят все команды и который может принимать решения, в том числе рассылать команды через описанный далее механизм Scatter. Привязка узлов происходит через события [`TEvInterconnect::TEvNodesInfo`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_binding.cpp#L5) и [`TEvInterconnect::TEvNodeConnected`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_binding.cpp#L109) в [`distconf_binding.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_binding.cpp).
+Ключевым элементом надёжности Distconf является хранение конфигурации непосредственно на PDisk'ах. Любое изменение считается успешно применённым только тогда, когда оно записано в область метаданных на **кворуме** дисков. Это означает, что даже при выходе из строя части узлов или дисков система сможет восстановить актуальную и целостную конфигурацию, прочитав её с оставшихся. Именно кворумное хранилище на PDisk'ах, а не состояние какого-либо одного узла, является единственным источником правды о конфигурации кластера. Этот механизм реализован в [`distconf_persistent_storage.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_persistent_storage.cpp).
 
-- **Scatter/Gather**
-  Лидер рассылает команды другим узлам по сформированному ранее графу (Scatter) и собирает результаты (Gather). Реализовано в [`distconf_scatter_gather.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_scatter_gather.cpp), задачи рассылки и сбора ответов хранятся в структуре [`TScatterTasks`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf.h#L235) и исполняются посредством методов `IssueScatterTask`, `CompleteScatterTask` и `AbortScatterTask`.
+### Процесс Binding и выборы лидера
 
-- **Finite State Machine (FSM)**
-  В [`distconf_fsm.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_fsm.cpp) реализован конечный автомат, непосредственно управляющий конфигурацией, её изменениями и их распространение по кластеру. Он отвечает за propose и commit изменений, а также смену лидера.
+Выборы лидера в Distconf осуществляются в процессе построения связей (`Binding`), описанном в `distconf_binding.cpp`.
 
-- **Persistent Storage**
-  Локальная запись и чтение метаданных ([`TPDiskMetadataRecord`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_distributed_config.proto#L38)) на PDisk'ах с обработкой событий [`TEvStorageConfigLoaded`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf.h#L82)/[`TEvStorageConfigStored`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf.h#L88) через [`TDistributedConfigKeeper`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf.h#L68).
+1.  **Обнаружение**: Узлы хранения обмениваются сообщениями `TEvInterconnect::TEvNodesInfo` для обнаружения друг друга в сети.
+2.  **Построение ациклического графа**: Каждый узел пытается подключиться (создать `bind`) к случайному соседнему узлу, который ещё не является его предком в формирующемся дереве. Это гарантирует построение ациклического графа, который по своей сути является деревом (или лесом деревьев на ранних стадиях).
+3.  **Определение лидера**: В процессе построения дерева неизбежно остаётся один узел, который не может ни к кому подключиться, потому что все остальные узлы уже находятся в его поддереве. Этот узел становится корнем дерева и объявляется **лидером**.
 
-- **InvokeOnRoot**
-  Входная точка для команд администратора кластера: запросы [`TEvNodeConfigInvokeOnRoot`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_invoke_common.cpp#L338) обрабатываются в [`distconf_invoke_common.cpp`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_invoke_common.cpp), ответы возвращаются в виде [`TEvNodeConfigInvokeOnRootResult`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_distributed_config.proto#L230).
+Лидер — это единственная точка в кластере, которая имеет право инициировать и координировать изменения конфигурации. Если текущий лидер выходит из строя, процесс `Binding` запускается заново, и кластер выбирает нового лидера.
 
-- **Dynamic**
-  Узлы баз данных подписываются на события [`TEvNodeWardenDynamicConfigPush`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/node_warden_events.h#L75) через [`ConnectToStaticNode`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/distconf_dynamic.cpp#L10), чтобы получать обновления конфигурации в реальном времени.
+### Scatter/Gather — механизм распространения команд
 
-- **Self-Heal**
-  При использовании Distconf для [статической группы](../concepts/glossary.md#static-group) работает [Self-Heal](../maintenance/manual/selfheal.md) по аналогии с [динамическими группами](../concepts/glossary.md#dynamic-group).
+Для управления кластером лидер использует механизм `Scatter/Gather` (`distconf_scatter_gather.cpp`), который работает поверх дерева, построенного в процессе `Binding`.
+
+- **Scatter (рассылка)**
+  Когда лидеру нужно отдать команду всем узлам (например, предложить новую конфигурацию), он отправляет её своим прямым потомкам в дереве. Каждый узел, получив команду, ретранслирует её своим потомкам. Так команда эффективно распространяется по всему дереву до самых листьев.
+- **Gather (сбор)**
+  После выполнения команды узлы должны отчитаться о результате. Ответы собираются в обратном порядке: листья отправляют результаты своим родителям, те, в свою очередь, агрегируют их и отправляют выше. В итоге лидер получает обобщённый результат от всего кластера.
+
+Этот механизм используется для всех распределённых операций, включая двухфазный коммит при изменении конфигурации. Задачи рассылки и сбора (`TScatterTasks`) отслеживаются лидером для контроля выполнения операций.
+
+### Конечный автомат (FSM) и жизненный цикл изменений
+
+Весь процесс изменения конфигурации на лидере управляется конечным автоматом (FSM), реализованным в `distconf_fsm.cpp`. FSM гарантирует, что в один момент времени выполняется только одна операция изменения конфигурации, предотвращая гонки и конфликты.
+
+Когда поступает запрос на изменение, FSM переходит в состояние `IN_PROGRESS`, блокируя новые запросы.
+
+Лидер использует `Scatter/Gather` для выполнения двухфазного коммита: сначала рассылает предложение (Propose), а после получения кворума подтверждений — команду на применение (Commit).
+
+После успешного завершения или отмены операции FSM возвращается в состояние `RELAX`, разрешая обработку следующих запросов.
+
+### Управление конфигурацией через InvokeOnRoot
+
+Запросы `TEvNodeConfigInvokeOnRoot` представляют собой унифицированный механизм для любых изменений конфигурации кластера. Эти команды могут быть инициированы как **администратором системы** (например, через CLI), так и **другими компонентами YDB** в автоматическом режиме (например, таблеткой `BlobStorageController` в процессе `Self-Heal`).
+
+Независимо от источника, любой такой запрос обрабатывается по единому сценарию:
+1. Запрос доставляется на узел-лидер Distconf (если был отправлен не на него, то перенаправляется автоматически).
+2. Лидер запускает FSM и выполняет процесс Scatter/Gather, как описано выше.
+
+Этот механизм гарантирует, что любое изменение конфигурации, вне зависимости от его природы, проходит через строгую процедуру валидации и кворумного подтверждения.
+
+Основные команды, поддерживаемые этим механизмом:
+
+- `UpdateConfig`: Внести частичные изменения в текущую конфигурацию. Изменения передаются в виде protobuf-сообщения `TStorageConfig`.
+- `QueryConfig`: Запросить текущую и предлагаемую конфигурацию. Ответ содержит protobuf-сообщения `TStorageConfig`.
+- `ReplaceStorageConfig`: Заменить текущую конфигурацию новой, переданной в виде YAML.
+- `FetchStorageConfig`: Вернуть загруженную YAML конфигурацию кластера.
+- `ReassignGroupDisk`: Заменить диск в статической группе хранения.
+- `StaticVDiskSlain`: Обработать событие выхода из строя VDisk'а в статической группе.
+- `DropDonor`: Удалить диски-доноры после завершения миграции данных.
+- `BootstrapCluster`: Инициировать первоначальное создание кластера.
+
+### Интеграция и дополнительные механизмы
+
+Помимо основных процессов, Distconf тесно взаимодействует с другими компонентами системы:
 
 - **Контроллер распределённого хранилища**
+
   DS-controller получает от Distconf изменения в конфигурации и использует их для работы распределённого хранилища.
+- **Dynamic-узлы**
+
+  Узлы баз данных (dynamic nodes) подписываются на события [`TEvNodeWardenDynamicConfigPush`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/blobstorage/nodewarden/node_warden_events.h#L75), чтобы получать обновления конфигурации в реальном времени.
+- **Self-Heal**
+
+  При использовании Distconf для [статической группы](../concepts/glossary.md#static-group) работает [Self-Heal](../maintenance/manual/selfheal.md) по аналогии с [динамическими группами](../concepts/glossary.md#dynamic-group).
 
 - **Локальные YAML-файлы на узлах**
+
   Хранятся в директории, указанной аргументом запуска сервера `ydbd --config-dir`, и обновляются при получении информации о каждом изменении конфигурации. Эти файлы нужны при старте узла, чтобы обнаружить PDisk'ы и другие узлы кластера, а также установить начальные сетевые соединения. Данные в этих файлах могут быть устаревшими, особенно при выключении узла на длительное время.
 
 ### Базовый порядок работы Distconf

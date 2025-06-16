@@ -1388,7 +1388,7 @@ protected:
                 addPartiton(startShard, nodeId, {}, shardInfo, inFlightShards);
                 fillRangesForTasks();
                 buildSinks();
-                return Nothing();
+                return (isParallelPointRead) ? TMaybe<size_t>(partitions.size()) : Nothing();
             } else {
                 return 0;
             }

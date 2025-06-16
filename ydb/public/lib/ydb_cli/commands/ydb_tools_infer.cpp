@@ -74,6 +74,27 @@ void TCommandToolsInferCsv::Parse(TConfig& config) {
     }
 }
 
+namespace {
+    std::string GetRelativePath(const std::string& fullPath, TClientCommand::TConfig& config) {
+        std::string databasePath = config.Database;
+        if (databasePath.back() != '/' && databasePath.back() != '\\') {
+            databasePath += '/';
+        }
+        if (fullPath.find(databasePath) == 0) {
+            return fullPath.substr(databasePath.length());
+        }
+        return fullPath;
+    }
+
+    void PrintStringQuotedIfNeeded(TStringBuilder& builder, const std::string& str) {
+        if (str.find_first_of(" \t\n\r\v\f/") != TString::npos) {
+            builder << '`' << str << '`';
+        } else {
+            builder << str;
+        }
+    }
+}
+
 int TCommandToolsInferCsv::Run(TConfig& config) {
     Y_UNUSED(config);
     std::vector<std::shared_ptr<arrow::io::InputStream>> inputs;
@@ -113,7 +134,9 @@ int TCommandToolsInferCsv::Run(TConfig& config) {
 
     auto& arrowFields = std::get<NYdb::NArrowInference::ArrowFields>(result);
     TStringBuilder query;
-    query << "CREATE TABLE `" << Path << "` (" << Endl;
+    query << "CREATE TABLE ";
+    PrintStringQuotedIfNeeded(query, GetRelativePath(Path, config));
+    query << " (" << Endl;
     for (const auto& field : arrowFields) {
         if (field->name().empty()) {
             continue;
@@ -140,7 +163,9 @@ int TCommandToolsInferCsv::Run(TConfig& config) {
         } else if (config.IsVerbose()) {
             Cerr << "Failed to infer type for column " << field->name() << Endl;
         }
-        query << "    `" << field->name() << "` " << resultType << ',' << Endl;
+        query << "    ";
+        PrintStringQuotedIfNeeded(query, field->name());
+        query << " " << resultType << ',' << Endl;
         if (!field->nullable()) {
             query << " NOT NULL";
         }
@@ -159,20 +184,23 @@ WITH (
 );)";
 
     if (Execute) {
-        Cerr << "Executing request: " << Endl << query << Endl;
+        Cerr << "Executing request: " << Endl << Endl << query << Endl << Endl;
         TDriver driver = CreateDriver(config);
         NQuery::TQueryClient client(driver);
         auto result = client.RetryQuery(query, NQuery::TTxControl::NoTx(), TDuration::Zero(), true)
             .GetValueSync();
         if (result.IsSuccess()) {
-            Cout << "Query executed successfully." << Endl;
+            Cerr << "Query executed successfully." << Endl;
             if (!result.GetIssues().Empty()) {
                 Cerr << "Issues: " << result.GetIssues().ToString() << Endl;
             }
         } else {
             Cerr << "Failed to create a table." << Endl;
             result.Out(Cerr);
+            Cerr << Endl;
+            return EXIT_FAILURE;
         }
+        driver.Stop(true);
     } else {
         Cout << query << Endl;
     }

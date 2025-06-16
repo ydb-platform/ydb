@@ -147,7 +147,7 @@ public:
                 .NotUnderDeleting();
 
             // Allow CDC operations on tables that are under incremental backup/restore
-            if (tablePath.IsUnderOperation() && 
+            if (checks && tablePath.IsUnderOperation() &&
                 !tablePath.IsUnderOutgoingIncrementalRestore()) {
                 checks.NotUnderOperation();
             }
@@ -383,7 +383,7 @@ public:
                 .NotUnderDeleting();
 
             // Allow CDC operations on tables that are under incremental backup/restore
-            if (tablePath.IsUnderOperation() && 
+            if (checks && tablePath.IsUnderOperation() &&
                 !tablePath.IsUnderOutgoingIncrementalRestore()) {
                 checks.NotUnderOperation();
             }
@@ -512,7 +512,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
             .NotAsyncReplicaTable();
 
         // Allow CDC operations on tables that are under incremental backup/restore
-        if (tablePath.IsUnderOperation() && 
+        if (checks && tablePath.IsUnderOperation() && 
             !tablePath.IsUnderOutgoingIncrementalRestore()) {
             checks.NotUnderOperation();
         }

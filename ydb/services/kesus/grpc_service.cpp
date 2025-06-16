@@ -665,6 +665,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 #undef ADD_REQUEST
 
+    auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
     for (auto* cq : CQS) {
         TGRpcSessionActor::TGRpcRequest::Start(
             this,
@@ -678,7 +679,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             *ActorSystem_,
             "Coordination/Session",
             getCounterBlock("coordination", "Session", true),
-            getLimiter(EStaticControlType::GRpcControlsRequestConfigsCoordinationServiceSessionMaxInFlight, DEFAULT_MAX_SESSIONS_INFLIGHT));
+            getLimiter("GRpcControls.RequestConfigs.CoordinationService_Session.MaxInFlight", icb.GRpcControls.RequestConfigs.CoordinationService_Session.MaxInFlight, DEFAULT_MAX_SESSIONS_INFLIGHT));
     }
 }
 

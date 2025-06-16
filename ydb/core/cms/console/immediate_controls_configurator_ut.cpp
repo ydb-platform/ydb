@@ -194,23 +194,23 @@ void ConfigureAndWaitUpdate(TTenantTestRuntime &runtime, TConfigUpdatesObserver 
 void CompareControls(TTenantTestRuntime &runtime,
                      const NKikimrConfig::TImmediateControlsConfig &cfg)
 {
-    auto icb = runtime.GetAppData().Icb;
+    auto& icb = *runtime.GetAppData().Icb;
 
     TControlWrapper wrapper;
 
-    icb->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsMaxTxInFly);
+    TControlBoard::RegisterSharedControl(wrapper, icb.DataShardControls.MaxTxInFly);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetMaxTxInFly());
-    icb->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsDisableByKeyFilter);
+    TControlBoard::RegisterSharedControl(wrapper, icb.DataShardControls.DisableByKeyFilter);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetDisableByKeyFilter());
-    icb->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsMaxTxLagMilliseconds);
+    TControlBoard::RegisterSharedControl(wrapper, icb.DataShardControls.MaxTxLagMilliseconds);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetMaxTxLagMilliseconds());
-    icb->RegisterSharedControl(wrapper, EStaticControlType::DataShardControlsCanCancelROWithReadSets);
+    TControlBoard::RegisterSharedControl(wrapper, icb.DataShardControls.CanCancelROWithReadSets);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetDataShardControls().GetCanCancelROWithReadSets());
-    icb->RegisterSharedControl(wrapper, EStaticControlType::TxLimitControlsPerRequestDataSizeLimit);
+    TControlBoard::RegisterSharedControl(wrapper, icb.TxLimitControls.PerRequestDataSizeLimit);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetTxLimitControls().GetPerRequestDataSizeLimit());
-    icb->RegisterSharedControl(wrapper, EStaticControlType::TxLimitControlsPerShardReadSizeLimit);
+    TControlBoard::RegisterSharedControl(wrapper, icb.TxLimitControls.PerShardReadSizeLimit);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetTxLimitControls().GetPerShardReadSizeLimit());
-    icb->RegisterSharedControl(wrapper, EStaticControlType::TxLimitControlsPerShardIncomingReadSetSizeLimit);
+    TControlBoard::RegisterSharedControl(wrapper, icb.TxLimitControls.PerShardIncomingReadSetSizeLimit);
     UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, cfg.GetTxLimitControls().GetPerShardIncomingReadSetSizeLimit());
 }
 
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(TImmediateControlsConfiguratorTests)
 
         TControlWrapper wrapper;
 
-        icb->RegisterSharedControl(wrapper, EStaticControlType::GRpcControlsRequestConfigsFooBarMaxInFlight);
+        TControlBoard::RegisterSharedControl(wrapper, icb->GRpcControls.RequestConfigs.FooBar.MaxInFlight);
         UNIT_ASSERT_VALUES_EQUAL((ui64)(i64)wrapper, 10);
     }
 }

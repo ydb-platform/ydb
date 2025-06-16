@@ -143,11 +143,18 @@ void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProv
 }
 
 void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
-    auto p = dynamic_cast<TEvDescribeTopicRequest*>(ctx.release());
+    //auto p = dynamic_cast<TEvDescribeTopicRequest*>(ctx.release());
 
-    EnsureReq(p);
+    //EnsureReq(p);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
+    Cerr << ">>>>> DoDescribeTopicRequest " << ctx->GetRequest()->GetTypeName() << Endl << Flush;
+
+    auto* p = ctx.release();
+    Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
+
+    Cerr << ">>>>> DoDescribeTopicRequest Y_VERIFY_DEBUG" << Endl << Flush;
+
+    LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
     f.RegisterActor(new NGRpcProxy::V1::TDescribeTopicActor(p));
 }
 

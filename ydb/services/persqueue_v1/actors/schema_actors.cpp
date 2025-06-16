@@ -461,6 +461,7 @@ TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::IRequestOpCtx * 
             dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_stats(),
             dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_location()))
 {
+        Cerr << ">>>>> TDescribeTopicActor::TDescribeTopicActo" << Endl << Flush;
 }
 
 TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::TEvDescribeConsumerRequest* request)
@@ -1183,7 +1184,7 @@ void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 
     SendDescribeProposeRequest(ctx);
     Become(&TDescribeTopicActor::StateWork);
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "Describe topic actor for path " << GetProtoRequest()->path());
+    LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, "Describe topic actor for path " << GetProtoRequest()->path());
 }
 
 void TDescribeConsumerActor::Bootstrap(const NActors::TActorContext& ctx)

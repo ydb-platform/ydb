@@ -772,11 +772,14 @@ private:
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
         Y_UNUSED(ev);
-        //auto args = std::move(ev->Get()->GetArgs());
-        //auto& [topicName, partitionId, consumerName, offset, settings] = args;
 
-        //auto* actor = new TLocalTopicPartitionCommitActor(ev->Sender, Database, std::move(topicName), partitionId, std::move(consumerName), std::move(settings.ReadSessionId_), offset);
-        //TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+        Cerr << ">>>>> TEvYdbProxy::TEvCommitOffsetRequest" << Endl << Flush;
+
+        auto args = std::move(ev->Get()->GetArgs());
+        auto& [topicName, partitionId, consumerName, offset, settings] = args;
+
+        auto* actor = new TLocalTopicPartitionCommitActor(ev->Sender, Database, std::move(topicName), partitionId, std::move(consumerName), std::move(settings.ReadSessionId_), offset);
+        TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
@@ -790,6 +793,8 @@ private:
 
         Cerr << ">>>>> TEvDescribeTopicRequest" << path << Endl << Flush;
         auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+            Cerr << ">>>>> TEvDescribeTopicRequest RESULT" << path << Endl << Flush;
+
             NYdb::NIssue::TIssues issues;
             Ydb::Topic::DescribeTopicResult describe;
             if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
@@ -805,6 +810,7 @@ private:
             NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
             NYdb::NTopic::TDescribeTopicResult r(std::move(status), std::move(describe));
             Send(replyTo, new TEvYdbProxy::TEvDescribeTopicResponse(r), 0, cookie);
+            Cerr << ">>>>> TEvDescribeTopicRequest RESULT SENT" << path << Endl << Flush;
         };
 
         NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);

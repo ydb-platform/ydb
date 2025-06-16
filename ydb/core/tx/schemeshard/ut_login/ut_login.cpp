@@ -1879,3 +1879,53 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         }
     }
 }
+
+Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
+
+    Y_UNIT_TEST(NoPublicKeys) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+
+        NLogin::TLoginProvider::TPasswordCheckResult check;
+        check.FillInvalidPassword();
+        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
+        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
+        // public keys are filled after the first login
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "No key to generate token");
+    }
+
+    Y_UNIT_TEST(InvalidPassword) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+
+        NLogin::TLoginProvider::TPasswordCheckResult check;
+        check.FillInvalidPassword();
+        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
+        // public keys are filled after the first login
+        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", "password1").error(), "");
+        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+    }
+
+    Y_UNIT_TEST(Success) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
+
+        const auto check = NLogin::TLoginProvider::TPasswordCheckResult{.Status =
+            NLogin::TLoginProvider::TPasswordCheckResult::EStatus::SUCCESS};
+        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
+        // public keys are filled after the first login
+        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", "wrong-password1").error(), "Invalid password");
+        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+    }
+}

@@ -539,8 +539,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         }
 
         if (checkResult.Status == TLoginUserResponse::EStatus::INVALID_PASSWORD) {
-            response.Status = checkResult.Status;
-            response.Error = checkResult.Error;
+            response.FillInvalidPassword();
             sid->LastFailedLogin = std::chrono::system_clock::now();
             sid->FailedLoginAttemptCount++;
             return response;
@@ -599,8 +598,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         const auto isSuccessVerifying = VerifyHash(request, passwordHash);
         UpdateCache(request, passwordHash, isSuccessVerifying);
         if (!isSuccessVerifying) {
-            checkResult.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
-            checkResult.Error = "Invalid password";
+            checkResult.FillInvalidPassword();
         }
     }
     return LoginUser(request, checkResult);
@@ -847,8 +845,7 @@ bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TPassword
     }
 
     if (WrongPasswordsCache.Find(key) != WrongPasswordsCache.End()) {
-        checkResult->Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
-        checkResult->Error = "Invalid password";
+        checkResult->FillInvalidPassword();
         return false;
     }
 

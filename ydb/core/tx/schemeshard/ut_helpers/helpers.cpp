@@ -2130,6 +2130,22 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
+    NKikimrScheme::TEvLoginResult LoginFinalize(
+        TTestActorRuntime& runtime,
+        const NLogin::TLoginProvider::TLoginUserRequest& request,
+        const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
+        const TString& passwordHash,
+        const bool needUpdateCache
+    ) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto evLoginFinalize = new NKikimr::NSchemeShard::TEvLoginFinalize(request, checkResult, sender, passwordHash, needUpdateCache);
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLoginFinalize);
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
     void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();

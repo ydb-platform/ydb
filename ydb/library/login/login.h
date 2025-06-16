@@ -69,6 +69,7 @@ public:
     };
 
     struct TPasswordCheckResult : TBasicResponse {
+    public:
         enum class EStatus {
             UNSPECIFIED,
             SUCCESS,
@@ -78,6 +79,12 @@ public:
         };
 
         EStatus Status = EStatus::UNSPECIFIED;
+
+    public:
+        void FillInvalidPassword() {
+            Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
+            Error = "Invalid password";
+        }
     };
 
     struct TLoginUserResponse : TPasswordCheckResult {

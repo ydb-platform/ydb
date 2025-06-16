@@ -47,8 +47,9 @@ protected:
 
 private:
     void DoDescribe() {
+        Cerr << ">>>>> TopicName " << TopicName << Endl << Flush;
         auto request = MakeHolder<TNavigate>();
-        request->ResultSet.emplace_back(MakeNavigateEntry(TopicName, TNavigate::OpTopic));
+        request->ResultSet.emplace_back(MakeNavigateEntry(TStringBuilder() << Database << TopicName, TNavigate::OpTopic));
         IActor::Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
         Become(&TThis::StateDescribe);
     }
@@ -520,23 +521,6 @@ private:
     const ui64 Offset;
 };
 
-class TLocalAlterTopicActor: public TActorBootstrapped<TLocalAlterTopicActor> {
-public:
-    TLocalAlterTopicActor(TActorId parent, TString&& path, NYdb::NTopic::TAlterTopicSettings&& settings)
-        : Parent(parent)
-        , Path(std::move(path))
-        , Settings(std::move(settings)) {
-    }
-
-    void Bootstrap() {
-    }
-
-private:
-    const TActorId Parent;
-    const TString Path;
-    const NYdb::NTopic::TAlterTopicSettings Settings;
-};
-
 class TLocalProxyRequest : public NKikimr::NGRpcService::IRequestOpCtx {
 public:
     using TRequest = TLocalProxyRequest;
@@ -766,8 +750,40 @@ private:
         auto& path = std::get<TString>(args);
         auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(args);
 
-        auto* actor = new TLocalAlterTopicActor(ev->Sender, std::move(path), std::move(settings));
-        TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+        Cerr << ">>>>> TEvYdbProxy::TEvAlterTopicRequest" << Endl << Flush;
+
+        auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
+        request.get()->set_path(TStringBuilder() << "/" << Database << path);
+        for(auto& c : settings.AddConsumers_) {
+            auto* consumer = request.get()->add_add_consumers();
+            consumer->set_name(c.ConsumerName_);
+        }
+        for(auto& c : settings.DropConsumers_) {
+            auto* consumer = request.get()->add_drop_consumers();
+            *consumer = c;
+        }
+
+        auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+            Cerr << ">>>>> TEvAlterTopicRequest RESULT" << path << Endl << Flush;
+
+            NYdb::NIssue::TIssues issues;
+            Ydb::Topic::AlterTopicResult describe;
+            if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
+                const auto* v = dynamic_cast<const Ydb::Topic::AlterTopicResult*>(result);
+                if (v) {
+                    describe = *v;
+                } else {
+                    statusCode = Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
+                    issues.AddIssue(TStringBuilder() << "Unexpected result type " << result->GetTypeName());
+                }
+            }
+
+            NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
+            Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
+            Cerr << ">>>>> TEvAlterTopicRequest RESULT SENT" << path << Endl << Flush;
+        };
+
+        NGRpcService::DoAlterTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {

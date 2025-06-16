@@ -4,9 +4,40 @@
 namespace NKikimr {
 namespace NHive {
 
-TBootQueue::TBootQueueRecord::TBootQueueRecord(const TTabletInfo& tablet, TNodeId suggestedNodeId)
+namespace {
+
+double GetDefaultBootPriority(const TTabletInfo &tablet) {
+    double priority = 0;
+    switch (tablet.GetTabletType()) {
+    case TTabletTypes::Hive:
+        priority = 4;
+        break;
+    case TTabletTypes::SchemeShard:
+        priority = 3;
+        break;
+    case TTabletTypes::Mediator:
+    case TTabletTypes::Coordinator:
+    case TTabletTypes::BlobDepot:
+        priority = 2;
+        break;
+    case TTabletTypes::ColumnShard:
+        priority = 0;
+        break;
+    default:
+        if (tablet.IsLeader()) {
+            priority = 1;
+        }
+        break;
+    }
+
+    return priority;
+}
+
+} // namespace
+
+TBootQueue::TBootQueueRecord::TBootQueueRecord(const TTabletInfo& tablet, double priority, TNodeId suggestedNodeId)
     : TabletId(tablet.GetLeader().Id)
-    , Priority(GetBootPriority(tablet))
+    , Priority(priority)
     , FollowerId(tablet.IsLeader() ? 0 : tablet.AsFollower().Id)
     , SuggestedNodeId(suggestedNodeId)
 {
@@ -14,6 +45,19 @@ TBootQueue::TBootQueueRecord::TBootQueueRecord(const TTabletInfo& tablet, TNodeI
 
 void TBootQueue::AddToBootQueue(TBootQueueRecord record) {
     BootQueue.push(record);
+}
+
+void TBootQueue::AddToBootQueue(const TTabletInfo &tablet, TNodeId node) {
+    double priority = GetBootPriority(tablet);
+    BootQueue.emplace(tablet, priority, node);
+}
+
+void TBootQueue::UpdateTabletBootQueuePriorities(const NKikimrConfig::THiveConfig& hiveConfig) {
+    TTabletTypeToBootPriority updated;
+    for (const auto& entry : hiveConfig.GetTabletTypeToBootPriority()) {
+        updated.emplace(entry.GetTabletType(), entry.GetPriority());
+    }
+    TabletTypeToBootPriority = std::move(updated);
 }
 
 TBootQueue::TBootQueueRecord TBootQueue::PopFromBootQueue() {
@@ -65,6 +109,20 @@ TBootQueue::TQueue& TBootQueue::GetCurrentQueue() {
         return WaitQueue;
     }
     return BootQueue;
+}
+
+double TBootQueue::GetBootPriority(const TTabletInfo& tablet) const {
+    double priority = GetDefaultBootPriority(tablet);
+    auto tabletType = tablet.GetTabletType();
+    const auto* it = TabletTypeToBootPriority.FindPtr(tabletType);
+    if (it) {
+        priority = *it;
+    }
+    priority += tablet.Weight;
+    if (tablet.RestartsOften()) {
+        priority -= 5;
+    }
+    return priority;
 }
 
 }

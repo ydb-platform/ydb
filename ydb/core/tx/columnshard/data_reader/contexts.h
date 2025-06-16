@@ -151,9 +151,7 @@ private:
 public:
     virtual ~IFetchingStep() = default;
 
-    [[nodiscard]] EStepResult Execute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const {
-        return DoExecute(fetchingContext);
-    }
+    [[nodiscard]] EStepResult Execute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const;
 };
 
 class TScript {

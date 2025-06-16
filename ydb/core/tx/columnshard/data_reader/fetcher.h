@@ -42,10 +42,6 @@ public:
         AFL_VERIFY(Callback);
     }
 
-    bool IsFinished() {
-        return IsFinishedFlag;
-    }
-
     ~TPortionsDataFetcher() {
         AFL_VERIFY(IsFinishedFlag || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage);
     }
@@ -103,12 +99,12 @@ public:
         Callback->OnFinished(std::move(CurrentContext));
     }
 
+    bool IsAborted() const {
+        return Callback->IsAborted();
+    }
+
     bool Resume(std::shared_ptr<TPortionsDataFetcher>& selfPtr) {
         if (IsFinishedFlag) {
-            return false;
-        }
-        if (Callback->IsAborted()) {
-            OnError("aborted");
             return false;
         }
         NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0);

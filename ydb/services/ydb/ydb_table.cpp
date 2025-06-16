@@ -1,5 +1,7 @@
 #include "ydb_table.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -65,6 +67,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }                                                                                                             \
     }
 
+    auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
 #define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE, REQUEST_TYPE, USE_LIMITER) \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                                           \
         for (auto* cq: CQS) {                                                                                                           \
@@ -80,7 +83,10 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 }));                                                                                                    \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                                    \
                     #NAME, logger, getCounterBlock("table", #NAME),                                                                     \
-                    (USE_LIMITER ? getLimiter(EStaticControlType::GRpcControlsRequestConfigsTableService##NAME##MaxInflight, UNLIMITED_INFLIGHT) : nullptr))->Run();                         \
+                    (USE_LIMITER ? getLimiter(                                                                                          \
+                                                "GRpcControls.RequestConfigs.TableService_" #NAME ".MaxInFlight",                       \
+                                                icb.GRpcControls.RequestConfigs.TableService_## NAME.MaxInFlight,                       \
+                                                UNLIMITED_INFLIGHT) : nullptr))->Run();                                                 \
         ++proxyCounter;                                                                                                                 \
     }                                                                                                                                   \
     }

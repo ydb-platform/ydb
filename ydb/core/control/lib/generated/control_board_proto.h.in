@@ -33,10 +33,11 @@ namespace NKikimr {
 {% for control_class in control_classes %}
 class {{ control_class.class_name }}: TNonCopyable {
 public:
+    void CreateConfigControls(bool allowExisting);
 {%- if control_class.has_proto_config_class_name %}
-    void UpdateControls(const {{ control_class.proto_config_class_name }}& config);
+    void UpdateControls(const {{ control_class.proto_config_class_name }}& config, bool createIfNotExist);
 {%- elif control_class.class_name == "TRequestConfigsOuter" %}
-    void UpdateControls(const NKikimrConfig::TImmediateControlsConfig_TGRpcControls& config);
+    void UpdateControls(const NKikimrConfig::TImmediateControlsConfig_TGRpcControls& config, bool createIfNotExist);
 {%- endif %}
 {%- for inner_control_class in control_class.inner_classes %}
     {{ inner_control_class.class_name }} {{ inner_control_class.name }};
@@ -49,15 +50,19 @@ public:
 
 {% endfor %}
 
-struct TControlAndName {
-    TIntrusivePtr<TControl> Control;
-    TString Name;
-};
-
-class TControlBoardBase: private TNonCopyable {
+class TControlBoardBase
+                        : private TNonCopyable
+                        , public TThrRefBase {
 public:
     void UpdateControls(const NKikimrConfig::TImmediateControlsConfig& config);
-    TVector<TControlAndName> GetAllAvailableControls() const;
+    void CreateConfigControls(bool allowExisting);
+protected:
+    // Should not be called in registration only in params handling
+    THashMap<TString, TIntrusivePtr<TControl>> GetAllAvailableControls() const;
+#if 0
+    THashMap<TString, TIntrusivePtr<TControl>> GetConfigControls() const;
+#endif
+
 public:
 {%- for control_class in root_control_classes %}
     {{ control_class.class_name }} {{ control_class.name }};

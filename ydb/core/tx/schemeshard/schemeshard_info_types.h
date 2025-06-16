@@ -91,18 +91,18 @@ struct TSplitSettings {
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
-        icb->RegisterSharedControl(SplitMergePartCountLimit,         EStaticControlType::SchemeShardSplitMergePartCountLimit);
-        icb->RegisterSharedControl(FastSplitSizeThreshold,           EStaticControlType::SchemeShardFastSplitSizeThreshold);
-        icb->RegisterSharedControl(FastSplitRowCountThreshold,       EStaticControlType::SchemeShardFastSplitRowCountThreshold);
-        icb->RegisterSharedControl(FastSplitCpuPercentageThreshold,  EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold);
+        TControlBoard::RegisterSharedControl(SplitMergePartCountLimit,         icb->SchemeShard.SplitMergePartCountLimit);
+        TControlBoard::RegisterSharedControl(FastSplitSizeThreshold,           icb->SchemeShard.FastSplitSizeThreshold);
+        TControlBoard::RegisterSharedControl(FastSplitRowCountThreshold,       icb->SchemeShard.FastSplitRowCountThreshold);
+        TControlBoard::RegisterSharedControl(FastSplitCpuPercentageThreshold,  icb->SchemeShard.FastSplitCpuPercentageThreshold);
 
-        icb->RegisterSharedControl(SplitByLoadEnabled,               EStaticControlType::SchemeShardSplitByLoadEnabled);
-        icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,      EStaticControlType::SchemeShardSplitByLoadMaxShardsDefault);
-        icb->RegisterSharedControl(MergeByLoadMinUptimeSec,          EStaticControlType::SchemeShardMergeByLoadMinUptimeSec);
-        icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec, EStaticControlType::SchemeShardMergeByLoadMinLowLoadDurationSec);
+        TControlBoard::RegisterSharedControl(SplitByLoadEnabled,               icb->SchemeShard.SplitByLoadEnabled);
+        TControlBoard::RegisterSharedControl(SplitByLoadMaxShardsDefault,      icb->SchemeShard.SplitByLoadMaxShardsDefault);
+        TControlBoard::RegisterSharedControl(MergeByLoadMinUptimeSec,          icb->SchemeShard.MergeByLoadMinUptimeSec);
+        TControlBoard::RegisterSharedControl(MergeByLoadMinLowLoadDurationSec, icb->SchemeShard.MergeByLoadMinLowLoadDurationSec);
 
-        icb->RegisterSharedControl(ForceShardSplitDataSize,         EStaticControlType::SchemeShardControlsForceShardSplitDataSize);
-        icb->RegisterSharedControl(DisableForceShardSplit,          EStaticControlType::SchemeShardControlsDisableForceShardSplit);
+        TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
+        TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {

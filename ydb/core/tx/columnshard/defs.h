@@ -62,9 +62,9 @@ public:
     TLimits();
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(MinInsertBytes, EStaticControlType::ColumnShardControlsMinBytesToIndex);
-        icb.RegisterSharedControl(MaxInsertBytes, EStaticControlType::ColumnShardControlsMaxBytesToIndex);
-        icb.RegisterSharedControl(InsertTableSize, EStaticControlType::ColumnShardControlsInsertTableCommittedSize);
+        TControlBoard::RegisterSharedControl(MinInsertBytes, icb.ColumnShardControls.MinBytesToIndex);
+        TControlBoard::RegisterSharedControl(MaxInsertBytes, icb.ColumnShardControls.MaxBytesToIndex);
+        TControlBoard::RegisterSharedControl(InsertTableSize, icb.ColumnShardControls.InsertTableCommittedSize);
     }
 };
 
@@ -89,11 +89,11 @@ struct TCompactionLimits {
     {}
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(GoodBlobSize, EStaticControlType::ColumnShardControlsIndexGoodBlobSize);
-        icb.RegisterSharedControl(GranuleOverloadSize, EStaticControlType::ColumnShardControlsGranuleOverloadBytes);
-        icb.RegisterSharedControl(InGranuleCompactSeconds, EStaticControlType::ColumnShardControlsCompactionDelaySec);
-        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsSizeLimit);
-        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsCountLimit);
+        TControlBoard::RegisterSharedControl(GoodBlobSize, icb.ColumnShardControls.IndexGoodBlobSize);
+        TControlBoard::RegisterSharedControl(GranuleOverloadSize, icb.ColumnShardControls.GranuleOverloadBytes);
+        TControlBoard::RegisterSharedControl(InGranuleCompactSeconds, icb.ColumnShardControls.CompactionDelaySec);
+        TControlBoard::RegisterSharedControl(GranuleIndexedPortionsSizeLimit, icb.ColumnShardControls.GranuleIndexedPortionsSizeLimit);
+        TControlBoard::RegisterSharedControl(GranuleIndexedPortionsCountLimit, icb.ColumnShardControls.GranuleIndexedPortionsCountLimit);
     }
 
     NOlap::TCompactionLimits Get() const {

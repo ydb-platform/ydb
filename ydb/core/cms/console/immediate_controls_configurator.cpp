@@ -41,7 +41,6 @@ private:
     void CreateControls(TIntrusivePtr<TControlBoard> board, bool allowExisting);
     void ApplyConfig(const NKikimrConfig::TImmediateControlsConfig &cfg,
                      TIntrusivePtr<TControlBoard> board);
-    // THashMap<TString, TControlWrapper> Controls;
 };
 
 TImmediateControlsConfigurator::TImmediateControlsConfigurator(TIntrusivePtr<TControlBoard> board,
@@ -90,10 +89,6 @@ void TImmediateControlsConfigurator::Handle(TEvConsole::TEvConfigNotificationReq
 void TImmediateControlsConfigurator::CreateControls(TIntrusivePtr<TControlBoard> board, bool allowExisting)
 {
     board->CreateConfigControls(allowExisting);
-    /*auto configControls = board->GetConfigControls();
-    for (const auto& [name, control] : configControls) {
-        Controls[name] = TControlWrapper(control);
-    }*/
 }
 
 

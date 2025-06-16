@@ -148,9 +148,9 @@ struct TSettings {
     }
 
     void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(BlobWriteGrouppingEnabled, EStaticControlType::ColumnShardControlsBlobWriteGrouppingEnabled);
-        icb.RegisterSharedControl(CacheDataAfterIndexing, EStaticControlType::ColumnShardControlsCacheDataAfterIndexing);
-        icb.RegisterSharedControl(CacheDataAfterCompaction, EStaticControlType::ColumnShardControlsCacheDataAfterCompaction);
+        TControlBoard::RegisterSharedControl(BlobWriteGrouppingEnabled, icb.ColumnShardControls.BlobWriteGrouppingEnabled);
+        TControlBoard::RegisterSharedControl(CacheDataAfterIndexing, icb.ColumnShardControls.CacheDataAfterIndexing);
+        TControlBoard::RegisterSharedControl(CacheDataAfterCompaction, icb.ColumnShardControls.CacheDataAfterCompaction);
     }
 };
 

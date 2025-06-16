@@ -470,9 +470,9 @@ struct TEvStateStorage {
     };
 };
 
-enum TRingGroupState {
+enum ERingGroupState {
     PRIMARY,
-    SECONDARY,
+    SYNCHRONIZED,
     NOT_SYNCHRONIZED,
     DISCONNECTED
 };
@@ -511,8 +511,7 @@ struct TStateStorageInfo : public TThrRefBase {
     };
 
     struct TRingGroup {
-        ui32 BridgePileId = 0;
-        TRingGroupState State;
+        ERingGroupState State;
         bool WriteOnly = false;
         ui32 NToSelect = 0;
         TVector<TRing> Rings;

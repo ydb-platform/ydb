@@ -138,7 +138,7 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
     struct TReplicaGroup {
         TVector<TActorId> Replicas;
         bool WriteOnly;
-        TRingGroupState State;
+        ERingGroupState State;
     };
     
     TVector<TReplicaGroup> ReplicaGroups;

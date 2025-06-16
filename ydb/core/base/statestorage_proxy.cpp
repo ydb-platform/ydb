@@ -647,8 +647,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
-            if ((!WaitAllReplies && ringGroup.WriteOnly) || ringGroup.State == TRingGroupState::DISCONNECTED
-                || ringGroup.State == TRingGroupState::NOT_SYNCHRONIZED) {
+            if ((!WaitAllReplies && ringGroup.WriteOnly) || ringGroup.State == ERingGroupState::DISCONNECTED
+                || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
                 continue;
             }
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
@@ -666,7 +666,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
-            if (ringGroup.State == TRingGroupState::DISCONNECTED || ringGroup.State == TRingGroupState::NOT_SYNCHRONIZED) {
+            if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
                 continue;
             }
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
@@ -677,7 +677,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (!Info->RingGroups[ringGroupIdx].WriteOnly && Info->RingGroups[ringGroupIdx].State == TRingGroupState::PRIMARY) {
+        if (!Info->RingGroups[ringGroupIdx].WriteOnly && Info->RingGroups[ringGroupIdx].State == ERingGroupState::PRIMARY) {
             // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
             TabletID = msg->TabletID;
             Cookie = msg->Cookie;
@@ -1042,7 +1042,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         reply->ClusterStateGuid = info->ClusterStateGuid;
         reply->ReplicaGroups.reserve(info->RingGroups.size());
         for (ui32 ringGroupIndex : xrange(info->RingGroups.size())) {
-            if (info->RingGroups[ringGroupIndex].State == TRingGroupState::DISCONNECTED) {
+            if (info->RingGroups[ringGroupIndex].State == ERingGroupState::DISCONNECTED) {
                 continue;
             }
             THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());

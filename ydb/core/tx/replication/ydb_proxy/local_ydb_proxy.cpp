@@ -84,6 +84,7 @@ private:
             return OnFatalError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicName << "' not found");
         }
         PartitionTabletId = node->TabletId;
+        Cerr << ">>>>> PartitionTabletId " << PartitionTabletId << Endl << Flush;
         DoCreatePipe();
     }
 
@@ -129,7 +130,9 @@ protected:
 
     void CreatePipe() {
         NTabletPipe::TClientConfig config;
-        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        config.RetryPolicy = {
+            .RetryLimitCount = 3
+        };
         PartitionPipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(TThis::SelfId(), PartitionTabletId, config));
     }
 
@@ -146,6 +149,7 @@ protected:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr) {
+        Cerr << ">>>>> TEvTabletPipe::TEvClientDestroyed" << Endl << Flush;
         OnError("Pipe destroyed");
     }
 
@@ -224,6 +228,8 @@ protected:
     STATEFN(OnInitEvent) override {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, HandleInit);
+        default:
+            Y_VERIFY_DEBUG(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
         }
     }
 
@@ -240,11 +246,14 @@ private:
 
 private:
     void DoInitOffset() {
-        Send(PartitionPipeClient, CreateGetOffsetRequest().release());
+        Cerr << ">>>>> DoInitOffset " << Endl << Flush;
+        NTabletPipe::SendData(SelfId(), PartitionPipeClient, CreateGetOffsetRequest().release());
         Become(&TLocalTopicPartitionReaderActor::StateInitOffset);
     }
 
     void HandleOnInitOffset(TEvPersQueue::TEvResponse::TPtr& ev) {
+        Cerr << ">>>>> DoInitOffset TEvResponse " << Endl << Flush;
+
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
             Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
@@ -278,6 +287,8 @@ private:
         auto& offset = *req.MutableCmdGetClientOffset();
         offset.SetClientId(Consumer);
 
+        Cerr << ">>>>> " << request->Record.DebugString() << Endl << Flush;
+
         return request;
     }
 
@@ -295,6 +306,8 @@ private:
 
 private:
     void DoWork() {
+        Cerr << ">>>>> DoWork " << Endl << Flush;
+
         Become(&TLocalTopicPartitionReaderActor::StateWork);
 
         if (!RequestsQueue.empty()) {
@@ -303,6 +316,8 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
+        Cerr << ">>>>>> TEvYdbProxy::TEvReadTopicReques" << Endl << Flush;
+
         HandleInit(ev);
         Handle(RequestsQueue.front());
     }
@@ -312,10 +327,10 @@ private:
 
         if (AutoCommit && !request.SkipCommit) {
             request.SkipCommit = true;
-            Send(PartitionPipeClient, CreateCommitRequest().release());
+            NTabletPipe::SendData(SelfId(), PartitionPipeClient, CreateCommitRequest().release());
         }
 
-        Send(PartitionPipeClient, CreateReadRequest().release());
+        NTabletPipe::SendData(SelfId(), PartitionPipeClient, CreateReadRequest().release());
 
         DoWaitData();
     }
@@ -471,7 +486,7 @@ protected:
 
 private:
     void DoCommitOffset() {
-        Send(PartitionPipeClient, CreateCommitRequest().release());
+        NTabletPipe::SendData(SelfId(), PartitionPipeClient, CreateCommitRequest().release());
         Become(&TLocalTopicPartitionCommitActor::StateCommitOffset);
     }
 
@@ -739,12 +754,14 @@ private:
         auto args = std::move(ev->Get()->GetArgs());
         auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
 
+        Cerr << ">>>>> TEvYdbProxy::TEvCreateTopicReaderRequest" << Endl << Flush;
+
         AFL_VERIFY(1 == settings.GetBase().Topics_.size())("topic count", settings.GetBase().Topics_.size());
         AFL_VERIFY(1 == settings.GetBase().Topics_[0].PartitionIds_.size())("partition count", settings.GetBase().Topics_[0].PartitionIds_.size());
 
         auto actor = new TLocalTopicPartitionReaderActor(ev->Sender, Database, settings);
         auto reader = TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
-        Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
+        Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader), 0, ev->Cookie);
     }
 
     void Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
@@ -765,21 +782,10 @@ private:
             *consumer = c;
         }
 
-        auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+        auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
             Cerr << ">>>>> TEvAlterTopicRequest RESULT" << path << Endl << Flush;
 
             NYdb::NIssue::TIssues issues;
-            Ydb::Topic::AlterTopicResult describe;
-            if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
-                const auto* v = dynamic_cast<const Ydb::Topic::AlterTopicResult*>(result);
-                if (v) {
-                    describe = *v;
-                } else {
-                    statusCode = Ydb::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR;
-                    issues.AddIssue(TStringBuilder() << "Unexpected result type " << result->GetTypeName());
-                }
-            }
-
             NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
             Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
             Cerr << ">>>>> TEvAlterTopicRequest RESULT SENT" << path << Endl << Flush;

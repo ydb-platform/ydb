@@ -1,4 +1,4 @@
-from devtools.yamaker.modules import Library, Linkable, Switch, Words
+from devtools.yamaker.modules import Linkable, Switch, Words
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 

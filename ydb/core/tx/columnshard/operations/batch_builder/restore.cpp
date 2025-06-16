@@ -9,7 +9,8 @@
 namespace NKikimr::NOlap {
 
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(LocalPathId, Snapshot, WriteData.GetWriteMeta().GetLockIdOptional());
+    const auto& writeMetaData = WriteData.GetWriteMeta();
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(writeMetaData.GetPathId(), Snapshot, writeMetaData.GetLockIdOptional());
     request->TaskIdentifier = GetTaskId();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")(
         "count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)("task_id", WriteData.GetWriteMeta().GetId());
@@ -48,7 +49,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     }
 
     auto batchResult = Merger->BuildResultBatch();
-    if (!WriteData.GetWritePortions() || !Context.GetNoTxWrite()) {
+    if (!Context.GetNoTxWrite()) {
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batchResult.GetContainer(), Context);
         NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
@@ -66,7 +67,6 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
           writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
     , WriteData(std::move(writeData))
     , Merger(merger)
-    , LocalPathId(WriteData.GetWriteMeta().GetTableId())
     , Snapshot(actualSnapshot)
     , IncomingData(incomingData)
     , Context(context) {

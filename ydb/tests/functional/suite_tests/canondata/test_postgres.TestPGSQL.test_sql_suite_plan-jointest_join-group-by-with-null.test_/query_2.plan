@@ -54,6 +54,7 @@
                                         "PlanNodeId": 13,
                                         "Plans": [
                                             {
+                                                "HashFunc": "HashV1",
                                                 "KeyColumns": [
                                                     "t1.q2"
                                                 ],

@@ -34,7 +34,7 @@ public:
     NRpc::TRealmId GetRealmId() const override;
     std::string GetMethod() const override;
     std::string GetService() const override;
-    const std::optional<std::string>& GetRequestInfo() const override;
+    const std::string& GetRequestInfo() const override;
 
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;

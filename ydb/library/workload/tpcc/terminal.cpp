@@ -105,6 +105,8 @@ TTerminalTask TTerminal::Run() {
 
     while (!StopToken.stop_requested()) {
         if (!WarmupWasStopped && StopWarmup.load(std::memory_order::relaxed)) {
+            // WarmupWasStopped is per terminal member, while Stats are shared
+            // between multiple terminals. That's why we call ClearOnce().
             Stats->ClearOnce();
             WarmupWasStopped = true;
         }

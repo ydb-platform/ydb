@@ -1,6 +1,8 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
 
 #include <util/generic/map.h>
 
@@ -15,6 +17,7 @@ namespace NPDisk {
 struct TOwnerInfo {
     i64 ChunksOwned;
     TVDiskID VDiskId;
+    ui32 Weight;
 };
 
 struct TKeeperParams {

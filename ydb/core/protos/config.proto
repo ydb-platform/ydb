@@ -214,6 +214,7 @@ message TDomainsConfig {
         repeated uint32 CompatibleVersions = 4;
         repeated TRing RingGroups = 5;
         optional uint64 ClusterStateGeneration = 6; // generation from current ClusterState
+        optional fixed64 ClusterStateGuid = 7;
     }
 
     message TStoragePoolType {
@@ -1969,6 +1970,7 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
+    optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
 }
 
 message TSchemeShardConfig {

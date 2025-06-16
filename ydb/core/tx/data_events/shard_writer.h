@@ -113,7 +113,6 @@ private:
     NActors::TActorIdentity LongTxActorId;
     std::vector<TWriteIdForShard> WriteIds;
     const TMonotonic StartInstant = TMonotonic::Now();
-    const bool ImmediateWrite = false;
     YDB_READONLY_DEF(NLongTxService::TLongTxId, LongTxId);
     YDB_READONLY(std::shared_ptr<TCSUploadCounters>, Counters, std::make_shared<TCSUploadCounters>());
     void SendReply() {
@@ -121,16 +120,9 @@ private:
             Counters->OnFailedFullReply(TMonotonic::Now() - StartInstant);
             AFL_VERIFY(Code);
             LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(*Code, Issues));
-        } else if (ImmediateWrite) {
-            Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);
-            LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(Ydb::StatusIds::SUCCESS));
         } else {
             Counters->OnSucceedFullReply(TMonotonic::Now() - StartInstant);
-            auto req = MakeHolder<NLongTxService::TEvLongTxService::TEvAttachColumnShardWrites>(LongTxId);
-            for (auto&& i : WriteIds) {
-                req->AddWrite(i.GetShardId(), i.GetWriteId());
-            }
-            LongTxActorId.Send(NLongTxService::MakeLongTxServiceID(LongTxActorId.NodeId()), req.Release());
+            LongTxActorId.Send(LongTxActorId, new TEvPrivate::TEvShardsWriteResult(Ydb::StatusIds::SUCCESS));
         }
     }
 
@@ -157,8 +149,7 @@ public:
         };
     };
 
-    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
-        const bool immediateWrite);
+    TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId);
     void OnSuccess(const ui64 shardId, const ui64 writeId, const ui32 writePartId);
     void OnFail(const Ydb::StatusIds::StatusCode code, const TString& message);
 };
@@ -180,8 +171,6 @@ private:
     TWritersController::TPtr ExternalController;
     const TActorId LeaderPipeCache;
     NWilson::TProfileSpan ActorSpan;
-    EModificationType ModificationType;
-    const bool ImmediateWrite = false;
     const std::optional<TDuration> Timeout;
 
     void SendWriteRequest();
@@ -200,11 +189,10 @@ private:
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const EModificationType mType, const bool immediateWrite, const std::optional<TDuration> timeout = std::nullopt);
+        const std::optional<TDuration> timeout = std::nullopt);
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvColumnShard::TEvWriteResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NEvents::TDataEvents::TEvWriteResult, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
@@ -214,7 +202,6 @@ public:
     void Bootstrap();
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev);
-    void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev);
 

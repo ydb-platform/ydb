@@ -9,6 +9,8 @@ option java_package = "ru.yandex.kikimr.proto";
 message TEvLookup {
     optional fixed64 TabletID = 1;
     optional uint64 Cookie = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional fixed64 ClusterStateGuid = 4;
 };
 
 message TEvInfo {
@@ -26,6 +28,8 @@ message TEvInfo {
     repeated NActorsProto.TActorId FollowerTablet = 12;
     repeated NActorsProto.TActorId FollowerCandidates = 13;
     optional fixed32 ConfigContentHash = 14;
+    optional uint64 ClusterStateGeneration = 15;
+    optional fixed64 ClusterStateGuid = 16;
 };
 
 message TEvReplicaShutdown {
@@ -47,6 +51,8 @@ message TEvUpdate {
     optional uint32 ProposedStep = 6;
     optional uint64 Signature = 7;
     optional bool IsGuardian = 8;
+    optional uint64 ClusterStateGeneration = 9;
+    optional fixed64 ClusterStateGuid = 10;
 };
 
 message TEvDelete {
@@ -63,11 +69,15 @@ message TEvRegisterFollower {
     optional NActorsProto.TActorId Follower = 2;
     optional NActorsProto.TActorId FollowerTablet = 3;
     optional bool Candidate = 4;
+    optional uint64 ClusterStateGeneration = 5;
+    optional fixed64 ClusterStateGuid = 6;
 }
 
 message TEvUnregisterFollower {
     optional fixed64 TabletID = 1;
     optional NActorsProto.TActorId Follower = 2;
+    optional uint64 ClusterStateGeneration = 3;
+    optional fixed64 ClusterStateGuid = 4;
 }
 
 message TEvLock {
@@ -76,6 +86,8 @@ message TEvLock {
     optional NActorsProto.TActorId ProposedLeader = 3;
     optional uint32 ProposedGeneration = 4;
     optional uint64 Signature = 5;
+    optional uint64 ClusterStateGeneration = 6;
+    optional fixed64 ClusterStateGuid = 7;
 };
 
 message TEvReplicaLeaderDemoted {

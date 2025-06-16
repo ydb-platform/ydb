@@ -14,6 +14,8 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    dq_factories.cpp
+
     dq_block_hash_join_ut.cpp
 )
 

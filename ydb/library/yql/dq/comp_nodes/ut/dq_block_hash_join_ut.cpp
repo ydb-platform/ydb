@@ -1,3 +1,6 @@
+#include "dq_setup.h"
+#include "dq_factories.h"
+
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -10,16 +13,6 @@ namespace NMiniKQL {
 // TODO (mfilitov): think how can we reuse the code
 // Code from https://github.com/ydb-platform/ydb/blob/main/yql/essentials/minikql/comp_nodes/ut/mkql_block_map_join_ut_utils.h
 namespace {
-
-TComputationNodeFactory GetDqNodeFactory() {
-    auto factory = GetBuiltinFactory();
-    return [factory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-        if (callable.GetType()->GetName() == "DqBlockHashJoin") {
-            return WrapDqBlockHashJoin(callable, ctx);
-        }
-        return factory(callable, ctx);
-    };
-}
 
 // List<Tuple<...>> -> Stream<Multi<...>>
 TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
@@ -51,45 +44,20 @@ TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     );
 }
 
-TRuntimeNode BuildDqBlockHashJoin(TProgramBuilder& pgmBuilder, TRuntimeNode leftStream, TRuntimeNode rightStream,
-                                 EJoinKind joinKind, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& rightKeyColumns) {
-    auto leftType = leftStream.GetStaticType();
-    
-    TCallableBuilder callableBuilder(pgmBuilder.GetTypeEnvironment(), "DqBlockHashJoin", leftType);
-    callableBuilder.Add(leftStream);
-    callableBuilder.Add(rightStream);
-    callableBuilder.Add(pgmBuilder.NewDataLiteral<ui32>(static_cast<ui32>(joinKind)));
-    
-    TRuntimeNode::TList leftKeyArgs;
-    for (ui32 col : leftKeyColumns) {
-        leftKeyArgs.emplace_back(pgmBuilder.NewDataLiteral<ui32>(col));
-    }
-    callableBuilder.Add(pgmBuilder.NewTuple(leftKeyArgs));
-    
-    TRuntimeNode::TList rightKeyArgs;
-    for (ui32 col : rightKeyColumns) {
-        rightKeyArgs.emplace_back(pgmBuilder.NewDataLiteral<ui32>(col));
-    }
-    callableBuilder.Add(pgmBuilder.NewTuple(rightKeyArgs));
-    
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
 NUdf::TUnboxedValue DoTestDqBlockHashJoin(
-    TSetup<false>& setup,
+    TDqSetup<false>& setup,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns,
     EJoinKind joinKind
 ) {
-    TProgramBuilder& pb = *setup.PgmBuilder;
+    TDqProgramBuilder& pb = setup.GetDqProgramBuilder();
 
     TRuntimeNode leftList = pb.Arg(leftType);
     TRuntimeNode rightList = pb.Arg(rightType);
     const auto leftStream = ToWideStream(pb, leftList);
     const auto rightStream = ToWideStream(pb, rightList);
-    const auto joinNode = BuildDqBlockHashJoin(pb, leftStream, rightStream, joinKind, leftKeyColumns, rightKeyColumns);
+    const auto joinNode = pb.DqBlockHashJoin(leftStream, rightStream, joinKind, leftKeyColumns, rightKeyColumns, leftStream.GetStaticType());
     
-    // Преобразуем результат обратно в список
     const auto resultNode = FromWideStream(pb, joinNode);
 
     const auto graph = setup.BuildGraph(resultNode, {leftList.GetNode(), rightList.GetNode()});
@@ -134,8 +102,8 @@ static void CompareResults(const TType* type, const NUdf::TUnboxedValue& expecte
 }
 
 void RunTestDqBlockHashJoin(
-    TSetup<false>& setup, EJoinKind joinKind,
-    const TType* expectedType, const NUdf::TUnboxedValue& expected,
+    TDqSetup<false>& setup, EJoinKind joinKind,
+    TType* expectedType, const NUdf::TUnboxedValue& expected,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns
 ) {
@@ -218,7 +186,7 @@ const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
 Y_UNIT_TEST_SUITE(TDqBlockHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestBasicPassthrough) {
-        TSetup<false> setup(GetDqNodeFactory());
+        TDqSetup<false> setup(GetDqNodeFactory());
         
         TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
         TVector<TString> leftValues = {"a", "b", "c", "d", "e"};
@@ -242,7 +210,7 @@ Y_UNIT_TEST_SUITE(TDqBlockHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST(TestEmptyStreams) {
-        TSetup<false> setup(GetDqNodeFactory());
+        TDqSetup<false> setup(GetDqNodeFactory());
         
         TVector<ui64> emptyKeys;
         TVector<TString> emptyValues;

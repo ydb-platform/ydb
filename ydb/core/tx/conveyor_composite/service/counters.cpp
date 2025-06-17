@@ -27,6 +27,7 @@ TWPCategorySignals::TWPCategorySignals(NColumnShard::TCommonCountersOwner& base,
     , Category(cat)
     , WaitingHistogram(TBase::GetHistogram("Waiting/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
     , TaskExecuteHistogram(TBase::GetHistogram("TaskExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+    , ValueWeight(TBase::GetValue("Weight"))
     , ExecuteDuration(TBase::GetDeriviative("Execute/Duration/Us")) {
 }
 

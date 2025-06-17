@@ -252,6 +252,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         hiveStorage->TabletType = TTabletTypes::Hive;
         TTestHive hive(hiveStorage.Get(), TActorId());
 
+        // Emulate initial BuildCurrentConfig call
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig&){});
+
         TFollowerGroup followerGroup(hive);
 
         // Part 1: Test default priorities with empty configuration
@@ -264,12 +267,16 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             dummyTablet.SetType(TTabletTypes::Dummy);
             hive.AddToBootQueue(&dummyTablet);
 
+            TFollowerTabletInfo dummyFollowerTablet(dummyTablet, 3UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTablet);
+
             auto& bootQueue = hive.GetBootQueue();
-            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
 
             // Priorities should follow defaults
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
 
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
         }
@@ -297,12 +304,16 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             configuredDummyTablet.SetType(TTabletTypes::Dummy);
             hive.AddToBootQueue(&configuredDummyTablet);
 
+            TFollowerTabletInfo configuredDummyFollowerTablet(configuredDummyTablet, 6UL, followerGroup);
+            hive.AddToBootQueue(&configuredDummyFollowerTablet);
+
             auto& bootQueue = hive.GetBootQueue();
-            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
 
             // Priorities should use configured values
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, SS_BOOT_PRIORITY); // Configured SchemeShard
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, DUMMY_BOOT_PRIORITY); // Configured Dummy
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default (should not change)
 
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
         }
@@ -321,12 +332,16 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             dummyTabletAfterClear.SetType(TTabletTypes::Dummy);
             hive.AddToBootQueue(&dummyTabletAfterClear);
 
+            TFollowerTabletInfo dummyFollowerTabletAfterClear(dummyTabletAfterClear, 9UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTabletAfterClear);
+
             auto& bootQueue = hive.GetBootQueue();
-            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
 
             // Priorities should revert to defaults
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
 
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
         }

@@ -16,6 +16,7 @@ add_executable(topic_direct_read_it)
 
 
 target_compile_options(topic_direct_read_it PRIVATE
+  -DPQ_EXPERIMENTAL_DIRECT_READ=1
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 

@@ -1,4 +1,5 @@
 #include "schemeshard_login_helper.h"
+#include "schemeshard_private.h"
 #include <ydb/library/login/login.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -18,13 +19,13 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvVerifyPassword, VerifyPassword);
+            hFunc(TEvPrivate::TEvVerifyPassword, VerifyPassword);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
 
 private:
-    void VerifyPassword(TEvVerifyPassword::TPtr& ev) {
+    void VerifyPassword(TEvPrivate::TEvVerifyPassword::TPtr& ev) {
         const bool isSuccessVerifying = LoginProvider_.VerifyHash(ev->Get()->Request, ev->Get()->PasswordHash);
         if (!isSuccessVerifying) {
             ev->Get()->CheckResult.Status = NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD;
@@ -32,7 +33,7 @@ private:
         }
         Send(
             ev->Sender,
-            MakeHolder<TEvLoginFinalize>(
+            MakeHolder<TEvPrivate::TEvLoginFinalize>(
                 ev->Get()->Request,
                 ev->Get()->CheckResult,
                 ev->Get()->Source,

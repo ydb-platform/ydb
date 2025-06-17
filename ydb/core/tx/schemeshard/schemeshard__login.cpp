@@ -1,5 +1,4 @@
 #include "schemeshard_impl.h"
-#include "schemeshard_login_helper.h"
 #include <ydb/library/login/login.h>
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -65,14 +64,14 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         if (Self->LoginProvider.NeedVerifyHash(loginRequest, &Response, &passwordHash)) {
             ctx.Send(
                 Self->LoginHelper,
-                MakeHolder<TEvVerifyPassword>(loginRequest, Response, Request->Sender, passwordHash),
+                MakeHolder<TEvPrivate::TEvVerifyPassword>(loginRequest, Response, Request->Sender, passwordHash),
                 0,
                 Request->Cookie
             );
         } else {
             ctx.Send(
                 Self->SelfId(),
-                MakeHolder<TEvLoginFinalize>(loginRequest, Response, Request->Sender, "", /*needUpdateCache*/ false),
+                MakeHolder<TEvPrivate::TEvLoginFinalize>(loginRequest, Response, Request->Sender, "", /*needUpdateCache*/ false),
                 0,
                 Request->Cookie
             );

@@ -1,5 +1,4 @@
 #include "schemeshard_impl.h"
-#include "schemeshard_login_helper.h"
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/base/auth.h>
@@ -10,11 +9,11 @@ namespace NSchemeShard {
 
 struct TSchemeShard::TTxLoginFinalize : TSchemeShard::TRwTxBase {
 private:
-    TEvLoginFinalize::TPtr LoginFinalizeEventPtr;
+    TEvPrivate::TEvLoginFinalize::TPtr LoginFinalizeEventPtr;
     TString ErrMessage;
 
 public:
-    TTxLoginFinalize(TSelf *self, TEvLoginFinalize::TPtr &ev)
+    TTxLoginFinalize(TSelf *self, TEvPrivate::TEvLoginFinalize::TPtr &ev)
         : TRwTxBase(self)
         , LoginFinalizeEventPtr(std::move(ev))
     {}
@@ -90,7 +89,7 @@ private:
     }
 
     void SendError(const TString& error) {
-        THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
+        auto result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
         result->Record.SetError(error);
         Self->Send(
             LoginFinalizeEventPtr->Get()->Source,
@@ -126,7 +125,7 @@ private:
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLoginFinalize(TEvLoginFinalize::TPtr &ev) {
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLoginFinalize(TEvPrivate::TEvLoginFinalize::TPtr &ev) {
     return new TTxLoginFinalize(this, ev);
 }
 

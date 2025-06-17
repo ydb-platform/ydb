@@ -104,6 +104,7 @@ namespace NSQLComplete {
             result.Hint = HintMatch(candidates);
             result.Object = ObjectMatch(context, candidates);
             result.Cluster = ClusterMatch(context, candidates);
+            result.Column = ColumnMatch(candidates);
             result.Binding = BindingMatch(candidates);
 
             return result;
@@ -294,6 +295,10 @@ namespace NSQLComplete {
                 cluster.Provider = begin->Base->Content;
             }
             return cluster;
+        }
+
+        bool ColumnMatch(const TC3Candidates& candidates) const {
+            return AnyOf(candidates.Rules, RuleAdapted(IsLikelyColumnStack));
         }
 
         bool BindingMatch(const TC3Candidates& candidates) const {

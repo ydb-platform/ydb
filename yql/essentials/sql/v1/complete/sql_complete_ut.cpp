@@ -43,6 +43,7 @@ public:
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     using ECandidateKind::BindingName;
     using ECandidateKind::ClusterName;
+    using ECandidateKind::ColumnName;
     using ECandidateKind::FolderName;
     using ECandidateKind::FunctionName;
     using ECandidateKind::HintName;
@@ -83,7 +84,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             },
         };
 
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs = {
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> folders = {
             {"", {{"/", {{"Folder", "local"},
                          {"Folder", "test"},
                          {"Folder", "prod"},
@@ -103,15 +104,18 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
              {{"/", {{"Table", "maxim"}}}}},
         };
 
+        THashMap<TString, THashMap<TString, TTableDetails>> tables = {
+            {"example", {{"/people", {{"name", "age"}}}}}};
+
         auto clustersIt = NFuncTools::Filter(
-            [](const auto& x) { return !x.empty(); }, IterateKeys(fs));
+            [](const auto& x) { return !x.empty(); }, IterateKeys(folders));
         TVector<TString> clusters(begin(clustersIt), end(clustersIt));
 
         TFrequencyData frequency;
 
         TVector<INameService::TPtr> children = {
             MakeStaticNameService(std::move(names), frequency),
-            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(fs)))),
+            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(folders), std::move(tables)))),
             MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
         };
         INameService::TPtr service = MakeUnionNameService(
@@ -1043,6 +1047,31 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
         UNIT_ASSERT_VALUES_UNEQUAL(
             CompleteTop(1, engine, "SELECT Max(#)").at(0).Kind, FolderName);
+    }
+
+    Y_UNIT_TEST(ColumnsAtSimpleSelect) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {ColumnName, "name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT a# FROM example.`/people`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {ColumnName, "name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE example; SELECT # FROM `/people`"), expected);
+        }
     }
 
     Y_UNIT_TEST(Typing) {

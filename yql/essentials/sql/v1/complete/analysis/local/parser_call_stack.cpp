@@ -123,6 +123,10 @@ namespace NSQLComplete {
         return Contains({RULE(Cluster_expr)}, stack);
     }
 
+    bool IsLikelyColumnStack(const TParserCallStack& stack) {
+        return Contains({RULE(Result_column)}, stack);
+    }
+
     bool IsLikelyBindingStack(const TParserCallStack& stack) {
         return EndsWith({RULE(Bind_parameter), RULE(An_id_or_type)}, stack);
     }

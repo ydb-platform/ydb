@@ -142,6 +142,11 @@ namespace NSQLComplete {
                 object->Kinds.emplace(EObjectKind::Table);
             }
 
+            if (context.Column && global.Column) {
+                request.Constraints.Column = TColumnName::TConstraints();
+                request.Constraints.Column->Tables = std::move(global.Column->Tables);
+            }
+
             return request;
         }
 
@@ -229,6 +234,10 @@ namespace NSQLComplete {
 
                 if constexpr (std::is_base_of_v<TClusterName, T>) {
                     return {ECandidateKind::ClusterName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TColumnName, T>) {
+                    return {ECandidateKind::ColumnName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TBindingName, T>) {
@@ -332,6 +341,9 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
             break;
         case NSQLComplete::ECandidateKind::BindingName:
             out << "BindingName";
+            break;
+        case NSQLComplete::ECandidateKind::ColumnName:
+            out << "ColumnName";
             break;
         case NSQLComplete::ECandidateKind::UnknownName:
             out << "UnknownName";

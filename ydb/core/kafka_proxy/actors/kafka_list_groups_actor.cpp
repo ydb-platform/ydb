@@ -14,23 +14,11 @@
 
 #include "actors.h"
 #include "kafka_list_groups_actor.h"
+#include "kafka_state_name_to_int.h"
 
 
 namespace NKafka {
 
-std::map<int, TString> numbersToStatesMapping = {{0, "Unknown"},
-                                                 {1, "PreparingRebalance"},
-                                                 {2, "CompletingRebalance"},
-                                                 {3, "Stable"},
-                                                 {4, "Dead"},
-                                                 {5, "Empty"}};
-
-std::map<TString, int> statesToNumbersMapping{{"Unknown", 0},
-                                              {"PreparingRebalance", 1},
-                                              {"CompletingRebalance", 2},
-                                              {"Stable", 3},
-                                              {"Dead", 4},
-                                              {"Empty", 5}};
 
 std::shared_ptr<TListGroupsResponseData> BuildResponse(TListGroupsResponseData responseData) {
     auto response = std::make_shared<TListGroupsResponseData>(std::move(responseData));
@@ -42,15 +30,15 @@ NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const 
 }
 
 void TKafkaListGroupsActor::StartKqpSession(const TActorContext& ctx) {
-        Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
-        KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
-        Kqp->SendCreateSessionRequest(ctx);
+    Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
+    KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
+    Kqp->SendCreateSessionRequest(ctx);
 }
 
  void TKafkaListGroupsActor::Die(const TActorContext &ctx) {
-        KAFKA_LOG_D("Dying.");
-        if (Kqp) {
-            Kqp->CloseKqpSession(ctx);
+    KAFKA_LOG_D("Dying.");
+    if (Kqp) {
+        Kqp->CloseKqpSession(ctx);
         }
 }
 
@@ -61,7 +49,7 @@ NYdb::TParams TKafkaListGroupsActor::BuildSelectParams() {
         auto& statesFilterParams = params.AddParam("$StatesFilter").BeginList();
         for (auto& statesNumberFilter : ListGroupsRequestData->StatesFilter) {
             if (statesNumberFilter.has_value()) {
-                statesFilterParams.AddListItem().Uint32(statesToNumbersMapping[*statesNumberFilter]);
+                statesFilterParams.AddListItem().Uint32(NKafka::statesToNumbersMapping.at(*statesNumberFilter));
             }
         }
         statesFilterParams.EndList().Build();
@@ -170,7 +158,7 @@ TListGroupsResponseData TKafkaListGroupsActor::ParseGroupsMetadata(const NKqp::T
         groupInfo.GroupId = consumerName;
         groupInfo.ProtocolType = protocolType;
         ui64 group_state_number = parser.ColumnParser("state").GetUint64();
-        groupInfo.GroupState = numbersToStatesMapping[group_state_number];
+        groupInfo.GroupState = numbersToStatesMapping.at(group_state_number);
         listGroupsResponse.Groups.push_back(groupInfo);
     }
     return listGroupsResponse;

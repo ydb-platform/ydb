@@ -400,6 +400,12 @@ TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroups(TListGroupsReq
     return WriteAndRead<TListGroupsResponseData>(header, request);
 }
 
+TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(TDescribeGroupsRequestData& request) {
+    Cerr << ">>>>> TDescribeGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::DESCRIBE_GROUPS, 5);
+    return WriteAndRead<TDescribeGroupsResponseData>(header, request);
+}
+
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
     Cerr << ">>>>> TFetchRequestData\n";
 

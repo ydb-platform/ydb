@@ -2673,7 +2673,6 @@ Y_UNIT_TEST(The_Value_Of_CreationUnixTime_Must_Not_Decrease)
 
     TTestContext tc;
     TFinalizer finalizer(tc);
-    tc.EnableDetailedPQLog = true;
     tc.Prepare();
 
     // Turn off the asynchronous compactor
@@ -2713,11 +2712,9 @@ Y_UNIT_TEST(The_Value_Of_CreationUnixTime_Must_Not_Decrease)
     ui64 currentCreationUnixTime = 0;
     for (const auto& key : keys) {
         Y_ABORT_UNLESS(!key.empty());
-        if (key.front() != 'd') {
+        if (key.front() != TKeyPrefix::TypeData) {
             continue;
         }
-
-        Cerr << ">>> " << key << Endl;
 
         auto request = MakeHolder<TEvKeyValue::TEvRequest>();
         auto read = request->Record.AddCmdReadRange();
@@ -2739,8 +2736,6 @@ Y_UNIT_TEST(The_Value_Of_CreationUnixTime_Must_Not_Decrease)
                        ", result.CreationUnixTime=" << result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime());
 
         currentCreationUnixTime = result->Record.GetReadRangeResult(0).GetPair(0).GetCreationUnixTime();
-
-        Cerr << result->Record << Endl;
     }
 }
 

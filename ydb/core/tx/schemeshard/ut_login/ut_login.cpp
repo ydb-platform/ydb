@@ -1895,6 +1895,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
         const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
         // public keys are filled after the first login
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "No key to generate token");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
     }
 
     Y_UNIT_TEST(InvalidPassword) {
@@ -1911,6 +1912,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
         UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", "password1").error(), "");
         const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
     }
 
     Y_UNIT_TEST(Success) {
@@ -1927,5 +1929,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
         UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", "wrong-password1").error(), "Invalid password");
         const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
         UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        CheckToken(resultLogin.token(), describe, "user1");
     }
 }

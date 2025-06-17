@@ -2137,11 +2137,12 @@ namespace NSchemeShardUT_Private {
         const TString& passwordHash,
         const bool needUpdateCache
     ) {
-        TActorId sender = runtime.AllocateEdgeActor();
-        auto evLoginFinalize = new NKikimr::NSchemeShard::TEvLoginFinalize(request, checkResult, sender, passwordHash, needUpdateCache);
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLoginFinalize);
+        const auto evLoginFinalize = new NKikimr::NSchemeShard::TEvLoginFinalize(
+            request, checkResult, runtime.AllocateEdgeActor(), passwordHash, needUpdateCache
+        );
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, evLoginFinalize);
         TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        const auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
         UNIT_ASSERT(event);
         return event->Record;
     }

@@ -212,10 +212,10 @@ public:
         const auto& evRecord = ev->Get()->Record;
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply SchemaChanged"
+                     DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
                      << " at tablet: " << ssId);
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply SchemaChanged"
+                    DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
                      << " triggered early"
                      << ", message: " << evRecord.ShortDebugString());
 

@@ -155,8 +155,6 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
 
-        // Persist alter
-        // context.DbChanges.PersistSubDomainAlter(basenameId);
         txState.State = TTxState::Waiting;
 
         // Add source tables from backup collection to transaction paths for proper state tracking
@@ -232,34 +230,27 @@ public:
     }
 };
 
-// CreateChangePathState functions are now defined in schemeshard__operation_change_path_state.h/.cpp
-
 bool CreateLongIncrementalRestoreOp(
     TOperationId opId,
     const TPath& bcPath,
     TVector<ISubOperation::TPtr>& result)
 {
-    // Create a transaction for the long incremental restore operation
     TTxTransaction tx;
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
     tx.SetInternal(true);
     
-    // Set the backup collection path as the working directory for this operation
     tx.SetWorkingDir(bcPath.PathString());
     
-    // Use the factory function to create the control plane sub-operation
     result.push_back(CreateLongIncrementalRestoreOpControlPlane(NextPartId(opId, result), tx));
     
     return true;
 }
 
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, const TTxTransaction& tx) {
-    // Create the control plane sub-operation directly for operation factory dispatch
     return MakeSubOperation<TCreateRestoreOpControlPlane>(opId, tx);
 }
 
 ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId, TTxState::ETxState state) {
-    // Create the control plane sub-operation for RestorePart dispatch
     return MakeSubOperation<TCreateRestoreOpControlPlane>(opId, state);
 }
 

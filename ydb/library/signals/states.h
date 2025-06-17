@@ -16,26 +16,42 @@ class TStateSignalsOwner: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateVolume;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateAdd;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateRemove;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateDuration;
+
+    void AddCountersForGroup(TCommonCountersOwner& group) {
+        StateVolume.emplace_back(group.GetValue("Count"));
+        StateAdd.emplace_back(group.GetDeriviative("Add"));
+        StateRemove.emplace_back(group.GetDeriviative("Remove"));
+        StateDuration.emplace_back(group.GetDeriviative("Duration/Us"));
+    }
 
 public:
-    void ExchangeState(const std::optional<EState> from, const std::optional<EState> to, const ui32 size = 1) {
+    void ExchangeState(const std::optional<EState> from, const std::optional<EState> to, const std::optional<TDuration> d, const ui32 size = 1) {
         if (from) {
             AFL_VERIFY((ui32)*from < StateVolume.size())("from", from)("size", StateVolume.size());
             StateVolume[(ui32)*from]->Sub(size);
+            StateRemove[(ui32)*from]->Add(size);
+            if (d) {
+                StateDuration->Add(d->MicroSeconds());
+            }
         }
         if (to) {
             AFL_VERIFY((ui32)*to < StateVolume.size())("to", to)("size", StateVolume.size());
             StateVolume[(ui32)*to]->Add(size);
+            StateAdd[(ui32)*to]->Add(size);
         }
     }
 
     TStateSignalsOwner(TCommonCountersOwner& base, const TString& stateName)
         : TBase(base, "states", stateName) {
+        auto undefinedGroup = TBase::CreateSubGroup("state_id", "UNDEFINED");
         for (auto&& i : GetEnumAllValues<EState>()) {
             while (StateVolume.size() < (ui32)i) {
-                StateVolume.emplace_back(TBase::CreateSubGroup("state_id", "UNDEFINED").GetValue("Count"));
+                AddCountersForGroup(undefinedGroup);
             }
-            StateVolume.emplace_back(TBase::CreateSubGroup("state_id", ::ToString(i)).GetValue("Count"));
+            AddCountersForGroup(TBase::CreateSubGroup("state_id", ::ToString(i)));
         }
     }
 };
@@ -48,22 +64,28 @@ private:
 public:
     class TGuard: public TMoveOnly {
     private:
+        std::optional<TMonotonic> CurrentStateInstant;
         std::optional<EState> CurrentState;
         std::shared_ptr<TStateSignalsOwner<EState>> Signals;
 
     public:
-        void SetState(const EState state) {
-            Signals->ExchangeState(CurrentState, state);
+        void SetState(const std::optional<EState> state) {
+            std::optional<TDuration> d;
+            const TMonotonic current = TMonotonic::Now();
+            if (CurrentStateInstant) {
+                d = current - *CurrentStateInstant;
+            }
+            Signals->ExchangeState(CurrentState, state, d);
             CurrentState = state;
+            CurrentStateInstant = current;
         }
 
-        TGuard(const std::optional<EState> start)
-            : CurrentState(start) {
-            Signals->ExchangeState(std::nullopt, CurrentState);
+        TGuard(const std::optional<EState> start) {
+            SetState(state);
         }
 
         ~TGuard() {
-            Signals->ExchangeState(CurrentState, std::nullopt);
+            SetState(std::nullopt);
         }
     };
 

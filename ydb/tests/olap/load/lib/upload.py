@@ -16,6 +16,9 @@ class UploadSuiteBase(LoadSuiteBase):
     def import_data(self):
         pass
 
+    def validate(self, result: YdbCliHelper.WorkloadRunResult):
+        pass
+
     def save_result_additional_info(self, result: YdbCliHelper.WorkloadRunResult):
         pass
 
@@ -38,6 +41,7 @@ class UploadSuiteBase(LoadSuiteBase):
             result.add_error(str(e))
             result.traceback = e.__traceback__
         result.iterations[0].time = time() - start_time
+        self.validate(result)
         self.save_result_additional_info(result)
         self.process_query_result(result, self.query_name, True)
 

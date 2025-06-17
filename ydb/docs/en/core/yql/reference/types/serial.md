@@ -1,6 +1,6 @@
 # Serial Types
 
-Serial types are integer types with an associated value-generation mechanism. These types are used to create auto-increment columns: for each new row inserted into a table, a unique value for this column is generated automatically (similar to the [SERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) type in PostgreSQL or the [AUTO_INCREMENT](https://dev.mysql.com/doc/refman/9.0/en/example-auto-increment.html) property in MySQL).
+Serial types are integer data types with an associated value-generation mechanism. They create auto-increment columns: each new row inserted into a table automatically generates a unique value for this column (similar to the [SERIAL](https://www.postgresql.org/docs/current/datatype-numeric.html#DATATYPE-SERIAL) type in PostgreSQL or the [AUTO_INCREMENT](https://dev.mysql.com/doc/refman/9.0/en/example-auto-increment.html) property in MySQL).
 
 ## Description
 
@@ -18,16 +18,16 @@ However, such columns cannot be [altered](../syntax/alter_table/family#mod-colum
 
 {% endnote %}
 
-| Type        | Maximum Value         | YDB Type |
+| Type        | Maximum Value         | Underlying Type |
 |-------------|----------------------|----------|
-| SmallSerial | 2^15–1                | Int16    |
-| Serial2     | 2^15–1                | Int16    |
-| Serial      | 2^31–1                | Int32    |
-| Serial4     | 2^31–1                | Int32    |
-| Serial8     | 2^63–1                | Int64    |
-| BigSerial   | 2^63–1                | Int64    |
+| `SmallSerial` | $2^15–1$                | `Int16`    |
+| `Serial2`     | $2^15–1$                | `Int16`    |
+| `Serial`      | $2^31–1$                | `Int32`    |
+| `Serial4`     | $2^31–1$                | `Int32`    |
+| `Serial8`     | $2^63–1$                | `Int64`    |
+| `BigSerial`   | $2^63–1$                | `Int64`    |
 
-If the sequence reaches its maximum value, insertion will result in an error:
+If a sequence reaches its maximum value, insertion results in an error:
 
 ```text
 Error: Failed to get next val for sequence: /dev/test/users/_serial_column_user_id, status: SCHEME_ERROR
@@ -41,13 +41,13 @@ As a result, the values in such a column may have gaps and may not form a contin
 
 {% endnote %}
 
-Tables with `Serial` columns support [copy](../../../reference/ydb-cli/tools-copy.md), [rename](../../../reference/ydb-cli/commands/tools/rename.md), [dump](../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../reference/ydb-cli/export-import/import-file.md), and [import](../../../reference/ydb-cli/export-import/import-s3.md)/[export](../../../reference/ydb-cli/export-import/export-s3.md) operations.
+Tables with `Serial` columns support [copy](../../../reference/ydb-cli/tools-copy.md), [rename](../../../reference/ydb-cli/commands/tools/rename.md), [dump](../../../reference/ydb-cli/export-import/tools-dump.md), [restore](../../../reference/ydb-cli/export-import/import-file.md), and [import](../../../reference/ydb-cli/export-import/import-s3.md)/[export](../../../reference/ydb-cli/export-import/export-s3.md) CLI operations.
 
 ## Usage Example
 
-You should carefully choose the columns for your [PRIMARY KEY](../../../dev/primary-key/row-oriented.md). For scalability and high performance, you should avoid writing rows with monotonically increasing primary keys. In this case, all records will go to the last partition, and all the load will target a single server.
+Carefully choose the columns for your [PRIMARY KEY](../../../dev/primary-key/row-oriented.md). To ensure scalability and high performance, avoid using monotonically increasing primary keys; this pattern directs all inserts to the last partition, concentrating load on a single server.
 
-As a recommended approach, use a hash (for example, from the whole or a part of the primary key) as the first key element, which will help evenly distribute data across cluster partitions.
+Instead, use a hash of the entire primary key (or a portion of it) as the first key element to distribute data evenly across cluster partitions.
 
 ```yql
 CREATE TABLE users (
@@ -59,7 +59,7 @@ CREATE TABLE users (
 );
 ```
 
-The `user_hash` field can be calculated on the application side, for example, by applying a hash function to the `email`.
+The `user_hash` field can be calculated on the application side, for example, by applying a hash function to the `email` column.
 
 ``` yql
 UPSERT INTO users (user_hash, name, email) VALUES (123456789, 'Alice', 'alice@example.com');
@@ -75,7 +75,7 @@ Result (example `user_hash` values are used):
 | 987654321   | `bob@example.com`     | Bob   | 2       |
 | 111111111   | `john@example.com`    | John  | 3       |
 
-You can also explicitly specify a value for the `Serial` column during insertion, for example, when restoring data. In this case, the insertion will work like with a regular integer column, and the `Sequence` will not be affected:
+You can also explicitly specify a value for a column of type `Serial` during insertion, for example, when restoring data. In this case, the insertion behaves like a regular integer column, and the sequence remains unaffected:
 
 ``` yql
 UPSERT INTO users (user_hash, user_id, name, email) VALUES (222222222, 10, 'Peter', 'peter@example.com');
@@ -92,4 +92,4 @@ CREATE TABLE users_bad (
 );
 ```
 
-In this example, the auto-increment column is the first and only element of the primary key. This leads to an uneven load and a bottleneck on the last partition.
+In this example, the auto-increment column is the sole component of the primary key, resulting in an uneven load and creating a bottleneck on the last partition.

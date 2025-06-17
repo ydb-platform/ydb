@@ -15,13 +15,19 @@ TString TStageFeatures::DebugString() const {
     return result;
 }
 
-TStageFeatures::TStageFeatures(const TString& name, const ui64 limit, const ui64 hardLimit, const std::shared_ptr<TStageFeatures>& owner,
-    const std::shared_ptr<TStageCounters>& counters)
+TStageFeatures::TStageFeatures(const TString& name, const ui64 limit, const std::optional<ui64>& hardLimit,
+    const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
     : Name(name)
     , Limit(limit)
     , HardLimit(hardLimit)
     , Owner(owner)
     , Counters(counters) {
+    if (Counters) {
+        Counters->ValueSoftLimit->Set(Limit);
+        if (HardLimit) {
+            Counters->ValueHardLimit->Set(*HardLimit);
+        }
+    }
 }
 
 TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
@@ -33,16 +39,16 @@ TConclusionStatus TStageFeatures::Allocate(const ui64 volume) {
             if (current->Counters) {
                 current->Counters->Sub(volume, false);
             }
-            if (current->HardLimit < current->Usage.Val() + volume) {
+            if (current->HardLimit && *current->HardLimit < current->Usage.Val() + volume) {
                 if (!result) {
-                    result = TConclusionStatus::Fail(TStringBuilder() << current->Name << "::(limit:" << current->HardLimit
+                    result = TConclusionStatus::Fail(TStringBuilder() << current->Name << "::(limit:" << *current->HardLimit
                                                                       << ";val:" << current->Usage.Val() << ";delta=" << volume << ");");
                 }
                 if (current->Counters) {
                     current->Counters->OnCannotAllocate();
                 }
                 AFL_DEBUG(NKikimrServices::GROUPED_MEMORY_LIMITER)("name", current->Name)("event", "cannot_allocate")(
-                    "limit", current->HardLimit)("usage", current->Usage.Val())("delta", volume);
+                    "limit", *current->HardLimit)("usage", current->Usage.Val())("delta", volume);
             }
             current = current->Owner.get();
         }

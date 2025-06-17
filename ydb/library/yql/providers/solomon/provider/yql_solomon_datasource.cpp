@@ -40,7 +40,7 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
-        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
+        cluster.SetUseSsl(properties.Value("use_tls", "true") == "true"sv);
 
         if (properties.Value("project", "") && properties.Value("cluster", "")) {
             cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
@@ -56,10 +56,18 @@ public:
             *grpcPort->MutableValue() = value;
         }
 
+        auto authMethod = properties.Value("authMethod", "");
+        TString structuredToken = "";
+        if (authMethod == "SERVICE_ACCOUNT") {
+            structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+        } else {
+            structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
+
         State_->Gateway->AddCluster(cluster);
 
         State_->Configuration->AddValidCluster(name);
-        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        State_->Configuration->Tokens[name] = structuredToken;
         State_->Configuration->ClusterConfigs[name] = cluster;
     }
 
@@ -71,13 +79,13 @@ public:
         return *ConfigurationTransformer_;
     }
 
-   IGraphTransformer& GetIODiscoveryTransformer() override {
-       return *IODiscoveryTransformer_;
-   }
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *IODiscoveryTransformer_;
+    }
 
-   IGraphTransformer& GetLoadTableMetadataTransformer() override {
-       return *LoadMetaDataTransformer_;
-   }
+    IGraphTransformer& GetLoadTableMetadataTransformer() override {
+        return *LoadMetaDataTransformer_;
+    }
 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);

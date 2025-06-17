@@ -6,7 +6,7 @@ Released on June 17, 2025. To update to version **2.22.1**, select the [Download
 
 ### Bug fixes
 
-* Fixed an issue where the certificate was not read from a file if the path to the file was specified in the [profile](./reference/ydb-cli/profile) with the `ca-file` field.
+* Fixed an issue where the certificate was not read from a file if the path to the file was specified in the [profile](./reference/ydb-cli/profile/index.md) with the `ca-file` field.
 * Fixed an issue where the `{{ ydb-cli }} workload query import` and `{{ ydb-cli }} workload clickbench import files` [commands](./reference/ydb-cli/workload-click-bench.md) displayed number of rows instead of number of bytes in progress state.
 
 ## Version 2.22.0 {#2-22-0}

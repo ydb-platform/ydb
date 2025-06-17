@@ -67,7 +67,7 @@ public:
         }
     };
 
-    TStateSignalsOperator(TCommonCountersOwner& base, const TString& stateName) {
+    TStateSignalsOperator(NColumnShard::TCommonCountersOwner& base, const TString& stateName) {
         Signals = std::make_shared<TStateSignalsOwner>(base, stateName);
     }
 

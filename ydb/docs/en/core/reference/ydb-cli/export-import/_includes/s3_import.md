@@ -26,11 +26,12 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 `--destination-path PATH`: Root destination folder for the objects being imported, database root if not provided.
 
-`--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times if you need to import multiple items. `STRING` is set in `<property>=<value>,...` format with the following properties:
+`--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times if you need to import multiple items. If no `--item` or `--include` parameters are specified, all object from source prefix will be imported. `STRING` is set in `<property>=<value>,...` format with the following properties:
 
 - `source`, `src` or `s` is the key prefix in S3 that hosts the imported directory or table.
-- `source_path` or `src_path` is the path relative to export prefix directory to the object being imported. Can not be used without `--source-prefix` parameter.
 - `destination`, `dst`, or `d` is the database path to host the imported directory or table. The destination of the path must not exist. All the directories along the path will be created if missing.
+
+`--include PATH`: Object paths relative to export root that are included into import. It is allowed to specify multiple `--include` parameters or multiple comma separated paths in one parameter. If no `--item` or `--include` parameters are specified, all object from source prefix will be imported.
 
 ### Additional parameters {#aux}
 
@@ -43,6 +44,8 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 - `proto-json-base64`: Protobuf in JSON format, binary strings are Base64-encoded.
 
 `--encryption-key-file PATH`: File path that contains encryption key (only for encrypted exports).
+
+`--list`: List objects in existing export.
 
 ## Importing {#exec}
 

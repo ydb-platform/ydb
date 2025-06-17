@@ -31,12 +31,14 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 `--destination-prefix PREFIX`: Destination prefix for export into bucket. Required for encrypted exports.
 
-`--source-path PATH`: Root folder for the objects being exported, database root if not provided.
+`--root-path PATH`: Root folder for the objects being exported, database root if not provided.
 
-`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. If no `--item` parameters are specified, the whole source path will be exported. `STRING` is set in `<property>=<value>,...` format with the following properties:
+`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. If no `--item` or `--include` parameters are specified, the whole root path will be exported. `STRING` is set in `<property>=<value>,...` format with the following properties:
 
 - `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
 - `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items. It can be generated automatically from the name of the exported object. In case of encrypted export, it is not recommended to specify an explicit destination path in order to anonymize exported object names.
+
+`--include PATH`: Object paths relative to root path that are included into export. It is allowed to specify multiple `--include` parameters or multiple comma separated paths in one parameter. If no `--item` or `--include` parameters are specified, the whole root path will be exported.
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
 
@@ -138,7 +140,7 @@ The `operation list` format is also set by the `--format` option.
 Exporting all DB objects whose names do not start with a dot and that are not stored in directories whose names start with a dot to the `export1` directory in `mybucket` using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
 
 ```bash
-ydb -p quickstart export s3 \
+{{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --destination-prefix export1
 ```
@@ -148,10 +150,19 @@ ydb -p quickstart export s3 \
 Exporting items from DB directories named dir1 and dir2 to the `export1` directory in `mybucket` using the explicitly set S3 authentication parameters:
 
 ```bash
-ydb -p quickstart export s3 \
+{{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+```
+
+Or with usage of the `--destination-prefix` and `--include` parameters:
+
+```bash
+{{ ydb-cli }} -p quickstart export s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --destination-prefix export1 --include dir1,dir2
 ```
 
 ### Exporting a directory with encryption {#example-encryption}
@@ -159,9 +170,9 @@ ydb -p quickstart export s3 \
 Exporting subdirectory dir1 of the database with encryption with the secret key stored in `~/my_secret_key` file to the `export1` directory in `mybucket` using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
 
 ```bash
-ydb -p quickstart export s3 \
+{{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --source-path dir1 \
+  --root-path dir1 \
   --destination-prefix export1 \
   --encryption-algorithm AES-128-GCM \
   --encryption-key-file ~/my_secret_key

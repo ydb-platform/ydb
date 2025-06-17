@@ -6,8 +6,11 @@ PY3_LIBRARY()
         external.py
         tpcds.py
         tpch.py
-        upload.py
+        workload_executor.py
         workload_simple_queue.py
+        workload_oltp.py
+        upload.py
+
     )
 
     PEERDIR (

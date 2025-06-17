@@ -102,7 +102,7 @@ namespace NKikimr {
         }
 
         ui8 *RawDataPtr(ui32 offset, ui32 len) {
-            Y_ABORT_UNLESS(offset + len <= Data.size() + Data.Tailroom(), "Buffer has size# %zu less then requested offset# %" PRIu32
+            Y_ABORT_UNLESS(offset + len <= Data.size() + Data.UnsafeTailroom(), "Buffer has size# %zu less then requested offset# %" PRIu32
                     " len# %" PRIu32, Data.size(), offset, len);
             IsCommited = false;
             return reinterpret_cast<ui8 *>(Data.GetDataMut() + offset);
@@ -150,7 +150,7 @@ namespace NKikimr {
         }
 
         ui32 SizeWithTail() const {
-            return Data.size() + Data.Tailroom();
+            return Data.size() + Data.UnsafeTailroom();
         }
 
         void Swap(TBufferWithGaps& other) {

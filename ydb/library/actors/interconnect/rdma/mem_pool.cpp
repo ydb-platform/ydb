@@ -172,7 +172,6 @@ namespace NInterconnect::NRdma {
     }
 
     class TMemPoolBase: public IMemPool, public std::enable_shared_from_this<TMemPoolBase> {
-        static constexpr size_t ALIGNMENT = 4096;
     public:
         TMemPoolBase()
             : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
@@ -180,7 +179,7 @@ namespace NInterconnect::NRdma {
         }
     protected:
         TMemRegion* AllocNewPage(int size) {
-            void* ptr = allocateMemory(size, ALIGNMENT);
+            void* ptr = allocateMemory(size, NSystemInfo::GetPageSize());
             if (!ptr) {
                 return nullptr;
             }
@@ -193,7 +192,6 @@ namespace NInterconnect::NRdma {
     };
 
     class TDummyMemPool: public TMemPoolBase {
-        static constexpr size_t ALIGNMENT = 4096;
     public:
         using TMemPoolBase::TMemPoolBase;
 

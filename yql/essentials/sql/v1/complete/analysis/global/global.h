@@ -29,6 +29,7 @@ namespace NSQLComplete {
         TMaybe<TColumnContext> Column;
     };
 
+    // TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
     class IGlobalAnalysis {
     public:
         using TPtr = THolder<IGlobalAnalysis>;

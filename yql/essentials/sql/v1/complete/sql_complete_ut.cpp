@@ -1319,6 +1319,24 @@ JOIN yt:$cluster_name.test;
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
     }
 
+    Y_UNIT_TEST(IgnoredTokens) {
+        auto lexer = MakePureLexerSupplier();
+
+        TNameSet names;
+        TFrequencyData frequency;
+        auto service = MakeStaticNameService(names, MakeDefaultRanking(frequency));
+
+        auto config = MakeYQLConfiguration();
+        auto engine = MakeSqlCompletionEngine(lexer, std::move(service), config);
+
+        UNIT_ASSERT(!FindPtr(Complete(engine, {""}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(!FindPtr(Complete(engine, {""}), TCandidate{Keyword, "PARALLEL"}));
+
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE "}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE  "}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE /**/"}), TCandidate{Keyword, "FOR"}));
+    }
+
     Y_UNIT_TEST(CachedSchema) {
         TLexerSupplier lexer = MakePureLexerSupplier();
 

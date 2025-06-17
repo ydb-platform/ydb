@@ -34,6 +34,12 @@ namespace NSQLComplete {
             return Parser_->getRuleNames().at(rule);
         }
 
+        TTokenId GetTokenId(std::string_view symbolized) const override {
+            TTokenId type = Parser_->getTokenType(symbolized);
+            Y_ENSURE(type != antlr4::Token::INVALID_TYPE, "Not found " << symbolized);
+            return type;
+        }
+
         TRuleId GetRuleId(std::string_view symbolized) const override {
             TRuleId index = Parser_->getRuleIndex(std::string(symbolized));
             if (index == INVALID_INDEX) {

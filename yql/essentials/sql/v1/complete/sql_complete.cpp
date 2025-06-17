@@ -22,7 +22,11 @@ namespace NSQLComplete {
             INameService::TPtr names,
             ISqlCompletionEngine::TConfiguration configuration)
             : Configuration_(std::move(configuration))
-            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer, Configuration_.IgnoredRules))
+            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(
+                  lexer,
+                  Configuration_.IgnoredRules,
+                  Configuration_.DisabledPreviousByToken,
+                  Configuration_.ForcedPreviousByToken))
             , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
         {
@@ -272,17 +276,17 @@ namespace NSQLComplete {
     }
 
     ISqlCompletionEngine::TConfiguration MakeYDBConfiguration() {
-        return {
-            .IgnoredRules = {
-                "use_stmt",
-                "import_stmt",
-                "export_stmt",
-            },
+        ISqlCompletionEngine::TConfiguration config;
+        config.IgnoredRules = {
+            "use_stmt",
+            "import_stmt",
+            "export_stmt",
         };
+        return config;
     }
 
     ISqlCompletionEngine::TConfiguration MakeYQLConfiguration() {
-        return MakeConfiguration(/* allowedStmts = */ {
+        auto config = MakeConfiguration(/* allowedStmts = */ {
             "lambda_stmt",
             "pragma_stmt",
             "select_stmt",
@@ -300,6 +304,18 @@ namespace NSQLComplete {
             "for_stmt",
             "values_stmt",
         });
+
+        config.DisabledPreviousByToken = {};
+
+        config.ForcedPreviousByToken = {
+            {"PARALLEL", {}},
+            {"TABLESTORE", {}},
+            {"FOR", {"EVALUATE"}},
+            {"IF", {"EVALUATE"}},
+            {"EXTERNAL", {"USING"}},
+        };
+
+        return config;
     }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(

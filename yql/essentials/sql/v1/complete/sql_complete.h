@@ -9,13 +9,14 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
 
     struct TCompletedToken {
         TStringBuf Content;
-        size_t SourcePosition;
+        size_t SourcePosition = 0;
     };
 
     enum class ECandidateKind {
@@ -45,18 +46,31 @@ namespace NSQLComplete {
         TVector<TCandidate> Candidates;
     };
 
+    // TODO(YQL-19747): Make it thread-safe.
     class ISqlCompletionEngine {
     public:
         using TPtr = THolder<ISqlCompletionEngine>;
 
         struct TConfiguration {
+            friend class TSqlCompletionEngine;
+            friend ISqlCompletionEngine::TConfiguration MakeYDBConfiguration();
+            friend ISqlCompletionEngine::TConfiguration MakeYQLConfiguration();
+            friend ISqlCompletionEngine::TConfiguration MakeConfiguration(THashSet<TString> allowedStmts);
+
+        public:
             size_t Limit = 256;
+
+        private:
             THashSet<TString> IgnoredRules;
+            THashMap<TString, THashSet<TString>> DisabledPreviousByToken;
+            THashMap<TString, THashSet<TString>> ForcedPreviousByToken;
         };
 
         virtual ~ISqlCompletionEngine() = default;
+
         virtual TCompletion
         Complete(TCompletionInput input, TEnvironment env = {}) = 0;
+
         virtual NThreading::TFuture<TCompletion> // TODO(YQL-19747): Migrate YDB CLI to `Complete` method
         CompleteAsync(TCompletionInput input, TEnvironment env = {}) = 0;
     };

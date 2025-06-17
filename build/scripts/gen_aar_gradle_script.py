@@ -4,7 +4,12 @@ import sys
 import tarfile
 
 FLAT_DIRS_REPO_TEMPLATE = 'flatDir {{ dirs {dirs} }}\n'
-MAVEN_REPO_TEMPLATE = 'maven {{ url "{repo}" }}\n'
+MAVEN_REPO_TEMPLATE = '''
+    maven {{
+        url "{repo}"
+        allowInsecureProtocol true
+    }}\n
+'''
 KEYSTORE_TEMLATE = 'signingConfigs {{ debug {{ storeFile file("{keystore}") }} }}\n'
 
 DO_NOT_STRIP = '''\
@@ -17,6 +22,9 @@ DO_NOT_STRIP = '''\
 '''
 
 AAR_TEMPLATE = """\
+apply plugin: 'com.android.library'
+apply plugin: 'maven-publish'
+
 ext.jniLibsDirs = [
     {jni_libs_dirs}
 ]
@@ -50,19 +58,15 @@ ext.compileOnlyAndroidArs = [
 ]
 
 def minVersion = 26
-def compileVersion = 34
-def targetVersion = 34
-def buildVersion = '34.0.0'
+def compileVersion = 35
+def targetVersion = 35
+def buildVersion = '35.0.0'
 
-import com.android.build.gradle.LibraryPlugin
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 import java.util.zip.ZipFile
-
-
-apply plugin: 'com.github.dcendents.android-maven'
 
 buildDir = "$projectDir/build"
 
@@ -70,33 +74,26 @@ if (!ext.has("packageSuffix"))
     ext.packageSuffix = ""
 
 buildscript {{
-//     repositories {{
-//         jcenter()
-//         mavenCentral()
-//     }}
+    //repositories {{
+    //     google()
+    //     mavenCentral()
+    //}}
 
     repositories {{
         {maven_repos}
     }}
 
     dependencies {{
-        classpath 'com.android.tools.build:gradle:4.0.2'
-        classpath 'com.github.dcendents:android-maven-gradle-plugin:1.5'
+        classpath 'com.android.tools.build:gradle:8.6.0'
     }}
 }}
 
-apply plugin: LibraryPlugin
-
 repositories {{
-//     flatDir {{
-//         dirs System.env.PKG_ROOT + '/bundle'
-//     }}
-//     maven {{
-//         url "http://maven.google.com/"
-//     }}
-//     maven {{
-//         url "http://artifactory.yandex.net/artifactory/public/"
-//     }}
+    //google()
+    //mavenCentral()
+    flatDir {{
+        dirs System.env.PKG_ROOT + '/bundle'
+    }}
 
     {flat_dirs_repo}
 
@@ -104,6 +101,8 @@ repositories {{
 }}
 
 android {{
+    namespace "{package_name}"
+
     {keystore}
 
     compileSdkVersion compileVersion
@@ -133,15 +132,16 @@ android {{
         androidTest.setRoot('bundle/tests')
     }}
 
+
     {do_not_strip}
 
     dependencies {{
         for (bundle in bundles)
-            compile("$bundle") {{
+            implementation("$bundle") {{
                 transitive = true
             }}
         for (bundle in androidArs)
-            compile(bundle) {{
+            implementation(bundle) {{
                 transitive = true
             }}
         for (bundle in compileOnlyAndroidArs)
@@ -152,7 +152,7 @@ android {{
         def suffix = variant.buildType.name.capitalize()
 
         def sourcesJarTask = project.tasks.create(name: "sourcesJar${{suffix}}", type: Jar) {{
-            classifier = 'sources'
+            archiveClassifier = 'sources'
             from android.sourceSets.main.java.srcDirs
             include '**/*.java'
             eachFile {{ fcd ->
@@ -164,28 +164,42 @@ android {{
             includeEmptyDirs = false
         }}
 
-        def manifestFile = android.sourceSets.main.manifest.srcFile
-        def manifestXml = new XmlParser().parse(manifestFile)
-
-        def packageName = manifestXml['@package']
-        def groupName = packageName.tokenize('.')[0..-2].join('.')
-
-        def androidNs = new groovy.xml.Namespace("http://schemas.android.com/apk/res/android")
-        def packageVersion = manifestXml.attributes()[androidNs.versionName]
-
-        def writePomTask = project.tasks.create(name: "writePom${{suffix}}") {{
-            pom {{
-                project {{
-                    groupId groupName
-                    version packageVersion
-                    packaging 'aar'
-                }}
-            }}.writeTo("$buildDir/${{rootProject.name}}$packageSuffix-pom.xml")
-        }}
-
         tasks["bundle${{suffix}}Aar"].dependsOn sourcesJarTask
-        tasks["bundle${{suffix}}Aar"].dependsOn writePomTask
+        tasks["bundle${{suffix}}Aar"].dependsOn tasks["generatePomFileForReleasePublication"]
     }}
+}}
+
+publishing {{
+    publications {{
+        release(MavenPublication) {{
+            def manifestFile = android.sourceSets.main.manifest.srcFile
+            def manifestXml = new XmlParser().parse(manifestFile)
+            def versionName = ''
+            manifestXml.attributes().each {{ p ->
+                if (p.key.localPart.equals("versionName")) {{
+                    versionName = p.value
+                }}
+            }}
+
+            groupId android.namespace.tokenize('.')[0..-2].join('.')
+            version versionName
+            artifact("$buildDir/outputs/aar/maps.mobile.aar")
+            pom.withXml {{
+                def dependenciesNode = asNode().appendNode('dependencies')
+
+                configurations.implementation.allDependencies.each {{
+                    def dependencyNode = dependenciesNode.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', it.group)
+                    dependencyNode.appendNode('artifactId', it.name)
+                    dependencyNode.appendNode('version', it.version)
+                }}
+            }}
+        }}
+    }}
+}}
+
+tasks.withType(GenerateMavenPom).all {{
+    destination = layout.buildDirectory.file("$buildDir/${{rootProject.name}}$packageSuffix-pom.xml").get().asFile
 }}
 
 """
@@ -237,6 +251,7 @@ def gen_build_script(args):
         maven_repos=maven_repos,
         proguard_rules=args.proguard_rules,
         res_dirs=wrap(args.res_dirs),
+        package_name=args.package_name
     )
 
 
@@ -259,6 +274,7 @@ if __name__ == '__main__':
     parser.add_argument('--peers', nargs='*', default=[])
     parser.add_argument('--proguard-rules', nargs='?', default=None)
     parser.add_argument('--res-dirs', nargs='*', default=[])
+    parser.add_argument('--package-name', default="com.yandex.maps.mobile")
     args = parser.parse_args()
 
     if args.proguard_rules is None:

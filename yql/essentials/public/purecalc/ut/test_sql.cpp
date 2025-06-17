@@ -33,6 +33,27 @@ Y_UNIT_TEST_SUITE(TestSql) {
         UNIT_ASSERT_VALUES_EQUAL(expectedIssues, program->GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(TestStructCastMessage) {
+        auto factory = MakeProgramFactory();
+
+        auto sql = TString(R"(
+            $l = ($x) -> {
+                return <| Id: $x.Name, Name: CAST($x.Name AS String), Body: Just('foo') |>;
+            };
+
+            SELECT $l(TableRow()) AS _r FROM Input
+        )");
+
+        try {
+            factory->MakePullListProgram(FakeIS(), FakeStructOS(), sql, ETranslationMode::SQL);
+            UNIT_ASSERT_C(false, "Unreachable");
+        } catch (const NYql::NPureCalc::TCompileError& error) {
+            auto issue = error.GetIssues();
+            UNIT_ASSERT_C(issue.Contains("Failed to convert 'Id': Int32 to Optional<Uint32>"), issue);
+            UNIT_ASSERT_C(!issue.Contains("Body"), issue);
+        }
+    }
+
     Y_UNIT_TEST(TestSqlCompileSingleUnnamedInput) {
         auto factory = MakeProgramFactory();
 

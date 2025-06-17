@@ -114,29 +114,49 @@ def GetLevelColours(maxLevel):
     return levelColors
 
 
-def GetIntersections(portions):
+def GenerateIntersectionData(ranges):
     points = []
-    for p in portions:
-        points.append((p.PkMin, 1))
-        points.append((p.PkMax, -1))
+    for minPk, maxPk in ranges:
+        points.append((minPk, 1))
+        points.append((maxPk, -1))
 
-    points.sort(key=lambda p: p[0])
+    points.sort(key=lambda p: (p[0], -p[1]))
 
-    intersections = []
+    cur = points[0][1]
     prevPk = points[0][0]
-    cur = 0
+    prevClosed = False
+    lastUsedPk = prevPk
+    for (pk, delta) in points[1:]:
+        if pk != prevPk:
+            if cur > 1:
+                yield (lastUsedPk, pk - lastUsedPk, cur - 1)
+            lastUsedPk = pk
+        elif delta < 0 and not prevClosed:
+            lastUsedPk = pk
+            if isinstance(lastUsedPk, int):
+                lastUsedPk += 1
+            if cur > 1:
+                yield (prevPk, lastUsedPk - prevPk, cur - 1)
+        cur += delta
+        prevPk = pk
+        prevClosed = delta < 0
+
+
+assert list(GenerateIntersectionData([(1, 10), (3, 3), (3, 8), (9, 15), (20, 25), (23, 30)])) == [(3, 1, 2), (4, 4, 1), (9, 1, 1), (23, 2, 1)]
+
+
+def GetIntersections(portions):
+    intersections = []
     maxIntersections = 0
-    for p in points[1:]:
-        cur += p[1]
-        maxIntersections = max(maxIntersections, cur)
+    for pk, width, n in GenerateIntersectionData((p.PkMin, p.PkMax) for p in portions):
         r = patches.Rectangle(
-            (prevPk, 0),
-            p[0]-prevPk, cur,
+            (pk, 0),
+            width, n,
             linestyle="dashed",
             linewidth=1,
         )
         intersections.append(r)
-        prevPk = p[0]
+        maxIntersections = max(maxIntersections, n)
     return intersections, maxIntersections
 
 

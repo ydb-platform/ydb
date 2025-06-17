@@ -3612,78 +3612,6 @@ TExprNode::TPtr ExpandAsSet(const TExprNode::TPtr& node, TExprContext& ctx) {
         .Build();
 }
 
-ui32 GetCommonPartWidth(const TExprNode& lhs, const TExprNode& rhs) {
-    ui32 c = 0U;
-    while (c < lhs.ChildrenSize() && c < rhs.ChildrenSize() && lhs.Child(c) == rhs.Child(c)) {
-        ++c;
-    }
-    return c;
-}
-
-template<bool AndOr>
-TExprNode::TPtr OptimizeLogicalDups(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto children = node->ChildrenList();
-    const auto opposite = AndOr ? "Or" : "And";
-    for (auto curr = children.begin(); children.cend() != curr;) {
-        if (const auto next = curr + 1U; children.cend() != next) {
-            if ((*curr)->IsCallable(opposite) && (*next)->IsCallable(opposite)) {
-                if (const auto common = GetCommonPartWidth(**curr, **next)) {
-                    if ((*next)->ChildrenSize() == common) {
-                        curr = children.erase(curr);
-                    } else if ((*curr)->ChildrenSize() == common) {
-                        children.erase(next);
-                    } else {
-                        auto childrenOne = (*curr)->ChildrenList();
-                        auto childrenTwo = (*next)->ChildrenList();
-
-                        TExprNode::TListType newChildren(common + 1U);
-                        std::move(childrenOne.begin(), childrenOne.begin() + common, newChildren.begin());
-
-                        childrenOne.erase(childrenOne.cbegin(), childrenOne.cbegin() + common);
-                        childrenTwo.erase(childrenTwo.cbegin(), childrenTwo.cbegin() + common);
-
-                        auto one = 1U == childrenOne.size() ? std::move(childrenOne.front()) : ctx.ChangeChildren(**curr, std::move(childrenOne));
-                        auto two = 1U == childrenTwo.size() ? std::move(childrenTwo.front()) : ctx.ChangeChildren(**next, std::move(childrenTwo));
-
-                        newChildren.back() = ctx.ChangeChildren(*node, {std::move(one), std::move(two)});
-                        *curr = ctx.ChangeChildren(**curr, std::move(newChildren));
-                        children.erase(next);
-                    }
-                    continue;
-                }
-            } else if ((*curr)->IsCallable(opposite) && &(*curr)->Head() == next->Get()) {
-                curr = children.erase(curr);
-                continue;
-            } else if ((*next)->IsCallable(opposite) && &(*next)->Head() == curr->Get()) {
-                children.erase(next);
-                continue;
-            } else if ((*curr)->IsCallable() && (*next)->IsCallable() && (*curr)->Content() == (*next)->Content()
-                && ((*next)->Content().ends_with("Map") || ((*curr)->IsCallable("IfPresent") && &(*curr)->Tail() == &(*next)->Tail()))
-                && &(*curr)->Head() == &(*next)->Head()) {
-                auto lambda = ctx.Builder(node->Pos())
-                    .Lambda()
-                        .Param("arg")
-                        .Callable(node->Content())
-                            .Apply(0, *(*curr)->Child(1U)).With(0, "arg").Seal()
-                            .Apply(1, *(*next)->Child(1U)).With(0, "arg").Seal()
-                        .Seal()
-                    .Seal().Build();
-                *curr = ctx.ChangeChild(**curr, 1U, std::move(lambda));
-                children.erase(next);
-                continue;
-            }
-        }
-        ++curr;
-    }
-
-    if (children.size() < node->ChildrenSize()) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Dedup " << node->ChildrenSize() - children.size() << " common parts of " << opposite << "'s under " << node->Content();
-        return 1U == children.size() ? children.front() : ctx.ChangeChildren(*node, std::move(children));
-    }
-
-    return node;
-}
-
 TExprNode::TPtr ExpandCombineByKey(const TExprNode::TPtr& node, TExprContext& ctx) {
     const bool isStreamOrFlow = node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream ||
         node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow;
@@ -9025,8 +8953,6 @@ struct TPeepHoleRules {
         {"AggrMax", &ExpandAggrMinMax<false>},
         {"Min", &ExpandMinMax},
         {"Max", &ExpandMinMax},
-        {"And", &OptimizeLogicalDups<true>},
-        {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
         {"FinalizeByKey", &ExpandFinalizeByKey},
         {"SkipNullMembers", &ExpandSkipNullFields},

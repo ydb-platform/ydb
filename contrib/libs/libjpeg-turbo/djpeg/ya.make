@@ -4,7 +4,7 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(2.1.4)
+VERSION(3.1.1)
 
 PEERDIR(
     contrib/libs/libjpeg-turbo
@@ -12,6 +12,7 @@ PEERDIR(
 
 ADDINCL(
     contrib/libs/libjpeg-turbo
+    contrib/libs/libjpeg-turbo/src
 )
 
 NO_COMPILER_WARNINGS()
@@ -25,16 +26,20 @@ CFLAGS(
     -DTARGA_SUPPORTED
 )
 
-SRCDIR(contrib/libs/libjpeg-turbo)
+SRCDIR(contrib/libs/libjpeg-turbo/src)
 
 SRCS(
     cdjpeg.c
     djpeg.c
-    rdcolmap.c
     rdswitch.c
+    wrapper/rdcolmap-12.c
+    wrapper/rdcolmap-8.c
+    wrapper/wrgif-12.c
+    wrapper/wrgif-8.c
+    wrapper/wrppm-12.c
+    wrapper/wrppm-16.c
+    wrapper/wrppm-8.c
     wrbmp.c
-    wrgif.c
-    wrppm.c
     wrtarga.c
 )
 

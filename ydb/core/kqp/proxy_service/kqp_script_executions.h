@@ -35,6 +35,6 @@ NActors::IActor* CreateGetScriptExecutionResultActor(const NActors::TActorId& re
 NActors::IActor* CreateSaveScriptExternalEffectActor(TEvSaveScriptExternalEffectRequest::TPtr ev);
 NActors::IActor* CreateSaveScriptFinalStatusActor(const NActors::TActorId& finalizationActorId, TEvScriptFinalizeRequest::TPtr ev);
 NActors::IActor* CreateScriptFinalizationFinisherActor(const NActors::TActorId& finalizationActorId, const TString& executionId, const TString& database, std::optional<Ydb::StatusIds::StatusCode> operationStatus, NYql::TIssues operationIssues);
-NActors::IActor* CreateScriptProgressActor(const TString& executionId, const TString& database, const TString& queryPlan, const TString& queryStats);
+NActors::IActor* CreateScriptProgressActor(const TString& executionId, const TString& database, const TString& queryPlan);
 
 } // namespace NKikimr::NKqp

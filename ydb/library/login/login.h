@@ -68,7 +68,7 @@ public:
         TString ExternalAuth;
     };
 
-    struct TLoginUserResponse : TBasicResponse {
+    struct TPasswordCheckResult : TBasicResponse {
         enum class EStatus {
             UNSPECIFIED,
             SUCCESS,
@@ -77,9 +77,12 @@ public:
             UNAVAILABLE_KEY
         };
 
+        EStatus Status = EStatus::UNSPECIFIED;
+    };
+
+    struct TLoginUserResponse : TPasswordCheckResult {
         TString Token;
         TString SanitizedToken; // Token for audit logs
-        EStatus Status = EStatus::UNSPECIFIED;
     };
 
     struct TValidateTokenRequest : TBasicRequest {
@@ -197,7 +200,15 @@ public:
 
     bool IsLockedOut(const TSidRecord& user) const;
     TCheckLockOutResponse CheckLockOutUser(const TCheckLockOutRequest& request);
+
+    // Login
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
+    // The next four methods are used (all together combined) when it's needed to separate hash verification which is quite cpu-intensive
+    bool NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* passwordHash);
+    static bool VerifyHash(const TLoginUserRequest& request, const TString& passwordHash); // it's made static to be thread-safe
+    void UpdateCache(const TLoginUserRequest& request, const TString& passwordHash, const bool isSuccessVerifying);
+    TLoginProvider::TLoginUserResponse LoginUser(const TLoginUserRequest& request, const TPasswordCheckResult& checkResult);
+
     TValidateTokenResponse ValidateToken(const TValidateTokenRequest& request);
 
     TBasicResponse CreateUser(const TCreateUserRequest& request);
@@ -243,7 +254,11 @@ private:
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
     bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
+    TSidRecord* GetUserSid(const TString& user);
+    bool FillNoKeys(TPasswordCheckResult* checkResult) const;
+    bool FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const;
 
+private:
     struct TImpl;
     THolder<TImpl> Impl;
 

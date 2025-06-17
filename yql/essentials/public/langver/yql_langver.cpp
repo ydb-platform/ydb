@@ -83,4 +83,16 @@ TLangVersion GetMaxLangVersion() {
     return max;
 }
 
+bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
+    EBackportCompatibleFeaturesMode mode) {
+    switch (mode) {
+    case EBackportCompatibleFeaturesMode::All:
+        return true;
+    case EBackportCompatibleFeaturesMode::Released:
+        return IsAvailableLangVersion(featureVer, GetMaxReleasedLangVersion());
+    case EBackportCompatibleFeaturesMode::None:
+        return IsAvailableLangVersion(featureVer, currentVer);
+    }
+}
+
 }

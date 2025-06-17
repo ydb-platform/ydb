@@ -6,7 +6,7 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.0.7)
+VERSION(1.1.0)
 
 PEERDIR(
     contrib/libs/brotli/c/common
@@ -22,7 +22,7 @@ NO_COMPILER_WARNINGS()
 NO_RUNTIME()
 
 CFLAGS(
-    -DBROTLI_BUILD_PORTABLE
+    -DBROTLI_HAVE_LOG2=1
 )
 
 SRCS(
@@ -32,12 +32,15 @@ SRCS(
     block_splitter.c
     brotli_bit_stream.c
     cluster.c
+    command.c
+    compound_dictionary.c
     compress_fragment.c
     compress_fragment_two_pass.c
     dictionary_hash.c
     encode.c
     encoder_dict.c
     entropy_encode.c
+    fast_log.c
     histogram.c
     literal_cost.c
     memory.c

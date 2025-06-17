@@ -23,7 +23,7 @@ namespace NYT::NClient::NFederated {
 struct IFederatedClientTransactionMixin
 {
     //! Try fetch sticky proxy address if underlying transaction supports it.
-    virtual std::optional<TString> TryGetStickyProxyAddress() const = 0;
+    virtual std::optional<std::string> TryGetStickyProxyAddress() const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

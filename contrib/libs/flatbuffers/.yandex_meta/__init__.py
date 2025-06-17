@@ -17,14 +17,11 @@ def post_install(self):
             )
             """,
         )
-
         m.SRCS.add("src/idl_gen_cpp_yandex_maps_iter.cpp")
-        m.PEERDIR.add("contrib/restricted/abseil-cpp/absl/base")
 
     with self.yamakes["."] as m:
         # Remove ADDINCL GLOBAL to keep status quo.
         m.ADDINCL.get(self.arcdir + "/include").GLOBAL = False
-        m.PEERDIR.add("contrib/restricted/abseil-cpp/absl/base")
 
 
 flatbuffers = CMakeNinjaNixProject(
@@ -44,7 +41,7 @@ flatbuffers = CMakeNinjaNixProject(
         "src/idl_gen_cpp_yandex_maps_iter.h",
     ],
     disable_includes=[
-        "absl/strings/string_view.h",
+        "absl/",
         "experimental/string_view",
         "utility.h",
         "FLATBUFFERS_ASSERT_INCLUDE",

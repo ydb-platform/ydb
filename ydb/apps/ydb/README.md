@@ -1,4 +1,4 @@
-# Yandex Database Command Line Interface
+# YDB Command Line Interface
 
 This is the official YDB command line client that works via public API.
 

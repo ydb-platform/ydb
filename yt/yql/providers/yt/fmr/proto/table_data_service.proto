@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package NYql.NFmr.NProto;
+
+message TTableDataServiceGroupDeletionRequest {
+    repeated string Groups = 1;
+}

@@ -273,6 +273,61 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             CompareYson(result, R"([[1u;]])");
         }
     }
+
+    Y_UNIT_TEST(OptimizationAfterDeletion) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr = TKikimrSettings().SetAppConfig(appConfig);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "20s", "expected_blobs_size" : 1073741824, "portions_count_available" : 2},
+                             {"class_name" : "Zero"}]}`);
+            )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        for (ui32 i = 0; i < 100; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 100 * i, 1000);
+        }
+
+        {
+            auto queryClient = kikimr.GetQueryClient();
+            auto it = queryClient.ExecuteQuery("DELETE FROM `/Root/olapStore/olapTable`", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(25));
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT
+                    Rows
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+            )")
+                          .GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([])");
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

@@ -38,7 +38,7 @@ TTestNodeMemoryTrackerPtr TTestServerHost::GetMemoryUsageTracker() const
     return MemoryUsageTracker_;
 }
 
-TString TTestServerHost::GetAddress() const
+std::string TTestServerHost::GetAddress() const
 {
     return Format("localhost:%v", static_cast<ui16>(Port_));
 }

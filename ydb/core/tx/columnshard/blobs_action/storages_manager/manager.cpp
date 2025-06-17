@@ -26,7 +26,8 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TStoragesManager::DoBuild
         }
         return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard.SelfId(),
             std::make_shared<NWrappers::NExternalStorage::TFakeExternalStorageConfig>("fakeBucket", "fakeSecret"),
-            SharedBlobsManager->GetStorageManagerGuarantee(storageId), Shard.Executor()->Generation());
+            SharedBlobsManager->GetStorageManagerGuarantee(storageId), Shard.Executor()->Generation(),
+            Shard.Counters.GetEvictionCounters().TieringErrors);
 #else
         return nullptr;
 #endif

@@ -924,6 +924,7 @@ struct TEvBlobStorage {
         EvNodeWardenQueryCache,
         EvNodeWardenQueryCacheResult,
         EvNodeWardenUnsubscribeFromCache,
+        EvNodeWardenNotifyConfigMismatch,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

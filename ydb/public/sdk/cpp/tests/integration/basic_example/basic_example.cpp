@@ -28,7 +28,7 @@ TRunArgs GetRunArgs() {
         .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     NYdb::TDriver driver(driverConfig);
-    return {driver, JoinPath(database, "basic")};
+    return {driver, database + "/" + std::string(std::getenv("YDB_TEST_ROOT")) + "/basic"};
 }
 
 ///////////////////////////////////////////////////////////////////////////////

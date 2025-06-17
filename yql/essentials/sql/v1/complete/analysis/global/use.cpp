@@ -54,13 +54,6 @@ namespace NSQLComplete {
                 };
             }
 
-            std::any aggregateResult(std::any aggregate, std::any nextResult) override {
-                if (nextResult.has_value()) {
-                    return nextResult;
-                }
-                return aggregate;
-            }
-
         private:
             TMaybe<TString> GetId(SQLv1::Pure_column_or_namedContext* ctx) const {
                 if (auto* x = ctx->bind_parameter()) {

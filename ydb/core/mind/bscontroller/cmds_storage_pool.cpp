@@ -1,7 +1,6 @@
 #include "config.h"
 #include <ydb/core/base/nameservice.h>
 
-
 namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineStoragePool& cmd, TStatus& status) {
@@ -157,7 +156,7 @@ namespace NKikimr::NBsController {
         for (auto it = r.first; it != r.second; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
-            if (group->ErasureSpecies != storagePool.ErasureSpecies) {
+            if (!group->BridgeGroupInfo && group->ErasureSpecies != storagePool.ErasureSpecies) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
             }
         }
@@ -171,6 +170,11 @@ namespace NKikimr::NBsController {
                 }
             }
             cur = std::move(storagePool); // update existing storage pool
+        } else {
+            // enable bridge mode by default for new pools (when bridge mode is enabled cluster-wide)
+            const bool bridgeMode = AppData()->BridgeConfig && AppData()->BridgeConfig->PilesSize();
+            Y_DEBUG_ABORT_UNLESS(bridgeMode == static_cast<bool>(BridgeInfo));
+            spIt->second.BridgeMode = bridgeMode;
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);
     }

@@ -166,11 +166,6 @@ TErrorOr<TSharedRef> TryTrackMemory(
     TSharedRef reference,
     bool keepExistingTracking = false);
 
-TSharedRef TrackMemory(
-    const IMemoryUsageTrackerPtr& tracker,
-    TSharedRef reference,
-    bool keepExistingTracking = false);
-
 TSharedRefArray TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRefArray array,

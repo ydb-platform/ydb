@@ -823,7 +823,7 @@ protected:
                 columns.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
             }
 
-            TValuePackerType packer(false, rowType, ArrowPool_, args.MinFillPercentage);
+            TValuePackerType packer(false, rowType, {}, ArrowPool_, args.MinFillPercentage);
             if (legacyStruct) {
                 TUnboxedValueVector columnsCopy = columns;
                 NUdf::TUnboxedValue row = HolderFactory.VectorAsArray(columnsCopy);

@@ -137,20 +137,20 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        std::vector<ui64> tables;
+        std::vector<TInternalPathId> tables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
             UNIT_ASSERT(rowset.IsReady());
 
             while (!rowset.EndOfSet()) {
-                const auto pathId = rowset.GetValue<Schema::TableInfo::PathId>();
+                const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfo::PathId>());
                 tables.emplace_back(pathId);
                 UNIT_ASSERT(rowset.Next());
             }
         }
 
         for (auto&& key : tables) {
-            db.Table<Schema::TableInfo>().Key(key).Delete();
+            db.Table<Schema::TableInfo>().Key(key.GetRawValue()).Delete();
         }
 
         struct TKey {

@@ -149,6 +149,7 @@ public:
         switch (response.ExecStatus) {
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
+            case NYdb::NQuery::EExecStatus::Running:
                 SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
                 QueryStats = response.QueryStats;
                 UpdateProgress();

@@ -13,7 +13,7 @@ private:
     NOlap::ISnapshotSchema::TPtr Schema;
     const NActors::TActorId SourceId;
     const std::optional<ui32> GranuleShardingVersionId;
-    const TInternalPathId PathId;
+    const TUnifiedPathId PathId;
     const ui64 Cookie;
     const ui64 LockId;
     const NEvWrite::EModificationType ModificationType;
@@ -22,7 +22,7 @@ private:
 
 public:
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
-        const std::optional<ui32>& granuleShardingVersionId, const TInternalPathId pathId, const ui64 cookie, const ui64 lockId,
+        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const ui64 lockId,
         const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour)
         : ArrowData(arrowData)
         , Schema(schema)
@@ -35,8 +35,8 @@ public:
         , Behaviour(behaviour) {
     }
 
-    const TInternalPathId& GetPathId() const {
-        return PathId;
+    const TInternalPathId& GetInternalPathId() const {
+        return PathId.InternalPathId;
     }
 
     const TMonotonic& GetCreatedMonotonic() const {

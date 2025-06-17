@@ -15,13 +15,14 @@ config:
     enabled: true
   default_disk_type: SSD # default disk type used for group creation of both kinds
   host_configs: # the list of available host configurations in the cluster.
-  - drive:
+  - host_config_id: 1
+    drive:
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
       type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
       type: SSD
     - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
-    type: SSD
+      type: SSD
   host_config_id: 1
   hosts:
   - host: ydb-node-zone-a.local       # storage node DNS name

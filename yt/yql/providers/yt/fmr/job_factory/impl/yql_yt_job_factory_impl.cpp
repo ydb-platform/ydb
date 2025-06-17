@@ -42,7 +42,7 @@ public:
         return future;
     }
 
-    ui64 GetMaxParallelJobCount() override {
+    ui64 GetMaxParallelJobCount() const override {
         return NumThreads_;
     }
 

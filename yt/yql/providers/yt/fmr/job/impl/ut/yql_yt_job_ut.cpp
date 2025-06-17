@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/local/yql_yt_table_data_service_local.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/local/impl/yql_yt_table_data_service_local.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/mock/yql_yt_job_service_mock.h>
 
@@ -36,7 +36,7 @@ TString GetTextYson(const TString& binaryYsonContent) {
 
 Y_UNIT_TEST_SUITE(FmrJobTests) {
     Y_UNIT_TEST(DownloadTable) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
         auto richPath = NYT::TRichYPath("//test_path").Cluster("test_cluster");
         TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}};
         std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), TableContent_1}};
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
     }
 
     Y_UNIT_TEST(UploadTable) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
         std::unordered_map<TString, TString> inputTables;
         std::unordered_map<TYtTableRef, TString> outputTables;
         NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
     }
 
     Y_UNIT_TEST(MergeMixedTables) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
 
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1", .TableRanges = ranges};
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(FmrJobTests) {
 
 Y_UNIT_TEST_SUITE(TaskRunTests) {
     Y_UNIT_TEST(RunDownloadTask) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
         auto richPath = NYT::TRichYPath("//test_path").Cluster("test_cluster");
         TYtTableTaskRef input = TYtTableTaskRef{.RichPaths = {richPath}};
         TFmrTableId inputFmrId("test_cluster", "test_path");
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
 
     Y_UNIT_TEST(RunUploadTask) {
 
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
         std::unordered_map<TString, TString> inputTables;
         std::unordered_map<TYtTableRef, TString> outputTables;
         NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
     }
 
     Y_UNIT_TEST(RunUploadTaskWithNoTable) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
         std::unordered_map<TString, TString> inputTables;
         std::unordered_map<TYtTableRef, TString> outputTables;
         NYql::NFmr::IYtJobService::TPtr ytJobService = MakeMockYtJobService(inputTables, outputTables);
@@ -198,12 +198,12 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             RunJob(task, tableDataServicePtr, ytJobService, cancelFlag),
             yexception,
-            "No data for chunk:test_table_id:test_part_id"
+            "No data for chunk:test_table_id_test_part_id"
         );
     }
 
     Y_UNIT_TEST(RunMergeTask) {
-        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService(TLocalTableDataServiceSettings(1));
+        ITableDataService::TPtr tableDataServicePtr = MakeLocalTableDataService();
         std::vector<TTableRange> ranges = {{"test_part_id"}};
         TFmrTableInputRef input_1 = TFmrTableInputRef{.TableId = "test_table_id_1", .TableRanges = ranges};
         auto richPath = NYT::TRichYPath("//test_path").Cluster("test_cluster");

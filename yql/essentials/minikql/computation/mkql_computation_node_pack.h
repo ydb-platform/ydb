@@ -75,9 +75,11 @@ class TValuePackerTransport {
 public:
     using TSelf = TValuePackerTransport<Fast>;
 
-    explicit TValuePackerTransport(const TType* type, arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+    explicit TValuePackerTransport(const TType* type,
+        TMaybe<size_t> bufferPageAllocSize = Nothing(), arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
     // for compatibility with TValuePackerGeneric - stable packing is not supported
-    TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+    TValuePackerTransport(bool stable, const TType* type,
+        TMaybe<size_t> bufferPageAllocSize = Nothing(), arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
 
     // AddItem()/UnpackBatch() will perform incremental packing - type T is processed as list item type. Will produce List<T> layout
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
@@ -115,6 +117,7 @@ private:
     const TType* const Type_;
     ui64 ItemCount_ = 0;
     TPagedBuffer::TPtr Buffer_;
+    const size_t BufferPageAllocSize_;
     mutable NDetails::TPackerState State_;
     mutable NDetails::TPackerState IncrementalState_;
 

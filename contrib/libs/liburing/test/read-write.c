@@ -47,7 +47,7 @@ static int create_nonaligned_buffers(void)
 
 static int _test_io(const char *file, struct io_uring *ring, int write,
 		    int buffered, int sqthread, int fixed, int nonvec,
-		    int buf_select, int seq, int exp_len)
+		    int buf_select, int seq, int exp_len, bool worker_offload)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
@@ -145,6 +145,10 @@ static int _test_io(const char *file, struct io_uring *ring, int write,
 		sqe->user_data = i;
 		if (sqthread)
 			sqe->flags |= IOSQE_FIXED_FILE;
+
+		if (worker_offload)
+			sqe->flags |= IOSQE_ASYNC;
+
 		if (buf_select) {
 			if (nonvec)
 				sqe->addr = 0;
@@ -228,12 +232,12 @@ err:
 
 static int __test_io(const char *file, struct io_uring *ring, int write,
 		     int buffered, int sqthread, int fixed, int nonvec,
-		     int buf_select, int seq, int exp_len)
+		     int buf_select, int seq, int exp_len, bool worker_offload)
 {
 	int ret;
 
 	ret = _test_io(file, ring, write, buffered, sqthread, fixed, nonvec,
-		       buf_select, seq, exp_len);
+		       buf_select, seq, exp_len, worker_offload);
 	if (ret)
 		return ret;
 
@@ -264,7 +268,7 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 			return ret;
 		}
 		ret = _test_io(file, &ring2, write, buffered, sqthread, 2,
-			       nonvec, buf_select, seq, exp_len);
+			       nonvec, buf_select, seq, exp_len, worker_offload);
 		if (ret)
 			return ret;
 
@@ -285,7 +289,7 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 }
 
 static int test_io(const char *file, int write, int buffered, int sqthread,
-		   int fixed, int nonvec, int exp_len)
+		   int fixed, int nonvec, int exp_len, bool worker_offload)
 {
 	struct io_uring ring;
 	int ret, ring_flags = 0;
@@ -302,7 +306,7 @@ static int test_io(const char *file, int write, int buffered, int sqthread,
 	}
 
 	ret = __test_io(file, &ring, write, buffered, sqthread, fixed, nonvec,
-			0, 0, exp_len);
+			0, 0, exp_len, worker_offload);
 	io_uring_queue_exit(&ring);
 	return ret;
 }
@@ -482,7 +486,8 @@ static int test_buf_select_short(const char *filename, int nonvec)
 		io_uring_cqe_seen(&ring, cqe);
 	}
 
-	ret = __test_io(filename, &ring, 0, 0, 0, 0, nonvec, 1, 1, exp_len);
+	ret = __test_io(filename, &ring, 0, 0, 0, 0, nonvec, 1, 1, exp_len,
+			false);
 
 	io_uring_queue_exit(&ring);
 	return ret;
@@ -621,7 +626,7 @@ static int test_buf_select(const char *filename, int nonvec)
 	for (i = 0; i < BUFFERS; i++)
 		memset(vecs[i].iov_base, i, vecs[i].iov_len);
 
-	ret = __test_io(filename, &ring, 1, 0, 0, 0, 0, 0, 1, BS);
+	ret = __test_io(filename, &ring, 1, 0, 0, 0, 0, 0, 1, BS, false);
 	if (ret) {
 		fprintf(stderr, "failed writing data\n");
 		return 1;
@@ -634,7 +639,7 @@ static int test_buf_select(const char *filename, int nonvec)
 	if (ret)
 		return ret;
 
-	ret = __test_io(filename, &ring, 0, 0, 0, 0, nonvec, 1, 1, BS);
+	ret = __test_io(filename, &ring, 0, 0, 0, 0, nonvec, 1, 1, BS, false);
 	io_uring_queue_exit(&ring);
 	return ret;
 }
@@ -934,17 +939,18 @@ int main(int argc, char *argv[])
 	vecs = t_create_buffers(BUFFERS, BS);
 
 	/* if we don't have nonvec read, skip testing that */
-	nr = has_nonvec_read() ? 32 : 16;
+	nr = has_nonvec_read() ? 64 : 32;
 
 	for (i = 0; i < nr; i++) {
 		int write = (i & 1) != 0;
 		int buffered = (i & 2) != 0;
 		int sqthread = (i & 4) != 0;
 		int fixed = (i & 8) != 0;
-		int nonvec = (i & 16) != 0;
+		int offload = (i & 16) != 0;
+		int nonvec = (i & 32) != 0;
 
 		ret = test_io(fname, write, buffered, sqthread, fixed, nonvec,
-			      BS);
+			      BS, offload);
 		if (ret) {
 			fprintf(stderr, "test_io failed %d/%d/%d/%d/%d\n",
 				write, buffered, sqthread, fixed, nonvec);
@@ -1048,14 +1054,15 @@ int main(int argc, char *argv[])
 		int buffered = (i & 2) != 0;
 		int sqthread = (i & 4) != 0;
 		int fixed = (i & 8) != 0;
-		int nonvec = (i & 16) != 0;
+		int offload = (i & 16) != 0;
+		int nonvec = (i & 32) != 0;
 
 		/* direct IO requires alignment, skip it */
 		if (!buffered || !fixed || nonvec)
 			continue;
 
 		ret = test_io(fname, write, buffered, sqthread, fixed, nonvec,
-			      -1);
+			      -1, offload);
 		if (ret) {
 			fprintf(stderr, "test_io failed %d/%d/%d/%d/%d\n",
 				write, buffered, sqthread, fixed, nonvec);

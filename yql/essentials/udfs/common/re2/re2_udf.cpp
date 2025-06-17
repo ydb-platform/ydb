@@ -55,7 +55,7 @@ namespace {
             return true;
         }
         THashType hash = GetStringHash(regexp) % 100;
-        ui64 failProbability = GetFailProbability();
+        static ui64 failProbability = GetFailProbability();
         return hash < failProbability;
     }
 

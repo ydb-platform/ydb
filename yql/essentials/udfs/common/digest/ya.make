@@ -2,7 +2,7 @@ YQL_UDF_CONTRIB(digest_udf)
 
     YQL_ABI_VERSION(
         2
-        28
+        43
         0
     )
 

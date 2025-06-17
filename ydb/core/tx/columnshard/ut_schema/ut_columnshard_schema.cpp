@@ -132,7 +132,7 @@ enum class EExpectedResult {
 
 static constexpr ui32 PORTION_ROWS = 80 * 1000;
 
-void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool writePortionsOnInsert, NScheme::TTypeId ttlColumnTypeId)
+void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId)
 {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
@@ -162,7 +162,6 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool writ
 
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
-    runtime.GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(writePortionsOnInsert);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -185,7 +184,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool writ
     const auto ttlAllDataStale = TDuration::Seconds(now - lastTs) - TDuration::Days(1);
 
 
-    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(writePortionsOnInsert);
+    auto spec = TTestSchema::TTableSpecials{}.WithForcedCompaction(true);
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = ttlAllDataFresh;
     auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk, spec, "/Root/olapStore"), ++txId);
@@ -865,9 +864,10 @@ void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
     }
 }
 
-void TestDrop(bool reboots) {
+void TestDrop(bool reboots, bool generateInternalPathId) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().ColumnShardConfig.SetGenerateInternalPathId(generateInternalPathId);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -1035,7 +1035,7 @@ extern bool gAllowLogBatchingDefaultValue;
 
 Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
 
-    Y_UNIT_TEST(CreateTable) {
+    void CreateTable(bool reboots, bool generateInternalPathId) {
         ui64 tableId = 1;
 
         std::vector<TTypeId> intTypes = {
@@ -1058,6 +1058,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetGenerateInternalPathId(generateInternalPathId);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
         using namespace NTxUT;
@@ -1082,6 +1083,24 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
             planStep = SetupSchema(runtime, sender, txBody, txId++);
+        }
+
+        {
+            const auto& pathIdTranslator = csDefaultControllerGuard->GetPathIdTranslator(TTestTxConfig::TxTablet0);
+            const auto pathIds = pathIdTranslator->GetSchemeShardLocalPathIds();
+            for (const auto& pathId : pathIds) {
+                const auto& internalPathId = pathIdTranslator->ResolveInternalPathId(pathId);
+                UNIT_ASSERT(internalPathId);
+                if (generateInternalPathId) {
+                    UNIT_ASSERT_VALUES_UNEQUAL(internalPathId->GetRawValue(), pathId.GetRawValue());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(internalPathId->GetRawValue(), pathId.GetRawValue());
+                }
+            }
+        }
+
+        if (reboots) {
+            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
 
         // TODO: support float types
@@ -1123,10 +1142,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         }
     }
 
-    Y_UNIT_TEST_SEDECIM(TTL, Reboot, Internal, FirstPkColumn, WritePortionsOnInsert) {
+    Y_UNIT_TEST_QUATRO(CreateTable, Reboots, GenerateInternalPathId) {
+        CreateTable(Reboots, GenerateInternalPathId);
+    }
+
+    Y_UNIT_TEST_OCTO(TTL, Reboot, Internal, FirstPkColumn) {
         for (auto typeId : { NTypeIds::Timestamp, NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64 }) {
             Cerr << "Running TestTtl ttlColumnType=" << NKikimr::NScheme::TypeName(typeId) << Endl;
-            TestTtl(Reboot, Internal, FirstPkColumn, WritePortionsOnInsert, typeId);
+            TestTtl(Reboot, Internal, FirstPkColumn, typeId);
         }
     }
 
@@ -1236,14 +1259,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestCompaction();
     }
 
-    Y_UNIT_TEST(Drop) {
-        TestDrop(false);
+    Y_UNIT_TEST_QUATRO(Drop, Reboots, GenerateInternalPathId) {
+        TestDrop(Reboots, GenerateInternalPathId);
     }
-
-    Y_UNIT_TEST(RebootDrop) {
-        TestDrop(true);
-    }
-
     Y_UNIT_TEST(DropWriteRace) {
         TestDropWriteRace();
     }

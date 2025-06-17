@@ -7,6 +7,7 @@
 #include "write.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/counters/error_collector.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/wrappers/unavailable_storage.h>
 
@@ -17,7 +18,8 @@ NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TOperator::GetCurren
     return ExternalStorageOperator->Get();
 }
 
-std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
+std::shared_ptr<IBlobsDeclareRemovingAction> TOperator::DoStartDeclareRemovingAction(
+    const std::shared_ptr<NBlobOperations::TRemoveDeclareCounters>& counters) {
     return std::make_shared<TDeclareRemovingAction>(GetStorageId(), GetSelfTabletId(), counters, GCInfo);
 }
 
@@ -85,17 +87,19 @@ void TOperator::InitNewExternalOperator() {
 
 void TOperator::DoInitNewExternalOperator(const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator,
     const std::optional<NKikimrSchemeOp::TS3Settings>& settings) {
-    storageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(GetStorageId()));
+    storageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>(ErrorCollector, GetStorageId()));
     {
         TGuard<TSpinLock> changeLock(ChangeOperatorLock);
         CurrentS3Settings = settings;
     }
+
     ExternalStorageOperator->Emplace(storageOperator);
 }
 
 TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard,
     const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager)
     : TBase(storageId, storageSharedBlobsManager)
+    , ErrorCollector(shard.Counters.GetEvictionCounters().TieringErrors)
     , TabletActorId(shard.SelfId())
     , Generation(shard.Executor()->Generation())
     , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>()) {
@@ -104,8 +108,10 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
 
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,
     const std::shared_ptr<NWrappers::IExternalStorageConfig>& storageConfig,
-    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation)
+    const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& storageSharedBlobsManager, const ui64 generation,
+    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector>& errorCollector)
     : TBase(storageId, storageSharedBlobsManager)
+    , ErrorCollector(std::move(errorCollector))
     , TabletActorId(shardActorId)
     , Generation(generation)
     , InitializationConfig(storageConfig)
@@ -129,4 +135,4 @@ bool TOperator::DoLoad(IBlobManagerDb& dbBlobs) {
     return true;
 }
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NTier

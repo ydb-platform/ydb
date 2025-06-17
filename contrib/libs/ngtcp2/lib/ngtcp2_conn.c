@@ -799,7 +799,7 @@ static void conn_reset_conn_stat_cc(ngtcp2_conn *conn,
   cstat->congestion_recovery_start_ts = UINT64_MAX;
   cstat->bytes_in_flight = 0;
   cstat->delivery_rate_sec = 0;
-  cstat->pacing_interval = 0;
+  cstat->pacing_interval_m = 0;
   cstat->send_quantum = 64 * 1024;
 }
 
@@ -3276,6 +3276,17 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
           require_padding = require_padding || !conn->server ||
                             destlen >= NGTCP2_MAX_UDP_PAYLOAD_SIZE;
           /* We don't retransmit PATH_RESPONSE. */
+
+          /* Include PING to make a packet non-probing as per
+             https://datatracker.ietf.org/doc/html/rfc9000#section-9.3.3
+
+             An endpoint that receives a PATH_CHALLENGE on an active
+             path SHOULD send a non-probing packet in response. */
+          lfr.type = NGTCP2_FRAME_PING;
+          rv = conn_ppe_write_frame_hd_log(conn, ppe, &hd_logged, hd, &lfr);
+          if (rv != 0) {
+            assert(NGTCP2_ERR_NOBUF == rv);
+          }
         }
       }
     }
@@ -3763,6 +3774,7 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
     rtb_entry_flags |= conn->pkt.rtb_entry_flags;
     pkt_empty = conn->pkt.pkt_empty;
     hd_logged = conn->pkt.hd_logged;
+    require_padding = conn->pkt.require_padding;
   }
 
   left = ngtcp2_ppe_left(ppe);
@@ -3957,6 +3969,7 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
         conn->pkt.pkt_empty = pkt_empty;
         conn->pkt.rtb_entry_flags = rtb_entry_flags;
         conn->pkt.hd_logged = hd_logged;
+        conn->pkt.require_padding = require_padding;
         conn->flags |= NGTCP2_CONN_FLAG_PPE_PENDING;
       }
 
@@ -3977,6 +3990,7 @@ static ngtcp2_ssize conn_write_pkt(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
     conn->pkt.pkt_empty = pkt_empty;
     conn->pkt.rtb_entry_flags = rtb_entry_flags;
     conn->pkt.hd_logged = hd_logged;
+    conn->pkt.require_padding = require_padding;
     conn->flags |= NGTCP2_CONN_FLAG_PPE_PENDING;
 
     assert(vmsg);
@@ -10198,16 +10212,12 @@ conn_client_write_handshake(ngtcp2_conn *conn, ngtcp2_pkt_info *pi,
     if (spktlen > 0 &&
         ngtcp2_pkt_get_type_long(version, dest[0]) == NGTCP2_PKT_INITIAL) {
       wflags |= NGTCP2_WRITE_PKT_FLAG_REQUIRE_PADDING;
-      conn->pkt.require_padding = 1;
     }
   } else {
     assert(!conn->pktns.crypto.rx.ckm);
     assert(!conn->pktns.crypto.tx.ckm);
     assert(conn->early.ckm);
 
-    if (conn->pkt.require_padding) {
-      wflags |= NGTCP2_WRITE_PKT_FLAG_REQUIRE_PADDING;
-    }
     spktlen = conn->pkt.hs_spktlen;
   }
 
@@ -11741,9 +11751,6 @@ ngtcp2_ssize ngtcp2_conn_write_vmsg(ngtcp2_conn *conn, ngtcp2_path *path,
 
   if (ppe_pending) {
     res = conn->pkt.hs_spktlen;
-    if (conn->pkt.require_padding) {
-      wflags |= NGTCP2_WRITE_PKT_FLAG_REQUIRE_PADDING;
-    }
     /* dest and destlen have already been adjusted in ppe in the first
        run.  They are adjusted for probe packet later. */
     nwrite = conn_write_pkt(conn, pi, dest, destlen, (size_t)res, vmsg,
@@ -13348,7 +13355,7 @@ int ngtcp2_conn_set_stream_user_data(ngtcp2_conn *conn, int64_t stream_id,
 }
 
 void ngtcp2_conn_update_pkt_tx_time(ngtcp2_conn *conn, ngtcp2_tstamp ts) {
-  ngtcp2_duration pacing_interval;
+  uint64_t pacing_interval_m;
   ngtcp2_duration wait, d;
 
   conn_update_timestamp(conn, ts);
@@ -13357,24 +13364,24 @@ void ngtcp2_conn_update_pkt_tx_time(ngtcp2_conn *conn, ngtcp2_tstamp ts) {
     return;
   }
 
-  if (conn->cstat.pacing_interval) {
-    pacing_interval = conn->cstat.pacing_interval;
+  if (conn->cstat.pacing_interval_m) {
+    pacing_interval_m = conn->cstat.pacing_interval_m;
   } else {
     /* 1.25 is the under-utilization avoidance factor described in
        https://datatracker.ietf.org/doc/html/rfc9002#section-7.7 */
-    pacing_interval = (conn->cstat.first_rtt_sample_ts == UINT64_MAX
-                         ? NGTCP2_MILLISECONDS
-                         : conn->cstat.smoothed_rtt) *
-                      100 / 125 / conn->cstat.cwnd;
+    pacing_interval_m = ((conn->cstat.first_rtt_sample_ts == UINT64_MAX
+                            ? NGTCP2_MILLISECONDS
+                            : conn->cstat.smoothed_rtt)
+                         << 10) *
+                        100 / 125 / conn->cstat.cwnd;
+    pacing_interval_m = ngtcp2_max_uint64(pacing_interval_m, 1);
   }
 
-  wait = (ngtcp2_duration)(conn->tx.pacing.pktlen * pacing_interval);
+  wait = (ngtcp2_duration)((conn->tx.pacing.pktlen * pacing_interval_m) >> 10);
 
-  if (conn->tx.pacing.compensation >= NGTCP2_MILLISECONDS) {
-    d = ngtcp2_min_uint64(wait, conn->tx.pacing.compensation);
-    wait -= d;
-    conn->tx.pacing.compensation -= d;
-  }
+  d = ngtcp2_min_uint64(wait / 2, conn->tx.pacing.compensation);
+  wait -= d;
+  conn->tx.pacing.compensation -= d;
 
   conn->tx.pacing.next_ts = ts + wait;
   conn->tx.pacing.pktlen = 0;

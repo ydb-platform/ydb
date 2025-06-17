@@ -15,6 +15,8 @@
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/config.h>
 
+#include <util/generic/hash.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -35,6 +37,7 @@ struct TConnectionConfig
     NRpc::TServiceDiscoveryEndpointsConfigPtr ProxyEndpoints;
     std::optional<std::string> ProxyUnixDomainSocket;
     bool EnableProxyDiscovery;
+    THashMap<std::string, std::string> ProxyUrlAliasingRules;
 
     NRpc::TDynamicChannelPoolConfigPtr DynamicChannelPool;
 

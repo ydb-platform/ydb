@@ -7626,7 +7626,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     }
 
                     if (ctx.Types.LangVer != UnknownLangVersion) {
-                        if (settingName == "minLang" && ctx.Types.LangVer < FromString<NYql::TLangVersion>(child->Tail().Content())) {
+                        if (settingName == "minLang" && !IsBackwardCompatibleFeatureAvailable(
+                                ctx.Types.LangVer,
+                                FromString<NYql::TLangVersion>(child->Tail().Content()),
+                                ctx.Types.BackportMode)) {
                             TLangVersionBuffer buffer;
                             TStringBuf str;
                             if (!FormatLangVersion(FromString<NYql::TLangVersion>(child->Tail().Content()), buffer, str)) {

@@ -6,8 +6,6 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TMoveIndexUnit : public TExecutionUnit {
-    TVector<IDataShardChangeCollector::TChange> ChangeRecords;
-
 public:
     TMoveIndexUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::MoveIndex, false, dataShard, pipeline)
@@ -59,13 +57,13 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        ChangeRecords.clear();
+        op->ChangeRecords().clear();
 
         auto changesQueue = DataShard.TakeChangesQueue();
         auto lockChangeRecords = DataShard.TakeLockChangeRecords();
         auto committedLockChangeRecords = DataShard.TakeCommittedLockChangeRecords();
 
-        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
+        if (!DataShard.LoadChangeRecords(db, op->ChangeRecords())) {
             DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
@@ -79,7 +77,7 @@ public:
             return EExecutionStatus::Restart;
         }
 
-        if (!DataShard.LoadChangeRecordCommits(db, ChangeRecords)) {
+        if (!DataShard.LoadChangeRecordCommits(db, op->ChangeRecords())) {
             DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
@@ -88,14 +86,14 @@ public:
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "TMoveIndexUnit Execute"
             << ": schemeTx# " << schemeTx.DebugString()
-            << ": changeRecords size# " << ChangeRecords.size()
+            << ": changeRecords size# " << op->ChangeRecords().size()
             << ", at tablet# " << DataShard.TabletID());
 
         DataShard.SuspendChangeSender(ctx);
 
         const auto& params = schemeTx.GetMoveIndex();
         DataShard.MoveUserIndex(op, params, ctx, txc);
-        MoveChangeRecords(db, params, ChangeRecords);
+        MoveChangeRecords(db, params, op->ChangeRecords());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
@@ -103,10 +101,10 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
         DataShard.CreateChangeSender(ctx);
         DataShard.MaybeActivateChangeSender(ctx);
-        DataShard.EnqueueChangeRecords(std::move(ChangeRecords), 0, true);
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()), 0, true);
     }
 };
 

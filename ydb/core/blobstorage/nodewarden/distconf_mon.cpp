@@ -160,6 +160,13 @@ namespace NKikimr::NStorage {
                     }
                     DIV_CLASS("panel-body") {
                         out << "Self-management enabled: " << (SelfManagementEnabled ? "yes" : "no") << "<br/>";
+                        out << "Self pile id: ";
+                        if (BridgeInfo) {
+                            out << BridgeInfo->SelfNodePile->BridgePileId;
+                        } else {
+                            out << "<none>";
+                        }
+                        out << "<br/>";
                     }
                 }
 

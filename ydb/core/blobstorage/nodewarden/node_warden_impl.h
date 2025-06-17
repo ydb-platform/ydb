@@ -20,6 +20,7 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenReadMetadata;
     struct TEvNodeConfigInvokeOnRootResult;
     struct TEvNodeWardenQueryBaseConfig;
+    struct TEvNodeWardenNotifyConfigMismatch;
     struct TEvNodeWardenWriteMetadata;
     struct TEvNodeWardenQueryCacheResult;
 
@@ -654,6 +655,8 @@ namespace NKikimr::NStorage {
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         void Handle(TEventHandle<TEvNodeWardenQueryBaseConfig>::TPtr ev);
+
+        void Handle(TEventHandle<TEvNodeWardenNotifyConfigMismatch>::TPtr ev);
 
         void Handle(TEventHandle<TEvNodeWardenReadMetadata>::TPtr ev);
         void Handle(TEventHandle<TEvNodeWardenWriteMetadata>::TPtr ev);

@@ -100,7 +100,10 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
                 break;
             }
 
-            if (const auto& resultsMeta = scriptExecutionOperation.Metadata().ResultSetsMeta; !resultsMeta.empty()) {
+            const auto& meta = scriptExecutionOperation.Metadata();
+            UNIT_ASSERT_VALUES_EQUAL(meta.ExecStatus, NYdb::NQuery::EExecStatus::Running);
+
+            if (const auto& resultsMeta = meta.ResultSetsMeta; !resultsMeta.empty()) {
                 UNIT_ASSERT_VALUES_EQUAL(resultsMeta.size(), 1);
                 const auto& resultMeta = resultsMeta[0];
                 Cerr << "Rows saved: " << resultMeta.RowsCount << ", elapsed time: " << TInstant::Now() - waitStart << "\n";

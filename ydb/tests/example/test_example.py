@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import pytest
+
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
@@ -12,29 +14,26 @@ class TestExample:
     Example for python test
     TODO: change description to yours
     """
-    @classmethod
-    def setup_class(cls):
+    @pytest.fixture(autouse=True)
+    def setup(self):
         # TODO: remove comment below
         # This cluster will be initialized before all tests in current suite and will be stopped after all tests
         # See KikimrConfigGenerator for full possibilities (feature flags, configs, erasure, etc.)
-        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.NONE))
-        cls.cluster.start()
+        self.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.NONE))
+        self.cluster.start()
 
-        cls.endpoint = "%s:%s" % (
-            cls.cluster.nodes[1].host, cls.cluster.nodes[1].port
-        )
-        cls.driver = ydb.Driver(
+        self.driver = ydb.Driver(
             ydb.DriverConfig(
                 database='/Root',
-                endpoint=cls.endpoint
+                endpoint=self.cluster.nodes[1].endpoint,
             )
         )
-        cls.driver.wait()
+        self.driver.wait()
 
-    @classmethod
-    def teardown_class(cls):
-        cls.driver.stop()
-        cls.cluster.stop()
+        yield
+
+        self.driver.stop()
+        self.cluster.stop()
 
     def test_example(self):  # TODO: change test name to yours
         """

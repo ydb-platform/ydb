@@ -99,7 +99,11 @@ static int test(int sqpoll)
 		p.sq_thread_cpu = SQPOLL_CPU;
 	}
 
-	io_uring_queue_init_params(8, &ring, &p);
+	ret = io_uring_queue_init_params(8, &ring, &p);
+	if (ret) {
+		fprintf(stderr, "Queue init: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
 
 	CPU_ZERO(&set);
 	CPU_SET(IOWQ_CPU, &set);

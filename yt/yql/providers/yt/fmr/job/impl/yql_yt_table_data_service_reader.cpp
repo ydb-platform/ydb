@@ -94,7 +94,7 @@ bool TFmrTableDataServiceReader::HasRangeIndices() const {
 }
 
 TString TFmrTableDataServiceReader::TFmrChunkMeta::ToString() const {
-    return TStringBuilder() << TableId << ":" << PartId << ":" << std::to_string(Chunk);
+    return TStringBuilder() << TableId << "_" << PartId << ":" << Chunk;
 }
 
 } // namespace NYql::NFmr

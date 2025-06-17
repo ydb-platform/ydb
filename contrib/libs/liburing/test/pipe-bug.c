@@ -25,20 +25,26 @@ do {										\
 
 static int pipe_bug(void)
 {
-	struct io_uring_params p;
 	struct io_uring ring;
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
 	char buf[1024];
-	int fds[2];
+	int ret, fds[2];
 	struct __kernel_timespec to = {
 		.tv_sec = 1
 	};
 
-	CHECK(pipe(fds) == 0);
+	ret = io_uring_queue_init(8, &ring, 0);
+	/* can hit -ENOMEM due to repeated ring creation and teardowns */
+	if (ret == -ENOMEM) {
+		usleep(1000);
+		return 0;
+	} else if (ret) {
+		fprintf(stderr, "ring_init: %d\n", ret);
+		return 1;
+	}
 
-	memset(&p, 0, sizeof(p));
-	CHECK(t_create_ring_params(8, &ring, &p) == 0);
+	CHECK(pipe(fds) == 0);
 
 	/* WRITE */
 	sqe = io_uring_get_sqe(&ring);

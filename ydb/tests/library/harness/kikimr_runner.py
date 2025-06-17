@@ -277,6 +277,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         return self.grpc_port
 
     @property
+    def endpoint(self):
+        return "{}:{}".format(self.host, self.port)
+
+    @property
     def pid(self):
         return self.daemon.process.pid
 

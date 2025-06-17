@@ -1375,6 +1375,55 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
         TestTableWithNulls({ testCase }, /* generic */ true);
     }
+
+    Y_UNIT_TEST(FloatSum) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `olap_table` (
+                        id Uint64 NOT NULL,
+                        value Float,
+                        PRIMARY KEY (id)
+                    ) WITH (STORE = COLUMN);
+                )",  NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(
+                    R"(
+                        INSERT INTO `olap_table` (id, value) VALUES (1u, 0.4f);
+                        INSERT INTO `olap_table` (id, value) VALUES (2u, 0.85f);
+                        INSERT INTO `olap_table` (id, value) VALUES (3u, 11.3f);
+                        INSERT INTO `olap_table` (id, value) VALUES (4u, 7.15f);
+                        INSERT INTO `olap_table` (id, value) VALUES (5u, 0.3f);
+                    )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+                ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        {
+            auto status = queryClient.ExecuteQuery(R"(
+                --!syntax_v1
+                SELECT SUM(value) FROM `olap_table`
+                WHERE id = 1
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+            CompareYson(result, R"([[[0.400000006;]]])");
+        }
+    }
 }
 
 }

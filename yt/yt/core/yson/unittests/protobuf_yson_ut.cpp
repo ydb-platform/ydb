@@ -8,6 +8,7 @@
 #include <yt/yt/core/yson/protobuf_interop.h>
 #include <yt/yt/core/yson/null_consumer.h>
 #include <yt/yt/core/yson/string_merger.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/node.h>
@@ -56,6 +57,8 @@ using namespace ::google::protobuf::io;
 using namespace ::google::protobuf::internal;
 
 using FieldDescriptor = google::protobuf::FieldDescriptor;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1616,17 +1619,17 @@ TEST(TProtobufToYsonTest, Success)
         {
             auto* entry = proto->add_attributes();
             entry->set_key("k1");
-            entry->set_value(ConvertToYsonString(1).ToString());
+            entry->set_value(ToProto(ConvertToYsonString(1)));
         }
         {
             auto* entry = proto->add_attributes();
             entry->set_key("k2");
-            entry->set_value(ConvertToYsonString("test").ToString());
+            entry->set_value(ToProto(ConvertToYsonString("test")));
         }
         {
             auto* entry = proto->add_attributes();
             entry->set_key("k3");
-            entry->set_value(ConvertToYsonString(std::vector<int>{1, 2, 3}).ToString());
+            entry->set_value(ToProto(ConvertToYsonString(std::vector<int>{1, 2, 3})));
         }
     }
 
@@ -1858,7 +1861,7 @@ TEST(TProtobufToYsonTest, ErrorProto)
     errorProto.set_code(1);
     auto attributeProto = errorProto.mutable_attributes()->add_attributes();
     attributeProto->set_key("host");
-    attributeProto->set_value(ConvertToYsonString("localhost").ToString());
+    attributeProto->set_value(ToProto(ConvertToYsonString("localhost")));
 
     auto serialized = SerializeProtoToRef(errorProto);
 

@@ -1687,7 +1687,7 @@ void SetBit(TMutableRef bitmap, i64 index, bool value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString EscapeCAndSingleQuotes(TStringBuf str)
+std::string EscapeCAndSingleQuotes(TStringBuf str)
 {
     auto escaped = TString();
     escaped.reserve(str.size() * 2);

@@ -11,6 +11,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/signals/states.h>
 
 namespace NKikimr::NOlap::NDataFetcher {
 
@@ -19,7 +20,7 @@ private:
     std::shared_ptr<NCounters::TStateSignalsOperator<EFetchingStage>> StateSignals;
 
 public:
-    TClassCounters(TCommonCountersOwner& owner) {
+    TClassCounters(NColumnShard::TCommonCountersOwner& owner) {
         StateSignals = std::make_shared<NCounters::TStateSignalsOperator<EFetchingStage>>(owner, "fetching_stage");
     }
 
@@ -28,9 +29,9 @@ public:
     }
 };
 
-class TCounters: public TCommonCountersOwner {
+class TCounters: public NColumnShard::TCommonCountersOwner {
 private:
-    using TBase = TCommonCountersOwner;
+    using TBase = NColumnShard::TCommonCountersOwner;
     TMutex Mutex;
     THashMap<TString, std::shared_ptr<TClassCounters>> ClassCounters;
 

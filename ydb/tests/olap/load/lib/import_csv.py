@@ -28,6 +28,7 @@ class ImportFileCsv(LoadSuiteBase):
         os.remove(self.zip_file_name)
 
     def create_table(self):
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', 'DROP TABLE IF EXISTS `{self.table_path}`'])
         sql_filename = 'create.sql'
         sql_text = f'''
 CREATE TABLE `{self.table_path}` (

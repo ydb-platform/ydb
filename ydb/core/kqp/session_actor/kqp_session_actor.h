@@ -55,9 +55,9 @@ struct TKqpWorkerSettings {
     {
         auto& icb = *AppData()->Icb;
         TControlBoard::RegisterSharedControl(
-            MkqlInitialMemoryLimit, icb.KqpSession.MkqlInitialMemoryLimit);
+            MkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
         TControlBoard::RegisterSharedControl(
-            MkqlMaxMemoryLimit, icb.KqpSession.MkqlMaxMemoryLimit);
+            MkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
     }
 };
 

@@ -268,28 +268,6 @@ void CodeGenControlsForTablets(TCodeGenContext& context) {
     }
 }
 
-void CodeGenKqpSessionControls(TCodeGenContext& context) {
-    TImmediateControlsClass kqpControlClass {
-        .Name = "KqpSession",
-        .ClassName = "TKqpSessionControls",
-    };
-    for (const auto& field: {"MkqlInitialMemoryLimit", "MkqlMaxMemoryLimit"}) {
-        auto fieldPath = TStringBuilder() << kqpControlClass.Name << "." << field;
-        TImmediateControl control {
-            .Name = field,
-            .FullPath = fieldPath,
-            .HtmlName = fieldPath,
-            .IsConfigBasedControl = false
-        };
-        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
-        context.JinjaControls.push_back(emplacedControlPtr);
-        kqpControlClass.Controls.push_back(emplacedControlPtr);
-    }
-    auto* res = &context.ControlClasses.emplace_back(std::move(kqpControlClass));
-    context.JinjaControlClasses.push_back(res);
-    context.JinjaRootControlClasses.push_back(res);
-}
-
 void CodeGenColumnShardControls(TCodeGenContext& context) {
     TImmediateControlsClass columnShardControls {
         .Name = "ColumnShardControls",
@@ -425,7 +403,6 @@ int main(int argc, char** argv) {
         }
         CodeGenClass(*protoField, TVector<TString>{}, codeGenContext, true);
     }
-    CodeGenKqpSessionControls(codeGenContext);
     CodeGenColumnShardControls(codeGenContext);
     CodeGenBlobCacheControls(codeGenContext);
     CodeGenBlobStorageNonConfigControls(codeGenContext);

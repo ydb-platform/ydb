@@ -23,6 +23,7 @@ public:
         PG /* "pg"*/
     };
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
+    void Validate(const ECommandType commandType, int workloadType) override;
     TString GetFullTableName(const char* table) const;
     static TString GetTablePathQuote(EQuerySyntax syntax);
     YDB_ACCESSOR_DEF(TString, Path);

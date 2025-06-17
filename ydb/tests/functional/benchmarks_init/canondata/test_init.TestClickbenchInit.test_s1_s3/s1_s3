@@ -1,12 +1,12 @@
 Init tables ...
 --!syntax_v1
-CREATE EXTERNAL DATA SOURCE `/Root/db/Root/db/clickbench/s1_s3_external_source` WITH (
+CREATE EXTERNAL DATA SOURCE `/Root/db/clickbench/s1_s3_external_source` WITH (
     SOURCE_TYPE="ObjectStorage",
     LOCATION="https://storage.yandexcloud.net/tpc",
     AUTH_METHOD="NONE"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/clickbench/s1` (
+CREATE EXTERNAL TABLE `/Root/db/clickbench/s1` (
     WatchID Int64 NOT NULL,
     JavaEnable Int16 NOT NULL,
     Title Utf8 NOT NULL,
@@ -114,7 +114,7 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/clickbench/s1` (
     CLID Int32 NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/clickbench/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/s1"
+    DATA_SOURCE = "/Root/db/clickbench/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/s1"
 );
 
 Init tables ...Ok

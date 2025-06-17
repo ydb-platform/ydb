@@ -1,4 +1,5 @@
 * Added processing of special values `null`, `/dev/null`, `-`, `stdout`, `cout`, `concole`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.
+* Fixed bug when `ydb wokrload` commands did not work with absolute paths.
 
 ## 2.22.1 ##
 

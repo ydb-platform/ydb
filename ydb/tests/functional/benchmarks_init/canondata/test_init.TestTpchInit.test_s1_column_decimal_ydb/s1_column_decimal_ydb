@@ -1,7 +1,7 @@
 Init tables ...
 --!syntax_v1
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/customer` (
+CREATE TABLE `/Root/db/tpch/s1/customer` (
     c_acctbal Decimal(22,9) NOT NULL,
     c_address Utf8 NOT NULL,
     c_comment Utf8 NOT NULL,
@@ -18,7 +18,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
+CREATE TABLE `/Root/db/tpch/s1/lineitem` (
     l_comment Utf8 NOT NULL,
     l_commitdate Date32 NOT NULL,
     l_discount Decimal(22,9) NOT NULL,
@@ -43,7 +43,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/nation` (
+CREATE TABLE `/Root/db/tpch/s1/nation` (
     n_comment Utf8 NOT NULL,
     n_name Utf8 NOT NULL,
     n_nationkey Int32 NOT NULL,
@@ -56,7 +56,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/orders` (
+CREATE TABLE `/Root/db/tpch/s1/orders` (
     o_clerk Utf8 NOT NULL,
     o_comment Utf8 NOT NULL,
     o_custkey Int64 NOT NULL,
@@ -74,7 +74,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/part` (
+CREATE TABLE `/Root/db/tpch/s1/part` (
     p_brand Utf8 NOT NULL,
     p_comment Utf8 NOT NULL,
     p_container Utf8 NOT NULL,
@@ -92,7 +92,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
+CREATE TABLE `/Root/db/tpch/s1/partsupp` (
     ps_availqty Int32 NOT NULL,
     ps_comment Utf8 NOT NULL,
     ps_partkey Int64 NOT NULL,
@@ -106,7 +106,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/region` (
+CREATE TABLE `/Root/db/tpch/s1/region` (
     r_comment Utf8 NOT NULL,
     r_name Utf8 NOT NULL,
     r_regionkey Int32 NOT NULL,
@@ -118,7 +118,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
 );
 
-CREATE TABLE `/Root/db/Root/db/tpch/s1/supplier` (
+CREATE TABLE `/Root/db/tpch/s1/supplier` (
     s_acctbal Decimal(22,9) NOT NULL,
     s_address Utf8 NOT NULL,
     s_comment Utf8 NOT NULL,

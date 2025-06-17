@@ -29,7 +29,7 @@ View the description of this command by calling it with `--help` option:
 || `--explain` | Execute an explain request for the query. Displays the query's logical plan. The query is not actually executed and does not affect database data. ||
 || `--explain-ast` | Same as `--explain`, but in addition to the query's logical plan, an [abstract syntax tree (AST)](https://en.wikipedia.org/wiki/Abstract_syntax_tree) is printed. The AST section contains a representation in the internal [miniKQL](../../concepts/glossary.md#minikql) language. ||
 || `--explain-analyze` | Execute the query in `EXPLAIN ANALYZE` mode. Displays the query execution plan. Query results are ignored.<br/>**Important note: The query is actually executed, so any changes will be applied to the database**. ||
-|| `--diagnostics-file` | Path to file where the diagnostics will be saved. ||
+|| `--diagnostics-file` | Path to a file where the [diagnostics](#diagnostics-collection) will be saved. ||
 || `--format` | Output format.<br/>Available options:
 
 {% include notitle [format](./_includes/result_format_common.md) %}
@@ -39,11 +39,11 @@ View the description of this command by calling it with `--help` option:
 ||
 |#
 
-### Diagnostics collection
+### Diagnostics collection {#diagnostics-collection}
 
-The `--diagnostics-file <path_to_diagnostics>` option allows you to save extended information about SQL query execution to a separate JSON file.
+The `--diagnostics-file <path_to_diagnostics>` option saves extended information about SQL query execution to a separate JSON file.
 
-For each query, a file named `<path_to_diagnostics>` will be created with the following fields:
+Each query generates a file named `<path_to_diagnostics>` containing the following fields:
 
 - `plan` — query execution plan.
 - `stats` — query execution statistics.
@@ -71,7 +71,7 @@ For each query, a file named `<path_to_diagnostics>` will be created with the fo
     - `table_metadata` — schemas, indexes, and statistics of the tables involved in the query (JSON format).
 - `ast` — abstract syntax tree (AST) for the query.
 
-{% note tip %}
+{% note warning %}
 
 The diagnostics file may contain confidential information, especially in the `meta.query_text`, `plan`, and `ast` fields. Before sharing it with third parties (for example, technical support), carefully review and edit the file to remove or replace any sensitive data.
 

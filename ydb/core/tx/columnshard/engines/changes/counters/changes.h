@@ -64,7 +64,7 @@ public:
 private:
     std::array<std::shared_ptr<NCounters::TStateSignalsOperator<EStage>>, static_cast<size_t>(NBlobOperations::EConsumer::COUNT)> StagesByConsumer;
 
-    std::shared_ptr<TStageCounters> GetStageCountersImpl(const NBlobOperations::EConsumer consumerId) {
+    std::shared_ptr<NCounters::TStateSignalsOperator<EStage>> GetStageCountersImpl(const NBlobOperations::EConsumer consumerId) {
         AFL_VERIFY((ui64)consumerId < StagesByConsumer.size())("index", consumerId)("size", StagesByConsumer.size());
         return StagesByConsumer[(ui64)consumerId];
     }

@@ -8,7 +8,7 @@ from .upload import UploadSuiteBase
 
 class ImportFileCsvBase(UploadSuiteBase):
     query_name: str = 'ImportFileCsv' # Override UploadSuiteBase.query_name
-    table_path: str = ''
+    table_name: str = ''
     iterations: int = 1
 
     def init(self):

@@ -1875,21 +1875,30 @@ Y_UNIT_TEST_SUITE(RDMA) {
         vdisk.CommitReservedChunks();
         auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
 
-        ui32 chunkBuffSize = 128_KB + 8765;
-        auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(chunkBuffSize));
-        testCtx.Send(new NPDisk::TEvChunkWrite(
-            vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-            chunk, 0, parts, nullptr, false, 0));
-        auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+        for (i64 writeSize: {1_KB - 123, 64_KB, 128_KB + 8765}) {
+            for (i64 readOffset: {0_KB, 0_KB + 123, 4_KB, 8_KB + 123}) {
+                for (i64 readSize: {writeSize, writeSize - 567, writeSize - i64(8_KB), writeSize - i64(8_KB) + 987}) {
+                    if (readOffset < 0 || readSize < 0 || readOffset + readSize > writeSize) {
+                        continue;
+                    }
+                    Cerr << "chunkBufSize: " << writeSize << ", readOffset: " << readOffset << ", readSize: " << readSize << Endl;
+                    auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(writeSize));
+                    testCtx.Send(new NPDisk::TEvChunkWrite(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, parts, nullptr, false, 0));
+                    auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
 
-        testCtx.Send(new NPDisk::TEvChunkRead(
-            vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
-            chunk, 123, chunkBuffSize - 1234, 0, nullptr));
-        auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
-        TRcBuf readBuf = read->Data.ToString();
-        NInterconnect::NRdma::TMemRegionSlice memReg = NInterconnect::NRdma::TryExtractFromRcBuf(readBuf);
-        UNIT_ASSERT_C(!memReg.Empty(), "Failed to extract RDMA memory region from RcBuf");
-        UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), chunkBuffSize - 1234, "Unexpected size of RDMA memory region");
+                    testCtx.Send(new NPDisk::TEvChunkRead(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, readOffset, readSize, 0, nullptr));
+                    auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                    TRcBuf readBuf = read->Data.ToString();
+                    NInterconnect::NRdma::TMemRegionSlice memReg = NInterconnect::NRdma::TryExtractFromRcBuf(readBuf);
+                    UNIT_ASSERT_C(!memReg.Empty(), "Failed to extract RDMA memory region from RcBuf");
+                    UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), readSize, "Unexpected size of RDMA memory region");
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorEncryptedChunks) {
@@ -1904,7 +1913,7 @@ Y_UNIT_TEST_SUITE(RDMA) {
         ui32 offset = 123;
         ui32 tailRoom = 1111;
         ui32 totalSize = size + tailRoom;
-        UNIT_ASSERT_C(totalSize == 131072, "Size should be less than 131072");
+        UNIT_ASSERT_VALUES_EQUAL(totalSize, 131072);
 
         auto alloc1 = [](ui32 size, ui32 headRoom, ui32 tailRoom) {
             TRcBuf buf = TRcBuf::UninitializedPageAligned(size + headRoom + tailRoom);

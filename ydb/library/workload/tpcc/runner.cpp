@@ -432,7 +432,7 @@ void TPCCRunner::RunSync() {
     // reset statistics
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(PerThreadTerminalStats.size(), MeasurementsStartTs);
 
-    StopDeadline = MeasurementsStartTs + std::chrono::minutes(Config.RunDuration.Minutes());
+    StopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunDuration.Seconds());
     while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
             break;
@@ -941,7 +941,6 @@ void TRunConfig::SetDisplay() {
     case EDisplayMode::Tui:
         DisplayUpdateInterval = DisplayUpdateTuiInterval;
         return;
-        break;
     }
 }
 

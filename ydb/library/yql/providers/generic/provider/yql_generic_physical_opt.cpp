@@ -83,10 +83,10 @@ namespace NYql {
 
                             // Get table metadata
                             const auto [tableMeta, issues] = State_->GetTable(
-                                TGenericState::TTableAddress(
-                                    TString(read.DataSource().Cluster().Value()),
-                                    TString(read.Table().Name().Value())
-                                )
+                                TGenericState::TTableAddress{
+                                    .ClusterName = TString(read.DataSource().Cluster().Value()),
+                                    .TableName = TString(read.Table().Name().Value())
+                                }
                             );
                             if (issues) {
                                 for (const auto& issue : issues) {

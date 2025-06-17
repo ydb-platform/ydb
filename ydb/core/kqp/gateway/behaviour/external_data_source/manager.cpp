@@ -78,7 +78,10 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         "use_tls",
         "schema", // managed PG, GP
         "service_name", // oracle
-        "folder_id" // logging
+        "folder_id", // logging
+        "grpc_location", // solomon
+        "project", // solomon
+        "cluster" // solomon
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();

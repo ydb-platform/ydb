@@ -396,7 +396,7 @@ namespace NYql::NConnector {
             auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<TResponse>>>();
             auto context = CreateClientContext();
 
-            auto callback = [context, promise](NYdbGrpc::TGrpcStatus&& status, NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr streamProcessor) mutable {
+            auto callback = [context, promise](NYdbGrpc::TGrpcStatus&& status, typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr streamProcessor) mutable {
                 if (!streamProcessor) {
                     promise.SetValue({std::move(status), nullptr});
                     return;

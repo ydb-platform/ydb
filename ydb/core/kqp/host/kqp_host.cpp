@@ -19,6 +19,8 @@
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
 #include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
@@ -1779,6 +1781,20 @@ private:
         TypesCtx->AddDataSink(NYql::PgProviderName, NYql::CreatePgDataSink(state));
     }
 
+    void InitSolomonProvider() {
+        auto solomonState = MakeIntrusive<TSolomonState>();
+
+        solomonState->Types = TypesCtx.Get();
+        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
+        solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
+        solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
+        solomonState->ExecutorPoolId = AppData()->UserPoolId;
+
+        TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
+        TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
+    }
+
     void Init(EKikimrQueryType queryType) {
         TransformCtx = MakeIntrusive<TKqlTransformContext>(Config, SessionCtx->QueryPtr(), SessionCtx->TablesPtr());
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, TransformCtx, *FuncRegistry, ActorSystem);
@@ -1814,6 +1830,9 @@ private:
             InitGenericProvider();
             if (FederatedQuerySetup->YtGateway) {
                 InitYtProvider();
+            }
+            if (FederatedQuerySetup->SolomonGateway) {
+                InitSolomonProvider();
             }
         }
 

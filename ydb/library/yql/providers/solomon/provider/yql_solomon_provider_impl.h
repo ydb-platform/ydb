@@ -2,6 +2,7 @@
 
 #include "yql_solomon_provider.h"
 
+#include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
 #include <ydb/library/yql/providers/common/transform/yql_visit.h>
@@ -12,6 +13,7 @@ namespace NYql {
 
 THolder<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TPtr state);
 THolder<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state);
+THolder<IGraphTransformer> CreateSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state);
 
 THolder<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state);
 THolder<TExecTransformerBase> CreateSolomonDataSourceExecTransformer(TSolomonState::TPtr state);

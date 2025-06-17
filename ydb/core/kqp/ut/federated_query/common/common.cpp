@@ -65,6 +65,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),
             nullptr,
+            appConfig->GetQueryServiceConfig().GetSolomon(),
+            nullptr,
             nullptr);
 
         settings

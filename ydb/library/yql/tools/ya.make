@@ -9,6 +9,7 @@ RECURSE(
     pgrun
     purebench
     solomon_emulator
+    solomon_emulator_grpc
     sql2yql
     sql_formatter
     udf_dep_stub

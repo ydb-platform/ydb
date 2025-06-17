@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -34,6 +35,8 @@ namespace NKikimr::NKqp {
         NYql::TGenericGatewayConfig GenericGatewayConfig;
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
+        NYql::TSolomonGatewayConfig SolomonGatewayConfig;
+        NYql::ISolomonGateway::TPtr SolomonGateway;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };
@@ -67,6 +70,8 @@ namespace NKikimr::NKqp {
         NYql::TGenericGatewayConfig GenericGatewaysConfig;
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
+        NYql::TSolomonGatewayConfig SolomonGatewayConfig;
+        NYql::ISolomonGateway::TPtr SolomonGateway;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         std::optional<NActors::TActorId> DatabaseResolverActorId;
@@ -86,6 +91,8 @@ namespace NKikimr::NKqp {
             const NYql::TGenericGatewayConfig& genericGatewayConfig,
             const NYql::TYtGatewayConfig& ytGatewayConfig,
             NYql::IYtGateway::TPtr ytGateway,
+            const NYql::TSolomonGatewayConfig& solomonGatewayConfig,
+            const NYql::ISolomonGateway::TPtr& solomonGateway,
             NMiniKQL::TComputationNodeFactory computationFactories)
             : HttpGateway(httpGateway)
             , ConnectorClient(connectorClient)
@@ -95,13 +102,15 @@ namespace NKikimr::NKqp {
             , GenericGatewayConfig(genericGatewayConfig)
             , YtGatewayConfig(ytGatewayConfig)
             , YtGateway(ytGateway)
+            , SolomonGatewayConfig(solomonGatewayConfig)
+            , SolomonGateway(solomonGateway)
             , ComputationFactories(computationFactories)
         {
         }
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig, YtGatewayConfig, YtGateway, ComputationFactories, S3ReadActorFactoryConfig};
+                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig, YtGatewayConfig, YtGateway, SolomonGatewayConfig, SolomonGateway, ComputationFactories, S3ReadActorFactoryConfig};
         }
 
     private:
@@ -113,6 +122,8 @@ namespace NKikimr::NKqp {
         NYql::TGenericGatewayConfig GenericGatewayConfig;
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
+        NYql::TSolomonGatewayConfig SolomonGatewayConfig;
+        NYql::ISolomonGateway::TPtr SolomonGateway;
         NMiniKQL::TComputationNodeFactory ComputationFactories;
         NYql::NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
     };

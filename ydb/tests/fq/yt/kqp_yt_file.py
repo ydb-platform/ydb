@@ -1,7 +1,9 @@
 import pytest
+import os
 
-from file_common import check_provider, get_sql_query
-from kqprun import KqpRun
+import yatest.common
+from test_file_common import check_provider, get_sql_query
+from ydb.tests.fq.tools.kqprun import KqpRun
 from utils import DATA_PATH, get_config, get_parameters_files, replace_vars
 from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path
 
@@ -179,7 +181,9 @@ def run_file_kqp_no_cache(suite, case, cfg):
     if is_xfail(config):
         pytest.skip('skip fail tests')
 
-    kqprun = KqpRun(udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'))
+    kqprun = KqpRun(config_file=os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_config.conf'),
+                    scheme_file=os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_scheme.sql'),
+                    udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'))
 
     return kqprun.yql_exec(program=sql_query, verbose=True, check_error=True, tables=in_tables)
 

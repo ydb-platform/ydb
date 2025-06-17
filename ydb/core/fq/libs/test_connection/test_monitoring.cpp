@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/utils/url_builder.h>
 
-#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -55,7 +55,7 @@ public:
         , Counters(counters)
         , CredentialsFactory(credentialsFactory)
         , Signer(signer)
-        , ClusterConfig(NFq::CreateSolomonClusterConfig({}, token, endpoint, signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
+        , ClusterConfig(NFq::CreateSolomonClusterConfig({}, token, endpoint, "", signer ? signer->SignAccountId(monitoring.auth().service_account().id()) : "", monitoring))
     {
         Counters->InFly->Inc();
     }

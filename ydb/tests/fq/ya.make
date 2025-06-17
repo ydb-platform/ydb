@@ -9,6 +9,7 @@ RECURSE_FOR_TESTS(
     pq_async_io
     restarts
     s3
+    tools
     yds
     yt
 )

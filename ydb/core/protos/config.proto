@@ -1018,6 +1018,7 @@ message TQueryServiceConfig {
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.TYtGatewayConfig Yt = 15;
+    optional NYql.TSolomonGatewayConfig Solomon = 21;
     optional NYql.TFileStorageConfig FileStorage = 16;
     optional NYql.THttpGatewayConfig HttpGateway = 7;
     optional NYql.TGenericConnectorConfig Connector = 8 [deprecated=true];

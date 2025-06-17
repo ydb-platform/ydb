@@ -87,7 +87,7 @@ namespace NYql {
 
                     const auto clusterName = read.DataSource().Cluster().StringValue();
                     const auto tableName = TString(keyArg.Tail().Head().Content());
-                    if (pendingTables.insert(TGenericState::TTableAddress(clusterName, tableName)).second) {
+                    if (pendingTables.insert(TGenericState::TTableAddress{.ClusterName = clusterName, .TableName = tableName}).second) {
                         YQL_CLOG(INFO, ProviderGeneric) << "Loading table meta for: `" << clusterName << "`.`" << tableName << "`";
                     }
                 }

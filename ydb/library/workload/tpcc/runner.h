@@ -15,7 +15,7 @@ constexpr TDuration DEFAULT_WARMUP_DURATION = TDuration::Minutes(1); // TODO
 constexpr TDuration DEFAULT_RUN_DURATION = TDuration::Minutes(2); // TODO
 
 constexpr int DEFAULT_MAX_SESSIONS = 100; // TODO
-constexpr int DEFAULT_THREAD_COUNT = 2;
+constexpr int DEFAULT_THREAD_COUNT = 0; // autodetect
 constexpr int DEFAULT_LOAD_THREAD_COUNT = 10;
 
 constexpr int DEFAULT_LOG_LEVEL = 6; // TODO: properly use enum

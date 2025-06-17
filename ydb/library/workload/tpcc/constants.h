@@ -85,4 +85,7 @@ enum class ETransactionType {
 
 constexpr const size_t TUI_LOG_LINES = 10;
 
+// lower limit, real number is higher
+constexpr const size_t WAREHOUSES_PER_CPU_CORE = 1500;
+
 } // namespace NYdb::NTPCC

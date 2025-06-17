@@ -176,8 +176,8 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     // TODO: detect automatically
     config.Opts->AddLongOption(
-        "threads", TStringBuilder() << "Number of threads executing queries")
-            .RequiredArgument("INT").StoreResult(&RunConfig->ThreadCount).DefaultValue(RunConfig->ThreadCount);
+        "threads", TStringBuilder() << "Number of threads executing queries (by default autodected)")
+            .RequiredArgument("INT").StoreResult(&RunConfig->ThreadCount);
 
     config.Opts->AddLongOption(
         'f', "format", TStringBuilder() << "Output format: " << GetEnumAllNames<NTPCC::TRunConfig::EFormat>())

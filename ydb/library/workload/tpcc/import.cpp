@@ -792,6 +792,11 @@ public:
     }
 
     void ImportSync() {
+        if (Config.WarehouseCount == 0) {
+            std::cerr << "Specified zero warehouses" << std::endl;
+            std::exit(1);
+        }
+
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
@@ -801,12 +806,19 @@ public:
             UpdateDisplayIfNeeded(Clock::now());
         }
 
+        // TODO: detect number of threads
+        if (Config.LoadThreadCount == 0) {
+            LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
+            Config.LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
+        }
+
         // in particular this log message
         LOG_I("Starting TPC-C data import for " << Config.WarehouseCount << " warehouses using " <<
-                Config.ThreadCount << " threads. Approximate data size: " << GetFormattedSize(LoadState.ApproximateDataSize));
+                Config.LoadThreadCount << " threads. Approximate data size: "
+                << GetFormattedSize(LoadState.ApproximateDataSize));
 
         // TODO: detect number of threads
-        size_t threadCount = std::min(Config.WarehouseCount, Config.ThreadCount );
+        size_t threadCount = std::min(Config.WarehouseCount, Config.LoadThreadCount);
         threadCount = std::max(threadCount, size_t(1));
 
         // TODO: calculate optimal number of drivers (but per thread looks good)
@@ -1071,7 +1083,7 @@ private:
 
         std::stringstream headerSs;
         headerSs << "TPC-C Import: " << Config.WarehouseCount << " warehouses, "
-                 << Config.ThreadCount << " threads   Estimated size: "
+                 << Config.LoadThreadCount << " threads   Estimated size: "
                  << GetFormattedSize(LoadState.ApproximateDataSize);
 
         std::stringstream progressSs;

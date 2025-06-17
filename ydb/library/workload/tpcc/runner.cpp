@@ -217,14 +217,27 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::exit(1);
     }
 
-    const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(ConnectionConfig);
-    const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
+    if (Config.WarehouseCount == 0) {
+        std::cerr << "Specified zero warehouses" << std::endl;
+        std::exit(1);
+    }
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
-    // we might consider using less than maxTerminalThreads
-    const size_t threadCount = Config.ThreadCount == 0 ?
-        std::min(maxTerminalThreadCount, terminalsCount) : Config.ThreadCount;
+    size_t threadCount = 0;
+    if (Config.ThreadCount == 0) {
+        // here we calculate max possible efficient thread number
+        const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(ConnectionConfig);
+        const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
+        threadCount = std::min(maxTerminalThreadCount, terminalsCount);
+
+        // usually this allows to lower number of threads
+        const size_t recommendedThreadCount =
+            (Config.WarehouseCount + WAREHOUSES_PER_CPU_CORE - 1) / WAREHOUSES_PER_CPU_CORE;
+        threadCount = std::min(threadCount, recommendedThreadCount);
+    } else {
+        threadCount = Config.ThreadCount;
+    }
 
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),

@@ -150,7 +150,12 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
             metricLabels[key] = value.GetString();
         }
 
-        result.Metrics.emplace_back(std::move(metricLabels), metricObj["type"].GetString());
+        TMetric metric {
+            .Labels = metricLabels,
+            .Type = metricObj["type"].GetString(),
+        };
+
+        result.Metrics.push_back(metric);
     }
 
     return TListMetricsResponse(std::move(result));
@@ -211,7 +216,13 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
             .Type = type,
         };
 
-        result.Timeseries.emplace_back(std::move(metric), std::move(timestamps), std::move(values));
+        TTimeseries timeseries {
+            .Metric = metric,
+            .Timestamps = timestamps,
+            .Values = values
+        };
+
+        result.Timeseries.push_back(timeseries);
     }
 
     return TGetDataResponse(std::move(result));

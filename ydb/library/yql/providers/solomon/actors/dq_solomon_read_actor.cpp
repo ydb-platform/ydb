@@ -178,9 +178,15 @@ public:
         auto& listedMetrics = batch.GetMetrics();
 
         SOURCE_LOG_D("HandleMetricsBatch batch of size " << listedMetrics.size());
-        for (const auto& metric : listedMetrics) {
-            std::map<TString, TString> labels(metric.GetLabels().begin(), metric.GetLabels().end());
-            ListedMetrics.emplace_back(std::move(labels), metric.GetType());
+        for (const auto& listedMetric : listedMetrics) {
+            std::map<TString, TString> labels(listedMetric.GetLabels().begin(), listedMetric.GetLabels().end());
+
+            NSo::TMetric metric {
+                .Labels = labels,
+                .Type = listedMetric.GetType()
+            };
+
+            ListedMetrics.push_back(metric);
         }
         ListedMetricsCount += listedMetrics.size();
 
@@ -236,7 +242,12 @@ public:
             return;
         }
         if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
-            MetricsWithTimeRange.emplace_back(batch.Metric, batch.From, batch.To);
+            TMetricTimeRange metricTimeRange {
+                .Metric = batch.Metric,
+                .From = batch.From,
+                .To = batch.To
+            };
+            MetricsWithTimeRange.push_back(metricTimeRange);
             TryRequestData();
             return;
         }
@@ -483,7 +494,12 @@ private:
         }
 
         for (const auto& [fromRange, toRange] : ranges) {
-            MetricsWithTimeRange.emplace_back(metric, fromRange, toRange);
+            TMetricTimeRange metricTimeRange {
+                .Metric = metric,
+                .From = fromRange,
+                .To = toRange
+            };
+            MetricsWithTimeRange.push_back(metricTimeRange);
         }
     }
 

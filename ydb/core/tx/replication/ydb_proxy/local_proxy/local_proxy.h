@@ -29,10 +29,10 @@ private:
 
     STATEFN(StateWork);
 
-public:
 
 private:
     const TString Database;
+    TString LogPrefix;
 };
 
 }

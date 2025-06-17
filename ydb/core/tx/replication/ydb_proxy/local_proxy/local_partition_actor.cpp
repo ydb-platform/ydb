@@ -1,4 +1,5 @@
 #include "local_partition_actor.h"
+#include "logging.h"
 
 namespace NKikimr::NReplication {
 
@@ -9,18 +10,23 @@ TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& 
 }
 
 void TBaseLocalTopicPartitionActor::Bootstrap() {
+    LogPrefix = MakeLogPrefix();
     DoDescribe();
 }
 
 void TBaseLocalTopicPartitionActor::DoDescribe() {
+    auto path = TStringBuilder() << "/" << Database << TopicName;
+    LOG_D("Describe topic '" << path << "'");
     auto request = MakeHolder<TNavigate>();
-    request->ResultSet.emplace_back(MakeNavigateEntry(TStringBuilder() << "/" << Database << TopicName, TNavigate::OpTopic));
+    request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpTopic));
     IActor::Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     Become(&TThis::StateDescribe);
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
     static const TString errorMarket = "LocalYdbProxy";
+
+    LOG_T("Handle " << ev->Get()->ToString());
 
     auto& result = ev->Get()->Request;
 
@@ -84,6 +90,8 @@ STATEFN(TBaseLocalTopicPartitionActor::StateDescribe) {
 }
 
 void TBaseLocalTopicPartitionActor::DoCreatePipe() {
+    LOG_T("Create pipe to " << PartitionTabletId);
+
     Attempt = 0;
     CreatePipe();
     Become(&TBaseLocalTopicPartitionActor::StateCreatePipe);
@@ -96,6 +104,8 @@ void TBaseLocalTopicPartitionActor::CreatePipe() {
 }
 
 void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
+
     auto& msg = *ev->Get();
     if (msg.Status != NKikimrProto::OK) {
         if (Attempt++ == MaxAttempts) {
@@ -104,10 +114,13 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TP
         return CreatePipe();
     }
 
+    LOG_T("Pipe has been connected");
+
     OnDescribeFinished();
 }
 
-void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+void TBaseLocalTopicPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
     OnError("Pipe destroyed");
 }
 

@@ -1,5 +1,6 @@
 #include "local_partition_reader.h"
 #include "local_proxy.h"
+#include "logging.h"
 
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -27,6 +28,10 @@ void TLocalTopicPartitionReaderActor::OnFatalError(const TString& error) {
     PassAway();
 }
 
+TString TLocalTopicPartitionReaderActor::MakeLogPrefix() {
+    return TStringBuilder() << "Reader[" << SelfId() << ":/" << Database << TopicName <<" ] ";
+}
+
 std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> TLocalTopicPartitionReaderActor::CreateError(NYdb::EStatus status, const TString& error) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue(error);
@@ -48,6 +53,8 @@ bool GetSkipCommit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
 }
 
 void TLocalTopicPartitionReaderActor::HandleInit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
+    LOG_T("Handle on init " << ev->Get()->ToString());
+
     RequestsQueue.emplace_back(ev->Sender, ev->Cookie, GetSkipCommit(ev));
 }
 
@@ -57,6 +64,8 @@ void TLocalTopicPartitionReaderActor::DoInitOffset() {
 }
 
 void TLocalTopicPartitionReaderActor::HandleOnInitOffset(TEvPersQueue::TEvResponse::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
+
     auto& record = ev->Get()->Record;
     if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
         Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup);
@@ -114,7 +123,7 @@ void TLocalTopicPartitionReaderActor::DoWork() {
 }
 
 void TLocalTopicPartitionReaderActor::Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-    Cerr << ">>>>>> TEvYdbProxy::TEvReadTopicReques" << Endl << Flush;
+    LOG_T("Handle " << ev->Get()->ToString());
 
     HandleInit(ev);
     Handle(RequestsQueue.front());
@@ -180,6 +189,8 @@ NKikimrPQClient::TDataChunk GetDeserializedData(const TString& string) {
 }
 
 void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
+
     const auto& record = ev->Get()->Record;
 
     TString error;
@@ -239,6 +250,8 @@ STATEFN(TLocalTopicPartitionReaderActor::StateWaitData) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
+
     auto args = std::move(ev->Get()->GetArgs());
     auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
 
@@ -249,6 +262,5 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev
     auto reader = TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
     Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader), 0, ev->Cookie);
 }
-
 
 }

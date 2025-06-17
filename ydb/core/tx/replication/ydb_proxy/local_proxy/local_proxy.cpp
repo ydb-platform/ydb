@@ -1,5 +1,6 @@
 #include "local_proxy.h"
 #include "local_proxy_request.h"
+#include "logging.h"
 
 #include <ydb/core/grpc_services/service_scheme.h>
 #include <ydb/core/grpc_services/service_topic.h>
@@ -12,6 +13,7 @@ TLocalProxyActor::TLocalProxyActor(const TString& database)
 }
 
 void TLocalProxyActor::Bootstrap() {
+    LogPrefix = TStringBuilder() << "[" << SelfId() << ":" << Database << "] ";
     Become(&TLocalProxyActor::StateWork);
 }
 
@@ -24,6 +26,8 @@ TActorId TLocalProxyActor::RegisterActor(IActor* actor) const {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
+
     auto args = std::move(ev->Get()->GetArgs());
     auto& path = std::get<TString>(args);
     auto& settings = std::get<NYdb::NTopic::TAlterTopicSettings>(args);
@@ -49,6 +53,8 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
+
     auto args = std::move(ev->Get()->GetArgs());
     auto& path = std::get<TString>(args);
     auto& settings = std::get<NYdb::NTopic::TDescribeTopicSettings>(args);
@@ -79,6 +85,8 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
+
     auto args = std::move(ev->Get()->GetArgs());
     auto& path = std::get<TString>(args);
     auto& settings = std::get<NYdb::NScheme::TDescribePathSettings>(args);

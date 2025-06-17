@@ -27,6 +27,7 @@ protected:
     void OnDescribeFinished() override;
     void OnError(const TString& error) override;
     void OnFatalError(const TString& error) override;
+    TString MakeLogPrefix() override;
 
     std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> CreateError(NYdb::EStatus status, const TString& error);
 

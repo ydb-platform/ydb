@@ -1,5 +1,6 @@
 #include "local_partition_committer.h"
 #include "local_proxy.h"
+#include "logging.h"
 
 #include <ydb/core/persqueue/writer/common.h>
 
@@ -27,6 +28,10 @@ void TLocalTopicPartitionCommitActor::OnFatalError(const TString& error) {
     PassAway();
 }
 
+TString TLocalTopicPartitionCommitActor::MakeLogPrefix() {
+    return TStringBuilder() << "Committer[" << SelfId() << ":/" << Database << TopicName <<" ] ";
+}
+
 std::unique_ptr<TEvYdbProxy::TEvCommitOffsetResponse> TLocalTopicPartitionCommitActor::CreateResponse(NYdb::EStatus status, const TString& error) {
     NYdb::NIssue::TIssues issues;
     if (error) {
@@ -40,15 +45,16 @@ STATEFN(TLocalTopicPartitionCommitActor::OnInitEvent) {
 }
 
 void TLocalTopicPartitionCommitActor::DoCommitOffset() {
-    Cerr << ">>>>> DoCommitOffset" << Endl << Flush;
+    LOG_T("DoCommit");
+
     NTabletPipe::SendData(SelfId(), PartitionPipeClient, CreateCommitRequest().release());
     Become(&TLocalTopicPartitionCommitActor::StateCommitOffset);
 }
 
 void TLocalTopicPartitionCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    const auto& record = ev->Get()->Record;
+    LOG_T("Handle " << ev->Get()->ToString());
 
-    Cerr << ">>>>> Handle(TEvPersQueue::TEvResponse) " << record.DebugString() << Endl << Flush;
+    const auto& record = ev->Get()->Record;
 
     TString error;
     if (!NPQ::BasicCheck(record, error)) {
@@ -92,7 +98,8 @@ STATEFN(TLocalTopicPartitionCommitActor::StateCommitOffset) {
 
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
-    Cerr << ">>>>> TEvYdbProxy::TEvCommitOffsetRequest" << Endl << Flush;
+    LOG_T("Handle " << ev->Get()->ToString());
+
     auto args = std::move(ev->Get()->GetArgs());
     auto& [topicName, partitionId, consumerName, offset, settings] = args;
 

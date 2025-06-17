@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(ut)
+
 add_library(yql-dq-comp_nodes)
 
 
@@ -37,5 +39,6 @@ target_sources(yql-dq-comp_nodes PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_hash_operator_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_hash_operator_serdes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_program_builder.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/dq_block_hash_join.cpp
 )
 

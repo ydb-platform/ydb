@@ -396,8 +396,6 @@ private:
             gotOffset = std::max(gotOffset, result.GetOffset());
             auto proto = GetDeserializedData(result.GetData());
 
-            Cerr << ">>>>> !!!!! " << proto.codec() << Endl << Flush;
-
             if (proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
                 const  NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
                 TString decompressed = codecImpl->Decompress(proto.GetData());
@@ -405,7 +403,6 @@ private:
             } else {
                 messages.emplace_back(result.GetOffset(), proto.GetData());
             }
-            Cerr << ">>>>> !!! " << messages.back().GetData() << Endl << Flush;
         }
         SentOffset = gotOffset + 1;
 
@@ -485,12 +482,15 @@ protected:
 
 private:
     void DoCommitOffset() {
+        Cerr << ">>>>> DoCommitOffset" << Endl << Flush;
         NTabletPipe::SendData(SelfId(), PartitionPipeClient, CreateCommitRequest().release());
         Become(&TLocalTopicPartitionCommitActor::StateCommitOffset);
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
+
+        Cerr << ">>>>> Handle(TEvPersQueue::TEvResponse) " << record.DebugString() << Endl << Flush;
 
         TString error;
         if (!NPQ::BasicCheck(record, error)) {
@@ -502,6 +502,8 @@ private:
         }
 
         Send(Parent, CreateResponse(NYdb::EStatus::SUCCESS, ""));
+
+        PassAway();
     }
 
     std::unique_ptr<TEvPersQueue::TEvRequest> CreateCommitRequest() const {
@@ -787,6 +789,7 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
+        Cerr << ">>>>> TEvYdbProxy::TEvCommitOffsetRequest" << Endl << Flush;
         auto args = std::move(ev->Get()->GetArgs());
         auto& [topicName, partitionId, consumerName, offset, settings] = args;
 

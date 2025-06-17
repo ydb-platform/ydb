@@ -39,11 +39,11 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
-    Y_UNIT_TEST(LocalBase) {
+    Y_UNIT_TEST(BaseScenario_Local) {
         CheckTopicLocalOrRemote(true);
     }
 
-    Y_UNIT_TEST(RemoteBase) {
+    Y_UNIT_TEST(BaseScenario_Remote) {
         CheckTopicLocalOrRemote(false);
     }
 
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
-    Y_UNIT_TEST(CheckCommittedOffset)
+    void CheckCommittedOffset(bool local)
     {
         MainTestCase testCase;
 
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-        )");
+        )", MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 
         testCase.Write({"Message-1"});
 
@@ -345,6 +345,14 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
         testCase.DropTable();
         testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffset_Local) {
+        CheckCommittedOffset(true);
+    }
+
+    Y_UNIT_TEST(CheckCommittedOffset_Remote) {
+        CheckCommittedOffset(false);
     }
 
     Y_UNIT_TEST(DropTransfer)

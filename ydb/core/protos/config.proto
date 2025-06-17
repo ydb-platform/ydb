@@ -1817,6 +1817,20 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 4096,
             DefaultValue: 3
+    }
+
+    message TKQPSessionControls {
+        optional uint64 MkqlInitialMemoryLimit = 1 [(ControlOptions) = {
+            Description: "Initial memory limit for mkql queries",
+            MinValue: 1,
+            MaxValue: 9223372036854775807, // 2 ** 63 -1
+            DefaultValue: 2097152 // 2 MB
+        }];
+        optional uint64 MkqlMaxMemoryLimit = 2 [(ControlOptions) = {
+            Description: "Max memory limit for mkql queries",
+            MinValue: 1,
+            MaxValue: 9223372036854775807, // 2 ** 63 -1
+            DefaultValue: 1073741824 // 1 GB
         }];
     }
 
@@ -1835,6 +1849,7 @@ message TImmediateControlsConfig {
     optional TTestShardControls TestShardControls = 13;
     optional TGRpcControls GRpcControls = 14;
     optional TKeyValueVolumeControls KeyValueVolumeControls = 15;
+    optional TKQPSessionControls KQPSessionControls = 16;
 };
 
 message TMeteringConfig {

@@ -62,7 +62,7 @@ public:
     };
 
 private:
-    std::array<std::shared_ptr<TStateSignalsOperator<EStage>>, static_cast<size_t>(NBlobOperations::EConsumer::COUNT)> StagesByConsumer;
+    std::array<std::shared_ptr<NCounters::TStateSignalsOperator<EStage>>, static_cast<size_t>(NBlobOperations::EConsumer::COUNT)> StagesByConsumer;
 
     std::shared_ptr<TStageCounters> GetStageCountersImpl(const NBlobOperations::EConsumer consumerId) {
         AFL_VERIFY((ui64)consumerId < StagesByConsumer.size())("index", consumerId)("size", StagesByConsumer.size());
@@ -73,12 +73,12 @@ public:
     TChangesCounters()
         : TBase("ColumnEngineChanges") {
         for (ui64 i = 0; i < (ui64)NBlobOperations::EConsumer::COUNT; ++i) {
-            StagesByConsumer[i] = std::make_shared<TStateSignalsOperator<EStage>>(
+            StagesByConsumer[i] = std::make_shared<NCounters::TStateSignalsOperator<EStage>>(
                 this->CreateSubGroup("consumer", ::ToString(static_cast<NBlobOperations::EConsumer>(i))), "indexation_stage");
         }
     }
 
-    static TStateSignalsOperator<EStage>::TGuard GetStageCounters(const NBlobOperations::EConsumer consumerId) {
+    static NCounters::TStateSignalsOperator<EStage>::TGuard GetStageCounters(const NBlobOperations::EConsumer consumerId) {
         return Singleton<TChangesCounters>()->GetStageCountersImpl(consumerId)->BuildGuard(EStage::Created);
     }
 };

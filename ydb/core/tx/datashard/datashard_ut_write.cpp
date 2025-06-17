@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(i32(-500)),   // int32_val
                 TCell::Make(i64(-5000)),  // int64_val
                 TCell::Make("text"),      // utf8_val
-                TCell::Make(3.14),       // double_val
+                TCell::Make(3.14),        // double_val
                 
                 TCell::Make(ui64(3)),     // key = 3
                 TCell::Make(ui8(15)),     // uint8_val
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(i16(-55)),    // int16_val  
                 TCell::Make(i32(-550)),   // int32_val
                 TCell::Make(i64(-5500)),  // int64_val
-                TCell::Make("othertext"),      // utf8_val
+                TCell::Make("othertext"), // utf8_val
                 TCell::Make(3.15)         // double_val
             };
 

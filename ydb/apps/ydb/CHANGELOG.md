@@ -1,3 +1,5 @@
+* Added processing of special values `null`, `/dev/null`, `-`, `stdout`, `cout`, `concole`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.
+
 ## 2.22.1 ##
 
 * Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.

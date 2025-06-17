@@ -12,6 +12,9 @@
 namespace NKikimr::NOlap::NCounters {
 
 class TStateCounters: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+
 public:
     const NMonitoring::TDynamicCounters::TCounterPtr Volume;
     const NMonitoring::TDynamicCounters::TCounterPtr Add;
@@ -36,7 +39,7 @@ private:
 public:
     void ExchangeState(const std::optional<EState> from, const std::optional<EState> to, const std::optional<TDuration> d, const ui32 size = 1) {
         if (from) {
-            AFL_VERIFY((ui32)*from < StateVolume.size())("from", from)("size", StateVolume.size());
+            AFL_VERIFY((ui32)*from < States.size())("from", from)("size", States.size());
             States[(ui32)*from].Volume->Sub(size);
             States[(ui32)*from].Remove->Add(size);
             if (d) {
@@ -44,7 +47,7 @@ public:
             }
         }
         if (to) {
-            AFL_VERIFY((ui32)*to < StateVolume.size())("to", to)("size", StateVolume.size());
+            AFL_VERIFY((ui32)*to < States.size())("to", to)("size", States.size());
             States[(ui32)*to].Volume->Add(size);
             States[(ui32)*to].Add->Add(size);
         }
@@ -86,7 +89,7 @@ public:
         }
 
         TGuard(const std::optional<EState> start) {
-            SetState(state);
+            SetState(start);
         }
 
         ~TGuard() {

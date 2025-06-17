@@ -7,17 +7,21 @@ from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.util import LogLevels
 import requests
 from urllib.parse import urlencode
 import time
 import re
 
 
-cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags={
-    'enable_alter_database_create_hive_first': True,
-    'enable_topic_transfer': True,
-    'enable_script_execution_operations': True,
-    }))
+cluster = KiKiMR(KikimrConfigGenerator(
+    extra_feature_flags={
+        'enable_alter_database_create_hive_first': True,
+        'enable_topic_transfer': True,
+        'enable_script_execution_operations': True,
+    },
+    additional_log_configs={'PERSQUEUE': LogLevels.DEBUG}
+    ))
 cluster.start()
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"
@@ -706,6 +710,7 @@ def test_pqrb_tablet():
         'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
         'schema': 'multi'
     })
+
     response_tablet_info = call_viewer("/viewer/tabletinfo", {
         'database': dedicated_db,
         'path': dedicated_db + '/topic1',
@@ -767,11 +772,14 @@ def test_operations_list_page_bad():
 
 
 def test_scheme_directory():
+
     result = {}
     result["1-get"] = get_viewer_normalized("/scheme/directory", {
         'database': dedicated_db,
         'path': dedicated_db
         })
+    logging.info("Result 1: {}".format(result["1-get"]))
+
     result["2-post"] = post_viewer("/scheme/directory", {
         'database': dedicated_db,
         'path': dedicated_db + '/test_dir'
@@ -796,7 +804,7 @@ def test_topic_data():
 
     call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TOPIC topic1',
+        'query': 'CREATE TOPIC topic2',
         'schema': 'multi'
     })
 
@@ -810,7 +818,7 @@ def test_topic_data():
         if close:
             writer.close()
 
-    writer = driver.topic_client.writer('topic1', producer_id="12345")
+    writer = driver.topic_client.writer('topic2', producer_id="12345")
     write(writer, "message", False)
 
     # Also write one messagewith metadata
@@ -818,36 +826,30 @@ def test_topic_data():
     writer.write(message_w_meta)
     writer.close()
 
-    writer_compressed = driver.topic_client.writer('topic1', producer_id="12345", codec=2)
+    writer_compressed = driver.topic_client.writer('topic2', producer_id="12345", codec=2)
     write(writer_compressed, "compressed-message")
+    writer_compressed.close()
+
+    topic_path = '{}/topic2'.format(dedicated_db)
 
     response = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '0',
-        'limit': '5'
-    })
-
-    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
-        'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
-        'partition': '0',
-        'offset': '0',
-        'last_offset': '3',
         'limit': '5'
     })
 
     response_w_meta = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '10',
         'limit': '1'
     })
     response_compressed = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '11',
         'limit': '5'
@@ -855,7 +857,7 @@ def test_topic_data():
 
     response_last = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'limit': '5'
@@ -863,7 +865,7 @@ def test_topic_data():
 
     response_short_msg = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'limit': '1',
@@ -872,24 +874,33 @@ def test_topic_data():
 
     response_no_part = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'offset': '20'
     })
 
     response_both_offset_and_ts = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'read_timestamp': '20'
     })
 
+    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': topic_path,
+        'partition': '0',
+        'offset': '0',
+        'last_offset': '4',
+        'limit': '10'
+    })
+
     def replace_values(resp):
         res = replace_values_by_key(resp, ['CreateTimestamp',
                                            'WriteTimestamp',
-                                           'TimestampDiff',
                                            'ProducerId',
                                            ])
+        res = replace_types_by_key(res, ['TimestampDiff'])
         logging.info(res)
         return res
 

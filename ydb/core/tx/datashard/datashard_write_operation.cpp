@@ -159,8 +159,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         }
     }
 
-    if(OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT)
-    {
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT) {
         for (ui32 columnTag : ColumnIds) {
             auto* col = tableInfo.Columns.FindPtr(columnTag);
             if(col->IsKey)

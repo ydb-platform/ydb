@@ -4,7 +4,7 @@
 #include <library/cpp/protobuf/util/pb_io.h>
 
 #include <util/string/join.h>
-#include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_metrics_queue.h>
 #include <ydb/library/yql/providers/solomon/events/events.h>
 #include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
@@ -14,19 +14,19 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/public/udf/udf_data_type.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/utils/url_builder.h>
-#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/url_builder.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -272,7 +272,7 @@ public:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         SOURCE_LOG_D("Handle MetricsQueue undelivered");
-        if (MetricsQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
+        if (!MetricsQueueEvents.HandleUndelivered(ev)) {
             TIssues issues{TIssue{TStringBuilder() << "MetricsQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }

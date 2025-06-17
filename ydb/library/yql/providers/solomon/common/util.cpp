@@ -1,6 +1,6 @@
 #include "util.h"
 
-#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/string/cast.h>
 #include <util/string/split.h>

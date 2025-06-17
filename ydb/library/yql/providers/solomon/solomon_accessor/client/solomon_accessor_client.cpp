@@ -4,10 +4,10 @@
 #include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/threading/future/wait/wait.h>
 #include <util/string/join.h>
+#include <ydb/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <yql/essentials/utils/url_builder.h>
-#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/utils/url_builder.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>

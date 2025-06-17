@@ -5,7 +5,7 @@ PY_SRCS(
 )
 
 PEERDIR(
-    yql/essentials/tests/common/test_framework
+    ydb/library/yql/tests/common/test_framework
 )
 
 END()

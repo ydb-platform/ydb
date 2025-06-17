@@ -1,9 +1,9 @@
 #pragma once
 
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_client_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 
 namespace NYql::NSo {
 

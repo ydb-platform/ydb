@@ -4,8 +4,8 @@
 #include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
-#include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
 namespace NYql::NSo {

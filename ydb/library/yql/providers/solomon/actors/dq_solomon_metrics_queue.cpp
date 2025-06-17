@@ -7,11 +7,10 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/solomon/events/events.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
-#include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #define LOG_E(name, stream) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << this->SelfId() << ", queued metrics: " << this->Metrics.size() << ". " << stream)

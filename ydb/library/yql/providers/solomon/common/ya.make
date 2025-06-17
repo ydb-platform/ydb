@@ -6,8 +6,8 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/providers/solomon/proto
-    yql/essentials/providers/common/proto
-    yql/essentials/utils
+    ydb/library/yql/providers/common/proto
+    ydb/library/yql/utils
 )
 
 END()

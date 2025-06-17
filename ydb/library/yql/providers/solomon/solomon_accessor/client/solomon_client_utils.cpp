@@ -4,7 +4,7 @@
 #include <util/string/strip.h>
 #include <util/string/split.h>
 
-#include <yql/essentials/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 namespace NYql::NSo {
 

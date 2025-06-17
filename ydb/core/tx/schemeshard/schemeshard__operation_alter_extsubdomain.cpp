@@ -562,8 +562,6 @@ public:
     }
 };
 
-// TEmptyPropose is now defined in schemeshard__operation_states.h
-
 class TAlterExtSubDomainCreateHive: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;

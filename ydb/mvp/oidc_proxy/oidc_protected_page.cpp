@@ -178,6 +178,7 @@ NHttp::THttpOutgoingRequestPtr THandlerSessionServiceCheck::CreateProxiedRequest
 
     static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
         "Connection",
+        "Accept",
         "Accept-Language",
         "Cache-Control",
         "Sec-Fetch-Dest",

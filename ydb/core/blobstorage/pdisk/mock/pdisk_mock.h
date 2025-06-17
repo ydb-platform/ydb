@@ -43,6 +43,7 @@ namespace NKikimr {
         void SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor);
         void SetStatusFlags(NPDisk::TStatusFlags flags);
         TString& GetStateErrorReason();
+        ui32 GetNumActiveSlots() const;
 
         TPtr Snapshot(); // create a copy of PDisk whole state
 

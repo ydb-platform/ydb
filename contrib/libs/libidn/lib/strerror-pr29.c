@@ -1,5 +1,5 @@
 /* strerror-pr29.c --- Convert PR29 errors into text.
-   Copyright (C) 2004-2024 Simon Josefsson
+   Copyright (C) 2004-2025 Simon Josefsson
 
    This file is part of GNU Libidn.
 

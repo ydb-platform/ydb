@@ -1,5 +1,6 @@
 #include "ydb_workload.h"
 #include "ydb_workload_import.h"
+#include "ydb_workload_tpcc.h"
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
@@ -345,10 +346,12 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
     : TWorkloadCommand(workload.CommandName, std::initializer_list<TString>(), workload.Description)
     , Params(params)
     , Type(workload.Type)
-{}
+{
+}
 
 int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
+    Params.SetClients(QueryClient.get(), nullptr, TableClient.get(), nullptr);
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
@@ -387,11 +390,13 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
+        Params.SetClients(QueryClient.Get(), SchemeClient.Get(), TableClient.Get(), TopicClient.Get());
     }
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
     auto result = DoRun(*workloadGen, config);
     if (!DryRun) {
+        Params.SetClients(nullptr, nullptr, nullptr, nullptr);
         TableClient->Stop().Wait();
         QueryClient.Reset();
         SchemeClient.Reset();

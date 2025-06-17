@@ -10,6 +10,7 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/data_reader/contexts.h>
 #include <ydb/core/tx/columnshard/engines/changes/counters/changes.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
@@ -17,6 +18,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 #include <util/datetime/base.h>
@@ -249,14 +251,11 @@ public:
 
 class TColumnEngineChanges: public TMoveOnly {
 private:
-    NChanges::EStage Stage = NChanges::EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
-    std::shared_ptr<NChanges::TChangesCounters::TStageCounters> Counters;
-
-    void SetStage(const NChanges::EStage stage);
+    std::shared_ptr<NChanges::TChangesCounters::TStageCountersGuard> Counters;
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -290,6 +289,8 @@ protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
+    void SetStage(const NChanges::EStage stage);
+
     bool IsActive() const {
         return !ActivityFlag || ActivityFlag->Val();
     }
@@ -355,14 +356,13 @@ public:
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
         , BlobsAction(storagesManager, consumerId) {
-        Counters->OnStageChanged(Stage, 0);
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Stage == NChanges::EStage::Aborted;
+        return Counters->GetCurrentStage() == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();
@@ -381,7 +381,7 @@ public:
     void Compile(TFinalizationContext& context) noexcept;
 
     NBlobOperations::NRead::TCompositeReadBlobs Blobs;
-    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    std::optional<NOlap::NDataFetcher::TCurrentContext> FetchingContext;
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();

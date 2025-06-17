@@ -1,6 +1,36 @@
 # Список изменений {{ ydb-short-name }} CLI
 
-## Версия 2.21.0
+## Версия 2.22.1 {#2-22-1}
+
+Дата выхода 17 июня 2025. Для обновления до версии **2.22.1** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой сертификат не читался из файла, если путь к файлу указан в [профиле](./reference/ydb-cli/profile/index.md) в поле `ca-file`.
+* Исправлена ошибка, из-за которой [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload clickbench import files` в состоянии отображали количество строк вместо количества байт.
+
+## Версия 2.22.0 {#2-22-0}
+
+Дата выхода 4 июня 2025. Для обновления до версии **2.22.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+### Функциональность
+
+* Добавлено автодополнение имён схемных объектов в интерактивном режиме.
+* Расширены возможности команды `{{ ydb-cli }} workload query`: добавлены команды `{{ ydb-cli }} workload query init`, `{{ ydb-cli }} workload query import` и `{{ ydb-cli }} workload query clean` и изменена команда `{{ ydb-cli }} workload query run`. Пользуясь ими можно инициализировать таблицы, заполнить их данными, провести нагрузочное тестирование и очистить данные за собой.
+* В [команды](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload clickbench run`, `{{ ydb-cli }} workload tpch run`, `{{ ydb-cli }} workload tpcds run` добавлена опция `--threads`, позволяющая указывать количество потоков для отправки запросов.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/index.md#list) `{{ ydb-cli }} admin cluster config version` для отображения версии конфигурации (V1/V2) на узлах.
+
+### Изменения с потерей обратной совместимости
+
+* Из команд [`{{ ydb-cli }} workload * run`](./reference/ydb-cli/commands/workload) удалена опция `--executor`. Теперь всегда используется исполнитель `generic`.
+
+### Исправления ошибок
+
+* Исправлена ошибка, из-за которой команды [`{{ ydb-cli }} workload * clean`](./reference/ydb-cli/commands/workload) удаляли все содержимое целевой директории, а не только таблицы, созданные командой init.
+
+## Версия 2.21.0 {#2-21-0}
+
+Дата выхода 22 мая 2024. Для обновления до версии **2.21.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
 
 ### Функциональность
 
@@ -12,7 +42,7 @@
   * Добавлены параметры диапазона дат (`--date-to`, `--date-from`) в операции `{{ ydb-cli }} workload log run` для поддержки равномерного распределения первичных ключей.
 * Улучшена функциональность резервного копирования и восстановления:
   * Добавлены опции `--replace` и `--verify-existence` в [команду](./reference/ydb-cli/export-import/tools-restore.md#schema-objects) `{{ ydb-cli }} tools restore` для управления удалением существующих объектов, совпадающих с объектами в резервной копии, перед восстановлением.
-  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: [таблицы-реплики](./concepts/async-replication.md) у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
+  * Улучшена [команда](./reference/ydb-cli/export-import/tools-dump.md#schema-objects) `{{ ydb-cli }} tools dump`: {% if feature_async_replication %}[таблицы-реплики](./concepts/async-replication.md){% else %}таблицы-реплики{% endif %} у ASYNC REPLICATION и их [потоки изменений](./concepts/glossary.md#changefeed) не сохраняются в локальные резервные копии. Это предотвращает дублирование потоков изменений и уменьшает размер резервной копии на диске.
 * Изменения, повышающие удобство использования CLI:
   * Вывод подробной справки (`-hh`) теперь показывает всё дерево подкоманд.
   * Добавлена автоматическая вставка парных скобок в интерактивном режиме `{{ ydb-cli }}`.

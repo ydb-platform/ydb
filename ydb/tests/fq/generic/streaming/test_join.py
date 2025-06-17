@@ -15,8 +15,17 @@ from ydb.library.yql.providers.generic.connector.tests.utils.one_time_waiter imp
 from yql.essentials.providers.common.proto.gateways_config_pb2 import EGenericDataSourceKind
 
 import conftest
+import random
 
 DEBUG = 0
+SEED = 0  # use fixed seed for regular tests
+if DEBUG:
+    if "RANDOM_SEED" in os.environ:
+        SEED = int(os.environ["RANDOM_SEED"])
+    else:
+        SEED = random.randint(0, (1 << 31))
+        print(f"RANDOM_SEED={SEED}", file=sys.stderr)
+random.seed(SEED)
 
 
 def ResequenceId(messages, field="id"):
@@ -586,6 +595,21 @@ TESTCASES = [
                 ('{"id":3,"user":[5]}', '{"id":3,"user_id":[5],"lookup":[null]}'),
                 ('{"id":9,"user":[3]}', '{"id":9,"user_id":[3],"lookup":["ydb30"]}'),
                 ('{"id":2,"user":[2]}', '{"id":2,"user_id":[2],"lookup":["ydb20"]}'),
+                (
+                    json.dumps(
+                        {
+                            "id": 111,
+                            "user": (L := [*map(lambda _: random.randint(0, 2000), range(random.randint(2, 5000)))]),
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "id": 111,
+                            "user_id": L,
+                            "lookup": [*map(lambda x: f"ydb{x}0" if 1 <= x <= 3 else None, L)],
+                        }
+                    ),
+                ),
                 ('{"id":1,"user":[1]}', '{"id":1,"user_id":[1],"lookup":["ydb10"]}'),
                 (
                     '{"id":3,"user":[5,3,2,1,0]}',
@@ -609,11 +633,11 @@ TESTCASES = [
         "MultiGet",
         "true",
         "TTL",
-        "10",
+        str(random.randint(1, 10)),
         "MaxCachedRows",
-        "7",
+        str(random.randint(7, 180)),
         "MaxDelayedRows",
-        "100",
+        str(random.randint(1, 1000)),
     ),
     # 12
     (

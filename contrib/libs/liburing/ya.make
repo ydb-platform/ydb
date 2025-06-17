@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.9)
+VERSION(2.10)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.9.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.10.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -79,6 +79,7 @@ RECURSE(
     test/eeed8b54e0df.t
     test/empty-eownerdead.t
     test/eploop.t
+    test/epwait.t
     test/eventfd-disable.t
     test/eventfd-reg.t
     test/eventfd-ring.t
@@ -104,6 +105,7 @@ RECURSE(
     test/fixed-hugepage.t
     test/fixed-link.t
     test/fixed-reuse.t
+    test/fixed-seg.t
     test/fpos.t
     test/fsnotify.t
     test/fsync.t
@@ -119,6 +121,7 @@ RECURSE(
     test/iopoll-leak.t
     test/iopoll-overflow.t
     test/iopoll.t
+    test/iowait.t
     test/kallsyms.t
     test/lfs-openat-write.t
     test/lfs-openat.t
@@ -169,6 +172,7 @@ RECURSE(
     test/read-mshot-stdin.t
     test/read-mshot.t
     test/read-write.t
+    test/recv-bundle-short-ooo.t
     test/recv-msgall-stream.t
     test/recv-msgall.t
     test/recv-multishot.t
@@ -193,6 +197,7 @@ RECURSE(
     test/send-zerocopy.t
     test/send_recv.t
     test/send_recvmsg.t
+    test/sendmsg_iov_clean.t
     test/shared-wq.t
     test/short-read.t
     test/shutdown.t
@@ -231,10 +236,12 @@ RECURSE(
     test/truncate.t
     test/tty-write-dpoll.t
     test/unlink.t
+    test/vec-regbuf.t
     test/version.t
     test/wait-timeout.t
     test/waitid.t
     test/wakeup-hang.t
     test/wq-aff.t
     test/xattr.t
+    test/zcrx.t
 )

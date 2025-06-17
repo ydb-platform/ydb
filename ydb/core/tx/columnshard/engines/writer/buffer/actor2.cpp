@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NWritingPortions {
 
@@ -48,7 +49,7 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
 
     SumSize += evBase->GetWriteData()->GetSize();
-    const TInternalPathId pathId = evBase->GetWriteData()->GetWriteMeta().GetTableId();
+    const auto& pathId = evBase->GetWriteData()->GetWriteMeta().GetPathId().InternalPathId;
     const ui64 schemaVersion = evBase->GetContext()->GetActualSchema()->GetVersion();
     TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType());
     auto it = Aggregations.find(aggrId);
@@ -71,7 +72,7 @@ void TWriteAggregation::Flush(const ui64 tabletId) {
         Context.GetWritingCounters()->OnAggregationWrite(Units.size(), SumSize);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TBuildPackSlicesTask>(std::move(Units), Context, PathId, tabletId, ModificationType);
-        NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+        NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
         Units.clear();
         SumSize = 0;
     }

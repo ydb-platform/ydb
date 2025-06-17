@@ -120,7 +120,7 @@ public:
 private:
     const TRealmIdServiceMap Services_;
     const TRealmIdServiceMap DefaultServices_;
-    const TString Address_;
+    const std::string Address_;
     const NYTree::IAttributeDictionaryPtr Attributes_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
 

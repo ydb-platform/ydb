@@ -9,6 +9,7 @@ TEST_SRCS(
     test_external.py
     test_diff_processing.py
     test_tpch.py
+    test_upload.py
 )
 
 SIZE(MEDIUM)

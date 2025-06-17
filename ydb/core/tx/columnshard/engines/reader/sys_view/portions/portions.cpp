@@ -6,8 +6,8 @@
 
 namespace NKikimr::NOlap::NReader::NSysView::NPortions {
 
-void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
-    NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
+void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion, const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    NArrow::Append<arrow::UInt64Type>(*builders[0], schemeShardLocalPathId.GetRawValue());
     const std::string prod = ::ToString(portion.GetProduced());
     NArrow::Append<arrow::StringType>(*builders[1], prod);
     NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
@@ -45,7 +45,8 @@ bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayB
     ui64 recordsCount = 0;
     while (auto portion = granule.PopFrontPortion()) {
         recordsCount += 1;
-        AppendStats(builders, *portion);
+        AFL_VERIFY(portion->GetPathId() == granule.GetPathId().InternalPathId);
+        AppendStats(builders, *portion, granule.GetPathId().SchemeShardLocalPathId);
         if (recordsCount >= 10000) {
             break;
         }

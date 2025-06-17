@@ -28,14 +28,24 @@ struct TTerminalTransaction {
     std::chrono::seconds ThinkTime;   // Time after executing transaction
 };
 
-// the order is as in TTerminalStats::ETransactionType
-static std::array<TTerminalTransaction, 5> Transactions = {{
-    {"NewOrder", NEW_ORDER_WEIGHT, &GetNewOrderTask, NEW_ORDER_KEYING_TIME, NEW_ORDER_THINK_TIME},
-    {"Delivery", DELIVERY_WEIGHT, &GetDeliveryTask, DELIVERY_KEYING_TIME, DELIVERY_THINK_TIME},
-    {"OrderStatus", ORDER_STATUS_WEIGHT, &GetOrderStatusTask, ORDER_STATUS_KEYING_TIME, ORDER_STATUS_THINK_TIME},
-    {"Payment", PAYMENT_WEIGHT, &GetPaymentTask, PAYMENT_KEYING_TIME, PAYMENT_THINK_TIME},
-    {"StockLevel", STOCK_LEVEL_WEIGHT, &GetStockLevelTask, STOCK_LEVEL_KEYING_TIME, STOCK_LEVEL_THINK_TIME}
-}};
+static std::array<TTerminalTransaction, GetEnumItemsCount<ETransactionType>()> CreateTransactions() {
+    std::array<TTerminalTransaction, GetEnumItemsCount<ETransactionType>()> transactions{};
+
+    transactions[static_cast<size_t>(ETransactionType::NewOrder)] =
+        {"NewOrder", NEW_ORDER_WEIGHT, &GetNewOrderTask, NEW_ORDER_KEYING_TIME, NEW_ORDER_THINK_TIME};
+    transactions[static_cast<size_t>(ETransactionType::Delivery)] =
+        {"Delivery", DELIVERY_WEIGHT, &GetDeliveryTask, DELIVERY_KEYING_TIME, DELIVERY_THINK_TIME};
+    transactions[static_cast<size_t>(ETransactionType::OrderStatus)] =
+        {"OrderStatus", ORDER_STATUS_WEIGHT, &GetOrderStatusTask, ORDER_STATUS_KEYING_TIME, ORDER_STATUS_THINK_TIME};
+    transactions[static_cast<size_t>(ETransactionType::Payment)] =
+        {"Payment", PAYMENT_WEIGHT, &GetPaymentTask, PAYMENT_KEYING_TIME, PAYMENT_THINK_TIME};
+    transactions[static_cast<size_t>(ETransactionType::StockLevel)] =
+        {"StockLevel", STOCK_LEVEL_WEIGHT, &GetStockLevelTask, STOCK_LEVEL_KEYING_TIME, STOCK_LEVEL_THINK_TIME};
+
+    return transactions;
+}
+
+static std::array<TTerminalTransaction, GetEnumItemsCount<ETransactionType>()> Transactions = CreateTransactions();
 
 static size_t ChooseRandomTransactionIndex() {
     double totalWeight = 0.0;
@@ -64,7 +74,7 @@ TTerminal::TTerminal(size_t terminalID,
                      ITaskQueue& taskQueue,
                      std::shared_ptr<NQuery::TQueryClient>& client,
                      const TString& path,
-                     bool noSleep,
+                     bool noDelays,
                      int simulateTransactionMs,
                      int simulateTransactionSelect1Count,
                      std::stop_token stopToken,
@@ -73,7 +83,7 @@ TTerminal::TTerminal(size_t terminalID,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
     , Context(terminalID, warehouseID, warehouseCount, TaskQueue, simulateTransactionMs, simulateTransactionSelect1Count, client, path, log)
-    , NoSleep(noSleep)
+    , NoDelays(noDelays)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
@@ -95,6 +105,8 @@ TTerminalTask TTerminal::Run() {
 
     while (!StopToken.stop_requested()) {
         if (!WarmupWasStopped && StopWarmup.load(std::memory_order::relaxed)) {
+            // WarmupWasStopped is per terminal member, while Stats are shared
+            // between multiple terminals. That's why we call ClearOnce().
             Stats->ClearOnce();
             WarmupWasStopped = true;
         }
@@ -103,7 +115,7 @@ TTerminalTask TTerminal::Run() {
         auto& transaction = Transactions[txIndex];
 
         try {
-            if (!NoSleep) {
+            if (!NoDelays) {
                 LOG_T("Terminal " << Context.TerminalID << " keying time for " << transaction.Name << ": "
                     << transaction.KeyingTime.count() << "s");
                 co_await TSuspend(TaskQueue, Context.TerminalID, transaction.KeyingTime);
@@ -146,18 +158,18 @@ TTerminalTask TTerminal::Run() {
                 auto latencyTransaction = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTimeTransaction);
 
                 if (result.IsSuccess()) {
-                    Stats->AddOK(static_cast<TTerminalStats::ETransactionType>(txIndex), latencyTransaction, latencyFull, latencyPure);
+                    Stats->AddOK(static_cast<ETransactionType>(txIndex), latencyTransaction, latencyFull, latencyPure);
                     LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction finished in "
                         << execCount << " execution(s): " << result.GetStatus());
                 } else {
-                    Stats->IncFailed(static_cast<TTerminalStats::ETransactionType>(txIndex));
+                    Stats->IncFailed(static_cast<ETransactionType>(txIndex));
                     LOG_E("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction failed in "
                         << execCount << " execution(s): " << result.GetStatus() << ", "
                         << result.GetIssues().ToOneLineString());
                 }
             }
             TaskQueue.DecInflight();
-            if (!NoSleep) {
+            if (!NoDelays) {
                 LOG_T("Terminal " << Context.TerminalID << " is going to sleep for "
                     << transaction.ThinkTime.count() << "s (think time)");
                 co_await TSuspend(TaskQueue, Context.TerminalID, transaction.ThinkTime);
@@ -165,7 +177,7 @@ TTerminalTask TTerminal::Run() {
             continue;
         } catch (const TUserAbortedException& ex) {
             // it's OK, inc statistics and ignore
-            Stats->IncUserAborted(static_cast<TTerminalStats::ETransactionType>(txIndex));
+            Stats->IncUserAborted(static_cast<ETransactionType>(txIndex));
             LOG_T("Terminal " << Context.TerminalID << " " << transaction.Name << " transaction aborted by user");
         } catch (const yexception& ex) {
             TStringStream ss;
@@ -176,7 +188,8 @@ TTerminalTask TTerminal::Run() {
                 ss << ", backtrace: " << ex.BackTrace()->PrintToString();
             }
             LOG_E(ss.Str());
-            std::quick_exit(1);
+            RequestStop();
+            co_return;
         }
 
         // only here if exception cought

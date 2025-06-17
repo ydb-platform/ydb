@@ -4,7 +4,7 @@ PROGRAM()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(2.1.4)
+VERSION(3.1.1)
 
 PEERDIR(
     contrib/libs/libjpeg-turbo
@@ -12,13 +12,14 @@ PEERDIR(
 
 ADDINCL(
     contrib/libs/libjpeg-turbo
+    contrib/libs/libjpeg-turbo/src
 )
 
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-SRCDIR(contrib/libs/libjpeg-turbo)
+SRCDIR(contrib/libs/libjpeg-turbo/src)
 
 SRCS(
     cdjpeg.c

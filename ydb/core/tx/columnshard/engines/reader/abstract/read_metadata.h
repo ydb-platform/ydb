@@ -1,7 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 
@@ -20,14 +19,11 @@ class TReadContext;
 
 class TDataStorageAccessor {
 private:
-    const std::unique_ptr<NOlap::TInsertTable>& InsertTable;
     const std::unique_ptr<NOlap::IColumnEngine>& Index;
 
 public:
-    TDataStorageAccessor(const std::unique_ptr<TInsertTable>& insertTable, const std::unique_ptr<IColumnEngine>& index);
+    TDataStorageAccessor(const std::unique_ptr<IColumnEngine>& index);
     std::shared_ptr<NOlap::TSelectInfo> Select(const TReadDescription& readDescription, const bool withUncommitted) const;
-    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema,
-        const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const;
 };
 
 // Holds all metadata that is needed to perform read/scan
@@ -123,6 +119,11 @@ public:
     const TVersionedIndex& GetIndexVersions() const {
         AFL_VERIFY(IndexVersionsPointer);
         return *IndexVersionsPointer;
+    }
+
+    const std::shared_ptr<TVersionedIndex>& GetIndexVersionsPtr() const {
+        AFL_VERIFY(IndexVersionsPointer);
+        return IndexVersionsPointer;
     }
 
     const std::optional<TGranuleShardingInfo>& GetRequestShardingInfo() const {

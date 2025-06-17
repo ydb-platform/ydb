@@ -379,7 +379,7 @@ private:
 };
 
 enum class ECleanupPolicy {
-    DELETE,
+    REMOVE,
     COMPACT,
     UNKNOWN
 };

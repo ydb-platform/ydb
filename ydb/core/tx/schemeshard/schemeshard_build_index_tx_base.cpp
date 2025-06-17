@@ -56,11 +56,6 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplySchedule(const TActorContext& ct
     }
 }
 
-ui64 TSchemeShard::TIndexBuilder::TTxBase::RequestUnits(const TBillingStats& stats) {
-    return TRUCalculator::ReadTable(stats.GetReadBytes())
-         + TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
-}
-
 void TSchemeShard::TIndexBuilder::TTxBase::RoundPeriod(TInstant& start, TInstant& end) {
     if (start.Hours() == end.Hours()) {
         return; // that is OK
@@ -157,7 +152,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         billed += toBill;
         Self->PersistBuildIndexBilled(db, buildInfo);
 
-        ui64 requestUnits = RequestUnits(toBill);
+        ui64 requestUnits = TRUCalculator::Calculate(toBill);
 
         const TString billRecord = TBillRecord()
             .Id(id)
@@ -197,8 +192,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Progress(TIndexBuildId id) {
 
 void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild& index, const TIndexBuildInfo& indexInfo) {
     index.SetId(ui64(indexInfo.Id));
-    if (indexInfo.Issue) {
-        AddIssue(index.MutableIssues(), indexInfo.Issue);
+    if (indexInfo.GetIssue()) {
+        AddIssue(index.MutableIssues(), indexInfo.GetIssue());
     }
     if (indexInfo.StartTime != TInstant::Zero()) {
         *index.MutableStartTime() = SecondsToProtoTimeStamp(indexInfo.StartTime.Seconds());
@@ -428,12 +423,47 @@ bool TSchemeShard::TIndexBuilder::TTxBase::GotScheduledBilling(TIndexBuildInfo& 
 }
 
 bool TSchemeShard::TIndexBuilder::TTxBase::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    if (!DoExecute(txc, ctx)) {
+    bool executeResult;
+
+    try {
+        executeResult = DoExecute(txc, ctx);
+    } catch (const std::exception& exc) {
+        if (OnUnhandledExceptionSafe(txc, ctx, exc)) {
+            return true;
+        }
+        throw; // fail process, a really bad thing has happened
+    }
+
+    if (!executeResult) {
         return false;
     }
 
     ApplyOnExecute(txc, ctx);
     return true;
+}
+
+bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransactionContext& txc, const TActorContext& ctx, const std::exception& originalExc) {
+    try {
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
+        TIndexBuildInfo* buildInfo = buildInfoPtr
+            ? buildInfoPtr->Get()
+            : nullptr;
+
+        LOG_E("Unhandled exception, id#"
+            << (BuildId == InvalidIndexBuildId ? TString("<no id>") : TStringBuilder() << BuildId)
+            << " " << TypeName(originalExc) << ": " << originalExc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString()
+            << ", TIndexBuildInfo: " << (buildInfo ? TStringBuilder() << (*buildInfo) : TString("<no build info>")));
+
+        OnUnhandledException(txc, ctx, buildInfo, originalExc);
+
+        return true;
+    } catch (const std::exception& handleExc) {
+        LOG_E("OnUnhandledException throws unhandled exception " 
+            << TypeName(handleExc) << ": " << handleExc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+        return false;
+    }
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::Complete(const TActorContext& ctx) {

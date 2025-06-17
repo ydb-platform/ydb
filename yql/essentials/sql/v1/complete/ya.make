@@ -8,16 +8,14 @@ PEERDIR(
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/complete/antlr4
     yql/essentials/sql/v1/complete/name/service
-    # TODO(YQL-19747): move to /analysis/local
     yql/essentials/sql/v1/complete/syntax
     yql/essentials/sql/v1/complete/analysis/global
+    yql/essentials/sql/v1/complete/analysis/local
     yql/essentials/sql/v1/complete/text
     # TODO(YQL-19747): split /name/service/ranking interface and implementation
     # TODO(YQL-19747): extract NameIndex
     yql/essentials/sql/v1/complete/name/service/ranking
     yql/essentials/sql/v1/complete/name/service/binding
-    # TODO(YQL-19747): add it to YDB CLI PEERDIR
-    yql/essentials/sql/v1/complete/name/service/static
 )
 
 END()
@@ -25,6 +23,8 @@ END()
 RECURSE(
     analysis
     antlr4
+    bench
+    check
     core
     name
     syntax

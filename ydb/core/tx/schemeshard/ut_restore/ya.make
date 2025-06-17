@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/ydb_convert
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    ydb/core/testlib/audit_helpers
 )
 
 SRCS(

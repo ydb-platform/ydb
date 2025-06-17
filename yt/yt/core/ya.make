@@ -250,6 +250,7 @@ SRCS(
     yson/null_consumer.cpp
     yson/parser.cpp
     yson/producer.cpp
+    yson/protobuf_helpers.cpp
     yson/protobuf_interop.cpp
     yson/protobuf_interop_options.cpp
     yson/protobuf_interop_unknown_fields.cpp

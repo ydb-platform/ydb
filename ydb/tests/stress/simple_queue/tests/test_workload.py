@@ -12,6 +12,8 @@ class TestYdbWorkload(object):
     def setup_class(cls):
         config_generator = KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC)
         config_generator.yaml_config["table_service_config"]["allow_olap_data_query"] = True
+        config_generator.yaml_config["table_service_config"]["enable_oltp_sink"] = True
+        config_generator.yaml_config["table_service_config"]["enable_batch_updates"] = True
         cls.cluster = KiKiMR(config_generator)
         cls.cluster.start()
 
@@ -22,5 +24,4 @@ class TestYdbWorkload(object):
     @pytest.mark.parametrize('mode', ['row', 'column'])
     def test(self, mode: str):
         with Workload(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', 60, mode) as workload:
-            for handle in workload.loop():
-                handle()
+            workload.start()

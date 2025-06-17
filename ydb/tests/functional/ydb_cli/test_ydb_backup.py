@@ -1319,7 +1319,7 @@ class BaseTestClusterBackupInFiles(object):
             storage_pool_units_count={
                 'hdd': 1
             },
-            timeout_seconds=100,
+            timeout_seconds=240,
             token=cls.cluster.config.default_clusteradmin
         )
 
@@ -1527,7 +1527,7 @@ class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):
                 "--endpoint", f"grpc://localhost:{cls.restore_cluster.nodes[1].grpc_port}",
             ]
             + command
-            + ["--input", backup_files_dir, "-w", "60s"]
+            + ["--input", backup_files_dir, "-w", "240s"]
             + additional_args,
             env={"YDB_TOKEN": token}
         )

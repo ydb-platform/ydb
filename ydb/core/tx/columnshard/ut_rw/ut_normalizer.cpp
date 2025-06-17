@@ -137,20 +137,20 @@ public:
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        std::vector<ui64> tables;
+        std::vector<TInternalPathId> tables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
             UNIT_ASSERT(rowset.IsReady());
 
             while (!rowset.EndOfSet()) {
-                const auto pathId = rowset.GetValue<Schema::TableInfo::PathId>();
+                const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfo::PathId>());
                 tables.emplace_back(pathId);
                 UNIT_ASSERT(rowset.Next());
             }
         }
 
         for (auto&& key : tables) {
-            db.Table<Schema::TableInfo>().Key(key).Delete();
+            db.Table<Schema::TableInfo>().Key(key.GetRawValue()).Delete();
         }
 
         struct TKey {
@@ -220,22 +220,6 @@ public:
             for (size_t i = 0; i < 100; ++i) {
                 db.Table<Schema::IndexColumns>()
                 .Key(1 + i, 2 + i, 3 + i, 4 + i, 5 + i, 6 + i, 7 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::TtlSettingsPresetInfo>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::TtlSettingsPresetInfo>()
-                .Key(1 + i)
-                .Update();
-            }
-        }
-
-        if (db.HaveTable<Schema::TtlSettingsPresetVersionInfo>()) {
-            for (size_t i = 0; i < 100; ++i) {
-                db.Table<Schema::TtlSettingsPresetVersionInfo>()
-                .Key(1 + i, 2 + i, 3 + i)
                 .Update();
             }
         }
@@ -374,7 +358,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         public:
             virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
                 auto* repair = columnShardConfig.MutableRepairs()->Add();
-                repair->SetClassName("CleanUnusedTables");
+                repair->SetClassName("CleanIndexColumns");
                 repair->SetDescription("Cleaning old table");
             }
         };

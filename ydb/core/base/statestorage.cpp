@@ -227,12 +227,16 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
     }
 }
 
+bool TStateStorageInfo::TRingGroup::SameConfiguration(const TStateStorageInfo::TRingGroup& rg) {
+    return NToSelect == rg.NToSelect && Rings == rg.Rings && State == rg.State;
+}
+
 bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) {
     return lhs.IsDisabled == rhs.IsDisabled && lhs.UseRingSpecificNodeSelection == rhs.UseRingSpecificNodeSelection && lhs.Replicas == rhs.Replicas;
 }
 
 bool operator==(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs) {
-    return lhs.WriteOnly == rhs.WriteOnly && lhs.NToSelect == rhs.NToSelect && lhs.Rings == rhs.Rings;
+    return lhs.WriteOnly == rhs.WriteOnly && lhs.NToSelect == rhs.NToSelect && lhs.Rings == rhs.Rings && lhs.State == rhs.State;
 }
 
 bool operator!=(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) { 
@@ -308,11 +312,32 @@ static void CopyStateStorageRingInfo(
     Y_ABORT("must have rings or legacy node config");
 }
 
+ERingGroupState GetRingGroupState(const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &ringGroup) {
+    if (!ringGroup.HasPileState()) {
+        return ERingGroupState::PRIMARY; 
+    }
+    switch (ringGroup.GetPileState()) {
+        case NKikimrConfig::TDomainsConfig::TStateStorage::PRIMARY:
+        case NKikimrConfig::TDomainsConfig::TStateStorage::PROMOTED:
+            return ERingGroupState::PRIMARY;   
+        case NKikimrConfig::TDomainsConfig::TStateStorage::SYNCHRONIZED:
+        case NKikimrConfig::TDomainsConfig::TStateStorage::DEMOTED:
+            return ERingGroupState::SYNCHRONIZED;  
+        case NKikimrConfig::TDomainsConfig::TStateStorage::NOT_SYNCHRONIZED:
+            return ERingGroupState::NOT_SYNCHRONIZED;
+        case NKikimrConfig::TDomainsConfig::TStateStorage::DISCONNECTED:
+            return ERingGroupState::DISCONNECTED;
+        default:
+            Y_ABORT("Unsupported ring group pile state");
+    }
+}
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefix, 
         const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     char name[TActorId::MaxServiceIDLength];
     strcpy(name, namePrefix);
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
+    info->ClusterStateGeneration = config.GetClusterStateGeneration();
+    info->ClusterStateGuid = config.GetClusterStateGuid();
     Y_ABORT_UNLESS(config.GetSSId() == 1);
     Y_ABORT_UNLESS(config.HasRing() != (config.RingGroupsSize() > 0));
     info->StateStorageVersion = config.GetStateStorageVersion();
@@ -329,13 +354,13 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefi
     memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         auto& ringGroup = config.GetRingGroups(i);
-        info->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
+        info->RingGroups.push_back({GetRingGroupState(ringGroup), ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
         CopyStateStorageRingInfo(ringGroup, info->RingGroups.back(), name, offset, ringGroup.GetRingGroupActorIdOffset());
         memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     }
     if (config.HasRing()) {
         auto& ring = config.GetRing();
-        info->RingGroups.push_back({false, ring.GetNToSelect(), {}});
+        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, ring.GetNToSelect(), {}});
         CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset, ring.GetRingGroupActorIdOffset());
     }
     return info;

@@ -177,6 +177,12 @@ namespace NYql {
             return;
         }
 
+        // We use HTTP protocol to access OpenSearch
+        if (clusterConfig.GetKind() == EGenericDataSourceKind::OPENSEARCH) {
+            clusterConfig.SetProtocol(EGenericProtocol::HTTP);
+            return;
+        }
+
         // For the most of transactional databases the PROTOCOL is always NATIVE 
         if (IsIn({
                 EGenericDataSourceKind::GREENPLUM,

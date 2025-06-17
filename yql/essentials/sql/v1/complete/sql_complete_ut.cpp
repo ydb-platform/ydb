@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine, TString sharped) {
-        auto candidates = Complete(engine, sharped);
+        auto candidates = Complete(engine, std::move(sharped));
         candidates.crop(limit);
         return candidates;
     }
@@ -1024,6 +1024,20 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, query + "$ab"), expected);
         }
+    }
+
+    Y_UNIT_TEST(TableAsFunctionArgument) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompleteTop(1, engine, "SELECT * FROM Concat(#)").at(0).Kind, FolderName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompleteTop(1, engine, "SELECT * FROM CONCAT(#)").at(0).Kind, FolderName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompleteTop(1, engine, "SELECT * FROM CONCAT(a, #)").at(0).Kind, FolderName);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            CompleteTop(1, engine, "SELECT Max(#)").at(0).Kind, FolderName);
     }
 
     Y_UNIT_TEST(Typing) {

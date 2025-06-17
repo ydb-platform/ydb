@@ -61,7 +61,6 @@ public:
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, NActors::NLog::PRI_DEBUG);
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER, NActors::NLog::PRI_DEBUG);
-        NYdb::NTable::TTableClient tableClient = TestHelper->GetKikimr().GetTableClient();
         Tests::NCommon::TLoggerInit(TestHelper->GetKikimr()).Initialize();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
     }
@@ -164,7 +163,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
         tieringHelper.SetTablePath("/Root/olapTable");
 
-        olapHelper.CreateTestOlapTableWithoutStore();
+        olapHelper.CreateTestOlapStandaloneTable();
         testHelper.CreateTier("tier1");
         testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
         {
@@ -335,13 +334,13 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         olapHelper.CreateTestOlapTable();
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
-        THashSet<NColumnShard::TInternalPathId> pathsToLock{
-            NColumnShard::TInternalPathId::FromRawValue(0),
-            NColumnShard::TInternalPathId::FromRawValue(1),
-            NColumnShard::TInternalPathId::FromRawValue(2),
-            NColumnShard::TInternalPathId::FromRawValue(3),
-            NColumnShard::TInternalPathId::FromRawValue(4),
-            NColumnShard::TInternalPathId::FromRawValue(5),
+        THashSet<NColumnShard::TInternalPathId> pathsToLock;
+        for (const auto& [_, pathIdTranslator]: csController->GetActiveTablets()) {
+            for (size_t i = 0; i != 6; ++i) {
+                if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(NColumnShard::TSchemeShardLocalPathId::FromRawValue(i))) {
+                    pathsToLock.insert(*internalPathId);
+                }
+            }
         };
 
         csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", std::move(pathsToLock), NOlap::NDataLocks::ELockCategory::Compaction));

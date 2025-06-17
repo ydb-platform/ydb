@@ -91,6 +91,7 @@ struct TReplicationCardFetchOptions
 
     operator size_t() const;
     bool operator == (const TReplicationCardFetchOptions& other) const = default;
+    TReplicationCardFetchOptions& operator |= (const TReplicationCardFetchOptions& other);
 
     bool Contains(const TReplicationCardFetchOptions& other) const;
 };

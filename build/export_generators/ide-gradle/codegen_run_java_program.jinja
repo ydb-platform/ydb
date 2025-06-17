@@ -1,4 +1,5 @@
 {%- if current_target.runs|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.runs|map(attribute='_object_index') -%}
 {%-     for run in current_target.runs %}
 
 val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
@@ -84,7 +85,6 @@ val {{ varprefix }}{{ run['_object_index'] }} = task<JavaExec>("{{ varprefix }}{
 
 {#-
     Не использованы атрибуты
-    run-in_dirs_inputs="list"
     run-tool="list"
 #}
 }

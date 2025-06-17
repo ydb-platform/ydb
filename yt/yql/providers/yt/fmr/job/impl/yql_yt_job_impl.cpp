@@ -3,7 +3,7 @@
 
 #include <util/stream/file.h>
 
-#include <yt/cpp/mapreduce/common/helpers.h> // Для логов, потом мб убрать
+#include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>

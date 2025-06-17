@@ -6,6 +6,7 @@ from collections import defaultdict
 from functools import reduce
 
 from pythran.analyses import Aliases, CFG
+from pythran.analyses.use_omp import UseOMP
 from pythran.intrinsic import Intrinsic
 from pythran.passmanager import ModuleAnalysis
 from pythran.interval import Interval, IntervalTuple, UNKNOWN_RANGE
@@ -205,15 +206,14 @@ def bound_range(mapping, aliases, node, modified=None):
             left = right
 
 
-class RangeValuesBase(ModuleAnalysis):
+class RangeValuesBase(ModuleAnalysis[Aliases, CFG, UseOMP]):
 
     ResultHolder = object()
+    ResultType = lambda: defaultdict(lambda: UNKNOWN_RANGE)
 
     def __init__(self):
         """Initialize instance variable and gather globals name information."""
-        self.result = defaultdict(lambda: UNKNOWN_RANGE)
-        from pythran.analyses import UseOMP
-        super(RangeValuesBase, self).__init__(Aliases, CFG, UseOMP)
+        super().__init__()
         self.parent = self
 
     def add(self, variable, range_):

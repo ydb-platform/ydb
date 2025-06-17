@@ -23,13 +23,8 @@ enum EOptionalFlag {
 struct TKikimrSettings {
     using TConstPtr = std::shared_ptr<const TKikimrSettings>;
 private:
-#ifdef YQL_BETTER_CONF_SETTING_API
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
     static constexpr NCommon::EConfSettingType Dynamic = NCommon::EConfSettingType::Dynamic;
-#else
-    static constexpr bool Static = false;
-    static constexpr bool Dynamic = true;
-#endif
 public:
     /* KQP */
     NCommon::TConfSetting<ui32, Static> _KqpSessionIdleTimeoutSec;
@@ -80,6 +75,9 @@ public:
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> UseBlockReader;
+
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
     NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
 
@@ -198,6 +196,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapScalarApply = false;
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
+
+    NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
+    NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

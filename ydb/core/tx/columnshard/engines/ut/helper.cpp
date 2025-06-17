@@ -1,7 +1,11 @@
 #include "helper.h"
+
+#include <ydb/core/formats/arrow/special_keys.h>
+
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
-namespace  NKikimr::NOlap::NEngines::NTest {
+namespace NKikimr::NOlap::NEngines::NTest {
 
 std::shared_ptr<arrow::Schema> TLocalHelper::GetMetaSchema() {
     return std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("1", arrow::uint64()) }));
@@ -23,4 +27,4 @@ NKikimrTxColumnShard::TLogicalMetadata TLocalHelper::GetMetaProto() {
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap::NEngines::NTest

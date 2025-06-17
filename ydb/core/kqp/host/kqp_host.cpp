@@ -1648,7 +1648,13 @@ private:
 
         YQL_ENSURE(ExprCtxStorage);
 
-        auto prepareData = PrepareRewrite(compileResult.QueryExpr, *ExprCtxStorage, *TypesCtx, SessionCtx, Cluster);
+        auto prepareData = PrepareRewrite(
+            compileResult.QueryExpr,
+            *ExprCtxStorage,
+            *TypesCtx,
+            SessionCtx,
+            *FuncRegistry,
+            Cluster);
 
         return MakeIntrusive<TAsyncSplitQueryResult>(
             compileResult.QueryExpr,
@@ -1904,6 +1910,7 @@ private:
 
         solomonState->Types = TypesCtx.Get();
         solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
         solomonState->ExecutorPoolId = AppData()->UserPoolId;

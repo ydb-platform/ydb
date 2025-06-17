@@ -200,7 +200,6 @@ public:
     std::string DbPath;
     bool Verbose = false;
 
-protected:
     NYdb::NQuery::TQueryClient* QueryClient = nullptr;
     NYdb::NScheme::TSchemeClient* SchemeClient = nullptr;
     NYdb::NTable::TTableClient* TableClient = nullptr;

@@ -4,13 +4,14 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <util/generic/serialized_enum.h>
 
 #include <map>
 #include <set>
 
 namespace NKikimr::NOlap::NCounters {
 
-template <enum EState>
+template <class EState>
 class TStateSignalsOwner: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -39,7 +40,7 @@ public:
     }
 };
 
-template <enum EState>
+template <class EState>
 class TStateSignalsOperator {
 private:
     std::shared_ptr<TStateSignalsOwner<EState>> Signals;

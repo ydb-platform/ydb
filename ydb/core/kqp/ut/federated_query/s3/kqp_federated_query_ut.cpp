@@ -2658,14 +2658,34 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        const TString query = R"(
-            PRAGMA s3.UseBlocksSink = "true";
+        {
+            const TString query = R"(
+                PRAGMA s3.UseBlocksSink = "true";
 
-            INSERT INTO test_bucket.`/result/` WITH (FORMAT = "parquet")
-            SELECT value FROM test_table
+                INSERT INTO test_bucket.`/result/` WITH (FORMAT = "parquet")
+                SELECT value FROM test_table
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            SELECT * FROM test_bucket.`/result/` WITH (
+                FORMAT = "parquet",
+                SCHEMA (
+                    value String
+                )
+            )
         )";
         const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT(!parser.ColumnParser(0).GetOptionalString());
     }
 }
 

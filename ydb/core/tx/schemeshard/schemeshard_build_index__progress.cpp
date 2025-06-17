@@ -1899,7 +1899,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
 
     TBillingStats GetBillingStats() const override {
         auto& record = Response->Get()->Record;
-        // TODO(mbkkt) we should account uploads and reads separately
+        // secondary index reads and writes almost the same amount of data
+        // do not count them separately for simplicity
         return {record.GetRowsDelta(), record.GetBytesDelta(), record.GetRowsDelta(), record.GetBytesDelta()};
     }
 };

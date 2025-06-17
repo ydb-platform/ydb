@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             TKafkaRecordBatch batch;
             batch.BaseOffset = 7;
-            batch.BaseSequence = 11;
+            batch.BaseSequence = 6;
             batch.Magic = 2; // Current supported
             batch.Records.resize(1);
             batch.Records[0].Key = "record-key-1";
@@ -454,16 +454,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // send producer epoch, seqno
-
-        }
-
-        {
             // Check for few records
 
             TKafkaRecordBatch batch;
             batch.BaseOffset = 13;
-            batch.BaseSequence = 17;
+            batch.BaseSequence = 7;
             batch.Magic = 2; // Current supported
             batch.Records.resize(1);
             batch.Records[0].Key = "record-key-0";
@@ -471,6 +466,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs;
             msgs.emplace_back(0, batch);
+            batch.BaseSequence = 8;
             msgs.emplace_back(1, batch);
 
             auto msg = client.Produce("topic-0-test", msgs);
@@ -492,7 +488,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             TKafkaRecordBatch batch;
             batch.BaseOffset = 7;
-            batch.BaseSequence = 11;
+            batch.BaseSequence = 9;
             batch.Magic = 2; // Current supported
             batch.Records.resize(1);
             batch.Records[0].Key = "record-key-1";
@@ -511,7 +507,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             TKafkaRecordBatch batch;
             batch.BaseOffset = 7;
-            batch.BaseSequence = 11;
+            batch.BaseSequence = 10;
             batch.Magic = 2; // Current supported
             batch.Records.resize(1);
             batch.Records[0].Key = "record-key-1";

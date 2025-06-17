@@ -335,11 +335,15 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             float poolSharedElapsedCpu = SharedInfo.CpuConsumption[poolIdx].Elapsed;
             possibleMaxSharedQuota = std::min<float>(poolSharedElapsedCpu + freeSharedCpu, sharedThreads);
         }
-        float threadCount = pool.GetFullThreadCount();
-        float elapsedCpu = pool.ElapsedCpu.GetAvgPart();
-        float parkedCpu = Max<float>(0.0f, threadCount - elapsedCpu);
+
+        float fullThreadCount = pool.GetFullThreadCount();
+        float elapsedCpu = CpuConsumption.PoolFullThreadConsumption[poolIdx].Elapsed;
+        float parkedCpu = Max<float>(0.0f, fullThreadCount - elapsedCpu);
         float budgetWithoutSharedAndParkedCpu = std::max<float>(0.0f, budgetWithoutSharedCpu - parkedCpu);
-        float potentialMaxThreadCountWithoutSharedCpu = std::min<float>(pool.MaxThreadCount, threadCount + budgetWithoutSharedAndParkedCpu);
+        float potentialMaxThreadCountWithoutSharedCpu = std::min<float>(pool.MaxThreadCount, fullThreadCount + budgetWithoutSharedAndParkedCpu);
+        if (!Shared) {
+            potentialMaxThreadCountWithoutSharedCpu = std::floor(potentialMaxThreadCountWithoutSharedCpu);
+        }
         float potentialMaxThreadCount = std::min<float>(pool.MaxThreadCount, potentialMaxThreadCountWithoutSharedCpu + possibleMaxSharedQuota);
 
         pool.PotentialMaxThreadCount.store(potentialMaxThreadCount, std::memory_order_relaxed);

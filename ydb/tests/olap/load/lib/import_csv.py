@@ -42,9 +42,11 @@ class ImportFileCsvBase(UploadSuiteBase):
         )
         result.add_stat(self.query_name, 'file_size', file_size)
         import_speed = 0
-        if result.time > 0:
-            import_speed = file_size / result.time
+        import_time = result.iterations[0].time
+        if import_time > 0:
+            import_speed = file_size / import_time
         result.add_stat(self.query_name, 'import_speed', import_speed)
+        result.add_stat(self.query_name, 'import_time', import_time)
 
 
 class TestImportFileCsv(ImportFileCsvBase):

@@ -437,14 +437,15 @@ public:
             const auto rowCells = *row;
 
             ReadBuf.AddRow(
-                TSerializedCellVec(rowCells.Slice(0, TargetDataColumnPos)),
-                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)),
-                TSerializedCellVec(key));
+                rowCells.Slice(0, TargetDataColumnPos),
+                rowCells.Slice(TargetDataColumnPos),
+                key);
         });
     }
 };
 
 class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR> {
+    TVector<TCell> Value;
     TString ValueSerialized;
 
 public:
@@ -463,21 +464,19 @@ public:
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
 
         TMemoryPool valueDataPool(256);
-        TVector<TCell> cells;
         TString err;
-        Y_ENSURE(BuildExtraColumns(cells, columnBuildSettings, err, valueDataPool));
-        ValueSerialized = TSerializedCellVec::Serialize(cells);
+        Y_ENSURE(BuildExtraColumns(Value, columnBuildSettings, err, valueDataPool));
+        ValueSerialized = TSerializedCellVec::Serialize(Value);
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         return FeedImpl(key, row, [&] {
-            TSerializedCellVec pk(key);
-            auto pkTarget = pk;
-            auto valueTarget = ValueSerialized;
+            auto valueSerializedCopy = ValueSerialized;
             ReadBuf.AddRow(
-                std::move(pkTarget),
-                std::move(valueTarget),
-                std::move(pk));
+                key,
+                Value,
+                std::move(valueSerializedCopy),
+                key);
         });
     }
 };

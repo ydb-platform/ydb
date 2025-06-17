@@ -38,10 +38,16 @@ public:
         LastKey = {};
     }
 
-    void AddRow(TSerializedCellVec&& rowKey, TString&& rowValue, TSerializedCellVec&& originalKey = {}) {
-        Rows->emplace_back(std::move(rowKey), std::move(rowValue));
+    void AddRow(TConstArrayRef<TCell> rowKey, TConstArrayRef<TCell> rowValue, TConstArrayRef<TCell> originalKey = {}) {
+        AddRow(rowKey, rowValue, TSerializedCellVec::Serialize(rowValue), originalKey);
+    }
+
+    void AddRow(TConstArrayRef<TCell> rowKey, TConstArrayRef<TCell> rowValue, TString&& rowValueSerialized,  TConstArrayRef<TCell> originalKey = {}) {
+        Y_UNUSED(rowValue);
+
+        Rows->emplace_back(TSerializedCellVec{rowKey}, std::move(rowValueSerialized));
         ByteSize += Rows->back().first.GetBuffer().size() + Rows->back().second.size();
-        LastKey = std::move(originalKey);
+        LastKey = TSerializedCellVec{originalKey};
     }
 
     bool IsEmpty() const {

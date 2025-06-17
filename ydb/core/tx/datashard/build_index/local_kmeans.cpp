@@ -243,7 +243,7 @@ public:
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
-            PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
+            PrefixRows.AddRow(key, *row);
             if (HasReachedLimits(PrefixRows, ScanSettings)) {
                 PrefixRows.Clear();
                 IsPrefixRowsValid = false;

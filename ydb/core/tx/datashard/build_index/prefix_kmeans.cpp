@@ -272,15 +272,15 @@ public:
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
 
             // write {Prefix..., Parent} row to PrefixBuf:
-            auto pk = TSerializedCellVec::Serialize(Prefix.GetCells());
-            std::array<TCell, 1> cells;
-            cells[0] = TCell::Make(Parent);
-            TSerializedCellVec::UnsafeAppendCells(cells, pk);
-            PrefixBuf->AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
+            TVector<TCell> pk(::Reserve(Prefix.GetCells().size() + 1));
+            pk.insert(pk.end(), Prefix.GetCells().begin(), Prefix.GetCells().end());
+            pk.push_back(TCell::Make(Parent));
+
+            PrefixBuf->AddRow(pk, {});
         }
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
-            PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
+            PrefixRows.AddRow(key, *row);
             if (HasReachedLimits(PrefixRows, ScanSettings)) {
                 PrefixRows.Clear();
                 IsPrefixRowsValid = false;

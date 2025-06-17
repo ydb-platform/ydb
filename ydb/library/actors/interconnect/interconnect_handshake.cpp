@@ -720,45 +720,38 @@ namespace NActors {
 
         NActorsInterconnect::TRdmaHandshakeReadAck TryRdmaRead(const NActorsInterconnect::TRdmaCred& cred) {
             NActorsInterconnect::TRdmaHandshakeReadAck rdmaReadAck;
-            bool ok = true;
             if (cred.GetSize() > RdmaHandshakeRegionSize) {
                 rdmaReadAck.SetErr("Unexpected rdma region size for READ request");
-                ok = false;
+                return rdmaReadAck;
             }
 
             NInterconnect::NRdma::TMemRegionPtr mr; 
-            if (ok) {
-                mr = std::move(Common->RdmaMemPool->Alloc(cred.GetSize()));
-                if (!mr) {
-                    TString err("Unable to allocate memory region for handshake rdma read");
-                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
-                        err.c_str());
-                    rdmaReadAck.SetErr(err);
-                    ok = false;
-                }
-            };
-
-            if (ok) {
-                void* addr = mr->GetAddr(); 
-                bzero(addr, cred.GetSize());
-
-                int err = RdmaQp->SendRdmaReadWr(1234, mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());
-                if (err) {
-                    TStringBuilder sb;
-                    sb << "Unable to post rdma READ work request, error " << err;
-                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                        sb.c_str());
-                        rdmaReadAck.SetErr(sb); 
-                    ok = false;
-                }
+            mr = std::move(Common->RdmaMemPool->Alloc(cred.GetSize()));
+            if (!mr) {
+                TString err("Unable to allocate memory region for handshake rdma read");
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_WARN,
+                    err.c_str());
+                rdmaReadAck.SetErr(err);
+                return rdmaReadAck;
             }
 
-            if (ok) {
-                RdmaQp->ProcessCq();
-                //auto ev = WaitForSpecificEvent<TEvRdmaIoHandshakeDone>("TryRdmaRead");
-                ui32 crc = Crc32cExtendMSanCompatible(0, mr->GetAddr(), cred.GetSize());
-                rdmaReadAck.SetDigest(crc);
+            void* addr = mr->GetAddr();
+            bzero(addr, cred.GetSize());
+
+            int err = RdmaQp->SendRdmaReadWr(1234, mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());
+            if (err) {
+                TStringBuilder sb;
+                sb << "Unable to post rdma READ work request, error " << err;
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                    sb.c_str());
+                    rdmaReadAck.SetErr(sb);
+                return rdmaReadAck;
             }
+
+            RdmaQp->ProcessCq();
+            //auto ev = WaitForSpecificEvent<TEvRdmaIoHandshakeDone>("TryRdmaRead");
+            ui32 crc = Crc32cExtendMSanCompatible(0, mr->GetAddr(), cred.GetSize());
+            rdmaReadAck.SetDigest(crc);
 
             return rdmaReadAck; 
         }

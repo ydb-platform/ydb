@@ -130,7 +130,7 @@ ui32 TQueuePair::GetQpNum() const noexcept {
    return Qp->qp_num;
 }
 
-void TQueuePair::PringQpDbg(IOutputStream& os) const noexcept {
+void TQueuePair::Output(IOutputStream& os) const noexcept {
     struct ibv_qp_attr attr;
     struct ibv_qp_init_attr init_attr;
     int err = ibv_query_qp(Qp, &attr,
@@ -202,7 +202,7 @@ template<>
 void Out<std::unique_ptr<NInterconnect::NRdma::TQueuePair>>(IOutputStream& os, const std::unique_ptr<NInterconnect::NRdma::TQueuePair>& qp) {
     if (qp) {
         os << "[";
-        qp->PringQpDbg(os);
+        qp->Output(os);
         os << "]";
     } else {
         os << "[none]"; 

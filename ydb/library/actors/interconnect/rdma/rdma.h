@@ -24,7 +24,7 @@ public:
     int ToRtsState(TRdmaCtx* ctx, ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
     int SendRdmaReadWr(ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) noexcept;
     ui32 GetQpNum() const noexcept;
-    void PringQpDbg(IOutputStream&) const noexcept;
+    void Output(IOutputStream&) const noexcept;
 
     void ProcessCq() noexcept;
 

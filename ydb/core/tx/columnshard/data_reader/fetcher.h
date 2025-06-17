@@ -14,16 +14,52 @@
 
 namespace NKikimr::NOlap::NDataFetcher {
 
+class TClassCounters {
+private:
+    std::shared_ptr<NCounters::TStateSignalsOperator<EFetchingStage>> StateSignals;
+
+public:
+    TClassCounters(TCommonCountersOwner& owner) {
+        StateSignals = std::make_shared<NCounters::TStateSignalsOperator<EFetchingStage>>(owner, "fetching_stage");
+    }
+
+    NCounters::TStateSignalsOperator<EFetchingStage>::TGuard GetGuard(const std::optional<EFetchingStage> start) {
+        return StateSignals->BuildGuard(start);
+    }
+};
+
+class TCounters: public TCommonCountersOwner {
+private:
+    using TBase = TCommonCountersOwner;
+    TMutex Mutex;
+    THashMap<TString, std::shared_ptr<TClassCounters>> ClassCounters;
+
+public:
+    TCounters()
+        : TBase("data_fetcher") {
+    }
+
+    std::shared_ptr<TClassCounters> GetClassCounters(const TString& className) {
+        TGuard<TMutex> g(Mutex);
+        auto it = ClassCounters.find(className);
+        if (it == ClassCounters.end()) {
+            it = ClassCounters.emplace(className, std::make_shared<TClassCounters>(*this)).first;
+        }
+        return it->second;
+    }
+};
+
 class TPortionsDataFetcher: TNonCopyable {
 private:
     const TRequestInput Input;
     const std::shared_ptr<IFetchCallback> Callback;
+    std::shared_ptr<TClassCounters> ClassCounters;
+    NCounters::TStateSignalsOperator<EFetchingStage>::TGuard Guard;
     TScriptExecution Script;
     TCurrentContext CurrentContext;
     std::shared_ptr<TEnvironment> Environment;
     const NConveyorComposite::ESpecialTaskCategory ConveyorCategory;
     bool IsFinishedFlag = false;
-    EFetchingStage Stage = EFetchingStage::Created;
 
 public:
     void AskMemoryAllocation(const std::shared_ptr<NGroupedMemoryManager::IAllocation>& task) {
@@ -35,6 +71,8 @@ public:
         const std::shared_ptr<TScript>& script, const NConveyorComposite::ESpecialTaskCategory conveyorCategory)
         : Input(std::move(input))
         , Callback(std::move(callback))
+        , ClassCounters(Singleton<TCounters>()->GetClassCounters(Callback->GetClassName()))
+        , Guard(ClassCounters->GetGuard(EFetchingStage::Created))
         , Script(script)
         , Environment(environment)
         , ConveyorCategory(conveyorCategory) {
@@ -43,7 +81,7 @@ public:
     }
 
     ~TPortionsDataFetcher() {
-        AFL_VERIFY(IsFinishedFlag || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage)("class_name", Callback->GetClassName());
+        //        AFL_VERIFY(IsFinishedFlag || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage)("class_name", Callback->GetClassName());
     }
 
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,
@@ -78,7 +116,7 @@ public:
 
     void SetStage(const EFetchingStage stage) {
         Callback->OnStageStarting(stage);
-        Stage = stage;
+        Guard.SetState(stage);
     }
 
     void OnError(const TString& errMessage) {

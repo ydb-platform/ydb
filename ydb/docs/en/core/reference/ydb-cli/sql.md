@@ -141,9 +141,7 @@ In the `diagnostics.json` file, in the `meta.query_text` field, the following st
 "query_text": "SELECT * FROM users WHERE email = 'alice@example.com';"
 ```
 
-This contains sensitive information — a user’s email address.
-
-Before sharing the diagnostics file, it is recommended to replace actual values with placeholders:
+This contains sensitive information, such as a user’s email address. Before sharing the diagnostics file, replace actual values with placeholders:
 
 ```json
 "query_text": "SELECT * FROM users WHERE email = '<EMAIL>';"

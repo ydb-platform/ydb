@@ -3935,7 +3935,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             "SELECT k, v FROM (SELECT * FROM `/Root/ColumnTableTest` WHERE k >= 0 AND k < 1000) ORDER BY k DESC LIMIT 3", "[[3u;0u];[2u;0u];[1u;0u]]");
     }
 
-    Y_UNIT_TEST(GroupByWithMageDatetime) {
+    Y_UNIT_TEST(GroupByWithMakeDatetime) {
         return; // TODO: fix me
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);

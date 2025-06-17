@@ -12,9 +12,9 @@
 namespace NKikimr::NOlap::NCounters {
 
 template <class EState>
-class TStateSignalsOwner: public TCommonCountersOwner {
+class TStateSignalsOwner: public NColumnShard::TCommonCountersOwner {
 private:
-    using TBase = TCommonCountersOwner;
+    using TBase = NColumnShard::TCommonCountersOwner;
     std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateVolume;
 
 public:

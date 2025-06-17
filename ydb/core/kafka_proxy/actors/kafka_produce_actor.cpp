@@ -254,12 +254,14 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     return canProcess;
 }
 
-THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TString& transactionalId,
-                                                     const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
-                                                     const TString& topicName,
-                                                     ui64 cookie,
-                                                     const TString& clientDC,
-                                                     bool ruPerRequest) {
+std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
+    const TString& transactionalId,
+    const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
+    const TString& topicName,
+    ui64 cookie,
+    const TString& clientDC,
+    bool ruPerRequest
+) {
     auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
@@ -294,7 +296,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TString& transactiona
                 res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
             }
             if (h.Value) {
-               res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
+                res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
             }
         }
 
@@ -322,15 +324,14 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TString& transactiona
             // Kafka accepts messages with producer epoch == -1, as long as it's the first "epoch" for this producer ID,
             // and ignores sequence numbers. I.e. you can send seqnos in any order with epoch == -1.
         } else if (batch->ProducerEpoch < -1) {
-            // TODO(qyryq) Should lead to an INVALID_PRODUCER_EPOCH error.
+            return {EKafkaErrors::INVALID_PRODUCER_EPOCH, nullptr};
         }
 
         if (batch->BaseSequence >= 0) {
             // Handle int32 overflow.
-            w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<i64>(std::numeric_limits<i32>::max()) + 1));
+            w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1));
         } else {
-            // TODO(qyryq) Should lead to an INVALID_RECORD error.
-            w->SetSeqNo(-1);
+            return {EKafkaErrors::INVALID_RECORD, nullptr};
         }
 
         w->SetData(str);
@@ -347,7 +348,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TString& transactiona
 
     partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
 
-    return ev;
+    return {EKafkaErrors::NONE_ERROR, std::move(ev)};
 }
 
 size_t PartsCount(const TMessagePtr<TProduceRequestData>& r) {
@@ -378,6 +379,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
             }
 
             auto writer = PartitionWriter({topicPath, static_cast<ui32>(partitionId)}, producerInstanceId, transactionalId, ctx);
+            auto& result = pendingRequest->Results[position];
             if (OK == writer.first) {
                 auto ownCookie = ++Cookie;
                 auto& cookieInfo = Cookies[ownCookie];
@@ -389,12 +391,14 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 pendingRequest->WaitAcceptingCookies.insert(ownCookie);
                 pendingRequest->WaitResultCookies.insert(ownCookie);
 
-                auto ev = Convert(transactionalId.GetOrElse(""), partitionData, *topicData.Name, ownCookie, ClientDC, ruPerRequest);
-                ruPerRequest = false;
-
-                Send(writer.second, std::move(ev));
+                auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, *topicData.Name, ownCookie, ClientDC, ruPerRequest);
+                if (error == EKafkaErrors::NONE_ERROR) {
+                    ruPerRequest = false;
+                    Send(writer.second, std::move(ev));
+                } else {
+                    result.ErrorCode = error;
+                }
             } else {
-                auto& result = pendingRequest->Results[position];
                 switch (writer.first) {
                     case NOT_FOUND:
                         result.ErrorCode = EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
@@ -550,7 +554,6 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             SendMetrics(TStringBuilder() << topicData.Name, writeResults.size(), "successful_messages", ctx);
                             auto& lastResult = writeResults.at(writeResults.size() - 1);
                             partitionResponse.LogAppendTimeMs = lastResult.GetWriteTimestampMS();
-                            // partitionResponse.BaseOffset = lastResult.GetOffset();
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {

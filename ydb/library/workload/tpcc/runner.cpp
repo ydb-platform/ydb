@@ -470,10 +470,12 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     ss << std::endl << "Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
        << "tpmC: " << std::setprecision(1) << data.Tpmc;
 
-    std::cout << ss.str();
+    LOG_I(ss.str());
 
     // Per thread statistics (two columns)
-    std::cout << "\n\nPer thread statistics:" << std::endl;
+
+    std::stringstream debugSs;
+    debugSs << "\nPer thread statistics:" << std::endl;
 
     size_t threadCount = LastStatisticsSnapshot->StatVec.size();
     size_t halfCount = (threadCount + 1) / 2;
@@ -488,10 +490,10 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
                << std::setw(15) << "queue p90, ms";
 
     // Print headers side by side
-    std::cout << threadsHeader.str() << " | " << threadsHeader.str() << std::endl;
+    debugSs << threadsHeader.str() << " | " << threadsHeader.str() << std::endl;
 
     size_t totalWidth = threadsHeader.str().length() * 2 + 3;
-    std::cout << std::string(totalWidth, '-') << std::endl;
+    debugSs << std::string(totalWidth, '-') << std::endl;
 
     // Print thread data in two columns
     for (size_t i = 0; i < halfCount; ++i) {
@@ -526,13 +528,15 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
             rightLine << std::string(threadsHeader.str().length(), ' ');
         }
 
-        std::cout << leftLine.str() << " | " << rightLine.str() << std::endl;
+        debugSs << leftLine.str() << " | " << rightLine.str() << std::endl;
     }
-    std::cout << std::string(totalWidth, '-') << std::endl;
+    debugSs << std::string(totalWidth, '-') << std::endl;
 
     // Transaction statistics
-    std::cout << "\n";
-    PrintTransactionStatisticsPretty(std::cout);
+    debugSs << "\n";
+    PrintTransactionStatisticsPretty(debugSs);
+
+    LOG_D(debugSs.str());
 }
 
 void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {

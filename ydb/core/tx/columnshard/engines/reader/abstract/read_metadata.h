@@ -121,6 +121,11 @@ public:
         return *IndexVersionsPointer;
     }
 
+    const std::shared_ptr<TVersionedIndex>& GetIndexVersionsPtr() const {
+        AFL_VERIFY(IndexVersionsPointer);
+        return IndexVersionsPointer;
+    }
+
     const std::optional<TGranuleShardingInfo>& GetRequestShardingInfo() const {
         return RequestShardingInfo;
     }

@@ -5,9 +5,11 @@ TEST_SRCS(
     test_clean.py
     test_clickbench.py
     test_workload_simple_queue.py
+    test_workload_oltp.py
     test_external.py
     test_diff_processing.py
     test_tpch.py
+    test_upload.py
 )
 
 SIZE(MEDIUM)
@@ -21,6 +23,7 @@ ENV(NO_KUBER_LOGS="yes")
 ENV(WAIT_CLUSTER_ALIVE_TIMEOUT="60")
 ENV(ARCADIA_EXTERNAL_DATA=ydb/tests/functional/tpc/data)
 ENV(SIMPLE_QUEUE_BINARY="ydb/tests/stress/simple_queue/simple_queue")
+ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
 
 PEERDIR(
     ydb/tests/functional/tpc/lib
@@ -30,6 +33,7 @@ DEPENDS(
     ydb/apps/ydb
     ydb/apps/ydbd
     ydb/tests/stress/simple_queue
+    ydb/tests/stress/oltp_workload
 )
 
 DATA(
@@ -38,5 +42,5 @@ DATA(
 )
 
 FORK_TEST_FILES()
-
+REQUIREMENTS(ram:28)
 END()

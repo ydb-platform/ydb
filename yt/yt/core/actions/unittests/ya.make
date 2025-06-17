@@ -10,7 +10,6 @@ SRCS(
     cancelation_token_ut.cpp
     future_ut.cpp
     invoker_ut.cpp
-    new_with_offloaded_dtor_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)

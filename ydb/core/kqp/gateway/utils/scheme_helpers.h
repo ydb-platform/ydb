@@ -34,6 +34,12 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
                                        bool replaceIfExists,
                                        const NYql::TCreateExternalTableSettings& settings);
 
+bool Validate(const NYql::TAlterDatabaseSettings& settings, NYql::TIssue& error);
+
+void FillAlterDatabaseOwner(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name, const TString& newOwner);
+
+void FillAlterDatabaseSchemeLimits(NKikimrSchemeOp::TModifyScheme& modifyScheme, const TString& name, const NKikimrSubDomains::TSchemeLimits& in);
+
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path);
 
 } // namespace NKikimr::NKqp::NSchemeHelpers

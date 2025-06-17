@@ -163,7 +163,7 @@ bool array_container_validate(const array_container_t *v, const char **reason);
  * Return the serialized size in bytes of a container having cardinality "card".
  */
 static inline int32_t array_container_serialized_size_in_bytes(int32_t card) {
-    return card * 2 + 2;
+    return card * sizeof(uint16_t);
 }
 
 /**

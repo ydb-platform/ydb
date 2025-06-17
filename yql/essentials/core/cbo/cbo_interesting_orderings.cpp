@@ -1,6 +1,7 @@
 #include "cbo_interesting_orderings.h"
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
+#include <library/cpp/iterator/zip.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -15,11 +16,39 @@
 namespace NYql::NDq {
 
 bool TOrdering::operator==(const TOrdering& other) const {
-    return std::tie(this->Type, this->Items) == std::tie(other.Type, other.Items);
+    return
+        std::tie(this->Type, this->Items, this->Directions) ==
+        std::tie(other.Type, other.Items, other.Directions);
 }
 
 TString TOrdering::ToString() const {
-    return "{" + JoinSeq(", ", Items) + "}";
+    TVector<TString> itemStrings;
+    itemStrings.reserve(Items.size());
+
+    for (size_t i = 0; i < Items.size(); ++i) {
+        TString itemStr = ::ToString(Items[i]);
+
+        if (i < Directions.size()) {
+            switch (Directions[i]) {
+                case TItem::EDirection::EAscending:
+                    itemStr += "^";
+                    break;
+                case TItem::EDirection::EDescending:
+                    itemStr += "v";
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        itemStrings.push_back(std::move(itemStr));
+    }
+
+    return "{" + JoinSeq(", ", itemStrings) + "}";
+}
+
+bool TOrdering::HasItem(std::size_t item) const {
+        return std::find(Items.begin(), Items.end(), item) != Items.end();
 }
 
 bool TFunctionalDependency::IsEquivalence() const {
@@ -27,7 +56,7 @@ bool TFunctionalDependency::IsEquivalence() const {
 }
 
 bool TFunctionalDependency::IsImplication() const {
-    return Type == EType::EImplication;
+    return Type == EType::EImplication && !IsConstant();
 }
 
 bool TFunctionalDependency::IsConstant() const {
@@ -284,21 +313,55 @@ i64 TFDStorage::FindInterestingOrderingIdx(
     TOrdering::EType type,
     TTableAliasMap* tableAliases
 ) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, false, tableAliases);
     return orderingIdx;
 }
 
-std::size_t TFDStorage::AddInterestingOrdering(
-    const TVector<TString>& interestingOrdering,
-    TOrdering::EType type,
+std::size_t TFDStorage::FindSorting(
+    const std::vector<TJoinColumn>& interestingOrdering,
+    const std::vector<TOrdering::TItem::EDirection>& directions,
     TTableAliasMap* tableAliases
 ) {
-    std::vector<TJoinColumn> columns;
-    columns.reserve(interestingOrdering.size());
-    for (const auto& column: interestingOrdering) {
-        columns.push_back(TJoinColumn("", column));
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, TOrdering::ESorting, false, tableAliases);
+    return orderingIdx;
+}
+
+std::size_t TFDStorage::AddSorting(
+    const std::vector<TJoinColumn>& interestingOrdering,
+    std::vector<TOrdering::TItem::EDirection> directions,
+    TTableAliasMap* tableAliases
+) {
+    return AddInterestingOrdering(interestingOrdering, TOrdering::ESorting, directions, tableAliases);
+}
+
+std::size_t TFDStorage::AddShuffling(
+    const std::vector<TJoinColumn>& interestingOrdering,
+    TTableAliasMap* tableAliases
+) {
+    return AddInterestingOrdering(interestingOrdering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, tableAliases);
+}
+
+std::size_t TFDStorage::AddInterestingOrdering(
+    const std::vector<TJoinColumn>& interestingOrdering,
+    TOrdering::EType type,
+    const std::vector<TOrdering::TItem::EDirection>& directions,
+    TTableAliasMap* tableAliases
+) {
+    if (interestingOrdering.empty()) {
+        return std::numeric_limits<std::size_t>::max();
     }
-    return AddInterestingOrdering(columns, type, tableAliases);
+
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, type, true, tableAliases);
+    if (items.Items.empty()) {
+        return std::numeric_limits<std::size_t>::max();
+    }
+
+    if (foundIdx >= 0) {
+        return static_cast<std::size_t>(foundIdx);
+    }
+
+    InterestingOrderings.push_back(std::move(items));
+    return InterestingOrderings.size() - 1;
 }
 
 std::size_t TFDStorage::AddInterestingOrdering(
@@ -310,18 +373,18 @@ std::size_t TFDStorage::AddInterestingOrdering(
         return std::numeric_limits<std::size_t>::max();
     }
 
-    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, true, tableAliases);
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, true, tableAliases);
 
     if (foundIdx >= 0) {
         return static_cast<std::size_t>(foundIdx);
     }
 
-    InterestingOrderings.emplace_back(std::move(items), type);
+    InterestingOrderings.emplace_back(std::move(items));
     return InterestingOrderings.size() - 1;
 }
 
 TVector<TJoinColumn> TFDStorage::GetInterestingOrderingsColumnNamesByIdx(std::size_t interestingOrderingIdx) const {
-    Y_ASSERT(interestingOrderingIdx < InterestingOrderings.size());
+    Y_ENSURE(interestingOrderingIdx < InterestingOrderings.size());
 
     TVector<TJoinColumn> columns;
     columns.reserve(InterestingOrderings[interestingOrderingIdx].Items.size());
@@ -358,24 +421,38 @@ TString TFDStorage::ToString() const {
     return ss;
 }
 
-std::pair<std::vector<std::size_t>, i64> TFDStorage::ConvertColumnsAndFindExistingOrdering(
+std::pair<TOrdering, i64> TFDStorage::ConvertColumnsAndFindExistingOrdering(
     const std::vector<TJoinColumn>& interestingOrdering,
+    const std::vector<TOrdering::TItem::EDirection>& directions,
     TOrdering::EType type,
     bool createIfNotExists,
     TTableAliasMap* tableAliases
 ) {
+    if(!(
+        directions.empty() && type == TOrdering::EShuffle ||
+        directions.size() == interestingOrdering.size() && type == TOrdering::ESorting
+    )) {
+        YQL_CLOG(TRACE, CoreDq)
+            << "Ordering and directions sizes mismatch : " << directions.size() << " vs " << interestingOrdering.size();
+        return {TOrdering(), -1};
+    }
+
     std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists, tableAliases);
     if (items.empty()) {
-        return {{}, -1};
+        return {TOrdering(), -1};
     }
 
     for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
-        if (items == InterestingOrderings[i].Items && type == InterestingOrderings[i].Type) {
-            return {items, static_cast<i64>(i)};
+        if (
+            items == InterestingOrderings[i].Items &&
+            type == InterestingOrderings[i].Type &&
+            directions == InterestingOrderings[i].Directions
+        ) {
+            return {InterestingOrderings[i], static_cast<i64>(i)};
         }
     }
 
-    return {items, -1};
+    return {TOrdering(std::move(items), directions, type), -1};
 }
 
 std::vector<std::size_t> TFDStorage::ConvertColumnIntoIndexes(
@@ -456,7 +533,7 @@ void TOrderingsStateMachine::TLogicalOrderings::RemoveState() {
 }
 
 void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
-    if (orderingIdx < 0 || orderingIdx >= static_cast<i64>(DFSM->InitStateByOrderingIdx.size())) {
+    if (!IsInitialized() || orderingIdx < 0 || orderingIdx >= static_cast<i64>(DFSM->InitStateByOrderingIdx.size())) {
         RemoveState();
         return;
     }
@@ -556,12 +633,59 @@ TString TOrderingsStateMachine::ToString() const {
     return ss;
 }
 
+void TOrderingsStateMachine::CollectItemInfo(
+    const std::vector<TFunctionalDependency>& fds,
+    const std::vector<TOrdering>& interestingOrderings
+) {
+    std::size_t maxItem = 0;
+
+    for (const auto& ordering: interestingOrderings) {
+        if (ordering.Items.empty()) {
+            continue;
+        }
+
+        std::size_t orderingMaxItem = *std::max_element(ordering.Items.begin(), ordering.Items.end());
+        maxItem = std::max(maxItem, orderingMaxItem);
+    }
+
+    for (const auto& fd: fds) {
+        std::size_t maxAntecedentItems = 0;
+        if (!fd.AntecedentItems.empty()) {
+            maxAntecedentItems = *std::max_element(fd.AntecedentItems.begin(), fd.AntecedentItems.end());
+        }
+
+        maxItem = std::max({maxItem, fd.ConsequentItem, maxAntecedentItems});
+    }
+
+    ItemInfo.resize(maxItem + 1);
+
+    for (const auto& ordering: interestingOrderings) {
+        Y_ENSURE(ordering.Items.size() == ordering.Directions.size() || ordering.Directions.empty());
+
+        for (const auto& [item, direction]: Zip(ordering.Items, ordering.Directions)) {
+            switch (direction) {
+                case TOrdering::TItem::EDirection::EAscending: {
+                    ItemInfo[item].UsedInAscOrdering = true;
+                    break;
+                }
+                case TOrdering::TItem::EDirection::EDescending: {
+                    ItemInfo[item].UsedInDescOrdering = true;
+                    break;
+                }
+                default: {}
+            }
+        }
+    }
+
+}
+
 void TOrderingsStateMachine::Build(
     const std::vector<TFunctionalDependency>& fds,
     const std::vector<TOrdering>& interestingOrderings
 ) {
+    CollectItemInfo(fds, interestingOrderings);
     std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
-    NFSM.Build(processedFDs, interestingOrderings);
+    NFSM.Build(processedFDs, interestingOrderings, ItemInfo);
     DFSM = MakeSimpleShared<TDFSM>();
     DFSM->Build(NFSM, processedFDs, interestingOrderings);
     Built = true;
@@ -605,13 +729,14 @@ TString TOrderingsStateMachine::TNFSM::ToString() const {
 
 void TOrderingsStateMachine::TNFSM::Build(
     const std::vector<TFunctionalDependency>& fds,
-    const std::vector<TOrdering>& interesting
+    const std::vector<TOrdering>& interesting,
+    const std::vector<TItemInfo>& itemInfo
 ) {
     for (std::size_t i = 0; i < interesting.size(); ++i) {
         AddNode(interesting[i], TNFSM::TNode::EInteresting, i);
     }
 
-    ApplyFDs(fds, interesting);
+    ApplyFDs(fds, interesting, itemInfo);
     PrefixClosure();
 
     for (std::size_t idx = 0; idx < Edges.size(); ++idx) {
@@ -673,7 +798,8 @@ void TOrderingsStateMachine::TNFSM::PrefixClosure() {
 
 void TOrderingsStateMachine::TNFSM::ApplyFDs(
     const std::vector<TFunctionalDependency>& fds,
-    const std::vector<TOrdering>& interestingOrderings
+    const std::vector<TOrdering>& interestingOrderings,
+    const std::vector<TItemInfo>& itemInfo
 ) {
     std::size_t maxInterestingOrderingSize = 0;
     if (!interestingOrderings.empty()) {
@@ -685,12 +811,15 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
             )->Items.size();
     }
 
-
     for (std::size_t nodeIdx = 0; nodeIdx < Nodes.size() && Nodes.size() < EMaxNFSMStates; ++nodeIdx) {
         for (std::size_t fdIdx = 0; fdIdx < fds.size() && Nodes.size() < EMaxNFSMStates; ++fdIdx) {
+            if (Nodes[nodeIdx].Ordering.Items.empty()) {
+                continue;
+            }
+
             TFunctionalDependency fd = fds[fdIdx];
 
-            auto applyFD = [this, nodeIdx, maxInterestingOrderingSize](const TFunctionalDependency& fd, std::size_t fdIdx) {
+            auto applyFD = [this, &itemInfo, nodeIdx, maxInterestingOrderingSize](const TFunctionalDependency& fd, std::size_t fdIdx) {
                 if (Nodes.size() >= EMaxNFSMStates) {
                     return;
                 }
@@ -702,9 +831,14 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                         return;
                     }
                     bool isNewOrderingPrefixOfOld = (it == (newOrdering.end() - 1));
-                    newOrdering.erase(it);
 
-                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                    auto newDirections = Nodes[nodeIdx].Ordering.Directions;
+                    if (!newDirections.empty()) {
+                        newDirections.erase(newDirections.begin() + std::distance(newOrdering.begin(), it));
+                        newOrdering.erase(it);
+                    }
+
+                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), std::move(newDirections), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
 
                     if (!isNewOrderingPrefixOfOld || Nodes[nodeIdx].Ordering.Type == TOrdering::EShuffle) {
                         AddEdge(nodeIdx, dstIdx, fdIdx);
@@ -729,11 +863,11 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                     auto it = std::find(Nodes[nodeIdx].Ordering.Items.begin(), Nodes[nodeIdx].Ordering.Items.end(), fd.ConsequentItem);
                     it != Nodes[nodeIdx].Ordering.Items.end()
                 ) {
-                    if (fd.IsEquivalence()) { // (a, b) -> (b, a)
+                    if (fd.IsEquivalence()) { // swap (a, b) -> (b, a)
                         std::size_t consequentItemIdx = std::distance(Nodes[nodeIdx].Ordering.Items.begin(), it);
                         auto newOrdering = Nodes[nodeIdx].Ordering.Items;
                         std::swap(newOrdering[antecedentItemIdx], newOrdering[consequentItemIdx]);
-                        std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                        std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Directions, Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
                         AddEdge(nodeIdx, dstIdx, fdIdx);
                         AddEdge(dstIdx, nodeIdx, fdIdx);
                     }
@@ -747,7 +881,7 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                     std::vector<std::size_t> newOrdering = Nodes[nodeIdx].Ordering.Items;
                     newOrdering[antecedentItemIdx] = fd.ConsequentItem;
 
-                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Directions, Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
                     AddEdge(nodeIdx, dstIdx, fdIdx);
                     AddEdge(dstIdx, nodeIdx, fdIdx);
                 }
@@ -764,8 +898,25 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                         std::vector<std::size_t> newOrdering = Nodes[nodeIdx].Ordering.Items;
                         newOrdering.insert(newOrdering.begin() + i, fd.ConsequentItem);
 
-                        std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
-                        AddEdge(nodeIdx, dstIdx, fdIdx); // Epsilon edge will be added during PrefixClosure
+                        auto newDirections = Nodes[nodeIdx].Ordering.Directions;
+                        if (newDirections.empty()) { // smthing went wrong during ordering adding stage
+                            return;
+                        }
+                        newDirections.insert(newDirections.begin() + i, TOrdering::TItem::EDirection::ENone);
+
+                        Y_ENSURE(fd.ConsequentItem < itemInfo.size());
+
+                        if (itemInfo[fd.ConsequentItem].UsedInAscOrdering) {
+                            newDirections[i] = TOrdering::TItem::EDirection::EAscending;
+                            std::size_t dstIdx = AddNode(TOrdering(newOrdering, newDirections, Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                            AddEdge(nodeIdx, dstIdx, fdIdx); // Epsilon edge will be added during PrefixClosure
+                        }
+
+                        if (itemInfo[fd.ConsequentItem].UsedInDescOrdering) {
+                            newDirections[i] = TOrdering::TItem::EDirection::EDescending;
+                            std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), std::move(newDirections), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                            AddEdge(nodeIdx, dstIdx, fdIdx); // Epsilon edge will be added during PrefixClosure
+                        }
                     }
                 }
             };
@@ -956,14 +1107,14 @@ std::vector<TFunctionalDependency> TOrderingsStateMachine::PruneFDs(
         bool canLeadToInteresting = false;
 
         for (const auto& ordering: interestingOrderings) {
-            if (std::find(ordering.Items.begin(), ordering.Items.end(), fds[i].ConsequentItem) != ordering.Items.end()) {
+            if (ordering.HasItem(fds[i].ConsequentItem)) {
                 canLeadToInteresting = true;
                 break;
             }
 
             if (
                 fds[i].IsEquivalence() &&
-                std::find(ordering.Items.begin(), ordering.Items.end(), fds[i].AntecedentItems[0]) != ordering.Items.end()
+                ordering.HasItem(fds[i].AntecedentItems[0])
             ) {
                 canLeadToInteresting = true;
                 break;

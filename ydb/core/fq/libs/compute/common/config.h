@@ -241,13 +241,13 @@ public:
             case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
             case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+            case FederatedQuery::ConnectionSetting::kMonitoring:
             case FederatedQuery::ConnectionSetting::kMysqlCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
             case FederatedQuery::ConnectionSetting::kLogging:
             case FederatedQuery::ConnectionSetting::kIceberg:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:
-            case FederatedQuery::ConnectionSetting::kMonitoring:
             case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
                 return false;
         }

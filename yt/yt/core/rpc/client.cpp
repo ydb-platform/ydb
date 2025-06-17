@@ -219,7 +219,7 @@ std::string TClientRequest::GetMethod() const
     return FromProto<std::string>(Header_.method());
 }
 
-const std::optional<std::string>& TClientRequest::GetRequestInfo() const
+const std::string& TClientRequest::GetRequestInfo() const
 {
     return RequestInfo_;
 }
@@ -363,6 +363,11 @@ TClientContextPtr TClientRequest::CreateClientContext()
         RequestAttachmentsStream_,
         ResponseAttachmentsStream_,
         MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
+}
+
+void TClientRequest::SetRawRequestInfo(std::string requestInfo)
+{
+    RequestInfo_ = std::move(requestInfo);
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()

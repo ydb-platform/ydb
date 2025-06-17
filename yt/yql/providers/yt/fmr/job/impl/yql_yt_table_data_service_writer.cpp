@@ -56,7 +56,7 @@ void TFmrTableDataServiceWriter::PutRows() {
         });
         ++State_->CurInflightChunks;
     }
-    TString chunkKey = GetTableDataServiceKey(TableId_, PartId_, ChunkCount_);
+    auto chunkKey = GetTableDataServiceKey(TableId_, PartId_, ChunkCount_);
     TableDataService_->Put(chunkKey, TString(TableContent_.Data(), TableContent_.Size())).Subscribe(
         [weakState = std::weak_ptr(State_)] (const auto& putFuture) mutable {
             std::shared_ptr<TFmrWriterState> state = weakState.lock();
@@ -83,7 +83,7 @@ void TFmrTableDataServiceWriter::PutRows() {
 }
 
 TTableChunkStats TFmrTableDataServiceWriter::GetStats() {
-    YQL_CLOG(DEBUG, FastMapReduce) << " Finished writing to table data service for table Id: " << TableId_ << " and part Id " << PartId_ ;
+    YQL_CLOG(DEBUG, FastMapReduce) << " Finished writing to table data service for table Id: " << TableId_ << " and part Id " << PartId_;
     return TTableChunkStats{.PartId = PartId_, .PartIdChunkStats = PartIdChunkStats_};
 }
 

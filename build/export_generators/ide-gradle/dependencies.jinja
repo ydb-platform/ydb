@@ -25,12 +25,15 @@
 {%-     endfor -%}
 {%- endmacro -%}
 
-{%- macro AddNonFileDeps(current_target, file_classpaths, implementationFunc, apiFunc) -%}
-{%-     for library in current_target.consumer -%}
+{%- macro AddNonFileDeps(libraries, file_classpaths, implementationFunc, apiFunc) -%}
+{%-     for library in libraries -%}
 {%-         set classpath = library.classpath -%}
-{%-         if (library.type == "ejlibrary") or (classpath and file_classpaths|select('eq', classpath)|length == 0) -%}
-{%-             if (library.type == "ejlibrary") or (library.type == "contrib" and library.jar and classpath|replace('project(":', '') != classpath) %}
-{#-                 External java library or contrib in exported arcadia folders #}
+{%-         if library.type == "ejlibrary" or library.type == "swigdll" %}
+{#-             External java library or DLL_JAVA #}
+    {{ implementationFunc }}(files("$output_root/{{ library.jar }}"))
+{%-         elif classpath and file_classpaths|select('eq', classpath)|length == 0 -%}
+{%-             if library.type == "contrib" and library.jar and classpath|replace('project(":', '') != classpath %}
+{#-                 Contrib in exported arcadia folders #}
     {{ implementationFunc }}(files("$output_root/{{ library.jar }}"))
 {%-             else -%}
 {%-                 if classpath|replace('"','') == classpath -%}
@@ -98,10 +101,9 @@ dependencies {
 {%-     endfor -%}
 {%- endif -%}
 {#- glue -#}
-{{ AddNonFileDeps(target, file_classpaths, "implementation", "api") }}
-{%- for extra_target in extra_targets -%}
-{{ AddNonFileDeps(extra_target, test_file_classpaths, "testImplementation", "testImplementation") }}
-{%- endfor -%}
+{{ AddNonFileDeps(target.consumer, file_classpaths, "implementation", "api") }}
+{%- set target_jars = target.consumer|selectattr('jar')|map(attribute='jar') -%}
+{{ AddNonFileDeps(extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|rejectattr('jar', 'in', target_jars), test_file_classpaths, "testImplementation", "testImplementation") }}
 
 {%- if file_jars|length %}
     implementation(files(listOf({#- glue -#}

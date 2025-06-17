@@ -38,6 +38,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_login PUBLIC
   ydb-library-login
   testlib-service_mocks-ldap_mock
   udf-service-exception_policy
+  core-testlib-audit_helpers
 )
 
 target_allocator(ydb-core-tx-schemeshard-ut_login

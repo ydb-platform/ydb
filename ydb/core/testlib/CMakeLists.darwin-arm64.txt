@@ -13,6 +13,7 @@
 # changes in this file.
 
 add_subdirectory(actors)
+add_subdirectory(audit_helpers)
 add_subdirectory(basics)
 add_subdirectory(default)
 add_subdirectory(pg)

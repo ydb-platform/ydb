@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(core-testlib-actors)
-
-
-target_link_libraries(core-testlib-actors PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  version_definition
-  library-actors-testlib
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-mon_alloc
-  ydb-core-scheme
-  ydb-core-tablet
-  core-testlib-audit_helpers
-)
-
-target_sources(core-testlib-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/block_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/wait_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/block_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/wait_events.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

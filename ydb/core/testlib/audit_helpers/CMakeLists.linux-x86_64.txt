@@ -12,31 +12,19 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(core-testlib-actors)
+add_library(core-testlib-audit_helpers)
 
 
-target_link_libraries(core-testlib-actors PUBLIC
+target_link_libraries(core-testlib-audit_helpers PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  version_definition
-  library-actors-testlib
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-mon_alloc
-  ydb-core-scheme
-  ydb-core-tablet
-  core-testlib-audit_helpers
+  library-cpp-logger
+  ydb-core-audit
 )
 
-target_sources(core-testlib-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/block_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/wait_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/block_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/wait_events.h
+target_sources(core-testlib-audit_helpers PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/audit_helpers/audit_helper.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/audit_helpers/audit_helper.h
 )
 

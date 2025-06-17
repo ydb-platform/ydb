@@ -37,6 +37,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_export PUBLIC
   ydb-core-util
   core-wrappers-ut_helpers
   udf-service-exception_policy
+  core-testlib-audit_helpers
 )
 
 target_allocator(ydb-core-tx-schemeshard-ut_export

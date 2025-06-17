@@ -12,31 +12,27 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
+add_subdirectory(cloud_events_ut)
 
-add_library(core-testlib-actors)
+add_library(ymq-actor-cloud_events)
 
 
-target_link_libraries(core-testlib-actors PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  version_definition
-  library-actors-testlib
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-mon_alloc
-  ydb-core-scheme
-  ydb-core-tablet
-  core-testlib-audit_helpers
+target_compile_options(ymq-actor-cloud_events PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_sources(core-testlib-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/block_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/wait_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/block_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/test_runtime.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/actors/wait_events.h
+target_link_libraries(ymq-actor-cloud_events PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-actors-core
+  ydb-core-protos
+  ydb-core-util
+  core-ymq-base
+  ydb-core-audit
+)
+
+target_sources(ymq-actor-cloud_events PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/actor/cloud_events/cloud_events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/actor/cloud_events/cloud_events.h
 )
 

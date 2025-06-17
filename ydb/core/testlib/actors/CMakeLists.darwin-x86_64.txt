@@ -28,6 +28,7 @@ target_link_libraries(core-testlib-actors PUBLIC
   ydb-core-mon_alloc
   ydb-core-scheme
   ydb-core-tablet
+  core-testlib-audit_helpers
 )
 
 target_sources(core-testlib-actors PRIVATE

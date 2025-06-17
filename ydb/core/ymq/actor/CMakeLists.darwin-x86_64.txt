@@ -19,7 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
-add_subdirectory(ut)
+add_subdirectory(cloud_events)
 add_subdirectory(yc_search_ut)
 
 add_library(core-ymq-actor)
@@ -65,11 +65,13 @@ target_link_libraries(core-ymq-actor PUBLIC
   library-http_proxy-authorization
   library-http_proxy-error
   library-mkql_proto-protos
+  ydb-library-security
   public-lib-scheme_types
   public-lib-value
   client-types-credentials
   yql-essentials-minikql
   lib-deprecated-client
+  ymq-actor-cloud_events
   tools-enum_parser-enum_serialization_runtime
 )
 

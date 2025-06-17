@@ -121,7 +121,7 @@ Command output:
 
 You can find examples of passing parameters to queries in the [article on how to pass parameters to `{{ ydb-cli }} sql`](parameterized-query-execution.md).
 
-Сommand to collect diagnostics in the `diagnostics.json` file and check its contents:
+Command to collect diagnostics in the `diagnostics.json` file and inspect its contents:
 
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" \

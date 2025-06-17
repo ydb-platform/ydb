@@ -129,7 +129,7 @@ ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice
 cat diagnostics.json
 ```
 
-If you want to collect diagnostics related to a query plan without actually executing the query, you can execute an query with `EXPLAIN` mode instead by adding the `--explain` option:
+If you want to collect diagnostics related to a query plan without executing the query, run it in `EXPLAIN` mode by adding the `--explain` option:
 
 ```bash
 ydb -e <endpoint> -d <database> sql -s "SELECT * FROM users WHERE email = 'alice@example.com';" --explain --diagnostics-file diagnostics.json

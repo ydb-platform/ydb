@@ -8,14 +8,18 @@ import allure
 
 
 class UploadSuiteBase(LoadSuiteBase):
+    query_name = 'Upload'
+
     def init(self):
         pass
 
     def import_data(self):
         pass
 
+    def save_result_additional_info(self, result: YdbCliHelper.WorkloadRunResult):
+        pass
+
     def test(self):
-        query_name = 'Upload'
         start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
@@ -34,7 +38,8 @@ class UploadSuiteBase(LoadSuiteBase):
             result.add_error(str(e))
             result.traceback = e.__traceback__
         result.iterations[0].time = time() - start_time
-        self.process_query_result(result, query_name, True)
+        self.save_result_additional_info(result)
+        self.process_query_result(result, self.query_name, True)
 
 
 class UploadTpchBase(UploadSuiteBase):

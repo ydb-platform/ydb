@@ -1,93 +1,63 @@
 from __future__ import annotations
-from .conftest import LoadSuiteBase
-from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from time import time
 import yatest.common
-import allure
 import os
-import pytest
-import requests
-import zipfile
+from .upload import UploadSuiteBase
 
 
-class ImportFileCsv(LoadSuiteBase):
-    table_path = get_external_param('table-path-import-csv', f'{YdbCluster.tables_path}/import_test_table')
-    file_url = get_external_param('file-url-import-csv', 'https://proxy.sandbox.yandex-team.ru/8980545283')
-    zip_file_name = 'data.csv.zip'
-    file_name = 'data.csv'
+class ImportFileCsvBase(UploadSuiteBase):
+    query_name: str = 'ImportFileCsv' # Override UploadSuiteBase.query_name
+    data_folder: str = ''
+    table_path: str = ''
+    iterations: int = 1
 
-    def download_and_extract_file(self):
-        response = requests.get(self.file_url)
-        with open(self.zip_file_name, 'wb') as f:
-            f.write(response.content)
-
-        with zipfile.ZipFile(self.zip_file_name, 'r') as zip_ref:
-            zip_ref.extractall()
-
-        os.remove(self.zip_file_name)
+    @classmethod
+    def setup_class(cls) -> None:
+        cls.setup_cluster()
+        cls.data_folder = cls.get_external_path()
+        super().setup_class()
 
     def drop_table_if_exists(self):
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', 'DROP TABLE IF EXISTS `{self.table_path}`'])
+        tables_path = YdbCluster.tables_path
+        for table_name in self.table_names:
+            full_table_path = f'{tables_path}/{table_name}'
+            yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', f'DROP TABLE IF EXISTS `{full_table_path}`'])
 
     def create_table(self):
-        sql_filename = 'create.sql'
-        sql_text = f'''
-CREATE TABLE `{self.table_path}` (
-    `event_time` Text NOT NULL,
-    `event_type` Text,
-    `product_id` Uint64,
-    `category_id` Uint64,
-    `category_code` Text,
-    `brand` Text,
-    `price` Double,
-    `user_id` Uint64,
-    `user_session` Text,
-    PRIMARY KEY (`event_time`)
-)
-WITH (
-    STORE = COLUMN
-    , AUTO_PARTITIONING_BY_SIZE = ENABLED
-    , AUTO_PARTITIONING_BY_LOAD = ENABLED
-    , UNIFORM_PARTITIONS = 100
-    , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
-    , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
-);
-'''
-        with open(sql_filename, 'w') as f:
-            f.write(sql_text)
-        try:
-            yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-f', sql_filename])
-        finally:
-            os.remove(sql_filename)
+        init_dir = os.path.join(self.data_folder, 'init')
+        for fname in sorted(os.listdir(init_dir)):
+            if fname.endswith('.sql'):
+                sql_path = os.path.join(init_dir, fname)
+                yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-f', sql_path])
 
     def init(self):
-        self.download_and_extract_file()
-        self.drop_table_if_exists()
+        import_path = os.path.join(self.data_folder, "import")
+        self.table_names = [name for name in os.listdir(import_path) if os.path.isdir(os.path.join(import_path, name))]
+        if not self.table_names:
+            raise RuntimeError(f"Found no directories in {import_path}")
+        self.table_name = self.table_names[0] # importing just one table
+        self.table_path = f'{YdbCluster.tables_path}/{self.table_name}'
+        self.drop_tables_if_exists()
         self.create_table()
 
     def import_data(self):
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, self.file_name, '--header'])
+        import_path = os.path.join(self.data_folder, 'import', self.table_name, '*') # All files in the table directory
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
 
-    def test(self):
-        start_time = time()
-        result = YdbCliHelper.ImportCsvRunResult()
-        result.traceback = None
-        try:
-            self.save_nodes_state()
-            with allure.step("init"):
-                self.init()
-            result.file_size_bytes = os.path.getsize(self.file_name)
-            start_time = time()
-            with allure.step("import data"):
-                self.import_data()
-        except BaseException as e:
-            result.add_error(str(e))
-            result.traceback = e.__traceback__
-        result.time = time() - start_time
+    def save_result_additional_info(self, result: YdbCliHelper.WorkloadRunResult):
+        import_dir = os.path.join(self.data_folder, 'import', self.table_name)
+        file_size = sum(
+            os.path.getsize(os.path.join(import_dir, f))
+            for f in os.listdir(import_dir)
+            if os.path.isfile(os.path.join(import_dir, f)) and f.endswith('.csv')
+        )
+        result.add_stat(self.query_name, 'file_size', file_size)
+        import_speed = 0
         if result.time > 0:
-            result.import_speed = result.file_size_bytes / result.time
-        else:
-            result.import_speed = 0
-        self.process_import_result(result)
+            import_speed = file_size / result.time
+        result.add_stat(self.query_name, 'import_speed', import_speed)
+
+
+class TestImportFileCsv(ImportFileCsvBase):
+    external_folder: str = 'ecommerce'

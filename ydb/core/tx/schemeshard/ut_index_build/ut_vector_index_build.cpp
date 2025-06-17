@@ -472,41 +472,30 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         ui64 uploadRows = 0, uploadBytes = 0, readRows = 0, readBytes = 0;
         ui64 expectedUploadRows = 0, expectedUploadBytes = 0, expectedReadRows = 0, expectedReadBytes = 0;
         auto logBillingStats = [&]() {
-            Cerr << "BillingStats:"
-                << " uploadRows: " << uploadRows << " uploadBytes: " << uploadBytes
-                << " readRows: " << readRows << " readBytes: " << readBytes
-                << Endl;
+            Cerr << "BillingStats:" << billingStats.ShortDebugString() << Endl;
         };
 
         TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
+            TBillingStatsCalculator::AddTo(billingStats, *response.MutableBillingStats());
             return true;
         });
 
         TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadSampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            uploadRows += response.GetUploadRows();
-            uploadBytes += response.GetUploadBytes();
+            TBillingStatsCalculator::AddTo(billingStats, *response.MutableBillingStats());
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            uploadRows += response.GetUploadRows();
-            uploadBytes += response.GetUploadBytes();
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
+            TBillingStatsCalculator::AddTo(billingStats, *response.MutableBillingStats());
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            uploadRows += response.GetUploadRows();
-            uploadBytes += response.GetUploadBytes();
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
+            TBillingStatsCalculator::AddTo(billingStats, *response.MutableBillingStats());
             return true;
         });
 
@@ -595,6 +584,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         expectedUploadRows += tableRows + K * K;
         expectedUploadBytes += postingBytes + K * K * levelRowBytes;
         if (smallScanBuffer) {
+            UNIT_ASSERT_VALUES_EQUAL(billingStats.GetReadRows(), 1400); // SAMPLE + KMEANS * 3 + UPLOAD = 5 scans
+            UNIT_ASSERT_VALUES_EQUAL(billingStats.GetReadBytes(), 20600);
             // KMEANS reads build table five times (SAMPLE + KMEANS * 3 + UPLOAD):
             expectedReadRows += tableRows * 5;
             expectedReadBytes += buildBytes * 5;

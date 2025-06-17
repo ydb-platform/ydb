@@ -790,8 +790,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-
-        // EnableParallelPointReadConsolidation is enabled, CA is local and the read task is local -> TotalSingleNodeReqCount increases
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -800,17 +798,19 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
-        // If UseSink is enabled, CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
-        // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // If UseSink is enabled, CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-
-        // EnableParallelPointReadConsolidation is enabled, CA is local and the read task is local -> TotalSingleNodeReqCount increases
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -819,9 +819,13 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
-        // If UseSink is enabled, CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
-        // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // If UseSink is enabled, CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = session.ExecuteDataQuery(R"(
@@ -829,8 +833,12 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
-        // CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Read is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
@@ -838,13 +846,22 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
-        // CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Read is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
 
-    // If UseSink is enabled, all requests are local or with two nodes -> NonLocalSingleNodeReqCount does not increase
-    // If UseSink is disabled, UPSERT queries are non-local and for the single node -> NonLocalSingleNodeReqCount increases
-    expectedNonLocalSingleNodeReqCount += (UseSink) ? 0 : 2;
+    if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+        // If UseSink is enabled, all requests are local or with two nodes -> NonLocalSingleNodeReqCount does not increase
+        // If UseSink is disabled, UPSERT queries are non-local and for the single node -> NonLocalSingleNodeReqCount increases
+        expectedNonLocalSingleNodeReqCount += (UseSink) ? 0 : 2;
+    } else {
+        expectedNonLocalSingleNodeReqCount += 6;
+    }
+
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), expectedNonLocalSingleNodeReqCount);
 
     // Now resume node 1 and move all tablets on the node1
@@ -858,8 +875,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-
-        // Read is local (node 1) and the tablet is local too (node 1) -> TotalSingleNodeReqCount increases
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -874,8 +889,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-
-        // Read is local (node 1) and the tablet is local too (node 1) -> TotalSingleNodeReqCount increases
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -890,8 +903,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-
-        // Read is local (node 1) and the tablet is local too (node 1) -> TotalSingleNodeReqCount increases
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {
@@ -899,8 +910,6 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             UPDATE `/Root/EightShard` SET Data = 111 WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-
-        // Read is local (node 1) and the tablet is local too (node 1) -> TotalSingleNodeReqCount increases
         UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
     }
     {

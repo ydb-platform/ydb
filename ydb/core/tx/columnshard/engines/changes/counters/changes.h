@@ -73,8 +73,9 @@ public:
     TChangesCounters()
         : TBase("ColumnEngineChanges") {
         for (ui64 i = 0; i < (ui64)NBlobOperations::EConsumer::COUNT; ++i) {
+            auto base = this->CreateSubGroup("consumer", ::ToString(static_cast<NBlobOperations::EConsumer>(i)));
             StagesByConsumer[i] = std::make_shared<NCounters::TStateSignalsOperator<EStage>>(
-                this->CreateSubGroup("consumer", ::ToString(static_cast<NBlobOperations::EConsumer>(i))), "indexation_stage");
+                base, "indexation_stage");
         }
     }
 

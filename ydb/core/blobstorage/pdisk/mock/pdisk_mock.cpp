@@ -78,7 +78,7 @@ struct TPDiskMockState::TImpl {
                 ChunkSharedQuota->ForceHardLimit(TotalChunks, NPDisk::TColorLimits::MakeChunkLimits(130));
                 break;
             }
-            case ESpaceColorPolicy::None: 
+            case ESpaceColorPolicy::None:
             default:
                 break;
         }
@@ -112,7 +112,7 @@ struct TPDiskMockState::TImpl {
                 SetStatusFlags(SpaceColorToStatusFlag(newColor));
                 break;
             }
-            case ESpaceColorPolicy::None: 
+            case ESpaceColorPolicy::None:
             default:
                 break;
         }
@@ -502,6 +502,17 @@ public:
         Send(ev->Sender, res.release());
     }
 
+    void Handle(NPDisk::TEvYardResize::TPtr ev) {
+        auto *msg = ev->Get();
+        PDISK_MOCK_LOG(NOTICE, PDM03, "received TEvYardResize", (Msg, msg->ToString()));
+
+        auto res = std::make_unique<NPDisk::TEvYardResizeResult>(NKikimrProto::OK, GetStatusFlags(), TString());
+        if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
+            owner->GroupSizeInUnits = msg->GroupSizeInUnits;
+        }
+        Send(ev->Sender, res.release());
+    }
+
     void Handle(NPDisk::TEvSlay::TPtr ev) {
         auto *msg = ev->Get();
         PDISK_MOCK_LOG(INFO, PDM17, "received TEvSlay", (Msg, msg->ToString()));
@@ -515,7 +526,7 @@ public:
             Send(ev->Sender, res.release());
             return;
         }
-        
+
         bool found = false;
         for (auto& [ownerId, owner] : Impl.Owners) {
             if (!owner.VDiskId.SameExceptGeneration(msg->VDiskId)) {
@@ -909,7 +920,7 @@ public:
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK, GetStatusFlags(),
             Impl.GetNumFreeChunks(), Impl.TotalChunks, Impl.TotalChunks - Impl.GetNumFreeChunks(),
-            Impl.Owners.size(), TString());
+            Impl.Owners.size(), 0u, TString());
         res->Occupancy = GetOccupancy();
         Impl.FindOwner(msg, res); // to ensure correct owner/round
         Send(ev->Sender, res.release());
@@ -959,8 +970,12 @@ public:
         Send(ev->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, State->GetStateErrorReason()));
     }
 
+    void ErrorHandle(NPDisk::TEvYardResize::TPtr &ev) {
+        Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+    }
+
     void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, State->GetStateErrorReason()));
     }
 
     void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {
@@ -1062,6 +1077,7 @@ public:
 
     STRICT_STFUNC(StateNormal,
         hFunc(NPDisk::TEvYardInit, Handle);
+        hFunc(NPDisk::TEvYardResize, Handle);
         hFunc(NPDisk::TEvLog, Handle);
         hFunc(NPDisk::TEvChunkForget, Handle);
         hFunc(NPDisk::TEvMultiLog, Handle);
@@ -1087,6 +1103,7 @@ public:
 
     STRICT_STFUNC(StateError,
         hFunc(NPDisk::TEvYardInit, ErrorHandle);
+        hFunc(NPDisk::TEvYardResize, ErrorHandle);
         hFunc(NPDisk::TEvCheckSpace, ErrorHandle);
         hFunc(NPDisk::TEvLog, ErrorHandle);
         hFunc(NPDisk::TEvMultiLog, ErrorHandle);

@@ -86,7 +86,7 @@ namespace NYql::NConnector {
             TIssues Issues;
         };
 
-        IStreamIteratorDrainer(IStreamIterator<TResponse>::TPtr&& iterator)
+        IStreamIteratorDrainer(typename IStreamIterator<TResponse>::TPtr&& iterator)
             : Iterator_(std::move(iterator))
         {
         }
@@ -101,7 +101,7 @@ namespace NYql::NConnector {
         }
 
     private:
-        IStreamIterator<TResponse>::TPtr Iterator_;
+        typename IStreamIterator<TResponse>::TPtr Iterator_;
 
         // Transport issues and stream messages received during stream flushing are accumulated here
         TVector<TResponse> Responses_;

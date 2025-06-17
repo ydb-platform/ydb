@@ -1760,6 +1760,21 @@ message TImmediateControlsConfig {
         map<string, TRequestConfig> RequestConfigs = 1;
     }
 
+    message TKQPSessionControls {
+        optional uint64 MkqlInitialMemoryLimit = 1 [(ControlOptions) = {
+            Description: "Initial memory limit for mkql queries",
+            MinValue: 1,
+            MaxValue: 9223372036854775807, // 2 ** 63 -1
+            DefaultValue: 2097152 // 2 MB
+        }];
+        optional uint64 MkqlMaxMemoryLimit = 2 [(ControlOptions) = {
+            Description: "Max memory limit for mkql queries",
+            MinValue: 1,
+            MaxValue: 9223372036854775807, // 2 ** 63 -1
+            DefaultValue: 1073741824 // 1 GB
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1774,6 +1789,7 @@ message TImmediateControlsConfig {
     optional TTableServiceControls TableServiceControls = 12;
     optional TTestShardControls TestShardControls = 13;
     optional TGRpcControls GRpcControls = 14;
+    optional TKQPSessionControls KQPSessionControls = 15;
 };
 
 message TMeteringConfig {

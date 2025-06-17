@@ -17,7 +17,7 @@ NKikimrConfig::TAppConfig GetAppConfig(size_t maxBatchSize = 10000, size_t parti
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableOltpSink(true);
-    app.MutableTableServiceConfig()->SetEnableBatchUpdates(false);
+    app.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(maxBatchSize);
     app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetPartitionExecutionLimit(partitionLimit);
     return app;

@@ -92,7 +92,18 @@ namespace NKikimr {
             bool allowGarbageCollection)
     {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
-        bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
+        bool needsFreshCompaction = false;
+        bool compact = false;
+        if (hullDs->HullCtx->FreshCompaction) {
+            bool needsFreshCompaction = rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
+            compact = needsFreshCompaction;
+        }
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired"
+            << ", required: " << compact
+            << ", yardFreeUpToLsn: " << yardFreeUpToLsn
+            << ", force: " << force
+            << ", needsFreshCompaction: " << needsFreshCompaction
+            << ", allowGarbageCollection: " << allowGarbageCollection);
         if (compact) {
             CompactFreshSegment<TKey, TMemRec>(hullDs, rtCtx, ctx, allowGarbageCollection);
         }

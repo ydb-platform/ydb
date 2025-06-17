@@ -11,6 +11,7 @@ import yatest.common
 class ImportFileCsvBase(UploadSuiteBase):
     query_name: str = 'ImportFileCsv' # Override UploadSuiteBase.query_name
     table_name: str = ''
+    table_path: str = ''
     iterations: int = 1
 
     def init(self):
@@ -24,13 +25,13 @@ class ImportFileCsvBase(UploadSuiteBase):
         self.table_name = table_names[0] # importing just one table
 
     def import_data(self):
-        table_path = f'{YdbCluster.tables_path}/{self.table_name}'
+        self.table_path = f'{YdbCluster.tables_path}/{self.table_name}'
         import_dir = os.path.join(self.get_external_path(), 'import', self.table_name)
         csv_files = [f for f in os.listdir(import_dir) if os.path.isfile(os.path.join(import_dir, f)) and f.endswith('.csv')]
         if not csv_files:
             raise RuntimeError(f'No .csv files found in {import_dir}')
         import_path = os.path.join(import_dir, csv_files[0])
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', table_path, import_path, '--header'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
 
     def validate(self, result: YdbCliHelper.WorkloadRunResult):
         select_command = yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', f'SELECT COUNT (*) AS count FROM `{self.table_path}`', '--format', 'json-unicode'])

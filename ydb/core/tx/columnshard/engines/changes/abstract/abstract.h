@@ -362,7 +362,7 @@ public:
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Counters->GetStage() == NChanges::EStage::Aborted;
+        return StateGuard.GetStage() == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();

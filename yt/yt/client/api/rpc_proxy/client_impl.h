@@ -125,6 +125,7 @@ public:
         const std::vector<NYPath::TYPath>& movableTables,
         const NApi::TBalanceTabletCellsOptions& options) override;
 
+    // Chaos.
     TFuture<NChaosClient::TReplicationCardPtr> GetReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TGetReplicationCardOptions& options = {}) override;
@@ -136,6 +137,13 @@ public:
     TFuture<void> AlterReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TAlterReplicationCardOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> AttachChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> StartChaosLease(
+        const TChaosLeaseStartOptions& options = {}) override;
 
     // Distributed table client
     TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(

@@ -58,6 +58,7 @@ struct TConnectionConfig
     TDuration DefaultTotalStreamingTimeout;
     TDuration DefaultStreamingStallTimeout;
     TDuration DefaultPingPeriod;
+    TDuration DefaultChaosLeaseTimeout;
 
     NBus::TBusConfigPtr BusClient;
     TDuration IdleChannelTtl;

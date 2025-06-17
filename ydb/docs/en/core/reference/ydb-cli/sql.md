@@ -73,7 +73,7 @@ For each query, a file named `<path_to_diagnostics>` will be created with the fo
 
 {% note tip %}
 
-The diagnostics file may contain confidential information, especially in the `meta.query_text`, `plan`, and `ast` fields. Before sharing this file with third parties (e.g., technical support), it is recommended to carefully review and edit its contents to remove or replace any sensitive data.
+The diagnostics file may contain confidential information, especially in the `meta.query_text`, `plan`, and `ast` fields. Before sharing it with third parties (for example, technical support), carefully review and edit the file to remove or replace any sensitive data.
 
 {% endnote %}
 

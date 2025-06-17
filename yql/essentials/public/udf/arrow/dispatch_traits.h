@@ -86,8 +86,7 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
 
     unpacked = SkipTaggedType(typeInfoHelper, unpacked);
 
-    TOptionalTypeInspector unpackedOpt(typeInfoHelper, unpacked);
-    if (unpackedOpt || (typeOpt && NeedWrapWithExternalOptional(typeInfoHelper, unpacked))) {
+    if (NeedWrapWithExternalOptional(typeInfoHelper, type)) {
         ui32 nestLevel = 0;
         auto currentType = type;
         auto previousType = type;
@@ -107,7 +106,7 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
             }
         }
 
-        if (NeedWrapWithExternalOptional(typeInfoHelper, currentType)) {
+        if (NeedWrapWithExternalOptional(typeInfoHelper, previousType)) {
             previousType = currentType;
             ++nestLevel;
         }

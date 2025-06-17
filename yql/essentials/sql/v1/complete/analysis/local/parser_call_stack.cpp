@@ -33,6 +33,9 @@ namespace NSQLComplete {
         RULE(Id_hint),
         RULE(Opt_id_prefix_or_type),
         RULE(Type_name_simple),
+        RULE(Type_name_composite),
+        RULE(Type_name_decimal),
+        RULE(Value_constructor),
     };
 
     TVector<std::string> Symbolized(const TParserCallStack& stack) {
@@ -69,6 +72,8 @@ namespace NSQLComplete {
 
     bool IsLikelyTypeStack(const TParserCallStack& stack) {
         return EndsWith({RULE(Type_name_simple)}, stack) ||
+               EndsWith({RULE(Type_name_composite)}, stack) ||
+               EndsWith({RULE(Type_name_decimal)}, stack) ||
                (Contains({RULE(Invoke_expr),
                           RULE(Named_expr_list),
                           RULE(Named_expr),
@@ -89,7 +94,8 @@ namespace NSQLComplete {
                          RULE(Atom_expr),
                          RULE(Bind_parameter),
                          RULE(An_id_or_type)}, stack) ||
-               EndsWith({RULE(Atom_expr), RULE(Id_or_type)}, stack);
+               EndsWith({RULE(Atom_expr), RULE(Id_or_type)}, stack) ||
+               EndsWith({RULE(Value_constructor)}, stack);
     }
 
     bool IsLikelyHintStack(const TParserCallStack& stack) {

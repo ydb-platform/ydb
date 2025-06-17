@@ -190,6 +190,16 @@ namespace NSQLComplete {
                 }
 
                 if constexpr (std::is_base_of_v<TTypeName, T>) {
+                    switch (name.Kind) {
+                        case TTypeName::EKind::Simple: {
+                        } break;
+                        case TTypeName::EKind::Container: {
+                            name.Indentifier += "<";
+                        } break;
+                        case TTypeName::EKind::Parameterized: {
+                            name.Indentifier += "(";
+                        } break;
+                    }
                     return {ECandidateKind::TypeName, std::move(name.Indentifier)};
                 }
 

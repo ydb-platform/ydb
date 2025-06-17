@@ -30,6 +30,14 @@ namespace NSQLComplete {
 
     struct TTypeName: TIndentifier {
         struct TConstraints {};
+
+        enum class EKind {
+            Simple,
+            Container,
+            Parameterized,
+        };
+
+        EKind Kind = EKind::Simple;
     };
 
     struct TFunctionName: TIndentifier {

@@ -340,6 +340,36 @@ class LoadSuiteBase:
             raise Exception(result.warning_message)
 
     @classmethod
+    def process_import_result(cls, result: YdbCliHelper.ImportCsvRunResult):
+        test_name = 'ImportFileCsv'
+
+        def _duration_text(duration: float | int):
+            s = f'{int(duration)}s ' if duration >= 1 else ''
+            return f'{s}{int(duration * 1000) % 1000}ms'
+
+        s = allure.step('Import result')
+        if result.time:
+            s.params['duration'] = _duration_text(result.time)
+        try:
+            with s:
+                if result.error_message:
+                    pytest.fail(result.error_message)
+        except BaseException:
+            pass
+        if result.stderr is not None:
+            allure.attach(result.stderr, 'Stderr', attachment_type=allure.attachment_type.TEXT)
+        end_time = time()
+        allure_test_description(cls.suite(), test_name, start_time=result.start_time, end_time=end_time)
+        allure.attach(json.dumps(stats, indent=2), 'Stats', attachment_type=allure.attachment_type.JSON)
+        if not result.success:
+            exc = pytest.fail.Exception('\n'.join([result.error_message, result.warning_message]))
+            if result.traceback is not None:
+                exc = exc.with_traceback(result.traceback)
+            raise exc
+        if result.warning_message:
+            raise Exception(result.warning_message)
+
+    @classmethod
     def setup_class(cls) -> None:
         start_time = time()
         result = YdbCliHelper.WorkloadRunResult()

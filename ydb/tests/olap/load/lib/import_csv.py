@@ -7,13 +7,14 @@ from time import time
 import yatest.common
 import allure
 import os
+import pytest
 import requests
 import zipfile
 
 
 class ImportFileCsv(LoadSuiteBase):
     table_path = get_external_param('table-path-import-csv', f'{YdbCluster.tables_path}/import_test_table')
-    file_url = get_external_param('file-url-import-csv', 'https://storage.yandexcloud.net/ydb-testing/2019-Nov.csv.zip')
+    file_url = get_external_param('file-url-import-csv', 'https://proxy.sandbox.yandex-team.ru/8980545283')
     zip_file_name = 'data.csv.zip'
     file_name = 'data.csv'
 
@@ -27,8 +28,10 @@ class ImportFileCsv(LoadSuiteBase):
 
         os.remove(self.zip_file_name)
 
-    def create_table(self):
+    def drop_table_if_exists(self):
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', 'DROP TABLE IF EXISTS `{self.table_path}`'])
+
+    def create_table(self):
         sql_filename = 'create.sql'
         sql_text = f'''
 CREATE TABLE `{self.table_path}` (
@@ -61,28 +64,30 @@ WITH (
 
     def init(self):
         self.download_and_extract_file()
+        self.drop_table_if_exists()
+        self.create_table()
 
     def import_data(self):
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, self.file_name, '--header'])
 
     def test(self):
-        query_name = 'ImportFileCsv'
         start_time = time()
-        result = YdbCliHelper.WorkloadRunResult()
-        result.iterations[0] = YdbCliHelper.Iteration()
+        result = YdbCliHelper.ImportCsvRunResult()
         result.traceback = None
-        nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
-        first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
-        result.start_time = max(start_time - 600, first_node_start_time)
         try:
             self.save_nodes_state()
             with allure.step("init"):
                 self.init()
+            result.file_size_bytes = os.path.getsize(self.file_name)
             start_time = time()
             with allure.step("import data"):
                 self.import_data()
         except BaseException as e:
             result.add_error(str(e))
             result.traceback = e.__traceback__
-        result.iterations[0].time = time() - start_time
-        self.process_query_result(result, query_name, True)
+        result.time = time() - start_time
+        if result.time > 0:
+            result.import_speed = result.file_size_bytes / result.time
+        else:
+            result.import_speed = 0
+        self.process_import_result(result)

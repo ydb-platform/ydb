@@ -22,13 +22,6 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-IF (OS_WINDOWS)
-    CFLAGS(
-        -DUNICODE
-        -D_UNICODE
-    )
-ENDIF()
-
 SRCS(
     src/ftxui/component/animation.cpp
     src/ftxui/component/button.cpp

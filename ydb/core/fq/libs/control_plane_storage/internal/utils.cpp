@@ -13,6 +13,8 @@ namespace NFq {
 
 using NYdb::NFq::TScope;
 
+constexpr char ICEBERG_SOURCE[] = "IcebergGeneric";
+
 NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl)
 {
     NYql::TIssues issues;
@@ -113,6 +115,15 @@ NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, 
     return issues;
 }
 
+void ExcludeFromBilling(const NJson::TJsonValue& jsonTree, const TString& source, ui64& ingress) {
+    const auto path = TStringBuilder() << "TaskRunner.Source=" << source << ".Stage=Total.IngressBytes.sum";
+
+    if (auto* sourceIngressNode = jsonTree.GetValueByPath(path)) {
+        ui64 sourceIngress = sourceIngressNode->GetIntegerSafe();
+        ingress = ingress > sourceIngress ? (ingress - sourceIngress) : 0;
+    }
+}
+
 std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable, const TString& jobId, const TString& scope, const TString& sourceId) {
 
     std::vector<TString> result;
@@ -135,6 +146,8 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
                 ui64 pqIngress = pqIngressNode->GetIntegerSafe();
                 ingress = ingress > pqIngress ? (ingress - pqIngress) : 0;
             }
+
+            ExcludeFromBilling(graph.second, ICEBERG_SOURCE, ingress);
         }
     }
 

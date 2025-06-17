@@ -859,6 +859,8 @@ public:
                 auto& driver = drivers[threadId % driverCount];
                 if (threadId == 0) {
                     LoadSmallTables(driver, Config.Path, Config.WarehouseCount, Log.get());
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(threadId));
                 }
                 LoadRange(driver, Config.Path, whStart, whEnd, LoadState, Log.get());
             });

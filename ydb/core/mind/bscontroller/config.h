@@ -124,6 +124,8 @@ namespace NKikimr {
 
             bool PushStaticGroupsToSelfHeal = false;
 
+            TBridgeInfo::TPtr BridgeInfo;
+
         public:
             TConfigState(TBlobStorageController &controller, const THostRecordMap &hostRecords, TInstant timestamp,
                     TMonotonic mono)
@@ -151,6 +153,7 @@ namespace NKikimr {
                 , StaticPDisks(controller.StaticPDisks)
                 , SerialManagementStage(&controller.SerialManagementStage)
                 , StoragePoolStat(*controller.StoragePoolStat)
+                , BridgeInfo(controller.BridgeInfo)
             {
                 Y_ABORT_UNLESS(HostRecords);
             }

@@ -386,6 +386,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TLangVersion LangVer = UnknownLangVersion;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
+    TLangVersion LangVer = MinLangVersion;
+    EBackportCompatibleFeaturesMode BackportMode = EBackportCompatibleFeaturesMode::None;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;

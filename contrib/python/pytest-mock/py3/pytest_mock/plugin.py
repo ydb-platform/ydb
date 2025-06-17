@@ -1,4 +1,3 @@
-import asyncio
 import builtins
 import functools
 import inspect
@@ -196,7 +195,7 @@ class MockerFixture:
                 spy_obj.spy_return_list.append(r)
             return r
 
-        if asyncio.iscoroutinefunction(method):
+        if inspect.iscoroutinefunction(method):
             wrapped = functools.update_wrapper(async_wrapper, method)
         else:
             wrapped = functools.update_wrapper(wrapper, method)
@@ -265,7 +264,7 @@ class MockerFixture:
                         "Mocks returned by pytest-mock do not need to be used as context managers. "
                         "The mocker fixture automatically undoes mocking at the end of a test. "
                         "This warning can be ignored if it was triggered by mocking a context manager. "
-                        "https://pytest-mock.readthedocs.io/en/latest/remarks.html#usage-as-context-manager",
+                        "https://pytest-mock.readthedocs.io/en/latest/usage.html#usage-as-context-manager",
                         PytestMockWarning,
                         stacklevel=5,
                     )

@@ -587,6 +587,8 @@ public:
 
         Table::GroupSizeInUnits::Type GroupSizeInUnits;
 
+        TMaybe<Table::BridgePileId::Type> BridgePileId;
+
         TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
         TMaybe<Table::HiveId::Type> HiveId;
@@ -596,6 +598,7 @@ public:
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
+        TMaybe<Table::BridgeGroupInfo::Type> BridgeGroupInfo;
 
         bool Down = false; // is group are down right now (not selectable)
         TVector<TIndirectReferable<TVSlotInfo>::TPtr> VDisksInGroup;
@@ -665,6 +668,7 @@ public:
                     Table::SeenOperational,
                     Table::DecommitStatus,
                     Table::GroupSizeInUnits,
+                    Table::BridgePileId,
                     Table::VirtualGroupName,
                     Table::VirtualGroupState,
                     Table::HiveId,
@@ -672,7 +676,8 @@ public:
                     Table::BlobDepotConfig,
                     Table::BlobDepotId,
                     Table::ErrorReason,
-                    Table::NeedAlter
+                    Table::NeedAlter,
+                    Table::BridgeGroupInfo
                 > adapter(
                     &TGroupInfo::Generation,
                     &TGroupInfo::Owner,
@@ -688,6 +693,7 @@ public:
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
                     &TGroupInfo::GroupSizeInUnits,
+                    &TGroupInfo::BridgePileId,
                     &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
                     &TGroupInfo::HiveId,
@@ -695,7 +701,8 @@ public:
                     &TGroupInfo::BlobDepotConfig,
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
-                    &TGroupInfo::NeedAlter
+                    &TGroupInfo::NeedAlter,
+                    &TGroupInfo::BridgeGroupInfo
                 );
             callback(&adapter);
         }
@@ -1218,6 +1225,7 @@ public:
         TMaybe<ui64> PathItemId;
         bool RandomizeGroupMapping;
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
+        Table::BridgeMode::Type BridgeMode = false;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1321,6 +1329,7 @@ public:
                     Table::PathItemId,
                     Table::RandomizeGroupMapping,
                     Table::DefaultGroupSizeInUnits,
+                    Table::BridgeMode,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1348,6 +1357,7 @@ public:
                     &TStoragePoolInfo::PathItemId,
                     &TStoragePoolInfo::RandomizeGroupMapping,
                     &TStoragePoolInfo::DefaultGroupSizeInUnits,
+                    &TStoragePoolInfo::BridgeMode,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );
@@ -1583,6 +1593,7 @@ private:
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
     std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
+    TBridgeInfo::TPtr BridgeInfo;
     bool SelfManagementEnabled = false;
     std::optional<TYamlConfig> YamlConfig;
     ui64 YamlConfigHash = 0;
@@ -1598,7 +1609,6 @@ private:
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
-    bool StorageConfigObtained = false;
     bool Loaded = false;
     bool EnableConfigV2 = false;
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
@@ -1866,7 +1876,7 @@ private:
 
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
-    void OnHostRecordsInitiate();
+    void SetHostRecords(THostRecordMap hostRecords);
 
     void CommitMetrics();
 

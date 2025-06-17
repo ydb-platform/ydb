@@ -6,7 +6,6 @@ PEERDIR(
     contrib/libs/antlr3_cpp_runtime
     library/cpp/getopt
     library/cpp/testing/unittest
-    yql/essentials/minikql/invoke_builtins/no_llvm
     yql/essentials/parser/lexer_common
     yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub

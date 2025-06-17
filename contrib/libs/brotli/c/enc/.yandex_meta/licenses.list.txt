@@ -27,6 +27,10 @@
 
 
 ====================COPYRIGHT====================
+/* Copyright 2022 Google Inc. All Rights Reserved.
+
+
+====================COPYRIGHT====================
 Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
 
 

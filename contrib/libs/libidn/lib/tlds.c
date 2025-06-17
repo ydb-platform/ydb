@@ -57,6 +57,7 @@ static const Tld_table _tld_no =
 };
 
 /* Main array */
+extern const Tld_table *_tld_tables[];
 const Tld_table * _tld_tables[] =
 {
   &_tld_fr,

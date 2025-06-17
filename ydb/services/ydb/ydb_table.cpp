@@ -47,6 +47,10 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #error ADD_STREAM_REQUEST_LIMIT macro already defined
 #endif
 
+#ifdef GET_LIMITER_BY_PATH
+#error GET_LIMITER_BY_PATH macro already defined
+#endif
+
 #define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE, REQUEST_TYPE, ...)                                                    \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                         \
         for (auto* cq: CQS) {                                                                                         \
@@ -68,6 +72,10 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     }
 
     auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
+
+#define GET_LIMITER_BY_PATH(ICB_PATH)\
+    getLimiter(#ICB_PATH, icb.ICB_PATH, UNLIMITED_INFLIGHT)
+
 #define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE, REQUEST_TYPE, USE_LIMITER) \
     for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                                           \
         for (auto* cq: CQS) {                                                                                                           \
@@ -83,10 +91,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 }));                                                                                                    \
                     }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                                    \
                     #NAME, logger, getCounterBlock("table", #NAME),                                                                     \
-                    (USE_LIMITER ? getLimiter(                                                                                          \
-                                                "GRpcControls.RequestConfigs.TableService_" #NAME ".MaxInFlight",                       \
-                                                icb.GRpcControls.RequestConfigs.TableService_## NAME.MaxInFlight,                       \
-                                                UNLIMITED_INFLIGHT) : nullptr))->Run();                                                 \
+                    (USE_LIMITER ? GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.TableService_##NAME.MaxInFlight) : nullptr))->Run(); \
         ++proxyCounter;                                                                                                                 \
     }                                                                                                                                   \
     }
@@ -119,6 +124,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress, STREAMREADTABLE, false)
     ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru, READROWS, true)
 
+#undef GET_LIMITER_BY_PATH
 #undef ADD_REQUEST_LIMIT
 #undef ADD_STREAM_REQUEST_LIMIT
 }

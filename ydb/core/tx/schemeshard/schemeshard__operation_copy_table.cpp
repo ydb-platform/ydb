@@ -260,8 +260,6 @@ public:
     }
 };
 
-// TCopyTableBarrier is now defined as TWaitCopyTableBarrier in schemeshard__operation_states.h
-
 class TCopyTable: public TSubOperation {
 
     THashSet<TString> LocalSequences;

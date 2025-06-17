@@ -2047,9 +2047,9 @@ struct Schema : NIceDb::Schema {
 
     // Header table for the overall incremental restore operation
     struct IncrementalRestoreOperations : Table<120> {
-        struct Id :                  Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
 
-        struct Operation :           Column<2, NScheme::NTypeIds::String> {};
+        struct Operation : Column<2, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<

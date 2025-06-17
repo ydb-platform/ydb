@@ -327,6 +327,21 @@ public:
     {
     }
 
+    void StateDone(TOperationContext& context) override {
+        if (GetState() == TTxState::Done) {
+            return;
+        }
+        
+        TTxState::ETxState nextState;
+        nextState = NextState(GetState(), context);
+        
+        SetState(nextState, context);
+        
+        if (nextState != TTxState::Invalid) {
+            context.OnComplete.ActivateTx(OperationId);
+        }
+    }
+
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetRestoreMultipleIncrementalBackups();

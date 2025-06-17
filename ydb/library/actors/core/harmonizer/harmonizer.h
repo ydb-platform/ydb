@@ -48,6 +48,9 @@ namespace NActors {
         float AvgAwakeningTimeUs = 0;
         float AvgWakingUpTimeUs = 0;
 
+        float Budget = 0.0;
+        float SharedFreeCpu = 0.0;
+
         TString ToString() const;
     };
 

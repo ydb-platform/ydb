@@ -42,17 +42,27 @@ namespace NActors {
 
     struct TExecutorPoolState {
         float ElapsedCpu = 0;
+        float SharedCpuQuota = 0;
         float CurrentLimit = 0;
         float PossibleMaxLimit = 0;
         float MaxLimit = 0;
         float MinLimit = 0;
 
+        i8 IsNeedy = 0;
+        i8 IsStarved = 0;
+        i8 IsHoggish = 0;
+
         void Aggregate(const TExecutorPoolState& other) {
             ElapsedCpu += other.ElapsedCpu;
+            SharedCpuQuota += other.SharedCpuQuota;
             CurrentLimit += other.CurrentLimit;
             PossibleMaxLimit += other.PossibleMaxLimit;
             MaxLimit += other.MaxLimit;
             MinLimit += other.MinLimit;
+
+            IsNeedy += other.IsNeedy;
+            IsStarved += other.IsStarved;
+            IsHoggish += other.IsHoggish;
         }
     };
 

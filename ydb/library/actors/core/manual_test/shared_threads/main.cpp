@@ -198,19 +198,36 @@ int main(int argc, char **argv) {
     }));
     actorSystem.Register(new THugeTaskActor([]{}));
 
+    auto printState = [&](i16 poolId) {
+        TExecutorPoolState state;
+        actorSystem.GetExecutorPoolState(poolId, state);
+        TStringBuilder flagBuilder;
+        if (state.IsNeedy) {
+            flagBuilder << "N";
+        }
+        if (state.IsHoggish) {
+            flagBuilder << "H";
+        }
+        if (state.IsStarved) {
+            flagBuilder << "S";
+        }
+        if (!flagBuilder.empty()) {
+            flagBuilder << " ";
+        }
+        Cout << "Pool " << poolId << " state: " << flagBuilder << state.ElapsedCpu << " " << state.CurrentLimit << "/" << state.PossibleMaxLimit << "(" << state.MaxLimit << ") foreign shared elapsed cpu: " << state.SharedCpuQuota - 1 << Endl;
+    };
+
     ui64 seconds = 0;
     while (ShouldContinue.PollState() == TProgramShouldContinue::Continue) {
         Sleep(TDuration::MilliSeconds(1000));
         ui64 maxInterval = state.MaxSmallTaskInterval.exchange(0);
         Cout << "--------------------------------" << Endl;
-        Cout << "Seconds: " << seconds << Endl;
+        Cout << "Seconds: " << seconds++ << Endl;
         Cout << "Max small task interval: " << std::round(Ts2Us(maxInterval))  << " us" << Endl;
-        TExecutorPoolState state;
-        actorSystem.GetExecutorPoolState(0, state);
-        Cout << "Pool 0 state: " << state.ElapsedCpu << " " << state.CurrentLimit << "/" << state.PossibleMaxLimit << "(" << state.MaxLimit << ")" << Endl;
-        actorSystem.GetExecutorPoolState(1, state);
-        Cout << "Pool 1 state: " << state.ElapsedCpu << " " << state.CurrentLimit << "/" << state.PossibleMaxLimit << "(" << state.MaxLimit << ")" << Endl;
-        seconds++;
+        printState(0);
+        printState(1);
+        THarmonizerStats stats = actorSystem.GetHarmonizerStats();
+        Cout << "Harmonizer stats: budget: " << stats.Budget << " shared free cpu: " << stats.SharedFreeCpu << Endl;
     }
 
     actorSystem.Stop();

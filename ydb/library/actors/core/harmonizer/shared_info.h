@@ -13,6 +13,8 @@ struct TPoolSharedThreadCpuConsumption {
     float Elapsed = 0;
     float Cpu = 0;
     float CpuQuota = 0;
+    float ForeignElapsed = 0;
+    float ForeignCpu = 0;
 
     TString ToString() const;
 };

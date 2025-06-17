@@ -28,8 +28,6 @@
 
 namespace NActors {
 
-constexpr float kMinFreeCpuThreshold = 0.1;
-
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 
@@ -168,7 +166,10 @@ void THarmonizer::ProcessNeedyState() {
         }
         float threadCount = pool.GetFullThreadCount() + SharedInfo.CpuConsumption[needyPoolIdx].CpuQuota;
 
-        if (ProcessingBudget >= 1.0 && threadCount + 1 <= pool.MaxFullThreadCount && SharedInfo.FreeCpu < kMinFreeCpuThreshold) {
+        float foreignElapsed = SharedInfo.CpuConsumption[needyPoolIdx].ForeignElapsed;
+        i16 sharedThreadCount = (SharedInfo.OwnedThreads[needyPoolIdx] != -1 ? 1 : 0);
+        bool allowedNextThreadCount = pool.GetFullThreadCount() + sharedThreadCount + 1 <= pool.MaxFullThreadCount;
+        if (ProcessingBudget + foreignElapsed >= 1.0 && allowedNextThreadCount) {
             pool.IncreasingThreadsByNeedyState.fetch_add(1, std::memory_order_relaxed);
             CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
             CpuConsumption.AdditionalThreads++;
@@ -338,11 +339,12 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         float elapsedCpu = pool.ElapsedCpu.GetAvgPart();
         float parkedCpu = Max<float>(0.0f, threadCount - elapsedCpu);
         float budgetWithoutSharedAndParkedCpu = std::max<float>(0.0f, budgetWithoutSharedCpu - parkedCpu);
-        i16 potentialMaxThreadCountWithoutSharedCpu = std::min<float>(pool.MaxThreadCount, threadCount + budgetWithoutSharedAndParkedCpu);
+        float potentialMaxThreadCountWithoutSharedCpu = std::min<float>(pool.MaxThreadCount, threadCount + budgetWithoutSharedAndParkedCpu);
         float potentialMaxThreadCount = std::min<float>(pool.MaxThreadCount, potentialMaxThreadCountWithoutSharedCpu + possibleMaxSharedQuota);
 
         pool.PotentialMaxThreadCount.store(potentialMaxThreadCount, std::memory_order_relaxed);
         HARMONIZER_DEBUG_PRINT(poolIdx, pool.Pool->GetName(),
+        //ACTORLIB_DEBUG_WITH_SPACES(EDebugLevel::None, poolIdx, pool.Pool->GetName(),
             "budget: ", CpuConsumption.Budget,
             "free shared cpu: ", freeSharedCpu,
             "budget without shared cpu: ", budgetWithoutSharedCpu,
@@ -491,6 +493,8 @@ THarmonizerStats THarmonizer::GetStats() const {
         .MinElapsedCpu = MinElapsedCpu.load(std::memory_order_relaxed),
         .AvgAwakeningTimeUs = WaitingInfo.AvgAwakeningTimeUs.load(std::memory_order_relaxed),
         .AvgWakingUpTimeUs = WaitingInfo.AvgWakingUpTimeUs.load(std::memory_order_relaxed),
+        .Budget = CpuConsumption.Budget,
+        .SharedFreeCpu = SharedInfo.FreeCpu,
     };
 }
 
@@ -499,7 +503,7 @@ void THarmonizer::SetSharedPool(ISharedPool* pool) {
 }
 
 TString TPoolHarmonizerStats::ToString() const {
-    return TStringBuilder() << '{' 
+    return TStringBuilder() << '{'
         << "IncreasingThreadsByNeedyState: " << IncreasingThreadsByNeedyState << ", "
         << "IncreasingThreadsByExchange: " << IncreasingThreadsByExchange << ", "
         << "DecreasingThreadsByStarvedState: " << DecreasingThreadsByStarvedState << ", "
@@ -531,7 +535,9 @@ TString THarmonizerStats::ToString() const {
         << "MaxElapsedCpu: " << MaxElapsedCpu << ", "
         << "MinElapsedCpu: " << MinElapsedCpu << ", "
         << "AvgAwakeningTimeUs: " << AvgAwakeningTimeUs << ", "
-        << "AvgWakingUpTimeUs: " << AvgWakingUpTimeUs << '}';
+        << "AvgWakingUpTimeUs: " << AvgWakingUpTimeUs << ", "
+        << "Budget: " << Budget << ", "
+        << "SharedFreeCpu: " << SharedFreeCpu << '}';
 }
 
 }

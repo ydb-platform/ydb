@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20250127.1)
+VERSION(20250512.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250127.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20250512.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -98,7 +98,6 @@ SRCS(
     absl/log/internal/proto.cc
     absl/log/internal/structured_proto.cc
     absl/log/internal/vlog_config.cc
-    absl/log/log_entry.cc
     absl/log/log_sink.cc
     absl/numeric/int128.cc
     absl/profiling/internal/exponential_biased.cc
@@ -107,7 +106,7 @@ SRCS(
     absl/random/gaussian_distribution.cc
     absl/random/internal/chi_square.cc
     absl/random/internal/distribution_test_util.cc
-    absl/random/internal/pool_urbg.cc
+    absl/random/internal/entropy_pool.cc
     absl/random/internal/randen.cc
     absl/random/internal/randen_detect.cc
     absl/random/internal/randen_hwaes.cc
@@ -124,7 +123,6 @@ SRCS(
     absl/strings/charconv.cc
     absl/strings/cord.cc
     absl/strings/cord_analysis.cc
-    absl/strings/cord_buffer.cc
     absl/strings/escaping.cc
     absl/strings/internal/charconv_bigint.cc
     absl/strings/internal/charconv_parse.cc
@@ -186,9 +184,6 @@ SRCS(
     absl/time/internal/cctz/src/time_zone_posix.cc
     absl/time/internal/cctz/src/zone_info_source.cc
     absl/time/time.cc
-    absl/types/bad_any_cast.cc
-    absl/types/bad_optional_access.cc
-    absl/types/bad_variant_access.cc
 )
 
 END()

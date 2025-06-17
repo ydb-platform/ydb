@@ -1,3 +1,4 @@
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
@@ -14,6 +15,19 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
         // and thus the vector index build process is never interrupted at all because there are no other
         // events to reboot on.
         T t(true /*killOnCommit*/);
+        // speed up the test:
+        // only check scheme shard reboots
+        t.TabletIds.clear();
+        t.TabletIds.push_back(t.SchemeShardTabletId);
+        // white list some more events
+        t.NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
+        t.NoRebootEventTypes.insert(TSchemeBoardEvents::EvUpdateAck);
+        t.NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletionRegistered);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerDisconnected);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvServerConnected);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientConnected);
+        t.NoRebootEventTypes.insert(TEvTabletPipe::EvClientDestroyed);
+        t.NoRebootEventTypes.insert(TEvDataShard::EvBuildIndexProgressResponse);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

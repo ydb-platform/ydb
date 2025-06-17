@@ -255,7 +255,7 @@ private:
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
-    TStateSignalsOperator<EStage>::TGuard StateGuard;
+    NCounters::TStateSignalsOperator<NChanges::EStage>::TGuard StateGuard;
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -354,7 +354,7 @@ public:
     }
 
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
-        : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
+        : StateGuard(NChanges::TChangesCounters::GetStageCounters(consumerId))
         , BlobsAction(storagesManager, consumerId) {
     }
 

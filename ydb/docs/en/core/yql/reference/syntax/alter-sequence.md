@@ -1,6 +1,6 @@
 # ALTER SEQUENCE
 
-Modifies parameters of an existing `Sequence` object associated with a [Serial](../types/serial.md) column.
+Modifies the parameters of an existing `Sequence` object associated with a [Serial](../types/serial.md) column.
 
 ## Syntax
 
@@ -13,19 +13,19 @@ ALTER SEQUENCE [ IF EXISTS ] path_to_sequence
 
 ## Parameters
 
-* `path_to_sequence` — the absolute path to the `Sequence` object.
+* `path_to_sequence` — the absolute path to the sequence object.
 
-    The path is constructed as `<path_to_table>/_serial_column_{column_name}`,
-    where `<path_to_table>` is the absolute path to the table, and `{column_name}` is the name of the `Serial` column.
+    The path is constructed as `<path_to_table>/_serial_column_<column_name>`,
+    where `<path_to_table>` is the absolute path to the table, and `<column_name>` is the name of the column with the `Serial` data type.
     For example, for the column `user_id` in the table `/local/users`, the corresponding `Sequence` path will be `/local/users/_serial_column_user_id`.
 
-* `IF EXISTS` — if used, the statement does not return an error if the `Sequence` does not exist at the specified path.
+* `IF EXISTS` — when used, the statement does not return an error if the sequence does not exist at the specified path.
 
 * `INCREMENT [ BY ] increment` — sets the increment step for the sequence. Default: 1.
 
-* `START [ WITH ] start_value` — sets a new start value for the sequence. Changing this parameter with `ALTER SEQUENCE` does not affect the current value, but new start value will be used with `ALTER SEQUENCE RESTART` if no value is specified. Default: 1.
+* `START [ WITH ] start_value` — sets a new start value for the sequence. Changing this parameter with `ALTER SEQUENCE` does not affect the current value; the new start value is used with `ALTER SEQUENCE RESTART` if no value is specified. Default: 1.
 
-* `RESTART [ [ WITH ] restart_value ]` — sets the current value of the sequence to the specified `restart_value`. If the value is not specified, the current value will be set to the current start value.
+* `RESTART [ [ WITH ] restart_value ]` — sets the current sequence value to the specified `restart_value`. If no value is specified, it sets the current value to the start value.
 
 ## Examples
 
@@ -53,3 +53,8 @@ An alternative way to change the current value is to first set a new start value
 ALTER SEQUENCE `/Root/users/_serial_column_user_id` INCREMENT BY 5 START WITH 1000;
 ALTER SEQUENCE `/Root/users/_serial_column_user_id` RESTART;
 ```
+
+## See also
+
+* [{#T}](create-table.md)
+* [{#T}](../types/serial.md)

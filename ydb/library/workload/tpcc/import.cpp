@@ -511,15 +511,28 @@ NTable::TBulkUpsertResult LoadOrderLines(
 template<typename LoadFunc>
 void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, TLog* Log) {
     for (int retryCount = 0; retryCount < MAX_RETRIES; ++retryCount) {
+        if (GetGlobalInterruptSource().stop_requested()) {
+            break;
+        }
+
         auto result = loadFunc();
         if (result.IsSuccess()) {
+            return;
+        }
+
+        const auto status = result.GetStatus();
+        bool shouldFail = status == EStatus::NOT_FOUND || status == EStatus::UNDETERMINED
+            || status == EStatus::UNAUTHORIZED || status == EStatus::SCHEME_ERROR;
+        if (shouldFail) {
+            LOG_E(operationName << " failed: " << result.GetIssues().ToOneLineString());
+            RequestStop();
             return;
         }
 
         if (retryCount < MAX_RETRIES - 1) {
             int waitMs = GetBackoffWaitMs(retryCount);
             LOG_T("Retrying " << operationName << " after " << waitMs << " ms due to: "
-                    << result.GetIssues().ToOneLineString());
+                    << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
             Sleep(TDuration::MilliSeconds(waitMs));
         } else {
             LOG_E(operationName << " failed after " << MAX_RETRIES << " retries: "
@@ -757,10 +770,8 @@ std::expected<double, std::string> GetIndexProgress(
 
 //-----------------------------------------------------------------------------
 
-std::stop_source StopByInterrupt;
-
 void InterruptHandler(int) {
-    StopByInterrupt.request_stop();
+    GetGlobalInterruptSource().request_stop();
 }
 
 //-----------------------------------------------------------------------------
@@ -787,7 +798,7 @@ public:
         , Log(std::make_unique<TLog>(THolder(static_cast<TLogBackend*>(LogBackend))))
         , PreviousDataSizeLoaded(0)
         , StartTime(Clock::now())
-        , LoadState(StopByInterrupt.get_token())
+        , LoadState(GetGlobalInterruptSource().get_token())
     {
     }
 
@@ -859,7 +870,7 @@ public:
         Clock::time_point lastIndexProgressCheck = Clock::time_point::min();
 
         while (true) {
-            if (StopByInterrupt.stop_requested()) {
+            if (GetGlobalInterruptSource().stop_requested()) {
                 break;
             }
 
@@ -876,6 +887,16 @@ public:
                 size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
                 if (indexedRangesLoaded >= threadCount) {
                     CreateIndices(drivers[0], Config.Path, LoadState, Log.get());
+                    for (const auto& state: LoadState.IndexBuildStates) {
+                        if (state.Id.GetKind() == TOperation::TOperationId::UNUSED) {
+                            GetGlobalInterruptSource().request_stop();
+                            break;
+                        }
+                    }
+                    if (GetGlobalInterruptSource().stop_requested()) {
+                        break;
+                    }
+
                     LOG_I("Indexed tables loaded, indices are being built in background. Continuing with remaining tables");
                     LoadState.State = TLoadState::ELOAD_TABLES_BUILD_INDICES;
                     lastIndexProgressCheck = now;
@@ -932,7 +953,7 @@ public:
             ExitTuiMode();
         }
 
-        if (StopByInterrupt.stop_requested()) {
+        if (GetGlobalInterruptSource().stop_requested()) {
             LOG_I("Stop requested, waiting for threads to finish");
         }
 

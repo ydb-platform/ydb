@@ -15,10 +15,6 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
     ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", changes->DebugString());
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
-        AFL_VERIFY(Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot() <= Self->GetLastTxSnapshot())
-        ("schema_last", Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot().DebugString())(
-            "planned_last", Self->GetLastTxSnapshot().DebugString());
-
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));

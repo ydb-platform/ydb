@@ -131,8 +131,10 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     void PassAway() override {
         BLOG_D("TBoardLookupActor::PassAway");
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
-            nullptr, 0));
+        if (Subscriber) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeStateStorageProxyID(), SelfId(),
+                nullptr, 0));
+        }
         for (const auto &rg : ReplicaGroups)
             for (const auto &replica : rg.Replicas) {
                 if (Subscriber) {

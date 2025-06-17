@@ -23,7 +23,7 @@ public:
     TCommandTPCCClean(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCClean() = default;
 
-    virtual int Run(TConfig& config) override;
+    int Run(TConfig& config) override;
 
 private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
@@ -50,7 +50,8 @@ public:
     TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCInit() = default;
 
-    virtual int Run(TConfig& config) override;
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
 
 private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
@@ -60,6 +61,20 @@ TCommandTPCCInit::TCommandTPCCInit(std::shared_ptr<NTPCC::TRunConfig> runConfig)
     : TYdbCommand("init", {}, "Create and initialize tables for benchmark")
     , RunConfig(std::move(runConfig))
 {
+}
+
+void TCommandTPCCInit::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+
+    config.Opts->AddLongOption(
+        'w', "warehouses", TStringBuilder() << "Number of warehouses")
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
+
+    config.Opts->AddLongOption(
+        "log-level", TStringBuilder() << "Log level from 0 to 8, default is 6 (INFO)")
+            .Optional().StoreMappedResult(&RunConfig->LogPriority, [](const TString& v) {
+                return FromString<ELogPriority>(v);
+            }).DefaultValue(RunConfig->LogPriority).Hidden();
 }
 
 int TCommandTPCCInit::Run(TConfig& connectionConfig) {
@@ -77,8 +92,8 @@ public:
     TCommandTPCCImport(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCImport() = default;
 
-    virtual void Config(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
 
 private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
@@ -95,7 +110,7 @@ void TCommandTPCCImport::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .OptionalArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
 
     // TODO: detect automatically
     config.Opts->AddLongOption(
@@ -140,8 +155,8 @@ public:
     TCommandTPCCRun(std::shared_ptr<NTPCC::TRunConfig> runConfig);
     ~TCommandTPCCRun() = default;
 
-    virtual void Config(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    void Config(TConfig& config) override;
+    int Run(TConfig& config) override;
 
 private:
     std::shared_ptr<NTPCC::TRunConfig> RunConfig;
@@ -158,7 +173,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
-            .OptionalArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
+            .RequiredArgument("INT").Required().StoreResult(&RunConfig->WarehouseCount);
 
     // TODO: default value should be auto
     config.Opts->AddLongOption(

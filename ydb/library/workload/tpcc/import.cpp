@@ -823,17 +823,16 @@ public:
             Config.LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
         }
 
-        // in particular this log message
-        LOG_I("Starting TPC-C data import for " << Config.WarehouseCount << " warehouses using " <<
-                Config.LoadThreadCount << " threads. Approximate data size: "
-                << GetFormattedSize(LoadState.ApproximateDataSize));
-
         // TODO: detect number of threads
         size_t threadCount = std::min(Config.WarehouseCount, Config.LoadThreadCount);
         threadCount = std::max(threadCount, size_t(1));
 
         // TODO: calculate optimal number of drivers (but per thread looks good)
         size_t driverCount = threadCount;
+
+        LOG_I("Starting TPC-C data import for " << Config.WarehouseCount << " warehouses using " <<
+                threadCount << " threads and " << driverCount << " YDB drivers. Approximate data size: "
+                << GetFormattedSize(LoadState.ApproximateDataSize));
 
         std::vector<TDriver> drivers;
         drivers.reserve(driverCount);

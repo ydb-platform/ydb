@@ -15,8 +15,7 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
-    // TODO: this is awful why do we check everything here
-    Y_UNIT_TEST(PleaseSplitMeOnMultipleTestsAndDoNotUseServerless) {
+    Y_UNIT_TEST(CreateAndDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -27,7 +26,105 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         ui64 tenantSchemeShard = 0;
         TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
 
-        // Just create main table
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 200);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 0);
+
+        TestDropTableIndex(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            TableName: "Table"
+            IndexName: "index1"
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        Cerr << "... rebooting scheme shard" << Endl;
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
+    }
+
+    Y_UNIT_TEST(RecreatedColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Test that index build succeeds on recreated columns
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            DropColumns { Name: "embedding" }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "embedding"   Type: "String" }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 200, {1, 3});
+
+        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(8)});
+    }
+
+    Y_UNIT_TEST(SimpleDuplicates) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
@@ -44,16 +141,14 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 2, 150, 200);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(3)});
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansRequest> reshuffleBlocker(runtime, [&](const auto& ) {
             return true;
         });
 
         ui64 buildIndexTx = ++txId;
-        AsyncBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
+        AsyncBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
 
         // Wait for the first "reshuffle" request (samples will be already collected on the first level)
         // and reboot the scheme shard to verify that its intermediate state is persisted correctly.
@@ -96,21 +191,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         level1Blocker.Stop().Unblock();
 
         // Now wait for the index build
-        {
-            auto expectedStatus = Ydb::StatusIds::SUCCESS;
-            TAutoPtr<IEventHandle> handle;
-            TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
-            UNIT_ASSERT(event);
-
-            Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
-            UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
-                                "status mismatch"
-                                    << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
-                                    << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
-                                    << " issues was " << event->Record.GetIssues());
-        }
-
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
 
         // Check row count in the posting table
         {
@@ -118,56 +201,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Cerr << "... posting table contains " << rows << " rows" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(rows, 200);
         }
-
-        auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
-        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
-
-        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
-        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
-
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(1),
-                            NLs::PathVersionEqual(6)});
-
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
-                           {NLs::PathExist,
-                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
-
-        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
-        buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
-        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 0);
-
-        TestDropTableIndex(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-            TableName: "Table"
-            IndexName: "index1"
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        Cerr << "... rebooting scheme shard" << Endl;
-        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
-
-        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
-                           {NLs::PathExist,
-                            NLs::IndexesCount(0),
-                            NLs::PathVersionEqual(8)});
-
-        // Test that index build succeeds on recreated columns
-
-        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-              Name: "Table"
-              DropColumns { Name: "embedding" }
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
-              Name: "Table"
-              Columns { Name: "embedding"   Type: "String" }
-        )");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
-
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding");
-        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
     }
 
     Y_UNIT_TEST(PrefixedDuplicates) {
@@ -406,9 +439,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 0, 0, 50);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 1, 50, 150);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 2, 150, 200);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 2, 150, 200);
 
         TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> meteringBlocker(runtime, [&](const auto& ev) {
             Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;

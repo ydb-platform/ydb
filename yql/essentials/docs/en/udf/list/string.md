@@ -42,7 +42,7 @@ Functions for ASCII strings:
 
 * `String::ReverseFind(String{Flags:AutoMap}, String, [Uint64?]) -> Int64`: Returns the last position found or -1. The optional argument is the offset from the beginning of the string.
 
-* `String::AsciiStartsWithIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
+* `String::AsciiStartsWithIgnoreCase(String?, String) -> Bool`
 
 * `String::HasPrefix(String?, String) -> Bool`
 
@@ -52,7 +52,7 @@ Functions for ASCII strings:
 
 * `String::StartsWithIgnoreCase(String?, String) -> Bool` Removed in the version [2025.02](../../changelog/2025.02.md#string-module)
 
-* `String::AsciiEndsWithIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
+* `String::AsciiEndsWithIgnoreCase(String?, String) -> Bool`
 
 * `String::HasSuffix(String?, String) -> Bool`
 

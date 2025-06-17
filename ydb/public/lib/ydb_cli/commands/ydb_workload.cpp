@@ -356,6 +356,8 @@ int TWorkloadCommandRun::Run(TConfig& config) {
     Params.Verbose = config.IsVerbose();
     auto workloadGen = Params.CreateGenerator();
     Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
+    Params.Init();
+    workloadGen->Init();
     return RunWorkload(*workloadGen, Type);
 }
 

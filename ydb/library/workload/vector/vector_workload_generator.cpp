@@ -1,3 +1,4 @@
+#include "vector_enums.h"
 #include "vector_sql.h"
 #include "vector_workload_generator.h"
 #include "vector_workload_params.h"
@@ -10,14 +11,22 @@
 
 #include <algorithm>
 
+
 namespace NYdbWorkload {
 
-// Initialize thread local atomic
 thread_local std::atomic<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex{0};
 
 TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* params)
     : TBase(params)
 {
+}
+
+void TVectorWorkloadGenerator::Init() {
+    VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>(Params);
+    VectorRecallEvaluator->SampleExistingVectors();
+    if (Params.Recall) {
+        VectorRecallEvaluator->FillEtalons();
+    }
 }
 
 std::string TVectorWorkloadGenerator::GetDDLQueries() const {
@@ -43,10 +52,10 @@ TVector<std::string> TVectorWorkloadGenerator::GetCleanPaths() const {
 }
 
 TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {
-    switch (static_cast<EType>(type)) {
-        case EType::Upsert:
+    switch (static_cast<EWorkloadRunType>(type)) {
+        case EWorkloadRunType::Upsert:
             return Upsert();
-        case EType::Select:
+        case EWorkloadRunType::Select:
             return Select();
         default:
             return TQueryInfoList();
@@ -55,8 +64,8 @@ TQueryInfoList TVectorWorkloadGenerator::GetWorkload(int type) {
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TVectorWorkloadGenerator::GetSupportedWorkloadTypes() const {
     TVector<TWorkloadType> result;
-    result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert vector rows in the table");
-    result.emplace_back(static_cast<int>(EType::Select), "select", "Retrieve top-K vectors");
+    result.emplace_back(static_cast<int>(EWorkloadRunType::Upsert), "upsert", "Upsert vector rows in the table");
+    result.emplace_back(static_cast<int>(EWorkloadRunType::Select), "select", "Retrieve top-K vectors");
     return result;
 }
 
@@ -66,7 +75,7 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
 }
 
 size_t TVectorWorkloadGenerator::GetNextTargetIndex(size_t currentIndex) const {
-    return (currentIndex + 1) % Params.VectorRecallEvaluator->GetTargetCount();
+    return (currentIndex + 1) % VectorRecallEvaluator->GetTargetCount();
 }
 
 TQueryInfoList TVectorWorkloadGenerator::Select() {
@@ -74,7 +83,7 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     if (ThreadLocalTargetIndex.load() == 0) {
         std::random_device rd;
         std::mt19937 gen(rd());
-        std::uniform_int_distribution<size_t> dist(0, Params.VectorRecallEvaluator->GetTargetCount() - 1);
+        std::uniform_int_distribution<size_t> dist(0, VectorRecallEvaluator->GetTargetCount() - 1);
         ThreadLocalTargetIndex.store(dist(gen));
     }
     
@@ -91,12 +100,12 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     );
     
     // Get the embedding for the specified target
-    const auto& targetEmbedding = Params.VectorRecallEvaluator->GetTargetEmbedding(targetIndex);
+    const auto& targetEmbedding = VectorRecallEvaluator->GetTargetEmbedding(targetIndex);
     
     // Get the prefix value if needed
     std::optional<i64> prefixValue;
     if (Params.PrefixColumn.has_value()) {
-        prefixValue = Params.VectorRecallEvaluator->GetPrefixValue(targetIndex);
+        prefixValue = VectorRecallEvaluator->GetPrefixValue(targetIndex);
     }
     
     NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.TopK);
@@ -121,7 +130,7 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
 
 void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex) {
     // Use the evaluator to process the result and calculate recall
-    Params.VectorRecallEvaluator->ProcessQueryResult(queryResult, targetIndex, Params.Verbose);
+    VectorRecallEvaluator->ProcessQueryResult(queryResult, targetIndex, Params.Verbose);
 }
 
 

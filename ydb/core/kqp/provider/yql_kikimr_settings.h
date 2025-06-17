@@ -73,10 +73,10 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, false> UseBlockReader;
 
-    NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
-    NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> HashShuffleFuncType;
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> ColumnShardHashShuffleFuncType;
 
-    NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
+    NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;

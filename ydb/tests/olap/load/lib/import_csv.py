@@ -9,7 +9,7 @@ import yatest.common
 
 
 class ImportFileCsvBase(UploadSuiteBase):
-    query_name: str = 'ImportFileCsv' # Override UploadSuiteBase.query_name
+    query_name: str = 'ImportFileCsv'  # Override UploadSuiteBase.query_name
     table_name: str = ''
     table_path: str = ''
     iterations: int = 1
@@ -22,7 +22,7 @@ class ImportFileCsvBase(UploadSuiteBase):
         table_names = [name for name in os.listdir(import_dir) if os.path.isdir(os.path.join(import_dir, name))]
         if not table_names:
             raise RuntimeError(f"Found no directories in {import_dir}")
-        self.table_name = table_names[0] # importing just one table
+        self.table_name = table_names[0]  # importing just one table
 
     def import_data(self):
         self.table_path = f'{YdbCluster.tables_path}/{self.table_name}'
@@ -41,7 +41,6 @@ class ImportFileCsvBase(UploadSuiteBase):
         logging.info(f'Rows in table {self.table_path} after import: {count}')
         result.add_stat(self.query_name, 'rows_in_table', count)
 
-
     def save_result_additional_info(self, result: YdbCliHelper.WorkloadRunResult):
         import_dir = os.path.join(self.get_external_path(), 'import', self.table_name)
         file_size = sum(
@@ -56,7 +55,7 @@ class ImportFileCsvBase(UploadSuiteBase):
         result.add_stat(self.query_name, 'import_time', import_time)
         import_speed = 0
         if import_time > 0:
-            import_speed = file_size / import_time / 1024 / 1024 # MB/s
+            import_speed = file_size / import_time / 1024 / 1024  # MB/s
         logging.info(f'Result import speed: {import_speed} MB/s')
         result.add_stat(self.query_name, 'import_speed', import_speed)
 

@@ -13,6 +13,7 @@ enum class EFetchingStage : ui32 {
     Created = 0,
     AskAccessorResources,
     AskDataResources,
+    AskGeneralResources,
     AskAccessors,
     ReadBlobs,
     Finished,
@@ -103,6 +104,10 @@ private:
 
 public:
     virtual ~IFetchCallback() = default;
+
+    virtual std::optional<ui64> GetMemoryForUsage() const {
+        return std::nullopt;
+    }
 
     virtual bool IsAborted() const = 0;
     virtual TString GetClassName() const = 0;

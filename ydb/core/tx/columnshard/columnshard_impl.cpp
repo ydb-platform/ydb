@@ -496,6 +496,10 @@ private:
     const bool NeedBlobs = true;
     const std::shared_ptr<TAtomicCounter> TabletActivity;
 
+    virtual std::optional<ui64> GetMemoryForUsage() const override {
+        return Changes->CalcMemoryForUsage();
+    }
+
     virtual bool IsAborted() const override {
         return !TabletActivity->Val();
     }
@@ -510,6 +514,7 @@ private:
                 Changes->SetStage(NOlap::NChanges::EStage::AskAccessors);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskDataResources:
+            case NOlap::NDataFetcher::EFetchingStage::AskGeneralResources:
                 Changes->SetStage(NOlap::NChanges::EStage::AskDataResources);
                 break;
             case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:

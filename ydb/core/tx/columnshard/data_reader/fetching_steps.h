@@ -104,6 +104,7 @@ public:
 class TAskDataResourceStep: public IFetchingStep {
 private:
     std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
+    std::optional<ui64> MemoryUsage;
 
     class TSubscriber: public NGroupedMemoryManager::IAllocation {
     private:
@@ -147,7 +148,49 @@ private:
 
 public:
     TAskDataResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
-        : ColumnIds(columnIds) {
+        : ColumnIds(columnIds)
+    {
+    }
+};
+
+class TAskGeneralResourceStep: public IFetchingStep {
+private:
+    std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
+    const ui64 MemoryUsage;
+
+    class TSubscriber: public NGroupedMemoryManager::IAllocation {
+    private:
+        using TBase = NGroupedMemoryManager::IAllocation;
+        std::shared_ptr<TPortionsDataFetcher> FetchingContext;
+
+        virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
+            FetchingContext->OnError(errorMessage);
+        }
+        virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+            const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
+            FetchingContext->MutableCurrentContext().RegisterResourcesGuard(std::move(guard));
+            FetchingContext->MutableScript().Next();
+            return FetchingContext->Resume(FetchingContext);
+        }
+
+    public:
+        TSubscriber(const ui64 memory, const std::shared_ptr<TPortionsDataFetcher>& fetchingContext)
+            : TBase(memory)
+            , FetchingContext(fetchingContext) {
+        }
+    };
+
+    virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
+        fetchingContext->SetStage(EFetchingStage::AskGeneralResources);
+        fetchingContext->AskMemoryAllocation(std::make_shared<TSubscriber>(MemoryUsage, fetchingContext));
+        return IFetchingStep::EStepResult::Detached;
+    }
+
+public:
+    TAskGeneralResourceStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const ui64 memoryUsage)
+        : ColumnIds(columnIds)
+        , MemoryUsage(memoryUsage)
+    {
     }
 };
 

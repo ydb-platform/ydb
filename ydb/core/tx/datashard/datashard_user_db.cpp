@@ -289,7 +289,7 @@ void TDataShardUserDb::UpsertRowInt(
     Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
 }
 
-bool TDataShardUserDb::RowExists (
+bool TDataShardUserDb::RowExists(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key)
 {
@@ -308,10 +308,10 @@ bool TDataShardUserDb::RowExists (
     }
 }
 
-NTable::TRowState TDataShardUserDb::GetRowState (
+NTable::TRowState TDataShardUserDb::GetRowState(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TStackVec<NTable::TTag> &columns)
+    const TStackVec<NTable::TTag>& columns)
 {
     NTable::TRowState rowState;
 

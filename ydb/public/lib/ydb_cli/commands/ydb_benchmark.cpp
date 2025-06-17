@@ -459,7 +459,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
         std::optional<TString> prevResult;
         THolder<IOutputStream> outFStreamHolder;
         IOutputStream& outFStream = [&]() -> IOutputStream& {
-            if (TSet<TString>{"cout", "stdout", "concole"}.contains(OutFilePath)) {
+            if (TSet<TString>{"cout", "stdout", "console"}.contains(OutFilePath)) {
                 return Cout;
             }
             if (TSet<TString>{"cerr", "stderr"}.contains(OutFilePath)) {

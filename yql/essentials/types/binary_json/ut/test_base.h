@@ -36,10 +36,10 @@ public:
     TString ContainerToJsonText(const TContainerCursor& cursor);
 
 protected:
-    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
-    TScopedAlloc Alloc;
-    TTypeEnvironment Env;
-    TMemoryUsageInfo MemInfo;
-    THolderFactory HolderFactory;
-    TDefaultValueBuilder ValueBuilder;
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry_;
+    TScopedAlloc Alloc_;
+    TTypeEnvironment Env_;
+    TMemoryUsageInfo MemInfo_;
+    THolderFactory HolderFactory_;
+    TDefaultValueBuilder ValueBuilder_;
 };

@@ -71,11 +71,6 @@ struct TGroupStatus {
     TString ProtocolType;
 };
 
-struct MemberTimeoutsMs {
-    ui32 RebalanceTimeoutMs;
-    TInstant HeartbeatDeadline;
-};
-
 class TKafkaBalancerActor : public NActors::TActorBootstrapped<TKafkaBalancerActor> {
 public:
     using TBase = NActors::TActorBootstrapped<TKafkaBalancerActor>;
@@ -117,6 +112,11 @@ public:
 
         LEAVE_GET_LAST_GENERATION,
         LEAVE_SET_DEAD
+    };
+
+    struct MemberTimeoutsMs {
+        ui32 RebalanceTimeoutMs;
+        TInstant HeartbeatDeadline;
     };
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TJoinGroupRequestData> message, ui8 retryNum = 0)
@@ -314,7 +314,7 @@ private:
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);
     bool ParseWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::TWorkerState>& workerStates, TString& outLastMemberId);
-    bool ParseMembersAndRebalanceTimeouts(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::MemberTimeoutsMs>& membersAndRebalanceTimeouts, TString& lastMemberId);
+    bool ParseMembersAndRebalanceTimeouts(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, MemberTimeoutsMs>& membersAndRebalanceTimeouts, TString& lastMemberId);
     bool ParseDeadsAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& deadsCount, ui32& outSessionTimeoutMs);
     bool ParseGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& groupsCount);
     bool ParseMemberGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& generation);

@@ -603,12 +603,12 @@ void TKafkaBalancerActor::JoinStepWaitMembersAndChooseProtocol(NKqp::TEvKqp::TEv
         // check all clients have joined or their timeout has expired
         for (auto prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.begin(); prevGenerationMembersAndTimeoutsIt != WaitedMemberIdsAndTimeouts.end();) {
             ui32 memberRebalanceTimeoutMs = prevGenerationMembersAndTimeoutsIt->second.RebalanceTimeoutMs;
-            TInstant memberHeartbeatDeadline = prevGenerationMembersAndTimeoutsIt->second.HeartbeatDeadline;
+            const TInstant& memberHeartbeatDeadline = prevGenerationMembersAndTimeoutsIt->second.HeartbeatDeadline;
             if (AllWorkerStates.count(prevGenerationMembersAndTimeoutsIt->first) == 1) {
                 KAFKA_LOG_D(TStringBuilder() << "Waited member connected: " << prevGenerationMembersAndTimeoutsIt->first);
                 prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
             } else if ((RebalanceStartTime + TDuration::MilliSeconds(memberRebalanceTimeoutMs)) < now) {
-                KAFKA_LOG_D(TStringBuilder() << "Waited member connect rebalance deadline: " << prevGenerationMembersAndTimeoutsIt->first);
+                KAFKA_LOG_D(TStringBuilder() << "Rebalance deadline: " << prevGenerationMembersAndTimeoutsIt->first);
                 prevGenerationMembersAndTimeoutsIt = WaitedMemberIdsAndTimeouts.erase(prevGenerationMembersAndTimeoutsIt);
             } else if (memberHeartbeatDeadline < now) {
                 KAFKA_LOG_D(TStringBuilder() << "Waited member connect session deadline: " << prevGenerationMembersAndTimeoutsIt->first);
@@ -943,7 +943,7 @@ bool TKafkaBalancerActor::ParseAssignments(
 
 bool TKafkaBalancerActor::ParseMembersAndRebalanceTimeouts(
     NKqp::TEvKqp::TEvQueryResponse::TPtr ev,
-    std::unordered_map<TString, NKafka::MemberTimeoutsMs>& membersAndTimeouts,
+    std::unordered_map<TString, MemberTimeoutsMs>& membersAndTimeouts,
     TString& lastMemberId)
 {
     if (!ev) {

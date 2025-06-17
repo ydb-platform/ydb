@@ -559,24 +559,19 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                     } else {
                         KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" << static_cast<int>(Convert(msg->GetError().Code)) << ", ErrorMessage=" << msg->GetError().Reason << ", #02");
                         SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
-                        partitionResponse.ErrorCode = Convert(msg->GetError().Code);
-                        metricsErrorCode = Convert(msg->GetError().Code);
-                        partitionResponse.ErrorMessage = msg->GetError().Reason;
 
-                        if (partitionResponse.ErrorMessage.has_value()) {
-                            if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::PRECONDITION_FAILED) {
-                                partitionResponse.ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
-                                metricsErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
-                                partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
-                            } else if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::VALIDATION_ERROR) {
-                                partitionResponse.ErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER;
-                                metricsErrorCode = EKafkaErrors::DUPLICATE_SEQUENCE_NUMBER;
-                                partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
-                            } else if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::INVALID_ARGUMENT) {
-                                partitionResponse.ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
-                                metricsErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
-                                partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
-                            }
+                        if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH) {
+                            partitionResponse.ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
+                            metricsErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH;
+                            partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
+                        } else if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER) {
+                            partitionResponse.ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
+                            metricsErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER;
+                            partitionResponse.ErrorMessage = msg->Record.GetErrorReason();
+                        } else {
+                            partitionResponse.ErrorCode = Convert(msg->GetError().Code);
+                            metricsErrorCode = Convert(msg->GetError().Code);
+                            partitionResponse.ErrorMessage = msg->GetError().Reason;
                         }
                     }
                 }

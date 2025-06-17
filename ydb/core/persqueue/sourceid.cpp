@@ -177,7 +177,7 @@ void TSourceIdInfo::Serialize(TBuffer& data) const {
     Y_ABORT_UNLESS(!Explicit);
     Y_ABORT_UNLESS(!KeyRange);
 
-    data.Resize(4 * sizeof(ui64));
+    data.Resize(4 * sizeof(ui64) + sizeof(TMaybe<i16>));
     ui32 pos = 0;
 
     Write<ui64>(SeqNo, data, pos);

@@ -33,9 +33,9 @@ public:
         : TBase(base, "states", stateName) {
         for (auto&& i : GetEnumAllValues<EState>()) {
             while (StateVolume.size() < (ui32)i) {
-                StateVolume.emplace_back(TBase::GetValue("state_id", "UNDEFINED"));
+                StateVolume.emplace_back(TBase::CreateSubGroup("state_id", "UNDEFINED").GetValue("Count"));
             }
-            StateVolume.emplace_back(TBase::GetValue("state_id", ::ToString(i)));
+            StateVolume.emplace_back(TBase::CreateSubGroup("state_id", ::ToString(i)).GetValue("Count"));
         }
     }
 };

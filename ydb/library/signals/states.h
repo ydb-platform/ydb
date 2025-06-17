@@ -11,47 +11,52 @@
 
 namespace NKikimr::NOlap::NCounters {
 
+class TStateCounters: public NColumnShard::TCommonCountersOwner {
+public:
+    const NMonitoring::TDynamicCounters::TCounterPtr Volume;
+    const NMonitoring::TDynamicCounters::TCounterPtr Add;
+    const NMonitoring::TDynamicCounters::TCounterPtr Remove;
+    const NMonitoring::TDynamicCounters::TCounterPtr Duration;
+
+    TStateCounters(TCommonCountersOwner& base, const TString& stateId)
+        : TBase(base, "state_id", stateId)
+        , Volume(TBase::GetValue("Count"))
+        , Add(TBase::GetDeriviative("Add"))
+        , Remove(TBase::GetDeriviative("Remove"))
+        , Duration(TBase::GetDeriviative("Duration/Us")) {
+    }
+};
+
 template <class EState>
 class TStateSignalsOwner: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateVolume;
-    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateAdd;
-    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateRemove;
-    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> StateDuration;
-
-    void AddCountersForGroup(TCommonCountersOwner& group) {
-        StateVolume.emplace_back(group.GetValue("Count"));
-        StateAdd.emplace_back(group.GetDeriviative("Add"));
-        StateRemove.emplace_back(group.GetDeriviative("Remove"));
-        StateDuration.emplace_back(group.GetDeriviative("Duration/Us"));
-    }
+    std::vector<TStateCounters> States;
 
 public:
     void ExchangeState(const std::optional<EState> from, const std::optional<EState> to, const std::optional<TDuration> d, const ui32 size = 1) {
         if (from) {
             AFL_VERIFY((ui32)*from < StateVolume.size())("from", from)("size", StateVolume.size());
-            StateVolume[(ui32)*from]->Sub(size);
-            StateRemove[(ui32)*from]->Add(size);
+            States[(ui32)*from].Volume->Sub(size);
+            States[(ui32)*from].Remove->Add(size);
             if (d) {
-                StateDuration->Add(d->MicroSeconds());
+                States[(ui32)*from].Duration->Add(d->MicroSeconds());
             }
         }
         if (to) {
             AFL_VERIFY((ui32)*to < StateVolume.size())("to", to)("size", StateVolume.size());
-            StateVolume[(ui32)*to]->Add(size);
-            StateAdd[(ui32)*to]->Add(size);
+            States[(ui32)*to].Volume->Add(size);
+            States[(ui32)*to].Add->Add(size);
         }
     }
 
     TStateSignalsOwner(TCommonCountersOwner& base, const TString& stateName)
         : TBase(base, "states", stateName) {
-        auto undefinedGroup = TBase::CreateSubGroup("state_id", "UNDEFINED");
         for (auto&& i : GetEnumAllValues<EState>()) {
-            while (StateVolume.size() < (ui32)i) {
-                AddCountersForGroup(undefinedGroup);
+            while (States.size() < (ui32)i) {
+                States.emplace_back(*this, "UNDEFINED");
             }
-            AddCountersForGroup(TBase::CreateSubGroup("state_id", ::ToString(i)));
+            States.emplace_back(*this, ::ToString(i));
         }
     }
 };

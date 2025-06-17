@@ -254,8 +254,6 @@ private:
     const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
 };
 
-// TCopyTableBarrier is now defined as TWaitCopyTableBarrier in schemeshard__operation_states.h
-
 class TNewRestoreFromAtTable : public TSubOperation {
     static TTxState::ETxState InitialState() {
         return TTxState::ConfigureParts;

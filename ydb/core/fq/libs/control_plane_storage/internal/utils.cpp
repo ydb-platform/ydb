@@ -14,6 +14,7 @@ namespace NFq {
 using NYdb::NFq::TScope;
 
 constexpr char ICEBERG_SOURCE[] = "IcebergGeneric";
+constexpr char CLOUD_LOGGING_SOURCE[] = "LoggingGeneric";
 
 NYql::TIssues ValidateWriteResultData(const TString& resultId, const Ydb::ResultSet& resultSet, const TInstant& deadline, const TDuration& ttl)
 {
@@ -148,6 +149,7 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
             }
 
             ExcludeFromBilling(graph.second, ICEBERG_SOURCE, ingress);
+            ExcludeFromBilling(graph.second, CLOUD_LOGGING_SOURCE, ingress);
         }
     }
 

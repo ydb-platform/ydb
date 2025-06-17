@@ -5,6 +5,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -83,6 +84,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     const TActorId Owner;
     const ui64 HiveId;
     TVector<TSubDomainKey> ServicedDomains;
+    std::optional<TBridgePileId> BridgePileId;
 
     TActorId HivePipeClient;
     bool Connected;
@@ -207,8 +209,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
         }
-        if (auto bridgePileId = AppData(ctx)->BridgePileId; bridgePileId) {
-            request->Record.SetBridgePileId(*bridgePileId);
+        if (BridgePileId) {
+            request->Record.SetBridgePileId(BridgePileId->GetRawId());
         }
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());
@@ -924,6 +926,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
+        auto bridgeInfo = ev->Get()->BridgeInfo;
+        if (bridgeInfo) {
+            auto pileInfo = bridgeInfo->SelfNodePile;
+            if (pileInfo) {
+                BridgePileId = pileInfo->BridgePileId;
+            }
+        }
+        TryToRegister(ctx);
+        Become(&TThis::StateWork);
+    }
+
     void UpdateCacheQuota() {
         ui64 mem = ResourceLimit.GetMemory();
         if (mem)
@@ -978,8 +992,9 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap");
         Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
         StartTime = ctx.Now();
-        TryToRegister(ctx);
-        Become(&TThis::StateWork);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
+        Become(&TThis::StateInit);
     }
 
     STFUNC(StateWork) {
@@ -1008,6 +1023,17 @@ public:
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
+                    " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
+                break;
+        }
+    }
+
+    STFUNC(StateInit) {
+        switch(ev->GetTypeRewrite()) {
+            HFunc(TEvPrivate::TEvUpdateSystemUsage, Handle);
+            HFunc(TEvNodeWardenStorageConfig, Handle);
+            default:
+                LOG_DEBUG(*TlsActivationContext, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateInit type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }

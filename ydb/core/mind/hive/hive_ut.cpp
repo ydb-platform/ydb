@@ -7679,47 +7679,61 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     class TDummyBridge {
         TTestBasicRuntime& Runtime;
         TTestActorRuntimeBase::TEventObserverHolder Observer;
-        std::shared_ptr<TBridgeInfo> BridgeInfo;
+        std::array<std::shared_ptr<TBridgeInfo>, 2> BridgeInfos;
         std::unordered_set<TActorId> Subscribers;
 
         void Notify() {
             for (auto subscriber : Subscribers) {
-                auto ev  = std::make_unique<TEvNodeWardenStorageConfig>(nullptr, nullptr, true, BridgeInfo);
+                auto pile = (subscriber.NodeId() - Runtime.GetNodeId(0)) % 2;
+                auto ev  = std::make_unique<TEvNodeWardenStorageConfig>(nullptr, nullptr, true, BridgeInfos[pile]);
                 Runtime.Send(new IEventHandle(subscriber, subscriber, ev.release()));
             }
+        }
+
+        void UpdateBridgeInfo(std::invocable<std::shared_ptr<TBridgeInfo>> auto&& func) {
+            for (ui32 pile = 0; pile < 2; ++pile) {
+                auto newInfo = std::make_shared<TBridgeInfo>();
+                newInfo->Piles = BridgeInfos[pile]->Piles;
+                func(newInfo);
+                newInfo->SelfNodePile = newInfo->Piles.data() + pile;
+                BridgeInfos[pile].swap(newInfo);
+            }
+            Notify();
         }
 
     public:
         TDummyBridge(TTestBasicRuntime& runtime) : Runtime(runtime) 
         {
-            Runtime.PileCallback = [](ui32 nodeIdx) { return nodeIdx % 2; };
-
-            BridgeInfo = std::make_shared<TBridgeInfo>();
             std::vector<ui32> nodeIds(Runtime.GetNodeCount());
             for (ui32 i = 0; i < Runtime.GetNodeCount(); ++i) {
                 nodeIds[i] = Runtime.GetNodeId(i);
             }
-            BridgeInfo->Piles.push_back(TBridgeInfo::TPile{
-                .BridgePileId = TBridgePileId::FromValue(0),
-                .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
-                .IsPrimary = true,
-                .IsBeingPromoted = false,
-            });
-            BridgeInfo->Piles.push_back(TBridgeInfo::TPile{
-                .BridgePileId = TBridgePileId::FromValue(1),
-                .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
-                .IsPrimary = false,
-                .IsBeingPromoted = false,
-            });
-            for (size_t i = 0; i < 2; ++i) {
-                for (size_t j = i; j < nodeIds.size(); ++j) {
-                    BridgeInfo->Piles[i].StaticNodeIds.push_back(nodeIds[j]);
+            for (ui32 pile = 0; pile < 2; ++pile) {
+                BridgeInfos[pile] = std::make_shared<TBridgeInfo>();
+                BridgeInfos[pile]->Piles.push_back(TBridgeInfo::TPile{
+                    .BridgePileId = TBridgePileId::FromValue(0),
+                    .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
+                    .IsPrimary = true,
+                    .IsBeingPromoted = false,
+                });
+                BridgeInfos[pile]->Piles.push_back(TBridgeInfo::TPile{
+                    .BridgePileId = TBridgePileId::FromValue(1),
+                    .State = NKikimrBridge::TClusterState::SYNCHRONIZED,
+                    .IsPrimary = false,
+                    .IsBeingPromoted = false,
+                });
+                for (size_t i = 0; i < 2; ++i) {
+                    for (size_t j = i; j < nodeIds.size(); ++j) {
+                        BridgeInfos[pile]->Piles[i].StaticNodeIds.push_back(nodeIds[j]);
+                    }
                 }
+                BridgeInfos[pile]->PrimaryPile = BridgeInfos[pile]->Piles.data();
+                BridgeInfos[pile]->SelfNodePile = BridgeInfos[pile]->Piles.data() + pile;
             }
-            BridgeInfo->PrimaryPile = BridgeInfo->Piles.data();
 
             Observer = Runtime.AddObserver<TEvNodeWardenStorageConfig>([this](auto&& ev) {
-                ev->Get()->BridgeInfo = BridgeInfo;
+                auto pile = (ev->Sender.NodeId() - Runtime.GetNodeId(0)) % 2;
+                ev->Get()->BridgeInfo = BridgeInfos[pile];
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
         }
@@ -7733,68 +7747,56 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         void Promote(ui32 pile) {
-            auto newState = std::make_shared<TBridgeInfo>();
-            newState->Piles = BridgeInfo->Piles;
-            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
-                if (i == pile) {
-                    newState->Piles[i].IsPrimary = false;
-                    newState->Piles[i].IsBeingPromoted = true;
-                } else {
-                    newState->Piles[i].IsPrimary = false;
-                    newState->Piles[i].IsBeingPromoted = false;
+            UpdateBridgeInfo([pile](std::shared_ptr<TBridgeInfo> newState) {
+                for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                    if (i == pile) {
+                        newState->Piles[i].IsPrimary = false;
+                        newState->Piles[i].IsBeingPromoted = true;
+                    } else {
+                        newState->Piles[i].IsPrimary = false;
+                        newState->Piles[i].IsBeingPromoted = false;
+                    }
                 }
-            }
-            newState->BeingPromotedPile = newState->Piles.data() + pile;
-            newState->PrimaryPile = nullptr;
-
-            BridgeInfo.swap(newState);
-            Notify();
+                newState->BeingPromotedPile = newState->Piles.data() + pile;
+                newState->PrimaryPile = nullptr;
+            });
         }
 
         void Disconnect(ui32 pile) {
-            auto newState = std::make_shared<TBridgeInfo>();
-            newState->Piles = BridgeInfo->Piles;
-            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
-                if (i == pile) {
-                    newState->Piles[i].IsPrimary = false;
-                    newState->Piles[i].IsBeingPromoted = false;
-                    newState->Piles[i].State = NKikimrBridge::TClusterState::DISCONNECTED;
-                } else {
-                    newState->Piles[i].IsPrimary = true;
-                    newState->Piles[i].IsBeingPromoted = false;
-                    newState->PrimaryPile = newState->Piles.data() + i;
+            UpdateBridgeInfo([pile](std::shared_ptr<TBridgeInfo> newState) {
+                for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                    if (i == pile) {
+                        newState->Piles[i].IsPrimary = false;
+                        newState->Piles[i].IsBeingPromoted = false;
+                        newState->Piles[i].State = NKikimrBridge::TClusterState::DISCONNECTED;
+                    } else {
+                        newState->Piles[i].IsPrimary = true;
+                        newState->Piles[i].IsBeingPromoted = false;
+                        newState->PrimaryPile = newState->Piles.data() + i;
+                    }
                 }
-            }
-            newState->BeingPromotedPile = nullptr;
-
-            BridgeInfo.swap(newState);
-            Notify();
+                newState->BeingPromotedPile = nullptr;
+            });
         }
 
         void Reconnect() {
-            auto newState = std::make_shared<TBridgeInfo>();
-            newState->Piles = BridgeInfo->Piles;
-            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
-                if (newState->Piles[i].State == NKikimrBridge::TClusterState::DISCONNECTED) {
-                    newState->Piles[i].State = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED;
+            UpdateBridgeInfo([](std::shared_ptr<TBridgeInfo> newState) {
+                for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                    if (newState->Piles[i].State == NKikimrBridge::TClusterState::DISCONNECTED) {
+                        newState->Piles[i].State = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED;
+                    }
                 }
-            }
-
-            BridgeInfo.swap(newState);
-            Notify();
+            });
         }
 
         void Synchronize() {
-            auto newState = std::make_shared<TBridgeInfo>();
-            newState->Piles = BridgeInfo->Piles;
-            for (ui32 i = 0; i < newState->Piles.size(); ++i) {
-                if (newState->Piles[i].State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED) {
-                    newState->Piles[i].State = NKikimrBridge::TClusterState::SYNCHRONIZED;
+            UpdateBridgeInfo([](std::shared_ptr<TBridgeInfo> newState) {
+                for (ui32 i = 0; i < newState->Piles.size(); ++i) {
+                    if (newState->Piles[i].State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED) {
+                        newState->Piles[i].State = NKikimrBridge::TClusterState::SYNCHRONIZED;
+                    }
                 }
-            }
-
-            BridgeInfo.swap(newState);
-            Notify();
+            });
         }
     };
 

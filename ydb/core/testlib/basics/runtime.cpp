@@ -18,9 +18,6 @@ namespace NActors {
     {
         AddICStuff();
         AddAuditLogStuff();
-        if (PileCallback) {
-            AddBridgeStuff();
-        }
 
         TTestActorRuntime::Initialize(std::move(egg));
     }
@@ -96,11 +93,5 @@ namespace NActors {
                 );
             }
         }
-    }
-
-    void TTestBasicRuntime::AddBridgeStuff() {
-        AddAppDataInit([callback = PileCallback](ui32 nodeIdx, NKikimr::TAppData& appData) {
-            appData.BridgePileId = callback(nodeIdx);
-        });
     }
 }

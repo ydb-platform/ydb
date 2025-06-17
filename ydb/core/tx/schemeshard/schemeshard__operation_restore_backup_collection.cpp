@@ -5,6 +5,7 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard__operation_restore_backup_collection.h"
 #include "schemeshard__operation_change_path_state.h"
+#include "schemeshard__operation_base.h"
 
 #include <util/generic/guid.h>
 
@@ -91,11 +92,7 @@ public:
     }
 };
 
-class TCreateRestoreOpControlPlane: public TSubOperation {
-    static TTxState::ETxState NextState() {
-        return TTxState::Waiting;
-    }
-
+class TCreateRestoreOpControlPlane: public TSubOperationWithContext {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch(state) {
         case TTxState::Waiting:
@@ -107,12 +104,6 @@ class TCreateRestoreOpControlPlane: public TSubOperation {
         default:
             return TTxState::Invalid;
         }
-        return TTxState::Invalid;
-    }
-
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
-        Y_UNUSED(state);
-        Y_ABORT("Unreachable code: TCreateRestoreOpControlPlane should not call this method");
     }
 
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
@@ -135,25 +126,9 @@ class TCreateRestoreOpControlPlane: public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        // When we reach Done state, don't try to advance to Invalid state
-        // Just complete the operation
-        if (GetState() == TTxState::Done) {
-            // Operation is complete, no need to advance state
-            return;
-        }
-        
-        // For other states, use normal state advancement
-        auto nextState = NextState(GetState());
-        SetState(nextState, context);
-        
-        if (nextState != TTxState::Invalid) {
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    using TSubOperation::TSubOperation;
+    using TSubOperationWithContext::TSubOperationWithContext;
+    using TSubOperationWithContext::SelectStateFunc;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& tx = Transaction;
@@ -238,7 +213,7 @@ public:
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state
-        SetState(NextState(), context);
+        SetState(NextState(TTxState::Waiting), context);
 
         return result;
     }

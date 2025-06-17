@@ -1,13 +1,14 @@
 #include "schemeshard__operation_change_path_state.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_states.h"
+#include "schemeshard__operation_base.h"
 
 #define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 
 namespace NKikimr::NSchemeShard {
 
-class TChangePathStateOp: public TSubOperation {
+class TChangePathStateOp: public TSubOperationWithContext {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch(state) {
         case TTxState::Waiting:
@@ -19,50 +20,27 @@ class TChangePathStateOp: public TSubOperation {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
-        Y_UNUSED(state);
-        Y_ABORT("Unreachable code: TChangePathStateOp should not call this method");
-    }
-
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
             return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::Done: {
-            // Get target state from transaction and create TDone with it
-            // This will cause TDone::Process to apply the path state change
             const auto* txState = context.SS->FindTx(OperationId);
             if (txState && txState->TargetPathTargetState.Defined()) {
                 auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
                 return MakeHolder<TDone>(OperationId, targetState);
             }
-            return MakeHolder<TDone>(OperationId);
+            Y_ABORT("Unreachable code: TDone state should always have a target state defined for TChangePathStateOp");
         }
         default:
             return nullptr;
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        // When we reach Done state, don't try to advance to Invalid state
-        // Just complete the operation
-        if (GetState() == TTxState::Done) {
-            // Operation is complete, no need to advance state
-            return;
-        }
-        
-        // For other states, use normal state advancement
-        auto nextState = NextState(GetState());
-        SetState(nextState, context);
-        
-        if (nextState != TTxState::Invalid) {
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
-    using TSubOperation::TSubOperation;
+    using TSubOperationWithContext::TSubOperationWithContext;
+    using TSubOperationWithContext::SelectStateFunc;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& tx = Transaction;

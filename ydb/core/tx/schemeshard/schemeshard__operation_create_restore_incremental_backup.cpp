@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_states.h"
+#include "schemeshard__operation_base.h"
 #include "schemeshard_impl.h"
 
 #include "schemeshard_utils.h"  // for TransactionTemplate
@@ -254,16 +255,15 @@ private:
     const NKikimrSchemeOp::TRestoreMultipleIncrementalBackups RestoreOp;
 };
 
-class TNewRestoreFromAtTable : public TSubOperation {
+class TNewRestoreFromAtTable : public TSubOperationWithContext {
+    using TSubOperationWithContext::SelectStateFunc;
+    using TSubOperationWithContext::NextState;
+
     static TTxState::ETxState InitialState() {
         return TTxState::ConfigureParts;
     }
 
     TTxState::ETxState NextState(TTxState::ETxState) const override {
-        Y_ABORT("unreachable");
-    }
-
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState /* state */) override {
         Y_ABORT("unreachable");
     }
 
@@ -316,23 +316,14 @@ class TNewRestoreFromAtTable : public TSubOperation {
         }
     }
 
-    void StateDone(TOperationContext& context) override {
-        auto state = NextState(GetState(), context);
-        SetState(state, context);
-
-        if (state != TTxState::Invalid) {
-            context.OnComplete.ActivateTx(OperationId);
-        }
-    }
-
 public:
     explicit TNewRestoreFromAtTable(TOperationId id, const TTxTransaction& tx)
-        : TSubOperation(id, tx)
+        : TSubOperationWithContext(id, tx)
     {
     }
 
     explicit TNewRestoreFromAtTable(TOperationId id, TTxState::ETxState state)
-        : TSubOperation(id, state)
+        : TSubOperationWithContext(id, state)
     {
     }
 

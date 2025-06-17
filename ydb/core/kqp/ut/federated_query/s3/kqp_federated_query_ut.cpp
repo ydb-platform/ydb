@@ -2620,6 +2620,53 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto kikimr = NTestUtils::MakeKikimrRunner(config);
         ReadLargeParquetFiles(kikimr, "test_local_read_large_file_bucket");
     }
+
+    Y_UNIT_TEST(TestBlockInsertNullColumn) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableTableServiceConfig()->SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+
+        const TString bucket = "test_block_insert_null_column_bucket";
+        CreateBucket(bucket);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `test_bucket` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = R"(
+                CREATE TABLE `test_table` (
+                    PRIMARY KEY (key)
+                )
+                WITH (STORE = COLUMN)
+                AS SELECT * FROM
+                AS_TABLE([<|key: 1, value: Nothing(Optional<String>)|>]);
+            )";
+            const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA s3.UseBlocksSink = "true";
+
+            INSERT INTO test_bucket.`/result/` WITH (FORMAT = "parquet")
+            SELECT value FROM test_table
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKikimr::NKqp

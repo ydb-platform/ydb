@@ -165,8 +165,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
             if(col->IsKey)
                 continue;
             auto type = col->Type.GetTypeId();
-            switch(type)
-            {
+            switch (type) {
                 case NScheme::NTypeIds::Uint8:
                 case NScheme::NTypeIds::Int8:
                 case NScheme::NTypeIds::Uint16:

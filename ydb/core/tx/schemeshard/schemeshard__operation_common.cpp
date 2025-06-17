@@ -604,41 +604,6 @@ bool CollectProposeTransactionResults(
 
 namespace {
 
-template<typename T>
-struct TEvSchemaChangedTraits;
-
-template<>
-struct TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged::TPtr> {
-    static TActorId GetSource(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
-        return TActorId{ev->Get()->GetSource()};
-    }
-    static std::optional<ui32> GetGeneration(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
-        return {ev->Get()->GetGeneration()};
-    }
-    static bool HasOpResult(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
-        return ev->Get()->Record.HasOpResult();
-    }
-    static TString GetName() {
-        return "TEvDataShard::TEvSchemaChanged";
-    }
-};
-
-template<>
-struct TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult::TPtr> {
-    static TActorId GetSource(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        return TActorId{ev->Sender};
-    }
-    static std::optional<ui32> GetGeneration(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
-        return std::nullopt; //TODO consider to add generation to TEvColumnShard::TEvNotifyTxCompletionResult
-    }
-    static bool HasOpResult(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
-        return false;
-    }
-    static TString GetName() {
-        return "TEvColumnShard::TEvNotifyTxCompletionResult";
-    }
-};
-
 template<typename TEvent>
 bool CollectSchemaChangedImpl(
         const TOperationId& operationId,
@@ -663,7 +628,7 @@ bool CollectSchemaChangedImpl(
     auto pTablet = txState.SchemeChangeNotificationReceived.FindPtr(shardIdx);
     if (pTablet && generation && (pTablet->second >= *generation)) {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "CollectSchemaChanged Ignore " << TEvSchemaChangedTraits<TEvent>::GetName() <<" as outdated"
+                    "CollectSchemaChanged Ignore " << TEvSchemaChangedTraits<TEvent>::GetName() << " as outdated"
                         << ", operationId: " << operationId
                         << ", shardIdx: " << shardIdx
                         << ", shard " << shardId
@@ -696,7 +661,7 @@ bool CollectSchemaChangedImpl(
                 "CollectSchemaChanged accept " << TEvSchemaChangedTraits<TEvent>::GetName()
                     << ", operationId: " << operationId
                     << ", shardIdx: " << shardIdx
-                    << ", datashard: " << shardId
+                    << ", shard: " << shardId
                     << ", left await: " << txState.ShardsInProgress.size()
                     << ", txState.State: " << TTxState::StateName(txState.State)
                     << ", txState.ReadyForNotifications: " << txState.ReadyForNotifications
@@ -730,7 +695,6 @@ bool CollectSchemaChanged(
 {
     return CollectSchemaChangedImpl(operationId, ev, context);
 }
-
 
 void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOperationContext &context) {
     TTabletId ssId = context.SS->SelfTabletId();
@@ -1077,16 +1041,16 @@ bool TProposedWaitParts::HandleReplyImpl(const TEvent& ev, TOperationContext& co
     const auto& evRecord = ev->Get()->Record;
 
     LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply SchemaChanged event"
+                DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
                             << " at tablet: " << ssId);
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " HandleReply SchemaChanged event"
+                DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
                             << " at tablet: " << ssId
                             << " message: " << evRecord.ShortDebugString());
 
     if (!CollectSchemaChanged(OperationId, ev, context)) {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply SchemaChanged event"
+                    DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
                                 << " CollectSchemaChanged: false");
         return false;
     }
@@ -1096,7 +1060,7 @@ bool TProposedWaitParts::HandleReplyImpl(const TEvent& ev, TOperationContext& co
 
     if (!txState.ReadyForNotifications) {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply SchemaChanged event"
+                    DebugHint() << " HandleReply " << TEvSchemaChangedTraits<TEvent>::GetName()
                                 << " ReadyForNotifications: false");
         return false;
     }

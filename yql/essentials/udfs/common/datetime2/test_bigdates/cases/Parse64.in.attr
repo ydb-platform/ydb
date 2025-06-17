@@ -4,34 +4,35 @@
             "StructType";
             [
                 [
-                    "rn";
-                    [
-                        "DataType";
-                        "Int32"
-                    ]
-                ];
-                [
-                    "d32";
+                    "fdatetime1";
                     [
                         "DataType";
                         "String"
                     ]
                 ];
                 [
-                    "dt64";
+                    "fdatetime2";
                     [
                         "DataType";
                         "String"
                     ]
                 ];
                 [
-                    "ts64";
+                    "fdatetime3";
                     [
                         "DataType";
                         "String"
                     ]
-                ]
+                ];
+                [
+                    "fdatetime4";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
             ]
         ]
     }
 }
+

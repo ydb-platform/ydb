@@ -215,6 +215,9 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
             case NUdf::TDataType<NUdf::TDatetime64>::Id:
             case NUdf::TDataType<NUdf::TTimestamp64>::Id:
             case NUdf::TDataType<NUdf::TInterval64>::Id:
+            case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
             case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
                 const NUdf::TUnboxedValue out(ValueToString(*dataType->GetDataSlot(), value));
                 writer.Write(out.AsStringRef());
@@ -522,7 +525,10 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
             case NUdf::TDataType<NUdf::TDate32>::Id:
             case NUdf::TDataType<NUdf::TDatetime64>::Id:
             case NUdf::TDataType<NUdf::TTimestamp64>::Id:
-            case NUdf::TDataType<NUdf::TInterval64>::Id: {
+            case NUdf::TDataType<NUdf::TInterval64>::Id:
+            case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
                 YQL_ENSURE(json.IsString(), "Unexpected json type (expected string, but got " << jsonType << ")");
                 YQL_ENSURE(IsValidStringValue(*dataType->GetDataSlot(), json.GetString()), "Invalid date format (expected ISO-8601)");
                 return ValueFromString(*dataType->GetDataSlot(), json.GetString());

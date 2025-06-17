@@ -1,0 +1,55 @@
+{
+    "fdate"="1969-12-31";
+    "fdatetime"="1969-12-31T23:59:59Z";
+    "ftimestamp"="1969-12-31T23:59:59.999999Z";
+    "ftzpdate"="1969-12-31,Europe/Moscow";
+    "ftzpdatetime"="1969-12-31T23:59:59,Europe/Moscow";
+    "ftzptimestamp"="1969-12-31T23:59:59.999999,Europe/Moscow";
+    "ftzmdate"="1969-12-31,America/Los_Angeles";
+    "ftzmdatetime"="1969-12-31T23:59:59,America/Los_Angeles";
+    "ftzmtimestamp"="1969-12-31T23:59:59.999999,America/Los_Angeles";
+};
+{
+    "fdate"="1970-01-01";
+    "fdatetime"="1970-01-01T00:00:00Z";
+    "ftimestamp"="1970-01-01T00:00:00.000000Z";
+    "ftzpdate"="1970-01-01,Europe/Moscow";
+    "ftzpdatetime"="1970-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp"="1970-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate"="1970-01-01,America/Los_Angeles";
+    "ftzmdatetime"="1970-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp"="1970-01-01T00:00:00.000000,America/Los_Angeles";
+};
+{
+    "fdate"="2025-01-01";
+    "fdatetime"="2025-01-01T00:00:00Z";
+    "ftimestamp"="2025-01-01T00:00:00.000000Z";
+    "ftzpdate"="2025-01-01,Europe/Moscow";
+    "ftzpdatetime"="2025-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp"="2025-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate"="2025-01-01,America/Los_Angeles";
+    "ftzmdatetime"="2025-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp"="2025-01-01T00:00:00.000000,America/Los_Angeles"
+};
+{
+    "fdate"="2105-12-31";
+    "fdatetime"="2105-12-31T23:59:59Z";
+    "ftimestamp"="2105-12-31T23:59:59.999999Z";
+    "ftzpdate"="2105-12-31,Europe/Moscow";
+    "ftzpdatetime"="2105-12-31T23:59:59,Europe/Moscow";
+    "ftzptimestamp"="2105-12-31T23:59:59.999999,Europe/Moscow";
+    "ftzmdate"="2105-12-31,America/Los_Angeles";
+    "ftzmdatetime"="2105-12-31T23:59:59,America/Los_Angeles";
+    "ftzmtimestamp"="2105-12-31T23:59:59.999999,America/Los_Angeles";
+};
+{
+    "fdate"="2106-01-01";
+    "fdatetime"="2106-01-01T00:00:00Z";
+    "ftimestamp"="2106-01-01T00:00:00.000000Z";
+    "ftzpdate"="2106-01-01,Europe/Moscow";
+    "ftzpdatetime"="2106-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp"="2106-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate"="2106-01-01,America/Los_Angeles";
+    "ftzmdatetime"="2106-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp"="2106-01-01T00:00:00.000000,America/Los_Angeles";
+};

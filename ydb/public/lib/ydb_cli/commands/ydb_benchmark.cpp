@@ -465,7 +465,7 @@ int TWorkloadCommandBenchmark::RunBench(NYdbWorkload::IWorkloadQueryGenerator& w
             if (TSet<TString>{"cerr", "stderr"}.contains(OutFilePath)) {
                 return Cerr;
             }
-            if (TSet<TString>{"", "/dev/null", "null", "-"}.contains(OutFilePath)) {
+            if (TSet<TString>{"", "/dev/null", "null"}.contains(OutFilePath)) {
                 outFStreamHolder = MakeHolder<TNullOutput>();
             } else {
                 outFStreamHolder = MakeHolder<TOFStream>(TStringBuilder() << OutFilePath << "." << queryName << ".out");

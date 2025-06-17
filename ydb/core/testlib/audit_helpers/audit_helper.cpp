@@ -1,36 +1,21 @@
-#include <util/generic/map.h>
-#include <util/generic/vector.h>
-#include <util/generic/ptr.h>
+#include "audit_helper.h"
 
-#include <library/cpp/logger/backend.h>
-#include <library/cpp/logger/record.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/protos/config.pb.h>
+namespace NKikimr {
+namespace Tests {
 
-#include "auditlog_helpers.h"
+TMemoryLogBackend::TMemoryLogBackend(std::vector<std::string>& buffer)
+    : Buffer(buffer)
+{}
 
-namespace NSchemeShardUT_Private {
+void TMemoryLogBackend::WriteData(const TLogRecord& rec) {
+    Buffer.emplace_back(rec.Data, rec.Len);
+}
 
-namespace {
-
-class TMemoryLogBackend: public TLogBackend {
-public:
-    std::vector<std::string>& Buffer;
-
-    TMemoryLogBackend(std::vector<std::string>& buffer)
-        : Buffer(buffer)
-    {}
-
-    virtual void WriteData(const TLogRecord& rec) override {
-        Buffer.emplace_back(rec.Data, rec.Len);
-    }
-
-    virtual void ReopenLog() override {
-    }
-};
-
-}  // anonymous namespace
+void TMemoryLogBackend::ReopenLog() {
+    // nothing
+}
 
 NAudit::TAuditLogBackends CreateTestAuditLogBackends(std::vector<std::string>& lineBuffer) {
     NAudit::TAuditLogBackends logBackends;
@@ -50,4 +35,5 @@ std::string FindAuditLine(const std::vector<std::string>& auditLines, const std:
     return line;
 }
 
-}  // namespace NSchemeShardUT_Private
+} // namespace Tests
+} // namespace NKikimr

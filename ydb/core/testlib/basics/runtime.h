@@ -13,13 +13,10 @@ namespace NActors {
         using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
         TNodeLocationCallback LocationCallback;
 
-        NKikimr::NAudit::TAuditLogBackends AuditLogBackends;
-
         ~TTestBasicRuntime();
 
         void Initialize(TEgg) override;
 
         void AddICStuff();
-        void AddAuditLogStuff();
     };
 }

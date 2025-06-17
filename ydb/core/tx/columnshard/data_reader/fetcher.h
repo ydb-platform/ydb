@@ -43,7 +43,7 @@ public:
     }
 
     ~TPortionsDataFetcher() {
-        AFL_VERIFY(IsFinishedFlag || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage);
+        AFL_VERIFY(IsFinishedFlag || Stage == EFetchingStage::Created || Callback->IsAborted())("stage", Stage)("class_name", Callback->GetClassName());
     }
 
     static void StartAccessorPortionsFetching(TRequestInput&& input, std::shared_ptr<IFetchCallback>&& callback,

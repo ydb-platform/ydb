@@ -199,6 +199,10 @@ private:
         return AbortionFlag->Val();
     }
 
+    virtual TString GetClassName() const override {
+        return "SYS_VIEW";
+    }
+
     virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
         NActors::TActivationContext::AsActorContext().Send(
             ParentActorId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(

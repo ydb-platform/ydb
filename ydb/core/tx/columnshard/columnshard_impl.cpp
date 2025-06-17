@@ -500,6 +500,10 @@ private:
         return !TabletActivity->Val();
     }
 
+    virtual TString GetClassName() const override {
+        return Changes->TypeName();
+    }
+
     virtual void OnStageStarting(const NOlap::NDataFetcher::EFetchingStage stage) override {
         switch (stage) {
             case NOlap::NDataFetcher::EFetchingStage::AskAccessors:

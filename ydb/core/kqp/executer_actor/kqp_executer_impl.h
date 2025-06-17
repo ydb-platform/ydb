@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -561,6 +562,16 @@ protected:
     void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr& ev) {
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
+
+#if defined(USE_HDRF_SCHEDULER)
+        const auto& poolId = GetUserRequestContext()->PoolId;
+
+        auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+        addQueryEvent->DatabaseId = Database;
+        addQueryEvent->PoolId = poolId.empty() ? NResourcePool::DEFAULT_POOL_ID : poolId;
+        addQueryEvent->QueryId = TxId;
+        this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
+#endif
 
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {

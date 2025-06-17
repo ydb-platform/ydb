@@ -2737,21 +2737,22 @@ namespace NSchemeShardUT_Private {
         TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot",
-            "StoragePools { "
-            "  Name: \"pool-1\" "
-            "  Kind: \"pool-kind-1\" "
-            "} "
-            "StoragePools { "
-            "  Name: \"pool-2\" "
-            "  Kind: \"pool-kind-2\" "
-            "} "
-            "PlanResolution: 50 "
-            "Coordinators: 1 "
-            "Mediators: 1 "
-            "TimeCastBucketsPerMediator: 2 "
-            "ExternalSchemeShard: true "
-            "Name: \"ResourceDB\"");
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            StoragePools {
+              Name: "pool-2"
+              Kind: "pool-kind-2"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            Name: "ResourceDB"
+        )");
         env.TestWaitNotification(runtime, txId);
 
         const auto attrs = AlterUserAttrs({
@@ -2768,18 +2769,19 @@ namespace NSchemeShardUT_Private {
         )", TTestTxConfig::SchemeShard), attrs);
         env.TestWaitNotification(runtime, txId);
 
-        TString alterData = TStringBuilder()
-            << "PlanResolution: 50 "
-            << "Coordinators: 1 "
-            << "Mediators: 1 "
-            << "TimeCastBucketsPerMediator: 2 "
-            << "ExternalSchemeShard: true "
-            << "ExternalHive: false "
-            << "Name: \"ServerLessDB\" "
-            << "StoragePools { "
-            << "  Name: \"pool-1\" "
-            << "  Kind: \"pool-kind-1\" "
-            << "} ";
+        TString alterData = R"(
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+            Name: "ServerLessDB"
+            StoragePools {
+                Name: "pool-1"
+                Kind: "pool-kind-1"
+            }
+        )";
         TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", alterData);
         env.TestWaitNotification(runtime, txId);
 

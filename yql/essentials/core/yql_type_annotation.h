@@ -383,7 +383,6 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
-    TLangVersion LangVer = UnknownLangVersion;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
     TLangVersion LangVer = MinLangVersion;

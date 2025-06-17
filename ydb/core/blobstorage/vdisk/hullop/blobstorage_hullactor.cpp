@@ -179,6 +179,7 @@ namespace NKikimr {
                 return false;
             }
 
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "START RunLevelCompactionSelector");
             //////////////////////// CHOOSE WHAT TO COMPACT ///////////////////////////////
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateCompPolicyAtWork);
             auto barriersSnap = HullDs->Barriers->GetIndexSnapshot();
@@ -205,6 +206,7 @@ namespace NKikimr {
             Y_VERIFY_S(CompactionScheduled, HullDs->HullCtx->VCtx->VDiskLogPrefix);
             CompactionScheduled = false;
             if (ctx.Monotonic() >= NextCompactionWakeup) {
+                LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Time to schedule compaction");
                 ScheduleCompaction(ctx);
             } else {
                 ScheduleCompactionWakeup(ctx);
@@ -213,6 +215,7 @@ namespace NKikimr {
 
         bool ScheduleCompaction(const TActorContext &ctx, bool level = true) {
             // schedule fresh if required
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule fresh compaction because of scheduling general compaction");
             const bool res = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, HugeBlobCtx, MinHugeBlobInBytes, RTCtx,
                 ctx, !RTCtx->LevelIndex->IsWrittenToSstBeforeLsn(ForceFreshCompactLsn), AllowGarbageCollection);
             if (level && !Config->BaseInfo.ReadOnly && !RunLevelCompactionSelector(ctx)) {
@@ -274,6 +277,8 @@ namespace NKikimr {
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     if (CompactionTask->GetHugeBlobsToDelete().Empty()) {
                         ApplyCompactionResult(ctx, {}, {}, 0);
+                        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
+                            << "HugeBlobsToDelete is empty in compaction task");
                     } else {
                         const ui64 cookie = NextPreCompactCookie++;
                         LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix

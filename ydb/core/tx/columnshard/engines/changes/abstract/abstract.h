@@ -255,7 +255,7 @@ private:
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
-    std::shared_ptr<NChanges::TChangesCounters::TStageCountersGuard> Counters;
+    TStateSignalsOperator<EStage>::TGuard StateGuard;
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -362,7 +362,7 @@ public:
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Counters->GetCurrentStage() == NChanges::EStage::Aborted;
+        return Counters->GetStage() == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();

@@ -82,6 +82,8 @@ void TLocalTopicPartitionReaderActor::HandleOnInitOffset(TEvPersQueue::TEvRespon
     Offset = resp.GetOffset();
     SentOffset = Offset;
 
+    Send(Parent, new TEvYdbProxy::TEvStartTopicReadingSession(TStringBuilder() << "Session_" << SelfId()));
+
     DoWork();
 }
 

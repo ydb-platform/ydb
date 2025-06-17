@@ -78,9 +78,6 @@ std::unique_ptr<TEvPersQueue::TEvRequest> TLocalTopicPartitionCommitActor::Creat
     auto& commit = *req.MutableCmdSetClientOffset();
     commit.SetOffset(Offset);
     commit.SetClientId(ConsumerName);
-    if (ReadSessionId) {
-        commit.SetSessionId(ReadSessionId.value());
-    }
 
     return request;
 }

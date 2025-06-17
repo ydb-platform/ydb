@@ -219,6 +219,11 @@ struct TEvYdbProxy {
         {
         }
 
+        explicit TStartTopicReadingSessionResult(const TString& readSessionId)
+            : ReadSessionId(readSessionId)
+        {
+        }
+
         void Out(IOutputStream& out) const;
 
         TString ReadSessionId;

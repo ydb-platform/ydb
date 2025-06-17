@@ -1002,6 +1002,7 @@ private:
 
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
+                     ui64 creationUnixTime,
                      const TActorContext& ctx);
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
@@ -1052,6 +1053,8 @@ private:
     TInstant GetFirstUncompactedBlobTimestamp() const;
 
     void TryCorrectStartOffset(TMaybe<ui64> offset);
+
+    ui64 LastRequestedBlobCreationUnixTime = 0;
 };
 
 } // namespace NKikimr::NPQ

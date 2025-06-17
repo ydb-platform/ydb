@@ -1005,11 +1005,16 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
+                             ui64 creationUnixTime,
                              const TActorContext& ctx)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
     write->SetValue(newWrite->Value);
+    if (creationUnixTime) {
+        PQ_LOG_D("newWrite->Key=" << newWrite->Key.ToString() << ", newWrite->WriteTimestamp=" << creationUnixTime);
+        write->SetCreationUnixTime(creationUnixTime);
+    }
     //Y_ABORT_UNLESS(newWrite->Key.IsFastWrite());
     auto channel = GetChannel(NextChannel(newWrite->Key.HasSuffix(), newWrite->Value.size()));
     write->SetStorageChannel(channel);
@@ -1294,7 +1299,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     if (newWrite && !newWrite->Value.empty()) {
         newWrite->Key.SetFastWrite();
-        AddCmdWrite(newWrite, request, ctx);
+        AddCmdWrite(newWrite, request, 0, ctx);
 
         PQ_LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<
@@ -1408,47 +1413,47 @@ void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TE
     UpdateWriteBufferIsFullState(ctx.Now());
 }
 
-void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::AddNewWriteBlob.");
-
-    const auto& key = res.first;
-    TString valueD = BlobEncoder.SerializeForKey(key, res.second, BlobEncoder.EndOffset, PendingWriteTimestamp);
-
-    auto write = request->Record.AddCmdWrite();
-    write->SetKey(key.Data(), key.Size());
-    write->SetValue(valueD);
-
-    bool isInline = key.HasSuffix() && valueD.size() < MAX_INLINE_SIZE;
-
-    if (isInline) {
-        write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-    } else {
-        auto channel = GetChannel(NextChannel(key.HasSuffix(), valueD.size()));
-        write->SetStorageChannel(channel);
-        write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
-    }
-
-    //Need to clear all compacted blobs
-    const TKey& k = BlobEncoder.CompactedKeys.empty() ? key : BlobEncoder.CompactedKeys.front().first;
-    ClearOldHead(k.GetOffset(), k.GetPartNo()); // schedule to delete the keys from the head
-
-    if (!key.HasSuffix()) {
-        if (!BlobEncoder.DataKeysBody.empty() && BlobEncoder.CompactedKeys.empty()) {
-            Y_ABORT_UNLESS(BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
-                "LAST KEY %s, HeadOffset %lu, NEWKEY %s", BlobEncoder.DataKeysBody.back().Key.ToString().c_str(), BlobEncoder.Head.Offset, key.ToString().c_str());
-        }
-        BlobEncoder.CompactedKeys.push_back(res);
-        // BlobEncoder.ResetNewHead ???
-        BlobEncoder.NewHead.Clear();
-        BlobEncoder.NewHead.Offset = res.first.GetOffset() + res.first.GetCount();
-        BlobEncoder.NewHead.PartNo = 0;
-    } else {
-        Y_ABORT_UNLESS(BlobEncoder.NewHeadKey.Size == 0);
-        BlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
-    }
-    WriteCycleSize += write->GetValue().size();
-    UpdateWriteBufferIsFullState(ctx.Now());
-}
+//void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+//    PQ_LOG_T("TPartition::AddNewWriteBlob.");
+//
+//    const auto& key = res.first;
+//    TString valueD = BlobEncoder.SerializeForKey(key, res.second, BlobEncoder.EndOffset, PendingWriteTimestamp);
+//
+//    auto write = request->Record.AddCmdWrite();
+//    write->SetKey(key.Data(), key.Size());
+//    write->SetValue(valueD);
+//
+//    bool isInline = key.HasSuffix() && valueD.size() < MAX_INLINE_SIZE;
+//
+//    if (isInline) {
+//        write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+//    } else {
+//        auto channel = GetChannel(NextChannel(key.HasSuffix(), valueD.size()));
+//        write->SetStorageChannel(channel);
+//        write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+//    }
+//
+//    //Need to clear all compacted blobs
+//    const TKey& k = BlobEncoder.CompactedKeys.empty() ? key : BlobEncoder.CompactedKeys.front().first;
+//    ClearOldHead(k.GetOffset(), k.GetPartNo()); // schedule to delete the keys from the head
+//
+//    if (!key.HasSuffix()) {
+//        if (!BlobEncoder.DataKeysBody.empty() && BlobEncoder.CompactedKeys.empty()) {
+//            Y_ABORT_UNLESS(BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount() <= key.GetOffset(),
+//                "LAST KEY %s, HeadOffset %lu, NEWKEY %s", BlobEncoder.DataKeysBody.back().Key.ToString().c_str(), BlobEncoder.Head.Offset, key.ToString().c_str());
+//        }
+//        BlobEncoder.CompactedKeys.push_back(res);
+//        // BlobEncoder.ResetNewHead ???
+//        BlobEncoder.NewHead.Clear();
+//        BlobEncoder.NewHead.Offset = res.first.GetOffset() + res.first.GetCount();
+//        BlobEncoder.NewHead.PartNo = 0;
+//    } else {
+//        Y_ABORT_UNLESS(BlobEncoder.NewHeadKey.Size == 0);
+//        BlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+//    }
+//    WriteCycleSize += write->GetValue().size();
+//    UpdateWriteBufferIsFullState(ctx.Now());
+//}
 
 void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SetDeadlinesForWrites.");

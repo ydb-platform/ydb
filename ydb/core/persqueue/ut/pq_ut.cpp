@@ -2673,7 +2673,7 @@ Y_UNIT_TEST(The_Value_Of_CreationUnixTime_Must_Not_Decrease)
 
     TTestContext tc;
     TFinalizer finalizer(tc);
-    //tc.EnableDetailedPQLog = true;
+    tc.EnableDetailedPQLog = true;
     tc.Prepare();
 
     // Turn off the asynchronous compactor

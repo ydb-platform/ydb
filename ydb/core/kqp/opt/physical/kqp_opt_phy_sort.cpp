@@ -242,8 +242,8 @@ TExprBase KqpBuildTopStageRemoveSort(
         TString topSortDir;
         switch (dir) {
             using enum NYql::NDq::TOrdering::TItem::EDirection;
-            case EDescending: { topSortDir = TTopSortSettings::AscendingSort; break; }
-            case EAscending: { topSortDir = TTopSortSettings::DescendingSort; break; }
+            case EAscending: { topSortDir = TTopSortSettings::AscendingSort; break; }
+            case EDescending: { topSortDir = TTopSortSettings::DescendingSort; break; }
             case ENone: { return node; }
         }
 

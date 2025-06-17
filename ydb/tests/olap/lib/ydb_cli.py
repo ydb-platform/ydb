@@ -353,28 +353,3 @@ class YdbCliHelper:
         if runner.run():
             return {q: YdbCliHelper.WorkloadResultParser(runner, q).result for q in extended_query_names}
         return {q: runner.result for q in extended_query_names}
-
-    class ImportCsvRunResult:
-        def __init__(self):
-            self.stdout: str = ''
-            self.stderr: str = ''
-            self.error_message: str = ''
-            self.warning_message: str = ''
-            self.traceback: Optional[TracebackType] = None
-            self.start_time = time()
-            self.time = 0
-            self.file_size_bytes = 0
-            self.import_speed = 0
-
-        @property
-        def success(self) -> bool:
-            return len(self.error_message) == 0
-
-        def add_error(self, msg: Optional[str]) -> bool:
-            if msg:
-                if len(self.error_message) > 0:
-                    self.error_message += f'\n\n{msg}'
-                else:
-                    self.error_message = msg
-                return True
-            return False

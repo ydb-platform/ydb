@@ -1,8 +1,5 @@
 #pragma once
 
-#include "vector_workload_generator.h"
-#include "vector_recall_evaluator.h"
-
 #include <ydb/library/workload/benchmark_base/workload.h>
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
@@ -24,6 +21,8 @@ public:
     TString GetWorkloadName() const override;
     void Validate(const ECommandType commandType, int workloadType) override;
 
+    void Init() override;
+
     TString TableName;
     TString IndexName;
     std::optional<std::string> PrefixColumn;
@@ -38,11 +37,6 @@ public:
     size_t KmeansTreeSearchClusters = 0;
     size_t TopK = 0;
     bool Recall;
-
-private:
-    void GetIndexInfo();
-
-    THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
 };
 
 

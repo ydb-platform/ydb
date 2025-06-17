@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vector_workload_params.h"
+#include "vector_recall_evaluator.h"
 
 #include <ydb/library/workload/abstract/workload_query_generator.h>
 
@@ -19,17 +20,12 @@ public:
     using TBase = TWorkloadQueryGeneratorBase<TVectorWorkloadParams>;
     TVectorWorkloadGenerator(const TVectorWorkloadParams* params);
 
+    void Init() override;
     std::string GetDDLQueries() const override;
     TQueryInfoList GetInitialData() override;
     TVector<std::string> GetCleanPaths() const override;
     TQueryInfoList GetWorkload(int type) override;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
-    
-    enum class EType {
-        Upsert,
-        Select
-    };
-
 private:
     TQueryInfoList Upsert();
     TQueryInfoList Select();
@@ -42,6 +38,8 @@ private:
 
     // Using atomic for thread safety
     static thread_local std::atomic<size_t> ThreadLocalTargetIndex;
+
+    THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
 };
 
 } // namespace NYdbWorkload

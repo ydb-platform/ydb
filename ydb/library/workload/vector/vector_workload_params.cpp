@@ -1,4 +1,6 @@
+#include "vector_enums.h"
 #include "vector_workload_params.h"
+#include "vector_workload_generator.h"
 
 #include <util/datetime/base.h>
 #include <util/generic/serialized_enum.h>
@@ -55,11 +57,11 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
         break;
     case TWorkloadParams::ECommandType::Run:
         addCommonParam();
-        switch (static_cast<TVectorWorkloadGenerator::EType>(workloadType)) {
-        case TVectorWorkloadGenerator::EType::Upsert:
+        switch (static_cast<EWorkloadRunType>(workloadType)) {
+        case EWorkloadRunType::Upsert:
             addUpsertParam();
             break;
-        case TVectorWorkloadGenerator::EType::Select:
+        case EWorkloadRunType::Select:
             addSelectParam();
             break;
         }
@@ -69,7 +71,7 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     }
 }
 
-void TVectorWorkloadParams::GetIndexInfo() {
+void TVectorWorkloadParams::Init() {
     const TString tablePath = GetFullTableName(TableName.c_str());
 
     auto session = TableClient->GetSession().ExtractValueSync().GetSession();
@@ -126,16 +128,10 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
         case TWorkloadParams::ECommandType::Init:
             break;
         case TWorkloadParams::ECommandType::Run:
-            switch (static_cast<TVectorWorkloadGenerator::EType>(workloadType)) {
-                case TVectorWorkloadGenerator::EType::Upsert:
+            switch (static_cast<EWorkloadRunType>(workloadType)) {
+                case EWorkloadRunType::Upsert:
                     break;
-                case TVectorWorkloadGenerator::EType::Select:
-                    GetIndexInfo();
-                    VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>(*this);
-                    VectorRecallEvaluator->SampleExistingVectors();
-                    if (Recall) {
-                        VectorRecallEvaluator->FillEtalons();
-                    }
+                case EWorkloadRunType::Select:
                     break;
             }
             break;

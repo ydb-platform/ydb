@@ -12,6 +12,6 @@ PEERDIR(
     ydb/library/workload/abstract
 )
 
-GENERATE_ENUM_SERIALIZATION_WITH_HEADER(vector_workload_generator.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(vector_enums.h)
 
 END()

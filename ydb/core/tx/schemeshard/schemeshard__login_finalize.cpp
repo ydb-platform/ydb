@@ -10,13 +10,13 @@ namespace NSchemeShard {
 
 struct TSchemeShard::TTxLoginFinalize : TSchemeShard::TRwTxBase {
 private:
-    TEvLoginFinalize::TPtr LoginFinalizeEventPtr_;
+    TEvLoginFinalize::TPtr LoginFinalizeEventPtr;
     TString ErrMessage;
 
 public:
     TTxLoginFinalize(TSelf *self, TEvLoginFinalize::TPtr &ev)
         : TRwTxBase(self)
-        , LoginFinalizeEventPtr_(std::move(ev))
+        , LoginFinalizeEventPtr(std::move(ev))
     {}
 
     TTxType GetTxType() const override {
@@ -28,7 +28,7 @@ public:
                     "TTxLoginFinalize Execute"
                     << " at schemeshard: " << Self->TabletID());
 
-        const auto& event = *LoginFinalizeEventPtr_->Get();
+        const auto& event = *LoginFinalizeEventPtr->Get();
         if (event.NeedUpdateCache) {
             const auto isSuccessVerifying =
                 event.CheckResult.Status == NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS;
@@ -40,7 +40,7 @@ public:
         }
         const auto response = Self->LoginProvider.LoginUser(event.Request, event.CheckResult);
 
-        if (!LoginFinalizeEventPtr_->Get()->Request.ExternalAuth) {
+        if (!LoginFinalizeEventPtr->Get()->Request.ExternalAuth) {
             UpdateLoginSidsStats(response, txc);
         }
         if (!response.Error.empty()) {
@@ -70,7 +70,7 @@ private:
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
             result->Record.SetToken(response.Token);
             result->Record.SetSanitizedToken(response.SanitizedToken);
-            result->Record.SetIsAdmin(IsAdmin(LoginFinalizeEventPtr_->Get()->Request.User));
+            result->Record.SetIsAdmin(IsAdmin(LoginFinalizeEventPtr->Get()->Request.User));
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD:
@@ -82,10 +82,10 @@ private:
         }
         }
         Self->Send(
-            LoginFinalizeEventPtr_->Get()->Source,
+            LoginFinalizeEventPtr->Get()->Source,
             std::move(result),
             0,
-            LoginFinalizeEventPtr_->Cookie
+            LoginFinalizeEventPtr->Cookie
         );
     }
 
@@ -93,10 +93,10 @@ private:
         THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
         result->Record.SetError(error);
         Self->Send(
-            LoginFinalizeEventPtr_->Get()->Source,
+            LoginFinalizeEventPtr->Get()->Source,
             std::move(result),
             0,
-            LoginFinalizeEventPtr_->Cookie
+            LoginFinalizeEventPtr->Cookie
         );
     }
 
@@ -104,18 +104,18 @@ private:
         NIceDb::TNiceDb db(txc.DB);
         switch (response.Status) {
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::SUCCESS: {
-            const auto& sid = Self->LoginProvider.Sids[LoginFinalizeEventPtr_->Get()->Request.User];
+            const auto& sid = Self->LoginProvider.Sids[LoginFinalizeEventPtr->Get()->Request.User];
             db.Table<Schema::LoginSids>()
-                .Key(LoginFinalizeEventPtr_->Get()->Request.User)
+                .Key(LoginFinalizeEventPtr->Get()->Request.User)
                 .Update<Schema::LoginSids::LastSuccessfulAttempt, Schema::LoginSids::FailedAttemptCount>(
                     ToMicroSeconds(sid.LastSuccessfulLogin), sid.FailedLoginAttemptCount
                 );
             break;
         }
         case NLogin::TLoginProvider::TLoginUserResponse::EStatus::INVALID_PASSWORD: {
-            const auto& sid = Self->LoginProvider.Sids[LoginFinalizeEventPtr_->Get()->Request.User];
+            const auto& sid = Self->LoginProvider.Sids[LoginFinalizeEventPtr->Get()->Request.User];
             db.Table<Schema::LoginSids>()
-                .Key(LoginFinalizeEventPtr_->Get()->Request.User)
+                .Key(LoginFinalizeEventPtr->Get()->Request.User)
                 .Update<Schema::LoginSids::LastFailedAttempt, Schema::LoginSids::FailedAttemptCount>(
                         ToMicroSeconds(sid.LastFailedLogin), sid.FailedLoginAttemptCount
                 );

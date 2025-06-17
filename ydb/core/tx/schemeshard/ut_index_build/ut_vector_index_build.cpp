@@ -556,7 +556,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
         logBillingStats();
         UNIT_ASSERT_VALUES_EQUAL(uploadRows, 204);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 6748);
+        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 3548);
         UNIT_ASSERT_VALUES_EQUAL(readRows, 400);
         UNIT_ASSERT_VALUES_EQUAL(readBytes, 3600);
 
@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
         logBillingStats();
         UNIT_ASSERT_VALUES_EQUAL(uploadRows, 420);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 11740);
+        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 6284);
         if (smallScanBuffer) {
             UNIT_ASSERT_VALUES_EQUAL(readRows, 1400); // SAMPLE + KMEANS * 3 + UPLOAD = 5 scans
             UNIT_ASSERT_VALUES_EQUAL(readBytes, 20600);
@@ -599,9 +599,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
             if (smallScanBuffer) {
-                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-1400-11740-20600");
+                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-1400-6284-20600");
             } else {
-                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-600-11740-7000");
+                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-600-6284-7000");
             }
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());

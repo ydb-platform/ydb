@@ -54,12 +54,12 @@ Decorator
         @freeze_time('2013-04-09', as_kwarg='frozen_time')
         def test_method_decorator_works_on_unittest(self, frozen_time):
             self.assertEqual(datetime.date(2013, 4, 9), datetime.date.today())
-            self.assertEqual(datetime.date(2013, 4, 9), frozen_time.time_to_freeze.today())
+            self.assertEqual(datetime.date(2013, 4, 9), frozen_time.time_to_freeze.date())
 
         @freeze_time('2013-04-09', as_kwarg='hello')
         def test_method_decorator_works_on_unittest(self, **kwargs):
             self.assertEqual(datetime.date(2013, 4, 9), datetime.date.today())
-            self.assertEqual(datetime.date(2013, 4, 9), kwargs.get('hello').time_to_freeze.today())
+            self.assertEqual(datetime.date(2013, 4, 9), kwargs.get('hello').time_to_freeze.date())
 
 Context manager
 ~~~~~~~~~~~~~~~
@@ -231,6 +231,46 @@ FreezeGun allows moving time to specific dates.
 
 Parameter for ``move_to`` can be any valid ``freeze_time`` date (string, date, datetime).
 
+``real_asyncio`` parameter
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+FreezeGun has an additional ``real_asyncio`` parameter which allows asyncio event loops to see real monotonic time even though time.monotonic() is frozen. This is useful to avoid breaking asyncio.sleep() and other asyncio functions that rely on monotonic time.
+
+.. code-block:: python
+
+    @freeze_time("2012-01-14", real_asyncio=True)
+    async def test_asyncio():
+        await asyncio.sleep(1)
+        assert datetime.datetime.now() == datetime.datetime(2012, 1, 14)
+
+API Documentation
+~~~~~~~~~~~~~~~~~
+
+Here is a succinct API documentation with all options listed:
+
+.. code-block:: python
+
+    freeze_time(time_to_freeze: Optional[_Freezable]=None, tz_offset: Union[int, datetime.timedelta]=0, ignore: Optional[List[str]]=None, tick: bool=False, as_arg: bool=False, as_kwarg: str='', auto_tick_seconds: float=0, real_asyncio: bool=False) -> _freeze_time
+
+    _freeze_time(time_to_freeze_str: Optional[_Freezable], tz_offset: Union[int, datetime.timedelta], ignore: List[str], tick: bool, as_arg: bool, as_kwarg: str, auto_tick_seconds: float, real_asyncio: Optional[bool])
+
+    _freeze_time.start() -> Union[StepTickTimeFactory, TickingDateTimeFactory, FrozenDateTimeFactory]
+
+    _freeze_time.stop() -> None
+
+    _freeze_time.move_to(target_datetime: _Freezable) -> None
+
+    _freeze_time.tick(delta: Union[datetime.timedelta, float]=datetime.timedelta(seconds=1)) -> datetime.datetime
+
+    _freeze_time.decorate_class(klass: Type[T2]) -> Type[T2]
+
+    _freeze_time.decorate_coroutine(coroutine: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]
+
+    _freeze_time.decorate_callable(func: Callable[P, T]) -> Callable[P, T]
+
+    _freeze_time.__enter__() -> Union[StepTickTimeFactory, TickingDateTimeFactory, FrozenDateTimeFactory]
+
+    _freeze_time.__exit__(*args: Any) -> None
 
 Default arguments
 ~~~~~~~~~~~~~~~~~

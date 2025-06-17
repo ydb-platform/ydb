@@ -66,7 +66,7 @@ def gen_default_suppressions(inputs, output, source_root):
                     continue
                 supp_map[sanitizer].add(line)
 
-    with open(output, "wb") as dst:
+    with open(output, "wt") as dst:
         for supp_type, supps in supp_map.items():
             dst.write('extern "C" const char *__%s_default_suppressions() {\n' % supp_type)
             dst.write('    return "{}";\n'.format('\\n'.join(sorted(supps))))

@@ -36,6 +36,7 @@ PEERDIR(
     yql/essentials/utils/log
     yql/essentials/protos
     yql/essentials/sql/settings
+    yql/essentials/sql/v1/complete/check
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/lexer/check
     yql/essentials/sql/v1/lexer/antlr4

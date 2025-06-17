@@ -76,9 +76,9 @@ public:
         AFL_VERIFY(stage);
         const std::optional<ui64> internalGroupIdOptional = GroupIds.GetInternalIdOptional(externalGroupId);
         if (!internalGroupIdOptional) {
-            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))(
-                                                                   "ext_group", externalGroupId)(
-                                                                   "min_group", GroupIds.GetMinInternalIdOptional())("stage", stage->GetName());
+            AFL_VERIFY(!task->OnAllocated(std::make_shared<TAllocationGuard>(ExternalProcessId, ExternalScopeId, task->GetIdentifier(), OwnerActorId, task->GetMemory()), task))("ext_group", externalGroupId)(
+                                         "min_int_group", GroupIds.GetMinInternalIdOptional())(
+                                         "min_ext_group", GroupIds.GetMinExternalIdOptional())("stage", stage->GetName());
             AFL_VERIFY(!AllocationInfo.contains(task->GetIdentifier()));
         } else {
             const ui64 internalGroupId = *internalGroupIdOptional;

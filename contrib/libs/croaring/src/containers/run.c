@@ -135,20 +135,22 @@ void run_container_offset(const run_container_t *c, container_t **loc,
     run_container_t *lo = NULL, *hi = NULL;
 
     bool split;
-    int lo_cap, hi_cap;
+    unsigned int lo_cap, hi_cap;
     int top, pivot;
 
     top = (1 << 16) - offset;
     pivot = run_container_index_equalorlarger(c, top);
+    // pivot is the index of the first run that is >= top or -1 if no such run
 
-    if (pivot == -1) {
-        split = false;
-        lo_cap = c->n_runs;
-        hi_cap = 0;
-    } else {
+    if(pivot >= 0) {
         split = c->runs[pivot].value < top;
         lo_cap = pivot + (split ? 1 : 0);
         hi_cap = c->n_runs - pivot;
+    } else {
+        // here pivot < 0
+        split = false;
+        lo_cap = c->n_runs;
+        hi_cap = 0;
     }
 
     if (loc && lo_cap) {

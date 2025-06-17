@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import abc
+from dataclasses import dataclass
 import ydb
 from abc import abstractmethod
 import logging
@@ -325,6 +326,20 @@ class TableIndex(object):
 
     def to_pb(self):
         return self._pb
+
+
+@dataclass
+class RenameIndexItem:
+    source_name: str
+    destination_name: str
+    replace_destination: bool = False
+
+    def to_pb(self):
+        return _apis.ydb_table.RenameIndexItem(
+            source_name=self.source_name,
+            destination_name=self.destination_name,
+            replace_destination=self.replace_destination,
+        )
 
 
 class ReplicationPolicy(object):
@@ -1124,6 +1139,7 @@ class ISession(abc.ABC):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):
         pass
 
@@ -1321,6 +1337,7 @@ class TableClient(BaseTableClient):
         alter_partitioning_settings: Optional["ydb.PartitioningSettings"] = None,
         set_key_bloom_filter: Optional["ydb.FeatureFlag"] = None,
         set_read_replicas_settings: Optional["ydb.ReadReplicasSettings"] = None,
+        rename_indexes: Optional[List["ydb.RenameIndexItem"]] = None,
     ) -> "ydb.Operation":
         """
         Alter a YDB table.
@@ -1340,6 +1357,7 @@ class TableClient(BaseTableClient):
         :param set_compaction_policy: Compaction policy
         :param alter_partitioning_settings: ydb.PartitioningSettings to alter
         :param set_key_bloom_filter: ydb.FeatureFlag to set key bloom filter
+        :param rename_indexes: List of ydb.RenameIndexItem to rename
 
         :return: Operation or YDB error otherwise.
         """
@@ -1364,6 +1382,7 @@ class TableClient(BaseTableClient):
                 alter_partitioning_settings=alter_partitioning_settings,
                 set_key_bloom_filter=set_key_bloom_filter,
                 set_read_replicas_settings=set_read_replicas_settings,
+                rename_indexes=rename_indexes,
             )
 
         return self._pool.retry_operation_sync(callee)
@@ -1857,6 +1876,7 @@ class BaseSession(ISession):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):
         return self._driver(
             _session_impl.alter_table_request_factory(
@@ -1876,6 +1896,7 @@ class BaseSession(ISession):
                 alter_partitioning_settings,
                 set_key_bloom_filter,
                 set_read_replicas_settings,
+                rename_indexes,
             ),
             _apis.TableService.Stub,
             _apis.TableService.AlterTable,
@@ -2088,6 +2109,7 @@ class Session(BaseSession):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):
         return self._driver.future(
             _session_impl.alter_table_request_factory(
@@ -2107,6 +2129,7 @@ class Session(BaseSession):
                 alter_partitioning_settings,
                 set_key_bloom_filter,
                 set_read_replicas_settings,
+                rename_indexes,
             ),
             _apis.TableService.Stub,
             _apis.TableService.AlterTable,

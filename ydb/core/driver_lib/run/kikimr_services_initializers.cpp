@@ -960,6 +960,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasBridgeConfig()) {
         nodeWardenConfig->BridgeConfig.emplace(Config.GetBridgeConfig());
     }
+    if (Config.HasDynamicNodeConfig()) {
+        nodeWardenConfig->DynamicNodeConfig.emplace(Config.GetDynamicNodeConfig());
+    }
 
     if (Config.HasConfigDirPath()) {
         nodeWardenConfig->ConfigDirPath = Config.GetConfigDirPath();
@@ -2175,22 +2178,41 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
     }
 }
 
-TGroupedMemoryLimiterInitializer::TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig)
+TScanGroupedMemoryLimiterInitializer::TScanGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
 
-void TGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+void TScanGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     NOlap::NGroupedMemoryManager::TConfig serviceConfig;
-    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetGroupedMemoryLimiterConfig()));
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetScanGroupedMemoryLimiterConfig()));
 
     if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_GROUPED_MEMORY_LIMITER");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_SCAN_GROUPED_MEMORY_LIMITER");
 
         auto service = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
 
         setup->LocalServices.push_back(std::make_pair(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(NodeId),
+            TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+    }
+}
+
+TCompGroupedMemoryLimiterInitializer::TCompGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    NOlap::NGroupedMemoryManager::TConfig serviceConfig;
+    Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto(Config.GetCompGroupedMemoryLimiterConfig()));
+
+    if (serviceConfig.IsEnabled()) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_COMP_GROUPED_MEMORY_LIMITER");
+
+        auto service = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
+
+        setup->LocalServices.push_back(std::make_pair(NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
     }
 }

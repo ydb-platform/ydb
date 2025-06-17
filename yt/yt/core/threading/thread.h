@@ -75,7 +75,24 @@ private:
 
     TThreadId ThreadId_ = InvalidThreadId;
     ::TThread UnderlyingThread_;
-    std::unique_ptr<char[]> SignalHandlerStack_;
+
+#if defined(_unix_)
+    class TSignalHandlerStack
+        : private TNonCopyable
+    {
+    public:
+        explicit TSignalHandlerStack(size_t size);
+        ~TSignalHandlerStack();
+
+    private:
+        size_t Size_;
+        char* Base_;
+
+        static const int GuardPageCount = 1;
+    };
+
+    std::unique_ptr<TSignalHandlerStack> SignalHandlerStack_;
+#endif
 
     void SetThreadPriority();
     void ConfigureSignalHandlerStack();

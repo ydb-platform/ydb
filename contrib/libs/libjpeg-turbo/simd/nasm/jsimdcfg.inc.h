@@ -12,9 +12,9 @@
 
 #define JPEG_INTERNALS
 
-#include "../jpeglib.h"
+#include "../src/jpeglib.h"
 #include "../jconfig.h"
-#include "../jmorecfg.h"
+#include "../src/jmorecfg.h"
 #include "jsimd.h"
 
 ;

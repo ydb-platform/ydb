@@ -31,7 +31,7 @@ class ExecProvider(object):
     * caching
     """
 
-    def __init__(self, exec_config, cwd):
+    def __init__(self, exec_config, cwd, cluster=None):
         """
         exec_config must be of type ConfigNode because we depend on
         safe_get(self, key) to correctly handle optional exec provider
@@ -53,8 +53,20 @@ class ExecProvider(object):
                 value = item['value']
                 additional_vars[name] = value
             self.env.update(additional_vars)
-
+        if exec_config.safe_get('provideClusterInfo'):
+            self.cluster = cluster
+        else:
+            self.cluster = None
         self.cwd = cwd or None
+    
+    @property
+    def shell(self):
+        # for windows systems `shell` should be `True`
+        # for other systems like linux or darwin `shell` should be `False`
+        # referenes:
+        # https://github.com/kubernetes-client/python/pull/2289
+        # https://docs.python.org/3/library/sys.html#sys.platform
+        return sys.platform in ("win32", "cygwin")
 
     def run(self, previous_response=None):
         is_interactive = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
@@ -67,6 +79,9 @@ class ExecProvider(object):
         }
         if previous_response:
             kubernetes_exec_info['spec']['response'] = previous_response
+        if self.cluster:
+            kubernetes_exec_info['spec']['cluster'] = self.cluster.value
+
         self.env['KUBERNETES_EXEC_INFO'] = json.dumps(kubernetes_exec_info)
         process = subprocess.Popen(
             self.args,
@@ -75,7 +90,8 @@ class ExecProvider(object):
             stdin=sys.stdin if is_interactive else None,
             cwd=self.cwd,
             env=self.env,
-            universal_newlines=True)
+            universal_newlines=True,
+            shell=self.shell)
         (stdout, stderr) = process.communicate()
         exit_code = process.wait()
         if exit_code != 0:

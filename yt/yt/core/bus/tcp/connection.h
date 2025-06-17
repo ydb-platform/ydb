@@ -191,7 +191,7 @@ private:
     const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
-    const std::optional<TString> EndpointAddress_;
+    const std::optional<std::string> EndpointAddress_;
     const std::optional<TString> UnixDomainSocketPath_;
     const std::optional<TString> AbstractUnixDomainSocketName_;
     const IMessageHandlerPtr Handler_;

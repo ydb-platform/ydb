@@ -64,33 +64,33 @@ public:
             rqs << "\r\n";
         }
 
-        Socket.Reset(new TSocket(TNetworkAddress(host, port), timeout));
-        SocketInput.Reset(new TSocketInput(*Socket));
-        SocketOutput.Reset(new TSocketOutput(*Socket));
+        Socket_.Reset(new TSocket(TNetworkAddress(host, port), timeout));
+        SocketInput_.Reset(new TSocketInput(*Socket_));
+        SocketOutput_.Reset(new TSocketOutput(*Socket_));
 
-        Socket->SetSocketTimeout(timeout.Seconds(), timeout.MilliSeconds() % 1000);
+        Socket_->SetSocketTimeout(timeout.Seconds(), timeout.MilliSeconds() % 1000);
 
         if (https) {
-            Ssl.Reset(new TOpenSslClientIO(SocketInput.Get(), SocketOutput.Get()));
+            Ssl_.Reset(new TOpenSslClientIO(SocketInput_.Get(), SocketOutput_.Get()));
         }
 
         {
-            THttpOutput ho(Ssl ? (IOutputStream*)Ssl.Get() : (IOutputStream*)SocketOutput.Get());
+            THttpOutput ho(Ssl_ ? (IOutputStream*)Ssl_.Get() : (IOutputStream*)SocketOutput_.Get());
             (ho << req).Finish();
         }
-        HttpInput.Reset(new THttpInput(Ssl ? (IInputStream*)Ssl.Get() : (IInputStream*)SocketInput.Get()));
+        HttpInput_.Reset(new THttpInput(Ssl_ ? (IInputStream*)Ssl_.Get() : (IInputStream*)SocketInput_.Get()));
     }
 
     THttpInput& GetStream() override {
-        return *HttpInput;
+        return *HttpInput_;
     }
 
     unsigned GetRetCode() override {
-        return ParseHttpRetCode(HttpInput->FirstLine());
+        return ParseHttpRetCode(HttpInput_->FirstLine());
     }
 
     THttpURL GetRedirectURL(const THttpURL& baseUrl) override {
-        for (auto i = HttpInput->Headers().Begin(); i != HttpInput->Headers().End(); ++i) {
+        for (auto i = HttpInput_->Headers().Begin(); i != HttpInput_->Headers().End(); ++i) {
             if (0 == TCiString::compare(i->Name(), TStringBuf("location"))) {
                 THttpURL target = ParseURL(i->Value(), THttpURL::FeaturesAll | NUri::TFeature::FeatureConvertHostIDN);
                 if (!target.IsValidAbs()) {
@@ -107,11 +107,11 @@ public:
     }
 
 private:
-    THolder<TSocket> Socket;
-    THolder<TSocketInput> SocketInput;
-    THolder<TSocketOutput> SocketOutput;
-    THolder<TOpenSslClientIO> Ssl;
-    THolder<THttpInput> HttpInput;
+    THolder<TSocket> Socket_;
+    THolder<TSocketInput> SocketInput_;
+    THolder<TSocketOutput> SocketOutput_;
+    THolder<TOpenSslClientIO> Ssl_;
+    THolder<THttpInput> HttpInput_;
 };
 
 inline bool IsRedirectCode(unsigned code) {

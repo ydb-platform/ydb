@@ -9,5 +9,5 @@ namespace NYql {
     // returns version, patch level
     std::pair<int, int> DetectLinuxKernelVersion2();
 
-    bool IsLinuxKernelBelow4_3();
+    bool IsLinuxKernelBelow4_3();  // NOLINT(readability-identifier-naming)
 }

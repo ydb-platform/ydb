@@ -1,7 +1,6 @@
 import re
 
 import _common
-import lib.test_const as consts
 
 
 def get_coverage_filter_regexp(pattern, cache={}):
@@ -36,32 +35,9 @@ def get_cpp_coverage_filters(unit, filters=[]):
     return filters
 
 
-def add_cpp_coverage_ldflags(unit):
-    ldflags = unit.get("LDFLAGS")
-    changed = False
-    for flag in consts.COVERAGE_LDFLAGS:
-        if flag not in ldflags:
-            ldflags = ldflags + ' ' + flag
-            changed = True
-    if changed:
-        unit.set(["LDFLAGS", ldflags])
-
-
-def add_cpp_coverage_cflags(unit):
-    cflags = unit.get("CFLAGS")
-    changed = False
-    for flag in consts.COVERAGE_CFLAGS:
-        if flag not in cflags:
-            cflags = cflags + ' ' + flag
-            changed = True
-    if changed:
-        unit.set(["CFLAGS", cflags])
-
-
 def onset_cpp_coverage_flags(unit):
     if unit.get("CLANG_COVERAGE") == "no":
         return
     filters = get_cpp_coverage_filters(unit)
     if should_be_covered(unit, filters):
-        add_cpp_coverage_cflags(unit)
-        add_cpp_coverage_ldflags(unit)
+        unit.on_setup_clang_coverage()

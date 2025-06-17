@@ -166,6 +166,23 @@ public:
 };
 
 //
+// TYardResize
+//
+class TYardResize : public TRequestBase {
+public:
+    ui32 GroupSizeInUnits;
+
+    TYardResize(const NPDisk::TEvYardResize &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::YardResize, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+        , GroupSizeInUnits(ev.GroupSizeInUnits)
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestYardResize;
+    }
+};
+
+//
 // TCheckSpace
 //
 class TCheckSpace : public TRequestBase {

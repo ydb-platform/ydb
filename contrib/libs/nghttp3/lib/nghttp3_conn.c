@@ -661,7 +661,7 @@ nghttp3_ssize nghttp3_conn_read_control(nghttp3_conn *conn,
       nghttp3_varint_read_state_reset(rvint);
       rstate->state = NGHTTP3_CTRL_STREAM_STATE_FRAME_LENGTH;
       if (p == end) {
-        break;
+        return (nghttp3_ssize)nconsumed;
       }
       /* Fall through */
     case NGHTTP3_CTRL_STREAM_STATE_FRAME_LENGTH:
@@ -968,6 +968,10 @@ nghttp3_ssize nghttp3_conn_read_control(nghttp3_conn *conn,
       }
 
       rstate->state = NGHTTP3_CTRL_STREAM_STATE_PRIORITY_UPDATE;
+
+      if (p == end) {
+        return (nghttp3_ssize)nconsumed;
+      }
 
       /* Fall through */
     case NGHTTP3_CTRL_STREAM_STATE_PRIORITY_UPDATE:

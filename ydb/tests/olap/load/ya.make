@@ -6,13 +6,16 @@ PY3TEST()
 
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     ENV(SIMPLE_QUEUE_BINARY="ydb/tests/stress/simple_queue/simple_queue")
+    ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
 
     TEST_SRCS (
         test_clickbench.py
         test_external.py
         test_tpcds.py
         test_tpch.py
+        test_upload.py
         test_workload_simple_queue.py
+        test_workload_oltp.py
     )
 
     PEERDIR (
@@ -23,6 +26,7 @@ PY3TEST()
         DEPENDS (
             ydb/apps/ydb
             ydb/tests/stress/simple_queue
+            ydb/tests/stress/oltp_workload
         )
     ENDIF()
 

@@ -132,7 +132,7 @@ class TBusTest
 {
 public:
     NTesting::TPortHolder Port;
-    TString Address;
+    std::string Address;
 
     TBusTest()
     {

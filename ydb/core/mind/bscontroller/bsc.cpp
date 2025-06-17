@@ -58,13 +58,17 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        ++pdisk->NumActiveSlots;
+        pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(
+            group->GroupSizeInUnits,
+            pdisk->SlotSizeInUnits);
     }
 }
 
 bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
+
+    // TODO(alexvru): bridge group status
 
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
             VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty()) {
@@ -151,7 +155,11 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 }
 
 void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+    const bool isFirstStorageConfig = !StorageConfig;
+    Y_DEBUG_ABORT_UNLESS(!isFirstStorageConfig || CurrentStateFunc() == &TThis::StateInit);
+
     StorageConfig = std::move(ev->Get()->Config);
+    BridgeInfo = std::move(ev->Get()->BridgeInfo);
     SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
@@ -190,29 +198,27 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     if (SelfManagementEnabled) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
-        HostRecords = std::make_shared<THostRecordMap::element_type>(*StorageConfig);
-        if (SelfHealId) {
-            Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
-        }
-
-        ConsoleInteraction->Stop(); // distconf will handle the Console from now on
-    } else if (Loaded) {
-        ConsoleInteraction->Start(); // we control the Console now
+        SetHostRecords(std::make_shared<THostRecordMap::element_type>(*StorageConfig));
     }
 
-    if (!std::exchange(StorageConfigObtained, true)) { // this is the first time we get StorageConfig in this instance of BSC
-        if (SelfManagementEnabled) {
-            OnHostRecordsInitiate();
-        } else {
-            Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
-        }
-    }
-
+    // switch console interaction state based on new information
     if (Loaded) {
-        ApplyStorageConfig();
+        if (SelfManagementEnabled) {
+            ConsoleInteraction->Stop(); // distconf manages the Console
+        } else {
+            ConsoleInteraction->Start(); // we manage the Console now
+        }
     }
 
-    PushStaticGroupsToSelfHeal();
+    if (!isFirstStorageConfig) {
+        // this isn't the first configuration change, we just update static groups information in self heal actor now
+        PushStaticGroupsToSelfHeal();
+    } else if (!SelfManagementEnabled) {
+        // this is the first time we get StorageConfig in this instance of BSC; tablet is not yet initialized, and
+        // self management is disabled, so we need to query nodes explicitly in the old way: through nameservice and
+        // Console tablet, which is the source of truth for this case
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
+    }
 }
 
 void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
@@ -519,19 +525,21 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat
 
 void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSC01, "Handle TEvInterconnect::TEvNodesInfo");
-    if (!std::exchange(HostRecords, std::make_shared<THostRecordMap::element_type>(ev->Get()))) {
-        OnHostRecordsInitiate();
-    }
-    Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+    SetHostRecords(std::make_shared<THostRecordMap::element_type>(ev->Get()));
 }
 
-void TBlobStorageController::OnHostRecordsInitiate() {
-    if (auto *appData = AppData()) {
-        if (appData->Icb) {
-            EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
-            appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
-                "BlobStorageControllerControls.EnableSelfHealWithDegraded");
-        }
+void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
+    if (std::exchange(HostRecords, std::move(hostRecords))) {
+        // we already had some host records, so this isn't the first time this function called
+        Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
+        return;
+    }
+
+    // there were no host records, this is the first call, so we must initialize SelfHeal now and start booting tablet
+    if (auto *appData = AppData(); appData && appData->Icb) {
+        EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
+        appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
+            "BlobStorageControllerControls.EnableSelfHealWithDegraded");
     }
     Y_ABORT_UNLESS(!SelfHealId);
     SelfHealId = Register(CreateSelfHealActor());
@@ -565,7 +573,11 @@ void TBlobStorageController::ValidateInternalState() {
         for (const auto& [vslotId, vslot] : pdisk->VSlotsOnPDisk) {
             Y_ABORT_UNLESS(vslot == FindVSlot(TVSlotId(pdiskId, vslotId)));
             Y_ABORT_UNLESS(vslot->PDisk == pdisk.Get());
-            numActiveSlots += !vslot->IsBeingDeleted();
+            if (!vslot->IsBeingDeleted()) {
+                const TGroupInfo* group = FindGroup(vslot->GroupId);
+                Y_ABORT_UNLESS(group);
+                numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdisk->SlotSizeInUnits);
+            }
         }
         Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);
     }
@@ -806,6 +818,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kProposeStoragePools:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMergeBoxes:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveGroups:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeGroupSizeInUnits:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:

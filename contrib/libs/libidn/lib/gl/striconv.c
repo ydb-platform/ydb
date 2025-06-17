@@ -1,5 +1,5 @@
 /* Charset conversion.
-   Copyright (C) 2001-2007, 2010-2024 Free Software Foundation, Inc.
+   Copyright (C) 2001-2007, 2010-2025 Free Software Foundation, Inc.
    Written by Bruno Haible and Simon Josefsson.
 
    This file is free software: you can redistribute it and/or modify
@@ -47,13 +47,8 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
   size_t length;
   char *result;
 
-  /* Avoid glibc-2.1 bug and Solaris 2.7-2.9 bug.  */
-# if defined _LIBICONV_VERSION \
-     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
-          || defined __sun)
   /* Set to the initial state.  */
   iconv (cd, NULL, NULL, NULL, NULL);
-# endif
 
   /* Determine the length we need.  */
   {
@@ -82,11 +77,12 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
             else
               return -1;
           }
-# if !defined _LIBICONV_VERSION && !(defined __GLIBC__ && !defined __UCLIBC__)
+# if !(defined _LIBICONV_VERSION && !(_LIBICONV_VERSION == 0x10b && defined __APPLE__)) \
+     && !(defined __GLIBC__ && !defined __UCLIBC__)
         /* Irix iconv() inserts a NUL byte if it cannot convert.
            NetBSD iconv() inserts a question mark if it cannot convert.
-           Only GNU libiconv and GNU libc are known to prefer to fail rather
-           than doing a lossy conversion.  */
+           Only GNU libiconv (excluding the bastard Apple iconv) and GNU libc
+           are known to prefer to fail rather than doing a lossy conversion.  */
         else if (res > 0)
           {
             errno = EILSEQ;
@@ -95,10 +91,6 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
 # endif
         count += outptr - tmpbuf;
       }
-    /* Avoid glibc-2.1 bug and Solaris 2.7 bug.  */
-# if defined _LIBICONV_VERSION \
-     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
-          || defined __sun)
     {
       char *outptr = tmpbuf;
       size_t outsize = tmpbufsize;
@@ -108,7 +100,6 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
         return -1;
       count += outptr - tmpbuf;
     }
-# endif
     length = count;
 # undef tmpbuf
   }
@@ -130,13 +121,8 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
         }
     }
 
-  /* Avoid glibc-2.1 bug and Solaris 2.7-2.9 bug.  */
-# if defined _LIBICONV_VERSION \
-     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
-          || defined __sun)
   /* Return to the initial state.  */
   iconv (cd, NULL, NULL, NULL, NULL);
-# endif
 
   /* Do the conversion for real.  */
   {
@@ -158,11 +144,12 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
             else
               goto fail;
           }
-# if !defined _LIBICONV_VERSION && !(defined __GLIBC__ && !defined __UCLIBC__)
+# if !(defined _LIBICONV_VERSION && !(_LIBICONV_VERSION == 0x10b && defined __APPLE__)) \
+     && !(defined __GLIBC__ && !defined __UCLIBC__)
         /* Irix iconv() inserts a NUL byte if it cannot convert.
            NetBSD iconv() inserts a question mark if it cannot convert.
-           Only GNU libiconv and GNU libc are known to prefer to fail rather
-           than doing a lossy conversion.  */
+           Only GNU libiconv (excluding the bastard Apple iconv) and GNU libc
+           are known to prefer to fail rather than doing a lossy conversion.  */
         else if (res > 0)
           {
             errno = EILSEQ;
@@ -170,17 +157,12 @@ mem_cd_iconv (const char *src, size_t srclen, iconv_t cd,
           }
 # endif
       }
-    /* Avoid glibc-2.1 bug and Solaris 2.7 bug.  */
-# if defined _LIBICONV_VERSION \
-     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
-          || defined __sun)
     {
       size_t res = iconv (cd, NULL, NULL, &outptr, &outsize);
 
       if (res == (size_t)(-1))
         goto fail;
     }
-# endif
     if (outsize != 0)
       abort ();
   }
@@ -206,14 +188,16 @@ str_cd_iconv (const char *src, iconv_t cd)
      to a trailing NUL byte in the output.  But not for UTF-7.  So that this
      function is usable for UTF-7, we have to exclude the NUL byte from the
      conversion and add it by hand afterwards.  */
-# if !defined _LIBICONV_VERSION && !(defined __GLIBC__ && !defined __UCLIBC__)
+# if !(defined _LIBICONV_VERSION && !(_LIBICONV_VERSION == 0x10b && defined __APPLE__)) \
+     && !(defined __GLIBC__ && !defined __UCLIBC__)
   /* Irix iconv() inserts a NUL byte if it cannot convert.
      NetBSD iconv() inserts a question mark if it cannot convert.
-     Only GNU libiconv and GNU libc are known to prefer to fail rather
-     than doing a lossy conversion.  For other iconv() implementations,
-     we have to look at the number of irreversible conversions returned;
-     but this information is lost when iconv() returns for an E2BIG reason.
-     Therefore we cannot use the second, faster algorithm.  */
+     Only GNU libiconv (excluding the bastard Apple iconv) and GNU libc are
+     known to prefer to fail rather than doing a lossy conversion.  For other
+     iconv() implementations, we have to look at the number of irreversible
+     conversions returned; but this information is lost when iconv() returns
+     for an E2BIG reason.  Therefore we cannot use the second, faster
+     algorithm.  */
 
   char *result = NULL;
   size_t length = 0;
@@ -269,13 +253,8 @@ str_cd_iconv (const char *src, iconv_t cd)
       return NULL;
     }
 
-  /* Avoid glibc-2.1 bug and Solaris 2.7-2.9 bug.  */
-# if defined _LIBICONV_VERSION \
-     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
-          || defined __sun)
   /* Set to the initial state.  */
   iconv (cd, NULL, NULL, NULL, NULL);
-# endif
 
   /* Do the conversion.  */
   {
@@ -322,10 +301,6 @@ str_cd_iconv (const char *src, iconv_t cd)
         else
           break;
       }
-    /* Avoid glibc-2.1 bug and Solaris 2.7 bug.  */
-# if defined _LIBICONV_VERSION \
-     || !(((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
-          || defined __sun)
     for (;;)
       {
         /* Here outptr + outbytes_remaining = result + result_size - 1.  */
@@ -361,7 +336,6 @@ str_cd_iconv (const char *src, iconv_t cd)
         else
           break;
       }
-# endif
 
     /* Add the terminating NUL byte.  */
     *outptr++ = '\0';
@@ -406,16 +380,6 @@ str_iconv (const char *src, const char *from_codeset, const char *to_codeset)
       iconv_t cd;
       char *result;
 
-      /* Avoid glibc-2.1 bug with EUC-KR.  */
-# if ((__GLIBC__ == 2 && __GLIBC_MINOR__ <= 1) && !defined __UCLIBC__) \
-     && !defined _LIBICONV_VERSION
-      if (c_strcasecmp (from_codeset, "EUC-KR") == 0
-          || c_strcasecmp (to_codeset, "EUC-KR") == 0)
-        {
-          errno = EINVAL;
-          return NULL;
-        }
-# endif
       cd = iconv_open (to_codeset, from_codeset);
       if (cd == (iconv_t) -1)
         return NULL;

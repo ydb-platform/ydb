@@ -133,6 +133,19 @@ enum EOperationState
     OS_REVIVE_INITIALIZING = 17;
 }
 
+enum EOperationEventType
+{
+    OET_INCARNATION_STARTED = 0;
+}
+
+enum EIncarnationSwitchReason
+{
+    ISR_JOB_ABORTED = 0;
+    ISR_JOB_FAILED = 1;
+    ISR_JOB_INTERRUPTED = 2;
+    ISR_JOB_LACK_AFTER_REVIVAL = 3;
+}
+
 enum EOperationSortDirection
 {
     OSD_NONE = 0;
@@ -2375,6 +2388,23 @@ message TRspPatchOperationSpec
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqListOperationEvents
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    optional EOperationEventType event_type = 3;
+    optional uint64 limit = 4 [default = 1000];
+}
+
+message TRspListOperationEvents
+{
+    repeated TOperationEvent events = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqGetOperation
 {
     oneof operation_id_or_alias {
@@ -3211,6 +3241,15 @@ message TListOperationsResult
     optional TPoolTreeCounts pool_tree_counts = 8;
 }
 
+message TOperationEvent
+{
+    optional uint64 timestamp = 1; // TInstant
+    optional EOperationEventType event_type = 2;
+    optional string incarnation = 3;
+    optional EIncarnationSwitchReason incarnation_switch_reason = 4;
+    optional bytes incarnation_switch_info = 5; // YSON
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 message TJob
@@ -3250,6 +3289,7 @@ message TJob
     optional NNodeTrackerClient.NProto.TAddressMap addresses = 33;
     optional bytes events = 34; // YSON
     optional bytes statistics = 35; // YSON
+    optional int64 gang_rank = 36;
 }
 
 message TListJobsStatistics

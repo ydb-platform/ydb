@@ -22,6 +22,8 @@
 #include "blobs_reader/actor.h"
 #include "bg_tasks/events/events.h"
 
+#include "data_reader/fetcher.h"
+#include "data_reader/contexts.h"
 #include "data_accessor/manager.h"
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
@@ -444,190 +446,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupGC();
 }
 
-class TChangesTask: public NConveyor::ITask {
-private:
-    std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-    const TIndexationCounters Counters;
-    const ui64 TabletId;
-    const TActorId ParentActorId;
-    TString ClassId;
-    NOlap::TSnapshot LastCompletedTx;
-
-protected:
-    virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
-        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
-        {
-            NOlap::TConstructionContext context(*TxEvent->IndexInfo, Counters, LastCompletedTx);
-            Y_ABORT_UNLESS(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
-            if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
-                TxEvent->SetPutStatus(NKikimrProto::OK);
-            }
-        }
-        TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
-    }
-
-public:
-    virtual TString GetTaskClassIdentifier() const override {
-        return ClassId;
-    }
-
-    TChangesTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters, const ui64 tabletId, const TActorId parentActorId, NOlap::TSnapshot lastCompletedTx)
-        : TxEvent(std::move(txEvent))
-        , Counters(counters)
-        , TabletId(tabletId)
-        , ParentActorId(parentActorId)
-        , LastCompletedTx(lastCompletedTx) {
-        Y_ABORT_UNLESS(TxEvent);
-        Y_ABORT_UNLESS(TxEvent->IndexChanges);
-        ClassId = "Changes::ConstructBlobs::" + TxEvent->IndexChanges->TypeString();
-    }
-};
-
-class TChangesReadTask: public NOlap::NBlobOperations::NRead::ITask {
-private:
-    using TBase = NOlap::NBlobOperations::NRead::ITask;
-    const TActorId ParentActorId;
-    const ui64 TabletId;
-    std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-    TIndexationCounters Counters;
-    NOlap::TSnapshot LastCompletedTx;
-
-protected:
-    virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
-        if (!!resourcesGuard) {
-            AFL_VERIFY(!TxEvent->IndexChanges->ResourcesGuard);
-            TxEvent->IndexChanges->ResourcesGuard = resourcesGuard;
-        } else {
-            AFL_VERIFY(TxEvent->IndexChanges->ResourcesGuard);
-        }
-        TxEvent->IndexChanges->Blobs = ExtractBlobsData();
-        TxEvent->IndexChanges->SetStage(NOlap::NChanges::EStage::ReadyForConstruct);
-        std::shared_ptr<NConveyor::ITask> task =
-            std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
-        NConveyorComposite::TCompServiceOperator::SendTaskToExecute(task);
-    }
-    virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
-        AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())("debug", TxEvent->IndexChanges->DebugString());
-        TxEvent->SetPutStatus(NKikimrProto::ERROR);
-        Counters.ReadErrors->Add(1);
-        TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
-        return false;
-    }
-
-public:
-    TChangesReadTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& event, const TActorId parentActorId, const ui64 tabletId, const TIndexationCounters& counters, NOlap::TSnapshot lastCompletedTx)
-        : TBase(event->IndexChanges->GetReadingActions(), event->IndexChanges->TypeString(), event->IndexChanges->GetTaskIdentifier())
-        , ParentActorId(parentActorId)
-        , TabletId(tabletId)
-        , TxEvent(std::move(event))
-        , Counters(counters)
-        , LastCompletedTx(lastCompletedTx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_changes")("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier());
-    }
-};
-
-class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
-private:
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
-    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Default<std::shared_ptr<const TAtomicCounter>>();
-    }
-
-    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {
-        AFL_VERIFY(ResourcesGuard);
-        DoOnRequestsFinished(std::move(result), std::move(ResourcesGuard));
-    }
-
-protected:
-    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) = 0;
-
-public:
-    void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-        AFL_VERIFY(!ResourcesGuard);
-        AFL_VERIFY(guard);
-        ResourcesGuard = guard;
-    }
-};
-
-class TDataAccessorsSubscriber: public TDataAccessorsSubscriberBase {
-protected:
-    const NActors::TActorId ShardActorId;
-    std::shared_ptr<NOlap::TColumnEngineChanges> Changes;
-    std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
-
-    virtual void DoOnRequestsFinishedImpl() = 0;
-
-    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override final {
-        Changes->SetFetchedDataAccessors(std::move(result), NOlap::TDataAccessorsInitializationContext(VersionedIndex));
-        Changes->ResourcesGuard = std::move(guard);
-        DoOnRequestsFinishedImpl();
-    }
-
-public:
-    void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-        AFL_VERIFY(!ResourcesGuard);
-        ResourcesGuard = guard;
-    }
-
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
-        AFL_VERIFY(ResourcesGuard);
-        return std::move(ResourcesGuard);
-    }
-
-    TDataAccessorsSubscriber(const NActors::TActorId& shardActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
-        const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
-        : ShardActorId(shardActorId)
-        , Changes(changes)
-        , VersionedIndex(versionedIndex) {
-    }
-};
-
-class TDataAccessorsSubscriberWithRead: public TDataAccessorsSubscriber {
-private:
-    using TBase = TDataAccessorsSubscriber;
-
-protected:
-    const bool CacheDataAfterWrite = false;
-    const ui64 ShardTabletId;
-    TIndexationCounters Counters;
-    NOlap::TSnapshot SnapshotModification;
-    const NActors::TActorId ResourceSubscribeActor;
-    const NOlap::NResourceBroker::NSubscribe::TTaskContext TaskSubscriptionContext;
-
-public:
-    TDataAccessorsSubscriberWithRead(const NActors::TActorId& resourceSubscribeActor, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
-        const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex, const bool cacheAfterWrite, const NActors::TActorId& shardActorId,
-        const ui64 shardTabletId, const TIndexationCounters& counters, const NOlap::TSnapshot& snapshotModification,
-        const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskSubscriptionContext)
-        : TBase(shardActorId, changes, versionedIndex)
-        , CacheDataAfterWrite(cacheAfterWrite)
-        , ShardTabletId(shardTabletId)
-        , Counters(counters)
-        , SnapshotModification(snapshotModification)
-        , ResourceSubscribeActor(resourceSubscribeActor)
-        , TaskSubscriptionContext(taskSubscriptionContext)
-    {
-    }
-};
-
-class TCompactChangesReadTask: public TChangesReadTask, public TMonitoringObjectsCounter<TCompactChangesReadTask> {
-private:
-    using TBase = TChangesReadTask;
-
-public:
-    using TBase::TBase;
-};
-
-class TTTLChangesReadTask: public TChangesReadTask, public TMonitoringObjectsCounter<TTTLChangesReadTask> {
-private:
-    using TBase = TChangesReadTask;
-
-public:
-    using TBase::TBase;
-};
-
 namespace {
 class TCompactionAllocated: public NPrioritiesQueue::IRequest {
 private:
@@ -666,6 +484,175 @@ void TColumnShard::SetupCompaction(const std::set<TInternalPathId>& pathIds) {
     }
 }
 
+class TCompactionExecutor: public NOlap::NDataFetcher::IFetchCallback {
+private:
+    const ui64 TabletId;
+    const NActors::TActorId ParentActorId;
+    std::shared_ptr<NOlap::TColumnEngineChanges> Changes;
+    std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    const TIndexationCounters Counters;
+    const NOlap::TSnapshot SnapshotModification;
+    const bool NeedBlobs = true;
+    const std::shared_ptr<TAtomicCounter> TabletActivity;
+
+    virtual std::optional<ui64> GetMemoryForUsage() const override {
+        return Changes->CalcMemoryForUsage();
+    }
+
+    virtual bool IsAborted() const override {
+        return !TabletActivity->Val();
+    }
+
+    virtual TString GetClassName() const override {
+        return Changes->TypeString();
+    }
+
+    virtual void OnStageStarting(const NOlap::NDataFetcher::EFetchingStage stage) override {
+        switch (stage) {
+            case NOlap::NDataFetcher::EFetchingStage::AskAccessors:
+                Changes->SetStage(NOlap::NChanges::EStage::AskAccessors);
+                break;
+            case NOlap::NDataFetcher::EFetchingStage::AskDataResources:
+            case NOlap::NDataFetcher::EFetchingStage::AskGeneralResources:
+                Changes->SetStage(NOlap::NChanges::EStage::AskDataResources);
+                break;
+            case NOlap::NDataFetcher::EFetchingStage::AskAccessorResources:
+                Changes->SetStage(NOlap::NChanges::EStage::AskAccessorResources);
+                break;
+            case NOlap::NDataFetcher::EFetchingStage::ReadBlobs:
+                Changes->SetStage(NOlap::NChanges::EStage::ReadBlobs);
+                break;
+            case NOlap::NDataFetcher::EFetchingStage::Finished:
+                Changes->SetStage(NOlap::NChanges::EStage::ReadyForConstruct);
+                break;
+            default:
+                break;
+        }
+    }
+
+    virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
+        NActors::TLogContextGuard g(
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
+        if (NeedBlobs) {
+            AFL_VERIFY(context.GetResourceGuards().size() == 2);
+        } else {
+            AFL_VERIFY(context.GetResourceGuards().size() == 1);
+        }
+        if (NeedBlobs) {
+            Changes->Blobs = context.ExtractBlobs();
+        }
+        Changes->SetFetchedDataAccessors(
+            NOlap::TDataAccessorsResult(context.ExtractPortionAccessors()), NOlap::TDataAccessorsInitializationContext(VersionedIndex));
+
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
+        Changes->FetchingContext.emplace(std::move(context));
+        {
+            NOlap::TConstructionContext context(*VersionedIndex, Counters, SnapshotModification);
+            if (NeedBlobs) {
+                Changes->ConstructBlobs(context).Validate();
+            }
+            if (!Changes->GetWritePortionsCount()) {
+                ev->SetPutStatus(NKikimrProto::OK);
+            }
+        }
+        TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
+    }
+    virtual void DoOnError(const TString& errorMessage) override {
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
+        ev->SetPutStatus(NKikimrProto::ERROR);
+        ev->ErrorMessage = errorMessage;
+        TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
+    }
+
+public:
+    TCompactionExecutor(const ui64 tabletId, const NActors::TActorId parentActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
+        const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex, const TIndexationCounters& counters,
+        const NOlap::TSnapshot snapshotModification, const std::shared_ptr<TAtomicCounter>& tabletActivity, const bool needBlobs = true)
+        : TabletId(tabletId)
+        , ParentActorId(parentActorId)
+        , Changes(changes)
+        , VersionedIndex(versionedIndex)
+        , Counters(counters)
+        , SnapshotModification(snapshotModification)
+        , NeedBlobs(needBlobs)
+        , TabletActivity(tabletActivity)
+    {
+    }
+};
+
+void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+    Counters.GetCSCounters().OnSetupCompaction();
+    BackgroundController.ResetWaitingPriority();
+
+    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
+    if (!indexChanges) {
+        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
+        return;
+    }
+
+    auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
+    compaction.SetActivityFlag(GetTabletActivity());
+    compaction.SetQueueGuard(guard);
+    compaction.Start(*this);
+
+    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+    NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
+        NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier());
+    auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+    NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
+        std::make_shared<TCompactionExecutor>(
+            TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
+        env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+}
+
+class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
+private:
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Default<std::shared_ptr<const TAtomicCounter>>();
+    }
+
+    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {
+        AFL_VERIFY(ResourcesGuard);
+        DoOnRequestsFinished(std::move(result), std::move(ResourcesGuard));
+    }
+
+protected:
+    virtual void DoOnRequestsFinished(
+        NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) = 0;
+
+public:
+    void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
+        AFL_VERIFY(!ResourcesGuard);
+        AFL_VERIFY(guard);
+        ResourcesGuard = guard;
+    }
+};
+
+class TCSMetadataSubscriber: public TDataAccessorsSubscriberBase, public TObjectCounter<TCSMetadataSubscriber> {
+private:
+    NActors::TActorId TabletActorId;
+    const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
+    const ui64 Generation;
+    virtual void DoOnRequestsFinished(
+        NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
+        NActors::TActivationContext::Send(
+            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation,
+                               NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard))));
+    }
+
+public:
+    TCSMetadataSubscriber(
+        const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen)
+        : TabletActorId(tabletActorId)
+        , Processor(processor)
+        , Generation(gen)
+    {
+
+    }
+};
+
 class TAccessorsMemorySubscriber: public NOlap::NResourceBroker::NSubscribe::ITask {
 private:
     using TBase = NOlap::NResourceBroker::NSubscribe::ITask;
@@ -693,109 +680,6 @@ public:
         , Request(std::move(request))
         , Subscriber(subscriber)
         , DataAccessorsManager(dataAccessorsManager) {
-    }
-};
-
-class TCompactionDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {
-private:
-    using TBase = TDataAccessorsSubscriberWithRead;
-
-protected:
-    virtual void DoOnRequestsFinishedImpl() override {
-        const TString externalTaskId = Changes->GetTaskIdentifier();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "compaction")("external_task_id", externalTaskId);
-
-        Changes->SetStage(NOlap::NChanges::EStage::ReadBlobs);
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, CacheDataAfterWrite);
-        TActorContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-            std::make_shared<TCompactChangesReadTask>(std::move(ev), ShardActorId, ShardTabletId, Counters, SnapshotModification)));
-    }
-
-public:
-    using TBase::TBase;
-};
-
-void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
-    Counters.GetCSCounters().OnSetupCompaction();
-    BackgroundController.ResetWaitingPriority();
-
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
-    if (!indexChanges) {
-        LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
-        return;
-    }
-
-    auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
-    compaction.SetActivityFlag(GetTabletActivity());
-    compaction.SetQueueGuard(guard);
-    compaction.Start(*this);
-
-    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    auto request = compaction.ExtractDataAccessorsRequest();
-    const ui64 accessorsMemory = request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()) +
-                                 indexChanges->CalcMemoryForUsage();
-    const auto subscriber = std::make_shared<TCompactionDataAccessorsSubscriber>(ResourceSubscribeActor, indexChanges, actualIndexInfo,
-        Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx(),
-        CompactTaskSubscription);
-    compaction.SetStage(NOlap::NChanges::EStage::AskResources);
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
-        std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, indexChanges->GetTaskIdentifier(), CompactTaskSubscription,
-                                    std::move(request),
-                                    subscriber, DataAccessorsManager.GetObjectPtrVerified(), indexChanges));
-}
-
-class TWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {
-private:
-    using TBase = TDataAccessorsSubscriberWithRead;
-
-protected:
-    virtual void DoOnRequestsFinishedImpl() override {
-        ACFL_DEBUG("background", "ttl")("need_writes", true);
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
-        TActorContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-            std::make_shared<TTTLChangesReadTask>(std::move(ev), ShardActorId, ShardTabletId, Counters, SnapshotModification)));
-    }
-
-public:
-    using TBase::TBase;
-};
-
-class TNoWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriber {
-private:
-    using TBase = TDataAccessorsSubscriber;
-
-protected:
-    virtual void DoOnRequestsFinishedImpl() override {
-        ACFL_DEBUG("background", "ttl")("need_writes", false);
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
-        ev->SetPutStatus(NKikimrProto::OK);
-        NActors::TActivationContext::Send(ShardActorId, std::move(ev));
-    }
-
-public:
-    using TBase::TBase;
-};
-
-class TCSMetadataSubscriber: public TDataAccessorsSubscriberBase, public TObjectCounter<TCSMetadataSubscriber> {
-private:
-    NActors::TActorId TabletActorId;
-    const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
-    const ui64 Generation;
-    virtual void DoOnRequestsFinished(
-        NOlap::TDataAccessorsResult&& result, std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& guard) override {
-        NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation,
-                               NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(result), std::move(guard))));
-    }
-
-public:
-    TCSMetadataSubscriber(
-        const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen)
-        : TabletActorId(tabletActorId)
-        , Processor(processor)
-        , Generation(gen)
-    {
-
     }
 };
 
@@ -834,45 +718,28 @@ bool TColumnShard::SetupTtl() {
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     for (auto&& i : indexChanges) {
         i->Start(*this);
-        auto request = i->ExtractDataAccessorsRequest();
-        ui64 memoryUsage = 0;
-        std::shared_ptr<TDataAccessorsSubscriber> subscriber;
+        NOlap::NDataFetcher::TRequestInput rInput(
+            i->GetPortionsInfo(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::TTL, i->GetTaskIdentifier());
+        auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
         if (i->NeedConstruction()) {
-            subscriber = std::make_shared<TWriteEvictPortionsDataAccessorsSubscriber>(ResourceSubscribeActor, i, actualIndexInfo,
-                Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetEvictionCounters(), GetLastCompletedTx(),
-                TTLTaskSubscription);
-            memoryUsage = i->CalcMemoryForUsage();
+            NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
+                std::make_shared<TCompactionExecutor>(
+                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, true),
+                env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         } else {
-            subscriber = std::make_shared<TNoWriteEvictPortionsDataAccessorsSubscriber>(SelfId(), i, actualIndexInfo);
+            NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
+                std::make_shared<TCompactionExecutor>(
+                    TabletID(), SelfId(), i, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
+                env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         }
-        const ui64 accessorsMemory =
-            request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema()) + memoryUsage;
-        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, i->GetTaskIdentifier(), TTLTaskSubscription,
-                                        std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified(), i));
     }
     return true;
 }
 
-class TCleanupPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriber {
-private:
-    using TBase = TDataAccessorsSubscriber;
-
-protected:
-    virtual void DoOnRequestsFinishedImpl() override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("background", "cleanup")("changes_info", Changes->DebugString());
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
-        ev->SetPutStatus(NKikimrProto::OK);   // No new blobs to write
-        NActors::TActivationContext::Send(ShardActorId, std::move(ev));
-    }
-
-public:
-    using TBase::TBase;
-};
-
 void TColumnShard::SetupCleanupPortions() {
     Counters.GetCSCounters().OnSetupCleanup();
-    if (!AppDataVerified().ColumnShardConfig.GetCleanupEnabled() || !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Cleanup)) {
+    if (!AppDataVerified().ColumnShardConfig.GetCleanupEnabled() ||
+        !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::Cleanup)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_cleanup")("reason", "disabled");
         return;
     }
@@ -891,14 +758,14 @@ void TColumnShard::SetupCleanupPortions() {
     }
     changes->Start(*this);
 
-    auto request = changes->ExtractDataAccessorsRequest();
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    const ui64 accessorsMemory = request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
-    const auto subscriber = std::make_shared<TCleanupPortionsDataAccessorsSubscriber>(SelfId(), changes, actualIndexInfo);
-
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-        ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, changes->GetTaskIdentifier(), TTLTaskSubscription,
-                                    std::move(request), subscriber, DataAccessorsManager.GetObjectPtrVerified(), changes));
+    NOlap::NDataFetcher::TRequestInput rInput(
+        changes->GetPortionsToDrop(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier());
+    auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+    NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
+        std::make_shared<TCompactionExecutor>(
+            TabletID(), SelfId(), changes, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl, false),
+        env, NConveyorComposite::ESpecialTaskCategory::Compaction);
 }
 
 void TColumnShard::SetupCleanupTables() {
@@ -921,7 +788,7 @@ void TColumnShard::SetupCleanupTables() {
 
     ACFL_DEBUG("background", "cleanup")("changes_info", changes->DebugString());
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, changes, false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(changes, false);
     ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
 
     changes->Start(*this);

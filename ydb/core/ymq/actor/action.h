@@ -31,6 +31,8 @@
 #include <util/string/ascii.h>
 #include <util/string/join.h>
 
+#include <ydb/library/security/util.h>
+
 namespace NKikimr::NSQS {
 
 template <typename TDerived>
@@ -573,6 +575,8 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
+        MaskedToken_ = NKikimr::MaskTicket(SecurityToken_);
+        AuthType_ = request.GetAuth().GetAuthType();
 
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);
@@ -881,7 +885,10 @@ protected:
     size_t SecurityCheckRequestsToWaitFor_ = 2;
     TIntrusivePtr<TSecurityObject> SecurityObject_;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken_;
-    TString  UserSID_; // identifies the client who sent this request
+    TString UserSID_; // identifies the client who sent this request
+    TString MaskedToken_;
+    TString AuthType_;
+
     bool UserExists_ = false;
     bool QueueExists_ = false;
     ui64     Shards_;

@@ -77,6 +77,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDatabaseAdmin)
     FEATURE_FLAG_SETTER(EnablePermissionsExport)
     FEATURE_FLAG_SETTER(EnableShowCreate)
+    FEATURE_FLAG_SETTER(EnableLocalDBBtreeIndex)
 
     #undef FEATURE_FLAG_SETTER
 };

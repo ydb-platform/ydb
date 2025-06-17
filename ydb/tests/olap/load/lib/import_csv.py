@@ -13,7 +13,7 @@ class ImportFileCsvBase(UploadSuiteBase):
 
     def init(self):
         # Create tables
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'init', '--suite-path', self.data_folder, '--clear'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'init', '--suite-path', self.get_external_path(), '--clear'])
 
         import_dir = os.path.join(self.get_external_path(), "import")
         table_names = [name for name in os.listdir(import_dir) if os.path.isdir(os.path.join(import_dir, name))]

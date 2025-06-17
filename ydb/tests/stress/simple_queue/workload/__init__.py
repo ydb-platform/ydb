@@ -50,8 +50,8 @@ class EventKind(object):
         return (
             cls.READ_TABLE,
 
-            cls.BATCH_DELETE,
-            cls.BATCH_UPDATE,
+            # cls.BATCH_DELETE,
+            # cls.BATCH_UPDATE,
         )
 
     @classmethod

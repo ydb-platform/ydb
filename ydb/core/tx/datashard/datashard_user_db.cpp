@@ -173,9 +173,9 @@ void TDataShardUserDb::IncrementRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected incrementRow for an unknown table");
 
-    TVector<NTable::TTag> columns;
-    for (auto op : ops) {
-        columns.push_back(op.Tag);
+    TStackVec<NTable::TTag> columns(ops.size());
+    for (size_t i = 0; i < ops.size(); i++) {
+        columns[i] = ops[i].Tag;
     }
 
     auto currentRow = GetRowState(tableId, key, columns);
@@ -184,7 +184,27 @@ void TDataShardUserDb::IncrementRow(
         return;
     }
     
-    IncrementRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, currentRow);
+    TStackVec<NIceDb::TUpdateOp> newOps(ops.size());
+
+    Y_ENSURE(currentRow.Size() == ops.size());
+    const NTable::TScheme& scheme = Db.GetScheme();
+    const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
+
+    TStackVec<TCell> incrementResults(ops.size());
+
+    for (size_t i = 0; i < ops.size(); i++) {
+        auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
+       
+        auto current = currentRow.Get(i);
+        auto delta = ops[i].AsCell();
+        
+        NFormats::AddTwoCells(incrementResults[i], current, delta, vtype);
+            
+        TRawTypeValue rawTypeValue(incrementResults[i].Data(), incrementResults[i].Size(), vtype);
+        newOps[i] = NIceDb::TUpdateOp(ops[i].Tag, ops[i].Op, rawTypeValue);
+    }
+
+    UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps);
 
     IncreaseUpdateCounters(key, ops);
 }
@@ -269,40 +289,9 @@ void TDataShardUserDb::UpsertRowInt(
     Self.GetKeyAccessSampler()->AddSample(tableId, keyCells);
 }
 
-void TDataShardUserDb::IncrementRowInt(
-    NTable::ERowOp rowOp,
-    const TTableId& tableId,
-    ui64 localTableId,
-    const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const NTable::TRowState &row) 
-{
-    TVector<NIceDb::TUpdateOp> newOps;
-
-    Y_ENSURE(row.Size() == ops.size());
-    const NTable::TScheme& scheme = Db.GetScheme();
-    const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
-
-    TStackVec<TCell> incrementResults(ops.size());
-
-    for (size_t i = 0; i < ops.size(); i++) {
-        auto vtype = scheme.GetColumnInfo(tableInfo, ops[i].Tag)->PType.GetTypeId();
-       
-        auto current = row.Get(i);
-        auto add = ops[i].AsCell();
-        
-        NFormats::AddTwoCells(incrementResults[i], current, add, vtype);
-            
-        TRawTypeValue rawTypeValue(incrementResults[i].InlineData(), incrementResults[i].Size(), vtype);
-        newOps.emplace_back(ops[i].Tag, ops[i].Op, rawTypeValue);
-    }
-
-    UpsertRowInt(rowOp, tableId, localTableId, key, newOps);
-}
-
 bool TDataShardUserDb::RowExists (
     const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key) 
+    const TArrayRef<const TRawTypeValue> key)
 {
     NTable::TRowState rowState;
     const auto ready = SelectRow(tableId, key, {}, rowState);
@@ -318,10 +307,11 @@ bool TDataShardUserDb::RowExists (
         }
     }
 }
+
 NTable::TRowState TDataShardUserDb::GetRowState (
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    TVector<NTable::TTag> columns) 
+    const TStackVec<NTable::TTag> &columns)
 {
     NTable::TRowState rowState;
 

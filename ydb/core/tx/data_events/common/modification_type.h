@@ -87,7 +87,6 @@ public:
                 return NEvWrite::EModificationType::Replace;
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
                 return NEvWrite::EModificationType::Increment;
-
         }
     }
 
@@ -105,7 +104,6 @@ public:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
             case NEvWrite::EModificationType::Increment:
                 Y_ENSURE(false);
-
         }
     }
 

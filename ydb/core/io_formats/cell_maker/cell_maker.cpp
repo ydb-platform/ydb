@@ -334,9 +334,9 @@ void AddTwoCells(TCell& result, const TCell& cell1, const TCell& cell2, const NS
     case NScheme::NTypeIds::Decimal:
     case NScheme::NTypeIds::Pg:
     case NScheme::NTypeIds::Uuid:
-        Y_VERIFY(false);
+        Y_ENSURE(false);
     default:
-        Y_VERIFY(false);
+        Y_ENSURE(false);
     }
 }
 

@@ -11,7 +11,7 @@ void TPortionsDataFetcher::StartColumnsFetching(TRequestInput&& input, std::shar
         steps.emplace_back(std::make_shared<TAskAccessorResourcesStep>());
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
         if (auto mem = callback->GetMemoryForUsage()) {
-            steps.emplace_back(std::make_shared<TAskGeneralResourceStep>(entityIds, mem));
+            steps.emplace_back(std::make_shared<TAskGeneralResourceStep>(entityIds, *mem));
         } else {
             steps.emplace_back(std::make_shared<TAskDataResourceStep>(entityIds));
         }
@@ -29,7 +29,7 @@ void TPortionsDataFetcher::StartFullPortionsFetching(TRequestInput&& input, std:
         steps.emplace_back(std::make_shared<TAskAccessorResourcesStep>());
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
         if (auto mem = callback->GetMemoryForUsage()) {
-            steps.emplace_back(std::make_shared<TAskGeneralResourceStep>(nullptr, mem));
+            steps.emplace_back(std::make_shared<TAskGeneralResourceStep>(nullptr, *mem));
         } else {
             steps.emplace_back(std::make_shared<TAskDataResourceStep>(nullptr));
         }

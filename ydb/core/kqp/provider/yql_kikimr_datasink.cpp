@@ -1343,6 +1343,10 @@ public:
                                 TString(dataSink.Cluster()),
                                 key.GetTablePath(), node->Pos(), ctx);
 
+                            if (tableDesc == nullptr) {
+                                return nullptr;
+                            }
+
                             settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
                         }
 
@@ -1383,6 +1387,10 @@ public:
                             auto tableDesc = SessionCtx->Tables().EnsureTableExists(
                                 TString(dataSink.Cluster()),
                                 key.GetTablePath(), node->Pos(), ctx);
+
+                            if (tableDesc == nullptr) {
+                                return nullptr;
+                            }
 
                             settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
                         }

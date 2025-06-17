@@ -28,7 +28,7 @@ class ImportFileCsvBase(UploadSuiteBase):
             raise RuntimeError(f"Found no directories in {import_dir}")
         self.table_name = table_names[0] # importing just one table
         self.table_path = f'{YdbCluster.tables_path}/{self.table_name}'
-        self.import_path = os.path.join(self.data_folder, 'import', self.table_name, '*') # All files in the table directory
+        self.import_path = os.path.join(self.data_folder, 'import', self.table_name) + '/*' # All files in the table directory
 
     def import_data(self):
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, self.import_path, '--header'])

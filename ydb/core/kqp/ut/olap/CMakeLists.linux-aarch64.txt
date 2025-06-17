@@ -61,13 +61,14 @@ target_link_options(ydb-core-kqp-ut-olap PRIVATE
 target_sources(ydb-core-kqp-ut-olap PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/blobs_sharing_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/dictionary_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/aggregations_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/clickbench_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/compaction_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/compression_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/datatime64_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/decimal_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/delete_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/dictionary_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/indexes_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/json_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_stats_ut.cpp

@@ -1,4 +1,6 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_login_helper.h"
+#include "schemeshard_svp_migration.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
@@ -5135,7 +5137,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
-        HFuncTraced(TEvLoginFinalize, Handle);
+        HFuncTraced(TEvPrivate::TEvLoginFinalize, Handle);
         HFuncTraced(TEvSchemeShard::TEvListUsers, Handle);
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
@@ -7829,7 +7831,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContex
     Execute(CreateTxLogin(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvLoginFinalize::TPtr &ev, const TActorContext &ctx) {
+void TSchemeShard::Handle(TEvPrivate::TEvLoginFinalize::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxLoginFinalize(ev), ctx);
 }
 

@@ -14,8 +14,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/core/tx/schemeshard/schemeshard_login_helper.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
+#include <ydb/library/login/login.h>
 
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>

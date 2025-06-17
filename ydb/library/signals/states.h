@@ -93,7 +93,9 @@ public:
             CurrentStateInstant = current;
         }
 
-        TGuard(const std::optional<EState> start) {
+        TGuard(const std::shared_ptr<TStateSignalsOwner<EState>>& owner, const std::optional<EState> start)
+            : Signals(owner)
+        {
             SetState(start);
         }
 
@@ -107,7 +109,7 @@ public:
     }
 
     TGuard BuildGuard(const std::optional<EState> startState) {
-        return TGuard(startState);
+        return TGuard(Signals, startState);
     }
 };
 

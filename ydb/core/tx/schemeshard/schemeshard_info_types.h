@@ -3354,7 +3354,7 @@ public:
         Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TString DebugMessage;
 
-        TBillingStats Processed;
+        NKikimrIndexBuilder::TBillingStats Processed;
 
         TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
@@ -3370,7 +3370,7 @@ public:
             result << " UploadStatus: " << Ydb::StatusIds::StatusCode_Name(UploadStatus);
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
-            result << " Processed: " << Processed.ToString();
+            result << " Processed: " << Processed.ShortDebugString();
 
             result << " }";
 
@@ -3384,8 +3384,8 @@ public:
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
 
-    TBillingStats Processed;
-    TBillingStats Billed;
+    NKikimrIndexBuilder::TBillingStats Processed;
+    NKikimrIndexBuilder::TBillingStats Billed;
 
     struct TSample {
         struct TRow {
@@ -3648,7 +3648,8 @@ public:
         };
         if (billed.GetUploadRows() != 0 && billed.GetReadRows() == 0 && indexInfo->IsFillBuildIndex()) {
             // old format: assign upload to read
-            billed += {0, 0, billed.GetUploadRows(), billed.GetUploadBytes()};
+            billed.SetReadRows(billed.GetUploadRows());
+            billed.SetReadBytes(billed.GetUploadBytes());
         }
 
         indexInfo->Processed = {
@@ -3728,9 +3729,10 @@ public:
         };
         if (processed.GetUploadRows() != 0 && processed.GetReadRows() == 0 && IsFillBuildIndex()) {
             // old format: assign upload to read
-            processed += {0, 0, processed.GetUploadRows(), processed.GetUploadBytes()};
+            processed.SetReadRows(processed.GetUploadRows());
+            processed.SetReadBytes(processed.GetUploadBytes());
         }
-        Processed += processed;
+        TBillingStatsCalculator::AddTo(Processed, processed);
     }
 
     bool IsCancellationRequested() const {
@@ -3920,10 +3922,10 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus>
 }
 
 template <>
-inline void Out<NKikimr::NSchemeShard::TBillingStats>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TBillingStats& stats)
+inline void Out<NKikimrIndexBuilder::TBillingStats>
+    (IOutputStream& o, const NKikimrIndexBuilder::TBillingStats& stats)
 {
-    o << stats.ToString();
+    o << stats.ShortDebugString();
 }
 
 template <>

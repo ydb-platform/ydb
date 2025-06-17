@@ -6,39 +6,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-TBillingStats::TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
-}
-
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ENSURE(UploadRows >= other.UploadRows);
-    Y_ENSURE(UploadBytes >= other.UploadBytes);
-    Y_ENSURE(ReadRows >= other.ReadRows);
-    Y_ENSURE(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
-}
-
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
-}
-
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
-}
-
 ui64 TRUCalculator::ReadTable(ui64 bytes) {
     // The ReadTable operation lets you efficiently read large ranges of data from a table.
     // The request cost only depends on the amount of data read based on the rate of 128 RU per 1 MB.
@@ -56,7 +23,7 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
     return (Max(rows, (bytes + 1_KB - 1) / 1_KB) + 1) / 2;
 }
 
-ui64 TRUCalculator::Calculate(const TBillingStats& stats) {
+ui64 TRUCalculator::Calculate(const NKikimrIndexBuilder::TBillingStats& stats) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
     return TRUCalculator::ReadTable(stats.GetReadBytes())

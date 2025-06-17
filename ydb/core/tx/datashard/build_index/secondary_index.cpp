@@ -155,7 +155,7 @@ protected:
 
         addRow();
 
-        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
+        if (!ReadBuf.HasReachedLimits(ScanSettings)) {
             return EScan::Feed;
         }
 
@@ -344,7 +344,7 @@ private:
         UploadStatus.Issues.AddIssues(ev->Get()->Issues);
 
         if (UploadStatus.IsSuccess()) {
-            Stats.Aggr(&WriteBuf);
+            Stats.Aggr(WriteBuf.GetRows(), WriteBuf.GetRowCellBytes());
             LastUploadedKey = WriteBuf.ExtractLastKey();
 
             //send progress
@@ -357,7 +357,7 @@ private:
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
             progress->Record.SetRowsDelta(WriteBuf.GetRows());
-            progress->Record.SetBytesDelta(WriteBuf.GetBytes());
+            progress->Record.SetBytesDelta(WriteBuf.GetRowCellBytes());
             WriteBuf.Clear();
 
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
@@ -365,7 +365,7 @@ private:
 
             this->Send(ProgressActorId, progress.Release());
 
-            if (HasReachedLimits(ReadBuf, ScanSettings)) {
+            if (ReadBuf.HasReachedLimits(ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload();
             }

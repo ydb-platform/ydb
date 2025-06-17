@@ -259,7 +259,7 @@ public:
         // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         if (Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
             if (!FinishPrefix()) {
@@ -281,7 +281,7 @@ public:
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
             PrefixRows.AddRow(key, *row);
-            if (HasReachedLimits(PrefixRows, ScanSettings)) {
+            if (PrefixRows.HasReachedLimits(ScanSettings)) {
                 PrefixRows.Clear();
                 IsPrefixRowsValid = false;
             }
@@ -385,7 +385,7 @@ protected:
             IsFirstPrefixFeed = false;
 
             if (IsPrefixRowsValid) {
-                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.Size() << " saved rows " << Debug());
+                LOG_T("FinishPrefix not finished, manually feeding " << PrefixRows.GetRows() << " saved rows " << Debug());
                 for (ui64 iteration = 0; ; iteration++) {
                     for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
                         TSerializedCellVec row(row_);

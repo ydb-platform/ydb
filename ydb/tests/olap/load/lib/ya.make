@@ -4,6 +4,7 @@ PY3_LIBRARY()
         conftest.py
         clickbench.py
         external.py
+        import_csv.py
         tpcds.py
         tpch.py
         upload.py

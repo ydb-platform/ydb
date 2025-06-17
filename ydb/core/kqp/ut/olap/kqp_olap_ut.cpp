@@ -3936,7 +3936,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(GroupByWithMakeDatetime) {
-        return; // TODO: fix me
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

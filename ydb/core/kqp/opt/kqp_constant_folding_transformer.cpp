@@ -39,6 +39,13 @@ namespace {
             return;
         }
 
+        if (TCoAsStruct::Match(input.Get())) {
+            for (auto child : TExprBase(input).Cast<TCoAsStruct>()) {
+                ExtractConstantExprs(child.Item(1).Ptr(), replaces, ctx);
+            }
+            return;
+        }
+
         if (input->IsCallable() && input->Content() != "EvaluateExpr") {
             if (input->ChildrenSize() >= 1) {
                 for (size_t i = 0; i < input->ChildrenSize(); i++) {

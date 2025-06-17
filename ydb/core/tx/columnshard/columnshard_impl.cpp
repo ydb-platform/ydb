@@ -501,7 +501,7 @@ private:
     }
 
     virtual TString GetClassName() const override {
-        return Changes->TypeName();
+        return Changes->TypeString();
     }
 
     virtual void OnStageStarting(const NOlap::NDataFetcher::EFetchingStage stage) override {

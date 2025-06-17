@@ -10,7 +10,7 @@
 namespace NKikimr::NOlap {
 
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
-    StateGuard.SetStage(stage);
+    StateGuard.SetState(stage);
 }
 
 TString TColumnEngineChanges::DebugString() const {

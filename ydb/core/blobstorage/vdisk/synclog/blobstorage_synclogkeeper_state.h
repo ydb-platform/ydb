@@ -110,7 +110,8 @@ namespace NKikimr {
                     std::unique_ptr<TSyncLogRepaired> repaired,
                     ui64 syncLogMaxMemAmount,
                     ui64 syncLogMaxDiskAmount,
-                    ui64 syncLogMaxEntryPointSize);
+                    ui64 syncLogMaxEntryPointSize,
+                    const TActorId& selfId);
 
             void Init(std::shared_ptr<IActorNotify> notifier, std::shared_ptr<ILoggerCtx> loggerCtx) {
                 Notifier = std::move(notifier);
@@ -192,6 +193,8 @@ namespace NKikimr {
             bool NeedsInitialCommit;
             // Snapshot that can be used by Commiter and PhantomFlagStorageBuilder actors
             TSyncLogSnapshotPtr Snapshot;
+            // Id of Keeper actor which possesses the state
+            const TActorId SelfId;
 
             // Fix Disk overflow, i.e. remove some chunks from SyncLog
             TVector<ui32> FixDiskOverflow(ui32 numChunksToAdd);

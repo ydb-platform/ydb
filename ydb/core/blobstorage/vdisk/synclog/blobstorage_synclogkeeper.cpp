@@ -278,7 +278,7 @@ namespace NKikimr {
                 : TActorBootstrapped<TSyncLogKeeperActor>()
                 , SlCtx(std::move(slCtx))
                 , KeepState(SlCtx, std::move(repaired), SlCtx->SyncLogMaxMemAmount, SlCtx->SyncLogMaxDiskAmount,
-                    SlCtx->SyncLogMaxEntryPointSize)
+                    SlCtx->SyncLogMaxEntryPointSize, SelfId())
             {}
         };
 

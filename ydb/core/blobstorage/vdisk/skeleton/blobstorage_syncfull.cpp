@@ -264,7 +264,7 @@ namespace NKikimr {
             , FullSyncGroup(fullSyncGroup)
             , InitialEvent(ev)
             , FakeFilter()
-            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID()))
+            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(InitialEvent->Get()->Record.GetSourceVDiskID()))
             , KeyLogoBlob(keyLogoBlob)
             , KeyBlock(keyBlock)
             , KeyBarrier(keyBarrier)

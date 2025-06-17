@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_context.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 
@@ -14,16 +15,18 @@ namespace NSyncLog {
 ////////////////////////////////////////////////////////////////////////////
 class TPhantomFlagStorageBuilderActor : public TActorBootstrapped<TPhantomFlagStorageBuilderActor> {
 public:
-    TPhantomFlagStorageBuilderActor(TSyncLogSnapshotPtr snapshot)
+    TPhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
+            const TActorId& keeperId, const TSyncLogSnapshotPtr& snapshot)
         : TActorBootstrapped<TPhantomFlagStorageBuilderActor>()
+        , SlCtx(slCtx)
+        , KeeperId(keeperId)
         , Snapshot(snapshot)
     {}
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap(const TActorContext&) {
         LastLsn = Snapshot->LogStartLsn;
-        DiskIt = TDiskRecLogSnapshot::TIndexRecIterator(SnapPtr->DiskSnapPtr);
+        DiskIt = TDiskRecLogSnapshot::TIndexRecIterator(Snapshot->DiskSnapPtr);
         DiskIt.Seek(LastLsn);
-        ProcessSyncLogMemSnapshot();
         ReadNextChunk();
         Become(&TThis::StateFunc);
     }
@@ -35,8 +38,8 @@ private:
         const TBufferWithGaps& readData = ev->Get()->Data;
 
         Y_VERIFY_S(chunkIdx == msg->ChunkIdx &&
-                idxRec->OffsetInPages * SnapPtr->AppendBlockSize == msg->Offset &&
-                idxRec->PagesNum * SnapPtr->AppendBlockSize == readData.Size(),
+                idxRec->OffsetInPages * Snapshot->AppendBlockSize == msg->Offset &&
+                idxRec->PagesNum * Snapshot->AppendBlockSize == readData.Size(),
             SlCtx->VCtx->VDiskLogPrefix
             << "Phantom Flag Storage Builder failed to read synclog: chunkIdx# " << chunkIdx
             << " msgChunkIdx# " << msg->ChunkIdx << " OffsetInPages# " << idxRec->OffsetInPages
@@ -50,8 +53,7 @@ private:
 
             // process one page
             TSyncLogPageROIterator it(page);
-            it.SeekToFirst();
-            for (it.SeekToFirst(); hi.Valid(); it.Next()) {
+            for (it.SeekToFirst(); it.Valid(); it.Next()) {
                 ProcessRecord(it.Get());
             }
         }
@@ -64,17 +66,18 @@ private:
         return NKikimrServices::TActivity::BS_PHANTOM_FLAG_STORAGE_BUILDER;
     }
 
-    void TPhantomFlagStorage::ProcessMemSnapshot(TMemRecLogSnapshotConstPtr memSnapshot) {
+    void ProcessMemSnapshot() {
         TMemRecLogSnapshot::TIterator it(Snapshot->MemSnapPtr);
         for (it.Seek(Snapshot->LogStartLsn); it.Valid(); it.Next()) {
             ProcessRecord(it.Get());
         }
     }
 
-    bool TPhantomFlagStorage::ProcessRecord(const TRecordHdr* hdr) {
+    void ProcessRecord(const TRecordHdr* hdr) {
         if (LastLsn < hdr->Lsn && hdr->RecType == TRecordHdr::RecLogoBlob) {
             const TLogoBlobRec* blob = hdr->GetLogoBlob();
-            if (blob->Ingress.GetCollectMode() == ECollectMode::CollectModeDoNotKeep) {
+            TIngress::EMode ingressMode = TIngress::IngressMode(SlCtx->VCtx->Top->GType);
+            if (blob->Ingress.GetCollectMode(ingressMode) == ECollectMode::CollectModeDoNotKeep) {
                 AddFlag(*blob);
             }
             LastLsn = hdr->Lsn;
@@ -96,16 +99,16 @@ private:
             Send(SlCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkRead(SlCtx->PDiskCtx->Dsk->Owner,
                     SlCtx->PDiskCtx->Dsk->OwnerRound, chunkIdx, offset, size, NPriRead::SyncLog, nullptr));
         } else {
-            ProcessMemSnapshots();
+            ProcessMemSnapshot();
         }
     }
 
-    void TPhantomFlagStorage::AddFlag(const TLogoBlobRec& flag) {
+    void AddFlag(const TLogoBlobRec& flag) {
         Flags.push_back(flag);
     }
 
     void Finish() {
-        Send(SlCtx->KeeperId, new TEvPhantomFlagStorageAddFlagsFromSnapshot(std::move(Flags)));
+        Send(KeeperId, new TEvPhantomFlagStorageAddFlagsFromSnapshot(std::move(Flags)));
         PassAway();
     }
 
@@ -115,6 +118,7 @@ private:
 
 private:
     TIntrusivePtr<TSyncLogCtx> SlCtx;
+    const TActorId KeeperId;
     TSyncLogSnapshotPtr Snapshot;
     TDiskRecLogSnapshot::TIndexRecIterator DiskIt;
     TPhantomFlags Flags;
@@ -122,9 +126,9 @@ private:
 };
 
 
-NActors::IActor* CreatePhantomFlagBuilderActor(TIntrusivePtr<TSyncLogCtx> slCtx,
-        TSyncLogSnapshotPtr snapshot) {
-    return new TPhantomFlagStorageBuilderActor(slCtx, snapshot);
+NActors::IActor* CreatePhantomFlagBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
+    const TActorId& keeperId, const TSyncLogSnapshotPtr& snapshot) {
+    return new TPhantomFlagStorageBuilderActor(slCtx, keeperId, snapshot);
 }
 
 } // namespace NSyncLog

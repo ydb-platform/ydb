@@ -33,7 +33,8 @@ namespace NKikimr {
                 std::unique_ptr<TSyncLogRepaired> repaired,
                 ui64 syncLogMaxMemAmount,
                 ui64 syncLogMaxDiskAmount,
-                ui64 syncLogMaxEntryPointSize)
+                ui64 syncLogMaxEntryPointSize,
+                const TActorId& selfId)
             : SlCtx(std::move(slCtx))
             , SyncLogPtr(std::move(repaired->SyncLogPtr))
             , ChunksToDelete(std::move(repaired->ChunksToDelete))
@@ -42,6 +43,7 @@ namespace NKikimr {
             , MaxDiskChunks(CalcMaxDiskChunks(syncLogMaxDiskAmount, SyncLogPtr->GetChunkSize()))
             , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
+            , SelfId(selfId)
         {}
 
         // Calculate first lsn in recovery log we must keep
@@ -377,9 +379,9 @@ namespace NKikimr {
             // trim SyncLog in case of disk overflow
             TVector<ui32> scheduledChunks = FixDiskOverflow(numChunksToAdd);
 
-            if (!scheduledChunks.empty() && !PhantomFlagStorageState.IsActive()) {
+            if (!scheduledChunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
                 PhantomFlagStorageState.Activate();
-                TActivationContext::Register(CreatePhantomFlagBuilderActor(SlCtx, Snapshot));
+                TActivationContext::Register(CreatePhantomFlagBuilderActor(SlCtx, SelfId, Snapshot));
             }
             
             // append scheduledChunks to ChunksToDeleteDelayed

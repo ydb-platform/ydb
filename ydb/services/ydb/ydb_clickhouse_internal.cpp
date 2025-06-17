@@ -25,6 +25,14 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
+
+#ifdef GET_LIMITER_BY_PATH
+#error GET_LIMITER_BY_PATH macro already defined
+#endif
+
+#define GET_LIMITER_BY_PATH(ICB_PATH)\
+    getLimiter(#ICB_PATH, icb.ICB_PATH, DEFAULT_MAX_IN_FLIGHT)
+
 #define ADD_REQUEST(NAME, IN, OUT, CB) \
     MakeIntrusive<TGRpcRequest<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT, TGRpcYdbClickhouseInternalService>>(this, &Service_, CQ_, \
         [this](NYdbGrpc::IRequestContextBase *ctx) { \
@@ -34,7 +42,7 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
                     (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(NGRpcService::TRateLimiterMode::Rps), nullptr})); \
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), \
-        getLimiter("GRpcControls.RequestConfigs.ClickhouseInternal_" # NAME ".MaxInFlight", icb.GRpcControls.RequestConfigs.ClickhouseInternal_ ## NAME.MaxInFlight,  DEFAULT_MAX_IN_FLIGHT))->Run();
+        GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.ClickhouseInternal_##NAME.MaxInFlight))->Run();
 
     ADD_REQUEST(Scan, ScanRequest, ScanResponse, DoReadColumnsRequest);
     ADD_REQUEST(GetShardLocations, GetShardLocationsRequest, GetShardLocationsResponse, DoGetShardLocationsRequest);
@@ -42,6 +50,7 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
     ADD_REQUEST(CreateSnapshot, CreateSnapshotRequest, CreateSnapshotResponse, DoKikhouseCreateSnapshotRequest);
     ADD_REQUEST(RefreshSnapshot, RefreshSnapshotRequest, RefreshSnapshotResponse, DoKikhouseRefreshSnapshotRequest);
     ADD_REQUEST(DiscardSnapshot, DiscardSnapshotRequest, DiscardSnapshotResponse, DoKikhouseDiscardSnapshotRequest);
+#undef GET_LIMITER_BY_PATH
 #undef ADD_REQUEST
 }
 

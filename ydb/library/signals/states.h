@@ -77,6 +77,11 @@ public:
         std::shared_ptr<TStateSignalsOwner<EState>> Signals;
 
     public:
+        EState GetStage() const {
+            AFL_VERIFY(CurrentState);
+            return *CurrentState;
+        }
+
         void SetState(const std::optional<EState> state) {
             std::optional<TDuration> d;
             const TMonotonic current = TMonotonic::Now();

@@ -2708,7 +2708,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
-        bool withPrefix, bool withValue, ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds) {
+        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds) {
         TVector<TCell> cells;
         ui8 str[6] = { 0 };
         str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
@@ -2719,24 +2719,13 @@ namespace NSchemeShardUT_Private {
             str[3] = ((key+106)*47) % 256;
             cells.emplace_back(TCell::Make(key));
             cells.emplace_back(TCell((const char*)str, 5));
-            if (withPrefix) {
-                // optional prefix ui32 column
-                cells.emplace_back(TCell::Make(key % 17));
-            }
-            if (withValue) {
-                // optionally use the same value for an additional covered string column
-                cells.emplace_back(TCell((const char*)str, 5));
-            }
+            // optional prefix ui32 column
+            cells.emplace_back(TCell::Make(key % 17));
+            // optionally use the same value for an additional covered string column
+            cells.emplace_back(TCell((const char*)str, 5));
         }
         if (!columnIds.size()) {
-            columnIds.push_back(1);
-            columnIds.push_back(2);
-            if (withValue) {
-                columnIds.push_back(columnIds.size()+1);
-            }
-            if (withPrefix) {
-                columnIds.push_back(columnIds.size()+1);
-            }
+            columnIds = {1, 2, 3, 4};
         }
         TSerializedCellMatrix matrix(cells, max-min, columnIds.size());
         WriteOp(runtime, schemeShardId, txId, tablePath,

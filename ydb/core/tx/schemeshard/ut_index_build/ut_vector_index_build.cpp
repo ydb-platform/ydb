@@ -30,12 +30,14 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 200);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
@@ -88,6 +90,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
@@ -105,7 +109,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 200, {1, 3});
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200, {1, 5, 3, 4});
 
         TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
@@ -129,6 +133,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
@@ -136,9 +142,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 50);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 1, 50, 150);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 2, 150, 200);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
@@ -220,6 +226,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
             Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
@@ -227,9 +234,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", true, false, 0, 0, 50);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", true, false, 1, 50, 150);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", true, false, 2, 150, 200);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
@@ -345,11 +352,13 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB/Table", false, false, 0, 100, 300);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/CommonDB/Table", 0, 100, 300);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/CommonDB/Table"), {
             NLs::PathExist,
@@ -432,6 +441,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
             KeyColumnNames: ["key"]
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
@@ -439,9 +450,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 0, 0, 50);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 1, 50, 150);
-        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, false, 2, 150, 200);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
 
         TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> meteringBlocker(runtime, [&](const auto& ev) {
             Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;

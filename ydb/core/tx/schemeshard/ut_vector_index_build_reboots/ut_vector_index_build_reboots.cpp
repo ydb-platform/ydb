@@ -32,25 +32,25 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTestReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", Sprintf(R"(
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                     Name: "dir/Table"
                     Columns { Name: "key"       Type: "Uint32" }
                     Columns { Name: "embedding" Type: "String" }
-                    %s
+                    Columns { Name: "prefix"    Type: "Uint32" }
                     Columns { Name: "value"     Type: "String" }
                     KeyColumnNames: ["key"]
                     SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
                     SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
                     SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 250 } } } }
                     SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 350 } } } }
-                )", (Prefixed ? "Columns { Name: \"prefix\" Type: \"Uint32\" }" : "")));
+                )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", Prefixed, true, 0, 0, 50);
-                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", Prefixed, true, 1, 50, 150);
-                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", Prefixed, true, 2, 150, 250);
-                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", Prefixed, true, 3, 250, 350);
-                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", Prefixed, true, 4, 350, 400);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", 0, 0, 50);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", 1, 50, 150);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", 2, 150, 250);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", 3, 250, 350);
+                WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++t.TxId, "/MyRoot/dir/Table", 4, 350, 400);
             }
 
             const ui64 buildIndexId = ++t.TxId;

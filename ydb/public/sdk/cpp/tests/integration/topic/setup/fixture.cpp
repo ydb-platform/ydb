@@ -6,22 +6,30 @@
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
+const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
+
 void TTopicTestFixture::SetUp() {
+    char* ydbVersion = std::getenv("YDB_VERSION");
+
+    if (EnableDirectRead && ydbVersion != nullptr && std::string(ydbVersion) != "trunk" && std::string(ydbVersion) <= "25.1") {
+        GTEST_SKIP() << "Skipping test for YDB version " << ydbVersion;
+    }
+
     TTopicClient client(MakeDriver());
 
     const testing::TestInfo* const testInfo = testing::UnitTest::GetInstance()->current_test_info();
     std::filesystem::path execPath(std::string{GetExecPath()});
 
-    std::stringstream builder;
-    builder << std::getenv("YDB_TEST_ROOT") << "/" << execPath.filename().string() << "/" << testInfo->test_suite_name() << "_" << testInfo->name();
-    TopicPath_ = builder.str();
+    std::stringstream topicBuilder;
+    topicBuilder << std::getenv("YDB_TEST_ROOT") << "/" << testInfo->test_suite_name() << "-" << testInfo->name();
+    TopicPath_ = topicBuilder.str();
+    
+    std::stringstream consumerBuilder;
+    consumerBuilder << testInfo->test_suite_name() << "-" << testInfo->name() << "-consumer";
+    ConsumerName_ = consumerBuilder.str();
 
     client.DropTopic(TopicPath_).GetValueSync();
     CreateTopic(TopicPath_);
-}
-
-void TTopicTestFixture::TearDown() {
-    DropTopic(GetTopicPath());
 }
 
 void TTopicTestFixture::CreateTopic(const std::string& path, const std::string& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount) {
@@ -47,8 +55,16 @@ void TTopicTestFixture::CreateTopic(const std::string& path, const std::string& 
     Y_ENSURE(status.IsSuccess(), status);
 }
 
+void TTopicTestFixture::CreateTopic(const std::string& path, size_t partitionCount, std::optional<size_t> maxPartitionCount) {
+    CreateTopic(path, GetConsumerName(), partitionCount, maxPartitionCount);
+}
+
 std::string TTopicTestFixture::GetTopicPath() {
     return TopicPath_;
+}
+
+std::string TTopicTestFixture::GetConsumerName() {
+    return ConsumerName_;
 }
 
 void TTopicTestFixture::DropTopic(const std::string& path) {

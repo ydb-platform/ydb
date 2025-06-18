@@ -22,8 +22,7 @@ namespace {
     static constexpr double MinCapacity = 1e-9;
 }
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp::NSchedulerOld {
 
 class IObservable : TNonCopyable, public TIntrusiveListItem<IObservable> {
 public:
@@ -360,7 +359,7 @@ TSchedulerEntityHandle::TSchedulerEntityHandle(TSchedulerEntity* ptr)
 {
 }
 
-TSchedulerEntityHandle::TSchedulerEntityHandle(){} 
+TSchedulerEntityHandle::TSchedulerEntityHandle(){}
 
 TSchedulerEntityHandle::TSchedulerEntityHandle(TSchedulerEntityHandle&& other) {
     Ptr.swap(other.Ptr);
@@ -786,9 +785,9 @@ void TComputeScheduler::TImpl::AdvanceTime(TMonotonic now, TSchedulerEntity::TGr
         auto tracked = record->TrackedMicroSeconds.load();
         v.Next()->MaxLimitDeviation = SmoothPeriod.MicroSeconds() * v.Next()->Capacity;
         v.Next()->LastNowRecalc = now;
-        v.Next()->TrackedBefore = 
+        v.Next()->TrackedBefore =
             Max<ssize_t>(
-                tracked - FromDuration(ForgetInteval) * group.get()->Capacity, 
+                tracked - FromDuration(ForgetInteval) * group.get()->Capacity,
                 Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, tracked));
 
         //if (group.get()->EntitiesWeight > 0) {
@@ -1103,5 +1102,4 @@ IActor* CreateSchedulerActor(TSchedulerActorOptions opts) {
     return new TSchedulerActor(opts);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp::NSchedulerOld

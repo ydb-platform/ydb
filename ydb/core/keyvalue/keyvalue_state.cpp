@@ -977,6 +977,7 @@ void TKeyValueState::ProcessCmd(TIntermediate::TRead &request,
             const TContiguousSpan span(value.GetContiguousSpan());
             legacyResponse->SetValue(span.data(), span.size());
         }
+        legacyResponse->SetCreationUnixTime(request.CreationUnixTime);
     } else {
         legacyResponse->SetMessage(request.Message);
         if (outStatus == NKikimrProto::NODATA) {

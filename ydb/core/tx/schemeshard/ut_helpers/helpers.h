@@ -663,5 +663,7 @@ namespace NSchemeShardUT_Private {
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
         bool withValue, ui32 shard, ui32 min, ui32 max);
+    
+    void TestCreateServerLessDb(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId, ui64& tenantSchemeShard);
 
 } //NSchemeShardUT_Private

@@ -255,7 +255,7 @@ private:
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
-    std::shared_ptr<NChanges::TChangesCounters::TStageCountersGuard> Counters;
+    NCounters::TStateSignalsOperator<NChanges::EStage>::TGuard StateGuard;
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -354,7 +354,7 @@ public:
     }
 
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
-        : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
+        : StateGuard(NChanges::TChangesCounters::GetStageCounters(consumerId))
         , BlobsAction(storagesManager, consumerId) {
     }
 
@@ -362,7 +362,7 @@ public:
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Counters->GetCurrentStage() == NChanges::EStage::Aborted;
+        return StateGuard.GetStage() == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();

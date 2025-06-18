@@ -173,7 +173,7 @@ protected:
 
     TReadSessionSettings CreateReadSessionSettings() {
         return TReadSessionSettings()
-            .ConsumerName("test-consumer")
+            .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath());
     }
 
@@ -309,7 +309,7 @@ private:
     std::chrono::milliseconds Delay = {};
 };
 
-TEST_F(LocalPartition, Basic) {
+TEST_F(LocalPartition, TEST_NAME(Basic)) {
     TMockDiscoveryService discovery;
     discovery.SetGoodEndpoints(*this);
     TDriver driver(CreateConfig(discovery.GetDiscoveryAddr()));
@@ -319,7 +319,7 @@ TEST_F(LocalPartition, Basic) {
     ReadMessage(client);
 }
 
-TEST_F(LocalPartition, DescribeBadPartition) {
+TEST_F(LocalPartition, TEST_NAME(DescribeBadPartition)) {
     TMockDiscoveryService discovery;
 
     discovery.SetGoodEndpoints(*this);
@@ -354,7 +354,7 @@ TEST_F(LocalPartition, DescribeBadPartition) {
     writeSession->Close();
 }
 
-TEST_F(LocalPartition, DiscoveryServiceBadPort) {
+TEST_F(LocalPartition, TEST_NAME(DiscoveryServiceBadPort)) {
     TMockDiscoveryService discovery;
     discovery.SetEndpoints(9999, 2, 0);
 
@@ -382,7 +382,7 @@ TEST_F(LocalPartition, DiscoveryServiceBadPort) {
     writeSession->Close();
 }
 
-TEST_F(LocalPartition, DiscoveryServiceBadNodeId) {
+TEST_F(LocalPartition, TEST_NAME(DiscoveryServiceBadNodeId)) {
     TMockDiscoveryService discovery;
     discovery.SetEndpoints(9999, GetNodeIds().size(), GetPort());
 
@@ -410,7 +410,7 @@ TEST_F(LocalPartition, DiscoveryServiceBadNodeId) {
     writeSession->Close();
 }
 
-TEST_F(LocalPartition, DescribeHang) {
+TEST_F(LocalPartition, TEST_NAME(DescribeHang)) {
     TMockDiscoveryService discovery;
     discovery.SetGoodEndpoints(*this);
 
@@ -430,7 +430,7 @@ TEST_F(LocalPartition, DescribeHang) {
     writeSession->Close();
 }
 
-TEST_F(LocalPartition, DiscoveryHang) {
+TEST_F(LocalPartition, TEST_NAME(DiscoveryHang)) {
     TMockDiscoveryService discovery;
     discovery.SetGoodEndpoints(*this);
     discovery.SetDelay(std::chrono::days(1));
@@ -443,7 +443,7 @@ TEST_F(LocalPartition, DiscoveryHang) {
     writeSession->Close();
 }
 
-TEST_F(LocalPartition, WithoutPartition) {
+TEST_F(LocalPartition, TEST_NAME(WithoutPartition)) {
     // Direct write without partition: happy way.
     TMockDiscoveryService discovery;
     discovery.SetGoodEndpoints(*this);
@@ -485,7 +485,7 @@ TEST_F(LocalPartition, WithoutPartition) {
     ASSERT_TRUE(expected.Matches(events));
 }
 
-TEST_F(LocalPartition, WithoutPartitionDeadNode) {
+TEST_F(LocalPartition, TEST_NAME(WithoutPartitionDeadNode)) {
     // This test emulates a situation, when InitResponse directs us to an inaccessible node.
     TMockDiscoveryService discovery;
     discovery.SetEndpoints(GetNodeIds()[0], 1, 0);

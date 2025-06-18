@@ -6,7 +6,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
+TBillingStats::TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes)
     : UploadRows{uploadRows}
     , UploadBytes{uploadBytes}
     , ReadRows{readRows}

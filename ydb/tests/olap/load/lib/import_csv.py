@@ -61,6 +61,12 @@ class ImportFileCsvBase(UploadSuiteBase):
         logging.info(f'Result import speed: {import_speed} MB/s')
         result.add_stat(self.query_name, 'import_speed', import_speed)
 
+    @classmethod
+    def teardown_class(cls) -> None:
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'clean', '--suite-path', cls.get_external_path()])
+        super().teardown_class()
+
+
 
 class TestImportFileCsv(ImportFileCsvBase):
     external_folder: str = 'ecommerce'

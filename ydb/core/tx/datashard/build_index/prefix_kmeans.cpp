@@ -203,8 +203,8 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableBillingStats()->SetReadRows(ReadRows);
+        record.MutableBillingStats()->SetReadBytes(ReadBytes);
 
         Uploader.Finish(record, status);
 

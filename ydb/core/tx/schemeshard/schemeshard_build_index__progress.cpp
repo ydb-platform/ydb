@@ -186,8 +186,8 @@ private:
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
 
         response->Record.SetId(ui64(BuildId));
-        response->Record.SetUploadRows(UploadRows->size());
-        response->Record.SetUploadBytes(UploadBytes);
+        response->Record.MutableBillingStats()->SetUploadRows(UploadRows->size());
+        response->Record.MutableBillingStats()->SetUploadBytes(UploadBytes);
 
         UploadStatusToMessage(response->Record);
 
@@ -1713,8 +1713,8 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         auto billingStats = GetBillingStats();
-        shardStatus.Processed += billingStats;
-        buildInfo.Processed += billingStats;
+        TBillingStatsCalculator::AddTo(shardStatus.Processed, billingStats);
+        TBillingStatsCalculator::AddTo(buildInfo.Processed, billingStats);
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1779,7 +1779,13 @@ public:
         Y_UNUSED(db, buildInfo);
     }
 
-    virtual TBillingStats GetBillingStats() const = 0;
+    virtual TBillingStats GetBillingStats() const {
+        auto& record = Response->Get()->Record;
+        if constexpr (requires { record.MutableBillingStats(); }) {
+            return record.GetBillingStats();
+        }
+        Y_ENSURE(false, "Should be overwritten");
+    }
 
     virtual TString ResponseShortDebugString() const {
         auto& record = Response->Get()->Record;
@@ -1822,11 +1828,6 @@ struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TTxShardReply<TEvDat
                 db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Delete();
             }
         }
-    }
-
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {0, 0, record.GetReadRows(), record.GetReadBytes()};
     }
 
     TString ResponseShortDebugString() const override {
@@ -1872,11 +1873,6 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
     }
-
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {record.GetUploadRows(), record.GetUploadBytes(), record.GetReadRows(), record.GetReadBytes()};
-    }
 };
 
 struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardReply<TEvDataShard::TEvReshuffleKMeansResponse> {
@@ -1884,22 +1880,12 @@ struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardRepl
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
     }
-
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {record.GetUploadRows(), record.GetUploadBytes(), record.GetReadRows(), record.GetReadBytes()};
-    }
 };
 
 struct TSchemeShard::TIndexBuilder::TTxReplyPrefixKMeans: public TTxShardReply<TEvDataShard::TEvPrefixKMeansResponse> {
     explicit TTxReplyPrefixKMeans(TSelf* self, TEvDataShard::TEvPrefixKMeansResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
-    }
-
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {record.GetUploadRows(), record.GetUploadBytes(), record.GetReadRows(), record.GetReadBytes()};
     }
 };
 
@@ -1938,8 +1924,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        TBillingStats stats{record.GetUploadRows(), record.GetUploadBytes(), 0, 0};
-        buildInfo.Processed += stats;
+        TBillingStatsCalculator::AddTo(buildInfo.Processed, record.GetBillingStats());
         // As long as we don't try to upload sample in parallel with requests to shards,
         // it's okay to persist Processed not incrementally
         Self->PersistBuildIndexProcessed(db, buildInfo);
@@ -2004,7 +1989,12 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
         auto& record = Response->Get()->Record;
         // secondary index reads and writes almost the same amount of data
         // do not count them separately for simplicity
-        return {record.GetRowsDelta(), record.GetBytesDelta(), record.GetRowsDelta(), record.GetBytesDelta()};
+        TBillingStats result;
+        result.SetUploadRows(record.GetRowsDelta());
+        result.SetUploadBytes(record.GetBytesDelta());
+        result.SetReadRows(record.GetRowsDelta());
+        result.SetReadBytes(record.GetBytesDelta());
+        return result;
     }
 };
 

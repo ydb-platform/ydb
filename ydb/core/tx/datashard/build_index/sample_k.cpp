@@ -153,8 +153,8 @@ public:
 
     TAutoPtr<IDestructable> Finish(EStatus status) final {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableBillingStats()->SetReadRows(ReadRows);
+        record.MutableBillingStats()->SetReadBytes(ReadBytes);
 
         if (status == EStatus::Exception) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);

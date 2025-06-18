@@ -5,15 +5,19 @@
 
 namespace NKikimr::NSchemeShard {
 
+using TBillingStats = NKikimrIndexBuilder::TBillingStats;
+
 struct TBillingStatsCalculator {
-    static void TryFixOldFormat(NKikimrIndexBuilder::TBillingStats& value);
-    static void AddTo(NKikimrIndexBuilder::TBillingStats& value, const NKikimrIndexBuilder::TBillingStats& other);
+    static void TryFixOldFormat(TBillingStats& value);
+    static bool IsZero(TBillingStats& value);
+    static void AddTo(TBillingStats& value, const TBillingStats& other);
+    static void SubFrom(TBillingStats& value, const TBillingStats& other);
 };
 
 struct TRUCalculator {
     static ui64 ReadTable(ui64 bytes);
     static ui64 BulkUpsert(ui64 bytes, ui64 rows);
-    static ui64 Calculate(const NKikimrIndexBuilder::TBillingStats& stats);
+    static ui64 Calculate(const TBillingStats& stats);
 };
 
 }

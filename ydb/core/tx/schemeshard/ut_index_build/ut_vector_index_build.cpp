@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(CommonDB) {
+    Y_UNIT_TEST(Metering_CommonDB) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 0);
     }
 
-    Y_UNIT_TEST_FLAG(ServerLessDB, smallScanBuffer) {
+    Y_UNIT_TEST_FLAG(Metering_ServerLessDB, smallScanBuffer) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -584,8 +584,15 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+<<<<<<< HEAD
             MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+=======
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+<<<<<<< HEAD
+>>>>>>> d2fd957ba9d (Metering_ServerLessDB_Restarts)
             previousBillId = newBillId;
+=======
+>>>>>>> 436575d4f74 (Metering_ServerLessDB_Restarts)
             meteringBlocker.Unblock();
         }
 
@@ -671,9 +678,155 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+<<<<<<< HEAD
             MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+=======
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+<<<<<<< HEAD
+>>>>>>> d2fd957ba9d (Metering_ServerLessDB_Restarts)
             previousBillId = newBillId;
             meteringBlocker.Stop().Unblock();
+=======
+            meteringBlocker.Stop().Unblock();
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(Metering_ServerLessDB_Restarts, doRestarts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write data directly into shards
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", false, 2, 150, 200);
+
+        TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> meteringBlocker(runtime, [&](const auto& ev) {
+            Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;
+            return true;
+        });
+
+        TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto&) {
+            return true;
+        });
+
+        // Build vector index with max_shards_in_flight(1) to guarantee deterministic metering data
+        ui64 buildIndexTx = ++txId;
+        {
+            auto sender = runtime.AllocateEdgeActor();
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            settings->MutableScanSettings()->SetMaxBatchRows(1);
+            auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
+            kmeansSettings->Mutablevector_settings()->Setlevels(2);
+            kmeansSettings->Mutablevector_settings()->Setclusters(4);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+
+        runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { upload rows: 4, upload bytes: 148, read rows: 200, read bytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { upload rows: 0, upload bytes: 0, read rows: 0, read bytes: 0 }");
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto expectedBill = TBillRecord()
+                .Id("109-72075186233409549-2-0-0-0-0-4-200-148-1800")
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(10))
+                .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { upload rows: 4, upload bytes: 148, read rows: 200, read bytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { upload rows: 4, upload bytes: 148, read rows: 200, read bytes: 1800 }");
+        }
+
+        reshuffleBlocker.Unblock();
+        runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { upload rows: 54, upload bytes: 1798, read rows: 250, read bytes: 2250 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { upload rows: 4, upload bytes: 148, read rows: 200, read bytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ upload rows: 50, upload bytes: 1650, read rows: 50, read bytes: 450 }</td>"); // shard 1 stats
+        }
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto expectedBill = TBillRecord()
+                .Id("109-72075186233409549-2-4-200-148-1800-54-250-1798-2250")
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(20))
+                .Usage(TBillRecord::RequestUnits(153, TInstant::Seconds(10), TInstant::Seconds(20)));
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            meteringBlocker.Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { upload rows: 54, upload bytes: 1798, read rows: 250, read bytes: 2250 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { upload rows: 54, upload bytes: 1798, read rows: 250, read bytes: 2250 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ upload rows: 50, upload bytes: 1650, read rows: 50, read bytes: 450 }</td>"); // shard 1 stats
+        }
+
+        reshuffleBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
+        {
+            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto expectedBill = TBillRecord()
+                .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
+                .SourceWt(TInstant::Seconds(20))
+                .Usage(TBillRecord::RequestUnits(311, TInstant::Seconds(20), TInstant::Seconds(20)));
+            expectedBill.Id("109-72075186233409549-2-54-250-1798-2250-420-1400-11740-20600");
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            meteringBlocker.Stop().Unblock();
+        }
+        if (doRestarts) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        }
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { upload rows: 420, upload bytes: 11740, read rows: 1400, read bytes: 20600 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { upload rows: 420, upload bytes: 11740, read rows: 1400, read bytes: 20600 }");
+>>>>>>> 436575d4f74 (Metering_ServerLessDB_Restarts)
         }
     }
 

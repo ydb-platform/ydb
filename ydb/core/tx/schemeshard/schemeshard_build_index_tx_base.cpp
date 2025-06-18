@@ -163,9 +163,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_N("ApplyBill: made a bill"
+        LOG_N("ApplyBill: make a bill, id#" << id
+              << ", toBill: " << toBill
+              << ", requestUnits: " << requestUnits
+              << ", ReadTableRU: " << TRUCalculator::ReadTable(toBill.GetReadBytes())
+              << ", BulkUpsertRU: " << TRUCalculator::BulkUpsert(toBill.GetUploadBytes(), toBill.GetUploadRows())
               << ", buildInfo: " << buildInfo
-              << ", record: '" << billRecord << "'");
+              << ", billRecord: " << billRecord);
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage

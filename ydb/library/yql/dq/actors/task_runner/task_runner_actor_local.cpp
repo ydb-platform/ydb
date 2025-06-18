@@ -350,6 +350,7 @@ private:
 
             dataSize = data.Size();
             isFinished = channel->IsFinished();
+            // IsFinished() won't return true until channel drained
 
             changed = changed || hasData || hasWatermark || hasCheckpoint || (isFinished != wasFinished);
 

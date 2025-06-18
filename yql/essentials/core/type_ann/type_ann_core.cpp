@@ -13283,7 +13283,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     class TIntentDeterminationTransformer : public TSyncTransformerBase {
     public:
         TIntentDeterminationTransformer(const TTypeAnnotationContext& types)
-            : Types(types)
+            : Types_(types)
         {}
 
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -13299,7 +13299,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                 bool foundFunc = false;
 
-                for (auto& datasource : Types.DataSources) {
+                for (auto& datasource : Types_.DataSources) {
                     if (!datasource->CanParse(*input)) {
                         continue;
                     }
@@ -13309,7 +13309,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 }
 
                 if (!foundFunc) {
-                    for (auto& datasink : Types.DataSinks) {
+                    for (auto& datasink : Types_.DataSinks) {
                         if (!datasink->CanParse(*input)) {
                             continue;
                         }
@@ -13332,10 +13332,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         void Rewind() final {
-            for (auto& x : Types.DataSources) {
+            for (auto& x : Types_.DataSources) {
                 x->GetIntentDeterminationTransformer().Rewind();
             }
-            for (auto& x : Types.DataSinks) {
+            for (auto& x : Types_.DataSinks) {
                 x->GetIntentDeterminationTransformer().Rewind();
             }
         }
@@ -13347,7 +13347,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
     private:
-        const TTypeAnnotationContext& Types;
+        const TTypeAnnotationContext& Types_;
     };
 
     class TExtCallableTypeAnnotationTransformer : public TCallableTransformerBase<TExtCallableTypeAnnotationTransformer> {
@@ -13366,15 +13366,15 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 TContext funcCtx(ctx);
                 status = (*func)(input, output, funcCtx);
             } else if (auto func = extFunctions.FindPtr(name)) {
-                TExtContext funcCtx(ctx, Types);
+                TExtContext funcCtx(ctx, Types_);
                 status = (*func)(input, output, funcCtx);
             } else {
                 return Nothing();
             }
 
-            if (status == IGraphTransformer::TStatus::Ok && Types.DeriveColumnOrder && !Types.LookupColumnOrder(*input)) {
+            if (status == IGraphTransformer::TStatus::Ok && Types_.DeriveColumnOrder && !Types_.LookupColumnOrder(*input)) {
                 if (auto func = columnOrderFunctions.FindPtr(name)) {
-                    TExtContext funcCtx(ctx, Types);
+                    TExtContext funcCtx(ctx, Types_);
                     status = (*func)(input, output, funcCtx);
                 }
             }
@@ -13428,7 +13428,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         IGraphTransformer& GetTransformer(IDataProvider& provider) const {
-            return provider.GetTypeAnnotationTransformer(InstantOnly);
+            return provider.GetTypeAnnotationTransformer(InstantOnly_);
         }
     };
 } // namespace NTypeAnnInpl

@@ -1041,12 +1041,13 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     
     # УЛУЧШЕННЫЙ ПОИСК: Ищем ERROR строки с более широким набором паттернов
     for i, line in enumerate(lines):
-        # Ищем различные варианты ERROR строк
+        # Ищем различные варианты ERROR строк + VERIFY ошибки
         if any(pattern in line for pattern in [
             ' - ERROR - ',           # Стандартный ERROR
             'ERROR -',               # Вариант без пробелов
             'ExecutionError:',       # Прямая ошибка выполнения
             'yatest.common.process.ExecutionError:', # Специфичная ошибка yatest
+            'VERIFY failed',         # КРИТИЧНО: Memory verification ошибки
         ]):
             error_start_index = i
             break
@@ -1054,24 +1055,41 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     # Если ERROR не найден, ищем другие критичные маркеры
     if error_start_index == -1:
         critical_markers = [
+            # ВЫСОКИЙ ПРИОРИТЕТ: Daemon crashes и системные ошибки
+            'SeveralDaemonErrors:',  # Множественные ошибки daemon'ов
+            'Daemon failed with message:',  # Ошибки daemon'ов
+            'Unexpectedly finished before stop',  # Неожиданное завершение
+            'Process exit_code = -',  # Crash с отрицательным exit code
+            'exit_code = -11',       # SIGSEGV
+            'exit_code = -6',        # SIGABRT
+            'Not freed 0x',          # Memory leaks
+            
             # Конкретные ошибки с высоким приоритетом
             'Function.*type mismatch',  # UDF type mismatch ошибки
             'VERIFY failed',  # Memory verification ошибки
             'Unknown node in OLAP comparison compiler',  # OLAP ошибки
             'Mkql memory limit exceeded',  # Memory limit ошибки
             'KiKiMR start failed',  # Startup ошибки
-            'Daemon failed',  # Daemon ошибки
             'Cannot kill a stopped process',  # Process ошибки
             'bootstrap controller timeout',  # Controller timeout
             'requirement.*failed',  # Assertion ошибки
             'Request timeout.*exceeded',  # Request timeout
-            'Unexpectedly finished',  # Unexpected termination
             'Command.*has failed with code',  # Command execution failures
             
             # Общие маркеры (с меньшим приоритетом)
             ' - EXCEPTION - ', ' - FATAL - ', ' - CRITICAL - ', 'Exception:', 'Error:', 
             'unknown field', 'timeout', 'assertion',
-            'DECODED_STDERR:', 'DECODED_STDOUT:'  # Добавляем новые маркеры
+            'DECODED_STDERR:', 'DECODED_STDOUT:',  # Добавляем новые маркеры
+            'VerifyDebug',           # Дополнительные VERIFY детали
+            'GRpc memory quota',
+            'Command.*has failed with code',
+            'yatest.common.process.ExecutionError:',
+            r'^E\s+',  # Pytest error lines (начинающиеся с "E   ")
+            'Errors:',
+            'std_err:',
+            'std_out:',
+            'failed with code',
+            r'raise ExecutionError',  # Строки с raise ExecutionError
         ]
         
         for marker in critical_markers:
@@ -1090,13 +1108,20 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
         return "No clear error found in log"
     
     # УЛУЧШЕННАЯ ЛОГИКА: Берем контекст вокруг ошибки
-    # Для ExecutionError важны строки ПОСЛЕ ERROR, где содержатся детали
+    # Для daemon crashes важны строки ПОСЛЕ ошибки, где содержатся детали
     context_start = max(0, error_start_index - 1)  # 1 строка до ошибки
-    context_end = min(len(lines), error_start_index + 20)  # До 20 строк после ошибки
+    
+    # Для daemon crashes берем больше контекста
+    if any(marker in lines[error_start_index].lower() for marker in [
+        'severaldaemonerrors', 'daemon failed', 'unexpectedly finished', 'exit_code = -'
+    ]):
+        context_end = min(len(lines), error_start_index + 30)  # До 30 строк для daemon crashes
+    else:
+        context_end = min(len(lines), error_start_index + 20)  # До 20 строк для остальных
     
     useful_lines = lines[context_start:context_end]
     
-    # Фильтруем информационные строки среди полезных, но сохраняем ExecutionError детали
+    # Фильтруем информационные строки среди полезных, но сохраняем daemon crash детали
     filtered_lines = []
     for line in useful_lines:
         line_stripped = line.strip()
@@ -1119,13 +1144,21 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
         # ВСЕГДА включаем строки с важной информацией об ошибках
         important_error_markers = [
             'ExecutionError:',
+            'SeveralDaemonErrors:',
+            'Daemon failed with message:',
+            'Unexpectedly finished',
+            'Process exit_code',
+            'exit_code = -',
+            'Not freed 0x',
+            'VERIFY failed',         # КРИТИЧНО: Memory verification ошибки
+            'VerifyDebug',           # Дополнительные VERIFY детали
+            'GRpc memory quota',
             'Command.*has failed with code',
             'yatest.common.process.ExecutionError:',
             r'^E\s+',  # Pytest error lines (начинающиеся с "E   ")
             'Errors:',
             'std_err:',
             'std_out:',
-            'exit code:',
             'failed with code',
             r'raise ExecutionError',  # Строки с raise ExecutionError
         ]
@@ -1139,20 +1172,27 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     if not filtered_lines:
         filtered_lines = [line.strip() for line in useful_lines if line.strip()][:8]
     
-    # ПРИОРИТИЗИРУЕМ ВАЖНЫЕ СТРОКИ: Выносим строки с "E   " в начало
+    # ПРИОРИТИЗИРУЕМ ВАЖНЫЕ СТРОКИ: Выносим критичные ошибки в начало
     priority_lines = []
     regular_lines = []
     
     for line in filtered_lines:
-        if (line.strip().startswith('E   ') and 
-            ('ExecutionError:' in line or 'Command' in line or 'Errors:' in line)):
+        # Высокий приоритет для daemon crashes и системных ошибок + VERIFY
+        if any(marker in line.lower() for marker in [
+            'severaldaemonerrors:', 'daemon failed', 'unexpectedly finished', 
+            'exit_code = -', 'not freed 0x', 'executionerror:', 'verify failed'
+        ]):
+            priority_lines.append(line)
+        elif (line.strip().startswith('E   ') and 
+              ('ExecutionError:' in line or 'Command' in line or 'Errors:' in line)):
             priority_lines.append(line)
         else:
             regular_lines.append(line)
     
-    # Объединяем: сначала приоритетные, потом обычные, берем до 15 строк
+    # Объединяем: сначала приоритетные, потом обычные, берем до 20 строк для daemon crashes
     reordered_lines = priority_lines + regular_lines
-    result = '\n'.join(reordered_lines[:15])
+    max_lines = 20 if any('daemon' in line.lower() or 'exit_code' in line.lower() for line in priority_lines) else 15
+    result = '\n'.join(reordered_lines[:max_lines])
     
     # Применяем нормализацию переменных данных (как в normalize_log)
     # Временные метки
@@ -1183,28 +1223,26 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     
     # IP адреса
     result = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP]', result)
+    result = re.sub(r'localhost:\d+', 'localhost:[PORT]', result)
     
-    # Резервируем место для ссылки на лог
-    log_link_space = 25 if log_url else 0
-    effective_max_length = max_length - log_link_space
+    # Thread/процесс номера
+    result = re.sub(r'thread-\d+', 'thread-[N]', result)
+    result = re.sub(r'Thread-\d+', 'Thread-[N]', result)
     
-    # Финальное ограничение длины с учетом места для ссылки
-    if len(result) > effective_max_length:
-        # Обрезаем по границе строк
-        lines = result.split('\n')
-        truncated_lines = []
-        current_length = 0
-        
-        for line in lines:
-            if current_length + len(line) + 1 <= effective_max_length - 20:
-                truncated_lines.append(line)
-                current_length += len(line) + 1
-            else:
-                break
-        
-        result = '\n'.join(truncated_lines)
-        if len(lines) > len(truncated_lines):
-            result += '\n[... truncated ...]'
+    # Номера сессий/соединений
+    result = re.sub(r'session-\d+', 'session-[ID]', result)
+    result = re.sub(r'connection-\d+', 'connection-[ID]', result)
+    
+    # Временные файлы и директории
+    result = re.sub(r'/tmp/[a-zA-Z0-9_.-]+', '/tmp/[TEMP]', result)
+    result = re.sub(r'CFG_DIR_PATH="[^"]*"', 'CFG_DIR_PATH="[PATH]"', result)
+    
+    # Специфичные для YDB переменные
+    result = re.sub(r'--log-file-name=[^\s]*', '--log-file-name=[PATH]', result)
+    result = re.sub(r'--yaml-config=[^\s]*', '--yaml-config=[CONFIG]', result)
+    
+    # Убираем лишние пробелы и пунктуацию
+    #normalized = re.sub(r'\s+', ' ', normalized)
     
     # Если результат пустой, возвращаем сообщение со ссылкой на лог
     if not result.strip():
@@ -1604,27 +1642,43 @@ def process_error_batch_with_ai(batch_data):
 
 
 def smart_error_extraction_with_cache(test_data):
-    """Умное извлечение ошибок с кешированием паттернов - обработка по одному логу"""
+    """Умное извлечение ошибок с кешированием паттернов - теперь обрабатывает И mute И failure тесты"""
     logging.debug("=== УМНОЕ ИЗВЛЕЧЕНИЕ ОШИБОК С КЕШИРОВАНИЕМ ===")
     
-    mute_records = [r for r in test_data if r.get('status') == 'mute' and r.get('log')]
-    if not mute_records:
+    # РАСШИРЯЕМ ОБРАБОТКУ: теперь включаем И mute И failure тесты
+    target_records = [r for r in test_data if r.get('status') in ['mute', 'failure'] and r.get('log')]
+    if not target_records:
+        logging.debug("Нет записей mute/failure с логами для обработки")
         return test_data
     
-    logging.debug(f"Обрабатываем {len(mute_records)} mute записей")
+    mute_count = len([r for r in target_records if r.get('status') == 'mute'])
+    failure_count = len([r for r in target_records if r.get('status') == 'failure'])
+    logging.debug(f"Обрабатываем {len(target_records)} записей: {mute_count} mute + {failure_count} failure")
     
     # Статистика
     cache_hits = 0
     basic_processed = 0
     ai_processed = 0
     failed_downloads = 0
+    xml_sufficient = 0  # Новая метрика для failure тестов с достаточным XML
     
     # Обрабатываем каждый лог по отдельности
-    for idx, record in enumerate(mute_records):
+    for idx, record in enumerate(target_records):
         log_url = record.get('log')
         test_name = f"{record.get('suite_folder', '')}/{record.get('test_name', '')}"
+        status = record.get('status')
         
-        logging.debug(f"Обрабатываем лог {idx+1}/{len(mute_records)}: {test_name}")
+        logging.debug(f"Обрабатываем лог {idx+1}/{len(target_records)} ({status}): {test_name}")
+        
+        # ДЛЯ FAILURE ТЕСТОВ: сначала проверяем качество XML описания
+        if status == 'failure':
+            xml_description = record.get('status_description', '')
+            if is_xml_description_sufficient(xml_description):
+                logging.debug(f"  XML описание достаточно информативно для failure теста")
+                xml_sufficient += 1
+                continue  # Пропускаем AI обработку - XML описание достаточно
+            else:
+                logging.debug(f"  XML описание недостаточно для failure теста: {xml_description[:100]}...")
         
         # Шаг 1: Скачиваем лог
         log_content = fetch_log_content(log_url)
@@ -1652,7 +1706,7 @@ def smart_error_extraction_with_cache(test_data):
             has_verify_in_log = 'VERIFY failed' in log_content
             has_verify_in_basic = 'VERIFY failed' in basic_result
             if has_verify_in_log:
-                logging.info(f"🔍 VERIFY DEBUGGING - Лог {test_name}:")
+                logging.info(f"🔍 VERIFY DEBUGGING - Лог {test_name} ({status}):")
                 logging.info(f"  📋 Исходный лог содержит VERIFY: ✅")
                 logging.info(f"  📤 Базовая обработка содержит VERIFY: {'✅' if has_verify_in_basic else '❌'}")
                 if not has_verify_in_basic:
@@ -1665,7 +1719,7 @@ def smart_error_extraction_with_cache(test_data):
                 logging.debug(f"  Требуется AI обработка")
                 
                 if has_verify_in_log:
-                    logging.info(f"  🤖 VERIFY DEBUGGING - AI обработка для VERIFY ошибки")
+                    logging.info(f"  🤖 VERIFY DEBUGGING - AI обработка для VERIFY ошибки ({status})")
                 
                 # Подготавливаем данные для AI
                 ai_data = {
@@ -1761,17 +1815,24 @@ def smart_error_extraction_with_cache(test_data):
     # Сохраняем кеш
     error_cache.save_cache()
     
-    # Статистика
-    total_processed = len(mute_records) - failed_downloads
+    # УЛУЧШЕННАЯ СТАТИСТИКА
+    total_processed = len(target_records) - failed_downloads
     logging.info(f"=== СТАТИСТИКА ОБРАБОТКИ ОШИБОК ===")
-    logging.info(f"Всего записей: {len(mute_records)}")
+    logging.info(f"Всего записей: {len(target_records)} (mute: {mute_count}, failure: {failure_count})")
     logging.info(f"Не удалось скачать: {failed_downloads}")
+    logging.info(f"XML описание достаточно (failure): {xml_sufficient}")
     logging.info(f"Успешно обработано: {total_processed}")
     logging.info(f"Кеш попадания: {cache_hits} ({cache_hits/total_processed*100:.1f}% если total_processed > 0)")
     logging.info(f"Базовая обработка: {basic_processed}")
     logging.info(f"AI обработка: {ai_processed}")
     logging.info(f"Новых паттернов: {error_cache.new_patterns_count}")
     logging.info(f"Всего паттернов в кеше: {len(error_cache.patterns)}")
+    
+    # КРИТИЧЕСКОЕ ОТКРЫТИЕ - логируем информацию о расширении обработки
+    logging.info(f"🔥 КРИТИЧЕСКОЕ УЛУЧШЕНИЕ: Теперь обрабатываем И mute И failure тесты!")
+    logging.info(f"   Ранее: только mute тесты ({mute_count}) получали AI анализ")
+    logging.info(f"   Теперь: mute + failure тесты ({len(target_records)}) получают AI анализ")
+    logging.info(f"   Это должно ЗНАЧИТЕЛЬНО улучшить категоризацию daemon crashes и других critical ошибок!")
     
     return test_data
 
@@ -2118,8 +2179,30 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
             error_type = 'Generic Execution Failure'
             key_error = 'Execution failed with exit code: 1'
             
-            # VERIFY ошибки (высший приоритет)
-            if 'verify failed' in error_desc_lower:
+            # DAEMON CRASHES (высший приоритет - критичные системные ошибки)
+            if any(marker in error_desc_lower for marker in [
+                'severaldaemonerrors:', 'daemon failed with message:', 'unexpectedly finished before stop',
+                'process exit_code = -', 'exit_code = -11', 'exit_code = -6'
+            ]):
+                error_type = 'Daemon Crash and System Failures'
+                # Извлекаем детали crash'а
+                crash_details = []
+                if 'exit_code = -11' in error_desc_lower:
+                    crash_details.append('SIGSEGV (segmentation fault)')
+                if 'exit_code = -6' in error_desc_lower:
+                    crash_details.append('SIGABRT (abort signal)')
+                if 'unexpectedly finished before stop' in error_desc_lower:
+                    crash_details.append('unexpected termination')
+                if 'not freed 0x' in error_desc_lower:
+                    crash_details.append('memory leaks detected')
+                
+                if crash_details:
+                    key_error = f"Daemon crash: {', '.join(crash_details)}"
+                else:
+                    key_error = 'Multiple daemon failures with unexpected termination'
+                    
+            # MEMORY VERIFICATION ошибки (высокий приоритет)
+            elif 'verify failed' in error_desc_lower:
                 error_type = 'Memory Verification Errors (VERIFY)'
                 # Извлекаем конкретные детали VERIFY
                 verify_match = re.search(r'verify failed.*?allocated:.*?\d+.*?freed:.*?\d+.*?peak:.*?\d+', meaningful_error, re.IGNORECASE | re.DOTALL)
@@ -2943,6 +3026,61 @@ def filter_versions_for_reports(grouped_data):
     logging.info(f"Версии для отчетов: {sorted(filtered_data.keys())}")
     
     return filtered_data
+
+
+def is_xml_description_sufficient(xml_description):
+    """
+    Проверяет, достаточно ли информативно XML описание ошибки для failure тестов.
+    
+    Возвращает True если XML описание содержит достаточно информации,
+    False если нужна дополнительная обработка лога.
+    """
+    if not xml_description or len(xml_description.strip()) < 50:
+        return False
+    
+    # Недостаточные описания - требуют дополнительной обработки
+    insufficient_patterns = [
+        r'^ExecutionError: Command.*has failed with code \d+$',  # Только код ошибки
+        r'^Not enough information in log',  # Прямое указание недостатка информации
+        r'^Command.*failed with exit code \d+$',  # Только exit code
+        r'^yatest\.common\.process\.ExecutionError:.*failed with code \d+$',  # yatest ошибка с кодом
+        r'^Test execution failed$',  # Общая фраза
+        r'^Process finished with exit code \d+$',  # Только exit code
+        r'^Execution failed$',  # Слишком общее
+    ]
+    
+    xml_stripped = xml_description.strip()
+    
+    # Проверяем на недостаточные паттерны
+    for pattern in insufficient_patterns:
+        if re.match(pattern, xml_stripped):
+            return False
+    
+    # Достаточные описания содержат конкретную информацию об ошибке
+    sufficient_indicators = [
+        'SeveralDaemonErrors:',  # Daemon crashes
+        'Daemon failed with message:',  # Daemon ошибки
+        'VERIFY failed',  # Memory verification
+        'Function.*type mismatch',  # Type errors
+        'Mkql memory limit exceeded',  # Memory errors
+        'Unknown node in OLAP',  # OLAP errors
+        'unknown field',  # Config errors
+        'timeout.*exceeded',  # Timeout errors
+        'assertion.*failed',  # Assertion errors
+        'requirement.*failed',  # Requirement errors
+        'KiKiMR start failed',  # Startup errors
+    ]
+    
+    xml_lower = xml_stripped.lower()
+    for indicator in sufficient_indicators:
+        if re.search(indicator.lower(), xml_lower):
+            return True
+    
+    # Если описание длинное и содержательное (более 200 символов), считаем достаточным
+    if len(xml_stripped) > 200:
+        return True
+    
+    return False
 
 
 if __name__ == "__main__":

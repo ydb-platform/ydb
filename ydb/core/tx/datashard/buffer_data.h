@@ -60,7 +60,7 @@ public:
         LastKey = TSerializedCellVec{originalKey};
     }
 
-    bool HasReachedLimits(const TIndexBuildScanSettings& scanSettings) {
+    bool HasReachedLimits(const TIndexBuildScanSettings& scanSettings) const {
         return Rows->size() > scanSettings.GetMaxBatchRows() || BufferBytes > scanSettings.GetMaxBatchBytes();
     }
 

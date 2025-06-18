@@ -1,5 +1,7 @@
 #include "schema.h"
 
+#include <ydb/core/tx/schemeshard/olap/column_family/column_family.h>
+
 #include <ydb/library/accessor/validator.h>
 
 namespace NKikimr::NSchemeShard {
@@ -120,7 +122,13 @@ bool TOlapColumnFamiliesDescription::ValidateForStore(const NKikimrSchemeOp::TCo
         lastColumnFamilyId = familyProto.GetId();
 
         if (familyProto.HasColumnCodec() && family->GetSerializerContainer().HasObject()) {
-            auto serializerProto = ConvertFamilyDescriptionToProtoSerializer(familyProto);
+            TColumnFamily columnFamily;
+            auto result = columnFamily.DeserializeFromProto(familyProto);
+            if (result.IsFail()) {
+                errors.AddError(result.GetErrorMessage());
+                return false;
+            }
+            auto serializerProto = columnFamily.GetSerializer();
             if (serializerProto.IsFail()) {
                 errors.AddError(serializerProto.GetErrorMessage());
                 return false;
@@ -150,4 +158,4 @@ bool TOlapColumnFamiliesDescription::ValidateForStore(const NKikimrSchemeOp::TCo
 
     return true;
 }
-}
+}  // namespace NKikimr::NSchemeShard

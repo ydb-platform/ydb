@@ -1,4 +1,9 @@
 name: Regression-run_compatibility
+run-name: >- 
+          ${{
+          inputs.initial_version_ref != '' && inputs.initial_version_ref || 'default-init'}} -> ${{
+          inputs.inter_version_ref != '' && inputs.inter_version_ref || 'default-inter'}} -> ${{
+          inputs.target_version_ref != '' && inputs.target_version_ref || 'default-target'}}
 
 on:
   schedule:

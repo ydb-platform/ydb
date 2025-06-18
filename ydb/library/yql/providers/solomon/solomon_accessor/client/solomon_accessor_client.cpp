@@ -14,6 +14,10 @@
 
 #include <util/string/join.h>
 
+#include <ydb/library/actors/core/log.h>
+#define LOG_E(name, stream) \
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, name << ": " << stream)
+
 namespace NYql::NSo {
 
 using namespace yandex::cloud::priv::monitoring::v3;
@@ -156,15 +160,15 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     return TListMetricsResponse(std::move(result));
 }
 
-TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response) {
+TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, TString program) {
     TGetPointsCountResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << response.Issues.ToOneLineString());
+        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << response.Issues.ToOneLineString() << "; " << program);
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Error while sending points count request to monitoring api: " << response.Content.data());
+        return TGetPointsCountResponse(TStringBuilder{} << "Error while sending points count request to monitoring api: " << response.Content.data() << "; " << program);
     }
 
     NJson::TJsonValue json;
@@ -285,8 +289,8 @@ public:
 
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& response) mutable {
-            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response)));
+        auto cb = [&, resultPromise, program](NYql::IHTTPGateway::TResult&& response) mutable {
+            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), program));
         };
 
         DoHttpRequest(
@@ -427,6 +431,8 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
+        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
+        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
 
         return builder.Build();
     }
@@ -442,6 +448,8 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
+        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
+        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
         builder.AddUrlParam("pageSize", std::to_string(pageSize));
         builder.AddUrlParam("page", std::to_string(page));
 

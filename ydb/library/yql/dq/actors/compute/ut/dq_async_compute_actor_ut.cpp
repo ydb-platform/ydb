@@ -1,28 +1,25 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_channels.h>
-#include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
-#include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
-#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
-#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_channels.h>
+#include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
+#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
+#include <ydb/library/yql/dq/tasks/dq_task_program.h>
+#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
+#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
+#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_graph_saveload.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/minikql/computation/mkql_value_builder.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
-#include <ydb/library/yql/dq/tasks/dq_task_program.h>
-#include <ydb/library/services/services.pb.h>
 
 
 using namespace NActors;
@@ -55,7 +52,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase
                 NKikimrServices::EServiceKikimr_Name<NLog::EComponent>
                 );
 
-        if (VERBOSE) {
+        if (TESTS_VERBOSE) {
             SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
         }
     }

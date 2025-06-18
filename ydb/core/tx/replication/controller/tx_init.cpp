@@ -55,8 +55,9 @@ class TController::TTxInit: public TTxBase {
             const auto issue = rowset.GetValue<Schema::Replications::Issue>();
             const auto nextTid = rowset.GetValue<Schema::Replications::NextTargetId>();
             const auto desiredState = rowset.GetValue<Schema::Replications::DesiredState>();
+            const auto database = rowset.GetValue<Schema::Replications::Database>();
 
-            auto replication = Self->Add(rid, pathId, config);
+            auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);

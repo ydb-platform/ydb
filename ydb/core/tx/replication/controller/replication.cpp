@@ -82,11 +82,12 @@ class TReplication::TImpl: public TLagProvider {
     }
 
 public:
-    template <typename T>
-    explicit TImpl(ui64 id, const TPathId& pathId, T&& config)
+    template <typename T, typename D>
+    explicit TImpl(ui64 id, const TPathId& pathId, T&& config, D&& database)
         : ReplicationId(id)
         , PathId(pathId)
         , Config(std::forward<T>(config))
+        , Database(std::forward<D>(database))
     {
     }
 
@@ -142,7 +143,7 @@ public:
             const bool ssl = params.GetEnableSsl();
 
             if (endpoint.empty()) {
-                ydbProxy.Reset(CreateLocalYdbProxy("local" /*database TODO */));
+                ydbProxy.Reset(CreateLocalYdbProxy(Database));
             } else {
                 switch (params.GetCredentialsCase()) {
                 case NKikimrReplication::TConnectionParams::kStaticCredentials:
@@ -232,6 +233,7 @@ private:
     TString Tenant;
 
     NKikimrReplication::TReplicationConfig Config;
+    TString Database;
     EState State = EState::Ready;
     TString Issue;
     EState DesiredState = EState::Ready;
@@ -246,13 +248,13 @@ private:
 
 }; // TImpl
 
-TReplication::TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, config))
+TReplication::TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config, const TString& database)
+    : Impl(std::make_shared<TImpl>(id, pathId, config, database))
 {
 }
 
-TReplication::TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, std::move(config)))
+TReplication::TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config, TString&& database)
+    : Impl(std::make_shared<TImpl>(id, pathId, std::move(config), std::move(database)))
 {
 }
 
@@ -262,8 +264,8 @@ static auto ParseConfig(const TString& config) {
     return cfg;
 }
 
-TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config)
-    : Impl(std::make_shared<TImpl>(id, pathId, ParseConfig(config)))
+TReplication::TReplication(ui64 id, const TPathId& pathId, const TString& config, const TString& database)
+    : Impl(std::make_shared<TImpl>(id, pathId, ParseConfig(config), database))
 {
 }
 
@@ -322,6 +324,10 @@ void TReplication::SetConfig(NKikimrReplication::TReplicationConfig&& config) {
 
 const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
     return Impl->Config;
+}
+
+const TString& TReplication::GetDatabase() const {
+    return Impl->Database;
 }
 
 void TReplication::SetState(EState state, TString issue) {

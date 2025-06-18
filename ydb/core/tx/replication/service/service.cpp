@@ -365,14 +365,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     template <typename... Args>
-    const TActorId& GetOrCreateYdbProxy(TConnectionParams&& params, Args&&... args) {
-        auto it = YdbProxies.find(params);
+    const TActorId& GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
+        auto it = YdbProxies.find(std::pair{database, params});
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
-                            ? CreateLocalYdbProxy("local") // TODO params.Database())
+                            ? CreateLocalYdbProxy(std::move(database))
                             : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...);
             auto ydbProxy = Register(actor);
-            auto res = YdbProxies.emplace(std::move(params), std::move(ydbProxy));
+            auto res = YdbProxies.emplace(std::pair{database, std::move(params)}, std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
@@ -380,15 +380,15 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         return it->second;
     }
 
-    std::function<IActor*(void)> ReaderFn(const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
+    std::function<IActor*(void)> ReaderFn(const TString& database, const NKikimrReplication::TRemoteTopicReaderSettings& settings, bool autoCommit) {
         TActorId ydbProxy;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
-            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetStaticCredentials());
+            ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetStaticCredentials());
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
-            ydbProxy = GetOrCreateYdbProxy(TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
+            ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
             break;
         default:
             Y_ABORT("Unexpected credentials");
@@ -497,7 +497,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             Y_ABORT("Unsupported");
         }
         const auto actorId = session.RegisterWorker(this, id,
-            CreateWorker(SelfId(), ReaderFn(readerSettings, autoCommit), std::move(writerFn)));
+            CreateWorker(SelfId(), ReaderFn(cmd.GetDatabase(), readerSettings, autoCommit), std::move(writerFn)));
         WorkerActorIdToSession[actorId] = controller.GetTabletId();
     }
 
@@ -726,7 +726,7 @@ private:
     mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
-    THashMap<TConnectionParams, TActorId> YdbProxies;
+    THashMap<std::pair<TString, TConnectionParams>, TActorId> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
     mutable TMaybe<TActorId> CompilationService;
 

@@ -26,6 +26,7 @@ target_link_libraries(v1-complete-syntax PUBLIC
   essentials-sql-settings
   sql-v1-lexer
   sql-v1-reflect
+  v1-complete-antlr4
   v1-complete-core
   v1-complete-text
 )

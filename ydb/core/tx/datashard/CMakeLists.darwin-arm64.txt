@@ -119,6 +119,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   services-lib-sharding
   ydb-library-chunks_limiter
   essentials-types-uuid
+  core-io_formats-cell_maker
 )
 
 target_sources(core-tx-datashard PRIVATE
@@ -457,6 +458,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   services-lib-sharding
   ydb-library-chunks_limiter
   essentials-types-uuid
+  core-io_formats-cell_maker
 )
 
 target_sources(core-tx-datashard.global PRIVATE

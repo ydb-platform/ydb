@@ -197,10 +197,10 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_assign_bsv.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_backup_backup_collection.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_backup_incremental_backup_collection.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_restore_backup_collection.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_blob_depot.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_cancel_tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_cansel_build_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_change_path_state.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common_bsv.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common_cdc_stream.cpp
@@ -273,22 +273,23 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_table_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_tables.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_part.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_restore_backup_collection.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_rmdir.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_side_effects.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_split_merge.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_upgrade_subdomain.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__pq_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__publish_to_scheme_board.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__root_data_erasure_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__serverless_storage_billing.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__state_changed_reply.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__sync_update_tenants.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__table_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__table_stats_histogram.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__tenant_data_erasure_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__unmark_restore_tables.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_access_database.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__upgrade_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__root_data_erasure_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__tenant_data_erasure_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_audit_log_fragment.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_backup.cpp
@@ -339,8 +340,8 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import_getters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/operation_queue_timer.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__op_traits.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common_subdomain.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_part.h

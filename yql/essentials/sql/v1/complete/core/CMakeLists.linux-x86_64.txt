@@ -25,5 +25,7 @@ target_link_libraries(v1-complete-core PUBLIC
 target_sources(v1-complete-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/core/environment.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/core/input.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/core/name.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/core/statement.cpp
 )
 

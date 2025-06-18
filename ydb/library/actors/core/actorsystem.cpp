@@ -84,9 +84,6 @@ namespace NActors {
         , DefSelfID(NodeId, "actorsystem")
         , AppData0(appData)
         , LoggerSettings0(loggerSettings)
-        , StartExecuted(false)
-        , StopExecuted(false)
-        , CleanupExecuted(false)
     {
         ServiceMap.Reset(new TServiceMap());
     }

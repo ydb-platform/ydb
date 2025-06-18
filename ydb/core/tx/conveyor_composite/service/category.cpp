@@ -15,24 +15,29 @@ void TProcessCategory::DoQuant(const TMonotonic newStart) {
 
 std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
     std::shared_ptr<TProcess> pMin;
-    TDuration dMin;
-    for (auto&& [_, p] : ProcessesWithTasks) {
-        if (!p->GetScope()->CheckToRun()) {
-            continue;
+    for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
+        for (ui32 i = 0; i < it->second.size(); ++i) {
+            if (!processes[i]->GetScope()->CheckToRun()) {
+                continue;
+            }
+            pMin = it->second[i];
+            std::swap(it->second[i], it->second.back());
+            it->second.pop_back();
+            if (it->second.empty()) {
+                WeightedProcesses.erase(it);
+            }
+            break;
         }
-        const TDuration d = p->GetCPUUsage()->CalcWeight(p->GetWeight());
-        if (!pMin || d < dMin) {
-            dMin = d;
-            pMin = p;
+        if (pMin) {
+            break;
         }
     }
     if (!pMin) {
         return std::nullopt;
     }
-    AFL_VERIFY(pMin);
     auto result = pMin->ExtractTaskWithPrediction(counters);
-    if (pMin->GetTasksCount() == 0) {
-        AFL_VERIFY(ProcessesWithTasks.erase(pMin->GetProcessId()));
+    if (pMin->GetTasksCount()) {
+        WeightedProcesses[pMin->GetWeightedUsage()].emplace_back(pMin);
     } 
     if (scopeIds.emplace(pMin->GetScope()->GetScopeId()).second) {
         pMin->GetScope()->IncInFlight();

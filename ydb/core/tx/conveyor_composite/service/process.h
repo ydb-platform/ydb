@@ -74,10 +74,27 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
 
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
+    TPositiveControlInteger InProgressTasksCount;
     TAverageCalcer<TDuration> AverageTaskDuration;
     ui32 LinksCount = 0;
+    TDuration BaseWeight = TDuration::Zero();
 
 public:
+    ui32 GetInProgressTasksCount() const {
+        return InProgressTasksCount.Val();
+    }
+
+    void SetBaseWeight(const TDuration d) {
+        BaseWeight = d;
+        CPUUsage->Clear();
+        AFL_VERIFY(InProgressTasksCount->Val() == 0);
+        AFL_VERIFY(WaitingTasksCount->Val() == 0);
+    }
+
+    TDuration GetWeightedUsage() const {
+        return BaseWeight + CPUUsage->CalcWeight(GetWeight());
+    }
+
     ~TProcess() {
         WaitingTasksCount->Sub(Tasks.size());
     }
@@ -98,12 +115,14 @@ public:
         auto result = Tasks.pop();
         CPUUsage->AddPredicted(result.GetPredictedDuration());
         WaitingTasksCount->Dec();
+        InProgressTasksCount.Inc();
         return std::move(result).BuildTask(signals->GetTaskSignals(result.GetTask()->GetTaskClassIdentifier()));
     }
 
     void PutTaskResult(TWorkerTaskResult&& result) {
         CPUUsage->Exchange(result.GetPredictedDuration(), result.GetStart(), result.GetFinish());
         AverageTaskDuration.Add(result.GetDuration());
+        InProgressTasksCount.Dec();
     }
 
     [[nodiscard]] bool DecRegistration() {

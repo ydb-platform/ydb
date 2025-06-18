@@ -5,9 +5,15 @@
 namespace NKikimr::NConveyorComposite {
 
 void TCPUUsage::Exchange(const TDuration predicted, const TMonotonic start, const TMonotonic finish) {
-    Usage.emplace_back(TTaskCPUUsage(start, finish));
+    {
+        TTaskCPUUsage usage(start, finish);
+        usage.Cut(StartInstant);
+        if (usage.GetDuration()) {
+            Usage.emplace_back(TTaskCPUUsage(start, finish));
+            Duration += Usage.back().GetDuration();
+        }
+    }
     AFL_VERIFY(predicted <= PredictedDuration)("predicted_delta", predicted)("predicted_sum", PredictedDuration);
-    Duration += Usage.back().GetDuration();
     PredictedDuration -= predicted;
     if (Parent) {
         Parent->Exchange(predicted, start, finish);
@@ -15,6 +21,7 @@ void TCPUUsage::Exchange(const TDuration predicted, const TMonotonic start, cons
 }
 
 void TCPUUsage::Cut(const TMonotonic start) {
+    StartInstant = start;
     ui32 idx = 0;
     while (idx < Usage.size()) {
         AFL_VERIFY(Usage[idx].GetDuration() <= Duration);

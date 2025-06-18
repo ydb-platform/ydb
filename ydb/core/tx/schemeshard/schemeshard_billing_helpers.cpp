@@ -6,6 +6,14 @@
 
 namespace NKikimr::NSchemeShard {
 
+void TBillingStatsCalculator::TryFixOldFormat(NKikimrIndexBuilder::TBillingStats& value) {
+    // old format: assign upload to read
+    if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
+        value.SetReadRows(value.GetUploadRows());
+        value.SetReadBytes(value.GetUploadBytes());
+    }
+}
+
 ui64 TRUCalculator::ReadTable(ui64 bytes) {
     // The ReadTable operation lets you efficiently read large ranges of data from a table.
     // The request cost only depends on the amount of data read based on the rate of 128 RU per 1 MB.

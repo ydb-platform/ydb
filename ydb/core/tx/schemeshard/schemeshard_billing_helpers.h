@@ -6,6 +6,7 @@
 namespace NKikimr::NSchemeShard {
 
 struct TBillingStatsCalculator {
+    static void TryFixOldFormat(NKikimrIndexBuilder::TBillingStats& value);
     static void AddTo(NKikimrIndexBuilder::TBillingStats& value, const NKikimrIndexBuilder::TBillingStats& other);
 };
 

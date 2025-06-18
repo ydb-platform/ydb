@@ -38,6 +38,9 @@ static const TString SELECT_GROUPS_WITH_FILTER = R"sql(
 
 class TKafkaListGroupsActor: public NActors::TActorBootstrapped<TKafkaListGroupsActor> {
 
+
+using TBase = TActorBootstrapped<TKafkaListGroupsActor>;
+
 public:
     TKafkaListGroupsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListGroupsRequestData>& message)
         : Context(context)

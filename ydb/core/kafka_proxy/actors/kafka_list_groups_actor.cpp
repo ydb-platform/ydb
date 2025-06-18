@@ -39,7 +39,8 @@ void TKafkaListGroupsActor::StartKqpSession(const TActorContext& ctx) {
     KAFKA_LOG_D("Dying.");
     if (Kqp) {
         Kqp->CloseKqpSession(ctx);
-        }
+    }
+    TBase::Die(ctx);
 }
 
 NYdb::TParams TKafkaListGroupsActor::BuildSelectParams() {

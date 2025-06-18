@@ -313,18 +313,17 @@ class ScenarioTestHelper:
             Full path.
         """
 
-        result = YdbCluster.ydb_database
-
-        def _add_not_empty(dir: str):
+        def _add_not_empty(p: list[str], dir: str):
             if dir:
-                result += f'/{dir}'
+                p.append(dir)
 
-        _add_not_empty(YdbCluster.get_tables_path())
+        result = [f'/{YdbCluster.ydb_database}']
+        _add_not_empty(result, YdbCluster.get_tables_path())
         if self.test_context is not None:
-            _add_not_empty(self.test_context.suite)
-            _add_not_empty(self.test_context.test)
-        _add_not_empty(path)
-        return result
+            _add_not_empty(result, self.test_context.suite)
+            _add_not_empty(result, self.test_context.test)
+        _add_not_empty(result, path)
+        return '/'.join(result)
 
     @staticmethod
     def _run_with_expected_status(

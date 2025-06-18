@@ -16,7 +16,7 @@ class ImportFileCsvBase(UploadSuiteBase):
 
     def init(self):
         # Create tables
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'init', '--suite-path', self.get_external_path(), '--clear'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.get_tables_path(), 'init', '--suite-path', self.get_external_path(), '--clear'])
 
         import_dir = os.path.join(self.get_external_path(), "import")
         table_names = sorted([name for name in os.listdir(import_dir) if os.path.isdir(os.path.join(import_dir, name))])
@@ -26,7 +26,7 @@ class ImportFileCsvBase(UploadSuiteBase):
         logging.info(f'Importing table: {self.table_name}')
 
     def import_data(self):
-        self.table_path = f'{YdbCluster.tables_path}/{self.table_name}'
+        self.table_path = YdbCluster.get_tables_path(self.table_name)
         logging.info(f'Table path: {self.table_path}')
         import_dir = os.path.join(self.get_external_path(), 'import', self.table_name)
         csv_files = [f for f in os.listdir(import_dir) if os.path.isfile(os.path.join(import_dir, f)) and f.endswith('.csv')]
@@ -63,7 +63,7 @@ class ImportFileCsvBase(UploadSuiteBase):
 
     @classmethod
     def teardown_class(cls) -> None:
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'clean'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.get_tables_path(), 'clean'])
         super().teardown_class()
 
 

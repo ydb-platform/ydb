@@ -2082,6 +2082,19 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, SysViewType>;
     };
 
+    // Header table for the overall incremental restore operation
+    struct IncrementalRestoreOperations : Table<120> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+
+        struct Operation : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<
+            Id,
+            Operation
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2199,7 +2212,8 @@ struct Schema : NIceDb::Schema {
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
         WaitingDataErasureShards,
-        SysView
+        SysView,
+        IncrementalRestoreOperations
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

@@ -1605,7 +1605,8 @@ bool TPath::IsUnderMoving() const {
 bool TPath::IsUnderOutgoingIncrementalRestore() const {
     Y_ABORT_UNLESS(IsResolved());
 
-    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore;
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore
+        || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
 }
 
 TPath& TPath::RiseUntilOlapStore() {

@@ -190,6 +190,10 @@ class PublicAsyncIOReader:
         self._closed = True
         await self._reconnector.close(flush)
 
+    @property
+    def read_session_id(self) -> Optional[str]:
+        return self._reconnector.read_session_id
+
 
 class ReaderReconnector:
     _static_reader_reconnector_counter = AtomicCounter()
@@ -372,6 +376,12 @@ class ReaderReconnector:
         except asyncio.InvalidStateError:
             # skip if already has result
             pass
+
+    @property
+    def read_session_id(self) -> Optional[str]:
+        if not self._stream_reader:
+            return None
+        return self._stream_reader._session_id
 
 
 class ReaderStream:

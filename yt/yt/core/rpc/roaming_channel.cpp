@@ -29,7 +29,7 @@ public:
     {
         if (Options_.Timeout) {
             asyncChannel = asyncChannel.WithTimeout(*Options_.Timeout, TFutureTimeoutOptions{
-                .Error = TError("Error getting channel"),
+                .Error = TError(NYT::EErrorCode::Timeout, "Error getting channel"),
             });
         }
 

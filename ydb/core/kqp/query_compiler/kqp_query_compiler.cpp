@@ -545,7 +545,6 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
                     nodes.emplace_back();
                     if (const auto& error = extractUint(node, &nodes.back())) {
                         issues.AddIssue(TStringBuilder() << error << " for key 'nodes' on position " << nodes.size() - 1 << " in stage override " << overrideIdx);
-                        continue;
                     }
                 }
                 continue;

@@ -63,7 +63,7 @@ class ImportFileCsvBase(UploadSuiteBase):
 
     @classmethod
     def teardown_class(cls) -> None:
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'clean', '--suite-path', cls.get_external_path()])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'clean'])
         super().teardown_class()
 
 

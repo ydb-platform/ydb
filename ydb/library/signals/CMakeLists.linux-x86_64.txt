@@ -31,5 +31,6 @@ target_sources(ydb-library-signals PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/signals/private.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/signals/object_counter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/signals/histogram.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/signals/states.cpp
 )
 

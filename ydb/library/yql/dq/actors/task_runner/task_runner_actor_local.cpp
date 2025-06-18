@@ -349,7 +349,7 @@ private:
             bool hasCheckpoint = channel->Pop(poppedCheckpoint);
 
             dataSize = data.Size();
-            isFinished = !hasData && channel->IsFinished();
+            isFinished = channel->IsFinished();
 
             changed = changed || hasData || hasWatermark || hasCheckpoint || (isFinished != wasFinished);
 

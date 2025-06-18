@@ -5,20 +5,9 @@
 
 static constexpr size_t BATCH_SIZE = 1000;
 
-static std::string JoinPath(const std::string& basePath, const std::string& path) {
-    if (basePath.empty()) {
-        return path;
-    }
-
-    std::filesystem::path prefixPathSplit(basePath);
-    prefixPathSplit /= path;
-
-    return prefixPathSplit;
-}
-
 TRunArgs GetRunArgs() {
-    std::string database = std::getenv("YDB_DATABASE");
     std::string endpoint = std::getenv("YDB_ENDPOINT");
+    std::string database = std::getenv("YDB_DATABASE");
 
     auto driverConfig = TDriverConfig()
         .SetEndpoint(endpoint)
@@ -26,7 +15,7 @@ TRunArgs GetRunArgs() {
         .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     TDriver driver(driverConfig);
-    return {driver, JoinPath(database, "bulk")};
+    return {driver, database + "/" + std::string(std::getenv("YDB_TEST_ROOT")) + "/bulk"};
 }
 
 TStatus CreateTable(TTableClient& client, const std::string& table) {

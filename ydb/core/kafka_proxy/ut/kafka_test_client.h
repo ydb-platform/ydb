@@ -2,6 +2,7 @@
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
+#include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 
 #include <util/system/tempfile.h>
@@ -38,13 +39,6 @@ struct TReadInfo {
     i32 GenerationId;
 };
 
-struct TConsumerOffset {
-    ui64 PartitionIndex;
-    ui64 Offset;
-    TString Metadata;
-};
-
-
 class TKafkaTestClient {
     public:
         TKafkaTestClient(ui16 port, const TString clientName = "TestClient");
@@ -73,7 +67,13 @@ class TKafkaTestClient {
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 
-        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>> msgs);
+        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId = {});
+        
+        TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition, 
+                                                  const std::vector<std::pair<TString, TString>>& keyValueMessages, 
+                                                  ui32 baseSequence = 0, 
+                                                  const std::optional<TProducerInstanceId>& producerInstanceId = {}, 
+                                                  const std::optional<TString>& transactionalId = {});
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
 
@@ -105,10 +105,19 @@ class TKafkaTestClient {
 
         TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
 
-        TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
+        TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(const std::vector<TTopicConfig>& topicsToCreate, bool validateOnly = false);
 
         TMessagePtr<TAlterConfigsResponseData> AlterConfigs(std::vector<TTopicConfig> topicsToModify, bool validateOnly = false);
+
         TMessagePtr<TDescribeConfigsResponseData> DescribeConfigs(std::vector<TString> topics);
+
+        TMessagePtr<TAddPartitionsToTxnResponseData> AddPartitionsToTxn(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const std::unordered_map<TString, std::vector<ui32>>& topicPartitions);
+
+        TMessagePtr<TAddOffsetsToTxnResponseData> AddOffsetsToTxn(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& groupId);
+
+        TMessagePtr<TTxnOffsetCommitResponseData> TxnOffsetCommit(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& groupName, ui32 generation, const std::unordered_map<TString, std::vector<std::pair<ui32, ui64>>>& paritionOffsetsToTopic);
+
+        TMessagePtr<TEndTxnResponseData> EndTxn(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, bool commit);
 
         void UnknownApiKey();
 

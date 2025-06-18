@@ -1,5 +1,5 @@
 diff --git a/tcmalloc/malloc_extension.cc b/tcmalloc/malloc_extension.cc
-index b7ca15a..dc4aeb5 100644
+index 47008d0..40f2351 100644
 --- a/tcmalloc/malloc_extension.cc
 +++ b/tcmalloc/malloc_extension.cc
 @@ -804,6 +804,20 @@ void MallocExtension::EnableForkSupport() {
@@ -24,7 +24,7 @@ index b7ca15a..dc4aeb5 100644
      CreateSampleUserDataCallback create,
      CopySampleUserDataCallback copy,
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 702baa8..0505971 100644
+index 644731b..dab6ea7 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
 @@ -667,6 +667,10 @@ class MallocExtension final {

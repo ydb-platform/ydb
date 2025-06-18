@@ -112,6 +112,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PatchOperationSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperations);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperationEvents);
 
     // Jobs
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobs);

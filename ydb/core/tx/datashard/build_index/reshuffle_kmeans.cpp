@@ -81,9 +81,6 @@ protected:
 
     TUploadStatus UploadStatus;
 
-    ui64 UploadRows = 0;
-    ui64 UploadBytes = 0;
-
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse> Response;
 
@@ -185,7 +182,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_D("Seek " << seq << " " << Debug());
+        LOG_T("Seek " << seq << " " << Debug());
 
         if (IsExhausted) {
             return Uploader.CanFinish()
@@ -200,7 +197,7 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        LOG_T("Feed " << Debug());
+        // LOG_T("Feed " << Debug());
 
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
@@ -212,7 +209,7 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_D("Exhausted " << Debug());
+        LOG_T("Exhausted " << Debug());
 
         IsExhausted = true;
 

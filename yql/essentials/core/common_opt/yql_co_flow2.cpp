@@ -2200,7 +2200,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         if (self.Input().Maybe<TCoFilterNullMembers>()) {
-            if (auto res = ApplyExtractMembersToFilterNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+            if (auto res = ApplyExtractMembersToFilterNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, optCtx, {})) {
                 return res;
             }
             return node;

@@ -508,6 +508,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme CreateTransfer = 51;
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
+        NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
     }
 }
 

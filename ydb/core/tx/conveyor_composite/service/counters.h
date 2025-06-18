@@ -37,6 +37,7 @@ private:
 public:
     const ::NMonitoring::THistogramPtr WaitingHistogram;
     const ::NMonitoring::THistogramPtr TaskExecuteHistogram;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr ValueWeight;
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr ExecuteDuration;
 

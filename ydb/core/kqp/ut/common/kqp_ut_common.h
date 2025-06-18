@@ -436,6 +436,8 @@ public:
     }
 
     void CreateDatabase(const TString& databaseName);
+    Tests::TServer& GetServer() const;
+    Tests::TClient& GetClient() const;
 
 private:
     TPortManager PortManager;
@@ -451,6 +453,8 @@ private:
 
     TEnvSettings EnvSettings;
 };
+
+void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TString& name);
 
 } // namespace NKqp
 } // namespace NKikimr

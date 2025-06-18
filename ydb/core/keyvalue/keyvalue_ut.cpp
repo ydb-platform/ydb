@@ -267,10 +267,14 @@ void CmdWrite(const TString &key, const TString &value,
 }
 
 void CmdRead(const TDeque<TString> &keys,
-        const NKikimrClient::TKeyValueRequest::EPriority priority,
-        const TDeque<TString> &expectedValues, const TDeque<bool> expectedNodatas, TTestContext &tc) {
+             const NKikimrClient::TKeyValueRequest::EPriority priority,
+             const TDeque<TString> &expectedValues, const TDeque<bool> &expectedNodatas, const TDeque<ui64> &expectedCreationUnixTimes,
+             TTestContext &tc)
+{
     Y_ABORT_UNLESS(keys.size() == expectedValues.size());
     Y_ABORT_UNLESS(expectedNodatas.size() == 0 || expectedNodatas.size() == keys.size());
+    Y_ABORT_UNLESS(expectedCreationUnixTimes.empty() || (expectedCreationUnixTimes.size() == keys.size()));
+
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -283,12 +287,15 @@ void CmdRead(const TDeque<TString> &keys,
             read->SetKey(key);
             read->SetPriority(priority);
         }
+
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Record.HasStatus());
         UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.ReadResultSize(), keys.size());
+
         for (ui64 idx = 0; idx < expectedValues.size(); ++idx) {
             const auto &readResult = result->Record.GetReadResult(idx);
             UNIT_ASSERT(readResult.HasStatus());
@@ -299,9 +306,19 @@ void CmdRead(const TDeque<TString> &keys,
             } else {
                 UNIT_ASSERT_EQUAL(readResult.GetStatus(), NKikimrProto::NODATA);
             }
+            if (idx < expectedCreationUnixTimes.size()) {
+                UNIT_ASSERT_VALUES_EQUAL(readResult.GetCreationUnixTime(), expectedCreationUnixTimes[idx]);
+            }
         }
+
         return true;
     });
+}
+
+void CmdRead(const TDeque<TString> &keys,
+        const NKikimrClient::TKeyValueRequest::EPriority priority,
+        const TDeque<TString> &expectedValues, const TDeque<bool> expectedNodatas, TTestContext &tc) {
+    CmdRead(keys, priority, expectedValues, expectedNodatas, {}, tc);
 }
 
 void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, const TDeque<ui64>& renameUnixTimes,
@@ -2774,6 +2791,11 @@ Y_UNIT_TEST(TestWriteAndRenameWithCreationUnixTime)
         RunRequest(dp, tc, __LINE__);
     }
 
+    CmdRead({"key-1"},
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            {"value"}, {false}, {creationUnixTime},
+            tc);
+
     const ui64 renameUnixTime = creationUnixTime - 1000;
 
     CmdRename("key-1", "key-2", renameUnixTime, tc);
@@ -2790,6 +2812,10 @@ Y_UNIT_TEST(TestWriteAndRenameWithCreationUnixTime)
         RunRequest(dp, tc, __LINE__);
     }
 
+    CmdRead({"key-2"},
+            NKikimrClient::TKeyValueRequest::REALTIME,
+            {"value"}, {false}, {renameUnixTime},
+            tc);
 }
 
 } // TKeyValueTest

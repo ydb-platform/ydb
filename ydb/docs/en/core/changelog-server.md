@@ -1,5 +1,78 @@
 # {{ ydb-short-name }} Server changelog
 
+# Version 25.1 {#25-1}
+
+## Version 25.1.1 {#25-1-1-}
+
+Release date: 2025.
+
+### Functionality
+
+* [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
+* Added support for parameterized Decimal type.
+* Added support for [auto-partitioning mode for topic in CDC](./concepts/cdc.md#topic-partitions) for row-tables. Enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* [Added](https://github.com/ydb-platform/ydb/pull/8264) ability to [alter CDC topic's retention_period](./concepts/cdc.md#topic-settings) using the expression `ALTER TOPIC`.
+* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [`DEBEZIUM_JSON` format for CDC](./concepts/cdc.md#debezium-json-record-structure). Enabled by setting the flag `enable_changefeed_debezium_json_format`.
+* The scope of supported objects in backup and restore operations has been expanded. Enabled by setting the flags indicated in parentheses:
+  * [support](https://github.com/ydb-platform/ydb/issues/7054) for changefeeds (flags `enable_changefeeds_export` and `enable_changefeeds_import`),
+  * [support](https://github.com/ydb-platform/ydb/issues/12724) for VIEWs (flag `enable_view_export`).
+* [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity check of backups during import, which prevents restoration from corrupted backups and protects against data loss.
+* [Added](https://github.com/ydb-platform/ydb/pull/15570) ability to create VIEWs that refer to [UDF](./yql/reference/builtins/basic.md#udf) in queries.
+* Added system views with information about [access rights settings](./dev/system-views#auth) and [partitions of tables](./dev/system-views.md#partitions).
+* Added new parameters to [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) operators:
+  * `HASH` - ability to set password in encrypted form,
+  * `LOGIN` and `NOLOGIN` - unlock and block user.
+* Enhanced account security:
+  * [Added](https://github.com/ydb-platform/ydb/pull/11963) user password complexity verification.
+  * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) automatic user blocking when password attempt limit is exhausted.
+  * [Added](https://github.com/ydb-platform/ydb/pull/12983) ability for users to change their own passwords.
+* [Implemented](https://github.com/ydb-platform/ydb/issues/9748) ability to switch functional flags at runtime. Flags for which the parameter `(RequireRestart) = true` is not specified in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) will be applied without requiring a restart.
+* [Changed](https://github.com/ydb-platform/ydb/pull/11329) oldest (not newest) locks into full-shard ones when the number of locks on shards is exceeded.
+* [Implemented](https://github.com/ydb-platform/ydb/pull/12567) preservation of optimistic locks in memory when datashards are gracefully restarted, which should reduce the number of ABORTED errors due to lock loss during table balancing between nodes.
+* [Implemented](https://github.com/ydb-platform/ydb/pull/12689) abot of volatile transactions with ABORTED status when datashards are gracefully restarted.
+* [Added](https://github.com/ydb-platform/ydb/pull/6342) ability to remove NOT NULL constraints on a column in a table using the query `ALTER TABLE _ ALTER COLUMN _ DROP NOT NULL`.
+* [Added](https://github.com/ydb-platform/ydb/pull/9168) a limit of 100 thousand on the number of simultaneous requests to create sessions in the coordination service.
+* [Increased](https://github.com/ydb-platform/ydb/pull/14219) the maximum [number of columns in the primary key](./concepts/limits-ydb.md?#schema-object) from 20 to 30.
+* **_(Experimental)_** [Added](https://github.com/ydb-platform/ydb/pull/14075) strict access control checks, which are enabled by setting the flags `enable_strict_acl_check` and:
+  * `enable_strict_user_management` enables strict checks for local users,
+  * `enable_database_admin` enables database administrator functions,
+  * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure for multiple overwrites of deleted data to reduce the risk of reading them when directly accessing block devices by OS means.
+
+### Performance
+
+* [Added](https://github.com/ydb-platform/ydb/pull/6509) support for [constant folding](https://en.wikipedia.org/wiki/Constant_folding) in the query optimizer by default, which improves query performance by evaluating constant expressions at compilation time. This feature reduces runtime overhead, enabling faster and more efficient query execution for complex static expressions.
+* [Added](https://github.com/ydb-platform/ydb/issues/6512) a granular timecast protocol that will reduce the execution time of distributed transactions (slowing down one shard will not cause all shards to slow down).
+* [Implemented](https://github.com/ydb-platform/ydb/issues/11561) functionality to in-memory state migration on graceful restart, which allows preserving locks and increasing the chances of successful transaction execution. This reduces the execution time of long transactions by decreasing the number of retries.
+* [Optimized](https://github.com/ydb-platform/ydb/pull/15264) memory consumption by storage nodes.
+* [Optimized](https://github.com/ydb-platform/ydb/pull/10969) Hive startup time.
+* [Optimized](https://github.com/ydb-platform/ydb/pull/6561) replication process.
+* [Optimized](https://github.com/ydb-platform/ydb/pull/9491) header size of large binary objects in VDisk.
+* Improved diagnostics and introspection of memory errors.
+* Reduced memory consumption through allocator page cleaning.
+
+### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in [Interconnect](../concepts/glossary#actor-system-interconnect) configuration that led to performance degradation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/13993) out of memory error when deleting very large tables by regulating the number of tablets simultaneously processing this operation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9848) handling of accidental duplicate nodes in system tablet config.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/11059) an error of long (seconds) data reading during frequent table resharding operations.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9723) an error in reading from asynchronous replicas that led to failure.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/9507) rare [CDC](./dev/cdc.md) initial scan freezing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/11483) handling of incomplete schema transactions in datashards during system restart.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/10460) an error of inconsistent reading from a topic when trying to explicitly confirm a message read within a transaction. Now the user will receive an error when attempting to confirm a message.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/12220) an error where auto-partitioning worked incorrectly when working with a topic within a transaction.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/12905) transaction hangs when working with topics during tablet restarts.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/13910) "Key is out of range" error when importing from S3-compatible storage.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/13741) incorrect determination of the end of the metadata field in [dynamic cluster configuration](../maintenance/manual/dynamic-config).
+* [Improved](https://github.com/ydb-platform/ydb/pull/16420) secondary index building: when certain errors occur, the system retries the process instead of interrupting it.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16635) an error in executing the `RETURNING` expression in INSERT/UPSERT operations.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16269) the problem of hanging Drop Tablet operation in PQ tablet, especially during Interconnect delays.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16194) an error that occurred during VDisk [compaction](../concepts/glossary#compaction).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue where long topic reading sessions ended with "too big inflight" errors.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15515) a hang when reading a topic if at least one partition had no incoming data but was read by multiple consumers.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18614) a rare problem with PQ tablet restarts.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18378) an issue where, after updating the cluster version, Hive started subscribers in data centers without running database nodes.
+
 ## Version 24.4 {#24-4}
 
 ### Version 24.4.4.2 {#24-4-4-2}

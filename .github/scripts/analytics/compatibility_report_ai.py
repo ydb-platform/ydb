@@ -40,7 +40,7 @@ DEBUG = True
 def setup_logging():
     """Настраиваем логирование"""
     logging.basicConfig(
-        level=logging.INFO,  # Изменено с DEBUG на INFO для лучшей видимости VERIFY отладки
+        level=logging.DEBUG,  # Изменено обратно с INFO на DEBUG для видимости всех сообщений
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
@@ -338,7 +338,8 @@ def save_text(data, filename):
 
 def get_compatibility_tests_data(driver, days_back=3):
     """Получает данные о compatibility тестах за последние дни"""
-    logging.debug(f'Fetching compatibility tests data for last {days_back} days')
+    logging.info(f'=== ПОЛУЧЕНИЕ ДАННЫХ ИЗ БД ===')
+    logging.info(f'Запрашиваем данные compatibility тестов за последние {days_back} дней')
     start_time = time.time()
     results = []
     
@@ -368,21 +369,124 @@ def get_compatibility_tests_data(driver, days_back=3):
         AND String::Contains(test_name, 'chunk chunk') = FALSE
         AND String::Contains(test_name, 'chunk+chunk') = FALSE
         
-        AND (branch = 'main') and build_type = 'relwithdebinfo'
+        AND (branch = 'main' or branch = 'custom-compatibility-tags-19415') and build_type = 'relwithdebinfo'
+        AND job_name != 'PR-check'
     ORDER BY run_timestamp DESC
     """
 
+    # Логируем SQL запрос
+    logging.debug(f'SQL запрос:\n{query}')
+    
+    logging.debug('Выполняем scan query...')
     scan_query = ydb.ScanQuery(query, {})
     it = driver.table_client.scan_query(scan_query)
+    
+    batch_count = 0
+    total_rows = 0
+    
     while True:
         try:
             result = next(it)
+            batch_rows = len(result.result_set.rows)
+            total_rows += batch_rows
+            batch_count += 1
             results.extend(result.result_set.rows)
+            
+            logging.debug(f'Получен batch {batch_count}: {batch_rows} записей (всего: {total_rows})')
+            
+            # Периодически выводим прогресс для больших запросов
+            if batch_count % 10 == 0:
+                elapsed_current = time.time() - start_time
+                logging.info(f'Прогресс: получено {total_rows} записей за {elapsed_current:.1f}с (batch #{batch_count})')
+                
         except StopIteration:
+            logging.debug('Scan query завершен')
             break
     
     elapsed = time.time() - start_time
-    logging.debug(f'Compatibility tests data retrieved: {len(results)} records (took {elapsed:.2f}s)')
+    logging.info(f'Данные успешно получены: {len(results)} записей за {elapsed:.2f}с в {batch_count} batches')
+    
+    # Анализируем полученные данные
+    if results:
+        # Группируем по статусам
+        status_counts = {}
+        branch_counts = {}
+        job_counts = {}
+        oldest_timestamp = None
+        newest_timestamp = None
+        
+        for record in results:
+            # Статусы
+            status = record.get('status', 'unknown')
+            status_counts[status] = status_counts.get(status, 0) + 1
+            
+            # Ветки
+            branch = record.get('branch', 'unknown')
+            branch_counts[branch] = branch_counts.get(branch, 0) + 1
+            
+            # Job names
+            job_name = record.get('job_name', 'unknown')
+            job_counts[job_name] = job_counts.get(job_name, 0) + 1
+            
+            # Временной диапазон
+            timestamp = record.get('run_timestamp')
+            if timestamp:
+                if isinstance(timestamp, int):
+                    # Микросекунды в datetime
+                    ts = datetime.utcfromtimestamp(timestamp / 1_000_000)
+                elif isinstance(timestamp, float):
+                    ts = datetime.utcfromtimestamp(timestamp)
+                else:
+                    ts = timestamp
+                    
+                if oldest_timestamp is None or ts < oldest_timestamp:
+                    oldest_timestamp = ts
+                if newest_timestamp is None or ts > newest_timestamp:
+                    newest_timestamp = ts
+        
+        # Выводим статистику
+        logging.info(f'=== СТАТИСТИКА ПОЛУЧЕННЫХ ДАННЫХ ===')
+        logging.info(f'Временной диапазон: {oldest_timestamp} - {newest_timestamp}')
+        
+        logging.info(f'По статусам:')
+        for status, count in sorted(status_counts.items(), key=lambda x: x[1], reverse=True):
+            percentage = count / len(results) * 100
+            logging.info(f'  {status}: {count} ({percentage:.1f}%)')
+        
+        logging.info(f'По веткам:')
+        for branch, count in sorted(branch_counts.items(), key=lambda x: x[1], reverse=True):
+            percentage = count / len(results) * 100
+            logging.info(f'  {branch}: {count} ({percentage:.1f}%)')
+        
+        logging.info(f'По job names (топ-5):')
+        sorted_jobs = sorted(job_counts.items(), key=lambda x: x[1], reverse=True)
+        for job_name, count in sorted_jobs[:5]:
+            percentage = count / len(results) * 100
+            logging.info(f'  {job_name}: {count} ({percentage:.1f}%)')
+        
+        # Проверяем наличие логов у mute тестов
+        mute_tests = [r for r in results if r.get('status') == 'mute']
+        mute_with_logs = [r for r in mute_tests if r.get('log')]
+        mute_without_logs = len(mute_tests) - len(mute_with_logs)
+        
+        if mute_tests:
+            logging.info(f'Mute тесты: {len(mute_tests)} всего, {len(mute_with_logs)} с логами, {mute_without_logs} без логов')
+        
+        # Предупреждения о потенциальных проблемах
+        if len(results) == 0:
+            logging.warning('Получено 0 записей - проверьте фильтры запроса!')
+        elif len(results) < 100:
+            logging.warning(f'Получено мало записей ({len(results)}) - возможно, стоит увеличить days_back?')
+            
+        # Проверяем версионность данных
+        sample_test_names = [f"{r.get('suite_folder', '')}/{r.get('test_name', '')}" for r in results[:10]]
+        logging.debug('Примеры имен тестов для проверки парсинга версий:')
+        for i, test_name in enumerate(sample_test_names, 1):
+            logging.debug(f'  {i}. {test_name}')
+    
+    else:
+        logging.warning('Получено 0 записей из БД!')
+    
     return results
 
 
@@ -399,6 +503,7 @@ def parse_test_type_and_versions(test_name):
     """
     match = re.search(r'\[(.*?)\]', test_name)
     if not match:
+        logging.debug(f"No bracket content found in test name: {test_name}")
         return ("unknown", "single_version", ["unknown"])
     
     inside = match.group(1)
@@ -406,32 +511,119 @@ def parse_test_type_and_versions(test_name):
     test_type = parts[0] if parts else "unknown"
     rest = '_'.join(parts[1:])
     
-    version_pattern = r'(current|\d+-\d+(?:-\d+)?)'
+    # УЛУЧШЕННЫЙ паттерн версий - поддерживает больше форматов
+    version_pattern = r'(current|trunk|main|\d+-\d+(?:-\d+)?|\d+\.\d+(?:\.\d+)?|v\d+(?:\.\d+)*)'
+    
+    # Логируем для отладки
+    logging.debug(f"Parsing test: {test_name}")
+    logging.debug(f"  Test type: {test_type}")
+    logging.debug(f"  Rest part: {rest}")
     
     # Проверяем на совместимость между версиями
     if '_to_' in rest:
         # Формат: restart_A_to_B или rolling_A_to_B
         versions_part = rest.split('_to_')
-        left_match = re.match(version_pattern, versions_part[0])
-        right_match = re.match(version_pattern, versions_part[1])
+        logging.debug(f"  Migration test detected: {versions_part}")
+        
+        left_match = re.search(version_pattern, versions_part[0])
+        right_match = re.search(version_pattern, versions_part[1])
         left = left_match.group(1) if left_match else 'unknown'
         right = right_match.group(1) if right_match else 'unknown'
+        
+        logging.debug(f"  Extracted versions: {left} -> {right}")
+        if left == 'unknown' or right == 'unknown':
+            logging.warning(f"Failed to parse migration versions in: {test_name}")
+        
         return (test_type, "compatibility", [left, right])
     
     elif '_and_' in rest:
         # Формат: mixed_current_and_25-1
         versions_part = rest.split('_and_')
-        left_match = re.match(version_pattern, versions_part[0])
-        right_match = re.match(version_pattern, versions_part[1])
+        logging.debug(f"  Compatibility test detected: {versions_part}")
+        
+        left_match = re.search(version_pattern, versions_part[0])
+        right_match = re.search(version_pattern, versions_part[1])
         left = left_match.group(1) if left_match else 'unknown'
         right = right_match.group(1) if right_match else 'unknown'
+        
+        logging.debug(f"  Extracted versions: {left} & {right}")
+        if left == 'unknown' or right == 'unknown':
+            logging.warning(f"Failed to parse compatibility versions in: {test_name}")
+        
         return (test_type, "compatibility", sorted([left, right]))
     
     else:
         # Тест одной версии: mixed_25-1-row, mixed_current-column
-        version_match = re.match(version_pattern, parts[1]) if len(parts) > 1 else None
+        version_match = re.search(version_pattern, parts[1]) if len(parts) > 1 else None
         version = version_match.group(1) if version_match else 'unknown'
+        
+        logging.debug(f"  Single version test: {version}")
+        if version == 'unknown':
+            logging.warning(f"Failed to parse single version in: {test_name} (parts: {parts})")
+            
+            # Дополнительная отладка - показываем все части
+            if len(parts) > 1:
+                logging.debug(f"    Second part for version extraction: '{parts[1]}'")
+                logging.debug(f"    All available parts: {parts}")
+        
         return (test_type, "single_version", [version])
+
+def analyze_parsed_versions(test_data):
+    """
+    Анализирует все распарсенные версии и выводит статистику
+    """
+    version_stats = {
+        'found_versions': [],  # Изменено с set на list для JSON сериализации
+        'unknown_count': 0,
+        'test_types': [],      # Изменено с set на list для JSON сериализации
+        'compatibility_tests': 0,
+        'single_version_tests': 0,
+        'unparsed_tests': []
+    }
+    
+    found_versions_set = set()  # Временный set для уникальности
+    test_types_set = set()      # Временный set для уникальности
+    
+    logging.info("=== АНАЛИЗ РАСПАРСЕННЫХ ВЕРСИЙ ===")
+    
+    for record in test_data:
+        test_name = f"{record.get('suite_folder', '')}/{record.get('test_name', '')}"
+        test_type, compatibility_category, versions_list = parse_test_type_and_versions(test_name)
+        
+        test_types_set.add(test_type)
+        
+        if compatibility_category == 'single_version':
+            version_stats['single_version_tests'] += 1
+        else:
+            version_stats['compatibility_tests'] += 1
+        
+        for version in versions_list:
+            if version == 'unknown':
+                version_stats['unknown_count'] += 1
+                version_stats['unparsed_tests'].append(test_name)
+            else:
+                found_versions_set.add(version)
+    
+    # Конвертируем sets в lists для JSON сериализации
+    version_stats['found_versions'] = sorted(found_versions_set)
+    version_stats['test_types'] = sorted(test_types_set)
+    
+    # Выводим статистику
+    logging.info(f"Найдено уникальных версий: {len(version_stats['found_versions'])}")
+    logging.info(f"Версии: {version_stats['found_versions']}")
+    logging.info(f"Типы тестов: {version_stats['test_types']}")
+    logging.info(f"Тесты одной версии: {version_stats['single_version_tests']}")
+    logging.info(f"Тесты совместимости: {version_stats['compatibility_tests']}")
+    logging.info(f"Тесты с неопределенными версиями: {version_stats['unknown_count']}")
+    
+    if version_stats['unparsed_tests']:
+        logging.warning(f"Тесты с неопределенными версиями ({len(version_stats['unparsed_tests'])}):")
+        for test in version_stats['unparsed_tests'][:10]:  # Показываем первые 10
+            logging.warning(f"  - {test}")
+        if len(version_stats['unparsed_tests']) > 10:
+            logging.warning(f"  ... и еще {len(version_stats['unparsed_tests']) - 10} тестов")
+    
+    return version_stats
 
 
 def format_compatibility_context(test_type, compatibility_category, versions_list):
@@ -983,6 +1175,7 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     # Номера узлов
     result = re.sub(r'--node=\d+', '--node=[N]', result)
     result = re.sub(r'node\s*=?\s*\d+', 'node=[N]', result)
+    result = re.sub(r'node\s+\d+', 'node [N]', result)
     
     # Хеши и идентификаторы (только длинные)
     result = re.sub(r'\b[a-f0-9]{16,}\b', '[HASH]', result)
@@ -1705,6 +1898,8 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
         # Сначала показываем группировку для обзора
         error_groups = group_tests_by_error(failed_tests)
         
+        # Создаем маппинг тестов к номерам паттернов
+        test_to_pattern = {}
         if len(error_groups) > 1:  # Если есть группы, показываем обзор
             report += "**Error Patterns Overview:**\n"
             report += "| Error Pattern | Tests Count | Representative Error |\n"
@@ -1717,19 +1912,27 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
                 tests_count = len(group_data['tests'])
                 error_desc = extract_error_for_display(group_data['representative_error'], max_length=200)
                 report += f"| Pattern #{i} | {tests_count} | {error_desc} |\n"
+                
+                # Сохраняем маппинг тестов к номеру паттерна
+                for test in group_data['tests']:
+                    test_to_pattern[test['name']] = i
             
             report += "\n"
         
         # Затем всегда показываем детальную таблицу всех тестов
         report += "**Detailed Test Failures:**\n"
-        report += "| Test | Failure Rate | Last Error | Context |\n|------|--------------|------------|----------|\n"
+        report += "| Test | Failure Rate | Pattern | Last Error | Context |\n|------|--------------|---------|------------|----------|\n"
         for test in failed_tests:
             error = format_error_for_html_table(test.get('error_description', ''), max_length=400, log_url=test.get('log_url', ''))
             context = 'N/A'
             if test.get('recent_runs'):
                 context = test['recent_runs'][0].get('test_context', 'N/A')
             fail_rate = test.get('fail_rate', 0) * 100
-            report += f"| {test['name']} | {fail_rate:.1f}% | {error} | {context} |\n"
+            
+            # Получаем номер паттерна для этого теста
+            pattern_ref = f"#{test_to_pattern[test['name']]}" if test['name'] in test_to_pattern else "N/A"
+            
+            report += f"| {test['name']} | {fail_rate:.1f}% | {pattern_ref} | {error} | {context} |\n"
     
     report += "\n---\n\n## 🔄 Stability Analysis\n"
     
@@ -1894,11 +2097,11 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
                     context = test['recent_runs'][0].get('test_context', 'N/A')
                 report += f"| {test['name']} | {test['latest_status']} | {context} | {error_pattern} |\n"
     
-    # AI анализ ошибок (упрощенный)
+    # AI анализ ошибок (улучшенный)
     if failed_tests or flaky_tests:
         report += f"\n---\n\n## 🤖 AI Error Analysis\n\n"
         
-        # Простая группировка ошибок по ключевым словам
+        # Улучшенная группировка ошибок с извлечением содержательной информации
         error_clusters = {}
         all_problem_tests = failed_tests + flaky_tests
         
@@ -1906,33 +2109,119 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
             error_desc = test.get('error_description', '')
             if not error_desc:
                 continue
-                
-            # Определяем тип ошибки
+            
+            # Извлекаем содержательную часть ошибки для анализа
+            meaningful_error = extract_meaningful_error_info(error_desc, max_length=500)
+            error_desc_lower = meaningful_error.lower()
+            
+            # Определяем тип ошибки на основе содержательной информации
             error_type = 'Generic Execution Failure'
             key_error = 'Execution failed with exit code: 1'
             
-            if 'mkql memory limit exceeded' in error_desc.lower():
+            # VERIFY ошибки (высший приоритет)
+            if 'verify failed' in error_desc_lower:
+                error_type = 'Memory Verification Errors (VERIFY)'
+                # Извлекаем конкретные детали VERIFY
+                verify_match = re.search(r'verify failed.*?allocated:.*?\d+.*?freed:.*?\d+.*?peak:.*?\d+', meaningful_error, re.IGNORECASE | re.DOTALL)
+                if verify_match:
+                    key_error = verify_match.group(0)[:100] + "..."
+                else:
+                    key_error = 'VERIFY failed: Memory verification error with allocation details'
+                    
+            # Memory limit ошибки
+            elif 'mkql memory limit exceeded' in error_desc_lower:
                 error_type = 'Mkql Memory Limit Exceeded'
-                key_error = 'Error: Mkql memory limit exceeded'
-            elif 'database resolve failed' in error_desc.lower():
+                # Извлекаем конкретные числа лимитов
+                memory_match = re.search(r'mkql memory limit exceeded.*?allocated.*?\d+.*?bytes', meaningful_error, re.IGNORECASE)
+                if memory_match:
+                    key_error = memory_match.group(0)
+                else:
+                    key_error = 'Mkql memory limit exceeded: Memory allocation limit reached'
+                    
+            # Type mismatch ошибки
+            elif 'type mismatch' in error_desc_lower or 'function.*type mismatch' in error_desc_lower:
+                error_type = 'Function Type Mismatch Errors'
+                type_match = re.search(r'function.*?type mismatch.*?expected.*?actual.*?', meaningful_error, re.IGNORECASE | re.DOTALL)
+                if type_match:
+                    key_error = type_match.group(0)[:150] + "..."
+                else:
+                    key_error = 'Function type mismatch: Expected vs actual parameter types differ'
+                    
+            # Database resolution ошибки
+            elif 'database resolve failed' in error_desc_lower:
                 error_type = 'Database Resolution Failure'
-                key_error = 'message: "Database resolve failed with no certain result"'
-            elif 'unknown field' in error_desc.lower():
+                key_error = 'Database resolve failed with no certain result'
+                
+            # Configuration ошибки
+            elif 'unknown field' in error_desc_lower:
                 error_type = 'Configuration and Startup Errors'
-                key_error = 'unknown field "enable_batch_updates"'
-            elif 'timeout' in error_desc.lower():
-                error_type = 'Request Timeout'
-                key_error = 'Error: Request timeout exceeded'
-            elif 'daemon failed' in error_desc.lower():
+                config_match = re.search(r'unknown field.*?"[^"]*"', meaningful_error, re.IGNORECASE)
+                if config_match:
+                    key_error = config_match.group(0)
+                else:
+                    key_error = 'Configuration error: Unknown field in config'
+                    
+            # Timeout ошибки
+            elif 'timeout' in error_desc_lower:
+                error_type = 'Request/Process Timeout'
+                timeout_match = re.search(r'timeout.*?exceeded|bootstrap.*?timeout', meaningful_error, re.IGNORECASE)
+                if timeout_match:
+                    key_error = timeout_match.group(0)
+                else:
+                    key_error = 'Timeout exceeded during operation'
+                    
+            # Daemon startup ошибки
+            elif 'daemon failed' in error_desc_lower or 'kikimr start failed' in error_desc_lower:
                 error_type = 'Daemon Startup Errors'
-                key_error = 'Daemon failed with message: Unexpectedly finished'
+                daemon_match = re.search(r'daemon failed.*?|kikimr start failed.*?', meaningful_error, re.IGNORECASE)
+                if daemon_match:
+                    key_error = daemon_match.group(0)[:100] + "..."
+                else:
+                    key_error = 'Daemon startup failure: Process failed to start properly'
+                    
+            # OLAP compiler ошибки
+            elif 'unknown node in olap' in error_desc_lower:
+                error_type = 'OLAP Compilation Errors'
+                key_error = 'Unknown node in OLAP comparison compiler'
+                
+            # Process management ошибки
+            elif 'cannot kill' in error_desc_lower:
+                error_type = 'Process Management Errors'
+                key_error = 'Cannot kill a stopped process: Process state inconsistency'
+                
+            # Assertion ошибки
+            elif 'assertion' in error_desc_lower or 'requirement.*failed' in error_desc_lower:
+                error_type = 'Assertion and Requirement Failures'
+                assertion_match = re.search(r'assertion.*?failed|requirement.*?failed', meaningful_error, re.IGNORECASE)
+                if assertion_match:
+                    key_error = assertion_match.group(0)
+                else:
+                    key_error = 'Assertion or requirement check failed'
             
+            # Добавляем в кластер
             if error_type not in error_clusters:
                 error_clusters[error_type] = {'key_error': key_error, 'tests': []}
             error_clusters[error_type]['tests'].append(test['name'])
         
-        # Выводим кластеры
-        for i, (error_type, cluster_data) in enumerate(error_clusters.items(), 1):
+        # Выводим кластеры (сортируем по важности)
+        cluster_priority = {
+            'Memory Verification Errors (VERIFY)': 1,
+            'Mkql Memory Limit Exceeded': 2,
+            'Function Type Mismatch Errors': 3,
+            'OLAP Compilation Errors': 4,
+            'Database Resolution Failure': 5,
+            'Daemon Startup Errors': 6,
+            'Configuration and Startup Errors': 7,
+            'Assertion and Requirement Failures': 8,
+            'Process Management Errors': 9,
+            'Request/Process Timeout': 10,
+            'Generic Execution Failure': 99
+        }
+        
+        sorted_clusters = sorted(error_clusters.items(), 
+                               key=lambda x: (cluster_priority.get(x[0], 50), -len(x[1]['tests'])))
+        
+        for i, (error_type, cluster_data) in enumerate(sorted_clusters, 1):
             report += f"## Cluster {i}: {error_type}\n"
             report += f"**Key Error:** `{cluster_data['key_error']}`\n"
             report += f"**Affected Tests:**\n"
@@ -2363,71 +2652,94 @@ def analyze_version_pairs(test_name, test_type, compatibility_category, versions
 
 def generate_compatibility_report():
     setup_logging()
-    logging.debug("Starting compatibility tests AI report generation")
+    logging.info("=== ЗАПУСК ГЕНЕРАЦИИ ОТЧЕТОВ ПО СОВМЕСТИМОСТИ ===")
+    logging.info(f"Время запуска: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
+    # Проверяем переменные окружения
+    logging.debug("Проверяем переменные окружения...")
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        logging.debug("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing")
+        logging.error("Ошибка: Переменная окружения CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS отсутствует")
         return 1
     else:
+        logging.debug("Переменная CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS найдена")
         os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
             "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
         ]
 
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables()
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-        
-        # ===== ЭТАП 1: ПОЛУЧИТЬ ДАННЫЕ ТЕСТОВ ИЗ БД =====
-        logging.debug("=== ЭТАП 1: ПОЛУЧЕНИЕ ДАННЫХ ИЗ БД ===")
-        test_data = get_compatibility_tests_data(driver, days_back=1)
-        
-        if not test_data:
-            logging.debug("No compatibility test data found")
-            return 0
-        
-        logging.debug(f"Получено {len(test_data)} записей из БД")
-        if DEBUG: save_json(test_data, 'analytics_debug_1_raw_data.json')
-        
-        # ===== ЭТАП 2: ЗАМЕНИТЬ STATUS_DESCRIPTION У MUTE РЕЗУЛЬТАТОВ ИЗ LOG =====
-        logging.debug("=== ЭТАП 2: ОБОГАЩЕНИЕ MUTE ЗАПИСЕЙ ЛОГАМИ ===")
-        enriched_data = enrich_mute_records_with_logs(test_data)
-        
-        logging.debug(f"Обогащение завершено")
-        if DEBUG: save_json(enriched_data, 'analytics_debug_2_enriched_data.json')
-        
-        # ===== ЭТАП 3: ИСКЛЮЧИТЬ ТЕСТЫ БЕЗ STATUS_DESCRIPTION ИЗ LOG =====
-        logging.debug("=== ЭТАП 3: ФИЛЬТРАЦИЯ ЗАПИСЕЙ ===")
-        filtered_data = filter_records_with_status_description(enriched_data)
-        
-        logging.debug(f"После фильтрации осталось {len(filtered_data)} записей")
-        if DEBUG: save_json(filtered_data, 'analytics_debug_3_filtered_data.json')
-        
-        # ===== ЭТАП 4: СГРУППИРОВАТЬ ПО ВЕРСИЯМ И ПРОВЕРКАМ =====
-        logging.debug("=== ЭТАП 4: ГРУППИРОВКА ПО ВЕРСИЯМ И ТИПАМ ===")
-        grouped_data = group_by_versions_and_types(filtered_data)
-        
-        logging.debug(f"Сгруппировано по {len(grouped_data)} версиям")
-        if DEBUG: save_json(grouped_data, 'analytics_debug_4_grouped_data.json')
-        
-        # ===== ЭТАП 5: СОБРАТЬ ГРУППЫ ДЛЯ ПЕРЕДАЧИ В AI =====
-        logging.debug("=== ЭТАП 5: ПОДГОТОВКА ДАННЫХ ДЛЯ AI ===")
-        ai_ready_data = prepare_data_for_ai_analysis(grouped_data)
-        
-        logging.debug(f"Подготовлены данные для AI анализа")
-        if DEBUG: save_json(ai_ready_data, 'analytics_debug_5_ai_ready_data.json')
-        
-        # ===== ГЕНЕРАЦИЯ ОТЧЕТОВ =====
-        logging.debug("=== ГЕНЕРАЦИЯ ОТЧЕТОВ ===")
-        
-        # Создаем папку для отчетов
-        reports_dir = f"{dir}/compatibility_reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        os.makedirs(reports_dir, exist_ok=True)
-        
-        # Создаем общий индексный отчет
-        index_report = f"""# Отчеты по совместимости YDB
+    # Подключение к БД
+    logging.info(f"Подключаемся к БД: {DATABASE_ENDPOINT}")
+    logging.info(f"Путь к БД: {DATABASE_PATH}")
+    
+    try:
+        with ydb.Driver(
+            endpoint=DATABASE_ENDPOINT,
+            database=DATABASE_PATH,
+            credentials=ydb.credentials_from_env_variables()
+        ) as driver:
+            logging.debug("Драйвер YDB создан, ожидаем подключения...")
+            driver.wait(timeout=10, fail_fast=True)
+            logging.info("✅ Успешно подключились к БД YDB")
+            
+            # ===== ЭТАП 1: ПОЛУЧИТЬ ДАННЫЕ ТЕСТОВ ИЗ БД =====
+            logging.info("=== ЭТАП 1: ПОЛУЧЕНИЕ ДАННЫХ ИЗ БД ===")
+            test_data = get_compatibility_tests_data(driver, days_back=1)
+            
+            if not test_data:
+                logging.warning("Не найдено данных compatibility тестов в БД")
+                return 0
+            
+            logging.info(f"Получено {len(test_data)} записей из БД")
+            if DEBUG: save_json(test_data, 'analytics_debug_1_raw_data.json')
+            
+            # ===== ЭТАП 2: ЗАМЕНИТЬ STATUS_DESCRIPTION У MUTE РЕЗУЛЬТАТОВ ИЗ LOG =====
+            logging.info("=== ЭТАП 2: ОБОГАЩЕНИЕ MUTE ЗАПИСЕЙ ЛОГАМИ ===")
+            enriched_data = enrich_mute_records_with_logs(test_data)
+            
+            logging.info(f"Обогащение завершено")
+            if DEBUG: save_json(enriched_data, 'analytics_debug_2_enriched_data.json')
+            
+            # ===== ЭТАП 3: ИСКЛЮЧИТЬ ТЕСТЫ БЕЗ STATUS_DESCRIPTION ИЗ LOG =====
+            logging.info("=== ЭТАП 3: ФИЛЬТРАЦИЯ ЗАПИСЕЙ ===")
+            filtered_data = filter_records_with_status_description(enriched_data)
+            
+            logging.info(f"После фильтрации осталось {len(filtered_data)} записей")
+            if DEBUG: save_json(filtered_data, 'analytics_debug_3_filtered_data.json')
+            
+            # ===== ЭТАП 3.5: АНАЛИЗ РАСПАРСЕННЫХ ВЕРСИЙ =====
+            logging.info("=== ЭТАП 3.5: АНАЛИЗ ВЕРСИЙ ===")
+            version_stats = analyze_parsed_versions(filtered_data)
+            if DEBUG: save_json(version_stats, 'analytics_debug_3_5_version_stats.json')
+            
+            # ===== ЭТАП 4: СГРУППИРОВАТЬ ПО ВЕРСИЯМ И ПРОВЕРКАМ =====
+            logging.info("=== ЭТАП 4: ГРУППИРОВКА ПО ВЕРСИЯМ И ТИПАМ ===")
+            grouped_data = group_by_versions_and_types(filtered_data)
+            
+            logging.info(f"Сгруппировано по {len(grouped_data)} версиям")
+            if DEBUG: save_json(grouped_data, 'analytics_debug_4_grouped_data.json')
+            
+            # ===== ЭТАП 4.5: ФИЛЬТРАЦИЯ ВЕРСИЙ ДЛЯ ОТЧЕТОВ =====
+            logging.info("=== ЭТАП 4.5: ФИЛЬТРАЦИЯ ВЕРСИЙ ===")
+            filtered_grouped_data = filter_versions_for_reports(grouped_data)
+            
+            logging.info(f"После фильтрации версий осталось {len(filtered_grouped_data)} версий")
+            if DEBUG: save_json(filtered_grouped_data, 'analytics_debug_4_5_filtered_versions.json')
+            
+            # ===== ЭТАП 5: СОБРАТЬ ГРУППЫ ДЛЯ ПЕРЕДАЧИ В AI =====
+            logging.info("=== ЭТАП 5: ПОДГОТОВКА ДАННЫХ ДЛЯ AI ===")
+            ai_ready_data = prepare_data_for_ai_analysis(filtered_grouped_data)
+            
+            logging.info(f"Подготовлены данные для AI анализа")
+            if DEBUG: save_json(ai_ready_data, 'analytics_debug_5_ai_ready_data.json')
+            
+            # ===== ГЕНЕРАЦИЯ ОТЧЕТОВ =====
+            logging.info("=== ГЕНЕРАЦИЯ ОТЧЕТОВ ===")
+            
+            # Создаем папку для отчетов
+            reports_dir = f"{dir}/compatibility_reports_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            os.makedirs(reports_dir, exist_ok=True)
+            
+            # Создаем общий индексный отчет
+            index_report = f"""# Отчеты по совместимости YDB
 
 Сгенерировано: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
@@ -2441,51 +2753,55 @@ def generate_compatibility_report():
 ## Отчеты по версиям
 
 """
-        
-        generated_reports = []
-        
-        # Генерируем отчеты для каждой версии
-        for version, version_data in ai_ready_data['by_version'].items():
-            logging.debug(f"Processing version: {version}")
             
-            # Проверяем, есть ли данные для этой версии
-            total_tests = sum(len(type_data.get('all_tests', [])) for type_data in version_data.values())
-            if total_tests == 0:
-                logging.debug(f"Skipping version {version} - no tests found")
-                continue
+            generated_reports = []
             
-            try:
-                report_path = generate_version_report(version, version_data, ai_ready_data, reports_dir)
-                report_filename = os.path.basename(report_path)
-                generated_reports.append((version, report_filename, total_tests))
+            # Генерируем отчеты для каждой версии
+            for version, version_data in ai_ready_data['by_version'].items():
+                logging.debug(f"Processing version: {version}")
                 
-                # Добавляем в индекс
-                index_report += f"- [{version}](./{report_filename}) - {total_tests} тестов\n"
+                # Проверяем, есть ли данные для этой версии
+                total_tests = sum(len(type_data.get('all_tests', [])) for type_data in version_data.values())
+                if total_tests == 0:
+                    logging.debug(f"Skipping version {version} - no tests found")
+                    continue
                 
-            except Exception as e:
-                logging.error(f"Failed to generate report for version {version}: {e}")
-                index_report += f"- {version} - ОШИБКА ГЕНЕРАЦИИ: {e}\n"
-        
-        # Сохраняем индексный отчет
-        index_path = os.path.join(reports_dir, "README.md")
-        with open(index_path, 'w', encoding='utf-8') as f:
-            f.write(index_report)
-        
-        logging.debug(f"Generated {len(generated_reports)} version reports in: {reports_dir}")
-        logging.debug(f"Index report: {index_path}")
-        
-        # Выводим сводку
-        print(f"\n{'='*60}")
-        print(f"ОТЧЕТЫ ПО СОВМЕСТИМОСТИ СГЕНЕРИРОВАНЫ")
-        print(f"{'='*60}")
-        print(f"Папка с отчетами: {reports_dir}")
-        print(f"Индексный файл: {index_path}")
-        print(f"\nСгенерировано отчетов по версиям: {len(generated_reports)}")
-        for version, filename, tests_count in generated_reports:
-            print(f"  - {version}: {filename} ({tests_count} тестов)")
-        print(f"{'='*60}")
-        
-        return 0
+                try:
+                    report_path = generate_version_report(version, version_data, ai_ready_data, reports_dir)
+                    report_filename = os.path.basename(report_path)
+                    generated_reports.append((version, report_filename, total_tests))
+                    
+                    # Добавляем в индекс
+                    index_report += f"- [{version}](./{report_filename}) - {total_tests} тестов\n"
+                    
+                except Exception as e:
+                    logging.error(f"Failed to generate report for version {version}: {e}")
+                    index_report += f"- {version} - ОШИБКА ГЕНЕРАЦИИ: {e}\n"
+            
+            # Сохраняем индексный отчет
+            index_path = os.path.join(reports_dir, "README.md")
+            with open(index_path, 'w', encoding='utf-8') as f:
+                f.write(index_report)
+            
+            logging.info(f"Сгенерировано {len(generated_reports)} отчетов по версиям в: {reports_dir}")
+            logging.info(f"Индексный отчет: {index_path}")
+            
+            # Выводим сводку
+            print(f"\n{'='*60}")
+            print(f"ОТЧЕТЫ ПО СОВМЕСТИМОСТИ СГЕНЕРИРОВАНЫ")
+            print(f"{'='*60}")
+            print(f"Папка с отчетами: {reports_dir}")
+            print(f"Индексный файл: {index_path}")
+            print(f"\nСгенерировано отчетов по версиям: {len(generated_reports)}")
+            for version, filename, tests_count in generated_reports:
+                print(f"  - {version}: {filename} ({tests_count} тестов)")
+            print(f"{'='*60}")
+            
+            return 0
+    
+    except Exception as e:
+        logging.error(f"Не удалось подключиться к БД: {e}")
+        return 1
 
 
 def format_error_for_html_table(error_description, max_length=600, log_url=None):
@@ -2552,6 +2868,81 @@ def group_tests_by_error(tests):
         error_groups[error_key]['tests'].append(test)
     
     return error_groups
+
+
+def should_include_version_in_reports(version):
+    """
+    Определяет, должна ли версия включаться в отчеты.
+    Исключает тестовые, промежуточные и экспериментальные версии.
+    """
+    if not version or version == 'unknown':
+        return False
+    
+    # Исключаем явно тестовые версии
+    test_version_patterns = [
+        r'test',
+        r'dev',
+        r'experimental',
+        r'temp',
+        r'tmp',
+        r'debug',
+        r'draft',
+        r'wip',  # work in progress
+        r'branch',
+        r'feature',
+        r'fix',
+        r'hotfix',
+    ]
+    
+    version_lower = version.lower()
+    for pattern in test_version_patterns:
+        if re.search(pattern, version_lower):
+            logging.debug(f"Excluding test version from reports: {version}")
+            return False
+    
+    # Исключаем версии с очень длинными хешами
+    if len(version) > 20 and re.match(r'^[a-f0-9]+$', version):
+        logging.debug(f"Excluding hash-like version from reports: {version}")
+        return False
+    
+    # Включаем стандартные версии
+    stable_version_patterns = [
+        r'^current$',
+        r'^trunk$',
+        r'^main$',
+        r'^\d+-\d+(?:-\d+)?$',  # 25-1, 25-1-3
+        r'^\d+\.\d+(?:\.\d+)?$',  # 1.2, 1.2.3
+        r'^v\d+(?:\.\d+)*$',  # v1, v1.2, v2.1
+    ]
+    
+    for pattern in stable_version_patterns:
+        if re.match(pattern, version):
+            return True
+    
+    # Если версия не подошла под известные паттерны, логируем и исключаем
+    logging.warning(f"Unknown version format, excluding from reports: {version}")
+    return False
+
+def filter_versions_for_reports(grouped_data):
+    """
+    Фильтрует версии, оставляя только подходящие для отчетов
+    """
+    filtered_data = {}
+    excluded_versions = []
+    
+    for version, version_data in grouped_data.items():
+        if should_include_version_in_reports(version):
+            filtered_data[version] = version_data
+        else:
+            excluded_versions.append(version)
+    
+    if excluded_versions:
+        logging.info(f"Исключено версий из отчетов: {len(excluded_versions)}")
+        logging.info(f"Исключенные версии: {excluded_versions}")
+    
+    logging.info(f"Версии для отчетов: {sorted(filtered_data.keys())}")
+    
+    return filtered_data
 
 
 if __name__ == "__main__":

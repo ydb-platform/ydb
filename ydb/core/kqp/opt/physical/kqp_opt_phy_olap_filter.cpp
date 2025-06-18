@@ -819,6 +819,11 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     const auto& optionaIf = maybeOptionalIf.Cast();
     auto predicate = optionaIf.Predicate();
     auto value = optionaIf.Value();
+    // There are could be a situation when the given `value` has a lambda inside epxression,
+    // YQL core peephole could rewrite this lambda to construction without lambda and additional `free_arg` which
+    // we cannot replace in the next step, because to replace `free_arg` we have to restore lambda,
+    // so we are not applying peephole for the given `value`.
+    auto originalOptionalIfValue = value;
 
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();
@@ -938,7 +943,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Value<TExprApplier>()
-                    .Apply(value)
+                    .Apply(originalOptionalIfValue)
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Build()

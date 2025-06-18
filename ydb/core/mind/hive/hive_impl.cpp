@@ -2940,8 +2940,12 @@ void THive::ProcessPendingResumeTablet() {
     }
 }
 
-const TBridgeInfo::TPile* THive::GetPile(TBridgePileId pile) const {
-    return BridgeInfo->GetPile(pile);
+bool THive::IsAllowedPile(TBridgePileId pile) const {
+    if (BridgeInfo->BeingPromotedPile) {
+        return BridgeInfo->BeingPromotedPile->BridgePileId == pile;
+    } else {
+        return BridgeInfo->PrimaryPile->BridgePileId == pile;
+    }
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)

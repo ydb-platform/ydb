@@ -89,6 +89,7 @@ namespace {
         runtime.SetLogPriority(NKikimrServices::BS_PROXY_BLOCK, otherPriority);
         runtime.SetLogPriority(NKikimrServices::BS_PROXY_RANGE, otherPriority);
         runtime.SetLogPriority(NKikimrServices::BS_PROXY_DISCOVER, otherPriority);
+        runtime.SetLogPriority(NKikimrServices::BS_PROXY_BRIDGE, otherPriority);
         runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority);
         runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, otherPriority);
         runtime.SetLogPriority(NKikimrServices::TX_DUMMY, otherPriority);
@@ -144,27 +145,40 @@ namespace {
 
     static TChannelsBindings BINDED_CHANNELS = {GetChannelBind(STORAGE_POOL + "1"), GetChannelBind(STORAGE_POOL + "2"), GetChannelBind(STORAGE_POOL + "3")};
 
+    static TString GetPDiskPath(ui32 nodeIdx) {
+        return TStringBuilder() << "SectorMap:" << nodeIdx << ":3200";
+    }
+
     void SetupNodeWarden(TTestActorRuntime &runtime) {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            TString staticConfig(
-                "AvailabilityDomains: 0 "
-                "PDisks { NodeID: $Node1 PDiskID: 1 PDiskGuid: 1 Path: \"/tmp/pdisk.dat\" }"
-                "VDisks { VDiskID { GroupID: 0 GroupGeneration: 1 Ring: 0 Domain: 0 VDisk: 0 }"
-                "    VDiskLocation { NodeID: $Node1 PDiskID: 1 PDiskGuid: 1 VDiskSlotID: 0 }"
-                "}"
-                "Groups { GroupID: 0 GroupGeneration: 1 ErasureSpecies: 0 "// None
-                "    Rings {"
-                "        FailDomains { VDiskLocations { NodeID: $Node1 PDiskID: 1 VDiskSlotID: 0 PDiskGuid: 1 } }"
-                "    }"
-                "}");
-
-            SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
-
             TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = new TNodeWardenConfig(
                     STRAND_PDISK && !runtime.IsRealThreads() ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
                     static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
                 //nodeWardenConfig->Monitoring = monitoring;
-            google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
+            auto* serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            serviceSet->AddAvailabilityDomains(0);
+            for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+                auto* pdisk = serviceSet->AddPDisks();
+                pdisk->SetNodeID(runtime.GetNodeId(i));
+                pdisk->SetPDiskID(1);
+                pdisk->SetPDiskGuid(i + 1);
+                pdisk->SetPath(GetPDiskPath(i));
+            }
+            auto* vdisk = serviceSet->AddVDisks();
+            vdisk->MutableVDiskID()->SetGroupID(0);
+            vdisk->MutableVDiskID()->SetGroupGeneration(1);
+            vdisk->MutableVDiskID()->SetRing(0);
+            vdisk->MutableVDiskID()->SetDomain(0);
+            vdisk->MutableVDiskID()->SetVDisk(0);
+            vdisk->MutableVDiskLocation()->SetNodeID(runtime.GetNodeId(0));
+            vdisk->MutableVDiskLocation()->SetPDiskID(1);
+            vdisk->MutableVDiskLocation()->SetPDiskGuid(1);
+            vdisk->MutableVDiskLocation()->SetVDiskSlotID(0);
+            auto* staticGroup = serviceSet->AddGroups();
+            staticGroup->SetGroupID(0);
+            staticGroup->SetGroupGeneration(1);
+            staticGroup->SetErasureSpecies(0); // none
+            staticGroup->AddRings()->AddFailDomains()->AddVDiskLocations()->CopyFrom(vdisk->GetVDiskLocation());
 
             TIntrusivePtr<TNodeWardenConfig> existingNodeWardenConfig = NodeWardenConfigs[nodeIndex];
             if (existingNodeWardenConfig != nullptr) {
@@ -178,15 +192,16 @@ namespace {
     void SetupPDisk(TTestActorRuntime &runtime) {
         if (runtime.GetNodeCount() == 0)
             return;
+        static ui64 iteration = 0;
+        ++iteration;
 
-        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = NodeWardenConfigs[0];
+        for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+            TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig = NodeWardenConfigs[i];
 
-        TString pDiskPath;
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap;
-        ui64 pDiskSize = 32ull << 30ull;
-        ui64 pDiskChunkSize = 32u << 20u;
-        if (true /*in memory*/) {
-            pDiskPath = "/tmp/pdisk.dat";
+            TString pDiskPath = GetPDiskPath(i);
+            TIntrusivePtr<NPDisk::TSectorMap> sectorMap;
+            ui64 pDiskSize = 32ull << 30ull;
+            ui64 pDiskChunkSize = 32u << 20u;
             auto& existing = nodeWardenConfig->SectorMaps[pDiskPath];
             if (existing && existing->DeviceSize == pDiskSize) {
                 sectorMap = existing;
@@ -194,29 +209,23 @@ namespace {
                 sectorMap.Reset(new NPDisk::TSectorMap(pDiskSize));
                 nodeWardenConfig->SectorMaps[pDiskPath] = sectorMap;
             }
-        } else {
-            static TTempDir tempDir;
-            pDiskPath = tempDir() + "/pdisk.dat";
+            ui64 pDiskGuid = i + 1;
+            FormatPDisk(
+                        pDiskPath,
+                        pDiskSize,
+                        4 << 10,
+                        pDiskChunkSize,
+                        pDiskGuid,
+                        0x1234567890 + iteration,
+                        0x4567890123 + iteration,
+                        0x7890123456 + iteration,
+                        NPDisk::YdbDefaultPDiskSequence,
+                        TString(""),
+                        false,
+                        false,
+                        sectorMap,
+                        false);
         }
-        nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
-        ui64 pDiskGuid = 1;
-        static ui64 iteration = 0;
-        ++iteration;
-        FormatPDisk(
-                    pDiskPath,
-                    pDiskSize,
-                    4 << 10,
-                    pDiskChunkSize,
-                    pDiskGuid,
-                    0x1234567890 + iteration,
-                    0x4567890123 + iteration,
-                    0x7890123456 + iteration,
-                    NPDisk::YdbDefaultPDiskSequence,
-                    TString(""),
-                    false,
-                    false,
-                    sectorMap,
-                    false);
     }
 
     TLocalConfig::TPtr MakeDefaultLocalConfig() {
@@ -317,13 +326,6 @@ namespace {
 
     void SetupBoxAndStoragePool(TTestActorRuntime &runtime, ui32 numGroups = 1, const TString& storagePoolNamePrefix = STORAGE_POOL, ui64 numPools = 3) {
         TActorId sender = runtime.AllocateEdgeActor();
-        ui32 nodeIndex = 0;
-        TString pDiskPath;
-        if (true /*in memory*/) {
-            pDiskPath = "/tmp/pdisk.dat";
-        } else {
-            pDiskPath = runtime.GetTempDir() + "/pdisk.dat";
-        }
 
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -337,19 +339,22 @@ namespace {
         NKikimrBlobStorage::TDefineBox boxConfig;
         boxConfig.SetBoxId(1);
 
-        ui32 nodeId = runtime.GetNodeId(nodeIndex);
-        Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
-        auto& nodeInfo = nodesInfo->Nodes[0];
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            ui32 nodeId = runtime.GetNodeId(nodeIndex);
+            Y_ABORT_UNLESS(nodesInfo->Nodes[nodeIndex].NodeId == nodeId);
+            auto& nodeInfo = nodesInfo->Nodes[nodeIndex];
 
-        NKikimrBlobStorage::TDefineHostConfig hostConfig;
-        hostConfig.SetHostConfigId(nodeId);
-        hostConfig.AddDrive()->SetPath(pDiskPath);
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
+            NKikimrBlobStorage::TDefineHostConfig hostConfig;
+            hostConfig.SetHostConfigId(nodeId);
+            hostConfig.AddDrive()->SetPath(GetPDiskPath(nodeIndex));
+            bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
 
-        auto &host = *boxConfig.AddHost();
-        host.MutableKey()->SetFqdn(nodeInfo.Host);
-        host.MutableKey()->SetIcPort(nodeInfo.Port);
-        host.SetHostConfigId(hostConfig.GetHostConfigId());
+            auto &host = *boxConfig.AddHost();
+            host.MutableKey()->SetFqdn(nodeInfo.Host);
+            host.MutableKey()->SetIcPort(nodeInfo.Port);
+            Cerr << "node " << nodeId << " [host] " << nodeInfo.Host << ":" << nodeInfo.Port << Endl;
+            host.SetHostConfigId(hostConfig.GetHostConfigId());
+        }
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
         for (ui64 i = 1; i <= numPools; ++i) {
@@ -652,6 +657,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvTabletMetrics, 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+        return handle->Sender;
+    }
+
+    TActorId GetBscActor(TTestActorRuntime& runtime, ui64 bsControllerTablet) {
+        TActorId senderB = runtime.AllocateEdgeActor(0);
+        runtime.SendToPipe(bsControllerTablet, senderB, new TEvBlobStorage::TEvControllerConfigRequest, 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handle);
         return handle->Sender;
     }
 
@@ -7681,6 +7694,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestActorRuntimeBase::TEventObserverHolder Observer;
         std::array<std::shared_ptr<TBridgeInfo>, 2> BridgeInfos;
         std::unordered_set<TActorId> Subscribers;
+        std::unordered_set<TActorId> IgnoreActors;
+        NKikimrConfig::TBridgeConfig BridgeConfig;
 
         void Notify() {
             for (auto subscriber : Subscribers) {
@@ -7696,9 +7711,28 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 newInfo->Piles = BridgeInfos[pile]->Piles;
                 func(newInfo);
                 newInfo->SelfNodePile = newInfo->Piles.data() + pile;
+                newInfo->BeingPromotedPile = nullptr;
+                for (const auto& pile : newInfo->Piles) {
+                    if (pile.IsPrimary) {
+                        newInfo->PrimaryPile = &pile;
+                    }
+                    if (pile.IsBeingPromoted) {
+                        newInfo->BeingPromotedPile = &pile;
+                    }
+                }
                 BridgeInfos[pile].swap(newInfo);
             }
             Notify();
+        }
+
+        void Observe() {
+            Observer = Runtime.AddObserver<TEvNodeWardenStorageConfig>([this](auto&& ev) {
+                if (!IgnoreActors.contains(ev->Recipient)) {
+                    auto pile = (ev->Sender.NodeId() - Runtime.GetNodeId(0)) % 2;
+                    ev->Get()->BridgeInfo = BridgeInfos[pile];
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
         }
 
     public:
@@ -7723,19 +7757,21 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                     .IsBeingPromoted = false,
                 });
                 for (size_t i = 0; i < 2; ++i) {
-                    for (size_t j = i; j < nodeIds.size(); ++j) {
+                    for (size_t j = i; j < nodeIds.size(); j += 2) {
                         BridgeInfos[pile]->Piles[i].StaticNodeIds.push_back(nodeIds[j]);
+                        BridgeInfos[pile]->StaticNodeIdToPile.emplace(nodeIds[j], BridgeInfos[pile]->Piles.data() + i);
                     }
                 }
                 BridgeInfos[pile]->PrimaryPile = BridgeInfos[pile]->Piles.data();
                 BridgeInfos[pile]->SelfNodePile = BridgeInfos[pile]->Piles.data() + pile;
             }
 
-            Observer = Runtime.AddObserver<TEvNodeWardenStorageConfig>([this](auto&& ev) {
-                auto pile = (ev->Sender.NodeId() - Runtime.GetNodeId(0)) % 2;
-                ev->Get()->BridgeInfo = BridgeInfos[pile];
-                return TTestActorRuntime::EEventAction::PROCESS;
+            BridgeConfig.AddPiles()->SetName("pile0");
+            BridgeConfig.AddPiles()->SetName("pile1");
+            Runtime.AddAppDataInit([this](ui32, TAppData& appData) {
+                appData.BridgeConfig = &BridgeConfig;
             });
+            Observe();
         }
 
         void Subscribe(TActorId actor) {
@@ -7746,19 +7782,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             Subscribers.erase(actor);
         }
 
+        void Ignore(TActorId actor) {
+            IgnoreActors.insert(actor);
+        }
+
         void Promote(ui32 pile) {
             UpdateBridgeInfo([pile](std::shared_ptr<TBridgeInfo> newState) {
                 for (ui32 i = 0; i < newState->Piles.size(); ++i) {
                     if (i == pile) {
-                        newState->Piles[i].IsPrimary = false;
                         newState->Piles[i].IsBeingPromoted = true;
                     } else {
-                        newState->Piles[i].IsPrimary = false;
                         newState->Piles[i].IsBeingPromoted = false;
                     }
                 }
-                newState->BeingPromotedPile = newState->Piles.data() + pile;
-                newState->PrimaryPile = nullptr;
             });
         }
 
@@ -7772,10 +7808,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                     } else {
                         newState->Piles[i].IsPrimary = true;
                         newState->Piles[i].IsBeingPromoted = false;
-                        newState->PrimaryPile = newState->Piles.data() + i;
                     }
                 }
-                newState->BeingPromotedPile = nullptr;
             });
         }
 

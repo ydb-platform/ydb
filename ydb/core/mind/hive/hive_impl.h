@@ -729,7 +729,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects);
     void ProcessPendingStopTablet();
     void ProcessPendingResumeTablet();
-    const TBridgeInfo::TPile* GetPile(TBridgePileId pile) const;
+    bool IsAllowedPile(TBridgePileId pile) const;
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();

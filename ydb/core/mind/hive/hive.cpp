@@ -108,8 +108,7 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
-    const auto* pileInfo = Hive->GetPile(pile);
-    return pileInfo->IsPrimary || pileInfo->IsBeingPromoted;
+    return Hive->IsAllowedPile(pile);
 }
 
 template <typename K, typename V>

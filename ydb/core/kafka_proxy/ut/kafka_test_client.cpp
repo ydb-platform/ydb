@@ -143,6 +143,7 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartitio
     TKafkaRecordBatch batch;
     batch.BaseSequence = baseSequence;
     batch.Magic = TKafkaRecordBatch::MagicMeta::Default;
+    batch.Records.resize(keyValueMessages.size());
     for (ui32 i = 0; i < keyValueMessages.size(); i++) {
         auto& keyValueMessage = keyValueMessages[i];
         batch.Records[i].Key = ToRawBytes(keyValueMessage.first);

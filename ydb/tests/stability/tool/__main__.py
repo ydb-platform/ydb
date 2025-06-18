@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from concurrent.futures import ThreadPoolExecutor
 import getpass
 import os
 import logging
@@ -62,8 +63,40 @@ DICT_OF_PROCESSES = {
                 echo "Stopped"
             fi""",
     },
-    'simple_queue_column' : {
-        'status' : """
+    'node_broker_workload': {
+        'status': """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/node_broker_workload|/tmp/node_broker_workload_wrapper.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi""",
+    },
+    'transfer_workload_row': {
+        'status': """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/transfer_workload.*mode row|/tmp/transfer_workload_row_wrapper.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi""",
+    },
+    'transfer_workload_column': {
+        'status': """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/transfer_workload.*mode column|/tmp/transfer_workload_column_wrapper.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi""",
+    },
+    's3_backups_workload': {
+        'status': """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/s3_backups_workload|/tmp/s3_backups_workload_wrapper.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi""",
+    },
+    'simple_queue_column': {
+        'status': """
             if ps aux | grep -E "/Berkanavt/nemesis/bin/simple_queue.*mode column|/tmp/simple_queue_column_wrapper.sh" | grep -v grep > /dev/null; then
                 echo "Running"
             else
@@ -143,6 +176,9 @@ class CustomArgumentParser(argparse.ArgumentParser):
                 "start_workload_simple_queue_column": "Start simple_queue workload with column storage",
                 "start_workload_olap_workload": "Start OLAP workload for analytical load testing",
                 "start_workload_oltp_workload": "Start OLTP workload for transactional load testing",
+                "start_workload_node_broker_workload": "Start Node Broker workload",
+                "start_workload_transfer_workload": "Start topic to table transfer workload",
+                "start_workload_s3_backups_workload": "Start auto removal of tmp tables workload",
                 "start_workload_log": "Start log workloads with both row and column storage",
                 "start_workload_log_column": "Start log workload with column storage",
                 "start_workload_log_row": "Start log workload with row storage",
@@ -192,6 +228,9 @@ class StabilityCluster:
             self._unpack_resource('simple_queue'),
             self._unpack_resource('olap_workload'),
             self._unpack_resource('oltp_workload'),
+            self._unpack_resource('node_broker_workload'),
+            self._unpack_resource('transfer_workload'),
+            self._unpack_resource('s3_backups_workload'),
             self._unpack_resource('statistics_workload'),
             self._unpack_resource('ydb_cli'),
         )
@@ -386,7 +425,7 @@ class StabilityCluster:
 
             # На всякий случай убиваем все потенциальные процессы рабочих нагрузок
             node.ssh_command(
-                'pkill -f "SCREEN.*workload\\|simple_queue\\|olap_workload\\|oltp_workload"',
+                'pkill -f "SCREEN.*workload\\|simple_queue\\|olap_workload\\|oltp_workload\\|node_broker_workload\\|transfer_workload\\|s3_backups_workload"',
                 raise_on_error=False
             )
 
@@ -537,34 +576,32 @@ class StabilityCluster:
         self.deploy_tools()
         self.get_state()
 
-    def deploy_tools(self):
-        for node in self.kikimr_cluster.nodes.values():
-            node.ssh_command(["sudo", "mkdir", "-p", STRESS_BINARIES_DEPLOY_PATH], raise_on_error=False)
-            for artifact in self.artifacts:
-                node_artifact_path = os.path.join(
-                    STRESS_BINARIES_DEPLOY_PATH,
-                    os.path.basename(
-                        artifact
-                    )
+    def deploy_node_tools(self, node):
+        node.ssh_command(["sudo", "mkdir", "-p", STRESS_BINARIES_DEPLOY_PATH], raise_on_error=False)
+        for artifact in self.artifacts:
+            node_artifact_path = os.path.join(
+                STRESS_BINARIES_DEPLOY_PATH,
+                os.path.basename(
+                    artifact
                 )
-                node.copy_file_or_dir(
-                    artifact,
-                    node_artifact_path
-                )
-                node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
-        self.prepare_cluster_yaml()
+            )
+            node.copy_file_or_dir(
+                artifact,
+                node_artifact_path
+            )
+            node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
     def prepare_cluster_yaml(self):
-        for node in self.kikimr_cluster.nodes.values():
-            node.copy_file_or_dir(
+        with ThreadPoolExecutor() as pool:
+            pool.map(lambda node: node.copy_file_or_dir(
                 self.slice_directory,
                 '/Berkanavt/kikimr/cfg/cluster.yaml'
-            )
+            ), self.kikimr_cluster.nodes.values())
 
-            node.copy_file_or_dir(
-                self.slice_directory,
-                '/Berkanavt/kikimr/cfg/cluster.yaml'
-            )
+    def deploy_tools(self):
+        with ThreadPoolExecutor(len(self.kikimr_cluster.nodes)) as pool:
+            pool.map(self.deploy_node_tools, self.kikimr_cluster.nodes.values())
+        self.prepare_cluster_yaml()
 
     def get_workload_outputs(self, mode='err', last_n_lines=10):
         """Capture last N lines of output from all running workload screens."""
@@ -805,6 +842,21 @@ handle_timeout() {{
     echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing olap_workload specific cleanup"
     # Убиваем процессы olap_workload
     pkill -9 -f "olap_workload" || true
+
+  elif [[ "{base_command}" == *"node_broker_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing node_broker_workload specific cleanup"
+    # Убиваем процессы node_broker_workload
+    pkill -9 -f "node_broker_workload" || true
+
+  elif [[ "{base_command}" == *"transfer_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing transfer_workload specific cleanup"
+    # Убиваем процессы transfer_workload
+    pkill -9 -f "transfer_workload" || true
+
+  elif [[ "{base_command}" == *"s3_backups_workload"* ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing s3_backups_workload specific cleanup"
+    # Убиваем процессы s3_backups_workload
+    pkill -9 -f "s3_backups_workload" || true
   fi
 
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Emergency cleanup completed"
@@ -1003,6 +1055,9 @@ Common usage scenarios:
         "start_workload_simple_queue_column": "Start simple_queue workload with column storage",
         "start_workload_olap_workload": "Start OLAP workload for analytical load testing",
         "start_workload_oltp_workload": "Start OLTP workload for transactional load testing",
+        "start_workload_node_broker_workload": "Start Node Broker workload",
+        "start_workload_transfer_workload": "Start topic to table transfer workload",
+        "start_workload_s3_backups_workload": "Start auto removal of tmp tables workload",
         "start_workload_log": "Start log workloads with both row and column storage",
         "start_workload_log_column": "Start log workload with column storage",
         "start_workload_log_row": "Start log workload with row storage",
@@ -1030,7 +1085,11 @@ Common usage scenarios:
         ],
         "SPECIFIC WORKLOADS": [
             "start_workload_simple_queue_row", "start_workload_simple_queue_column",
-            "start_workload_olap_workload", "start_workload_oltp_workload",
+            "start_workload_olap_workload",
+            "start_workload_oltp_workload",
+            "start_workload_node_broker_workload",
+            "start_workload_transfer_workload",
+            "start_workload_s3_backups_workload",
             "start_workload_log", "start_workload_log_column", "start_workload_log_row"
         ]
     }
@@ -1154,7 +1213,7 @@ def main():
                 stability_cluster._clean_and_start_workload(
                     node,
                     'olap_workload',
-                    '/Berkanavt/nemesis/bin/olap_workload --database /Root/db1'
+                    f'/Berkanavt/nemesis/bin/olap_workload --database /Root/db1 --path olap_workload_{node_id}'
                 )
             stability_cluster.get_state()
         if action == "stop_workload":
@@ -1257,7 +1316,7 @@ def main():
                 stability_cluster._clean_and_start_workload(
                     node,
                     'olap_workload',
-                    '/Berkanavt/nemesis/bin/olap_workload --database /Root/db1'
+                    f'/Berkanavt/nemesis/bin/olap_workload --database /Root/db1 --path olap_workload_{node_id}'
                 )
             stability_cluster.get_state()
         if action == "start_workload_oltp_workload":
@@ -1265,7 +1324,33 @@ def main():
                 stability_cluster._clean_and_start_workload(
                     node,
                     'oltp_workload',
-                    f'/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path {node_id} --duration 250'
+                    f'/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path {node_id}'
+                )
+            stability_cluster.get_state()
+        if action == "start_workload_node_broker_workload":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    'node_broker_workload',
+                    f'/Berkanavt/nemesis/bin/node_broker_workload --database /Root/db1 --mon-endpoint http://localhost:{node.mon_port}'
+                )
+            stability_cluster.get_state()
+        if action == "start_workload_transfer_workload":
+            modes = ['row', 'column']
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                for mode in modes:
+                    stability_cluster._clean_and_start_workload(
+                        node,
+                        f'transfer_workload_{mode}',
+                        f'/Berkanavt/nemesis/bin/transfer_workload --database /Root/db1 --mode {mode}'
+                    )
+            stability_cluster.get_state()
+        if action == "start_workload_s3_backups_workload":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    's3_backups_workload',
+                    '/Berkanavt/nemesis/bin/s3_backups_workload --database /Root/db1'
                 )
             stability_cluster.get_state()
         if action == "stop_workloads":

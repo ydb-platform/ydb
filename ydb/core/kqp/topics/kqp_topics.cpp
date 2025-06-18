@@ -46,7 +46,7 @@ bool TConsumerOperations::IsValid() const
 
 std::pair<ui64, ui64> TConsumerOperations::GetOffsetsCommitRange() const
 {
-    Y_ABORT_UNLESS(IsValid());
+    Y_ENSURE(IsValid());
 
     if (Offsets_.Empty()) {
         return {0,0};
@@ -77,7 +77,7 @@ TString TConsumerOperations::GetReadSessionId() const
 
 ui64 TConsumerOperations::GetKafkaCommitOffset() const
 {
-    Y_ABORT_UNLESS(KafkaCommitOffset_.Defined());
+    Y_ENSURE(KafkaCommitOffset_.Defined());
 
     return *KafkaCommitOffset_;
 }
@@ -89,15 +89,15 @@ void TConsumerOperations::AddOperation(const TString& consumer,
                                        bool onlyCheckCommitedToFinish,
                                        const TString& readSessionId)
 {
-    Y_ABORT_UNLESS(Consumer_.Empty() || Consumer_ == consumer);
+    Y_ENSURE(Consumer_.Empty() || Consumer_ == consumer);
 
     AddOperationImpl(consumer, range.start(), range.end(), forceCommit, killReadSession, onlyCheckCommitedToFinish, readSessionId);
 }
 
 void TConsumerOperations::Merge(const TConsumerOperations& rhs)
 {
-    Y_ABORT_UNLESS(rhs.Consumer_.Defined());
-    Y_ABORT_UNLESS(Consumer_.Empty() || Consumer_ == rhs.Consumer_);
+    Y_ENSURE(rhs.Consumer_.Defined());
+    Y_ENSURE(Consumer_.Empty() || Consumer_ == rhs.Consumer_);
 
     if (rhs.IsKafkaApiOperation()) {
         KafkaCommitOffset_ = rhs.KafkaCommitOffset_;
@@ -170,8 +170,8 @@ void TTopicPartitionOperations::AddOperation(const TString& topic,
                                              bool onlyCheckCommitedToFinish,
                                              const TString& readSessionId)
 {
-    Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
-    Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
+    Y_ENSURE(Topic_.Empty() || Topic_ == topic);
+    Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
     if (Topic_.Empty()) {
         Topic_ = topic;
@@ -184,8 +184,8 @@ void TTopicPartitionOperations::AddOperation(const TString& topic,
 void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition,
                                              TMaybe<ui32> supportivePartition)
 {
-    Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
-    Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
+    Y_ENSURE(Topic_.Empty() || Topic_ == topic);
+    Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
     if (Topic_.Empty()) {
         Topic_ = topic;
@@ -198,8 +198,8 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
 }
 
 void TTopicPartitionOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId) {
-    Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
-    Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
+    Y_ENSURE(Topic_.Empty() || Topic_ == topic);
+    Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
     if (Topic_.Empty()) {
         Topic_ = topic;
@@ -212,8 +212,8 @@ void TTopicPartitionOperations::AddKafkaApiWriteOperation(const TString& topic, 
 }
 
 void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset) {
-    Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
-    Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
+    Y_ENSURE(Topic_.Empty() || Topic_ == topic);
+    Y_ENSURE(Partition_.Empty() || Partition_ == partition);
 
     if (Topic_.Empty()) {
         Topic_ = topic;
@@ -225,8 +225,8 @@ void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, u
 
 void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
-    Y_ABORT_UNLESS(TabletId_.Defined());
-    Y_ABORT_UNLESS(Partition_.Defined());
+    Y_ENSURE(TabletId_.Defined());
+    Y_ENSURE(Partition_.Defined());
 
     auto& t = txs[*TabletId_];
 
@@ -267,9 +267,9 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 
 void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
 {
-    Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == rhs.Topic_);
-    Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == rhs.Partition_);
-    Y_ABORT_UNLESS(TabletId_.Empty() || TabletId_ == rhs.TabletId_);
+    Y_ENSURE(Topic_.Empty() || Topic_ == rhs.Topic_);
+    Y_ENSURE(Partition_.Empty() || Partition_ == rhs.Partition_);
+    Y_ENSURE(TabletId_.Empty() || TabletId_ == rhs.TabletId_);
 
     if (Topic_.Empty()) {
         Topic_ = rhs.Topic_;
@@ -289,14 +289,14 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
 
 ui64 TTopicPartitionOperations::GetTabletId() const
 {
-    Y_ABORT_UNLESS(TabletId_.Defined());
+    Y_ENSURE(TabletId_.Defined());
 
     return *TabletId_;
 }
 
 void TTopicPartitionOperations::SetTabletId(ui64 value)
 {
-    Y_ABORT_UNLESS(TabletId_.Empty());
+    Y_ENSURE(TabletId_.Empty());
 
     TabletId_ = value;
 }
@@ -383,8 +383,8 @@ void TTopicOperations::SetWriteId(NLongTxService::TLockHandle handle)
 
 NKafka::TProducerInstanceId TTopicOperations::GetKafkaProducerInstanceId() const
 {
-    Y_ABORT_UNLESS(HasKafkaOperations_);
-    Y_ABORT_UNLESS(KafkaProducerInstanceId_.Defined());
+    Y_ENSURE(HasKafkaOperations_);
+    Y_ENSURE(KafkaProducerInstanceId_.Defined());
 
     return *KafkaProducerInstanceId_;
 }
@@ -432,7 +432,7 @@ void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
 
 void TTopicOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId)
 {
-    Y_ABORT_UNLESS(!KafkaProducerInstanceId_ || *KafkaProducerInstanceId_ == producerInstanceId);
+    Y_ENSURE(!KafkaProducerInstanceId_ || *KafkaProducerInstanceId_ == producerInstanceId);
 
     if (KafkaProducerInstanceId_.Empty()) {
         KafkaProducerInstanceId_ = producerInstanceId;

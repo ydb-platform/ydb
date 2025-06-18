@@ -1141,6 +1141,7 @@ private:
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
     bool CanProcessUserActionAndTransactionEvents() const;
+    ui64 GetCompactedBlobSizeLowerBound() const;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

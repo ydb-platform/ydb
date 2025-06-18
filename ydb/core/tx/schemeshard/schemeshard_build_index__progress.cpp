@@ -348,9 +348,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         op.SetName(TString::Join(PostingTable, suffix));
         NTableIndex::FillIndexTableColumns(tableInfo->Columns, implTableColumns.Keys, implTableColumns.Columns, op);
         auto& policy = *resetPartitionsSettings();
-        const auto shards = tableInfo->GetShard2PartitionIdx().size();
-        policy.SetMinPartitionsCount(shards);
-        policy.SetMaxPartitionsCount(shards);
+        // Prevent merging partitions
+        policy.SetMinPartitionsCount(32768);
+        policy.SetMaxPartitionsCount(0);
 
         LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
             "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -866,6 +866,10 @@ private:
     bool FillPrefixKMeans(TIndexBuildInfo& buildInfo) {
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
+        }
+        size_t i = 0;
+        for (auto& [shardIdx, shardStatus]: buildInfo.Shards) {
+            shardStatus.Index = i++;
         }
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendPrefixKMeansRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
@@ -1428,7 +1432,7 @@ public:
                 LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
                 buildInfo.AddParent(shardRange, x.ShardIdx);
             }
-            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), "", buildInfo.Shards.size()});
+            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
             shardRange.From = std::move(bound);
 

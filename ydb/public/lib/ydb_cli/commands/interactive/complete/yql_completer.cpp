@@ -154,13 +154,13 @@ namespace NYdb::NConsoleClient {
                         MakeYDBSchema(std::move(driver), std::move(database), isVerbose)))),
         };
 
+        auto service = NSQLComplete::MakeUnionNameService(std::move(services), std::move(ranking));
+
+        auto config = NSQLComplete::MakeYDBConfiguration();
+
         return IYQLCompleter::TPtr(new TYQLCompleter(
-            NSQLComplete::MakeSqlCompletionEngine(
-                lexer,
-                NSQLComplete::MakeUnionNameService(services, ranking)),
-            NSQLComplete::MakeSqlCompletionEngine(
-                lexer,
-                NSQLComplete::MakeUnionNameService(services, ranking)),
+            /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, service, config),
+            /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, service, config),
             std::move(color)));
     }
 

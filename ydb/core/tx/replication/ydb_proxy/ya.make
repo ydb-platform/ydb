@@ -24,6 +24,10 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    local_proxy
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

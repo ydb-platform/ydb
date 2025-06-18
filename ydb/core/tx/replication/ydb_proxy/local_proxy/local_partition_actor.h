@@ -13,8 +13,18 @@ enum class EWakeupType : ui64 {
     InitOffset
 };
 
+class ILocalTopicPartitionActor {
+protected:
+    virtual void OnDescribeFinished() = 0;
+    virtual void OnError(const TString& error) = 0;
+    virtual void OnFatalError(const TString& error) = 0;
+    virtual STATEFN(OnInitEvent) = 0;
+    virtual TString MakeLogPrefix() = 0;
+};
+
 class TBaseLocalTopicPartitionActor
     : public TActorBootstrapped<TBaseLocalTopicPartitionActor>
+    , public ILocalTopicPartitionActor
     , private TSchemeCacheHelpers
 {
     using TThis = TBaseLocalTopicPartitionActor;
@@ -23,13 +33,6 @@ class TBaseLocalTopicPartitionActor
 public:
     TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicName, const ui32 partitionId);
     void Bootstrap();
-
-protected:
-    virtual void OnDescribeFinished() = 0;
-    virtual void OnError(const TString& error) = 0;
-    virtual void OnFatalError(const TString& error) = 0;
-    virtual STATEFN(OnInitEvent) = 0;
-    virtual TString MakeLogPrefix() = 0;
 
 protected:
     void DoDescribe();

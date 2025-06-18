@@ -325,6 +325,9 @@ public:
             std::move(columnsMetadata),
             std::move(writeIndexes),
             priority);
+
+        // At current time only insert operation can fail.
+        NeedToFlushBeforeCommit |= (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
         CA_LOG_D("Open: token=" << token);
         return token;
     }
@@ -357,6 +360,7 @@ public:
     void CleanupClosedTokens() {
         YQL_ENSURE(ShardedWriteController);
         ShardedWriteController->CleanupClosedTokens();
+        NeedToFlushBeforeCommit = false;
     }
 
     void SetParentTraceId(NWilson::TTraceId traceId) {
@@ -1276,6 +1280,10 @@ public:
         Stats.AffectedPartitions.clear();
     }
 
+    bool FlushBeforeCommit() const {
+        return NeedToFlushBeforeCommit;
+    }
+
 private:
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
@@ -1304,6 +1312,7 @@ private:
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;
+    bool NeedToFlushBeforeCommit = false;
     EMode Mode = EMode::WRITE;
     THashMap<ui64, TInstant> SendTime;
 
@@ -1634,7 +1643,6 @@ private:
     std::optional<TKqpTableWriteActor::TWriteToken> WriteToken;
 
     bool Closed = false;
-
     bool WaitingForTableActor = false;
 
     NWilson::TSpan DirectWriteActorSpan;
@@ -1852,6 +1860,23 @@ public:
         Process();
     }
 
+    bool NeedToFlush() {
+        const bool outOfMemory = GetTotalFreeSpace() <= 0;
+        const bool needToFlush = outOfMemory
+            || State == EState::FLUSHING
+            || State == EState::PREPARING
+            || State == EState::COMMITTING
+            || State == EState::ROLLINGBACK;
+        return needToFlush;
+    }
+
+    bool NeedToFlushActor(const TKqpTableWriteActor* actor) {
+        return NeedToFlush()
+            && (State != EState::FLUSHING
+                || !TxId // Flush between queries
+                || actor->FlushBeforeCommit()); // Flush before commit
+    }
+
     bool Process() {
         ProcessRequestQueue();
         if (!ProcessWrite()) {
@@ -1862,7 +1887,9 @@ public:
         if (State == EState::FLUSHING) {
             bool isEmpty = true;
             for (auto& [_, info] : WriteInfos) {
-                isEmpty = isEmpty && info.WriteTableActor->IsReady() && info.WriteTableActor->IsEmpty();
+                if (NeedToFlushActor(actor)) {
+                    isEmpty = isEmpty && info.WriteTableActor->IsReady() && info.WriteTableActor->IsEmpty();
+                }
             }
             if (isEmpty) {
                 OnFlushed();
@@ -1916,15 +1943,8 @@ public:
         }
     }
 
-    bool ProcessWrite() {
-        const bool outOfMemory = GetTotalFreeSpace() <= 0;
-        const bool needToFlush = outOfMemory
-            || State == EState::FLUSHING
-            || State == EState::PREPARING
-            || State == EState::COMMITTING
-            || State == EState::ROLLINGBACK;
-
-        if (!EnableStreamWrite && outOfMemory) {
+    bool ProcessFlush() {
+        if (!EnableStreamWrite && GetTotalFreeSpace() <= 0) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
@@ -1934,10 +1954,10 @@ public:
             return false;
         }
 
-        if (needToFlush) {
+        if (NeedToFlush()) {
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
-                if (info.WriteTableActor->IsReady()) {
+                if (info.WriteTableActor->IsReady() && NeedToFlushActor(actor)) {
                     if (!info.WriteTableActor->FlushToShards()) {
                         return false;
                     }
@@ -1967,13 +1987,13 @@ public:
 
         CA_LOG_D("Start prepare for distributed commit");
         YQL_ENSURE(State == EState::WRITING);
-        YQL_ENSURE(!NeedToFlushBeforeCommit);
         State = EState::PREPARING;
         for (auto& [_, queue] : DataQueues) {
             YQL_ENSURE(queue.empty());
         }
         YQL_ENSURE(TxId);
         for (auto& [_, info] : WriteInfos) {
+            AFL_ENSURE(!actor->FlushBeforeCommit());
             info.WriteTableActor->SetPrepare(*TxId);
         }
         Close();
@@ -2427,7 +2447,13 @@ public:
         } else {
             AFL_ENSURE(ev->Get()->TxId);
             TxId = ev->Get()->TxId;
-            if (NeedToFlushBeforeCommit) {
+
+            bool needToFlushBeforeCommit = false;
+            for (auto& [_, info] : WriteInfos) {
+                needToFlushBeforeCommit |= info.WriteTableActor->FlushBeforeCommit();
+            }
+
+            if (needToFlushBeforeCommit) {
                 Flush(std::move(ev->TraceId));
             } else {
                 TxManager->StartPrepare();
@@ -2812,8 +2838,19 @@ public:
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
         State = EState::WRITING;
-        AFL_ENSURE(!TxId || NeedToFlushBeforeCommit); // TxId => NeedToFlushBeforeCommit
-        NeedToFlushBeforeCommit = false;
+
+        for (auto& [_, info] : WriteInfos) {
+            AFL_ENSURE(TxId || info.WriteTableActor->IsEmpty());
+            if (info.WriteTableActor->IsEmpty()) {
+                info.WriteTableActor->CleanupClosedTokens();
+            }
+            if (!TxId) {
+                info.WriteTableActor->Unlink();
+            }
+
+            AFL_ENSURE(!info.WriteTableActor->FlushBeforeCommit());
+        }
+
         if (TxId) {
             TxManager->StartPrepare();
             Prepare(std::nullopt);
@@ -2947,7 +2984,6 @@ private:
 
     EState State;
     bool HasError = false;
-    bool NeedToFlushBeforeCommit = false;
     THashMap<TPathId, std::queue<TBufferWriteMessage>> DataQueues;
 
     struct TAckMessage {

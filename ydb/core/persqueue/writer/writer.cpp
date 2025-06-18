@@ -973,7 +973,10 @@ private:
     using IRetryState = IRetryPolicy::IRetryState;
 
     static IRetryPolicy::TPtr GetRetryPolicy() {
-        return IRetryPolicy::GetExponentialBackoffPolicy(Retryable);
+        return IRetryPolicy::GetExponentialBackoffPolicy(Retryable,
+                                                         TDuration::MilliSeconds(10),
+                                                         TDuration::MilliSeconds(10),
+                                                         TDuration::MilliSeconds(100));
     };
 
     static ERetryErrorClass Retryable(Ydb::StatusIds::StatusCode code) {

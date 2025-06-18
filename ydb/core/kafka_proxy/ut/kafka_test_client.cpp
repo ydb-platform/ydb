@@ -492,19 +492,6 @@ TMessagePtr<TCreateTopicsResponseData> TKafkaTestClient::CreateTopics(std::vecto
     return WriteAndRead<TCreateTopicsResponseData>(header, request);
 }
 
-TMessagePtr<TDeleteTopicsResponseData> TKafkaTestClient::DeleteTopics(std::vector<TString> topicsToDelete) {
-    Cerr << ">>>>> TDeleteTopicsRequestData\n";
-
-    TRequestHeaderData header = Header(NKafka::EApiKey::DELETE_TOPICS, 5);
-    TDeleteTopicsRequestData request;
-    for (const auto& n : topicsToDelete) {
-        //auto s = TDeleteTopicsRequestData::TDeleteTopicState();
-        //s.Name = n;
-        request.TopicNames.push_back(n);
-    }
-    return WriteAndRead<TDeleteTopicsResponseData>(header, request);
-}
-
 TMessagePtr<TCreatePartitionsResponseData> TKafkaTestClient::CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly) {
     Cerr << ">>>>> TCreateTopicsRequestData\n";
 

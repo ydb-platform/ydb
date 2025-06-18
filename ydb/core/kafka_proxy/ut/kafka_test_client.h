@@ -108,7 +108,6 @@ class TKafkaTestClient {
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);
 
         TMessagePtr<TCreateTopicsResponseData> CreateTopics(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
-        TMessagePtr<TDeleteTopicsResponseData> DeleteTopics(std::vector<TString> topicsToDelete);
 
         TMessagePtr<TCreatePartitionsResponseData> CreatePartitions(std::vector<TTopicConfig> topicsToCreate, bool validateOnly = false);
 

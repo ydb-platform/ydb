@@ -38,7 +38,7 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
     auto result = pMin->ExtractTaskWithPrediction(counters);
     if (pMin->GetTasksCount()) {
         WeightedProcesses[pMin->GetWeightedUsage()].emplace_back(pMin);
-    } 
+    }
     if (scopeIds.emplace(pMin->GetScope()->GetScopeId()).second) {
         pMin->GetScope()->IncInFlight();
     }

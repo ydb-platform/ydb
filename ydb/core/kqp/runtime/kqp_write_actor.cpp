@@ -2217,6 +2217,7 @@ public:
         if (TxManager->GetTopicOperations().HasWriteId()) {
             writeId = TxManager->GetTopicOperations().GetWriteId();
         }
+        bool kafkaTransaction = TxManager->GetTopicOperations().HasKafkaOperations();
 
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
@@ -2225,10 +2226,15 @@ public:
                 FillTopicsCommit(transaction, TxManager);
             }
 
-            if (t.hasWrite && writeId.Defined()) {
+            if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();
                 w->SetNodeId(SelfId().NodeId());
                 w->SetKeyId(*writeId);
+            } else if (t.hasWrite && kafkaTransaction) {
+                auto* w = transaction.MutableWriteId();
+                w->SetKafkaTransaction(true);
+                w->MutableKafkaProducerInstanceId()->SetId(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Id);
+                w->MutableKafkaProducerInstanceId()->SetEpoch(TxManager->GetTopicOperations().GetKafkaProducerInstanceId().Epoch);
             }
             transaction.SetImmediate(isImmediateCommit);
 

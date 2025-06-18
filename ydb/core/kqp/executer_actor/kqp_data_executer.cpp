@@ -2835,6 +2835,11 @@ private:
                 auto* w = transaction.MutableWriteId();
                 w->SetNodeId(SelfId().NodeId());
                 w->SetKeyId(*writeId);
+            } else if (Request.TopicOperations.HasKafkaOperations() && Request.TopicOperations.HasWriteOperations()) {
+                auto* w = transaction.MutableWriteId();
+                w->SetKafkaTransaction(true);
+                w->MutableKafkaProducerInstanceId()->SetId(Request.TopicOperations.GetKafkaProducerInstanceId().Id);
+                w->MutableKafkaProducerInstanceId()->SetEpoch(Request.TopicOperations.GetKafkaProducerInstanceId().Epoch);
             }
             transaction.SetImmediate(ImmediateTx);
 

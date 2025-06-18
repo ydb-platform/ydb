@@ -2538,7 +2538,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             PQ_LOG_D("add key " << k.Key.ToString());
             auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size);
             if (write && !write->Value.empty()) {
-                AddCmdWrite(write, PersistRequest.Get(), 0, ctx);
+                AddCmdWrite(write, PersistRequest.Get(), ctx);
                 BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
             }
             Parameters->CurOffset += k.Key.GetCount();

@@ -1004,6 +1004,9 @@ private:
                      TEvKeyValue::TEvRequest* request,
                      ui64 creationUnixTime,
                      const TActorContext& ctx);
+    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
+                     const TActorContext& ctx);
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
                            ui32 curWrites,

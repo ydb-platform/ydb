@@ -1024,6 +1024,13 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
     WriteCycleSize += newWrite->Value.size();
 }
 
+void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                             TEvKeyValue::TEvRequest* request,
+                             const TActorContext& ctx)
+{
+    AddCmdWrite(newWrite, request, 0, ctx);
+}
+
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                                    TProcessParametersBase& parameters,
                                    ui32 curWrites,
@@ -1298,7 +1305,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     if (newWrite && !newWrite->Value.empty()) {
         newWrite->Key.SetFastWrite();
-        AddCmdWrite(newWrite, request, 0, ctx);
+        AddCmdWrite(newWrite, request, ctx);
 
         PQ_LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<

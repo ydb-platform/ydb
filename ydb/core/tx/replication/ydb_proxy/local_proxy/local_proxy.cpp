@@ -9,7 +9,8 @@
 namespace NKikimr::NReplication {
 
 TLocalProxyActor::TLocalProxyActor(const TString& database)
-    : Database(database) {
+    : Database(database)
+{
 }
 
 void TLocalProxyActor::Bootstrap() {
@@ -22,7 +23,7 @@ ui64 TLocalProxyActor::GetChannelBufferSize() const {
 }
 
 TActorId TLocalProxyActor::RegisterActor(IActor* actor) const {
-    return TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+    return RegisterWithSameMailbox(actor);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
@@ -34,16 +35,16 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
 
     auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
     request.get()->set_path(TStringBuilder() << "/" << Database << path);
-    for(auto& c : settings.AddConsumers_) {
+    for (auto& c : settings.AddConsumers_) {
         auto* consumer = request.get()->add_add_consumers();
         consumer->set_name(c.ConsumerName_);
     }
-    for(auto& c : settings.DropConsumers_) {
+    for (auto& c : settings.DropConsumers_) {
         auto* consumer = request.get()->add_drop_consumers();
         *consumer = c;
     }
 
-    auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
+    auto callback = [replyTo = ev->Sender, cookie = ev->Cookie, path = path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message*) {
         NYdb::NIssue::TIssues issues;
         NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), std::move(issues));
         Send(replyTo, new TEvYdbProxy::TEvAlterTopicResponse(std::move(status)), 0, cookie);
@@ -63,7 +64,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
     auto request = std::make_unique<Ydb::Topic::DescribeTopicRequest>();
     request.get()->set_path(TStringBuilder() << "/" << Database << path);
 
-    auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+    auto callback = [replyTo = ev->Sender, cookie = ev->Cookie, path = path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
         NYdb::NIssue::TIssues issues;
         Ydb::Topic::DescribeTopicResult describe;
         if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
@@ -95,7 +96,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
     auto request = std::make_unique<Ydb::Scheme::DescribePathRequest>();
     request.get()->set_path(TStringBuilder() << "/" << Database << path);
 
-    auto callback = [replyTo= ev->Sender, cookie = ev->Cookie, path=path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
+    auto callback = [replyTo = ev->Sender, cookie = ev->Cookie, path = path, this](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* result) {
         NYdb::NIssue::TIssues issues;
         NYdb::NScheme::TSchemeEntry entry;
         if (statusCode == Ydb::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS) {
@@ -125,7 +126,7 @@ STATEFN(TLocalProxyActor::StateWork) {
         hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     default:
-        Y_VERIFY_DEBUG(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
+        Y_DEBUG_ABORT_S(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
     }
 }
 

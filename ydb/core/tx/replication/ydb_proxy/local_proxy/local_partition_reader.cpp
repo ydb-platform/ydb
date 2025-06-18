@@ -11,7 +11,8 @@ TLocalTopicPartitionReaderActor::TLocalTopicPartitionReaderActor(const TActorId&
     : TBaseLocalTopicPartitionActor(database, std::move(settings.GetBase().Topics_[0].Path_), settings.GetBase().Topics_[0].PartitionIds_[0])
     , Parent(parent)
     , Consumer(std::move(settings.GetBase().ConsumerName_))
-    , AutoCommit(settings.AutoCommit_) {
+    , AutoCommit(settings.AutoCommit_)
+{
 }
 
 void TLocalTopicPartitionReaderActor::OnDescribeFinished() {
@@ -42,7 +43,7 @@ STATEFN(TLocalTopicPartitionReaderActor::OnInitEvent) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvYdbProxy::TEvReadTopicRequest, HandleInit);
     default:
-        Y_VERIFY_DEBUG(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
+        Y_DEBUG_ABORT_S(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
     }
 }
 
@@ -273,7 +274,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev
     AFL_VERIFY(1 == settings.GetBase().Topics_[0].PartitionIds_.size())("partition count", settings.GetBase().Topics_[0].PartitionIds_.size());
 
     auto actor = new TLocalTopicPartitionReaderActor(ev->Sender, Database, settings);
-    auto reader = TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+    auto reader = RegisterWithSameMailbox(actor);
     Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader), 0, ev->Cookie);
 }
 

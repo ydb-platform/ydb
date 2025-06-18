@@ -366,13 +366,13 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     template <typename... Args>
     const TActorId& GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
-        auto it = YdbProxies.find(std::pair{database, params});
+        auto it = YdbProxies.find(std::make_pair(database, params));
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
-                            ? CreateLocalYdbProxy(std::move(database))
-                            : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...);
+                ? CreateLocalYdbProxy(std::move(database))
+                : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...);
             auto ydbProxy = Register(actor);
-            auto res = YdbProxies.emplace(std::pair{database, std::move(params)}, std::move(ydbProxy));
+            auto res = YdbProxies.emplace(std::make_pair(database, std::move(params)), std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }

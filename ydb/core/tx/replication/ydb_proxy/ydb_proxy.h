@@ -185,7 +185,8 @@ struct TEvYdbProxy {
 
         TReadTopicResult(ui64 partitionId, TVector<TTopicMessage>&& messages)
             : PartitionId(partitionId)
-            , Messages(std::move(messages)) {
+            , Messages(std::move(messages))
+        {
         }
 
         void Out(IOutputStream& out) const;
@@ -293,4 +294,5 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
     const NKikimrReplication::TStaticCredentials& credentials);
 
 IActor* CreateLocalYdbProxy(const TString& database);
+
 }

@@ -6,12 +6,20 @@
 
 namespace NKikimr::NReplication {
 
-TLocalTopicPartitionCommitActor::TLocalTopicPartitionCommitActor(const TActorId& parent, const std::string& database, std::string&& topicName, ui64 partitionId, std::string&& consumerName, std::optional<std::string>&& readSessionId, ui64 offset)
+TLocalTopicPartitionCommitActor::TLocalTopicPartitionCommitActor(
+    const TActorId& parent,
+    const std::string& database,
+    std::string&& topicName,
+    ui64 partitionId,
+    std::string&& consumerName,
+    std::optional<std::string>&& readSessionId,
+    ui64 offset)
     : TBaseLocalTopicPartitionActor(database, std::move(topicName), partitionId)
     , Parent(parent)
     , ConsumerName(std::move(consumerName))
     , ReadSessionId(std::move(readSessionId))
-    , Offset(offset) {
+    , Offset(offset)
+{
 }
 
 void TLocalTopicPartitionCommitActor::OnDescribeFinished() {
@@ -97,7 +105,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
     auto& [topicName, partitionId, consumerName, offset, settings] = args;
 
     auto* actor = new TLocalTopicPartitionCommitActor(ev->Sender, Database, std::move(topicName), partitionId, std::move(consumerName), std::move(settings.ReadSessionId_), offset);
-    TlsActivationContext->RegisterWithSameMailbox(actor, SelfId());
+    RegisterWithSameMailbox(actor);
 }
 
 }

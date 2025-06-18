@@ -8,7 +8,6 @@
 namespace NKikimr::NReplication {
 
 class TLocalTopicPartitionReaderActor : public TBaseLocalTopicPartitionActor {
-
     using TBase = TBaseLocalTopicPartitionActor;
 
     constexpr static TDuration ReadTimeout = TDuration::Seconds(1);

@@ -13,9 +13,10 @@ enum class EWakeupType : ui64 {
     InitOffset
 };
 
-class TBaseLocalTopicPartitionActor : public TActorBootstrapped<TBaseLocalTopicPartitionActor>
-                                    , private TSchemeCacheHelpers {
-
+class TBaseLocalTopicPartitionActor
+    : public TActorBootstrapped<TBaseLocalTopicPartitionActor>
+    , private TSchemeCacheHelpers
+{
     using TThis = TBaseLocalTopicPartitionActor;
     static constexpr size_t MaxAttempts = 5;
 

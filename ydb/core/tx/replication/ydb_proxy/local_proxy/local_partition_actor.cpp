@@ -6,7 +6,8 @@ namespace NKikimr::NReplication {
 TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicName, const ui32 partitionId)
     : Database(database)
     , TopicName(std::move(topicName))
-    , PartitionId(partitionId) {
+    , PartitionId(partitionId)
+{
 }
 
 void TBaseLocalTopicPartitionActor::Bootstrap() {
@@ -19,7 +20,7 @@ void TBaseLocalTopicPartitionActor::DoDescribe() {
     LOG_D("Describe topic '" << path << "'");
     auto request = MakeHolder<TNavigate>();
     request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpTopic));
-    IActor::Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+    Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     Become(&TThis::StateDescribe);
 }
 
@@ -67,7 +68,7 @@ TSchemeCacheHelpers::TCheckFailFunc TBaseLocalTopicPartitionActor::DoRetryDescri
         if (Attempt == MaxAttempts) {
             OnError(error);
         } else {
-            IActor::Schedule(TDuration::Seconds(1 << Attempt++), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupType::Describe)));
+            Schedule(TDuration::Seconds(1 << Attempt++), new TEvents::TEvWakeup(static_cast<ui64>(EWakeupType::Describe)));
         }
     };
 }

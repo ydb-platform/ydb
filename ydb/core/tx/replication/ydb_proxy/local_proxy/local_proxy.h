@@ -5,15 +5,16 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-
 namespace NKikimr::NReplication {
 
 using namespace NActors;
 
-class TLocalProxyActor: public TActorBootstrapped<TLocalProxyActor>
-                      , public NGRpcService::IFacilityProvider {
+class TLocalProxyActor
+    : public TActorBootstrapped<TLocalProxyActor>
+    , public NGRpcService::IFacilityProvider
+{
 public:
-    TLocalProxyActor(const TString& database);
+    explicit TLocalProxyActor(const TString& database);
 
     void Bootstrap();
 

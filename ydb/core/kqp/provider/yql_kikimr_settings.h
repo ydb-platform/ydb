@@ -73,6 +73,9 @@ struct TKikimrSettings {
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, false> UseBlockReader;
 
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> HashShuffleFuncType;
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , false> ColumnShardHashShuffleFuncType;
+
     NCommon::TConfSetting<ui32, false> MaxDPHypDPTableSize;
 
 
@@ -187,6 +190,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableSpillingInHashJoinShuffleConnections = false;
+
+    NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
+    NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

@@ -5,6 +5,7 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
+#include <util/string/join.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
@@ -829,7 +830,7 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -871,6 +872,16 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
                 TStringBuilder() << "Non-hashable key column: " << column->Content()));
             return TStatus::Error;
         }
+    }
+
+    if (TDqCnHashShuffle::idx_HashFunc < input->ChildrenSize()) {
+        TString hashFuncName = TString(input->Child(TDqCnHashShuffle::idx_HashFunc)->Content()); hashFuncName.to_lower();
+
+        static const auto allowableHashFuncs = { "columnshardhashv1", "hashv1" };
+        Y_ENSURE(
+            std::find(allowableHashFuncs.begin(), allowableHashFuncs.end(), hashFuncName) != allowableHashFuncs.end(),
+            TStringBuilder{} << "No such hash function: "  << hashFuncName << ", allowable: "  << "{" << JoinSeq(",", allowableHashFuncs) << "}"
+        );
     }
 
     input->SetTypeAnn(outputType);

@@ -507,6 +507,13 @@ private:
                     keyColumns.AppendValue(TString(column.Value()));
                 }
             }
+
+            auto& hashFunc = planNode.NodeInfo["HashFunc"];
+            if (hashShuffle.HashFunc().IsValid()) {
+                hashFunc = hashShuffle.HashFunc().Cast().StringValue();
+            } else {
+                hashFunc = "HashV1";
+            }
         } else if (auto merge = connection.Maybe<TDqCnMerge>()) {
             planNode.TypeName = "Merge";
             auto& sortColumns = planNode.NodeInfo["SortColumns"];
@@ -2237,7 +2244,13 @@ struct TQueryPlanReconstructor {
             result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
 
             if (plan.GetMapSafe().at("Node Type") == "HashShuffle") {
-                result["Node Type"] = TStringBuilder{} << "HashShuffle (KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ")";
+                    TStringBuilder stringBuilder;
+                    stringBuilder << "HashShuffle (" <<
+                        "KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ", " <<
+                        "HashFunc: "   << plan.GetMapSafe().at("HashFunc")
+                    << ")";
+
+                result["Node Type"] = stringBuilder;
             }
 
             if (plan.GetMapSafe().contains("CTE Name")) {

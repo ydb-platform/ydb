@@ -493,6 +493,19 @@ namespace NYql::NDq {
 
             select.mutable_from()->Settable(LookupSource.table());
 
+            if (KeyType->GetMembersCount() == 1) {
+                auto& in = *select.mutable_where()->mutable_filter_typed()->mutable_in();
+                in.mutable_value()->set_column(TString(KeyType->GetMemberName(0)));
+                Ydb::Type type;
+                ExportTypeToProto(KeyType->GetMemberType(0), type);
+                auto& set = *in.mutable_set();
+                for (const auto& [keys, _] : *Request) {
+                    auto& rightTypedValue = *set.Add()->mutable_typed_value();
+                    *rightTypedValue.mutable_type() = type;
+                    ExportValueToProto(KeyType->GetMemberType(0), keys.GetElement(0), *rightTypedValue.mutable_value());
+                }
+                return {};
+            }
             NConnector::NApi::TPredicate::TDisjunction disjunction;
             for (const auto& [keys, _] : *Request) {
                 // TODO consider skipping already retrieved keys

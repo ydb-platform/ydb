@@ -40,7 +40,7 @@ class UploadSuiteBase(LoadSuiteBase):
 class UploadTpchBase(UploadSuiteBase):
     @classmethod
     def __get_path(cls):
-        return f'{YdbCluster.tables_path}/upload/tpch/s{cls.scale}'
+        return YdbCluster.get_tables_path(f'upload/tpch/s{cls.scale}')
 
     def init(self):
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', self.__get_path(), 'init', '--store=column'])

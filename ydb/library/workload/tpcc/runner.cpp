@@ -8,6 +8,7 @@
 #include "transactions.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/logger/log.h>
@@ -216,14 +217,27 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::exit(1);
     }
 
-    const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(ConnectionConfig);
-    const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
+    if (Config.WarehouseCount == 0) {
+        std::cerr << "Specified zero warehouses" << std::endl;
+        std::exit(1);
+    }
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
-    // we might consider using less than maxTerminalThreads
-    const size_t threadCount = Config.ThreadCount == 0 ?
-        std::min(maxTerminalThreadCount, terminalsCount) : Config.ThreadCount;
+    size_t threadCount = 0;
+    if (Config.ThreadCount == 0) {
+        // here we calculate max possible efficient thread number
+        const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(ConnectionConfig);
+        const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
+        threadCount = std::min(maxTerminalThreadCount, terminalsCount);
+
+        // usually this allows to lower number of threads
+        const size_t recommendedThreadCount =
+            (Config.WarehouseCount + WAREHOUSES_PER_CPU_CORE - 1) / WAREHOUSES_PER_CPU_CORE;
+        threadCount = std::min(threadCount, recommendedThreadCount);
+    } else {
+        threadCount = Config.ThreadCount;
+    }
 
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TYdbCommand::GetNetworkThreadNum()),
@@ -351,7 +365,7 @@ void TPCCRunner::Join() {
 }
 
 void TPCCRunner::RunSync() {
-    Config.SetDisplayUpdateInterval();
+    Config.SetDisplay();
 
     Clock::time_point now = Clock::now();
 
@@ -363,14 +377,14 @@ void TPCCRunner::RunSync() {
     // We don't want to start all terminals at the same time, because then there will be
     // a huge queue of ready terminals, which we can't handle
     bool forcedWarmup = false;
-    int minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
-    int minWarmupMinutes = (minWarmupSeconds + 59) / 60;
-    int warmupMinutes;
-    if (Config.WarmupMinutes < minWarmupMinutes) {
+    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
+    uint32_t minWarmupMinutes = (minWarmupSeconds + 59) / 60;
+    uint32_t warmupMinutes;
+    if (Config.WarmupDuration.Minutes() < minWarmupMinutes) {
         forcedWarmup = true; // we must print log message later after display update
         warmupMinutes = minWarmupMinutes;
     } else {
-        warmupMinutes = Config.WarmupMinutes;
+        warmupMinutes = Config.WarmupDuration.Minutes();
     }
 
     WarmupStartTs = Clock::now();
@@ -411,14 +425,14 @@ void TPCCRunner::RunSync() {
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
-    LOG_I("Measuring during " << Config.RunMinutes << " minutes");
+    LOG_I("Measuring during " << Config.RunDuration);
 
     MeasurementsStartTs = Clock::now();
 
     // reset statistics
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(PerThreadTerminalStats.size(), MeasurementsStartTs);
 
-    StopDeadline = MeasurementsStartTs + std::chrono::minutes(Config.RunMinutes);
+    StopDeadline = MeasurementsStartTs + std::chrono::seconds(Config.RunDuration.Seconds());
     while (!GetGlobalInterruptSource().stop_requested()) {
         if (now >= StopDeadline) {
             break;
@@ -469,10 +483,12 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     ss << std::endl << "Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
        << "tpmC: " << std::setprecision(1) << data.Tpmc;
 
-    std::cout << ss.str();
+    LOG_I(ss.str());
 
     // Per thread statistics (two columns)
-    std::cout << "\nPer thread statistics:" << std::endl;
+
+    std::stringstream debugSs;
+    debugSs << "\nPer thread statistics:" << std::endl;
 
     size_t threadCount = LastStatisticsSnapshot->StatVec.size();
     size_t halfCount = (threadCount + 1) / 2;
@@ -487,10 +503,10 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
                << std::setw(15) << "queue p90, ms";
 
     // Print headers side by side
-    std::cout << threadsHeader.str() << " | " << threadsHeader.str() << std::endl;
+    debugSs << threadsHeader.str() << " | " << threadsHeader.str() << std::endl;
 
     size_t totalWidth = threadsHeader.str().length() * 2 + 3;
-    std::cout << std::string(totalWidth, '-') << std::endl;
+    debugSs << std::string(totalWidth, '-') << std::endl;
 
     // Print thread data in two columns
     for (size_t i = 0; i < halfCount; ++i) {
@@ -525,13 +541,15 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
             rightLine << std::string(threadsHeader.str().length(), ' ');
         }
 
-        std::cout << leftLine.str() << " | " << rightLine.str() << std::endl;
+        debugSs << leftLine.str() << " | " << rightLine.str() << std::endl;
     }
-    std::cout << std::string(totalWidth, '-') << std::endl;
+    debugSs << std::string(totalWidth, '-') << std::endl;
 
     // Transaction statistics
-    std::cout << "\n\n";
-    PrintTransactionStatisticsPretty(std::cout);
+    debugSs << "\n";
+    PrintTransactionStatisticsPretty(debugSs);
+
+    LOG_D(debugSs.str());
 }
 
 void TPCCRunner::UpdateDisplayTuiMode(const TCalculatedStatusData& data) {
@@ -900,6 +918,31 @@ void TPCCRunner::PrintFinalResultPretty() {
 }
 
 } // anonymous
+
+//-----------------------------------------------------------------------------
+
+void TRunConfig::SetDisplay() {
+    if (NoTui) {
+        DisplayMode = EDisplayMode::Text;
+    } else {
+        if (NConsoleClient::IsStdoutInteractive()) {
+            DisplayMode = EDisplayMode::Tui;
+        } else {
+            DisplayMode = EDisplayMode::Text;
+        }
+    }
+
+    switch (DisplayMode) {
+    case EDisplayMode::None:
+        return;
+    case EDisplayMode::Text:
+        DisplayUpdateInterval = DisplayUpdateTextInterval;
+        return;
+    case EDisplayMode::Tui:
+        DisplayUpdateInterval = DisplayUpdateTuiInterval;
+        return;
+    }
+}
 
 //-----------------------------------------------------------------------------
 

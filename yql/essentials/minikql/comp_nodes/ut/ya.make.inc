@@ -84,8 +84,6 @@ SET(ORIG_SOURCES
 )
 
 PEERDIR(
-    yql/essentials/core/arrow_kernels/request
-    yql/essentials/core/arrow_kernels/registry
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy

@@ -55,10 +55,12 @@ namespace NSQLComplete {
         TMaybe<THint> Hint;
         TMaybe<TObject> Object;
         TMaybe<TCluster> Cluster;
+        bool Column = false;
         bool Binding = false;
         TEditRange EditRange;
     };
 
+    // TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
     class ILocalSyntaxAnalysis {
     public:
         using TPtr = THolder<ILocalSyntaxAnalysis>;
@@ -68,6 +70,9 @@ namespace NSQLComplete {
     };
 
     ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(
-        TLexerSupplier lexer, const THashSet<TString>& IgnoredRules);
+        TLexerSupplier lexer,
+        const THashSet<TString>& ignoredRules,
+        const THashMap<TString, THashSet<TString>>& disabledPreviousByToken,
+        const THashMap<TString, THashSet<TString>>& forcedPreviousByToken);
 
 } // namespace NSQLComplete

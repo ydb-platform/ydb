@@ -50,8 +50,10 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPar
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoPartitioning
 ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.E2EBackupCollection
+ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.SimpleBackupBackupCollection+WithIncremental
+ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.SimpleRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
-ydb/core/tx/schemeshard/ut_index_build VectorIndexBuildTest.BaseCase
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
@@ -180,6 +182,9 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large sole chunk chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
+ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbench[Query18]
+ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbench[Query28]
+ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbench[Query39]
 ydb/tests/functional/tpc/medium test_workload_oltp.py.TestWorkloadSimpleQueue.test_workload_oltp
 ydb/tests/functional/tpc/medium test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue[row]
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
@@ -187,6 +192,7 @@ ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]

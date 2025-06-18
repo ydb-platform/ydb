@@ -22,7 +22,11 @@ namespace NSQLComplete {
             INameService::TPtr names,
             ISqlCompletionEngine::TConfiguration configuration)
             : Configuration_(std::move(configuration))
-            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer, Configuration_.IgnoredRules))
+            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(
+                  lexer,
+                  Configuration_.IgnoredRules,
+                  Configuration_.DisabledPreviousByToken,
+                  Configuration_.ForcedPreviousByToken))
             , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
         {
@@ -142,6 +146,11 @@ namespace NSQLComplete {
                 object->Kinds.emplace(EObjectKind::Table);
             }
 
+            if (context.Column && global.Column) {
+                request.Constraints.Column = TColumnName::TConstraints();
+                request.Constraints.Column->Tables = std::move(global.Column->Tables);
+            }
+
             return request;
         }
 
@@ -190,6 +199,16 @@ namespace NSQLComplete {
                 }
 
                 if constexpr (std::is_base_of_v<TTypeName, T>) {
+                    switch (name.Kind) {
+                        case TTypeName::EKind::Simple: {
+                        } break;
+                        case TTypeName::EKind::Container: {
+                            name.Indentifier += "<";
+                        } break;
+                        case TTypeName::EKind::Parameterized: {
+                            name.Indentifier += "(";
+                        } break;
+                    }
                     return {ECandidateKind::TypeName, std::move(name.Indentifier)};
                 }
 
@@ -219,6 +238,10 @@ namespace NSQLComplete {
 
                 if constexpr (std::is_base_of_v<TClusterName, T>) {
                     return {ECandidateKind::ClusterName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TColumnName, T>) {
+                    return {ECandidateKind::ColumnName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TBindingName, T>) {
@@ -253,17 +276,17 @@ namespace NSQLComplete {
     }
 
     ISqlCompletionEngine::TConfiguration MakeYDBConfiguration() {
-        return {
-            .IgnoredRules = {
-                "use_stmt",
-                "import_stmt",
-                "export_stmt",
-            },
+        ISqlCompletionEngine::TConfiguration config;
+        config.IgnoredRules = {
+            "use_stmt",
+            "import_stmt",
+            "export_stmt",
         };
+        return config;
     }
 
     ISqlCompletionEngine::TConfiguration MakeYQLConfiguration() {
-        return MakeConfiguration(/* allowedStmts = */ {
+        auto config = MakeConfiguration(/* allowedStmts = */ {
             "lambda_stmt",
             "pragma_stmt",
             "select_stmt",
@@ -281,6 +304,18 @@ namespace NSQLComplete {
             "for_stmt",
             "values_stmt",
         });
+
+        config.DisabledPreviousByToken = {};
+
+        config.ForcedPreviousByToken = {
+            {"PARALLEL", {}},
+            {"TABLESTORE", {}},
+            {"FOR", {"EVALUATE"}},
+            {"IF", {"EVALUATE"}},
+            {"EXTERNAL", {"USING"}},
+        };
+
+        return config;
     }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
@@ -322,6 +357,9 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
             break;
         case NSQLComplete::ECandidateKind::BindingName:
             out << "BindingName";
+            break;
+        case NSQLComplete::ECandidateKind::ColumnName:
+            out << "ColumnName";
             break;
         case NSQLComplete::ECandidateKind::UnknownName:
             out << "UnknownName";

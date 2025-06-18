@@ -256,6 +256,7 @@ public:
 
         REGISTER    (TUpdateChaosTableReplicaProgressCommand, "update_replication_progress",  Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TAlterReplicationCardCommand,         "alter_replication_card",          Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TPingChaosLeaseCommand,               "ping_chaos_lease",                Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TMergeCommand,                        "merge",                           Null,       Structured, true,  false, ApiVersion3);
         REGISTER    (TEraseCommand,                        "erase",                           Null,       Structured, true,  false, ApiVersion3);

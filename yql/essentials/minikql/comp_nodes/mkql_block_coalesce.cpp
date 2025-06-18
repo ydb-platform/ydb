@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/util.h>
@@ -118,18 +119,37 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
     }
 }
 
+std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scalar, bool firstScalarIsExternalOptional) {
+    if (firstScalarIsExternalOptional) {
+        return dynamic_cast<arrow::StructScalar&>(*scalar).value.at(0);
+    }
+    return scalar;
+}
+
 class TCoalesceBlockExec {
 public:
     TCoalesceBlockExec(const std::shared_ptr<arrow::DataType>& returnArrowType, TType* firstItemType, TType* secondItemType, bool needUnwrapFirst)
         : ReturnArrowType_(returnArrowType)
         , FirstItemType_(firstItemType)
         , SecondItemType_(secondItemType)
-        , NeedUnwrapFirst_(needUnwrapFirst) {
+        , NeedUnwrapFirst_(needUnwrapFirst)
+        , FirstScalarIsExternalOptional_(NeedWrapWithExternalOptional(FirstItemType_))
+    {
     }
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         const auto& first = batch.values[0];
         const auto& second = batch.values[1];
+
+        if (first.is_scalar() && second.is_scalar()) {
+            if (first.scalar()->is_valid) {
+                *res = NeedUnwrapFirst_ ? UnwrapScalar(first.scalar(), FirstScalarIsExternalOptional_) : first.scalar();
+            } else {
+                *res = second.scalar();
+            }
+            return arrow::Status::OK();
+        }
+
         MKQL_ENSURE(!first.is_scalar() || !second.is_scalar(), "Expected at least one array");
         size_t length = Max(first.length(), second.length());
         auto firstReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), FirstItemType_);
@@ -137,7 +157,7 @@ public:
         if (first.is_scalar()) {
             auto firstValue = firstReader->GetScalarItem(*first.scalar());
             if (firstValue) {
-                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
+                auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, /*pgBuilder=*/nullptr);
                 builder->Add(NeedUnwrapFirst_ ? firstValue.GetOptionalValue() : firstValue, length);
                 *res = builder->Build(true);
             } else {
@@ -205,6 +225,7 @@ private:
     TType* const FirstItemType_;
     TType* const SecondItemType_;
     const bool NeedUnwrapFirst_;
+    const bool FirstScalarIsExternalOptional_;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockCoalesceKernel(const TVector<TType*>& argTypes, TType* resultType, bool needUnwrapFirst) {

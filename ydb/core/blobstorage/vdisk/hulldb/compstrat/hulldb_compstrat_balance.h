@@ -73,6 +73,9 @@ namespace NKikimr {
 
                         // put all found ssts into Vec
                         CompactSsts.PushSstFromLevelX(level, trgtFirstIt, trgtEndIt);
+                        /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                            HullCtx->VCtx->VDiskLogPrefix << " TBalanceBase::FindNeighborhoods decided to compact to level# " << level
+                            << " Task# " << CompactSsts.ToString());*/
                     } else {
                         // we don't have any ssts at level, it's fine
                     }
@@ -118,8 +121,7 @@ namespace NKikimr {
             // find empty level to put compaction result to
             ui32 FindTargetLevel() const {
                 ui32 otherLevelsNum = SliceSnap.GetLevelXNumber();
-                ui32 i = 0;
-                for (; i < Boundaries->SortedParts * 2; i++) {
+                for (ui32 i = 0; i < Boundaries->SortedParts * 2; i++) {
                     if (i < otherLevelsNum) {
                         const TSortedLevel &sl = SliceSnap.GetLevelXRef(i);
                         if (sl.Empty()) {
@@ -149,6 +151,8 @@ namespace NKikimr {
                     it.Next();
                 }
                 Y_VERIFY_S(added > 0, HullCtx->VCtx->VDiskLogPrefix);
+                /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                        HullCtx->VCtx->VDiskLogPrefix << " TBalanceLevel0 decided to compact, Task# " << CompactSsts.ToString());*/
             }
 
             // check and run full compaction if required
@@ -235,9 +239,9 @@ namespace NKikimr {
                     LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: TBalancePartiallySortedLevels::CalculateRank: %s, "
-                                "freeLevels: %d, totalPsl %d",
+                                "freeLevels: %" PRIu32 ", totalPsl %" PRIu32,
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ToString().data()), freeLevels, totalPsl);
+                                ToString().data(), freeLevels, totalPsl));
                 }
 
                 Y_VERIFY_S(freeLevels <= totalPsl, HullCtx->VCtx->VDiskLogPrefix);
@@ -311,6 +315,12 @@ namespace NKikimr {
                     added++;
                 }
                 Y_VERIFY_S(added, HullCtx->VCtx->VDiskLogPrefix);
+
+                /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    HullCtx->VCtx->VDiskLogPrefix << " TBalancePartiallySortedLevels decided to compact, Task# " << CompactSsts.ToString()
+                    << " firstKeyToCover# " << (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")
+                    << " lastKeyToCover# " << (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")
+                );*/
             }
 
             void Compact() {
@@ -398,7 +408,7 @@ namespace NKikimr {
 
                 // find sst to compact
                 const TSortedLevel &srcLevelData = SliceSnap.GetLevelXRef(srcLevelArrIdx);
-                const TKey &lastCompactedKey = srcLevelData.LastCompactedKey;
+                const TKey &lastCompactedKey = TKey::First(); // We don't use it and don't care even more than earlier!
                 const TSegments &srcSegs = srcLevelData.Segs->Segments;
                 Y_DEBUG_ABORT_UNLESS(!srcSegs.empty());
                 typename TSegments::const_iterator srcIt = ::LowerBound(srcSegs.begin(),
@@ -420,6 +430,11 @@ namespace NKikimr {
 
                 Y_VERIFY_S(srcIt != srcSegs.end(), HullCtx->VCtx->VDiskLogPrefix);
                 CompactSst(srcLevel, srcIt);
+
+                /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    HullCtx->VCtx->VDiskLogPrefix << " TBalanceLevelX decided to compact, Task# " << CompactSsts.ToString()
+                    << " lastCompactedKey# " << lastCompactedKey.ToString()
+                );*/
             }
 
             void CompactSst(ui32 srcLevel, typename TSegments::const_iterator srcIt) {
@@ -583,8 +598,8 @@ namespace NKikimr {
 
                 TString ToString() const {
                     TStringStream str;
-                    str  << "{VirtLevelComp# " << VirtualLevelToCompact
-                    << " RreePartSortLevels# " << FreePartiallySortedLevelsNum
+                    str  << "{VirtualLevelToCompact# " << VirtualLevelToCompact
+                    << " FreePartiallySortedLevelsNum# " << FreePartiallySortedLevelsNum
                     << " Ranks# ";
                     for (const auto &x : *this)
                         str << " " << x;
@@ -604,16 +619,16 @@ namespace NKikimr {
                 // find level to compact
                 Y_DEBUG_ABORT_UNLESS(!ranks.empty());
                 ranks.VirtualLevelToCompact = 0;
-                double minRank = ranks[0];
+                double maxRank = ranks[0];
                 for (ui32 i = 1; i < ranks.size(); i++) {
-                    if (ranks[i] > minRank) {
-                        minRank = ranks[i];
+                    if (ranks[i] > maxRank) {
+                        maxRank = ranks[i];
                         ranks.VirtualLevelToCompact = i;
                     }
                 }
 
                 // fill in compaction task or do nothing
-                if (minRank < RankThreshold) {
+                if (maxRank < RankThreshold) {
                     if (FullCompactionAttrs) {
                         if (BalanceLevel0.FullCompact(FullCompactionAttrs->FullCompactionLsn))
                             return ActCompactSsts;
@@ -633,6 +648,8 @@ namespace NKikimr {
                         return ActNothing;
                     }
                 } else {
+                    LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                            HullCtx->VCtx->VDiskLogPrefix << " TStrategyBalance decided to compact, ranks# " << ranks.ToString());
                     switch (ranks.VirtualLevelToCompact) {
                         case 0:     BalanceLevel0.Compact(); break;
                         case 1:     BalancePartiallySortedLevels.Compact(); break;

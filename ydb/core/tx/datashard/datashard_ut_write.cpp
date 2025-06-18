@@ -93,7 +93,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         const ui64 shard = shards[0];
         ui64 txId = 100;
 
-        // 1. Insert initial test data
         Cout << "========= Insert initial data =========\n";
         {
             TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7,8,9,10,11}; // all columns
@@ -128,7 +127,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);          
         }
     
-        // 2. Verify initial data
         Cout << "========= Verify initial data =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
@@ -143,7 +141,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             );
         }
 
-        // 3. Increment numeric columns
         Cout << "========= Increment numeric columns =========\n";
         {
             TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // key and numerical columns
@@ -164,7 +161,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
         
-        // 4. Verify increment results
         Cout << "========= Verify increment results =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
@@ -180,8 +176,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             );
         }
     
-        // 5. Try increment two rows, one don't exist (should ignore), other exist
-        Cout << "========= Try increment several rows =========\n";
+        Cout << "========= Try increment several rows (one don't exist) =========\n";
         {
             TVector<ui32> columnIds = {1,2}; //key column and uint8_val column
             TVector<TCell> increments = {TCell::Make(ui64(7)), TCell::Make(ui8(3)), // id 7 don't exist
@@ -192,7 +187,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
 
-        // 6. Verify data changed after increments in row with id=1 and row with id=7 was not added
         Cout << "========= Verify data changed after increments =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
@@ -208,7 +202,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             );
         }
 
-        // 7. Try increment non-numeric utf-8 column (should fail)
         Cout << "========= Try increment utf-8 column (should fail) =========\n";
         {
             TVector<ui32> columnIds = {1, 10}; // id, utf8_val
@@ -222,7 +215,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
-        // 8. Try increment double column (should fail)
         Cout << "========= Try increment double column (should fail) =========\n";
         { 
             TVector<ui32> columnIds = {1, 11}; // id, double_val
@@ -236,7 +228,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
-        // 9. Verify data remains unchanged after failed increments
         Cout << "========= Verify data remains unchanged after failed increments =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
@@ -252,21 +243,19 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             );
         }
 
-        // 10. Try increment key column
         Cout << "========= Try increment key columns =========\n";
         { 
             TVector<ui32> columnIds = {1, 1}; // id, id
             TVector<TCell> increments = {
                 TCell::Make(ui64(1)),
-                TCell::Make(ui64(1))
+                TCell::Make(ui64(3))
             };
             
             auto result = Increment(runtime, sender, shard, tableId, txId++, 
-                                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+                                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 
-        // 11. Verify data remains unchanged
         Cout << "========= Verify data remains unchanged =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
@@ -282,7 +271,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             );
         }
 
-        // 12. Try increment with overflow
         Cout << "========= Try increment with overflow =========\n";
         { 
             TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // id, id
@@ -303,7 +291,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
 
-        // 13. Verify data 
         Cout << "========= Verify data =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
@@ -319,7 +306,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             );
         }
 
-        // 14. Try increment no delta columns
         Cout << "========= Try increment no delta columns =========\n";
         { 
             TVector<ui32> columnIds = {1}; // id
@@ -330,7 +316,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
 
-        // 15. Verify data don't change
         Cout << "========= Verify data =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);

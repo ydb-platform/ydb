@@ -160,10 +160,10 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
 
     if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT) {
-        for (ui32 columnTag : ColumnIds) {
-            auto* col = tableInfo.Columns.FindPtr(columnTag);
+        for (size_t i = tableInfo.KeyColumnIds.size(); i < ColumnIds.size(); i++) { // only data columns
+            auto* col = tableInfo.Columns.FindPtr(ColumnIds[i]);
             if (col->IsKey) {
-                continue;
+                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Increment not allowed for key column " << ColumnIds[i]};
             }
             auto type = col->Type.GetTypeId();
             switch (type) {
@@ -177,7 +177,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
                 case NScheme::NTypeIds::Int64:
                     break;
                 default:
-                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only integer types are supported by increment" << columnTag};
+                    return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only integer types are supported by increment, but column " << ColumnIds[i] << " is not"};
             }        
         }
     }

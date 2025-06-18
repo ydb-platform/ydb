@@ -497,27 +497,25 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
         TCmsTestEnv env(opts);
 
-        auto pdiskId1 = env.PDiskId(0, 0);
-        auto pdiskId2 = env.PDiskId(0, 1);
+        auto pdiskId = env.PDiskId(0, 0);
 
-        TString pdiskPath1 = "/" + std::to_string(pdiskId1.NodeId) + "/pdisk-" + std::to_string(pdiskId1.DiskId) + ".data";
-        TString pdiskPath2 = "/" + std::to_string(pdiskId2.NodeId) + "/pdisk-" + std::to_string(pdiskId2.DiskId) + ".data";
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
 
-        auto& node1 = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
-        node1.VDisksMoved = true;
-        node1.VDiskStateInfo.clear();
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
         env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
 
         env.CheckPermissionRequest(
             MakePermissionRequest(TRequestOptions("user", false, false, false),
-                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath1, pdiskPath2)
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
                 ),
             TStatus::ALLOW
         );
 
         env.CheckPermissionRequest(
             MakePermissionRequest(TRequestOptions("user", false, false, false),
-                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath1)
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
                 ),
             TStatus::DISALLOW_TEMP
         );

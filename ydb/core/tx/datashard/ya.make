@@ -283,6 +283,7 @@ PEERDIR(
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
     yql/essentials/types/uuid
+    ydb/core/io_formats/cell_maker
 )
 
 YQL_LAST_ABI_VERSION()

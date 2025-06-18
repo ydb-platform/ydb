@@ -24,9 +24,9 @@ namespace NSQLComplete {
             : Configuration_(std::move(configuration))
             , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(
                   lexer,
-                  Configuration_.IgnoredRules,
-                  Configuration_.DisabledPreviousByToken,
-                  Configuration_.ForcedPreviousByToken))
+                  Configuration_.IgnoredRules_,
+                  Configuration_.DisabledPreviousByToken_,
+                  Configuration_.ForcedPreviousByToken_))
             , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
         {
@@ -269,7 +269,7 @@ namespace NSQLComplete {
         ISqlCompletionEngine::TConfiguration config;
         for (const std::string& name : GetSqlGrammar().GetAllRules()) {
             if (name.ends_with("_stmt") && !allowedStmts.contains(name)) {
-                config.IgnoredRules.emplace(name);
+                config.IgnoredRules_.emplace(name);
             }
         }
         return config;
@@ -277,7 +277,7 @@ namespace NSQLComplete {
 
     ISqlCompletionEngine::TConfiguration MakeYDBConfiguration() {
         ISqlCompletionEngine::TConfiguration config;
-        config.IgnoredRules = {
+        config.IgnoredRules_ = {
             "use_stmt",
             "import_stmt",
             "export_stmt",
@@ -305,9 +305,9 @@ namespace NSQLComplete {
             "values_stmt",
         });
 
-        config.DisabledPreviousByToken = {};
+        config.DisabledPreviousByToken_ = {};
 
-        config.ForcedPreviousByToken = {
+        config.ForcedPreviousByToken_ = {
             {"PARALLEL", {}},
             {"TABLESTORE", {}},
             {"FOR", {"EVALUATE"}},

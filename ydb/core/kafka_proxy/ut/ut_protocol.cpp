@@ -1161,11 +1161,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             AssertOffset(topic, 3);
 
+            // Non-conforming behavior, Kafka does not accept the next message with producer epoch = -1.
             CheckResponse(
                 client.Produce(topic, 0, MakeBatch(id, -1, { .BaseSequence = 4 })),
-                { .ErrorCode = EKafkaErrors::INVALID_PRODUCER_EPOCH });
+                { .BaseOffset = 3, .ErrorCode = EKafkaErrors::NONE_ERROR });
 
-            AssertOffset(topic, 3);
+            AssertOffset(topic, 4);
         });
 
         // TODO(qyryq) The same tests but with the tablet restarting in between the producer requests.

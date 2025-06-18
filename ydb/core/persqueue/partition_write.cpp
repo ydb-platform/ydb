@@ -1184,24 +1184,18 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " ProducerEpoch=" << p.Msg.ProducerEpoch
     );
 
-    if (p.Msg.EnableKafkaDeduplication && sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined()) {
+    if (p.Msg.EnableKafkaDeduplication &&
+        sourceId.ProducerEpoch().has_value() && sourceId.ProducerEpoch().value().Defined() &&
+        p.Msg.ProducerEpoch.Defined()
+    ) {
         auto WriteError = [this, &ctx, &p](NPersQueue::NErrorCode::EErrorCode errorCode, TStringBuilder message) {
             CancelOneWriteOnWrite(ctx, message, p, errorCode);
         };
 
         auto lastEpoch = *sourceId.ProducerEpoch().value();
-
-        if (!p.Msg.ProducerEpoch.Defined()) {
-            // INVALID_PRODUCER_EPOCH
-            WriteError(
-                NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH,
-                TStringBuilder() << "Can not write message at offset " << poffset
-                                 << " in " << TopicName() << "-" << Partition.OriginalPartitionId
-                                 << " with message producer epoch undefined and last seen producer epoch defined (" << lastEpoch << ")");
-            return false;
-        }
-
         auto messageEpoch = *p.Msg.ProducerEpoch;
+        auto lastSeqNo = *sourceId.SeqNo();
+        auto messageSeqNo = p.Msg.SeqNo;
 
         if (lastEpoch > messageEpoch) {
             // INVALID_PRODUCER_EPOCH
@@ -1212,35 +1206,30 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                                  << ", which is smaller than the last seen epoch " << lastEpoch);
             return false;
         } else if (lastEpoch < messageEpoch) {
-            if (p.Msg.SeqNo != 0) {
+            if (messageSeqNo != 0) {
                 // OUT_OF_ORDER_SEQUENCE_NUMBER
                 WriteError(
                     NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
                     TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
                                      << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": "
-                                     << "expected 0, got " << p.Msg.SeqNo);
+                                     << "expected 0, got " << messageSeqNo);
                 return false;
             }
-        } else {
-            // At this point it must be defined, as we've already checked ProducerEpoch.
-            Y_ABORT_UNLESS(sourceId.SeqNo().has_value());
-            ui64 lastSeqNo = *sourceId.SeqNo();
-            if (!InSequence(lastSeqNo, p.Msg.SeqNo)) {
-                if (IsDuplicate(lastSeqNo, p.Msg.SeqNo)) {
-                    // "DUPLICATE_SEQUENCE_NUMBER". Kafka sends successful answer in response
-                    // to requests that exactly match some of the last 5 batches (that may contain multiple records each).
+        } else if (InSequence(lastSeqNo, messageSeqNo)) {
+            // Continue processing the message.
+        } else if (IsDuplicate(lastSeqNo, messageSeqNo)) {
+            // "DUPLICATE_SEQUENCE_NUMBER". Kafka sends successful answer in response
+            // to requests that exactly match some of the last 5 batches (that may contain multiple records each).
 
-                    return true;
-                } else {
-                    // OUT_OF_ORDER_SEQUENCE_NUMBER
-                    WriteError(
-                        NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
-                        TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
-                                         << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << p.Msg.SeqNo << " (incoming seq. number), "
-                                         << lastSeqNo << " (current end sequence number)");
-                    return false;
-                }
-            }
+            return true;
+        } else {
+            // OUT_OF_ORDER_SEQUENCE_NUMBER
+            WriteError(
+                NPersQueue::NErrorCode::KAFKA_OUT_OF_ORDER_SEQUENCE_NUMBER,
+                TStringBuilder() << "Out of order sequence number for producer " << EscapeC(p.Msg.SourceId) << " at offset " << poffset
+                                    << " in " << TopicName() << "-" << Partition.OriginalPartitionId << ": " << messageSeqNo << " (incoming seq. number), "
+                                    << lastSeqNo << " (current end sequence number)");
+            return false;
         }
     }
 

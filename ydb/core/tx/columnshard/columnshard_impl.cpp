@@ -558,6 +558,28 @@ private:
         }
         TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
     }
+
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<NOlap::TPortionDataAccessor>& acc) const override {
+        AFL_VERIFY(!columnIds);
+        THashMap<ui32, ui64> memoryByColumns;
+        for (auto&& a : acc) {
+            THashMap<ui32, ui64> memoryByPortionColumns;
+            for (auto&& c : a.GetRecordsVerified()) {
+                const ui64 current = memoryByPortionColumns[c.GetEntityId()];
+                memoryByPortionColumns[c.GetEntityId()] = std::max<ui64>(current, c.GetMeta().GetRawBytes());
+            }
+            for (auto&& c : memoryByPortionColumns) {
+                memoryByColumns[c.first] += c.second;
+            }
+        }
+        ui64 max = 0;
+        for (auto&& c : memoryByColumns) {
+            max = std::max(max, c.second);
+        }
+        return max;
+    }
+
     virtual void DoOnError(const TString& errorMessage) override {
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
         ev->SetPutStatus(NKikimrProto::ERROR);

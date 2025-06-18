@@ -217,9 +217,9 @@ namespace {
                 Ctx->Runtime->RegisterService(MakeTransactionsServiceID(Ctx->Runtime->GetNodeId()), Ctx->Edge);
                 ActorId = Ctx->Runtime->Register(new TTransactionActor(
                     TransactionalId,
-                    ProducerId,
-                    ProducerEpoch,
-                    Database                    
+                    {static_cast<i64>(ProducerId), ProducerEpoch},
+                    Database,
+                    5000            
                 ));
                 DummyKqpActor->SetValidationResponse(TransactionalId, ProducerId, ProducerEpoch);
             }

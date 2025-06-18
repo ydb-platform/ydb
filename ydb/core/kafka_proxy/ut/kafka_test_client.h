@@ -68,7 +68,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TSaslAuthenticateResponseData> SaslAuthenticate(const TString& user, const TString& password);
 
-        TMessagePtr<TInitProducerIdResponseData> InitProducerId(const TString& transactionalId = "");
+        TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = {}, ui64 txnTimeoutMs = 1000);
 
         TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets);
 

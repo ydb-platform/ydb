@@ -70,14 +70,14 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslAuthenticate(co
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
 
-TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const TString& transactionalId) {
+TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const std::optional<TString>& transactionalId, ui64 txnTimeoutMs) {
     Cerr << ">>>>> TInitProducerIdRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::INIT_PRODUCER_ID, 4);
 
     TInitProducerIdRequestData request;
     request.TransactionalId = transactionalId;
-    request.TransactionTimeoutMs = 5000;
+    request.TransactionTimeoutMs = txnTimeoutMs;
 
     return WriteAndRead<TInitProducerIdResponseData>(header, request);
 }
@@ -640,7 +640,7 @@ void TKafkaTestClient::AuthenticateToKafka() {
         auto msg = ApiVersions();
 
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 22u);
     }
 
     {

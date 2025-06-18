@@ -8,7 +8,6 @@
 #include <util/datetime/base.h>
 #include <util/generic/hash.h>
 
-#include <atomic>
 #include <vector>
 
 namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {

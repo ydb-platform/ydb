@@ -35,6 +35,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
     struct TTreeElementBase : public TStaticAttributes {
         std::atomic<ui64> Usage = 0;
         std::atomic<ui64> Demand = 0;
+        std::atomic<ui64> Throttle = 0;
 
         std::atomic<ui64> BurstUsage = 0;
         std::atomic<ui64> BurstThrottle = 0;

@@ -14,8 +14,12 @@ struct TSchedulableTask {
     explicit TSchedulableTask(const NHdrf::NDynamic::TQueryPtr& query);
     ~TSchedulableTask();
 
+    bool TryIncreaseUsage(const TDuration& burstThrottle);
     void IncreaseUsage(const TDuration& burstThrottle);
     void DecreaseUsage(const TDuration& burstUsage);
+
+    void IncreaseThrottle();
+    void DecreaseThrottle();
 
     NHdrf::NDynamic::TQueryPtr Query;
 };
@@ -25,29 +29,35 @@ public:
     struct TOptions {
         TSchedulableTaskPtr SchedulableTask;
         bool IsSchedulable;
+        TString PoolId; // TODO: for debug
     };
 
 protected:
     explicit TSchedulableActorHelper(TOptions&& options);
 
+    const TString& GetPoolId() const { // TODO: for debug
+        return PoolId;
+    }
+
     static TMonotonic Now();
     bool IsSchedulable() const;
 
-    void StartExecution(const TDuration& burstThrottle);
+    bool StartExecution(const TDuration& burstThrottle);
+    bool IsExecuted() const;
     void StopExecution();
 
-    void Throttle();
+    void Throttle(TMonotonic now);
     bool IsThrottled() const;
-    TDuration Resume();
+    TDuration Resume(TMonotonic now);
 
-    std::optional<TDuration> CalculateDelay(TMonotonic now) const;
-
-    void AccountThrottledTime(TMonotonic now);
+    TDuration CalculateDelay(TMonotonic now) const;
 
 private:
     TSchedulableTaskPtr SchedulableTask;
     const bool Schedulable;
+    const TString PoolId; // TODO: for debug
     THPTimer Timer;
+    bool Executed = false;
     bool Throttled = false;
     TMonotonic StartThrottle;
     TDuration BatchTime;

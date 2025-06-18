@@ -135,6 +135,7 @@ public:
 #if defined(USE_HDRF_SCHEDULER)
         schedulableOptions.SchedulableTask = SchedulableTaskFactory(args.TxId);
         schedulableOptions.IsSchedulable = !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID;
+        schedulableOptions.PoolId = args.TxInfo->PoolId;
 #endif
 
         TIntrusivePtr<NRm::TTaskState> task = MakeIntrusive<NRm::TTaskState>(args.Task->GetId(), args.TxInfo->CreatedAt);

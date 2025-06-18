@@ -264,7 +264,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         return MakeBSControllerID();
     }
 
-    ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory) {
+    ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory,
+            ui64 inferPDiskSlotCountFromUnitSize = 0) {
         VERBOSE_COUT(" Creating pdisk");
 
         ui32 nodeId = runtime.GetNodeId(nodeIdx);
@@ -277,6 +278,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         pdisk->SetPDiskGuid(guid);
         pdisk->SetPDiskCategory(pDiskCategory);
         pdisk->SetEntityStatus(NKikimrBlobStorage::CREATE);
+        if (inferPDiskSlotCountFromUnitSize) {
+            pdisk->SetInferPDiskSlotCountFromUnitSize(inferPDiskSlotCountFromUnitSize);
+        }
+
         runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), TActorId(), ev.release()));
 
         return pdiskId;
@@ -913,6 +918,106 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_STRINGS_EQUAL("Fake error", restartPDiskEv->Details);
 
         UNIT_ASSERT_EQUAL(pdiskId, restartPDiskEv->PDiskId);
+    }
+
+    void TestInferPDiskSlotCount(ui64 driveSize, ui64 unitSizeInBytes,
+            ui64 expectedSlotCount, ui32 expectedSlotSizeInUnits, double expectedRelativeError = 0) {
+        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig("fake_drive", 0, 0, 0);
+
+        NStorage::TNodeWarden::InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes);
+
+        double unitSizeCalculated = double(driveSize) / pdiskConfig->ExpectedSlotCount / pdiskConfig->SlotSizeInUnits;
+        double unitSizeRelativeError =  (unitSizeCalculated - unitSizeInBytes) / unitSizeInBytes;
+
+        VERBOSE_COUT(""
+            << " driveSize# " << driveSize
+            << " unitSizeInBytes# " << unitSizeInBytes
+            << " ->"
+            << " ExpectedSlotCount# " << pdiskConfig->ExpectedSlotCount
+            << " SlotSizeInUnits# " << pdiskConfig->SlotSizeInUnits
+            << " relativeError# " << unitSizeRelativeError
+        );
+
+        if (expectedSlotCount) {
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->ExpectedSlotCount, expectedSlotCount);
+        }
+        if (expectedSlotSizeInUnits) {
+            UNIT_ASSERT_VALUES_EQUAL(pdiskConfig->SlotSizeInUnits, expectedSlotSizeInUnits);
+        }
+
+        if (expectedRelativeError > 0) {
+            UNIT_ASSERT_LE_C(abs(unitSizeRelativeError), expectedRelativeError,
+                TStringBuilder() << "abs(" << unitSizeRelativeError << ") < " << expectedRelativeError
+            );
+        }
+    }
+
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountPureFunction) {
+        TestInferPDiskSlotCount(7900, 1000, 8, 1u, 0.0125);
+        TestInferPDiskSlotCount(8000, 1000, 8, 1u, std::numeric_limits<double>::epsilon());
+        TestInferPDiskSlotCount(8100, 1000, 8, 1u, 0.0125);
+        TestInferPDiskSlotCount(16000, 1000, 16, 1u, std::numeric_limits<double>::epsilon());
+        TestInferPDiskSlotCount(24000, 1000, 12, 2u, std::numeric_limits<double>::epsilon());
+        TestInferPDiskSlotCount(31000, 1000, 16, 2u, 0.032);
+        TestInferPDiskSlotCount(50000, 1000, 13, 4u, 0.039);
+        TestInferPDiskSlotCount(50000, 100, 16, 32u, 0.024);
+        TestInferPDiskSlotCount(18000, 200, 11, 8u, 0.023);
+
+        for (ui64 i=1; i<=1024; i++) {
+            // In all cases the relative error doesn't exceed 1/maxSlotCount
+            TestInferPDiskSlotCount(i, 1, 0, 0, 1./16);
+        }
+
+        const size_t c_200GB = 200'000'000'000;
+        const size_t c_2000GB = 2000'000'000'000;
+
+        // Some real-world examples
+        TestInferPDiskSlotCount(1919'366'987'776, c_200GB, 10, 1u, 0.041); // "Micron_5200_MTFDDAK1T9TDD"
+        TestInferPDiskSlotCount(3199'243'124'736, c_200GB, 16, 1u, 0.001); // "SAMSUNG MZWLR3T8HBLS-00007"
+        TestInferPDiskSlotCount(6400'161'873'920, c_200GB, 16, 2u, 0.001); // "INTEL SSDPE2KE064T8"
+        TestInferPDiskSlotCount(6398'611'030'016, c_200GB, 16, 2u, 0.001); // "INTEL SSDPF2KX076T1"
+        TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 9, 1u, 0.001); // "WDC  WUH721818ALE6L4"
+    }
+
+    std::optional<NKikimrWhiteboard::TPDiskStateInfo> GrabEvPDiskStateUpdate(TTestBasicRuntime& runtime, TActorId edge, ui32 pdiskId) {
+        VERBOSE_COUT("Awaiting EvPDiskStateUpdate PDiskId# " << pdiskId);
+        for (int attempt=0; attempt<10;) {
+            const auto evPDiskStateUpdate = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>(edge);
+            NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = evPDiskStateUpdate->Get()->Record;
+            if (pdiskInfo.GetPDiskId() != pdiskId) {
+                continue;
+            }
+
+            VERBOSE_COUT("- Got EvPDiskStateUpdate# " << evPDiskStateUpdate->ToString());
+            if (!pdiskInfo.HasSlotSizeInUnits()) {
+                attempt++;
+                continue;
+            }
+
+            return pdiskInfo;
+        }
+        return std::nullopt;
+    }
+
+    CUSTOM_UNIT_TEST(TestInferPDiskSlotCountComplexSetup) {
+        TTempDir tempDir;
+
+        TTestBasicRuntime runtime(1, false);
+        auto nodeId = runtime.GetNodeId(0);
+        TString pdiskPath = "SectorMap:TestInferPDiskSlotCountComplexSetup";
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32_GB));
+        Setup(runtime, pdiskPath, sectorMap);
+
+        TActorId edge = runtime.AllocateEdgeActor();
+        runtime.SetDispatchTimeout(TDuration::Seconds(10));
+        runtime.RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), edge);
+
+        NKikimrBlobStorage::TPDiskConfig pdiskConfig;
+        ui32 pdiskId = CreatePDisk(runtime, 0, pdiskPath, 0, 1001, 0, 1_GB);
+        std::optional<NKikimrWhiteboard::TPDiskStateInfo> pdiskInfo = GrabEvPDiskStateUpdate(runtime, edge, pdiskId);
+        UNIT_ASSERT_C(pdiskInfo, "No appropriate TEvPDiskStateUpdate received");
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo->GetExpectedSlotCount(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo->GetSlotSizeInUnits(), 2u);
     }
 }
 

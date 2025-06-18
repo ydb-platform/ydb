@@ -136,6 +136,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxQueuedCompletionActions;
     bool UseSpdkNvmeDriver;
 
+    // Next 2 are either user-defined or inferred from drive size
     ui64 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
 

@@ -449,6 +449,7 @@ struct TShardedTableOptions {
         TMaybe<TDuration> ResolvedTimestamps;
         TMaybe<TString> AwsRegion;
         bool TopicAutoPartitioning = false;
+        bool SchemaChanges = false;
     };
 
     struct TFamily {

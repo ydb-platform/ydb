@@ -854,6 +854,25 @@ struct Schema : NIceDb::Schema {
         struct DatabaseQuotas : Column<9, NScheme::NTypeIds::String> {};
         struct AuditSettings : Column<10, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<11, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
+        // Scheme limits. Must be kept in sync with the scheme limits from the SubDomains table.
+        struct DepthLimit : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct PathsLimit : Column<13, NScheme::NTypeIds::Uint64> {};
+        struct ChildrenLimit : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct ShardsLimit : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct PathShardsLimit : Column<16, NScheme::NTypeIds::Uint64> {};
+        struct TableColumnsLimit : Column<17, NScheme::NTypeIds::Uint64> {};
+        struct TableColumnNameLengthLimit : Column<18, NScheme::NTypeIds::Uint64> {};
+        struct TableKeyColumnsLimit : Column<19, NScheme::NTypeIds::Uint64> {};
+        struct TableIndicesLimit : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct AclByteSizeLimit : Column<21, NScheme::NTypeIds::Uint64> {};
+        struct ConsistentCopyingTargetsLimit : Column<22, NScheme::NTypeIds::Uint64> {};
+        struct PathElementLength : Column<23, NScheme::NTypeIds::Uint64> {};
+        struct ExtraPathSymbolsAllowed : Column<24, NScheme::NTypeIds::Utf8> {};
+        struct PQPartitionsLimit : Column<25, NScheme::NTypeIds::Uint64> {};
+        struct TableCdcStreamsLimit : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct ExportsLimit : Column<27, NScheme::NTypeIds::Uint64> {};
+        struct ImportsLimit : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct ColumnTableColumnsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -867,7 +886,25 @@ struct Schema : NIceDb::Schema {
             DeclaredSchemeQuotas,
             DatabaseQuotas,
             AuditSettings,
-            ServerlessComputeResourcesMode
+            ServerlessComputeResourcesMode,
+            DepthLimit,
+            PathsLimit,
+            ChildrenLimit,
+            ShardsLimit,
+            PathShardsLimit,
+            TableColumnsLimit,
+            TableColumnNameLengthLimit,
+            TableKeyColumnsLimit,
+            TableIndicesLimit,
+            AclByteSizeLimit,
+            ConsistentCopyingTargetsLimit,
+            PathElementLength,
+            ExtraPathSymbolsAllowed,
+            PQPartitionsLimit,
+            TableCdcStreamsLimit,
+            ExportsLimit,
+            ImportsLimit,
+            ColumnTableColumnsLimit
         >;
     };
 

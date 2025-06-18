@@ -61,12 +61,12 @@ std::vector<int> TDataSplitter::GetSplitKeys(const TString& table) const {
 
     if (table == TABLE_ITEM) {
         // Special case for item table - no warehouse id in primary key
-        int itemsPerShard = ITEMS_COUNT / minShardCount;
+        int itemsPerShard = ITEM_COUNT / minShardCount;
         itemsPerShard = std::max(MIN_ITEMS_PER_SHARD, itemsPerShard);
 
         std::vector<int> splitKeys;
         int curItem = itemsPerShard;
-        while (curItem < ITEMS_COUNT) {
+        while (curItem < ITEM_COUNT) {
             splitKeys.push_back(curItem);
             curItem += itemsPerShard;
         }

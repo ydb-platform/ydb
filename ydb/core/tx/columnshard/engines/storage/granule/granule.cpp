@@ -151,6 +151,9 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
     if (!portion->IsCommitted()) {
         const std::shared_ptr<TWrittenPortionInfo> portionImpl = std::static_pointer_cast<TWrittenPortionInfo>(portion);
         const TInsertWriteId insertWriteId = portionImpl->GetInsertWriteId();
+        if (AtomicGet(LastInsertWriteId) < (i64)portionImpl->GetInsertWriteId()) {
+            AtomicSet(LastInsertWriteId, (i64)portionImpl->GetInsertWriteId());
+        }
         AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portionImpl).second);
         AFL_VERIFY(!Portions.contains(portionImpl->GetPortionId()));
     } else {

@@ -590,10 +590,15 @@ message TCompactionPlannerConstructorContainer {
         repeated TCompactionSelectorConstructorContainer Selectors = 2;
     }
 
+    message TTilingOptimizer {
+        optional string Json = 1;
+    }
+
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
         TLCOptimizer LCBuckets = 22;
+        TTilingOptimizer Tiling = 23;
     }
 }
 

@@ -39,14 +39,7 @@ void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomi
         if (NeedSendSecureHttpRequest(response)) {
             return SendSecureHttpRequest(response);
         }
-        NHttp::THeadersBuilder headers = GetResponseHeaders(response);
-        TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
-        if (contentType == "text/html") {
-            TString newBody = FixReferenceInHtml(response->Body, response->GetRequest()->Host);
-            return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, headers, newBody));
-        } else {
-            return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, headers, response->Body));
-        }
+        return ReplyAndPassAway(CreateProxiedResponse(response));
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
         BLOG_D("Can not process request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
@@ -135,17 +128,7 @@ bool THandlerSessionServiceCheck::IsAuthorizedRequest(TStringBuf authHeader) {
 
 void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool secure) {
     BLOG_D("Forward user request bypass OIDC");
-    NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
-    ForwardRequestHeaders(httpRequest);
-    if (!authHeader.empty()) {
-        httpRequest->Set(AUTH_HEADER_NAME, authHeader);
-    }
-    if (Request->HaveBody()) {
-        httpRequest->SetBody(Request->Body);
-    }
-    if (RequestedPageScheme.empty()) {
-        httpRequest->Secure = secure;
-    }
+    auto httpRequest = CreateProxiedRequest(authHeader, secure);
 
     auto requestEvent = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
     requestEvent->Timeout = TDuration::Seconds(120);
@@ -190,9 +173,12 @@ TString THandlerSessionServiceCheck::FixReferenceInHtml(TStringBuf html, TString
     return FixReferenceInHtml(result, host, findString);
 }
 
-void THandlerSessionServiceCheck::ForwardRequestHeaders(NHttp::THttpOutgoingRequestPtr& request) const {
+NHttp::THttpOutgoingRequestPtr THandlerSessionServiceCheck::CreateProxiedRequest(TStringBuf authHeader, bool secure) const {
+    auto request = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
+
     static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
         "Connection",
+        "Accept",
         "Accept-Language",
         "Cache-Control",
         "Sec-Fetch-Dest",
@@ -201,7 +187,10 @@ void THandlerSessionServiceCheck::ForwardRequestHeaders(NHttp::THttpOutgoingRequ
         "Sec-Fetch-User",
         "Upgrade-Insecure-Requests",
         "Content-Type",
-        "Origin"
+        "Origin",
+        "X-Trace-Verbosity",
+        "X-Want-Trace",
+        "traceparent"
     };
     NHttp::THeadersBuilder headers(Request->Headers);
     for (const auto& header : HEADERS_WHITE_LIST) {
@@ -210,9 +199,23 @@ void THandlerSessionServiceCheck::ForwardRequestHeaders(NHttp::THttpOutgoingRequ
         }
     }
     request->Set("Accept-Encoding", "deflate");
+
+    if (!authHeader.empty()) {
+        request->Set(AUTH_HEADER_NAME, authHeader);
+    }
+    if (Request->HaveBody()) {
+        request->SetBody(Request->Body);
+    }
+    if (RequestedPageScheme.empty()) {
+        request->Secure = secure;
+    }
+
+    return request;
 }
 
-NHttp::THeadersBuilder THandlerSessionServiceCheck::GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
+NHttp::THeadersBuilder THandlerSessionServiceCheck::ProxyResponseHeaders(const NHttp::THttpIncomingResponsePtr& response) {
+    NHttp::THeadersBuilder headers(response->Headers);
+    NHttp::THeadersBuilder outHeaders;
     static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
         "Content-Type",
         "Connection",
@@ -221,20 +224,37 @@ NHttp::THeadersBuilder THandlerSessionServiceCheck::GetResponseHeaders(const NHt
         "Access-Control-Allow-Origin",
         "Access-Control-Allow-Credentials",
         "Access-Control-Allow-Headers",
-        "Access-Control-Allow-Methods"
+        "Access-Control-Allow-Methods",
+        "traceresponse"
     };
-    NHttp::THeadersBuilder headers(response->Headers);
-    NHttp::THeadersBuilder resultHeaders;
     for (const auto& header : HEADERS_WHITE_LIST) {
         if (headers.Has(header)) {
-            resultHeaders.Set(header, headers.Get(header));
+            outHeaders.Set(header, headers.Get(header));
         }
     }
+
     static const TString LOCATION_HEADER_NAME = "Location";
     if (headers.Has(LOCATION_HEADER_NAME)) {
-        resultHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
+        outHeaders.Set(LOCATION_HEADER_NAME, GetFixedLocationHeader(headers.Get(LOCATION_HEADER_NAME)));
     }
-    return resultHeaders;
+
+    return outHeaders;
+}
+
+TString THandlerSessionServiceCheck::ProxyResponseBody(const NHttp::THttpIncomingResponsePtr& response) {
+    NHttp::THeadersBuilder headers(response->Headers);
+    TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
+    if (contentType == "text/html") {
+        return FixReferenceInHtml(response->Body, response->GetRequest()->Host);
+    } else {
+        return TString(response->Body);
+    }
+}
+
+NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateProxiedResponse(const NHttp::THttpIncomingResponsePtr& response) {
+    auto outHeaders = ProxyResponseHeaders(response);
+    auto outBody = ProxyResponseBody(response);
+    return Request->CreateResponse(response->Status, response->Message, outHeaders, outBody);
 }
 
 void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) {
@@ -246,21 +266,21 @@ void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomi
 
 TString THandlerSessionServiceCheck::GetFixedLocationHeader(TStringBuf location) {
     TStringBuf scheme, host, uri;
-        NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
-        if (location.StartsWith("//")) {
-            return TStringBuilder() << '/' << (scheme.empty() ? "" : TString(scheme) + "://") << location.SubStr(2);
-        } else if (location.StartsWith('/')) {
-            return TStringBuilder() << '/'
-                                    << (scheme.empty() ? "" : TString(scheme) + "://")
-                                    << host << location;
-        } else {
-            TStringBuf locScheme, locHost, locUri;
-            NHttp::CrackURL(location, locScheme, locHost, locUri);
-            if (!locScheme.empty()) {
-                return TStringBuilder() << '/' << location;
-            }
+    NHttp::CrackURL(ProtectedPageUrl, scheme, host, uri);
+    if (location.StartsWith("//")) {
+        return TStringBuilder() << '/' << (scheme.empty() ? "" : TString(scheme) + "://") << location.SubStr(2);
+    } else if (location.StartsWith('/')) {
+        return TStringBuilder() << '/'
+                                << (scheme.empty() ? "" : TString(scheme) + "://")
+                                << host << location;
+    } else {
+        TStringBuf locScheme, locHost, locUri;
+        NHttp::CrackURL(location, locScheme, locHost, locUri);
+        if (!locScheme.empty()) {
+            return TStringBuilder() << '/' << location;
         }
-        return TString(location);
+    }
+    return TString(location);
 }
 
 NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateResponseForbiddenHost() {

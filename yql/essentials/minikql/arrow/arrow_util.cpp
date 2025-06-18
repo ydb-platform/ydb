@@ -36,4 +36,9 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
     }
 }
 
+std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
+    static constexpr ui8 data alignas(ArrowAlignment)[1]{};
+    return std::make_shared<arrow::Buffer>(data, 0);
+}
+
 }

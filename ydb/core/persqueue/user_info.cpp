@@ -123,7 +123,8 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
         Create(
             ctx, user, userData.GetReadRuleGeneration(), false, userData.GetSession(), userData.GetPartitionSessionId(),
             userData.GetGeneration(), userData.GetStep(), offset,
-            userData.GetOffsetRewindSum(), TInstant::Zero(),  {}, userData.GetAnyCommits()
+            userData.GetOffsetRewindSum(), TInstant::Zero(),  {}, userData.GetAnyCommits(),
+            userData.HasCommittedMetadata() ? static_cast<std::optional<TString>>(userData.GetCommittedMetadata()) : std::nullopt
         );
     } else {
         userInfo->Session = userData.GetSession();
@@ -177,7 +178,8 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
                                             const TString& session,
                                             ui64 partitionSessionId,
                                             ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-                                            TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits) const
+                                            TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
+                                            const std::optional<TString>& committedMetadata) const
 {
     TString defaultServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
     TString userServiceType = "";
@@ -194,7 +196,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
         ctx, StreamCountersSubgroup,
         user, readRuleGeneration, important, TopicConverter, Partition,
         session, partitionSessionId, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,
-        meterRead, pipeClient, anyCommits
+        meterRead, pipeClient, anyCommits, committedMetadata
     };
 }
 
@@ -208,10 +210,12 @@ TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
 TUserInfo& TUsersInfoStorage::Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
-        TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits
+        TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
+        const std::optional<TString>& committedMetadata
 ) {
     auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, session, partitionSessionId,
-                                              gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient, anyCommits);
+                                              gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient,
+                                              anyCommits, committedMetadata);
     auto result = UsersInfo.emplace(user, std::move(userInfo));
     Y_ABORT_UNLESS(result.second);
     return result.first->second;

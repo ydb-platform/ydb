@@ -363,7 +363,8 @@ struct TEvPQ {
 
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId, const ui64 partitionSessionId,
                             const ui32 generation, const ui32 step, const TActorId& pipeClient,
-                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false)
+                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false,
+                            const std::optional<TString>& сommittedMetadata = std::nullopt)
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -375,6 +376,7 @@ struct TEvPQ {
         , ReadRuleGeneration(readRuleGeneration)
         , Strict(strict)
         , PipeClient(pipeClient)
+        , CommittedMetadata(сommittedMetadata)
         {
         }
 
@@ -389,6 +391,7 @@ struct TEvPQ {
         ui64 ReadRuleGeneration;
         bool Strict;
         TActorId PipeClient;
+        std::optional<TString> CommittedMetadata;
     };
 
 
@@ -819,6 +822,16 @@ struct TEvPQ {
             operation.SetKillReadSession(killReadSession);
             operation.SetOnlyCheckCommitedToFinish(onlyCheckCommitedToFinish);
             operation.SetReadSessionId(readSessionId);
+
+            Operations.push_back(std::move(operation));
+        }
+
+        void AddKafkaOffsetCommitOperation(TString consumer, ui64 offset) {
+            NKikimrPQ::TPartitionOperation operation;
+            operation.SetConsumer(std::move(consumer));
+            operation.SetKafkaTransaction(true);
+            operation.SetCommitOffsetsEnd(offset);
+            operation.SetForceCommit(true);
 
             Operations.push_back(std::move(operation));
         }

@@ -347,10 +347,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (IsTable(SchemeKey)) {
                 // try search for a view
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
+                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
                 HeadObject(SchemeKey);
             } else if (IsView(SchemeKey)) {
                 // try search for a topic
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
+                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
                 HeadObject(SchemeKey);
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
@@ -475,7 +477,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         TString content;
-        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema)) {
+        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
             return;
         }
 
@@ -834,6 +836,7 @@ private:
 
     const TString MetadataKey;
     TString SchemeKey;
+    NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;

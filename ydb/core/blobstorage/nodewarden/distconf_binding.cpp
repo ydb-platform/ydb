@@ -64,7 +64,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
         CheckRootNodeStatus();
-        if (RootState == ERootState::INITIAL && !Binding && AllBoundNodes.size() < NodeIds.size()) {
+        if (RootState == ERootState::INITIAL && !ScepterlessOperationInProgress && !Binding && AllBoundNodes.size() < NodeIds.size()) {
             const TMonotonic now = TActivationContext::Monotonic();
             TMonotonic closest;
             if (std::optional<ui32> nodeId = BindQueue.Pick(now, &closest)) {

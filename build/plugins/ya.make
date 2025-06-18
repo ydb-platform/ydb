@@ -9,7 +9,6 @@ PY_SRCS(
     _common.py
     _dart_fields.py
     _requirements.py
-    _xsyn_includes.py
     bundle.py
     coverage.py
     cp.py

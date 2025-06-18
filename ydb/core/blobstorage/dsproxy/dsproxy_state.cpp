@@ -1,6 +1,8 @@
 #include "dsproxy_impl.h"
 #include "dsproxy_monactor.h"
 
+#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
+
 namespace NKikimr {
 
     void TBlobStorageGroupProxy::Handle5min(TAutoPtr<IEventHandle> ev) {
@@ -90,6 +92,15 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::ApplyGroupInfo(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
             TNodeLayoutInfoPtr nodeLayoutInfo, TIntrusivePtr<TStoragePoolCounters>&& counters) {
+        if (info && info->IsBridged()) {
+            const TActorId serviceId = MakeBlobStorageProxyID(info->GroupID);
+            BridgeProxyId = RegisterWithSameMailbox(CreateBridgeProxyActor(std::move(info)));
+            TActivationContext::ActorSystem()->RegisterLocalService(serviceId, BridgeProxyId);
+            Become(&TThis::StateForward);
+            ProcessInitQueue();
+            return;
+        }
+
         auto prevInfo = std::exchange(Info, std::move(info));
         if (Info) {
             if (Topology) {

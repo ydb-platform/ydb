@@ -30,11 +30,11 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
 
         // For 1 warehouse, most tables should have no split keys (single shard)
 
-        // Item table - special case, depends on ITEMS_COUNT
+        // Item table - special case, depends on ITEM_COUNT
         auto itemSplits = splitter.GetSplitKeys(TABLE_ITEM);
-        int itemsPerShard = ITEMS_COUNT / minShardCount;
+        int itemsPerShard = ITEM_COUNT / minShardCount;
         itemsPerShard = std::max(minItemsPerShard, itemsPerShard);
-        int expectedItemSplits = (ITEMS_COUNT - 1) / itemsPerShard;
+        int expectedItemSplits = (ITEM_COUNT - 1) / itemsPerShard;
         UNIT_ASSERT_VALUES_EQUAL(itemSplits.size(), expectedItemSplits);
         if (!itemSplits.empty()) {
             UNIT_ASSERT_VALUES_EQUAL(itemSplits[0], itemsPerShard);
@@ -60,9 +60,10 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
 
         // Item table
         auto itemSplits = splitter.GetSplitKeys(TABLE_ITEM);
-        int itemsPerShard = ITEMS_COUNT / minShardCount;
+        int itemsPerShard = ITEM_COUNT / minShardCount;
         itemsPerShard = std::max(minItemsPerShard, itemsPerShard);
-        int expectedItemSplits = (ITEMS_COUNT - 1) / itemsPerShard;
+        int expectedItemSplits = (ITEM_COUNT - 1) / itemsPerShard;
+        UNIT_ASSERT(expectedItemSplits >= 0);
         UNIT_ASSERT_VALUES_EQUAL(itemSplits.size(), expectedItemSplits);
 
         // Heavy tables - check based on PER_WAREHOUSE_MB
@@ -73,6 +74,7 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
         int stockWarehousesPerShard2 = (1000 + minShardCount - 1) / minShardCount;
         stockWarehousesPerShard = std::min(stockWarehousesPerShard, stockWarehousesPerShard2);
         int expectedStockSplits = (1000 - 1) / stockWarehousesPerShard;
+        UNIT_ASSERT(expectedStockSplits > 0);
         UNIT_ASSERT_VALUES_EQUAL(stockSplits.size(), expectedStockSplits);
         if (!stockSplits.empty()) {
             UNIT_ASSERT_VALUES_EQUAL(stockSplits[0], 1 + stockWarehousesPerShard);
@@ -85,12 +87,14 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
         int customerWarehousesPerShard2 = (1000 + minShardCount - 1) / minShardCount;
         customerWarehousesPerShard = std::min(customerWarehousesPerShard, customerWarehousesPerShard2);
         int expectedCustomerSplits = (1000 - 1) / customerWarehousesPerShard;
+        UNIT_ASSERT(expectedCustomerSplits > 0);
         UNIT_ASSERT_VALUES_EQUAL(customerSplits.size(), expectedCustomerSplits);
 
         // Light tables
         auto warehouseSplits = splitter.GetSplitKeys(TABLE_WAREHOUSE);
         int lightWarehousesPerShard = (1000 + minShardCount - 1) / minShardCount;
         int expectedLightSplits = (1000 - 1) / lightWarehousesPerShard;
+        UNIT_ASSERT(expectedLightSplits > 0);
         UNIT_ASSERT_VALUES_EQUAL(warehouseSplits.size(), expectedLightSplits);
     }
 
@@ -101,9 +105,9 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
 
         // Item table
         auto itemSplits = splitter.GetSplitKeys(TABLE_ITEM);
-        int itemsPerShard = ITEMS_COUNT / minShardCount;
+        int itemsPerShard = ITEM_COUNT / minShardCount;
         itemsPerShard = std::max(minItemsPerShard, itemsPerShard);
-        int expectedItemSplits = (ITEMS_COUNT - 1) / itemsPerShard;
+        int expectedItemSplits = (ITEM_COUNT - 1) / itemsPerShard;
         UNIT_ASSERT_VALUES_EQUAL(itemSplits.size(), expectedItemSplits);
         if (!itemSplits.empty()) {
             UNIT_ASSERT_VALUES_EQUAL(itemSplits[0], itemsPerShard);
@@ -310,10 +314,10 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
 
             auto itemSplits = splitter.GetSplitKeys(TABLE_ITEM);
 
-            int itemsPerShard = ITEMS_COUNT / minShardCount;
+            int itemsPerShard = ITEM_COUNT / minShardCount;
             itemsPerShard = std::max(minItemsPerShard, itemsPerShard);
 
-            if (itemsPerShard >= ITEMS_COUNT) {
+            if (itemsPerShard >= ITEM_COUNT) {
                 // Single shard case
                 UNIT_ASSERT(itemSplits.empty());
             } else {
@@ -321,7 +325,7 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
                 UNIT_ASSERT(!itemSplits.empty());
 
                 // Verify split points
-                int expectedSplits = (ITEMS_COUNT - 1) / itemsPerShard;
+                int expectedSplits = (ITEM_COUNT - 1) / itemsPerShard;
                 UNIT_ASSERT_VALUES_EQUAL(itemSplits.size(), expectedSplits);
 
                 // Verify first split
@@ -331,7 +335,7 @@ Y_UNIT_TEST_SUITE(TDataSplitterTest) {
                 for (size_t i = 0; i < itemSplits.size(); ++i) {
                     int expectedSplit = itemsPerShard * (i + 1);
                     UNIT_ASSERT_VALUES_EQUAL(itemSplits[i], expectedSplit);
-                    UNIT_ASSERT(itemSplits[i] < ITEMS_COUNT);
+                    UNIT_ASSERT(itemSplits[i] < ITEM_COUNT);
                 }
             }
         }

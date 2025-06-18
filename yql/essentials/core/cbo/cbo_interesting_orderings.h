@@ -28,17 +28,49 @@ struct TOrdering {
     bool operator==(const TOrdering& other) const;
     TString ToString() const;
 
+    struct TItem {
+        enum EDirection : uint32_t {
+            ENone = 0,
+            EAscending = 1,
+            EDescending = 2
+        };
+    };
+
     TOrdering(
         std::vector<std::size_t> items,
+        std::vector<TItem::EDirection> directions,
         EType type,
         bool isNatural = false
     )
         : Items(std::move(items))
+        , Directions(std::move(directions))
         , Type(type)
         , IsNatural(isNatural)
+    {
+        Y_ENSURE(
+            Directions.empty() && type == TOrdering::EShuffle ||
+            Directions.size() == Items.size() && type == TOrdering::ESorting
+        );
+    }
+
+    TOrdering(
+        std::vector<std::size_t> items,
+        EType type
+    )
+        : TOrdering(
+            std::move(items),
+            std::vector<TItem::EDirection>{},
+            type
+        )
     {}
 
+    TOrdering() = default;
+
+    bool HasItem(std::size_t item) const;
+
     std::vector<std::size_t> Items;
+    std::vector<TItem::EDirection> Directions;
+
     EType Type;
     /* Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping. */
     bool IsNatural = false;
@@ -135,8 +167,7 @@ public:
         TTableAliasMap* tableAliases = nullptr
     );
 
-public:
-    // Deprecated, use the others in this public section instead
+public: // deprecated section, use the section below instead of this
     std::size_t AddFD(
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
@@ -145,6 +176,7 @@ public:
         TTableAliasMap* tableAliases = nullptr
     );
 
+public:
     std::size_t AddConstant(
         const TJoinColumn& constantColumn,
         bool alwaysActive,
@@ -168,8 +200,7 @@ public:
 private:
     std::size_t AddFDImpl(TFunctionalDependency fd);
 
-public:
-
+public: // deprecated section, use the section below instead of this
     i64 FindInterestingOrderingIdx(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type,
@@ -182,12 +213,30 @@ public:
         TTableAliasMap* tableAliases = nullptr
     );
 
-    std::size_t AddInterestingOrdering(
-        const TVector<TString>& interestingOrdering, // column names
-        TOrdering::EType type,
+public:
+    std::size_t FindSorting(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        const std::vector<TOrdering::TItem::EDirection>& directions,
         TTableAliasMap* tableAliases = nullptr
     );
 
+    std::size_t AddSorting(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        std::vector<TOrdering::TItem::EDirection> directions,
+        TTableAliasMap* tableAliases = nullptr
+    );
+
+    std::size_t FindShuffling(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        TTableAliasMap* tableAliases = nullptr
+    );
+
+    std::size_t AddShuffling(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        TTableAliasMap* tableAliases = nullptr
+    );
+
+public:
     TVector<TJoinColumn> GetInterestingOrderingsColumnNamesByIdx(std::size_t interestingOrderingIdx) const;
     TString ToString() const;
 
@@ -196,8 +245,9 @@ public:
     std::vector<TOrdering> InterestingOrderings;
 
 private:
-    std::pair<std::vector<std::size_t>, i64> ConvertColumnsAndFindExistingOrdering(
+    std::pair<TOrdering, i64> ConvertColumnsAndFindExistingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
+        const std::vector<TOrdering::TItem::EDirection>& directions,
         TOrdering::EType type,
         bool createIfNotExists,
         TTableAliasMap* tableAliases = nullptr
@@ -213,6 +263,13 @@ private:
         const TJoinColumn& column,
         bool createIfNotExists,
         TTableAliasMap* tableAliases = nullptr
+    );
+
+    std::size_t AddInterestingOrdering(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        TOrdering::EType type,
+        const std::vector<TOrdering::TItem::EDirection>& directions,
+        TTableAliasMap* tableAliases
     );
 
 private:
@@ -237,6 +294,11 @@ private:
         EMaxFDCount = 64,
         EMaxNFSMStates = 256,
         EMaxDFSMStates = 512,
+    };
+
+    struct TItemInfo {
+        bool UsedInAscOrdering  = false;
+        bool UsedInDescOrdering = false;
     };
 
 public:
@@ -364,7 +426,8 @@ private:
         TString ToString() const;
         void Build(
             const std::vector<TFunctionalDependency>& fds,
-            const std::vector<TOrdering>& interesting
+            const std::vector<TOrdering>& interesting,
+            const std::vector<TItemInfo>& itemInfo
         );
 
     private:
@@ -373,7 +436,8 @@ private:
         void PrefixClosure();
         void ApplyFDs(
             const std::vector<TFunctionalDependency>& fds,
-            const std::vector<TOrdering>& interesting
+            const std::vector<TOrdering>& interesting,
+            const std::vector<TItemInfo>& itemInfo
         );
 
     private:
@@ -448,11 +512,17 @@ private:
         const std::vector<TOrdering>& interestingOrderings
     );
 
+    void CollectItemInfo(
+        const std::vector<TFunctionalDependency>& fds,
+        const std::vector<TOrdering>& interestingOrderings
+    );
+
 private:
     TNFSM NFSM;
     TSimpleSharedPtr<TDFSM> DFSM; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
 
     std::vector<i64> FdMapping; // We to remap FD idxes after the pruning
+    std::vector<TItemInfo> ItemInfo;
     bool Built = false;
 };
 

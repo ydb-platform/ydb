@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     evaluate.cpp
+    function.cpp
     global.cpp
     named_node.cpp
     narrowing_visitor.cpp

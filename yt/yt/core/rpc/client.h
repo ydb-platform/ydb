@@ -63,7 +63,7 @@ struct IClientRequest
     virtual std::string GetService() const = 0;
     virtual std::string GetMethod() const = 0;
 
-    virtual const std::optional<std::string>& GetRequestInfo() const = 0;
+    virtual const std::string& GetRequestInfo() const = 0;
 
     virtual void DeclareClientFeature(int featureId) = 0;
     virtual void RequireServerFeature(int featureId) = 0;
@@ -179,7 +179,7 @@ public:
     template <class... TArgs>
     void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
 
-    const std::optional<std::string>& GetRequestInfo() const override;
+    const std::string& GetRequestInfo() const override;
 
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;
@@ -255,9 +255,11 @@ private:
 
     std::string User_;
     std::string UserTag_;
-    std::optional<std::string> RequestInfo_;
+    std::string RequestInfo_;
 
     TWeakPtr<IClientRequestControl> RequestControl_;
+
+    void SetRawRequestInfo(std::string requestInfo);
 
     void OnPullRequestAttachmentsStream();
     void OnRequestStreamingPayloadAcked(int sequenceNumber, const TError& error);

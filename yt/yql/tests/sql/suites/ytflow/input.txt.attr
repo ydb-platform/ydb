@@ -4,6 +4,26 @@
             "StructType";
             [
                 [
+                    "$timestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Uint64"
+                        ]
+                    ];
+                ];
+                [
+                    "$cumulative_data_weight";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
+                ];
+                [
                     "value";
                     [
                         "DataType";

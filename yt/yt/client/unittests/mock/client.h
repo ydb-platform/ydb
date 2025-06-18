@@ -675,6 +675,11 @@ public:
         const TListOperationsOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<TListJobsResult>, ListJobs, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TListJobsOptions& options),

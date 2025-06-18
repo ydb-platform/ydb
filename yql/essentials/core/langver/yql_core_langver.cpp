@@ -29,7 +29,7 @@ bool CheckLangVersion(TLangVersion ver, TLangVersion max, TMaybe<TIssue>& issue)
         return false;
     }
 
-    if (!IsAvalableLangVersion(ver, max)) {
+    if (!IsAvailableLangVersion(ver, max)) {
         TStringBuilder builder;
         builder << "YQL language version '";
         WriteVersion(builder, ver);

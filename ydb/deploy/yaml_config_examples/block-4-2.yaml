@@ -44,7 +44,6 @@ config:
       body: 3
       data_center: 'zone-a'
       rack: '3'
-
   - host: ydb-node-zone-a-4.local
     host_config_id: 1
     location:
@@ -63,7 +62,6 @@ config:
       body: 6
       data_center: 'zone-a'
       rack: '6'
-
   - host: ydb-node-zone-a-7.local
     host_config_id: 1
     location:
@@ -77,14 +75,14 @@ config:
       data_center: 'zone-a'
       rack: '8'
   interconnect_config:
-      start_tcp: true
-      encryption_mode: OPTIONAL
-      path_to_certificate_file: "/opt/ydb/certs/node.crt"
-      path_to_private_key_file: "/opt/ydb/certs/node.key"
-      path_to_ca_file: "/opt/ydb/certs/ca.crt"
+    start_tcp: true
+    encryption_mode: OPTIONAL
+    path_to_certificate_file: "/opt/ydb/certs/node.crt"
+    path_to_private_key_file: "/opt/ydb/certs/node.key"
+    path_to_ca_file: "/opt/ydb/certs/ca.crt"
   grpc_config:
-      cert: "/opt/ydb/certs/node.crt"
-      key: "/opt/ydb/certs/node.key"
-      ca: "/opt/ydb/certs/ca.crt"
-      services_enabled:
-      - legacy
+    cert: "/opt/ydb/certs/node.crt"
+    key: "/opt/ydb/certs/node.key"
+    ca: "/opt/ydb/certs/ca.crt"
+    services_enabled:
+    - legacy

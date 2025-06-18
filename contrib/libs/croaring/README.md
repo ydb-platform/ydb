@@ -144,6 +144,12 @@ Linux or macOS users might follow the following instructions if they have a rece
     ```
 
 
+
+Packages
+------
+
+[![Packaging status](https://repology.org/badge/vertical-allrepos/croaring.svg)](https://repology.org/project/croaring/versions)
+
 # Using Roaring as a CPM dependency
 
 
@@ -891,20 +897,25 @@ later `roaring_bitmap_or_inplace` will be very fast.
 
 You should benchmark these alternatives on your own data to decide what is best.
 
-# Wrappers
+# Wrappers for Roaring Bitmaps
+
+This page lists several community-contributed wrappers for the Roaring Bitmap library, enabling its use in various programming languages and environments.
 
 ## Python
-Tom Cornebize wrote a Python wrapper available at https://github.com/Ezibenroc/PyRoaringBitMap
-Installing it is as easy as typing...
+
+Tom Cornebize developed a Python wrapper, **PyRoaringBitMap**, which can be found at [https://github.com/Ezibenroc/PyRoaringBitMap](https://github.com/Ezibenroc/PyRoaringBitMap).
+
+Installation is straightforward using pip:
 
 ```
 pip install pyroaring
 ```
 
-## JavaScript
+## JavaScript (Node.js)
 
-Salvatore Previti  wrote a Node/JavaScript wrapper available at https://github.com/SalvatorePreviti/roaring-node
-Installing it is as easy as typing...
+Salvatore Previti created a Node.js wrapper, **roaring-node**, available at [https://github.com/SalvatorePreviti/roaring-node](https://github.com/SalvatorePreviti/roaring-node).
+
+You can install it via npm with the following command:
 
 ```
 npm install roaring
@@ -912,33 +923,31 @@ npm install roaring
 
 ## Swift
 
-Jérémie Piotte wrote a [Swift wrapper](https://github.com/RoaringBitmap/SwiftRoaring).
+Jérémie Piotte authored the [Swift wrapper](https://github.com/RoaringBitmap/SwiftRoaring).
 
+## C\#
 
-## C#
+There is a C\# wrapper, **CRoaring.Net**, located at [https://github.com/k-wojcik/Roaring.Net](https://github.com/k-wojcik/Roaring.Net). This wrapper is compatible with Windows and Linux on x64 processors.
 
-Brandon Smith wrote a C# wrapper available at https://github.com/RogueException/CRoaring.Net (works for Windows and Linux under x64 processors)
+## Go (Golang)
 
-
-## Go (golang)
-
-There is a Go (golang) wrapper available at https://github.com/RoaringBitmap/gocroaring
+A Go wrapper is available at the official RoaringBitmap GitHub organization: [https://github.com/RoaringBitmap/gocroaring](https://github.com/RoaringBitmap/gocroaring).
 
 ## Rust
 
-Saulius Grigaliunas wrote a Rust wrapper available at https://github.com/saulius/croaring-rs
+Saulius Grigaliunas developed a Rust wrapper, **croaring-rs**, which can be found at [https://github.com/saulius/croaring-rs](https://github.com/saulius/croaring-rs).
 
 ## D
 
-Yuce Tekol wrote a D wrapper available at https://github.com/yuce/droaring
+Yuce Tekol created a D wrapper, **droaring**, available at [https://github.com/yuce/droaring](https://github.com/yuce/droaring).
 
-## Redis
+## Redis Module
 
-Antonio Guilherme Ferreira Viggiano wrote a Redis Module available at https://github.com/aviggiano/redis-roaring
+Antonio Guilherme Ferreira Viggiano wrote a Redis Module integrating Roaring Bitmaps, available at [https://github.com/aviggiano/redis-roaring](https://github.com/aviggiano/redis-roaring).
 
 ## Zig
 
-Justin Whear wrote a Zig wrapper available at https://github.com/jwhear/roaring-zig
+Justin Whear contributed a Zig wrapper, located at [https://github.com/jwhear/roaring-zig](https://github.com/jwhear/roaring-zig).
 
 
 # Mailing list/discussion group

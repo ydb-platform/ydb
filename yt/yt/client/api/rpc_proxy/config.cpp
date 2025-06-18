@@ -50,6 +50,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("enable_proxy_discovery", &TThis::EnableProxyDiscovery)
         .Default(true);
+    registrar.Parameter("proxy_url_aliasing_rules", &TThis::ProxyUrlAliasingRules)
+        .Default();
 
     registrar.Parameter("dynamic_channel_pool", &TThis::DynamicChannelPool)
         .DefaultNew();

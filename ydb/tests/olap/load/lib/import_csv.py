@@ -67,6 +67,5 @@ class ImportFileCsvBase(UploadSuiteBase):
         super().teardown_class()
 
 
-
 class TestImportFileCsv(ImportFileCsvBase):
     external_folder: str = 'ecommerce'

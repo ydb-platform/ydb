@@ -133,7 +133,10 @@ namespace NYdb::NConsoleClient {
 
         return NSQLComplete::MakeLocalCache<TKey, TValue>(
             NMonotonic::CreateDefaultMonotonicTimeProvider(),
-            /* config = */ {});
+            {
+                .ByteCapacity = 1 * 1024 * 1024,
+                .TTL = TDuration::Seconds(8),
+            });
     }
 
     IYQLCompleter::TPtr MakeYQLCompleter(

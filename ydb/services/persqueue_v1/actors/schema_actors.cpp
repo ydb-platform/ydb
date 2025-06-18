@@ -1183,7 +1183,7 @@ void TDescribeTopicActor::Bootstrap(const NActors::TActorContext& ctx)
 
     SendDescribeProposeRequest(ctx);
     Become(&TDescribeTopicActor::StateWork);
-    LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, "Describe topic actor for path " << GetProtoRequest()->path());
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "Describe topic actor for path " << GetProtoRequest()->path());
 }
 
 void TDescribeConsumerActor::Bootstrap(const NActors::TActorContext& ctx)

@@ -2737,7 +2737,6 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
 void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
     NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
-
     TString s = request.HasRequestId() ? request.GetRequestId() : "<none>";
     ui32 p = request.HasPartitionRequest() && request.GetPartitionRequest().HasPartition() ? request.GetPartitionRequest().GetPartition() : 0;
     ui64 m = request.HasPartitionRequest() && request.GetPartitionRequest().HasMessageNo() ? request.GetPartitionRequest().GetMessageNo() : 0;
@@ -2841,7 +2840,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     } else if (req.HasCmdCreateSession()) {
         HandleCreateSessionRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx, pipeClient, ev->Sender);
     } else if (req.HasCmdSetClientOffset()) {
-        Cerr << ">>>>> req.HasCmdSetClientOffset()" << Endl << Flush;
         HandleSetClientOffsetRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdGetClientOffset()) {
         HandleGetClientOffsetRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);

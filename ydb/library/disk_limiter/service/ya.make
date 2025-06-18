@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/limiter/usage
+    ydb/library/disk_limiter/usage
     ydb/core/protos
 )
 

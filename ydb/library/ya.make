@@ -11,6 +11,7 @@ RECURSE(
     breakpad
     chunks_limiter
     drr
+    disk_limiter
     folder_service
     formats
     fyamlcpp

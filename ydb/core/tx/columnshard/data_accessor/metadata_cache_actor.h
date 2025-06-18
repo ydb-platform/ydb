@@ -35,46 +35,52 @@ private:
         manager->second.RegisterController(move(controller), ev->Get()->GetIsUpdateFlag());
     }
     void Handle(TEvUnregisterController::TPtr& ev) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "TEvUnregisterController")("owner", ev->Get()->GetOwner());
-        auto owner = ev->Get()->GetOwner();
-        auto manager = Managers.find(owner);
-        if (manager == Managers.end()) {
-            return;
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "TEvUnregisterController")("owner", ev->Get()->GetOwner());
+        if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
+            manager->second.UnregisterController(ev->Get()->GetPathId());
         }
-        manager->second.UnregisterController(ev->Get()->GetPathId());
+        else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "owner_not_found");
+        }
     }
     void Handle(TEvAddPortion::TPtr& ev) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "TEvAddPortion")("owner", ev->Get()->GetOwner());
-        auto owner = ev->Get()->GetOwner();
-        auto manager = Managers.find(owner);
-        if (manager == Managers.end()) {
-            return;
+        if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
+            for (auto&& a : ev->Get()->ExtractAccessors()) {
+                manager->second.AddPortion(std::move(a));
+            }
         }
-        for (auto&& a : ev->Get()->ExtractAccessors()) {
-            manager->second.AddPortion(std::move(a));
+        else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "owner_not_found");
         }
     }
     void Handle(TEvRemovePortion::TPtr& ev) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "TEvRemovePortion")("owner", ev->Get()->GetOwner());
-        auto owner = ev->Get()->GetOwner();
-        auto manager = Managers.find(owner);
-        if (manager == Managers.end()) {
-            return;
+        if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
+            manager->second.RemovePortion(ev->Get()->GetPortion());
         }
-        manager->second.RemovePortion(ev->Get()->GetPortion());
+        else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "owner_not_found");
+        }
     }
    void Handle(TEvAskServiceDataAccessors::TPtr& ev) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "TEvAskServiceDataAccessors")("owner", ev->Get()->GetOwner());
-        auto owner = ev->Get()->GetOwner();
-        auto manager = Managers.find(owner);
-        if (manager == Managers.end()) {
-            return;
+        if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
+            manager->second.AskData(ev->Get()->GetRequest());
         }
-        manager->second.AskData(ev->Get()->GetRequest());
+        else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "owner_not_found");
+        }
     }
     void Handle(TEvClearCache::TPtr& ev) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "TEvClearCache")("owner", ev->Get()->GetOwner());
-        Managers.erase(ev->Get()->GetOwner());
+        if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
+            Managers.erase(manager);
+        }
+        else {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_cache", "owner_not_found");
+        }
+
     }
 
 public:

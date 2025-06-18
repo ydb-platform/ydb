@@ -1,8 +1,8 @@
 # {{ ydb-short-name }} Entity Framework Core Provider
 
-{{ ydb-short-name }} has an Entity Framework (EF) Core provider. It behaves like other EF Core providers (e.g. SQL Server), so the [general EF Core docs](https://docs.microsoft.com/ef/core/index) apply here as well. If you're just getting started with EF Core, those docs are the best place to start.
+{{ ydb-short-name }} has an Entity Framework (EF) Core provider — an object-relational mapper (ORM) that enables .NET developers to work with a {{ ydb-short-name }} database using .NET objects. It behaves like other EF Core providers (e.g. SQL Server). If you're just getting started with EF Core, the [EF Core documentation](https://docs.microsoft.com/ef/core/index) is the best place to start.
 
-Development happens in the [ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main) repository, all issues should be reported there.
+ydb-dotnet-sdk is an open source project. If you encounter any issues, report them in the [official repository on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main).
 
 ## Set up the {{ ydb-short-name }} Entity Framework Core provider
 
@@ -14,7 +14,7 @@ dotnet add package EntityFrameworkCore.Ydb
 
 ## Defining a model and a DbContext
 
-Let's say you want to store blogs and their posts in their database; you can model these as .NET types as follows:
+Let's say you want to store blogs and their posts in a database; you can model these as .NET types as follows:
 
 ```c#
 public class Blog
@@ -42,7 +42,7 @@ You then define a `DbContext` type which you'll use to interact with the databas
 
 - OnConfiguring
 
-  Using OnConfiguring() to configure your context is the easiest way to get started, but is discouraged for most production applications:
+  Using `OnConfiguring()` to configure your context is the easiest way to get started, but is discouraged for most production applications:
 
   ```c#
   public class BloggingContext : DbContext
@@ -89,7 +89,7 @@ You then define a `DbContext` type which you'll use to interact with the databas
 
 {% endlist %}
 
-For more information on getting started with EF, consult the [getting started documentation](https://learn.microsoft.com/en-us/ef/core/get-started/overview/first-app?tabs=netcore-cli).
+For more information on getting started with EF, see the [Getting Started guide](https://learn.microsoft.com/en-us/ef/core/get-started/overview/first-app?tabs=netcore-cli).
 
 ## Additional {{ ydb-short-name }} configuration
 
@@ -110,7 +110,7 @@ Below is an example of how to specify the necessary parameters for connecting to
 
 ### Schema Migration
 
-To ensure that database schema migrations are executed correctly, you need to disable the automatic retry strategy (`ExecutionStrategy`), which is enabled by default in `EntityFrameworkCore.Ydb`.
+To ensure that database schema migrations are executed correctly, disable the automatic retry strategy (`ExecutionStrategy`), which is enabled by default in `EntityFrameworkCore.Ydb`.
 
 To do this, explicitly override the IDesignTimeDbContextFactory interface and use the `DisableRetryOnFailure()` method.
 

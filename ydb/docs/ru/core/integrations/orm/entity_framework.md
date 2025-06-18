@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} Entity Framework Core Provider
 
-{{ ydb-short-name }} имеет поставщика Entity Framework (EF) Core. Он ведет себя так же, как и другие поставщики EF Core (например, SQL Server), поэтому здесь применима [общая документация по EF Core](https://docs.microsoft.com/ef/core/index). Если вы только начинаете работать с EF Core, эта документация - лучшее место для начала.
+{{ ydb-short-name }} предоставляет поставщика Entity Framework (EF) Core — объектно-реляционный модуль сопоставления (ORM), который позволяет разработчикам .NET работать с базой данных {{ ydb-short-name }} с помощью объектов .NET. Он ведет себя так же, как и другие поставщики EF Core (например, SQL Server), поэтому здесь применима [общая документация по EF Core](https://docs.microsoft.com/ef/core/index). Если вы только начинаете работать с EF Core, эта документация — лучшее место для начала.
 
 Разработка ведется в репозитории [ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main), о всех проблемах следует сообщать там.
 
@@ -42,7 +42,7 @@ public class Post
 
 - OnConfiguring
 
-  Использование OnConfiguring() для настройки контекста - это самый простой способ начать работу, но для большинства прод приложений он не рекомендуется:
+  Использование `OnConfiguring()` для настройки контекста — это самый простой способ начать работу, но для большинства приложений в рабочей среде он не рекомендуется:
 
   ```c#
   public class BloggingContext : DbContext

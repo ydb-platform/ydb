@@ -51,7 +51,6 @@ ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_RowTable_TopicAutoParti
 ydb/core/tx/conveyor_composite/ut CompositeConveyorTests.TestUniformDistribution
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
-ydb/core/tx/schemeshard/ut_index_build VectorIndexBuildTest.BaseCase
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
@@ -187,6 +186,7 @@ ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]

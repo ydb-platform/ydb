@@ -7,6 +7,7 @@
 #include <util/network/address.h>
 
 #include "interconnect_stream.h"
+#include "rdma/rdma.h"
 #include "types.h"
 
 namespace NActors {
@@ -59,6 +60,8 @@ namespace NActors {
         // external data channel messages
         EvSubscribeForConnection,
         EvReportConnection,
+        // rdma
+        EvRdmaIoHandshakeDone,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
@@ -181,7 +184,8 @@ namespace NActors {
                 ui64 nextPacket,
                 TAutoPtr<TProgramInfo>&& programInfo,
                 TSessionParams params,
-                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket)
+                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
+                std::unique_ptr<NInterconnect::NRdma::TQueuePair> qp)
             : Socket(std::move(socket))
             , Peer(peer)
             , Self(self)
@@ -189,6 +193,7 @@ namespace NActors {
             , ProgramInfo(std::move(programInfo))
             , Params(std::move(params))
             , XdcSocket(std::move(xdcSocket))
+            , Qp(std::move(qp))
         {
         }
 
@@ -199,6 +204,7 @@ namespace NActors {
         TAutoPtr<TProgramInfo> ProgramInfo;
         const TSessionParams Params;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
+        std::unique_ptr<NInterconnect::NRdma::TQueuePair> Qp;
     };
 
     struct TEvHandshakeFail: public TEventLocal<TEvHandshakeFail, ui32(ENetwork::HandshakeFail)> {
@@ -394,5 +400,9 @@ namespace NActors {
             : HandshakeId(std::move(handshakeId))
             , Socket(std::move(socket))
         {}
+    };
+
+    struct TEvRdmaIoHandshakeDone : TEventLocal<TEvRdmaIoHandshakeDone, (ui32)ENetwork::EvRdmaIoHandshakeDone> {
+
     };
 }

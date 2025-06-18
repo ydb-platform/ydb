@@ -265,6 +265,8 @@ namespace NActors {
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
 
+        auto qp = std::move(ev->Get()->Qp);
+
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
         }
@@ -290,7 +292,7 @@ namespace NActors {
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, std::move(qp));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor

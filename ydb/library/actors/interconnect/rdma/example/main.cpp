@@ -48,11 +48,10 @@ void completionThread(TContext& ctx, int sockfd, std::vector<WorkItem>& workItem
 
     const int wcBatchSize = 1024;
     std::vector<ibv_wc> wcs(wcBatchSize);
-
     while (true) {
         int numComp = ibv_poll_cq(ctx.Cq, wcBatchSize, &wcs.front());
         if (numComp < 0) {
-            Cerr << "ibv_poll_cq failed: " << strerror(errno) << Endl;
+            Cerr << "ibv_poll_cq failed: " << strerror(errno) << " " << errno << Endl;
             return;
         }
         if (numComp > 0) {
@@ -60,7 +59,7 @@ void completionThread(TContext& ctx, int sockfd, std::vector<WorkItem>& workItem
             for (int i = 0; i < numComp; ++i) {
                 ibv_wc& wc = wcs[i];
                 if (wc.status != IBV_WC_SUCCESS) {
-                    Cerr << "ibv_poll_cq failed: " << ibv_wc_status_str(wc.status) << Endl;
+                    Cerr << "ibv_poll_cq failed: " << ibv_wc_status_str(wc.status) << " " << (int)wc.status << "QP: " << wc.qp_num << " " << Endl;
                     return;
                 }
                 handleOneCompletion(workItems, sockfd, wc);
@@ -175,9 +174,11 @@ int main(int argc, char *argv[]) {
     TContext ctx(rdmaCtx, NInterconnect::NRdma::CreateDummyMemPool());
 
     ctx.InitQp();
+
     auto [dstGid, dstQpNum] = ExchangeRdmaConnectionInfo(sockfd, rdmaCtx->GetGid(), ctx.Qp->qp_num);
 
     ctx.MoveQpToRTS(dstGid, dstQpNum);
+    Cerr << "QP state " <<(int)GetQpState(ctx.Qp) << Endl;
 
     if (isServer) {
         serverLogic(sockfd, ctx);

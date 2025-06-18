@@ -398,10 +398,10 @@ def allure_test_description(
     db = test_info['database']
     test_info.update(
         {
-            'table_path': YdbCluster.tables_path,
+            'table_path': YdbCluster.get_tables_path(),
             'db_admin': (
                 f"<a target='_blank' href='{service_url}/monitoring/tenant?"
-                f"schema=/{db}/{YdbCluster.tables_path}&tenantPage=query"
+                f"schema=/{db}/{YdbCluster.get_tables_path()}&tenantPage=query"
                 f"&diagnosticsTab=nodes&name=/{db}'>{service_url}</a>"
             ),
             'time': (

@@ -65,9 +65,15 @@ class YdbCluster:
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
     ydb_mon_port = 8765
-    tables_path = get_external_param('tables-path', 'olap_yatests')
+    _tables_path = get_external_param('tables-path', 'olap_yatests').rstrip('/')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
     _dyn_nodes_count: Optional[int] = None
+
+    @classmethod
+    def get_tables_path(cls, subpath: str = '') -> str:
+        if cls._tables_path and subpath:
+            return f'{cls._tables_path}/{subpath}'
+        return subpath if subpath else cls._tables_path
 
     @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:

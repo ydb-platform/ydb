@@ -513,7 +513,7 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
             return "Expected non negative integer json value";
         }
 
-        *result = node.GetIntegerSafe();
+        *result = node.GetUIntegerSafe();
         return "";
     };
 

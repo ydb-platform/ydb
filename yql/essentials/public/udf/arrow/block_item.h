@@ -27,7 +27,7 @@ public:
         *reinterpret_cast<NYql::NDecimal::TInt128*>(&Raw) = value;
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
-    
+
     inline explicit TBlockItem(IBoxedValuePtr&& value) {
         Raw.Resource.Meta = static_cast<ui8>(EMarkers::Boxed);
         Raw.Resource.Value = value.Release();
@@ -127,7 +127,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
         return TStringValue(Raw.StringValue.Value);
     }
-    
+
     inline TStringRef GetStringRefFromValue() const {
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
         return { Raw.StringValue.Value->Data() + (Raw.StringValue.Offset & 0xFFFFFF), Raw.StringValue.Size };
@@ -184,7 +184,7 @@ public:
     }
 
     inline explicit operator bool() const { return bool(Raw); }
-    
+
     EMarkers GetMarkers() const {
         return static_cast<EMarkers>(Raw.Simple.Meta);
     }
@@ -208,7 +208,7 @@ private:
         ui64 Halfs[2] = {0, 0};
 
         TRawEmbeddedValue Embedded;
-        
+
         TRawBoxedValue Resource;
 
         TRawStringValue StringValue;

@@ -152,4 +152,9 @@ extern const TString KqpResourceManagerTaskName;
 extern const TString KqpResourceManagerQueue;
 extern const TString LegacyQueueIdTaskNamePrefix;
 
+// ?? Константы для названия очередей сюда?
+extern const TString CompactionIndexationQueue;
+extern const TString CompactionTtlQueue;
+extern const TString CompactionGeneralQueue;
+extern const TString CompactionNormalizerQueue;
 }}

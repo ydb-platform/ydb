@@ -25,4 +25,11 @@ message TMemoryControllerConfig {
 
     optional float QueryExecutionLimitPercent = 120 [default = 20];
     optional uint64 QueryExecutionLimitBytes = 121;
+
+    optional float ReadExecutionLimitPercent = 200 [default = 20]; // 1/3 - soft limit = ~6
+    optional uint64 ReadExecutionLimitBytes = 201;
+    optional float CompactionLimitPercent = 202 [default = 16]; // 2 2 6 6
+    optional uint64 CompactionLimitBytes = 203;
+    optional float ReadCacheLimitPercent = 204 [default = 4]; // 2 + 2
+    optional uint64 ReadCacheLimitBytes = 205;
 }

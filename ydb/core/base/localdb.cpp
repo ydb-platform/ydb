@@ -262,4 +262,8 @@ const TString KqpResourceManagerTaskName = "kqp_query";
 const TString KqpResourceManagerQueue = "queue_kqp_resource_manager";
 const TString LegacyQueueIdTaskNamePrefix = "compaction_gen";
 
+const TString CompactionIndexationQueue = "queue_cs_indexation";
+const TString CompactionTtlQueue = "queue_cs_ttl";
+const TString CompactionGeneralQueue = "queue_cs_general";
+const TString CompactionNormalizerQueue = "queue_cs_normalizer";
 }}

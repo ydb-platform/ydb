@@ -283,22 +283,7 @@ private:
 
         Counters->GetCounter("Stats/ConsumersLimit")->Set(consumersLimitBytes);
 
-        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
-        ui64 queryExecutionLimitBytes = ResourceBrokerSelfConfig.QueryExecutionLimitBytes
-            ? ResourceBrokerSelfConfig.QueryExecutionLimitBytes // for backward compatibility
-            : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Consumer QueryExecution state:"
-            << " Consumption: " << HumanReadableBytes(queryExecutionConsumption) << " Limit: " << HumanReadableBytes(queryExecutionLimitBytes));
-        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(queryExecutionLimitBytes);
-        memoryStats.SetQueryExecutionConsumption(queryExecutionConsumption);
-        memoryStats.SetQueryExecutionLimit(queryExecutionLimitBytes);
-
-        // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
-        ApplyResourceBrokerConfig({
-            activitiesLimitBytes,
-            queryExecutionLimitBytes
-        });
+        ProcessResourceBrokerConfig(ctx, memoryStats, hardLimitBytes, activitiesLimitBytes);
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), memoryStatsUpdate);
 
@@ -385,14 +370,61 @@ private:
         }
     }
 
+    void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes,
+                                     ui64 activitiesLimitBytes) {
+        auto setCounters = [&](const TString& name, const ui64 consumption, const ui64 limit) {
+            LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER,
+                       "Consumer " << name << " state:"
+                                   << " Consumption: " << HumanReadableBytes(consumption) << " Limit: " << HumanReadableBytes(limit));
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << name << "/Consumption")->Set(consumption);
+            Counters->GetCounter(TStringBuilder() << "Consumer/" << name << "/Limit")->Set(limit);
+        };
+
+        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
+        ui64 queryExecutionLimitBytes = ResourceBrokerSelfConfig.QueryExecutionLimitBytes
+                                            ? ResourceBrokerSelfConfig.QueryExecutionLimitBytes // for backward compatibility
+                                            : GetQueryExecutionLimitBytes(Config, hardLimitBytes);
+        setCounters("QueryExecution", queryExecutionConsumption, queryExecutionLimitBytes);
+        memoryStats.SetQueryExecutionConsumption(queryExecutionConsumption);
+        memoryStats.SetQueryExecutionLimit(queryExecutionLimitBytes);
+
+        ui64 compactionConsumption = TAlignedPagePool::GetGlobalPagePoolSize(); // ?? Это откуда правильно брать?
+        ui64 compactionLimitBytes = GetCompactionLimitBytes(Config, hardLimitBytes);
+        setCounters("Compaction", compactionConsumption, compactionLimitBytes);
+        memoryStats.SetCompactionConsumption(compactionConsumption);
+        memoryStats.SetCompactionLimit(compactionLimitBytes);
+
+        // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
+        ApplyResourceBrokerConfig(
+            {.LimitBytes = activitiesLimitBytes, .QueryExecutionLimitBytes = queryExecutionLimitBytes, .CompactionLimitBytes = compactionLimitBytes});
+    }
+
     void ApplyResourceBrokerConfig(TResourceBrokerConfig config) {
         if (config == CurrentResourceBrokerConfig) {
             return;
         }
 
+        // ?? Куда вынести коэффициенты?
+        const double compactionIndexationQueueMemoryCoefficient = 0.125;
+        const double compactionTtlQueueCoefficient = 0.125;
+        const double compactionGeneralQueueCoefficient = 0.375;
+        const double compactionNormalizerQueueCoefficient = 0.375;
+
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;
         configure->Record.MutableResourceLimit()->SetMemory(config.LimitBytes);
+
+        auto configureQueue = [&](const TString& name, ui64 limitBytes) {
+            auto queue = configure->Record.AddQueues();
+            queue->SetName(name);
+            queue->MutableLimit()->SetMemory(limitBytes);
+        };
+
+        configureQueue(NLocalDb::KqpResourceManagerQueue, config.QueryExecutionLimitBytes);
+        configureQueue(NLocalDb::CompactionIndexationQueue, config.CompactionLimitBytes * compactionIndexationQueueMemoryCoefficient);
+        configureQueue(NLocalDb::CompactionTtlQueue, config.CompactionLimitBytes * compactionTtlQueueCoefficient);
+        configureQueue(NLocalDb::CompactionGeneralQueue, config.CompactionLimitBytes * compactionGeneralQueueCoefficient);
+        configureQueue(NLocalDb::CompactionNormalizerQueue, config.CompactionLimitBytes * compactionNormalizerQueueCoefficient);
 
         auto queue = configure->Record.AddQueues();
         queue->SetName(NLocalDb::KqpResourceManagerQueue);

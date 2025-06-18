@@ -1003,35 +1003,76 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     # УЛУЧШЕННАЯ ЛОГИКА: Обрабатываем экранированные строки типа std_err:b'...'
     decoded_text = text
     
+    # НОВАЯ ЛОГИКА: Обрабатываем failure тесты где ';;' уже заменено на '\n'
+    # Если текст содержит структурированные ошибки, разделенные переносами строк
+    if '\n' in decoded_text and not any(marker in decoded_text for marker in [' - ERROR - ', 'DECODED_STDERR:', 'DECODED_STDOUT:']):
+        # Это может быть failure тест с нормализованным описанием
+        # Ищем содержательные строки среди разделенных переносами
+        lines = decoded_text.split('\n')
+        meaningful_lines = []
+        
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+                
+            # Ищем строки с важной информацией об ошибках
+            if any(marker in line_stripped.lower() for marker in [
+                'error', 'exception', 'failed', 'timeout', 'assertion', 'abort',
+                'daemon failed', 'severaldaemonerrors', 'verify failed', 'memory limit',
+                'type mismatch', 'unknown field', 'requirement', 'cannot kill'
+            ]):
+                meaningful_lines.append(line_stripped)
+                
+            # Ограничиваем количество строк
+            if len(meaningful_lines) >= 5:
+                break
+        
+        if meaningful_lines:
+            # Если нашли содержательные строки, используем их
+            result = '\n'.join(meaningful_lines)
+            
+            # Применяем базовую нормализацию
+            result = re.sub(r'([a-zA-Z0-9/_.-]*)build_root/[a-zA-Z0-9/_.-]+', '[BUILD_PATH]', result)
+            result = re.sub(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+', '[TIMESTAMP]', result)
+            result = re.sub(r':\d{4,5}\b', ':[PORT]', result)
+            result = re.sub(r'--node=\d+', '--node=[N]', result)
+            
+            # Добавляем ссылку на лог если есть
+            if log_url:
+                result = result.strip() + f"\n[View full log]({log_url})"
+            
+            return result.strip()
+    
     # Улучшенный regex который правильно обрабатывает экранированные кавычки
     # Ищем std_err:b' и берем все до неэкранированной закрывающей кавычки
-    std_err_pattern = r"std_err:b'((?:[^'\\]|\\.)*)'"
+    std_err_pattern = r"std_err:b'((?:[^'\\\\]|\\\\.)*)'"
     std_err_match = re.search(std_err_pattern, decoded_text, re.DOTALL)
     if std_err_match:
         encoded_content = std_err_match.group(1)
         try:
-            # Заменяем \\n на \n, \\r на \r, \\' на ', \\t на \t
-            decoded_content = encoded_content.replace('\\n', '\n').replace('\\r', '\r').replace("\\'", "'").replace('\\t', '\t')
+            # Заменяем \\\\n на \\n, \\\\r на \\r, \\\\' на ', \\\\t на \\t
+            decoded_content = encoded_content.replace('\\\\n', '\\n').replace('\\\\r', '\\r').replace("\\\\'", "'").replace('\\\\t', '\\t')
             
-            # Убираем escape-последовательности ANSI (типа \x1b[K)
-            decoded_content = re.sub(r'\\x[0-9a-fA-F]{2}', '', decoded_content)
+            # Убираем escape-последовательности ANSI (типа \\x1b[K)
+            decoded_content = re.sub(r'\\\\x[0-9a-fA-F]{2}', '', decoded_content)
             
             # Заменяем исходную экранированную строку на декодированную
-            decoded_text = decoded_text.replace(std_err_match.group(0), f"DECODED_STDERR:\n{decoded_content}")
+            decoded_text = decoded_text.replace(std_err_match.group(0), f"DECODED_STDERR:\\n{decoded_content}")
             
         except Exception as e:
             # Если не удалось декодировать, оставляем как есть
             pass
     
     # Также ищем std_out
-    std_out_pattern = r"std_out:b'((?:[^'\\]|\\.)*)'"
+    std_out_pattern = r"std_out:b'((?:[^'\\\\]|\\\\.)*)'"
     std_out_match = re.search(std_out_pattern, decoded_text, re.DOTALL)
     if std_out_match:
         encoded_content = std_out_match.group(1)
         try:
-            decoded_content = encoded_content.replace('\\n', '\n').replace('\\r', '\r').replace("\\'", "'").replace('\\t', '\t')
-            decoded_content = re.sub(r'\\x[0-9a-fA-F]{2}', '', decoded_content)
-            decoded_text = decoded_text.replace(std_out_match.group(0), f"DECODED_STDOUT:\n{decoded_content}")
+            decoded_content = encoded_content.replace('\\\\n', '\\n').replace('\\\\r', '\\r').replace("\\\\'", "'").replace('\\\\t', '\\t')
+            decoded_content = re.sub(r'\\\\x[0-9a-fA-F]{2}', '', decoded_content)
+            decoded_text = decoded_text.replace(std_out_match.group(0), f"DECODED_STDOUT:\\n{decoded_content}")
         except Exception as e:
             pass
     
@@ -1982,9 +2023,9 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
         
         # Затем всегда показываем детальную таблицу всех тестов
         report += "**Detailed Test Failures:**\n"
-        report += "| Test | Failure Rate | Pattern | Last Error | Context |\n|------|--------------|---------|------------|----------|\n"
+        report += "| Test | Failure Rate | Pattern | Error Pattern | Context |\n|------|--------------|---------|---------------|----------|\n"
         for test in failed_tests:
-            error = format_error_for_html_table(test.get('error_description', ''), max_length=400, log_url=test.get('log_url', ''))
+            error_pattern = format_error_pattern_for_table(test.get('error_description', ''), log_url=test.get('log_url', ''))
             context = 'N/A'
             if test.get('recent_runs'):
                 context = test['recent_runs'][0].get('test_context', 'N/A')
@@ -1993,7 +2034,7 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
             # Получаем номер паттерна для этого теста
             pattern_ref = f"#{test_to_pattern[test['name']]}" if test['name'] in test_to_pattern else "N/A"
             
-            report += f"| {test['name']} | {fail_rate:.1f}% | {pattern_ref} | {error} | {context} |\n"
+            report += f"| {test['name']} | {fail_rate:.1f}% | {pattern_ref} | {error_pattern} | {context} |\n"
     
     report += "\n---\n\n## 🔄 Stability Analysis\n"
     
@@ -2109,7 +2150,7 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
             report += "**Failed Single Version Tests:**\n"
             report += "| Test | Status | Error Pattern |\n|------|--------|---------------|\n"
             for test in single_failed:  # Показываем ВСЕ failed single version тесты
-                error_pattern = format_error_for_html_table(test.get('error_description', ''), max_length=400, log_url=test.get('log_url', ''))
+                error_pattern = format_error_pattern_for_table(test.get('error_description', ''), log_url=test.get('log_url', ''))
                 report += f"| {test['name']} | {test['latest_status']} | {error_pattern} |\n"
     
     # Анализ тестов совместимости
@@ -2152,7 +2193,7 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
             report += f"\n**Failed Cross-Version Tests:**\n"
             report += "| Test | Status | Version Pair | Error Pattern |\n|------|--------|--------------|---------------|\n"
             for test in compat_failed:  # Показываем ВСЕ failed cross-version тесты
-                error_pattern = format_error_for_html_table(test.get('error_description', ''), max_length=400, log_url=test.get('log_url', ''))
+                error_pattern = format_error_pattern_for_table(test.get('error_description', ''), log_url=test.get('log_url', ''))
                 context = 'N/A'
                 if test.get('recent_runs'):
                     context = test['recent_runs'][0].get('test_context', 'N/A')
@@ -2774,9 +2815,16 @@ def generate_compatibility_report():
             logging.info(f"Получено {len(test_data)} записей из БД")
             if DEBUG: save_json(test_data, 'analytics_debug_1_raw_data.json')
             
+            # ===== ЭТАП 1.5: НОРМАЛИЗАЦИЯ STATUS_DESCRIPTION У FAILURE ТЕСТОВ =====
+            logging.info("=== ЭТАП 1.5: НОРМАЛИЗАЦИЯ STATUS_DESCRIPTION ===")
+            normalized_data = normalize_failure_status_description(test_data)
+            
+            logging.info(f"Нормализация завершена")
+            if DEBUG: save_json(normalized_data, 'analytics_debug_1_5_normalized_data.json')
+            
             # ===== ЭТАП 2: ЗАМЕНИТЬ STATUS_DESCRIPTION У MUTE РЕЗУЛЬТАТОВ ИЗ LOG =====
             logging.info("=== ЭТАП 2: ОБОГАЩЕНИЕ MUTE ЗАПИСЕЙ ЛОГАМИ ===")
-            enriched_data = enrich_mute_records_with_logs(test_data)
+            enriched_data = enrich_mute_records_with_logs(normalized_data)
             
             logging.info(f"Обогащение завершено")
             if DEBUG: save_json(enriched_data, 'analytics_debug_2_enriched_data.json')
@@ -2869,6 +2917,39 @@ def generate_compatibility_report():
             logging.info(f"Сгенерировано {len(generated_reports)} отчетов по версиям в: {reports_dir}")
             logging.info(f"Индексный отчет: {index_path}")
             
+            # ===== ГЕНЕРАЦИЯ ОТЧЕТОВ СРАВНЕНИЯ ВЕРСИЙ =====
+            logging.info("=== ГЕНЕРАЦИЯ ОТЧЕТОВ СРАВНЕНИЯ ВЕРСИЙ ===")
+            comparison_reports = []  # Инициализируем переменную
+            
+            try:
+                comparison_reports = generate_version_comparison_reports(filtered_grouped_data, reports_dir)
+            except Exception as e:
+                logging.error(f"Ошибка при генерации отчетов сравнения версий: {e}")
+                comparison_reports = []  # Устанавливаем пустой список в случае ошибки
+            
+            # Обновляем индексный отчет с информацией о сравнениях
+            if comparison_reports:
+                updated_index_report = index_report + f"""
+
+## Отчеты сравнения версий
+
+Отчеты показывающие регрессии и улучшения между версиями:
+
+"""
+                for version_a, version_b, report_path in comparison_reports:
+                    report_filename = os.path.basename(report_path)
+                    updated_index_report += f"- [{version_a} vs {version_b}](./{report_filename})\n"
+                
+                updated_index_report += f"\n[📋 Полный индекс сравнений](./version_comparisons_index.md)\n"
+                
+                # Перезаписываем индексный отчет
+                with open(index_path, 'w', encoding='utf-8') as f:
+                    f.write(updated_index_report)
+            
+            logging.info(f"Сгенерировано {len(generated_reports)} отчетов по версиям в: {reports_dir}")
+            logging.info(f"Сгенерировано {len(comparison_reports)} отчетов сравнения версий")
+            logging.info(f"Индексный отчет: {index_path}")
+            
             # Выводим сводку
             print(f"\n{'='*60}")
             print(f"ОТЧЕТЫ ПО СОВМЕСТИМОСТИ СГЕНЕРИРОВАНЫ")
@@ -2878,6 +2959,16 @@ def generate_compatibility_report():
             print(f"\nСгенерировано отчетов по версиям: {len(generated_reports)}")
             for version, filename, tests_count in generated_reports:
                 print(f"  - {version}: {filename} ({tests_count} тестов)")
+            
+            if comparison_reports:
+                print(f"\nСгенерировано отчетов сравнения версий: {len(comparison_reports)}")
+                for version_a, version_b, report_path in comparison_reports[:5]:  # Показываем первые 5
+                    report_filename = os.path.basename(report_path)
+                    print(f"  - {version_a} vs {version_b}: {report_filename}")
+                if len(comparison_reports) > 5:
+                    print(f"  - ... и еще {len(comparison_reports) - 5} сравнений")
+                print(f"  📋 Полный список: version_comparisons_index.md")
+            
             print(f"{'='*60}")
             
             return 0
@@ -3081,6 +3172,1044 @@ def is_xml_description_sufficient(xml_description):
         return True
     
     return False
+
+
+def normalize_failure_status_description(test_data):
+    """
+    Нормализует status_description у failure тестов:
+    заменяет ';;' на '\n' для правильной обработки парсерами ошибок
+    """
+    logging.debug("=== НОРМАЛИЗАЦИЯ STATUS_DESCRIPTION У FAILURE ТЕСТОВ ===")
+    
+    failure_tests = [r for r in test_data if r.get('status') == 'failure']
+    normalized_count = 0
+    
+    for record in failure_tests:
+        status_description = record.get('status_description', '')
+        if status_description and ';;' in status_description:
+            # Заменяем ';;' на '\n' для правильной обработки парсерами
+            normalized_description = status_description.replace(';;', '\n')
+            record['status_description'] = normalized_description
+            normalized_count += 1
+            
+            logging.debug(f"Нормализован failure тест: {record.get('test_name', '')}")
+            logging.debug(f"  До: {status_description[:100]}...")
+            logging.debug(f"  После: {normalized_description[:100]}...")
+    
+    logging.info(f"Нормализовано {normalized_count} failure тестов (заменено ';;' на '\\n')")
+    return test_data
+
+
+def generate_version_comparison_reports(grouped_data, output_dir):
+    """
+    Генерирует отчеты сравнения версий - показывает тесты которые проходили в версии A, но падают в версии B
+    """
+    logging.info("=== ГЕНЕРАЦИЯ ОТЧЕТОВ СРАВНЕНИЯ ВЕРСИЙ ===")
+    
+    # Получаем список всех версий
+    versions = list(grouped_data.keys())
+    versions = [v for v in versions if should_include_version_in_reports(v)]
+    versions.sort()
+    
+    logging.info(f"Генерируем сравнения для {len(versions)} версий: {versions}")
+    
+    comparison_reports = []
+    
+    # Генерируем сравнения для всех пар версий
+    for i, version_a in enumerate(versions):
+        for j, version_b in enumerate(versions):
+            if i >= j:  # Избегаем дублирования и самосравнения
+                continue
+                
+            logging.debug(f"Сравниваем {version_a} vs {version_b}")
+            
+            try:
+                report_path = generate_single_version_comparison(
+                    version_a, version_b, grouped_data, output_dir
+                )
+                if report_path:
+                    comparison_reports.append((version_a, version_b, report_path))
+                    logging.debug(f"Создан отчет сравнения: {report_path}")
+            except Exception as e:
+                logging.error(f"Ошибка при создании сравнения {version_a} vs {version_b}: {e}")
+    
+    # Создаем индексный файл для сравнений
+    if comparison_reports:
+        index_content = f"""# Отчеты сравнения версий YDB
+
+Сгенерировано: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Эти отчеты показывают тесты, которые проходили в одной версии, но падают в другой.
+
+## Доступные сравнения
+
+"""
+        
+        for version_a, version_b, report_path in comparison_reports:
+            report_filename = os.path.basename(report_path)
+            index_content += f"- [{version_a} vs {version_b}](./{report_filename})\n"
+        
+        index_path = os.path.join(output_dir, "version_comparisons_index.md")
+        with open(index_path, 'w', encoding='utf-8') as f:
+            f.write(index_content)
+        
+        logging.info(f"Создан индекс сравнений: {index_path}")
+        logging.info(f"Сгенерировано {len(comparison_reports)} отчетов сравнения версий")
+    
+    return comparison_reports
+
+
+def generate_single_version_comparison(version_a, version_b, grouped_data, output_dir):
+    """
+    Генерирует отчет сравнения двух конкретных версий
+    """
+    data_a = grouped_data.get(version_a, {})
+    data_b = grouped_data.get(version_b, {})
+    
+    if not data_a or not data_b:
+        logging.debug(f"Недостаточно данных для сравнения {version_a} vs {version_b}")
+        return None
+    
+    # Собираем все тесты из обеих версий
+    tests_a = {}  # normalized_test_name -> test_info
+    tests_b = {}
+    
+    for test_type, type_data in data_a.items():
+        for test_name, runs in type_data.items():
+            if runs:  # Если есть запуски
+                latest_run = runs[0]  # Последний запуск
+                # Нормализуем имя теста для сравнения
+                normalized_name = normalize_test_name_for_comparison(test_name)
+                tests_a[normalized_name] = {
+                    'original_name': test_name,  # Сохраняем оригинальное имя
+                    'status': latest_run.get('status', 'unknown'),
+                    'test_context': latest_run.get('test_context', ''),
+                    'error_description': latest_run.get('status_description', ''),
+                    'log_url': latest_run.get('log', ''),
+                    'test_type': test_type,
+                    'last_run_time': latest_run.get('run_timestamp')  # Добавляем время последнего запуска
+                }
+    
+    for test_type, type_data in data_b.items():
+        for test_name, runs in type_data.items():
+            if runs:  # Если есть запуски
+                latest_run = runs[0]  # Последний запуск
+                # Нормализуем имя теста для сравнения
+                normalized_name = normalize_test_name_for_comparison(test_name)
+                tests_b[normalized_name] = {
+                    'original_name': test_name,  # Сохраняем оригинальное имя
+                    'status': latest_run.get('status', 'unknown'),
+                    'test_context': latest_run.get('test_context', ''),
+                    'error_description': latest_run.get('status_description', ''),
+                    'log_url': latest_run.get('log', ''),
+                    'test_type': test_type,
+                    'last_run_time': latest_run.get('run_timestamp')  # Добавляем время последнего запуска
+                }
+    
+    # Находим регрессии: тесты которые проходили в A, но падают в B
+    regressions = []
+    improvements = []
+    common_failures = []
+    compatibility_tests = []  # Новая категория для тестов совместимости
+    
+    for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
+        status_a = tests_a[normalized_name]['status']
+        status_b = tests_b[normalized_name]['status']
+        
+        # Проверяем, является ли это тестом совместимости между сравниваемыми версиями
+        test_name_a = tests_a[normalized_name]['original_name']
+        test_name_b = tests_b[normalized_name]['original_name']
+        
+        is_compat_test = (is_compatibility_test_for_versions(test_name_a, version_a, version_b) or 
+                         is_compatibility_test_for_versions(test_name_b, version_a, version_b))
+        
+        if is_compat_test:
+            # Это тест совместимости - добавляем в отдельную категорию
+            compatibility_tests.append({
+                'test_name': test_name_b,  # Используем имя из version_b
+                'normalized_name': normalized_name,
+                'version_a_name': test_name_a,
+                'version_a_status': status_a,
+                'version_b_status': status_b,
+                'test_context': tests_b[normalized_name]['test_context'],
+                'error_description': tests_b[normalized_name]['error_description'],
+                'log_url': tests_b[normalized_name]['log_url'],
+                'test_type': tests_b[normalized_name]['test_type'],
+                'last_run_time': tests_b[normalized_name].get('last_run_time')  # Добавляем время последнего запуска
+            })
+        else:
+            # Обычные тесты - классифицируем как раньше
+            # Регрессии: passed -> failure/mute
+            if status_a == 'passed' and status_b in ['failure', 'mute']:
+                regressions.append({
+                    'test_name': tests_b[normalized_name]['original_name'],  # Используем оригинальное имя из version_b
+                    'normalized_name': normalized_name,
+                    'version_a_name': tests_a[normalized_name]['original_name'],
+                    'version_a_status': status_a,
+                    'version_b_status': status_b,
+                    'test_context': tests_b[normalized_name]['test_context'],
+                    'error_description': tests_b[normalized_name]['error_description'],
+                    'log_url': tests_b[normalized_name]['log_url'],
+                    'test_type': tests_b[normalized_name]['test_type'],
+                    'last_run_time': tests_b[normalized_name].get('last_run_time')  # Добавляем время последнего запуска
+                })
+            
+            # Улучшения: failure/mute -> passed
+            elif status_a in ['failure', 'mute'] and status_b == 'passed':
+                improvements.append({
+                    'test_name': tests_a[normalized_name]['original_name'],  # Используем оригинальное имя из version_a
+                    'normalized_name': normalized_name,
+                    'version_b_name': tests_b[normalized_name]['original_name'],
+                    'version_a_status': status_a,
+                    'version_b_status': status_b,
+                    'test_context': tests_a[normalized_name]['test_context'],
+                    'error_description': tests_a[normalized_name]['error_description'],
+                    'log_url': tests_a[normalized_name]['log_url'],
+                    'test_type': tests_a[normalized_name]['test_type'],
+                    'last_run_time': tests_a[normalized_name].get('last_run_time')  # Добавляем время последнего запуска
+                })
+            
+            # Общие падения: failure/mute в обеих версиях
+            elif status_a in ['failure', 'mute'] and status_b in ['failure', 'mute']:
+                common_failures.append({
+                    'test_name': tests_b[normalized_name]['original_name'],  # Используем оригинальное имя из version_b
+                    'normalized_name': normalized_name,
+                    'version_a_name': tests_a[normalized_name]['original_name'],
+                    'version_a_status': status_a,
+                    'version_b_status': status_b,
+                    'test_context': tests_b[normalized_name]['test_context'],
+                    'error_description': tests_b[normalized_name]['error_description'],
+                    'log_url': tests_b[normalized_name]['log_url'],
+                    'test_type': tests_b[normalized_name]['test_type'],
+                    'last_run_time': tests_b[normalized_name].get('last_run_time')  # Добавляем время последнего запуска
+                })
+    
+    # Всегда создаем отчет для показа полного diff между версиями
+    logging.debug(f"Создаем отчет сравнения {version_a} vs {version_b}: регрессий={len(regressions)}, улучшений={len(improvements)}, общих падений={len(common_failures)}, тестов совместимости={len(compatibility_tests)}")
+    
+    # Находим тесты, которые есть только в одной версии (по нормализованным именам)
+    only_in_a = []
+    only_in_b = []
+    
+    for normalized_name in set(tests_a.keys()) - set(tests_b.keys()):
+        test_info = tests_a[normalized_name]
+        only_in_a.append({
+            'test_name': test_info['original_name'],
+            'normalized_name': normalized_name,
+            'status': test_info['status'],
+            'test_context': test_info.get('test_context', ''),
+            'error_description': test_info.get('error_description', ''),
+            'log_url': test_info.get('log_url', ''),
+            'test_type': test_info['test_type'],
+            'last_run_time': test_info.get('last_run_time')  # Добавляем время последнего запуска
+        })
+    
+    for normalized_name in set(tests_b.keys()) - set(tests_a.keys()):
+        test_info = tests_b[normalized_name]
+        only_in_b.append({
+            'test_name': test_info['original_name'],
+            'normalized_name': normalized_name,
+            'status': test_info['status'],
+            'test_context': test_info.get('test_context', ''),
+            'error_description': test_info.get('error_description', ''),
+            'log_url': test_info.get('log_url', ''),
+            'test_type': test_info['test_type'],
+            'last_run_time': test_info.get('last_run_time')  # Добавляем время последнего запуска
+        })
+    
+    # Находим тесты без изменений статуса
+    unchanged_tests = []
+    for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
+        status_a = tests_a[normalized_name]['status']
+        status_b = tests_b[normalized_name]['status']
+        
+        # Если статус не изменился (не регрессия, не улучшение, не общее падение)
+        if not (
+            (status_a == 'passed' and status_b in ['failure', 'mute']) or  # регрессия
+            (status_a in ['failure', 'mute'] and status_b == 'passed') or  # улучшение
+            (status_a in ['failure', 'mute'] and status_b in ['failure', 'mute'])  # общее падение
+        ):
+            unchanged_tests.append({
+                'test_name': tests_b[normalized_name]['original_name'],  # Используем оригинальное имя из version_b
+                'normalized_name': normalized_name,
+                'version_a_name': tests_a[normalized_name]['original_name'],
+                'status': status_b,  # статус одинаковый в обеих версиях
+                'test_context': tests_b[normalized_name].get('test_context', ''),
+                'test_type': tests_b[normalized_name]['test_type'],
+                'last_run_time': tests_b[normalized_name].get('last_run_time')  # Добавляем время последнего запуска
+            })
+    
+    # Генерируем отчет
+    report_content = f"""# Сравнение версий: {version_a} vs {version_b}
+
+**Сгенерировано:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## 📊 Сводка изменений
+
+| Метрика | Количество |
+|---------|------------|
+| 📈 **Регрессии** (проходили → падают) | **{len(regressions)}** |
+| 📉 **Улучшения** (падали → проходят) | **{len(improvements)}** |
+| 🔄 **Общие падения** (падают в обеих) | {len(common_failures)} |
+| 🔗 **Тесты совместимости** ({version_a} ↔ {version_b}) | {len(compatibility_tests)} |
+| ⏩ **Пропущенные тесты** | {len(skipped_tests)} |
+| ⏰ **Не запускались >24ч** | {len(not_run_recently)} |
+| ➡️ **Без изменений** | {len(unchanged_tests)} |
+| ➕ **Только в {version_a}** | {len(only_in_a)} |
+| ➖ **Только в {version_b}** | {len(only_in_b)} |
+| 📋 **Общих тестов** | {len(set(tests_a.keys()) & set(tests_b.keys()))} |
+| 📊 **Всего в {version_a}** | {len(tests_a)} |
+| 📊 **Всего в {version_b}** | {len(tests_b)} |
+
+"""
+    
+    # Определяем общий тренд
+    if len(regressions) > len(improvements):
+        trend_emoji = "📈❌"
+        trend_text = "Ухудшение"
+    elif len(improvements) > len(regressions):
+        trend_emoji = "📉✅"
+        trend_text = "Улучшение"
+    else:
+        trend_emoji = "➡️"
+        trend_text = "Без изменений"
+    
+    report_content += f"""
+**Общий тренд:** {trend_emoji} {trend_text}
+
+---
+
+"""
+    
+    # Секция регрессий
+    if regressions:
+        report_content += f"""## 📈❌ Регрессии ({len(regressions)})
+*Тесты, которые проходили в {version_a}, но падают в {version_b}*
+
+| Тест | Было ({version_a}) | Стало ({version_b}) | Контекст | Ошибка |
+|------|-------------------|---------------------|----------|--------|
+"""
+        
+        # Сортируем регрессии по имени теста
+        sorted_regressions = sorted(regressions, key=lambda x: x['test_name'])
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_regressions) > 0:
+            common_prefix = os.path.commonprefix([r['test_name'] for r in sorted_regressions])
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        for reg in sorted_regressions:
+            error_formatted = format_error_for_html_table(
+                reg['error_description'], max_length=300, log_url=reg['log_url']
+            )
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = reg['test_name'][len(common_prefix):]
+            else:
+                display_name = reg['test_name']
+                
+            report_content += f"| {display_name} | ✅ {reg['version_a_status']} | ❌ {reg['version_b_status']} | {reg['test_context']} | {error_formatted} |\n"
+    
+    # Секция улучшений
+    if improvements:
+        report_content += f"""
+## 📉✅ Улучшения ({len(improvements)})
+*Тесты, которые падали в {version_a}, но проходят в {version_b}*
+
+| Тест | Было ({version_a}) | Стало ({version_b}) | Контекст | Предыдущая ошибка |
+|------|-------------------|---------------------|----------|-------------------|
+"""
+        
+        # Сортируем улучшения по имени теста
+        sorted_improvements = sorted(improvements, key=lambda x: x['test_name'])
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_improvements) > 0:
+            common_prefix = os.path.commonprefix([i['test_name'] for i in sorted_improvements])
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        for imp in sorted_improvements:
+            error_formatted = format_error_for_html_table(
+                imp['error_description'], max_length=300, log_url=imp['log_url']
+            )
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = imp['test_name'][len(common_prefix):]
+            else:
+                display_name = imp['test_name']
+                
+            report_content += f"| {display_name} | ❌ {imp['version_a_status']} | ✅ {imp['version_b_status']} | {imp['test_context']} | {error_formatted} |\n"
+    
+    # Секция тестов совместимости
+    if compatibility_tests:
+        report_content += f"""
+## 🔗 Тесты совместимости {version_a} ↔ {version_b} ({len(compatibility_tests)})
+*Тесты, которые специально проверяют совместимость между сравниваемыми версиями*
+
+| Тест | {version_a} | {version_b} | Контекст | Ошибка (если есть) |
+|------|-------------|-------------|----------|-------------------|
+"""
+        
+        # Сортируем тесты совместимости по имени теста
+        sorted_compat_tests = sorted(compatibility_tests, key=lambda x: x['test_name'])
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_compat_tests) > 0:
+            common_prefix = os.path.commonprefix([c['test_name'] for c in sorted_compat_tests])
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        for compat in sorted_compat_tests:
+            error_formatted = format_error_pattern_for_table(
+                compat['error_description'], log_url=compat['log_url']
+            ) if compat['error_description'] and compat['version_b_status'] in ['failure', 'mute'] else 'N/A'
+            
+            status_a_emoji = '✅' if compat['version_a_status'] == 'passed' else '❌'
+            status_b_emoji = '✅' if compat['version_b_status'] == 'passed' else '❌'
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = compat['test_name'][len(common_prefix):]
+            else:
+                display_name = compat['test_name']
+                
+            report_content += f"| {display_name} | {status_a_emoji} {compat['version_a_status']} | {status_b_emoji} {compat['version_b_status']} | {compat['test_context']} | {error_formatted} |\n"
+        
+        # Добавляем анализ тестов совместимости
+        passed_compat = len([t for t in compatibility_tests if t['version_b_status'] == 'passed'])
+        failed_compat = len(compatibility_tests) - passed_compat
+        
+        if failed_compat > 0:
+            report_content += f"""
+
+⚠️ **Внимание**: {failed_compat} из {len(compatibility_tests)} тестов совместимости падают!
+Это может указывать на проблемы совместимости между версиями {version_a} и {version_b}.
+
+"""
+        else:
+            report_content += f"""
+
+✅ **Отлично**: Все {len(compatibility_tests)} тестов совместимости проходят успешно.
+
+"""
+    
+    # Секция общих падений (только если есть регрессии или улучшения)
+    if common_failures and (regressions or improvements):
+        report_content += f"""
+## 🔄 Общие падения ({len(common_failures)})
+*Тесты, которые падают в обеих версиях*
+
+| Тест | {version_a} | {version_b} | Контекст | Ошибка в {version_b} |
+|------|-------------|-------------|----------|---------------------|
+"""
+        
+        # Сортируем общие падения по имени теста
+        sorted_common_failures = sorted(common_failures, key=lambda x: x['test_name'])
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_common_failures) > 0:
+            common_prefix = os.path.commonprefix([c['test_name'] for c in sorted_common_failures])
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        # Показываем все общие падения (убираем ограничение в 10)
+        for common in sorted_common_failures:
+            error_formatted = format_error_for_html_table(
+                common['error_description'], max_length=200, log_url=common['log_url']
+            )
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = common['test_name'][len(common_prefix):]
+            else:
+                display_name = common['test_name']
+                
+            report_content += f"| {display_name} | ❌ {common['version_a_status']} | ❌ {common['version_b_status']} | {common['test_context']} | {error_formatted} |\n"
+    
+    # Секция пропущенных тестов (skipped)
+    skipped_tests = []
+    for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
+        status_a = tests_a[normalized_name]['status']
+        status_b = tests_b[normalized_name]['status']
+        
+        # Если тест пропущен (skipped) в любой из версий
+        if status_a == 'skipped' or status_b == 'skipped':
+            skipped_tests.append({
+                'test_name': tests_b[normalized_name]['original_name'],
+                'version_a_status': status_a,
+                'version_b_status': status_b,
+                'test_context': tests_b[normalized_name]['test_context']
+            })
+    
+    if skipped_tests:
+        report_content += f"""
+## ⏩ Тесты не выполнялись ({len(skipped_tests)})
+*Тесты, которые были пропущены (skipped) в одной или обеих версиях*
+
+| Тест | {version_a} | {version_b} | Контекст |
+|------|-------------|-------------|----------|
+"""
+        
+        # Сортируем пропущенные тесты по имени
+        sorted_skipped = sorted(skipped_tests, key=lambda x: x['test_name'])
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_skipped) > 0:
+            common_prefix = os.path.commonprefix([s['test_name'] for s in sorted_skipped])
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        for skip in sorted_skipped:
+            status_a_emoji = '✅' if skip['version_a_status'] == 'passed' else '⏩' if skip['version_a_status'] == 'skipped' else '❌'
+            status_b_emoji = '✅' if skip['version_b_status'] == 'passed' else '⏩' if skip['version_b_status'] == 'skipped' else '❌'
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = skip['test_name'][len(common_prefix):]
+            else:
+                display_name = skip['test_name']
+                
+            report_content += f"| {display_name} | {status_a_emoji} {skip['version_a_status']} | {status_b_emoji} {skip['version_b_status']} | {skip['test_context']} |\n"
+    
+    # Секция тестов, которые не выполнялись более 24 часов
+    not_run_recently = []
+    now = datetime.now()
+    
+    # Проверяем тесты в обеих версиях
+    for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
+        test_a = tests_a[normalized_name]
+        test_b = tests_b[normalized_name]
+        
+        # Проверяем время последнего запуска, если оно доступно
+        last_run_time_a = test_a.get('last_run_time')
+        last_run_time_b = test_b.get('last_run_time')
+        
+        if last_run_time_a and isinstance(last_run_time_a, datetime):
+            time_since_run_a = now - last_run_time_a
+            if time_since_run_a.total_seconds() > 86400:  # Более 24 часов
+                not_run_recently.append({
+                    'test_name': test_a['original_name'],
+                    'version': version_a,
+                    'last_run': last_run_time_a,
+                    'time_since': time_since_run_a,
+                    'test_context': test_a.get('test_context', '')
+                })
+        
+        if last_run_time_b and isinstance(last_run_time_b, datetime):
+            time_since_run_b = now - last_run_time_b
+            if time_since_run_b.total_seconds() > 86400:  # Более 24 часов
+                not_run_recently.append({
+                    'test_name': test_b['original_name'],
+                    'version': version_b,
+                    'last_run': last_run_time_b,
+                    'time_since': time_since_run_b,
+                    'test_context': test_b.get('test_context', '')
+                })
+    
+    if not_run_recently:
+        report_content += f"""
+## ⏰ Не тестировались какое-то время ({len(not_run_recently)})
+*Тесты, которые не запускались более 24 часов*
+
+| Тест | Версия | Последний запуск | Контекст |
+|------|--------|------------------|----------|
+"""
+        
+        # Сортируем по имени теста и затем по версии
+        sorted_not_run = sorted(not_run_recently, key=lambda x: (x['test_name'], x['version']))
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_not_run) > 0:
+            common_prefix = os.path.commonprefix([n['test_name'] for n in sorted_not_run])
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        for test in sorted_not_run:
+            # Форматируем время в человекочитаемом виде
+            days = test['time_since'].days
+            hours = test['time_since'].seconds // 3600
+            time_str = f"{days} дн. {hours} ч." if days > 0 else f"{hours} ч."
+            last_run_str = test['last_run'].strftime("%Y-%m-%d %H:%M")
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = test['test_name'][len(common_prefix):]
+            else:
+                display_name = test['test_name']
+                
+            report_content += f"| {display_name} | {test['version']} | {last_run_str} ({time_str} назад) | {test['test_context']} |\n"
+    
+    # Секция тестов только в version_a
+    if only_in_a:
+        report_content += f"""
+## ➕ Тесты только в {version_a} ({len(only_in_a)})
+*Тесты, которые есть в {version_a}, но отсутствуют в {version_b}*
+
+| Тест | Статус | Контекст | Ошибка |
+|------|--------|----------|--------|
+"""
+        
+        # Сортируем тесты по имени для лучшей читаемости
+        sorted_tests = sorted(only_in_a, key=lambda x: x['test_name'])
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_tests) > 0:
+            common_prefix = os.path.commonprefix([t['test_name'] for t in sorted_tests])
+            # Если общий префикс заканчивается на '/', сохраняем его, иначе обрезаем до последнего '/'
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        # Показываем все тесты только в A
+        for test in sorted_tests:
+            error_formatted = format_error_pattern_for_table(
+                test['error_description'], log_url=test['log_url']
+            ) if test['error_description'] else 'N/A'
+            status_emoji = '✅' if test['status'] == 'passed' else '❌'
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = test['test_name'][len(common_prefix):]
+            else:
+                display_name = test['test_name']
+                
+            report_content += f"| {display_name} | {status_emoji} {test['status']} | {test['test_context']} | {error_formatted} |\n"
+    
+    # Секция тестов только в version_b
+    if only_in_b:
+        report_content += f"""
+## ➖ Тесты только в {version_b} ({len(only_in_b)})
+*Тесты, которые есть в {version_b}, но отсутствуют в {version_a}*
+
+| Тест | Статус | Контекст | Ошибка |
+|------|--------|----------|--------|
+"""
+        
+        # Сортируем тесты по имени для лучшей читаемости
+        sorted_tests = sorted(only_in_b, key=lambda x: x['test_name'])
+        
+        # Находим общий префикс путей для возможного сокращения
+        if len(sorted_tests) > 0:
+            common_prefix = os.path.commonprefix([t['test_name'] for t in sorted_tests])
+            # Если общий префикс заканчивается на '/', сохраняем его, иначе обрезаем до последнего '/'
+            if not common_prefix.endswith('/'):
+                common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
+        else:
+            common_prefix = ''
+        
+        # Показываем все тесты только в B
+        for test in sorted_tests:
+            error_formatted = format_error_pattern_for_table(
+                test['error_description'], log_url=test['log_url']
+            ) if test['error_description'] else 'N/A'
+            status_emoji = '✅' if test['status'] == 'passed' else '❌'
+            
+            # Опционально сокращаем путь для лучшей читаемости
+            if len(common_prefix) > 10:  # Если есть значимый общий префикс
+                display_name = test['test_name'][len(common_prefix):]
+            else:
+                display_name = test['test_name']
+                
+            report_content += f"| {display_name} | {status_emoji} {test['status']} | {test['test_context']} | {error_formatted} |\n"
+    
+    # Секция тестов без изменений (только если есть изменения для контраста)
+    if unchanged_tests and (regressions or improvements or only_in_a or only_in_b):
+        report_content += f"""
+## ➡️ Тесты без изменений ({len(unchanged_tests)})
+*Тесты со стабильным статусом в обеих версиях*
+
+"""
+        
+        # Группируем по статусам
+        unchanged_by_status = {}
+        for test in unchanged_tests:
+            status = test['status']
+            if status not in unchanged_by_status:
+                unchanged_by_status[status] = []
+            unchanged_by_status[status].append(test)
+        
+        report_content += "| Статус | Количество | Примеры |\n|--------|------------|----------|\n"
+        
+        for status, status_tests in sorted(unchanged_by_status.items(), 
+                                         key=lambda x: len(x[1]), reverse=True):
+            examples = [test['test_name'].split('/')[-1] for test in status_tests[:3]]
+            examples_str = ', '.join(examples)
+            if len(status_tests) > 3:
+                examples_str += f", ... (+{len(status_tests) - 3})"
+            
+            status_emoji = '✅' if status == 'passed' else '❌'
+            report_content += f"| {status_emoji} {status} | {len(status_tests)} | {examples_str} |\n"
+    
+    # Анализ по типам тестов
+    if regressions:
+        report_content += f"""
+---
+
+## 📊 Анализ регрессий по типам тестов
+
+"""
+        
+        # Группируем регрессии по типам тестов
+        regressions_by_type = {}
+        for reg in regressions:
+            test_type = reg['test_type']
+            if test_type not in regressions_by_type:
+                regressions_by_type[test_type] = []
+            regressions_by_type[test_type].append(reg)
+        
+        report_content += "| Тип теста | Регрессий | Примеры |\n|-----------|-----------|----------|\n"
+        
+        for test_type, type_regressions in sorted(regressions_by_type.items(), 
+                                                key=lambda x: len(x[1]), reverse=True):
+            examples = [reg['test_name'].split('/')[-1] for reg in type_regressions[:3]]
+            examples_str = ', '.join(examples)
+            if len(type_regressions) > 3:
+                examples_str += f", ... (+{len(type_regressions) - 3})"
+            
+            report_content += f"| {test_type} | {len(type_regressions)} | {examples_str} |\n"
+    
+    # Рекомендации
+    report_content += f"""
+---
+
+## 🎯 Рекомендации
+
+"""
+    
+    if regressions:
+        report_content += f"- 🔥 **КРИТИЧНО**: Исследовать {len(regressions)} регрессий при переходе с {version_a} на {version_b}\n"
+        
+        # Анализируем типы ошибок в регрессиях
+        error_types = {}
+        for reg in regressions:
+            error_desc = reg['error_description'].lower()
+            if 'daemon failed' in error_desc or 'severaldaemonerrors' in error_desc:
+                error_types.setdefault('Daemon crashes', []).append(reg['test_name'])
+            elif 'memory limit' in error_desc or 'mkql memory' in error_desc:
+                error_types.setdefault('Memory issues', []).append(reg['test_name'])
+            elif 'verify failed' in error_desc:
+                error_types.setdefault('Memory verification', []).append(reg['test_name'])
+            elif 'type mismatch' in error_desc:
+                error_types.setdefault('Type compatibility', []).append(reg['test_name'])
+            else:
+                error_types.setdefault('Other errors', []).append(reg['test_name'])
+        
+        if error_types:
+            report_content += f"- 📋 **Приоритеты исследования по типам ошибок:**\n"
+            for error_type, tests in sorted(error_types.items(), key=lambda x: len(x[1]), reverse=True):
+                report_content += f"  - {error_type}: {len(tests)} тестов\n"
+    
+    if improvements:
+        report_content += f"- ✅ **ПОЗИТИВ**: {len(improvements)} тестов исправлено в {version_b}\n"
+    
+    if compatibility_tests:
+        passed_compat = len([t for t in compatibility_tests if t['version_b_status'] == 'passed'])
+        failed_compat = len(compatibility_tests) - passed_compat
+        
+        if failed_compat > 0:
+            report_content += f"- 🔗 **СОВМЕСТИМОСТЬ**: {failed_compat} из {len(compatibility_tests)} тестов совместимости падают - требует внимания!\n"
+        else:
+            report_content += f"- 🔗 **СОВМЕСТИМОСТЬ**: Все {len(compatibility_tests)} тестов совместимости проходят успешно\n"
+    
+    if only_in_a:
+        report_content += f"- ➕ **ВНИМАНИЕ**: {len(only_in_a)} тестов отсутствуют в {version_b} (удалены или переименованы?)\n"
+    
+    if only_in_b:
+        report_content += f"- ➖ **НОВОЕ**: {len(only_in_b)} новых тестов добавлено в {version_b}\n"
+    
+    if unchanged_tests:
+        passed_unchanged = len([t for t in unchanged_tests if t['status'] == 'passed'])
+        failed_unchanged = len(unchanged_tests) - passed_unchanged
+        if passed_unchanged > 0:
+            report_content += f"- ✅ **СТАБИЛЬНОСТЬ**: {passed_unchanged} тестов стабильно проходят в обеих версиях\n"
+        if failed_unchanged > 0:
+            report_content += f"- ❌ **ТЕХНИЧЕСКИЙ ДОЛГ**: {failed_unchanged} тестов стабильно падают в обеих версиях\n"
+    
+    if skipped_tests:
+        report_content += f"- ⏩ **ПРОПУЩЕНО**: {len(skipped_tests)} тестов не выполнялись (skipped) в одной или обеих версиях\n"
+    
+    if not_run_recently:
+        report_content += f"- ⏰ **УСТАРЕВШИЕ ДАННЫЕ**: {len(not_run_recently)} тестов не запускались более 24 часов\n"
+    
+    if not regressions and improvements:
+        report_content += f"- 🎉 **ОТЛИЧНО**: Нет регрессий, только улучшения!\n"
+    elif not regressions and not improvements and not only_in_a and not only_in_b:
+        report_content += f"- 🔄 **СТАБИЛЬНО**: Функциональных изменений между версиями не обнаружено\n"
+    
+    report_content += f"""
+---
+
+*Отчет сравнения версий сгенерирован автоматически*
+*Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+    
+    # Сохраняем отчет
+    safe_version_a = version_a.replace('/', '_').replace('-', '_')
+    safe_version_b = version_b.replace('/', '_').replace('-', '_')
+    report_filename = f"comparison_{safe_version_a}_vs_{safe_version_b}.md"
+    report_path = os.path.join(output_dir, report_filename)
+    
+    with open(report_path, 'w', encoding='utf-8') as f:
+        f.write(report_content)
+    
+    return report_path
+
+
+def format_error_pattern_for_table(error_description, log_url=None):
+    """
+    Форматирует паттерн ошибки для таблицы вместо полного текста.
+    Возвращает краткий паттерн ошибки + ссылку на лог.
+    """
+    if not error_description:
+        pattern = 'No error description'
+    else:
+        # Получаем содержательную ошибку
+        meaningful_error = extract_meaningful_error_info(error_description, max_length=500)
+        
+        # Определяем тип ошибки и создаем краткий паттерн
+        error_lower = meaningful_error.lower()
+        
+        if 'severaldaemonerrors:' in error_lower or 'daemon failed with message:' in error_lower:
+            pattern = '🔴 Daemon Crash'
+        elif 'verify failed' in error_lower or 'verifydebug' in error_lower:
+            pattern = '🔍 Memory Verification Failed'
+        elif 'mkql memory limit exceeded' in error_lower:
+            pattern = '💾 Memory Limit Exceeded'
+        elif 'function' in error_lower and 'type mismatch' in error_lower:
+            pattern = '🔀 Type Mismatch'
+        elif 'unknown node in olap' in error_lower:
+            pattern = '📊 OLAP Node Error'
+        elif 'unknown field' in error_lower:
+            pattern = '⚙️ Config Field Error'
+        elif 'timeout' in error_lower and 'exceeded' in error_lower:
+            pattern = '⏱️ Timeout Exceeded'
+        elif 'assertion' in error_lower and 'failed' in error_lower:
+            pattern = '❌ Assertion Failed'
+        elif 'requirement' in error_lower and 'failed' in error_lower:
+            pattern = '📋 Requirement Failed'
+        elif 'kikimr start failed' in error_lower:
+            pattern = '🚀 Startup Failed'
+        elif 'executionerror' in error_lower and 'failed with code' in error_lower:
+            pattern = '💥 Execution Error'
+        elif 'command' in error_lower and 'failed' in error_lower:
+            pattern = '⚡ Command Failed'
+        else:
+            # Для неизвестных ошибок берем первые 50 символов
+            # Удаляем переносы строк и экранируем вертикальные черты
+            cleaned_error = meaningful_error.replace('\n', ' ').replace('\r', ' ')
+            cleaned_error = re.sub(r'\s+', ' ', cleaned_error).strip()
+            pattern = f"❓ {cleaned_error[:50]}..."
+    
+    # Экранируем вертикальные черты для markdown таблиц
+    pattern = pattern.replace('|', '\\|')
+    
+    # Добавляем ссылку на лог если есть
+    if log_url:
+        return f"{pattern} [📋 Log]({log_url})"
+    else:
+        return pattern
+
+
+def format_error_for_html_table(error_description, max_length=600, log_url=None):
+    """Форматирует ошибку для отображения в HTML таблице с переносами строк"""
+    if not error_description:
+        return 'No error description'
+    
+    # Получаем содержательную ошибку
+    meaningful_error = extract_meaningful_error_info(error_description, max_length, log_url=log_url)
+    
+    # Заменяем переносы строк на пробелы для совместимости с Markdown таблицами
+    formatted_error = meaningful_error.replace('\n', ' ').replace('\r', ' ')
+    
+    # Убираем лишние пробелы
+    formatted_error = re.sub(r'\s+', ' ', formatted_error).strip()
+    
+    # Экранируем специальные символы для markdown таблиц
+    formatted_error = formatted_error.replace('|', '\\|')  # Экранируем вертикальные черты
+    
+    return formatted_error
+
+
+def normalize_test_name_for_comparison(test_name):
+    """
+    Нормализует имя теста для сравнения версий, заменяя версии в параметрах на плейсхолдеры.
+    
+    Примеры:
+    test_tpch1[restart_24-4_to_25-1-column-date64] -> test_tpch1[restart_VERSION_A_to_VERSION_B-column-date64]
+    test_simple_queue[mixed_current_and_25-1-column] -> test_simple_queue[mixed_current_and_VERSION-column]
+    test_simple_queue[mixed_current_and_stable-25-1-2-column] -> test_simple_queue[mixed_current_and_VERSION-column]
+    """
+    if not test_name or '[' not in test_name:
+        return test_name
+    
+    # Разделяем имя теста и параметры
+    parts = test_name.split('[', 1)
+    if len(parts) != 2:
+        return test_name
+    
+    base_name = parts[0]
+    params = parts[1].rstrip(']')
+    
+    # Паттерны для замены версий
+    import re
+    
+    # 1. Паттерн restart_VERSION_A_to_VERSION_B (для test_tpch1, test_compatibility)
+    # Примеры: restart_24-4_to_25-1-column-date64 -> restart_VERSION_A_to_VERSION_B-column-date64
+    # Ограничиваем версии только числовыми компонентами
+    params = re.sub(
+        r'restart_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current))_to_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current))(.*)',
+        r'restart_VERSION_A_to_VERSION_B\3',
+        params
+    )
+    
+    # 2. Паттерн mixed_current_and_VERSION (для test_simple_queue, test_stress)  
+    # Примеры: mixed_current_and_25-1-column -> mixed_current_and_VERSION-column
+    # Ограничиваем версию числовыми компонентами
+    params = re.sub(
+        r'mixed_current_and_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current))(.*)',
+        r'mixed_current_and_VERSION\2',
+        params
+    )
+    
+    # 3. Паттерн rolling_VERSION (для test_batch_update)
+    # Примеры: rolling_25-1-1_to_current -> rolling_VERSION
+    # Здесь может быть _to_ паттерн или просто версия
+    params = re.sub(
+        r'rolling_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current)(?:_to_(?:stable-)?(?:\d+-\d+(?:-\d+)*|current))?)',
+        r'rolling_VERSION',
+        params
+    )
+    
+    # 4. Общий паттерн для оставшихся версий
+    # Заменяем отдельно стоящие версии вида X-Y, X-Y-Z, stable-X-Y, stable-X-Y-Z, current
+    params = re.sub(
+        r'\b(?:stable-)?(?:\d+-\d+(?:-\d+)?|current)\b',
+        'VERSION',
+        params
+    )
+    
+    return f"{base_name}[{params}]"
+
+
+def normalize_error_for_grouping(error_description):
+    """
+    Нормализует ошибку для группировки похожих ошибок
+    """
+    if not error_description:
+        return "no_error"
+    
+    # Получаем содержательную ошибку
+    meaningful_error = extract_meaningful_error_info(error_description, max_length=500)
+    
+    # Дополнительная нормализация для группировки
+    normalized = meaningful_error.lower()
+    
+    # Убираем специфичные детали, оставляя суть ошибки
+    normalized = re.sub(r'\[timestamp\].*?-', '', normalized)  # Убираем временные метки с префиксами
+    normalized = re.sub(r'\[build_path\]', '', normalized)     # Убираем пути
+    normalized = re.sub(r'\[port\]', '', normalized)           # Убираем порты
+    normalized = re.sub(r'\[pid\]', '', normalized)            # Убираем PID
+    normalized = re.sub(r'\[hash\]', '', normalized)           # Убираем хеши
+    normalized = re.sub(r'\[id\]', '', normalized)             # Убираем ID
+    normalized = re.sub(r'\[ip\]', '', normalized)             # Убираем IP
+    normalized = re.sub(r'\[n\]', '', normalized)              # Убираем номера узлов
+    
+    # Убираем лишние пробелы и пунктуацию
+    normalized = re.sub(r'\s+', ' ', normalized)
+    normalized = re.sub(r'[^\w\s]', ' ', normalized)
+    normalized = normalized.strip()
+    
+    # Берем первые 100 символов как ключ группировки
+    return normalized[:100] if normalized else "unknown_error"
+
+
+def is_compatibility_test_for_versions(test_name, version_a, version_b):
+    """
+    Проверяет, является ли тест совместимости между указанными версиями.
+    
+    Примеры:
+    test_tpch1[mixed_stable-25-1-2_and_stable-25-1-1-row] при сравнении 25-1-1 vs 25-1-2
+    test_compatibility[restart_24-4_to_25-1-column] при сравнении 24-4 vs 25-1
+    """
+    if not test_name or '[' not in test_name:
+        return False
+    
+    # Извлекаем параметры теста
+    parts = test_name.split('[', 1)
+    if len(parts) != 2:
+        return False
+    
+    params = parts[1].rstrip(']').lower()
+    
+    # Нормализуем версии для сравнения (убираем stable- префиксы и лишние символы)
+    def normalize_version(v):
+        return v.replace('stable-', '').replace('_', '-').strip()
+    
+    norm_a = normalize_version(version_a)
+    norm_b = normalize_version(version_b)
+    
+    # Паттерны совместимости:
+    import re
+    
+    # 1. mixed_VERSION_and_VERSION
+    mixed_pattern = r'mixed_(?:stable-)?([^_]+)_and_(?:stable-)?(\d+-\d+(?:-\d+)*)'
+    mixed_match = re.search(mixed_pattern, params)
+    if mixed_match:
+        test_v1 = normalize_version(mixed_match.group(1))
+        test_v2 = normalize_version(mixed_match.group(2))
+        # Проверяем, совпадают ли версии в тесте с версиями сравнения (в любом порядке)
+        return (test_v1 == norm_a and test_v2 == norm_b) or (test_v1 == norm_b and test_v2 == norm_a)
+    
+    # 2. restart_VERSION_to_VERSION
+    restart_pattern = r'restart_(?:stable-)?(\d+-\d+(?:-\d+)*|current)_to_(?:stable-)?(\d+-\d+(?:-\d+)*|current)'
+    restart_match = re.search(restart_pattern, params)
+    if restart_match:
+        test_v1 = normalize_version(restart_match.group(1))
+        test_v2 = normalize_version(restart_match.group(2))
+        # Проверяем, совпадают ли версии в тесте с версиями сравнения (в любом порядке)
+        return (test_v1 == norm_a and test_v2 == norm_b) or (test_v1 == norm_b and test_v2 == norm_a)
+    
+    return False
+
+
+def clean_test_name_for_display(test_name):
+    """
+    Очищает имя теста от избыточного пути ydb/tests/compatibility/
+    """
+    if not test_name:
+        return test_name
+    
+    # Убираем префикс ydb/tests/compatibility/
+    prefixes_to_remove = [
+        'ydb/tests/compatibility/',
+        'tests/compatibility/',
+        'compatibility/'
+    ]
+    
+    cleaned_name = test_name
+    for prefix in prefixes_to_remove:
+        if cleaned_name.startswith(prefix):
+            cleaned_name = cleaned_name[len(prefix):]
+            break
+    
+    return cleaned_name
 
 
 if __name__ == "__main__":

@@ -158,24 +158,25 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
 
 TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response) {
     TGetPointsCountResult result;
+    result.PointsCount = 1;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << response.Issues.ToOneLineString());
+        return TGetPointsCountResponse(std::move(result));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Error while sending points count request to monitoring api: " << response.Content.data());
+        return TGetPointsCountResponse(std::move(result));
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Failed to parse points count response from monitoring api: " << e.what());
+        return TGetPointsCountResponse(std::move(result));
     }
 
     if (!json.IsMap() || !json.Has("scalar") || !json["scalar"].IsInteger()) {
-        return TGetPointsCountResponse("Invalid points count result from monitoring api");
+        return TGetPointsCountResponse(std::move(result));
     }
 
     result.PointsCount = json["scalar"].GetInteger();

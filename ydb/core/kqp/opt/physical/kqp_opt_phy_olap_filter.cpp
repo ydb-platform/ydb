@@ -782,7 +782,112 @@ std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPart
     return {pushable, remaining};
 }
 
-} // anonymous namespace end
+bool IsSuitableToCollectProjection(TExprBase node) {
+    return !!node.Maybe<TCoJsonValue>();
+}
+
+TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections(const TExprNode::TPtr& node, const TExprNode& arg,
+                                                                                 TNodeOnNodeOwnedMap& replaces, TExprContext& ctx) {
+    auto asStructPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoAsStruct>(node); };
+    auto memberPred = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoMember>(node); };
+
+    TVector<std::pair<TString, TExprNode::TPtr>> olapOperationsForProjections;
+    if (auto asStruct = FindNode(node, asStructPred)) {
+        for (auto child : TExprBase(asStruct).Cast<TCoAsStruct>()) {
+            if (IsSuitableToCollectProjection(child.Item(1))) {
+                if (auto originalMembers = FindNodes(child.Item(1).Ptr(), memberPred); originalMembers.size() == 1) {
+                    if (auto olapOperations = ConvertComparisonNode(TExprBase(child.Item(1)), arg, ctx, node->Pos(), false);
+                        olapOperations.size() == 1) {
+                        auto originalMember = TExprBase(originalMembers.front()).Cast<TCoMember>();
+                        auto newMember = Build<TCoMember>(ctx, node->Pos())
+                            .Struct(originalMember.Struct())
+                            .Name(originalMember.Name())
+                            .Done();
+
+                        auto olapOperation = olapOperations.front();
+                        // Replace full expression with only member.
+                        replaces[child.Item(1).Raw()] = newMember.Ptr();
+                        olapOperationsForProjections.emplace_back(TString(newMember.Name()), olapOperation.Ptr());
+
+                        YQL_CLOG(TRACE, ProviderKqp) << "[OLAP PROJECTION] Operation in olap dialect: " << KqpExprToPrettyString(olapOperation, ctx);
+                    }
+                }
+            }
+        }
+    }
+
+    return olapOperationsForProjections;
+}
+}  // anonymous namespace end
+
+TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    TTypeAnnotationContext& typesCtx)
+{
+    Y_UNUSED(typesCtx);
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
+        return node;
+    }
+
+    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+        return node;
+    }
+
+    auto flatmap = node.Cast<TCoFlatMap>();
+    const auto& lambda = flatmap.Lambda();
+
+    auto olapAggPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapAgg>(node); };
+    if (auto maybeOlapAgg = FindNode(lambda.Body().Ptr(), olapAggPred)) {
+        return node;
+    }
+
+    const auto& lambdaArg = lambda.Args().Arg(0).Ref();
+    auto read = flatmap.Input().Cast<TKqpReadOlapTableRanges>();
+
+    TNodeOnNodeOwnedMap replaces;
+    auto olapOperationsForProjections = CollectOlapOperationsForProjections(flatmap.Ptr(), lambdaArg, replaces, ctx);
+    if (olapOperationsForProjections.empty()) {
+        return node;
+    }
+
+    TVector<TExprBase> projections;
+    for (const auto& [columnName, olapOperation] : olapOperationsForProjections) {
+        auto olapProjection = Build<TKqpOlapProjection>(ctx, node.Pos())
+            .OlapOperation(olapOperation)
+            .ColumnName().Build(columnName)
+            .Done();
+        projections.push_back(olapProjection);
+    }
+
+    auto olapProjections = Build<TKqpOlapProjections>(ctx, node.Pos())
+        .Input(read.Process().Body())
+        .Projections()
+            .Add(projections)
+            .Build()
+        .Done();
+
+    auto newLambda = Build<TCoLambda>(ctx, node.Pos())
+        .Args({"arg"})
+        .Body<TExprApplier>()
+            .Apply(olapProjections)
+            .With(read.Process().Args().Arg(0), "arg")
+            .Build()
+        .Done();
+
+    auto newRead = Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
+        .Table(read.Table())
+        .Ranges(read.Ranges())
+        .Columns(read.Columns())
+        .Settings(read.Settings())
+        .ExplainPrompt(read.ExplainPrompt())
+        .Process(newLambda)
+        .Done();
+
+    replaces[read.Raw()] = newRead.Ptr();
+    auto newFlatmap = TExprBase(TExprBase(ctx.ReplaceNodes(flatmap.Ptr(), replaces)).Cast<TCoFlatMap>());
+
+    YQL_CLOG(TRACE, ProviderKqp) << "[OLAP PROJECTION] After rewrite: " << KqpExprToPrettyString(newFlatmap, ctx);
+    return newFlatmap;
+}
 
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)
@@ -808,7 +913,6 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     const auto& lambda = flatmap.Lambda();
     const auto& lambdaArg = lambda.Args().Arg(0).Ref();
-
     YQL_CLOG(TRACE, ProviderKqp) << "Initial OLAP lambda: " << KqpExprToPrettyString(lambda, ctx);
 
     const auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
@@ -819,6 +923,8 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     const auto& optionaIf = maybeOptionalIf.Cast();
     auto predicate = optionaIf.Predicate();
     auto value = optionaIf.Value();
+    // Use original value in final flatmap, because we need an original ast for the given value in `KqpPushOlapProjection`.
+    auto originalValue = value;
 
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();
@@ -938,7 +1044,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Value<TExprApplier>()
-                    .Apply(value)
+                    .Apply(originalValue)
                     .With(lambda.Args().Arg(0), "new_arg")
                     .Build()
                 .Build()

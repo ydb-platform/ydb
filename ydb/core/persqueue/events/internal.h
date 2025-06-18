@@ -200,6 +200,7 @@ struct TEvPQ {
         EvTransactionCompleted,
         EvListAllTopicsResponse,
         EvRunCompaction,
+        EvAllocateCookie,
         EvEnd
     };
 
@@ -280,6 +281,7 @@ struct TEvPQ {
             , ExternalOperation(externalOperation)
             , PipeClient(pipeClient)
             , LastOffset(lastOffset)
+            , IsInternal(false)
         {}
 
         ui64 Cookie;
@@ -296,6 +298,7 @@ struct TEvPQ {
         bool ExternalOperation;
         TActorId PipeClient;
         ui64 LastOffset;
+        bool IsInternal;
     };
 
     struct TMessageGroup {
@@ -467,11 +470,13 @@ struct TEvPQ {
 
 
     struct TEvProxyResponse : public TEventLocal<TEvProxyResponse, EvProxyResponse> {
-        TEvProxyResponse(ui64 cookie)
+        TEvProxyResponse(ui64 cookie, bool isInternal)
             : Cookie(cookie)
+            , IsInternal(isInternal)
             , Response(std::make_shared<NKikimrClient::TResponse>())
         {}
         ui64 Cookie;
+        bool IsInternal;
         std::shared_ptr<NKikimrClient::TResponse> Response;
     };
 
@@ -1216,6 +1221,16 @@ struct TEvPQ {
 
         ui64 MaxBlobSize = 0;
         ui64 CumulativeSize = 0;
+    };
+
+    struct TEvAllocateCookie : TEventLocal<TEvAllocateCookie, EvAllocateCookie> {
+        explicit TEvAllocateCookie(ui64 count)
+            : Count(count)
+        {
+        }
+
+        ui64 Count;
+        ui64 StartCookie = 0;
     };
 };
 

@@ -44,13 +44,6 @@ struct TReadInfo {
     i32 GenerationId;
 };
 
-struct TConsumerOffset {
-    ui64 PartitionIndex;
-    ui64 Offset;
-    TString Metadata;
-};
-
-
 class TKafkaTestClient {
     public:
         TKafkaTestClient(ui16 port, const TString clientName = "TestClient");

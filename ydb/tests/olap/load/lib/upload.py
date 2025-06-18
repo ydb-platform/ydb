@@ -5,6 +5,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from time import time
 import yatest.common
 import allure
+import logging
 
 
 class UploadSuiteBase(LoadSuiteBase):
@@ -38,6 +39,7 @@ class UploadSuiteBase(LoadSuiteBase):
             with allure.step("import data"):
                 self.import_data()
         except BaseException as e:
+            logging.error(f'Error: {e}')
             result.add_error(str(e))
             result.traceback = e.__traceback__
         result.iterations[0].time = time() - start_time

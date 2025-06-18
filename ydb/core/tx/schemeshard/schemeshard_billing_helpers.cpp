@@ -6,12 +6,38 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TBillingStatsCalculator::TryFixOldFormat(NKikimrIndexBuilder::TBillingStats& value) {
+void TBillingStatsCalculator::TryFixOldFormat(TBillingStats& value) {
     // old format: assign upload to read
     if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
         value.SetReadRows(value.GetUploadRows());
         value.SetReadBytes(value.GetUploadBytes());
     }
+}
+
+bool TBillingStatsCalculator::IsZero(TBillingStats& value) {
+    return value.GetUploadRows() == 0
+        && value.GetUploadBytes() == 0
+        && value.GetReadRows() == 0
+        && value.GetReadBytes() == 0;
+}
+
+void TBillingStatsCalculator::AddTo(TBillingStats& value, const TBillingStats& other) {
+    value.SetUploadRows(value.GetUploadRows() + other.GetUploadRows());
+    value.SetUploadBytes(value.GetUploadBytes() + other.GetUploadBytes());
+    value.SetReadRows(value.GetReadRows() + other.GetReadRows());
+    value.SetReadBytes(value.GetReadBytes() + other.GetReadBytes());
+}
+
+void TBillingStatsCalculator::SubFrom(TBillingStats& value, const TBillingStats& other) {
+    const auto safeSub = [](ui64 x, ui64 y) {
+        Y_ENSURE(x >= y);
+        return x - y;
+    };
+
+    value.SetUploadRows(safeSub(value.GetUploadRows(), other.GetUploadRows()));
+    value.SetUploadBytes(safeSub(value.GetUploadBytes(), other.GetUploadBytes()));
+    value.SetReadRows(safeSub(value.GetReadRows(), other.GetReadRows()));
+    value.SetReadBytes(safeSub(value.GetReadBytes(), other.GetReadBytes()));
 }
 
 ui64 TRUCalculator::ReadTable(ui64 bytes) {
@@ -31,7 +57,7 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
     return (Max(rows, (bytes + 1_KB - 1) / 1_KB) + 1) / 2;
 }
 
-ui64 TRUCalculator::Calculate(const NKikimrIndexBuilder::TBillingStats& stats) {
+ui64 TRUCalculator::Calculate(const TBillingStats& stats) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
     return TRUCalculator::ReadTable(stats.GetReadBytes())

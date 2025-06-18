@@ -3352,7 +3352,7 @@ public:
         Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TString DebugMessage;
 
-        NKikimrIndexBuilder::TBillingStats Processed;
+        TBillingStats Processed;
 
         TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
@@ -3382,8 +3382,8 @@ public:
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
 
-    NKikimrIndexBuilder::TBillingStats Processed;
-    NKikimrIndexBuilder::TBillingStats Billed;
+    TBillingStats Processed;
+    TBillingStats Billed;
 
     struct TSample {
         struct TRow {
@@ -3707,19 +3707,14 @@ public:
             Schema::IndexBuildShardStatus::UploadStatus>(
             Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
 
-        auto& processed = shardStatus.Processed;
-        processed = {
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
-        };
-        if (processed.GetUploadRows() != 0 && processed.GetReadRows() == 0 && IsFillBuildIndex()) {
-            // old format: assign upload to read
-            processed.SetReadRows(processed.GetUploadRows());
-            processed.SetReadBytes(processed.GetUploadBytes());
+        shardStatus.Processed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0));
+        shardStatus.Processed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0));
+        shardStatus.Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0));
+        shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0));
+        if (IsFillBuildIndex()) {
+            TBillingStatsCalculator::TryFixOldFormat(shardStatus.Processed);
         }
-        TBillingStatsCalculator::AddTo(Processed, processed);
+        TBillingStatsCalculator::AddTo(Processed, shardStatus.Processed);
     }
 
     bool IsCancellationRequested() const {

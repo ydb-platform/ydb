@@ -17,6 +17,7 @@ import hashlib
 from difflib import SequenceMatcher
 import math
 import codecs
+import sys
 
 # Отключаем предупреждения о непроверенных HTTPS запросах
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -37,12 +38,19 @@ API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 DEBUG = True
 
 def setup_logging():
+    """Настраиваем логирование"""
     logging.basicConfig(
-        level=logging.DEBUG if DEBUG else logging.INFO,
-        format='[%(asctime)s] %(levelname)s: %(message)s',
-        handlers=[logging.StreamHandler()],
-        force=True  # Гарантируем, что настройки применятся
+        level=logging.INFO,  # Изменено с DEBUG на INFO для лучшей видимости VERIFY отладки
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler('compatibility_report.log', encoding='utf-8')
+        ]
     )
+    
+    # Устанавливаем уровень DEBUG для нашего модуля чтобы видеть детальную отладку
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
 
 class ErrorPatternCache:
     """Кеш паттернов ошибок для переиспользования"""
@@ -571,7 +579,7 @@ def group_by_versions_and_types(test_data):
                 test_runs.sort(key=lambda x: x['timestamp'], reverse=True)
     
     # Подсчитываем статистику
-    logging.debug(f"Сгруппировано по {len(grouped)} основным версиям:")
+    logging.debug(f"Сгруппировано по {len(grouped)} версиям:")
     for version, types in grouped.items():
         total_tests = sum(len(tests) for tests in types.values())
         
@@ -839,20 +847,45 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     lines = decoded_text.split('\n')
     error_start_index = -1
     
-    # Ищем первую строку с ERROR и берем все начиная с нее
+    # УЛУЧШЕННЫЙ ПОИСК: Ищем ERROR строки с более широким набором паттернов
     for i, line in enumerate(lines):
-        if ' - ERROR - ' in line:
+        # Ищем различные варианты ERROR строк
+        if any(pattern in line for pattern in [
+            ' - ERROR - ',           # Стандартный ERROR
+            'ERROR -',               # Вариант без пробелов
+            'ExecutionError:',       # Прямая ошибка выполнения
+            'yatest.common.process.ExecutionError:', # Специфичная ошибка yatest
+        ]):
             error_start_index = i
             break
     
     # Если ERROR не найден, ищем другие критичные маркеры
     if error_start_index == -1:
-        critical_markers = [' - EXCEPTION - ', ' - FATAL - ', ' - CRITICAL - ', 'Exception:', 'Error:', 
-                          'unknown field', 'daemon failed', 'start failed', 'timeout', 'assertion',
-                          'Mkql memory limit exceeded', 'DECODED_STDERR:', 'DECODED_STDOUT:']  # Добавляем новые маркеры
+        critical_markers = [
+            # Конкретные ошибки с высоким приоритетом
+            'Function.*type mismatch',  # UDF type mismatch ошибки
+            'VERIFY failed',  # Memory verification ошибки
+            'Unknown node in OLAP comparison compiler',  # OLAP ошибки
+            'Mkql memory limit exceeded',  # Memory limit ошибки
+            'KiKiMR start failed',  # Startup ошибки
+            'Daemon failed',  # Daemon ошибки
+            'Cannot kill a stopped process',  # Process ошибки
+            'bootstrap controller timeout',  # Controller timeout
+            'requirement.*failed',  # Assertion ошибки
+            'Request timeout.*exceeded',  # Request timeout
+            'Unexpectedly finished',  # Unexpected termination
+            'Command.*has failed with code',  # Command execution failures
+            
+            # Общие маркеры (с меньшим приоритетом)
+            ' - EXCEPTION - ', ' - FATAL - ', ' - CRITICAL - ', 'Exception:', 'Error:', 
+            'unknown field', 'timeout', 'assertion',
+            'DECODED_STDERR:', 'DECODED_STDOUT:'  # Добавляем новые маркеры
+        ]
+        
         for marker in critical_markers:
             for i, line in enumerate(lines):
-                if marker.lower() in line.lower():
+                # Используем regex для более точного поиска
+                if re.search(marker, line, re.IGNORECASE):
                     error_start_index = i
                     break
             if error_start_index != -1:
@@ -864,20 +897,24 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
             return f"No clear error found in log. [View full log]({log_url})"
         return "No clear error found in log"
     
-    # Берем полезную часть лога (от первой ошибки) - увеличиваем до 15 строк
-    useful_lines = lines[error_start_index:error_start_index + 15]  # Увеличиваем с 10 до 15 строк
+    # УЛУЧШЕННАЯ ЛОГИКА: Берем контекст вокруг ошибки
+    # Для ExecutionError важны строки ПОСЛЕ ERROR, где содержатся детали
+    context_start = max(0, error_start_index - 1)  # 1 строка до ошибки
+    context_end = min(len(lines), error_start_index + 20)  # До 20 строк после ошибки
     
-    # Фильтруем информационные строки среди полезных
+    useful_lines = lines[context_start:context_end]
+    
+    # Фильтруем информационные строки среди полезных, но сохраняем ExecutionError детали
     filtered_lines = []
     for line in useful_lines:
         line_stripped = line.strip()
         if not line_stripped:
             continue
             
-        # Исключаем информационные строки даже в секции ошибок
+        # НЕ исключаем строки с важной информацией об ошибках
         skip_patterns = [
             r' - DEBUG - ',  # DEBUG
-            r' - INFO - ',   # INFO (но не ERROR)
+            r' - INFO - (?!.*ExecutionError)',   # INFO, но НЕ если содержит ExecutionError
         ]
         
         # Проверяем, нужно ли пропустить эту строку
@@ -887,15 +924,43 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
                 should_skip = True
                 break
         
-        if not should_skip:
+        # ВСЕГДА включаем строки с важной информацией об ошибках
+        important_error_markers = [
+            'ExecutionError:',
+            'Command.*has failed with code',
+            'yatest.common.process.ExecutionError:',
+            r'^E\s+',  # Pytest error lines (начинающиеся с "E   ")
+            'Errors:',
+            'std_err:',
+            'std_out:',
+            'exit code:',
+            'failed with code',
+            r'raise ExecutionError',  # Строки с raise ExecutionError
+        ]
+        
+        has_important_error = any(re.search(marker, line_stripped, re.IGNORECASE) for marker in important_error_markers)
+        
+        if not should_skip or has_important_error:
             filtered_lines.append(line_stripped)
     
     # Если после фильтрации ничего не осталось, берем исходные строки
     if not filtered_lines:
-        filtered_lines = [line.strip() for line in useful_lines if line.strip()][:5]
+        filtered_lines = [line.strip() for line in useful_lines if line.strip()][:8]
     
-    # Объединяем отфильтрованные строки - увеличиваем до 8 строк
-    result = '\n'.join(filtered_lines[:8])  # Увеличиваем с 5 до 8 строк
+    # ПРИОРИТИЗИРУЕМ ВАЖНЫЕ СТРОКИ: Выносим строки с "E   " в начало
+    priority_lines = []
+    regular_lines = []
+    
+    for line in filtered_lines:
+        if (line.strip().startswith('E   ') and 
+            ('ExecutionError:' in line or 'Command' in line or 'Errors:' in line)):
+            priority_lines.append(line)
+        else:
+            regular_lines.append(line)
+    
+    # Объединяем: сначала приоритетные, потом обычные, берем до 15 строк
+    reordered_lines = priority_lines + regular_lines
+    result = '\n'.join(reordered_lines[:15])
     
     # Применяем нормализацию переменных данных (как в normalize_log)
     # Временные метки
@@ -926,15 +991,19 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
     # IP адреса
     result = re.sub(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[IP]', result)
     
-    # Финальное ограничение длины
-    if len(result) > max_length:
+    # Резервируем место для ссылки на лог
+    log_link_space = 25 if log_url else 0
+    effective_max_length = max_length - log_link_space
+    
+    # Финальное ограничение длины с учетом места для ссылки
+    if len(result) > effective_max_length:
         # Обрезаем по границе строк
         lines = result.split('\n')
         truncated_lines = []
         current_length = 0
         
         for line in lines:
-            if current_length + len(line) + 1 <= max_length - 20:
+            if current_length + len(line) + 1 <= effective_max_length - 20:
                 truncated_lines.append(line)
                 current_length += len(line) + 1
             else:
@@ -949,6 +1018,10 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
         if log_url:
             return f"No meaningful error found. [View full log]({log_url})"
         return "No meaningful error found"
+    
+    # ВСЕГДА добавляем ссылку на лог в конце для валидации
+    if log_url:
+        result = result.strip() + f"\n[View full log]({log_url})"
     
     return result.strip()
 
@@ -1221,28 +1294,85 @@ def needs_ai_processing(basic_result):
 def process_error_batch_with_ai(batch_data):
     """Обрабатывает батч ошибок через AI"""
     
+    # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ входных данных
+    logging.debug("🤖 AI обработка начата")
+    for key, data in batch_data.items():
+        if isinstance(data, dict):
+            original_log = data.get('original_log', '')
+            basic_processing = data.get('basic_processing', '')
+            has_verify_original = 'VERIFY failed' in original_log
+            has_verify_basic = 'VERIFY failed' in basic_processing
+            
+            logging.debug(f"  📋 {key}: original_log длина={len(original_log)}, VERIFY={'✅' if has_verify_original else '❌'}")
+            logging.debug(f"  📋 {key}: basic_processing длина={len(basic_processing)}, VERIFY={'✅' if has_verify_basic else '❌'}")
+            
+            if has_verify_original or has_verify_basic:
+                logging.info(f"🔍 VERIFY DEBUGGING - AI получил данные с VERIFY:")
+                if has_verify_original:
+                    verify_lines = [line.strip() for line in original_log.split('\n') if 'VERIFY failed' in line]
+                    logging.info(f"  📋 VERIFY строки в original_log: {verify_lines[:2]}")
+                if has_verify_basic:
+                    verify_lines = [line.strip() for line in basic_processing.split('\n') if 'VERIFY failed' in line]
+                    logging.info(f"  📋 VERIFY строки в basic_processing: {verify_lines[:2]}")
+    
     prompt = """
-Обработай каждый лог ошибки и извлеки ключевую информацию максимально сжато.
+Проанализируй каждый лог ошибки и извлеки САМУЮ ВАЖНУЮ информацию об ошибке.
 
-Для каждого лога верни объект с ключевой информацией об ошибке:
-- Убери повторяющиеся строки
-- Убери технические пути и хеши  
-- Сохрани суть проблемы
-- Максимум 800 символов на лог
+🔥 КРИТИЧЕСКИ ВАЖНО - ОБЯЗАТЕЛЬНО найди и включи в ответ:
+1. Точное сообщение об ошибке (например: "Function 'DateTime2.Format' type mismatch", "Mkql memory limit exceeded", "VERIFY failed", "Unknown node in OLAP comparison compiler")
+2. Конкретные технические детали ошибки (коды ошибок, лимиты памяти, типы несоответствий)
+3. Контекст где произошла ошибка (файл, функция, строка если есть)
 
-Формат ответа (строго JSON):
+🚨 СПЕЦИАЛЬНОЕ ВНИМАНИЕ К VERIFY ОШИБКАМ:
+Если в логе есть строки с "VERIFY failed", это КРИТИЧЕСКИ ВАЖНАЯ информация об ошибках памяти.
+ВСЕГДА включай полную VERIFY информацию:
+- "VERIFY failed (Z): Allocated: [числа], Freed: [числа], Peak: [числа]"
+- "VerifyDebug(): requirement GetUsage() == 0 failed"
+- Любые другие детали VERIFY ошибок
+
+ОБЯЗАТЕЛЬНО ВКЛЮЧАЙ:
+- 🔥 Ошибки верификации "VERIFY failed" с ПОЛНЫМИ числовыми деталями (Allocated, Freed, Peak)
+- 🔥 Требования верификации "requirement GetUsage() == 0 failed"
+- Сообщения об ошибках типа "Function ... type mismatch"
+- Ошибки памяти "Mkql memory limit exceeded" с деталями
+- Ошибки компиляции "Unknown node in OLAP comparison compiler"
+- Ошибки запуска "KiKiMR start failed", "Daemon failed"
+- Ошибки процессов "Cannot kill a stopped process"
+- Assertion ошибки с конкретными условиями
+- Timeout ошибки с временными лимитами
+
+НЕ ВКЛЮЧАЙ:
+- Общие фразы типа "Тест завершился ошибкой"
+- Пути к файлам и технические детали без смысла
+- Повторяющиеся строки
+- Информационные сообщения
+
+ПРИМЕРЫ ХОРОШИХ ОТВЕТОВ:
+- "VERIFY failed (Z): Allocated: 41981872, Freed: 41975776, Peak: 6726904. VerifyDebug(): requirement GetUsage() == 0 failed. Daemon failed with message: Unexpectedly finished before stop."
+- "Function 'DateTime2.Format' type mismatch: expected Type (Callable) with DateTime2.TM64, actual Type (Callable) with DateTime2.TM"
+- "Mkql memory limit exceeded: allocated 264306688 bytes by task 1, tx total memory allocations: 408MiB"
+- "KiKiMR start failed: bootstrap controller timeout в методе __wait_for_bs_controller_to_start"
+
+🔥 ВАЖНО: Если видишь "VERIFY failed" - это ПРИОРИТЕТ №1! Включи ВСЕ детали VERIFY.
+
+ФОРМАТ ОТВЕТА (строго JSON):
 {
-  "log_0": "сжатая ключевая информация об ошибке",
-  "log_1": "сжатая ключевая информация об ошибке",
+  "log_0": "конкретная ошибка с техническими деталями",
+  "log_1": "конкретная ошибка с техническими деталями",
   ...
 }
 
-Отвечай ТОЛЬКО JSON, без дополнительных комментариев.
+Максимум 800 символов на лог. Отвечай ТОЛЬКО JSON, без комментариев.
 """
     
     try:
+        logging.debug("🤖 Отправляем запрос в AI...")
         response = call_single_ai_request(prompt, batch_data)
+        
         if response:
+            logging.debug(f"🤖 AI ответил, длина ответа: {len(response)} символов")
+            logging.debug(f"🤖 AI ответ начинается с: {response[:100]}...")
+            
             # Пытаемся распарсить JSON
             cleaned_response = response.strip()
             if cleaned_response.startswith('```json'):
@@ -1250,11 +1380,34 @@ def process_error_batch_with_ai(batch_data):
             elif cleaned_response.startswith('```'):
                 cleaned_response = cleaned_response[3:-3]
             
-            return json.loads(cleaned_response)
+            ai_result = json.loads(cleaned_response)
+            
+            # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ результата AI
+            logging.debug(f"🤖 AI результат успешно распарсен, ключей: {len(ai_result)}")
+            for key, result in ai_result.items():
+                has_verify_result = 'VERIFY failed' in result if result else False
+                logging.debug(f"  📤 {key}: длина={len(result) if result else 0}, VERIFY={'✅' if has_verify_result else '❌'}")
+                
+                if has_verify_result:
+                    logging.info(f"✅ VERIFY DEBUGGING - AI СОХРАНИЛ VERIFY информацию в {key}:")
+                    logging.info(f"  📋 Результат: {result[:200]}...")
+                elif any('VERIFY failed' in str(data.get('original_log', '')) or 'VERIFY failed' in str(data.get('basic_processing', '')) 
+                        for data in batch_data.values() if isinstance(data, dict)):
+                    logging.warning(f"❌ VERIFY DEBUGGING - AI НЕ СОХРАНИЛ VERIFY информацию в {key}:")
+                    logging.warning(f"  📋 Результат без VERIFY: {result[:200]}...")
+            
+            return ai_result
+        else:
+            logging.warning("🤖 AI не вернул ответ")
+            return None
+            
+    except json.JSONDecodeError as e:
+        logging.warning(f"🤖 AI вернул невалидный JSON: {e}")
+        logging.warning(f"🤖 Ответ AI: {response[:500]}...")
+        return None
     except Exception as e:
-        logging.warning(f"AI batch processing failed: {e}")
-    
-    return None
+        logging.warning(f"🤖 AI batch processing failed: {e}")
+        return None
 
 
 def smart_error_extraction_with_cache(test_data):
@@ -1302,10 +1455,24 @@ def smart_error_extraction_with_cache(test_data):
             # Шаг 3: Базовая обработка
             basic_result = extract_meaningful_error_info(log_content, max_length=1500, log_url=log_url)
             
+            # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ для VERIFY ошибок
+            has_verify_in_log = 'VERIFY failed' in log_content
+            has_verify_in_basic = 'VERIFY failed' in basic_result
+            if has_verify_in_log:
+                logging.info(f"🔍 VERIFY DEBUGGING - Лог {test_name}:")
+                logging.info(f"  📋 Исходный лог содержит VERIFY: ✅")
+                logging.info(f"  📤 Базовая обработка содержит VERIFY: {'✅' if has_verify_in_basic else '❌'}")
+                if not has_verify_in_basic:
+                    logging.warning(f"  ⚠️  VERIFY информация потеряна в базовой обработке!")
+                    logging.info(f"  📋 Базовая обработка: {basic_result[:200]}...")
+            
             # Шаг 4: Определяем, нужен ли AI
             if needs_ai_processing(basic_result):
                 # Нужна AI обработка
                 logging.debug(f"  Требуется AI обработка")
+                
+                if has_verify_in_log:
+                    logging.info(f"  🤖 VERIFY DEBUGGING - AI обработка для VERIFY ошибки")
                 
                 # Подготавливаем данные для AI
                 ai_data = {
@@ -1315,6 +1482,20 @@ def smart_error_extraction_with_cache(test_data):
                     }
                 }
                 
+                # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ данных для AI
+                if has_verify_in_log:
+                    has_verify_in_ai_original = 'VERIFY failed' in ai_data["log_0"]['original_log']
+                    has_verify_in_ai_basic = 'VERIFY failed' in ai_data["log_0"]['basic_processing']
+                    logging.info(f"  📤 AI данные - original_log содержит VERIFY: {'✅' if has_verify_in_ai_original else '❌'}")
+                    logging.info(f"  📤 AI данные - basic_processing содержит VERIFY: {'✅' if has_verify_in_ai_basic else '❌'}")
+                    
+                    if not has_verify_in_ai_original:
+                        logging.warning(f"  ⚠️  VERIFY информация потеряна при урезании лога до 8000 символов!")
+                        # Ищем VERIFY в исходном логе
+                        verify_lines = [line for line in log_content.split('\n') if 'VERIFY failed' in line]
+                        if verify_lines:
+                            logging.info(f"  📋 VERIFY строки в исходном логе: {verify_lines[:3]}")
+                
                 # AI запрос
                 ai_results = process_error_batch_with_ai(ai_data)
                 
@@ -1323,21 +1504,66 @@ def smart_error_extraction_with_cache(test_data):
                     final_result = ai_results["log_0"]
                     ai_processed += 1
                     logging.debug(f"  AI обработка успешна")
+                    
+                    # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ результата AI
+                    if has_verify_in_log:
+                        has_verify_in_ai_result = 'VERIFY failed' in final_result
+                        logging.info(f"  📤 AI результат содержит VERIFY: {'✅' if has_verify_in_ai_result else '❌'}")
+                        logging.info(f"  📋 AI результат: {final_result[:300]}...")
+                        
+                        if not has_verify_in_ai_result:
+                            logging.warning(f"  ❌ AI НЕ СОХРАНИЛ VERIFY ИНФОРМАЦИЮ!")
+                            logging.warning(f"  📋 Полный AI результат: {final_result}")
+                            logging.warning(f"  🔍 Анализ проблемы:")
+                            logging.warning(f"    - Исходный лог имел VERIFY: ✅")
+                            logging.warning(f"    - Базовая обработка имела VERIFY: {'✅' if has_verify_in_basic else '❌'}")
+                            logging.warning(f"    - AI original_log имел VERIFY: {'✅' if 'VERIFY failed' in ai_data['log_0']['original_log'] else '❌'}")
+                            logging.warning(f"    - AI basic_processing имел VERIFY: {'✅' if 'VERIFY failed' in ai_data['log_0']['basic_processing'] else '❌'}")
+                            logging.warning(f"    - AI результат имеет VERIFY: ❌")
+                        else:
+                            logging.info(f"  ✅ AI ПРАВИЛЬНО СОХРАНИЛ VERIFY ИНФОРМАЦИЮ")
                 else:
                     # AI не сработал, используем базовую обработку
                     final_result = basic_result
                     basic_processed += 1
                     logging.debug(f"  AI не сработал, используем базовую обработку")
+                    
+                    if has_verify_in_log:
+                        logging.warning(f"  ❌ AI НЕ СРАБОТАЛ для VERIFY ошибки!")
+                        logging.info(f"  📋 Используем базовую обработку: {final_result[:200]}...")
+                        logging.info(f"  📤 Базовая обработка содержит VERIFY: {'✅' if 'VERIFY failed' in final_result else '❌'}")
             else:
                 # Базовой обработки достаточно
                 final_result = basic_result
                 basic_processed += 1
                 logging.debug(f"  Базовая обработка достаточна")
+                
+                if has_verify_in_log:
+                    logging.info(f"  📋 VERIFY DEBUGGING - AI не нужен, используем базовую обработку")
+                    logging.info(f"  📤 Финальный результат содержит VERIFY: {'✅' if 'VERIFY failed' in final_result else '❌'}")
+                    if 'VERIFY failed' not in final_result:
+                        logging.warning(f"  ⚠️  VERIFY информация потеряна даже в базовой обработке!")
+                        logging.warning(f"  📋 Базовая обработка: {final_result}")
             
             # Шаг 5: Устанавливаем результат и добавляем в кеш
             record['status_description'] = final_result
             error_cache.add_pattern(log_content, final_result)
             logging.debug(f"  Добавлено в кеш")
+            
+            # ФИНАЛЬНАЯ ПРОВЕРКА для VERIFY ошибок
+            if has_verify_in_log:
+                has_verify_in_final = 'VERIFY failed' in final_result
+                logging.info(f"  🎯 ИТОГОВЫЙ РЕЗУЛЬТАТ для VERIFY: {'✅ Сохранено' if has_verify_in_final else '❌ Потеряно'}")
+                if not has_verify_in_final:
+                    logging.error(f"  💥 КРИТИЧЕСКАЯ ПРОБЛЕМА: VERIFY информация потеряна в финальном результате!")
+                    logging.error(f"  📋 Финальный результат: {final_result}")
+                    logging.error(f"  🔍 Полная цепочка обработки:")
+                    logging.error(f"    1. Исходный лог содержал VERIFY: ✅")
+                    logging.error(f"    2. Базовая обработка содержала VERIFY: {'✅' if has_verify_in_basic else '❌'}")
+                    logging.error(f"    3. AI {'был вызван' if needs_ai_processing(basic_result) else 'НЕ был вызван'}")
+                    logging.error(f"    4. Финальный результат содержит VERIFY: ❌")
+                else:
+                    logging.info(f"  ✅ VERIFY информация успешно сохранена через всю цепочку обработки")
     
     # Сохраняем кеш
     error_cache.save_cache()
@@ -1476,39 +1702,34 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
     if failed_tests:
         report += f"\n### ⚠️ Consistently Failing Tests ({len(failed_tests)})\n"
         
-        # Группируем тесты по ошибкам
+        # Сначала показываем группировку для обзора
         error_groups = group_tests_by_error(failed_tests)
         
-        if len(error_groups) <= 5:  # Если групп немного, показываем все тесты
-            report += "| Test | Failure Rate | Last Error | Context |\n|------|--------------|------------|----------|\n"
-            for test in failed_tests:
-                error = format_error_for_html_table(test.get('error_description', ''), max_length=400, log_url=test.get('log_url', ''))
-                context = 'N/A'
-                if test.get('recent_runs'):
-                    context = test['recent_runs'][0].get('test_context', 'N/A')
-                fail_rate = test.get('fail_rate', 0) * 100
-                report += f"| {test['name']} | {fail_rate:.1f}% | {error} | {context} |\n"
-        else:  # Если групп много, группируем по ошибкам
-            report += "| Error Type | Tests Count | Error Description | Affected Tests |\n|------------|-------------|-------------------|----------------|\n"
+        if len(error_groups) > 1:  # Если есть группы, показываем обзор
+            report += "**Error Patterns Overview:**\n"
+            report += "| Error Pattern | Tests Count | Representative Error |\n"
+            report += "|---------------|-------------|----------------------|\n"
             
             # Сортируем группы по количеству тестов (убывание)
             sorted_groups = sorted(error_groups.items(), key=lambda x: len(x[1]['tests']), reverse=True)
             
-            for error_key, group_data in sorted_groups:
+            for i, (error_key, group_data) in enumerate(sorted_groups, 1):
                 tests_count = len(group_data['tests'])
-                error_desc = format_error_for_html_table(group_data['representative_error'], max_length=300)
-                
-                # Формируем список тестов
-                test_names = []
-                for test in group_data['tests'][:10]:  # Показываем до 10 тестов в группе
-                    test_names.append(test['name'])
-                
-                if len(group_data['tests']) > 10:
-                    test_names.append(f"... и еще {len(group_data['tests']) - 10} тестов")
-                
-                tests_list = '<br>'.join(test_names)
-                
-                report += f"| Similar Error Pattern | {tests_count} | {error_desc} | {tests_list} |\n"
+                error_desc = extract_error_for_display(group_data['representative_error'], max_length=200)
+                report += f"| Pattern #{i} | {tests_count} | {error_desc} |\n"
+            
+            report += "\n"
+        
+        # Затем всегда показываем детальную таблицу всех тестов
+        report += "**Detailed Test Failures:**\n"
+        report += "| Test | Failure Rate | Last Error | Context |\n|------|--------------|------------|----------|\n"
+        for test in failed_tests:
+            error = format_error_for_html_table(test.get('error_description', ''), max_length=400, log_url=test.get('log_url', ''))
+            context = 'N/A'
+            if test.get('recent_runs'):
+                context = test['recent_runs'][0].get('test_context', 'N/A')
+            fail_rate = test.get('fail_rate', 0) * 100
+            report += f"| {test['name']} | {fail_rate:.1f}% | {error} | {context} |\n"
     
     report += "\n---\n\n## 🔄 Stability Analysis\n"
     
@@ -1519,14 +1740,74 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
     
     if flaky_tests:
         report += f"### 📊 Flaky Tests ({len(flaky_tests)})\n"
-        report += "*Tests showing inconsistent behavior (both passes and failures)*\n\n"
-        report += "| Test | Failure Rate | Status | Context |\n|------|--------------|--------|---------|\n"
+        report += "*Tests showing inconsistent behavior - both passes and failures in recent runs*\n\n"
+        report += "| Test | Pattern | Failure Rate | Most Common Error | Trend | Context |\n"
+        report += "|------|---------|--------------|-------------------|-------|----------|\n"
+        
         for test in flaky_tests:  # Показываем ВСЕ flaky тесты
+            # Анализируем паттерн последних запусков
+            recent_runs = test.get('recent_runs', [])[:10]  # Последние 10 запусков
+            pattern = ""
+            for run in recent_runs:
+                status = run.get('status', 'U')
+                if status == 'passed':
+                    pattern += "P"
+                elif status in ['failure', 'mute']:
+                    pattern += "F"
+                elif status == 'skipped':
+                    pattern += "S"
+                else:
+                    pattern += "U"
+            
+            # Определяем тренд (последние 5 vs предыдущие 5)
+            if len(recent_runs) >= 6:
+                recent_5 = recent_runs[:5]
+                prev_5 = recent_runs[5:10] if len(recent_runs) >= 10 else recent_runs[5:]
+                
+                recent_fail_rate = len([r for r in recent_5 if r.get('status') in ['failure', 'mute']]) / len(recent_5)
+                prev_fail_rate = len([r for r in prev_5 if r.get('status') in ['failure', 'mute']]) / len(prev_5) if prev_5 else 0
+                
+                if recent_fail_rate > prev_fail_rate + 0.2:
+                    trend = "📈 Worsening"
+                elif recent_fail_rate < prev_fail_rate - 0.2:
+                    trend = "📉 Improving"
+                else:
+                    trend = "➡️ Stable"
+            else:
+                trend = "❓ Insufficient data"
+            
+            # Находим самую частую ошибку
+            error_descriptions = []
+            for run in recent_runs:
+                if run.get('status') in ['failure', 'mute'] and run.get('status_description'):
+                    error_descriptions.append(run.get('status_description'))
+            
+            most_common_error = "No error info"
+            if error_descriptions:
+                # Группируем похожие ошибки
+                error_groups = {}
+                for error_desc in error_descriptions:
+                    error_key = normalize_error_for_grouping(error_desc)
+                    if error_key not in error_groups:
+                        error_groups[error_key] = {'count': 0, 'example': error_desc}
+                    error_groups[error_key]['count'] += 1
+                
+                # Находим самую частую
+                if error_groups:
+                    most_frequent = max(error_groups.items(), key=lambda x: x[1]['count'])
+                    most_common_error = extract_error_for_display(most_frequent[1]['example'], max_length=150)
+                    if most_frequent[1]['count'] > 1:
+                        most_common_error += f" ({most_frequent[1]['count']}x)"
+            
             fail_rate = test.get('fail_rate', 0) * 100
             context = 'N/A'
             if test.get('recent_runs'):
                 context = test['recent_runs'][0].get('test_context', 'N/A')
-            report += f"| {test['name']} | {fail_rate:.1f}% | {test.get('latest_status', 'unknown')} | {context} |\n"
+            
+            report += f"| {test['name']} | `{pattern}` | {fail_rate:.1f}% | {most_common_error} | {trend} | {context} |\n"
+        
+        # Добавляем пояснение к паттерну
+        report += "\n*Pattern Legend: P=Pass, F=Fail, S=Skip, U=Unknown (most recent first)*\n"
     else:
         report += "✅ **No flaky tests detected - all tests show consistent behavior**\n"
     

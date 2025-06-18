@@ -366,13 +366,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
     template <typename... Args>
     const TActorId& GetOrCreateYdbProxy(const TString& database, TConnectionParams&& params, Args&&... args) {
-        auto it = YdbProxies.find(std::make_pair(database, params));
+        TYdbProxyKey key = params.Endpoint().empty() ? TYdbProxyKey{database} : TYdbProxyKey{params};
+        auto it = YdbProxies.find(key);
         if (it == YdbProxies.end()) {
             auto* actor = params.Endpoint().empty()
                 ? CreateLocalYdbProxy(std::move(database))
                 : CreateYdbProxy(params.Endpoint(), params.Database(), params.EnableSsl(), std::forward<Args>(args)...);
             auto ydbProxy = Register(actor);
-            auto res = YdbProxies.emplace(std::make_pair(database, std::move(params)), std::move(ydbProxy));
+            auto res = YdbProxies.emplace(key, std::move(ydbProxy));
             Y_ABORT_UNLESS(res.second);
             it = res.first;
         }
@@ -726,7 +727,23 @@ private:
     mutable TMaybe<TString> LogPrefix;
     TActorId BoardPublisher;
     THashMap<ui64, TSessionInfo> Sessions;
-    THashMap<std::pair<TString, TConnectionParams>, TActorId> YdbProxies;
+
+    using TYdbProxyKey = std::variant<TString, TConnectionParams>;
+
+    struct TYdbProxyKeyHash {
+        size_t operator()(const TYdbProxyKey& key) const {
+            switch (key.index()) {
+                case 0:
+                    return THash<TString>()(std::get<TString>(key));
+                case 1:
+                    return THash<TConnectionParams>()(std::get<TConnectionParams>(key));
+                default:
+                    Y_UNREACHABLE();
+            }
+        }
+    };
+
+    THashMap<TYdbProxyKey, TActorId, TYdbProxyKeyHash> YdbProxies;
     THashMap<TActorId, ui64> WorkerActorIdToSession;
     mutable TMaybe<TActorId> CompilationService;
 

@@ -1381,7 +1381,6 @@ public:
     }
 
     void CleanupClosedTokens() override {
-        AFL_ENSURE(IsEmpty());
         for (auto it = WriteInfos.begin(); it != WriteInfos.end();) {
             if (it->second.Closed) {
                 AFL_ENSURE(it->second.Serializer->IsFinished());

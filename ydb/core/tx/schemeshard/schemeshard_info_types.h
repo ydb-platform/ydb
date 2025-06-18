@@ -3262,7 +3262,7 @@ public:
         TSerializedTableRange Range;
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
-        size_t Index = 0;  // size of Shards map before this element was added
+        size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
 
         NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
@@ -3271,7 +3271,7 @@ public:
 
         TBillingStats Processed;
 
-        TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount);
+        TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
         TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
             TStringBuilder result;
@@ -3615,7 +3615,7 @@ public:
             AddParent(bound, shardIdx);
         }
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =

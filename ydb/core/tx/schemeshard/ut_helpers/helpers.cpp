@@ -1777,10 +1777,10 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                              const TString &src, const TString &name, TString column, TVector<TString> dataColumns)
+                              const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, std::move(dataColumns)
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, std::move(dataColumns)
         });
     }
 
@@ -2647,7 +2647,8 @@ namespace NSchemeShardUT_Private {
         return CountRows(runtime, TTestTxConfig::SchemeShard, table);
     }
 
-    void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath, bool withValue, ui32 shard, ui32 min, ui32 max) {
+    void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
+        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds) {
         TVector<TCell> cells;
         ui8 str[6] = { 0 };
         str[4] = (ui8)Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
@@ -2658,16 +2659,15 @@ namespace NSchemeShardUT_Private {
             str[3] = ((key+106)*47) % 256;
             cells.emplace_back(TCell::Make(key));
             cells.emplace_back(TCell((const char*)str, 5));
-            if (withValue) {
-                // optionally use the same value for an additional covered string column
-                cells.emplace_back(TCell((const char*)str, 5));
-            }
+            // optional prefix ui32 column
+            cells.emplace_back(TCell::Make(key % 17));
+            // optionally use the same value for an additional covered string column
+            cells.emplace_back(TCell((const char*)str, 5));
         }
-        std::vector<ui32> columnIds{1, 2};
-        if (withValue) {
-            columnIds.push_back(3);
+        if (!columnIds.size()) {
+            columnIds = {1, 2, 3, 4};
         }
-        TSerializedCellMatrix matrix(cells, max-min, withValue ? 3 : 2);
+        TSerializedCellMatrix matrix(cells, max-min, columnIds.size());
         WriteOp(runtime, schemeShardId, txId, tablePath,
             shard, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
             columnIds, std::move(matrix), true);

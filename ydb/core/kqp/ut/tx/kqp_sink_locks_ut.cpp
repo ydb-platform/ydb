@@ -442,14 +442,70 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
         }
     };
 
-    Y_UNIT_TEST(VisibleUncommittedRows ) {
+    Y_UNIT_TEST(VisibleUncommittedRows) {
         TVisibleUncommittedRows tester;
         tester.SetIsOlap(false);
         tester.Execute();
     }
 
-    Y_UNIT_TEST(OlapVisibleUncommittedRows ) {
+    Y_UNIT_TEST(OlapVisibleUncommittedRows) {
         TVisibleUncommittedRows tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TVisibleUncommittedRowsUpdate : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                INSERT INTO KV (Key, Value) VALUES (0u, "TEST");
+            )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx1 = result.GetTransaction();
+            UNIT_ASSERT(tx1);
+
+            {
+                // Row with key = 0 wasn't inserted.
+                result = session2.ExecuteQuery(Q1_(R"(
+                    SELECT * FROM KV WHERE Key = 0u;
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            {
+                // Row with key = 0 wasn't inserted.
+                result = session2.ExecuteQuery(Q1_(R"(
+                    UPDATE KV ON (Key, Value) VALUES (0u, "TEST");
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                // Row with key = 0 wasn't inserted.
+                result = session2.ExecuteQuery(Q1_(R"(
+                    SELECT * FROM KV WHERE Key = 0u;
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(VisibleUncommittedRowsUpdate) {
+        TVisibleUncommittedRowsUpdate tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(OlapVisibleUncommittedRowsUpdate) {
+        TVisibleUncommittedRowsUpdate tester;
         tester.SetIsOlap(true);
         tester.Execute();
     }

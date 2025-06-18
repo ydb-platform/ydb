@@ -211,7 +211,19 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
 
     const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
 
+    auto partitionFinishedAndCommitted = readResult.GetReadingFinished() && readResult.GetCommittedToEnd();
+    if (partitionFinishedAndCommitted) {
+        Send(RequestsQueue.front().Sender, new TEvYdbProxy::TEvEndTopicPartition(
+            PartitionId,
+            TVector<ui64>(readResult.GetAdjacentPartitionIds().begin(), readResult.GetAdjacentPartitionIds().end()),
+            TVector<ui64>(readResult.GetChildPartitionIds().begin(), readResult.GetChildPartitionIds().end())
+        ));
+    }
+
     if (!readResult.ResultSize()) {
+        if (partitionFinishedAndCommitted) {
+            return;
+        }
         return Handle(RequestsQueue.front());
     }
 

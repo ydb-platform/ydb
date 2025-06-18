@@ -1477,7 +1477,8 @@ void TPartition::OnReadComplete(TReadInfo& info,
 {
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
-        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
+        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
+        GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     );
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
 

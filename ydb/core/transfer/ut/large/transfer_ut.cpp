@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         if (autopartitioning) {
             testCase.CreateTopic({
                 .MinPartitionCount = std::max<ui64>(1, threadsCount >> 4),
-                .MaxPartitionCount = threadsCount,
+                .MaxPartitionCount = threadsCount << 2,
                 .AutoPartitioningEnabled = true
             });
         } else {

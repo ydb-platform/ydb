@@ -11,7 +11,7 @@ class TLocalTopicPartitionReaderActor : public TBaseLocalTopicPartitionActor {
 
     using TBase = TBaseLocalTopicPartitionActor;
 
-    constexpr static TDuration ReadTimeout = TDuration::MilliSeconds(1000);
+    constexpr static TDuration ReadTimeout = TDuration::Seconds(1);
     constexpr static ui64 ReadLimitBytes = 1_MB;
 
     struct ReadRequest {

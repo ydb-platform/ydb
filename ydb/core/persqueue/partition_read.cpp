@@ -117,6 +117,32 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
     }
 }
 
+template<typename T>
+std::function<void(bool, T& r)> TPartition::GetResultPostProcessor(const TString& consumer) {
+    return [&, this](bool readingFinished, T& r) {
+        r.SetReadingFinished(readingFinished);
+        if (readingFinished) {
+            ui32 partitionId = Partition.OriginalPartitionId;
+
+            auto* node = PartitionGraph.GetPartition(partitionId);
+            for (auto* child : node->DirectChildren) {
+                r.AddChildPartitionIds(child->Id);
+
+                for (auto* p : child->DirectParents) {
+                    if (p->Id != partitionId) {
+                        r.AddAdjacentPartitionIds(p->Id);
+                    }
+                }
+            }
+
+            if constexpr (std::is_same<T, NKikimrClient::TCmdReadResult>::value) {
+                auto& userInfo = UsersInfoStorage->GetOrCreate(consumer, ActorContext());
+                r.SetCommittedToEnd(LastOffsetHasBeenCommited(userInfo));
+            }
+        }
+    };
+}
+
 TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished) {
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> res(new TEvPersQueue::TEvHasDataInfoResponse());
 
@@ -126,21 +152,7 @@ TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoRespon
     if (cookie) {
         res->Record.SetCookie(*cookie);
     }
-    res->Record.SetReadingFinished(readingFinished);
-    if (readingFinished) {
-        ui32 partitionId = Partition.OriginalPartitionId;
-
-        auto* node = PartitionGraph.GetPartition(partitionId);
-        for (auto* child : node->DirectChildren) {
-            res->Record.AddChildPartitionIds(child->Id);
-
-            for (auto* p : child->DirectParents) {
-                if (p->Id != partitionId) {
-                    res->Record.AddAdjacentPartitionIds(p->Id);
-                }
-            }
-        }
-    }
+    GetResultPostProcessor<NKikimrPQ::THasDataInfoResponse>()(readingFinished, res->Record);
 
     return res;
 }
@@ -534,7 +546,8 @@ TReadAnswer TReadInfo::FormAnswer(
     const ui64 sizeLag,
     const TActorId& tablet,
     const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode,
-    const bool isActive
+    const bool isActive,
+    const std::function<void(bool readingFinished, NKikimrClient::TCmdReadResult& r)>& postProcessor
 ) {
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
@@ -564,7 +577,7 @@ TReadAnswer TReadInfo::FormAnswer(
     PQ_LOG_D("FormAnswer for " << Blobs.size() << " blobs");
 
     if (!isActive && response->GetBlobs().empty()) {
-        readResult->SetReadingFinished(true);
+        postProcessor(true, *readResult);
     }
 
     AddResultDebugInfo(response, readResult);
@@ -683,7 +696,8 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     if (!res)
         return;
     TReadAnswer answer = res->FormAnswer(
-            ctx, nullptr, CompactionBlobEncoder.StartOffset, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
+            ctx, nullptr, CompactionBlobEncoder.StartOffset, res->Offset, Partition, nullptr,
+            res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
     ctx.Send(Tablet, answer.Event.Release());
     PQ_LOG_D(" waiting read cookie " << ev->Get()->Cookie

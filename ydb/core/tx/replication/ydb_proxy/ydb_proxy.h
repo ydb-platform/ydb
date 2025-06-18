@@ -202,6 +202,13 @@ struct TEvYdbProxy {
         {
         }
 
+        TEndTopicPartitionResult(ui64 partitionId, TVector<ui64>&& adjacentPartitionIds, TVector<ui64>&& childPartitionIds)
+            : PartitionId(partitionId)
+            , AdjacentPartitionsIds(std::move(adjacentPartitionIds))
+            , ChildPartitionsIds(std::move(childPartitionIds))
+        {
+        }
+
         void Out(IOutputStream& out) const;
 
         ui64 PartitionId;

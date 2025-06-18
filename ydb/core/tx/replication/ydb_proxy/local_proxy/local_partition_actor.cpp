@@ -3,9 +3,9 @@
 
 namespace NKikimr::NReplication {
 
-TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicName, const ui32 partitionId)
+TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicPath, const ui32 partitionId)
     : Database(database)
-    , TopicName(std::move(topicName))
+    , TopicPath(std::move(topicPath))
     , PartitionId(partitionId)
 {
 }
@@ -16,7 +16,7 @@ void TBaseLocalTopicPartitionActor::Bootstrap() {
 }
 
 void TBaseLocalTopicPartitionActor::DoDescribe() {
-    auto path = TStringBuilder() << "/" << Database << TopicName;
+    auto path = TStringBuilder() << "/" << Database << TopicPath;
     LOG_D("Describe topic '" << path << "'");
     auto request = MakeHolder<TNavigate>();
     request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpTopic));
@@ -51,7 +51,7 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 
     auto* node = entry.PQGroupInfo->PartitionGraph->GetPartition(PartitionId);
     if (!node) {
-        return OnFatalError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicName << "' not found");
+        return OnFatalError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicPath << "' not found");
     }
     PartitionTabletId = node->TabletId;
     DoCreatePipe();

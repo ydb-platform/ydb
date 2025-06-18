@@ -31,7 +31,7 @@ class TBaseLocalTopicPartitionActor
     static constexpr size_t MaxAttempts = 5;
 
 public:
-    TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicName, const ui32 partitionId);
+    TBaseLocalTopicPartitionActor(const std::string& database, const std::string&& topicPath, const ui32 partitionId);
     void Bootstrap();
 
 protected:
@@ -59,7 +59,7 @@ protected:
 
 protected:
     const std::string Database;
-    const TString TopicName;
+    const TString TopicPath;
     const ui32 PartitionId;
 
     ui64 PartitionTabletId;

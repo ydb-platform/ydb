@@ -37,7 +37,7 @@ void TLocalTopicPartitionCommitActor::OnFatalError(const TString& error) {
 }
 
 TString TLocalTopicPartitionCommitActor::MakeLogPrefix() {
-    return TStringBuilder() << "Committer[" << SelfId() << ":/" << Database << TopicName <<" ] ";
+    return TStringBuilder() << "Committer[" << SelfId() << ":/" << Database << TopicPath <<" ] ";
 }
 
 std::unique_ptr<TEvYdbProxy::TEvCommitOffsetResponse> TLocalTopicPartitionCommitActor::CreateResponse(NYdb::EStatus status, const TString& error) {

@@ -30,7 +30,7 @@ void TLocalTopicPartitionReaderActor::OnFatalError(const TString& error) {
 }
 
 TString TLocalTopicPartitionReaderActor::MakeLogPrefix() {
-    return TStringBuilder() << "Reader[" << SelfId() << ":/" << Database << TopicName <<" ] ";
+    return TStringBuilder() << "Reader[" << SelfId() << ":/" << Database << TopicPath <<" ] ";
 }
 
 std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> TLocalTopicPartitionReaderActor::CreateError(NYdb::EStatus status, const TString& error) {

@@ -421,6 +421,18 @@ TMessagePtr<TOffsetFetchResponseData> TKafkaTestClient::OffsetFetch(TOffsetFetch
     return WriteAndRead<TOffsetFetchResponseData>(header, request);
 }
 
+TMessagePtr<TListGroupsResponseData> TKafkaTestClient::ListGroups(TListGroupsRequestData request) {
+    Cerr << ">>>>> TListGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::LIST_GROUPS, 4);
+    return WriteAndRead<TListGroupsResponseData>(header, request);
+}
+
+TMessagePtr<TDescribeGroupsResponseData> TKafkaTestClient::DescribeGroups(TDescribeGroupsRequestData& request) {
+    Cerr << ">>>>> TDescribeGroupsResponseData\n";
+    TRequestHeaderData header = Header(NKafka::EApiKey::DESCRIBE_GROUPS, 5);
+    return WriteAndRead<TDescribeGroupsResponseData>(header, request);
+}
+
 TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
     Cerr << ">>>>> TFetchRequestData\n";
 
@@ -640,7 +652,7 @@ void TKafkaTestClient::AuthenticateToKafka() {
         auto msg = ApiVersions();
 
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 20u);
     }
 
     {

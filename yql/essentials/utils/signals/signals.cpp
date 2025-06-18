@@ -128,8 +128,8 @@ int SetSignalHandler(int signo, void (*handler)(int))
 
 struct TSignalHandlerDesc
 {
-    int signo;
-    void (*handler)(int);
+    int Signo;
+    void (*Handler)(int);
 };
 
 void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
@@ -137,11 +137,11 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
     sigset_t interestedSignals;
     SigEmptySet(&interestedSignals);
 
-    for (int i = 0; handlerDescs[i].signo != -1; i++) {
-        int signo = handlerDescs[i].signo;
+    for (int i = 0; handlerDescs[i].Signo != -1; i++) {
+        int signo = handlerDescs[i].Signo;
         SigAddSet(&interestedSignals, signo);
 
-        if (SetSignalHandler(signo, handlerDescs[i].handler) == -1) {
+        if (SetSignalHandler(signo, handlerDescs[i].Handler) == -1) {
             ythrow TSystemError() << "Cannot set handler for signal "
                                   << strsignal(signo);
         }

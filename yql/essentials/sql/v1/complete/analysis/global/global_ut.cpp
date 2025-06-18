@@ -98,4 +98,24 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
         }
     }
 
+    Y_UNIT_TEST(SimpleSelectFrom) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+        {
+            TString query = "SELECT # FROM plato.Input";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {.Tables = {{"plato", "Input"}}};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+        {
+            TString query = "SELECT # FROM plato.`//home/input`";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {.Tables = {{"plato", "//home/input"}}};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(GlobalAnalysisTests)

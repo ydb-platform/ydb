@@ -1,16 +1,17 @@
+#include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce.h>
 
-#include <yql/essentials/core/arrow_kernels/request/request.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_block_coalesce_blending_helper.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/ast/yql_expr_builder.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
-#include <yql/essentials/core/arrow_kernels/request/request.h>
-#include <yql/essentials/core/arrow_kernels/registry/registry.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_helper.h>
 
 #include <arrow/compute/exec_internal.h>
 
@@ -105,6 +106,15 @@ arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::ve
     return resultArray;
 }
 
+template <typename T, typename U, typename V>
+void TestScalarCoalesceKernel(T left, U right, V expected) {
+    TSetup<false> setup;
+    TestScalarKernel(left, right, expected, setup,
+                     [&](TRuntimeNode left, TRuntimeNode right) {
+                         return setup.PgmBuilder->BlockCoalesce(left, right);
+                     });
+}
+
 enum class ERightOperandType {
     SCALAR,
     ARRAY,
@@ -116,7 +126,20 @@ template <typename T>
 using InputOptionalVector =
     std::vector<TMaybe<typename NUdf::TDataType<T>::TLayout>>;
 
-template <typename T, ERightOperandType rightType = ERightOperandType::ARRAY>
+std::unique_ptr<IArrowKernelComputationNode> GetArrowKernel(IComputationGraph* graph) {
+    std::vector<std::unique_ptr<IArrowKernelComputationNode>> allKernels;
+    for (auto node : graph->GetNodes()) {
+        auto kernelNode = node->PrepareArrowKernelComputationNode(graph->GetContext());
+        if (!kernelNode) {
+            continue;
+        }
+        allKernels.push_back(std::move(kernelNode));
+    }
+    UNIT_ASSERT_EQUAL(allKernels.size(), 1u);
+    return std::move(allKernels[0]);
+}
+
+template <typename T, ERightOperandType rightTypeShape = ERightOperandType::ARRAY>
 void TestBlockCoalesceForVector(InputOptionalVector<T> left,
                                 InputOptionalVector<T> right,
                                 InputOptionalVector<T> expected,
@@ -125,29 +148,22 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
     using TLayout = typename NUdf::TDataType<T>::TLayout;
     TSetup<false> setup;
     NYql::TExprContext exprCtx;
-    auto* type = setup.PgmBuilder->NewDataType(NUdf::TDataType<T>::Id);
-    auto* typeNode = exprCtx.template MakeType<NYql::TBlockExprType>(
-        exprCtx.template MakeType<NYql::TDataExprType>(NUdf::TDataType<T>::Slot));
-
-    auto* optType = setup.PgmBuilder->NewOptionalType(type);
-    auto* optTypeNode = exprCtx.template MakeType<NYql::TBlockExprType>(
-        exprCtx.template MakeType<NYql::TOptionalExprType>(
-            exprCtx.template MakeType<NYql::TDataExprType>(NUdf::TDataType<T>::Slot)));
-    if (rightType == ERightOperandType::OPTIONAL_ARRAY || rightType == ERightOperandType::OPTIONAL_SCALAR) {
+    auto* rightType = setup.PgmBuilder->NewDataType(NUdf::TDataType<T>::Id);
+    auto* leftType = setup.PgmBuilder->NewOptionalType(rightType);
+    if (rightTypeShape == ERightOperandType::OPTIONAL_ARRAY || rightTypeShape == ERightOperandType::OPTIONAL_SCALAR) {
         // Make both operands optional.
-        type = optType;
-        typeNode = optTypeNode;
+        rightType = leftType;
     }
     TTypeInfoHelper typeInfoHelper;
-    arrow::Datum leftOperand = GenerateArray(typeInfoHelper, optType, left, leftOffset);
+    arrow::Datum leftOperand = GenerateArray(typeInfoHelper, leftType, left, leftOffset);
 
     arrow::compute::ExecContext execCtx;
     arrow::compute::KernelContext ctx(&execCtx);
 
     arrow::Datum rightOperand;
-    if constexpr (rightType == ERightOperandType::SCALAR) {
+    if constexpr (rightTypeShape == ERightOperandType::SCALAR) {
         rightOperand = MakeScalarDatum<TLayout>(right[0].GetRef());
-    } else if constexpr (rightType == ERightOperandType::OPTIONAL_SCALAR) {
+    } else if constexpr (rightTypeShape == ERightOperandType::OPTIONAL_SCALAR) {
         if (right[0]) {
             rightOperand = MakeScalarDatum<TLayout>(right[0].GetRef());
         } else {
@@ -155,25 +171,21 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
             rightOperand.scalar()->is_valid = false;
         }
     } else {
-        rightOperand = GenerateArray(typeInfoHelper, type, right, rightOffset);
+        rightOperand = GenerateArray(typeInfoHelper, rightType, right, rightOffset);
     }
     auto bi = arrow::compute::detail::ExecBatchIterator::Make({leftOperand, rightOperand}, 1000).ValueOrDie();
     arrow::compute::ExecBatch batch;
     UNIT_ASSERT(bi->Next(&batch));
-    std::shared_ptr<arrow::DataType> arrowType;
-    UNIT_ASSERT(ConvertArrowType(type, arrowType, [](TType*) {}));
     arrow::Datum out;
-    auto registry = CreateFunctionRegistry(CreateBuiltinRegistry());
-    NYql::TKernelRequestBuilder b(*registry);
-
-    b.AddBinaryOp(NYql::TKernelRequestBuilder::EBinaryOp::Coalesce, optTypeNode, typeNode, optTypeNode);
-    auto serializedNode = b.Serialize();
-    auto nodeFactory = GetBuiltinFactory();
-    auto kernel = NYql::LoadKernels(serializedNode, *registry, nodeFactory);
-    Y_ENSURE(kernel.size() == 1);
-    Y_ENSURE(kernel[0]->exec(&ctx, batch, &out).ok());
-
-    arrow::Datum expectedArrowArray = GenerateArray(typeInfoHelper, type, expected, 0);
+    // This graph will never be executed. We need it only to extrace coalesce arrow kernel.
+    auto graph = setup.BuildGraph(
+        setup.PgmBuilder->BlockCoalesce(
+            setup.PgmBuilder->Arg(setup.PgmBuilder->NewBlockType(leftType, TBlockType::EShape::Many)),
+            setup.PgmBuilder->Arg(setup.PgmBuilder->NewBlockType(rightType, TBlockType::EShape::Many))));
+    auto kernel = GetArrowKernel(graph.Get());
+    // kernel is exectly coalesce kernel.
+    Y_ENSURE(kernel->GetArrowKernel().exec(&ctx, batch, &out).ok());
+    arrow::Datum expectedArrowArray = GenerateArray(typeInfoHelper, rightType, expected, 0);
     UNIT_ASSERT_EQUAL_C(out, expectedArrowArray, "Expected : " << expectedArrowArray.make_array()->ToString() << "\n but got : " << out.make_array()->ToString());
 }
 
@@ -337,6 +349,23 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
                                                                      {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77, 19, 20});
 }
 
-} // Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest)
+Y_UNIT_TEST(OptionalScalar) {
+    TestScalarCoalesceKernel(TMaybe<i32>{16}, 5, 16);
+    TestScalarCoalesceKernel(TMaybe<i32>(), 4, 4);
+    TestScalarCoalesceKernel(TMaybe<i32>(18), TMaybe<i32>(3), TMaybe<i32>(18));
+    TestScalarCoalesceKernel(TMaybe<i32>(), TMaybe<i32>(2), TMaybe<i32>(2));
+}
 
+Y_UNIT_TEST(ExternalOptionalScalar) {
+    using TDoubleMaybe = TMaybe<TMaybe<i32>>;
+    using TSingleMaybe = TMaybe<i32>;
+
+    TestScalarCoalesceKernel(TDoubleMaybe{TSingleMaybe{25}}, TSingleMaybe{1}, TSingleMaybe{25});
+    TestScalarCoalesceKernel(TDoubleMaybe(TSingleMaybe()), TSingleMaybe(9), TSingleMaybe());
+    TestScalarCoalesceKernel(TDoubleMaybe(), TSingleMaybe(8), TSingleMaybe(8));
+    TestScalarCoalesceKernel(TDoubleMaybe(TSingleMaybe(33)), TDoubleMaybe(TSingleMaybe(7)), TDoubleMaybe(TSingleMaybe(33)));
+    TestScalarCoalesceKernel(TDoubleMaybe(), TDoubleMaybe(TSingleMaybe(6)), TDoubleMaybe(TSingleMaybe(6)));
+}
+
+} // Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest)
 } // namespace NKikimr::NMiniKQL

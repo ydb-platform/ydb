@@ -76,27 +76,18 @@ int Run(int argc, char* argv[]) {
     auto engine = NSQLComplete::MakeSqlCompletionEngine(
         MakePureLexerSupplier(),
         NSQLComplete::MakeStaticNameService(
-            NSQLComplete::LoadDefaultNameSet(), 
+            NSQLComplete::LoadDefaultNameSet(),
             std::move(frequency)));
 
-    NSQLComplete::TCompletionInput input;
-
-    input.Text = queryString;
-    if (!NYql::IsUtf8(input.Text)) {
+    if (!NYql::IsUtf8(queryString)) {
         ythrow yexception() << "provided input is not UTF encoded";
     }
 
-    if (pos) {
-        input.CursorPosition = UTF8PositionToBytes(input.Text, *pos);
-    } else if (Count(input.Text, '#') == 1) {
-        Cerr << "Note: found an only '#', setting the cursor position\n";
-        input.CursorPosition = input.Text.find('#');
-    } else if (Count(input.Text, '#') >= 2) {
-        Cerr << "Note: found multiple '#', defaulting the cursor position\n";
-        input.CursorPosition = queryString.size();
-    } else {
-        input.CursorPosition = queryString.size();
+    if (auto count = Count(queryString, '#'); 1 < count) {
+        ythrow yexception() << "provided input contains " << count << " '#', expected 0 or 1";
     }
+
+    NSQLComplete::TCompletionInput input = NSQLComplete::SharpedInput(queryString);
 
     auto output = engine->CompleteAsync(input).ExtractValueSync();
     for (const auto& c : output.Candidates) {

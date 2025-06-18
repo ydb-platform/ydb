@@ -84,6 +84,7 @@ public:
                 return true;
             case EModificationType::Update:
             case EModificationType::Replace:
+            case EModificationType::Increment:
                 return false;
         }
     }

@@ -43,6 +43,7 @@ public:
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     using ECandidateKind::BindingName;
     using ECandidateKind::ClusterName;
+    using ECandidateKind::ColumnName;
     using ECandidateKind::FolderName;
     using ECandidateKind::FunctionName;
     using ECandidateKind::HintName;
@@ -83,7 +84,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             },
         };
 
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs = {
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> folders = {
             {"", {{"/", {{"Folder", "local"},
                          {"Folder", "test"},
                          {"Folder", "prod"},
@@ -103,15 +104,18 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
              {{"/", {{"Table", "maxim"}}}}},
         };
 
+        THashMap<TString, THashMap<TString, TTableDetails>> tables = {
+            {"example", {{"/people", {{"name", "age"}}}}}};
+
         auto clustersIt = NFuncTools::Filter(
-            [](const auto& x) { return !x.empty(); }, IterateKeys(fs));
+            [](const auto& x) { return !x.empty(); }, IterateKeys(folders));
         TVector<TString> clusters(begin(clustersIt), end(clustersIt));
 
         TFrequencyData frequency;
 
         TVector<INameService::TPtr> children = {
             MakeStaticNameService(std::move(names), frequency),
-            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(fs)))),
+            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(folders), std::move(tables)))),
             MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
         };
         INameService::TPtr service = MakeUnionNameService(
@@ -475,37 +479,40 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         TVector<TCandidate> expected = {
             {Keyword, "ALL"},
             {Keyword, "BITCAST("},
-            {Keyword, "CALLABLE"},
             {Keyword, "CASE"},
             {Keyword, "CAST("},
             {Keyword, "CURRENT_DATE"},
             {Keyword, "CURRENT_TIME"},
             {Keyword, "CURRENT_TIMESTAMP"},
-            {Keyword, "Dict<"},
+            {TypeName, "Callable<"},
             {Keyword, "DISTINCT"},
             {FunctionName, "DateTime::Split("},
+            {TypeName, "Decimal("},
+            {TypeName, "Dict<"},
             {Keyword, "EMPTY_ACTION"},
-            {Keyword, "ENUM"},
             {Keyword, "EXISTS("},
+            {TypeName, "Enum<"},
             {Keyword, "FALSE"},
-            {Keyword, "Flow<"},
+            {TypeName, "Flow<"},
             {Keyword, "JSON_EXISTS("},
             {Keyword, "JSON_QUERY("},
             {Keyword, "JSON_VALUE("},
-            {Keyword, "List<"},
+            {TypeName, "List<"},
             {Keyword, "NOT"},
             {Keyword, "NULL"},
-            {Keyword, "Optional<"},
+            {TypeName, "Optional<"},
             {FunctionName, "Python::__private("},
-            {Keyword, "Resource<"},
-            {Keyword, "Set<"},
+            {TypeName, "Resource<"},
             {Keyword, "STREAM"},
-            {Keyword, "STRUCT"},
+            {TypeName, "Set<"},
             {FunctionName, "StartsWith("},
-            {Keyword, "Tagged<"},
+            {TypeName, "Stream<"},
+            {TypeName, "Struct<"},
             {Keyword, "TRUE"},
-            {Keyword, "TUPLE"},
-            {Keyword, "VARIANT"},
+            {TypeName, "Tagged<"},
+            {TypeName, "Tuple<"},
+            {TypeName, "Uint64"},
+            {TypeName, "Variant<"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -689,8 +696,8 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, R"(
-                USE example; 
-                DEFINE ACTION $hello() AS 
+                USE example;
+                DEFINE ACTION $hello() AS
                     USE yt:saurus;
                     SELECT * FROM #;
                 END DEFINE;
@@ -721,36 +728,38 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(SelectWhere) {
         TVector<TCandidate> expected = {
             {Keyword, "BITCAST("},
-            {Keyword, "CALLABLE"},
             {Keyword, "CASE"},
             {Keyword, "CAST("},
             {Keyword, "CURRENT_DATE"},
             {Keyword, "CURRENT_TIME"},
             {Keyword, "CURRENT_TIMESTAMP"},
-            {Keyword, "Dict<"},
+            {TypeName, "Callable<"},
             {FunctionName, "DateTime::Split("},
+            {TypeName, "Decimal("},
+            {TypeName, "Dict<"},
             {Keyword, "EMPTY_ACTION"},
-            {Keyword, "ENUM"},
             {Keyword, "EXISTS("},
+            {TypeName, "Enum<"},
             {Keyword, "FALSE"},
-            {Keyword, "Flow<"},
+            {TypeName, "Flow<"},
             {Keyword, "JSON_EXISTS("},
             {Keyword, "JSON_QUERY("},
             {Keyword, "JSON_VALUE("},
-            {Keyword, "List<"},
+            {TypeName, "List<"},
             {Keyword, "NOT"},
             {Keyword, "NULL"},
-            {Keyword, "Optional<"},
+            {TypeName, "Optional<"},
             {FunctionName, "Python::__private("},
-            {Keyword, "Resource<"},
-            {Keyword, "Set<"},
-            {Keyword, "Stream<"},
-            {Keyword, "STRUCT"},
+            {TypeName, "Resource<"},
+            {TypeName, "Set<"},
             {FunctionName, "StartsWith("},
-            {Keyword, "Tagged<"},
+            {TypeName, "Stream<"},
+            {TypeName, "Struct<"},
             {Keyword, "TRUE"},
-            {Keyword, "TUPLE"},
-            {Keyword, "VARIANT"},
+            {TypeName, "Tagged<"},
+            {TypeName, "Tuple<"},
+            {TypeName, "Uint64"},
+            {TypeName, "Variant<"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -791,21 +800,21 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(TypeName) {
         TVector<TCandidate> expected = {
-            {Keyword, "Callable<("},
-            {Keyword, "Decimal("},
-            {Keyword, "Dict<"},
-            {Keyword, "Enum<"},
-            {Keyword, "Flow<"},
-            {Keyword, "List<"},
-            {Keyword, "Optional<"},
-            {Keyword, "Resource<"},
-            {Keyword, "Set<"},
-            {Keyword, "Stream<"},
-            {Keyword, "STRUCT"},
-            {Keyword, "Tagged<"},
-            {Keyword, "TUPLE"},
+            {TypeName, "Callable<"},
+            {TypeName, "Decimal("},
+            {TypeName, "Dict<"},
+            {TypeName, "Enum<"},
+            {TypeName, "Flow<"},
+            {TypeName, "List<"},
+            {TypeName, "Optional<"},
+            {TypeName, "Resource<"},
+            {TypeName, "Set<"},
+            {TypeName, "Stream<"},
+            {TypeName, "Struct<"},
+            {TypeName, "Tagged<"},
+            {TypeName, "Tuple<"},
             {TypeName, "Uint64"},
-            {Keyword, "Variant<"},
+            {TypeName, "Variant<"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -825,7 +834,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {Keyword, "Optional<"},
+                {TypeName, "Optional<"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Nothing(Option"), expected);
         }
@@ -995,7 +1004,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             $=0;
             $a=0;
             $abac=0;
-            SELECT 
+            SELECT
         )";
 
         {
@@ -1040,6 +1049,31 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             CompleteTop(1, engine, "SELECT Max(#)").at(0).Kind, FolderName);
     }
 
+    Y_UNIT_TEST(ColumnsAtSimpleSelect) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {ColumnName, "name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT a# FROM example.`/people`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {ColumnName, "name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE example; SELECT # FROM `/people`"), expected);
+        }
+    }
+
     Y_UNIT_TEST(Typing) {
         const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"
@@ -1065,7 +1099,7 @@ SELECT
     123467, \"Hello, {name}! 编码\"},
     (1 + (5 * 1 / 0)), MIN(identifier),
     Bool(field), Math::Sin(var)
-FROM `local/test/space/table` 
+FROM `local/test/space/table`
 JOIN yt:$cluster_name.test;
 )";
 
@@ -1283,6 +1317,24 @@ JOIN yt:$cluster_name.test;
         UNIT_ASSERT_EQUAL(Complete(engine, {"ROLL"}).size(), 0);
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"INSE"}).size(), 0);
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
+    }
+
+    Y_UNIT_TEST(IgnoredTokens) {
+        auto lexer = MakePureLexerSupplier();
+
+        TNameSet names;
+        TFrequencyData frequency;
+        auto service = MakeStaticNameService(names, MakeDefaultRanking(frequency));
+
+        auto config = MakeYQLConfiguration();
+        auto engine = MakeSqlCompletionEngine(lexer, std::move(service), config);
+
+        UNIT_ASSERT(!FindPtr(Complete(engine, {""}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(!FindPtr(Complete(engine, {""}), TCandidate{Keyword, "PARALLEL"}));
+
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE "}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE  "}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE /**/"}), TCandidate{Keyword, "FOR"}));
     }
 
     Y_UNIT_TEST(CachedSchema) {

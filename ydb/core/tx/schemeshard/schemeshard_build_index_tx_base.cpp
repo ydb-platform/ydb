@@ -96,7 +96,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         auto& billed = buildInfo.Billed;
 
         auto toBill = processed;
-        TBillingStatsCalculator::SubFrom(processed, billed);
+        TBillingStatsCalculator::SubFrom(toBill, billed);
         if (TBillingStatsCalculator::IsZero(toBill)) {
             continue;
         }
@@ -163,7 +163,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_D("ApplyBill: made a bill"
+        LOG_N("ApplyBill: made a bill"
               << ", buildInfo: " << buildInfo
               << ", record: '" << billRecord << "'");
 

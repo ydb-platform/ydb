@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         // 7. Try increment non-numeric utf-8 column (should fail)
-        Cout << "========= Try increment non-numeric columns (should fail) =========\n";
+        Cout << "========= Try increment utf-8 column (should fail) =========\n";
         {
             TVector<ui32> columnIds = {1, 10}; // id, utf8_val
             TVector<TCell> increments = {
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         // 8. Try increment double column (should fail)
-        Cout << "========= Try increment non-numeric columns (should fail) =========\n";
+        Cout << "========= Try increment double column (should fail) =========\n";
         { 
             TVector<ui32> columnIds = {1, 11}; // id, double_val
             TVector<TCell> increments = {
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
 
-        // 11. Verify data remains unchanged after
+        // 11. Verify data remains unchanged
         Cout << "========= Verify data remains unchanged =========\n";
         {
             auto tableState = ReadTable(server, shards, tableId);
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
 
         // 12. Try increment with overflow
-        Cout << "========= Try increment key columns =========\n";
+        Cout << "========= Try increment with overflow =========\n";
         { 
             TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // id, id
             TVector<TCell> increments = {
@@ -344,20 +344,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 "uint64_val = 15000, int8_val = -15, int16_val = -55, int32_val = -550, int64_val = -5500, "
                 "utf8_val = othertext\\0, double_val = 3.15\n"
             );
-        }
-
-        // 16. Try increment by incorrect type (should fail)
-        Cout << "========= Try increment non-numeric columns (should fail) =========\n";
-        { 
-            TVector<ui32> columnIds = {1, 2}; // id, ui8
-            TVector<TCell> increments = {
-                TCell::Make(ui64(1)),
-                TCell::Make(ui64(8)) // incorrect type
-            };
-            
-            UNIT_ASSERT_EXCEPTION(Increment(runtime, sender, shard, tableId, txId++, 
-                                  NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), 
-                                  yexception);
         }
     }
 

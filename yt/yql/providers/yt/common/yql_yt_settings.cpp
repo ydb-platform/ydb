@@ -471,6 +471,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
     REGISTER_SETTING(*this, EnforceJobUtc);
+    REGISTER_SETTING(*this, _EnforceRegexpProbabilityFail);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);

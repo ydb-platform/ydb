@@ -9,9 +9,9 @@ void TStatsIterator::AppendStats(
     const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portionPtr) const {
     const TPortionInfo& portion = portionPtr.GetPortionInfo();
     auto portionSchema = ReadMetadata->GetLoadSchemaVerified(portion);
-    auto it = PortionType.find(portion.GetMeta().Produced);
+    auto it = PortionType.find(portion.GetProduced());
     if (it == PortionType.end()) {
-        it = PortionType.emplace(portion.GetMeta().Produced, ::ToString(portion.GetMeta().Produced)).first;
+        it = PortionType.emplace(portion.GetProduced(), ::ToString(portion.GetProduced())).first;
     }
     const arrow::util::string_view prodView = it->second.GetView();
     const bool activity = !portion.HasRemoveSnapshot();

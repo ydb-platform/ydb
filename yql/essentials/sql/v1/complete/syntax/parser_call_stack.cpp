@@ -73,13 +73,21 @@ namespace NSQLComplete {
                           RULE(Named_expr_list),
                           RULE(Named_expr),
                           RULE(Expr)}, stack) &&
-                EndsWith({RULE(Atom_expr), RULE(An_id_or_type)}, stack));
+                (EndsWith({RULE(Atom_expr),
+                           RULE(An_id_or_type)}, stack) ||
+                 EndsWith({RULE(Atom_expr),
+                           RULE(Bind_parameter),
+                           RULE(An_id_or_type)}, stack)));
     }
 
     bool IsLikelyFunctionStack(const TParserCallStack& stack) {
         return EndsWith({RULE(Unary_casual_subexpr), RULE(Id_expr)}, stack) ||
                EndsWith({RULE(Unary_casual_subexpr),
                          RULE(Atom_expr),
+                         RULE(An_id_or_type)}, stack) ||
+               EndsWith({RULE(Unary_casual_subexpr),
+                         RULE(Atom_expr),
+                         RULE(Bind_parameter),
                          RULE(An_id_or_type)}, stack) ||
                EndsWith({RULE(Atom_expr), RULE(Id_or_type)}, stack);
     }
@@ -107,6 +115,10 @@ namespace NSQLComplete {
 
     bool IsLikelyClusterStack(const TParserCallStack& stack) {
         return Contains({RULE(Cluster_expr)}, stack);
+    }
+
+    bool IsLikelyBindingStack(const TParserCallStack& stack) {
+        return EndsWith({RULE(Bind_parameter), RULE(An_id_or_type)}, stack);
     }
 
     TMaybe<EStatementKind> StatementKindOf(const TParserCallStack& stack) {

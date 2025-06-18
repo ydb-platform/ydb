@@ -91,6 +91,9 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         desc.SetSrcPath(JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName(), lastFullBackupName, relativeItemPath}));
         desc.SetDstPath(item.GetPath());
         desc.SetAllowUnderSameOperation(true);
+        if (incrBackupNames) {
+            desc.SetTargetPathTargetState(NKikimrSchemeOp::EPathStateIncomingIncrementalRestore);
+        }
     }
 
     CreateConsistentCopyTables(opId, consistentCopyTables, context, result);

@@ -43,10 +43,12 @@ struct TProducerState {
     i64 AckedFreeSpaceBytes = 0;
     TActorId ActorId;
     ui64 ChannelId = 0;
+    bool Enough = false;
 
     void SendAck(const NActors::TActorIdentity& actor) const {
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
         resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
+        resp->Record.SetEnough(Enough);
         actor.Send(ActorId, resp.Release());
     }
 
@@ -75,11 +77,33 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
         UpdateLeaseEvent,
     };
 
+    class TResultSetMeta {
+    public:
+        Ydb::Query::Internal::ResultSetMeta& MutableMeta() {
+            JsonMeta = std::nullopt;
+            return Meta;
+        }
+
+        const NJson::TJsonValue& GetJsonMeta() {
+            if (!JsonMeta) {
+                JsonMeta = NJson::TJsonValue();
+                NProtobufJson::Proto2Json(Meta, *JsonMeta, NProtobufJson::TProto2JsonConfig());
+            }
+            return *JsonMeta;
+        }
+
+    private:
+        Ydb::Query::Internal::ResultSetMeta Meta;
+        std::optional<NJson::TJsonValue> JsonMeta;
+    };
+
     struct TResultSetInfo {
+        bool NewResultSet = true;
         bool Truncated = false;
+        bool Finished = false;
         ui64 RowCount = 0;
         ui64 ByteCount = 0;
-        NJson::TJsonValue* Meta;
+        TResultSetMeta Meta;
 
         ui64 FirstRowId = 0;
         ui64 AccumulatedSize = 0;
@@ -348,7 +372,8 @@ private:
             << ", queryResultIndex: " << ev->Get()->Record.GetQueryResultIndex()
             << ", from: " << ev->Sender);
 
-        auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
+        auto& streamData = ev->Get()->Record;
+        auto resultSetIndex = streamData.GetQueryResultIndex();
 
         if (resultSetIndex >= ResultSetInfos.size()) {
             // we don't know result set count, so just accept all of them
@@ -363,7 +388,7 @@ private:
             auto& rowCount = resultSetInfo.RowCount;
             auto& byteCount = resultSetInfo.ByteCount;
 
-            for (auto& row : *ev->Get()->Record.MutableResultSet()->mutable_rows()) {
+            for (auto& row : *streamData.MutableResultSet()->mutable_rows()) {
                 if (QueryServiceConfig.GetScriptResultRowsLimit() && rowCount + 1 > QueryServiceConfig.GetScriptResultRowsLimit()) {
                     resultSetInfo.Truncated = true;
                     break;
@@ -381,11 +406,13 @@ private:
                 *resultSetInfo.PendingResult.add_rows() = std::move(row);
             }
 
-            bool newResultSet = resultSetInfo.Meta == nullptr;
+            const bool newResultSet = std::exchange(resultSetInfo.NewResultSet, false);
+            resultSetInfo.Finished = streamData.GetFinished();
             if (newResultSet || resultSetInfo.Truncated) {
-                Ydb::Query::Internal::ResultSetMeta meta;
+                auto& meta = resultSetInfo.Meta.MutableMeta();
                 if (newResultSet) {
-                    *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
+                    meta.set_enabled_runtime_results(true);
+                    *meta.mutable_columns() = streamData.GetResultSet().columns();
 
                     if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(meta.columns())) {
                         NYql::TIssue rootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support");
@@ -393,6 +420,7 @@ private:
                             rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
                         }
                         Issues.AddIssue(rootIssue);
+                        meta.clear_columns();
                         Finish(Ydb::StatusIds::INTERNAL_ERROR);
                         return;
                     }
@@ -400,23 +428,7 @@ private:
                 if (resultSetInfo.Truncated) {
                     meta.set_truncated(true);
                 }
-
-                NJson::TJsonValue* value;
-                if (newResultSet) {
-                    value = &ResultSetMetas[resultSetIndex];
-                    resultSetInfo.Meta = value;
-                } else {
-                    value = resultSetInfo.Meta;
-                }
-                NProtobufJson::Proto2Json(meta, *value, NProtobufJson::TProto2JsonConfig());
-
-                // can't save meta when previous request is not completed for TLI reasons
-                if (SaveResultMetaInflight) {
-                    PendingResultMeta = true;
-                } else {
-                    SaveResultMeta();
-                    SaveResultMetaInflight++;
-                }
+                SaveResultMeta();
             }
 
             if (ShouldSaveResult(resultSetIndex)) {
@@ -426,13 +438,14 @@ private:
         }
 
         const i64 freeSpaceBytes = GetFreeSpaceBytes();
-        const ui32 channelId = ev->Get()->Record.GetChannelId();
-        const ui64 seqNo = ev->Get()->Record.GetSeqNo();
+        const ui32 channelId = streamData.GetChannelId();
+        const ui64 seqNo = streamData.GetSeqNo();
         auto& channel = StreamChannels[channelId];
         channel.ActorId = ev->Sender;
         channel.LastSeqNo = seqNo;
         channel.AckedFreeSpaceBytes = freeSpaceBytes;
         channel.ChannelId = channelId;
+        channel.Enough = resultSetInfo.Truncated;
         channel.SendAck(SelfId());
 
         if (!savedResult && SaveResultInflight == 0) {
@@ -441,8 +454,21 @@ private:
     }
 
     void SaveResultMeta() {
+        // can't save meta when previous request is not completed for TLI reasons
+        if (SaveResultMetaInflight) {
+            PendingResultMeta = true;
+            return;
+        } 
+        SaveResultMetaInflight++;
+
+        NJson::TJsonValue resultSetMetas;
+        resultSetMetas.SetType(NJson::JSON_ARRAY);
+        for (size_t i = 0; auto& resultSetInfo : ResultSetInfos) {
+            resultSetMetas[i++] = resultSetInfo.Meta.GetJsonMeta();
+        }
+
         NJsonWriter::TBuf sout;
-        sout.WriteJsonValue(&ResultSetMetas);
+        sout.WriteJsonValue(&resultSetMetas);
         Register(
             CreateSaveScriptExecutionResultMetaActor(SelfId(), Database, ExecutionId, sout.Str())
         );
@@ -549,13 +575,14 @@ private:
     }
 
     void Handle(TEvSaveScriptResultMetaFinished::TPtr& ev) {
+        SaveResultMetaInflight--;
+
         if (PendingResultMeta) {
             PendingResultMeta = false;
             SaveResultMeta();
             return;
         }
 
-        SaveResultMetaInflight--;
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && (Status == Ydb::StatusIds::SUCCESS || Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)) {
             Status = ev->Get()->Status;
             Issues.AddIssues(ev->Get()->Issues);
@@ -566,6 +593,25 @@ private:
     void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
         SaveResultInflight--;
         SaveResultInflightBytes = 0;
+
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            const auto resultSetId = ev->Get()->ResultSetId;
+            if (resultSetId >= ResultSetInfos.size()) {
+                Issues.AddIssue(TStringBuilder() << "ResultSetId " << resultSetId << " is out of range [0; " << ResultSetInfos.size() << ")");
+                Finish(Ydb::StatusIds::INTERNAL_ERROR);
+                return;
+            }
+
+            auto& resultSetInfo = ResultSetInfos[resultSetId];
+            auto& meta = resultSetInfo.Meta.MutableMeta();
+            meta.set_number_rows(resultSetInfo.RowCount);
+            if (resultSetInfo.PendingResult.rows().empty() && (resultSetInfo.Truncated || resultSetInfo.Finished)) {
+                meta.set_finished(true);
+            }
+
+            SaveResultMeta();
+        }
+
         if (Status == Ydb::StatusIds::SUCCESS || Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
             if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
                 Status = ev->Get()->Status;
@@ -650,9 +696,7 @@ private:
 
         // if query has no results, save empty json array
         if (ResultSetInfos.empty()) {
-            ResultSetMetas.SetType(NJson::JSON_ARRAY);
             SaveResultMeta();
-            SaveResultMetaInflight++;
         } else {
             CheckInflight();
         }
@@ -701,7 +745,6 @@ private:
     std::vector<TResultSetInfo> ResultSetInfos;
     TMap<ui64, TProducerState> StreamChannels;
     std::optional<TInstant> ExpireAt;
-    NJson::TJsonValue ResultSetMetas;
     ui32 SaveResultInflight = 0;
     ui64 SaveResultInflightBytes = 0;
     ui32 SaveResultMetaInflight = 0;

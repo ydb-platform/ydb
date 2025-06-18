@@ -4,6 +4,8 @@ PY3TEST()
         conftest.py
     )
 
+    FORK_TESTS()
+
     TEST_SRCS(
         test_alter_compression.py
         test_alter_tiering.py

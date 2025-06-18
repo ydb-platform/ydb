@@ -9,7 +9,7 @@ import builtins
 import gast as ast
 
 
-class ExpandBuiltins(Transformation):
+class ExpandBuiltins(Transformation[Locals, Globals]):
 
     """
     Expands all builtins into full paths.
@@ -23,9 +23,6 @@ class ExpandBuiltins(Transformation):
     def foo():
         return builtins.list()
     """
-
-    def __init__(self):
-        Transformation.__init__(self, Locals, Globals)
 
     def visit_Name(self, node):
         s = node.id

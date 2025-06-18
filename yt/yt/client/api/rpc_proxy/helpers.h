@@ -328,10 +328,7 @@ void ParseRequest(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsRetriableError(
-    const TError& error,
-    bool retryProxyBanned = true,
-    bool retrySequoiaErrorsOnly = false);
+bool IsRetriableError(const TError& error, bool retryProxyBanned = true);
 
 ////////////////////////////////////////////////////////////////////////////////
 

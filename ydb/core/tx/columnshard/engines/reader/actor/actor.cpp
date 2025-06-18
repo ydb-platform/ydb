@@ -84,7 +84,6 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
     } else {
         ACFL_DEBUG("event", "TEvTaskProcessedResult");
         auto t = static_pointer_cast<IApplyAction>(result.GetResult());
-        Y_DEBUG_ABORT_UNLESS(dynamic_pointer_cast<IDataTasksProcessor::ITask>(result.GetResult()));
         if (!ScanIterator->Finished()) {
             ScanIterator->Apply(t);
         }

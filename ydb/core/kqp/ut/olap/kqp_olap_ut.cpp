@@ -1240,13 +1240,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`uid` LIKE "_id%000_")",
             R"(`uid` ILIKE "UID%002")",
 
-            R"(Udf(String::AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::_yql_AsciiEqualsIgnoreCase)(`uid`,  "UI"))",
             R"(Udf(String::Contains)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiContainsIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::_yql_AsciiContainsIgnoreCase)(`uid`,  "UI"))",
             R"(Udf(String::StartsWith)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::_yql_AsciiStartsWithIgnoreCase)(`uid`,  "UI"))",
             R"(Udf(String::EndsWith)(`uid`,  "UI"))",
-            R"(Udf(String::AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
+            R"(Udf(String::_yql_AsciiEndsWithIgnoreCase)(`uid`,  "UI"))",
         };
 
         for (const auto& predicate: testData) {
@@ -1571,7 +1571,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(dt32 <= ts64 - inter64)",
 
             R"(dt <= CAST('2001-01-01' as Date))",
-            R"(dt <= Date('2001-01-01'))"
+            R"(dt <= Date('2001-01-01'))",
+
+            R"((`dt`, `id`) >= (CAST('1998-12-01' AS Date) - Interval64("P100D"), 3))",
+            R"((`ts`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
+            R"((`dt32`, `id`) >= (CAST('1998-12-01' AS Date32), 3))",
+            R"((`dtm`, `id`) >= (CAST('1998-12-01' AS DateTime), 3))",
+            R"((`dtm64`, `id`) >= (CAST('1998-12-01' AS DateTime64), 3))",
+            R"((`ts64`, `id`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))"
         };
 
         auto queryPrefix = R"(
@@ -2899,6 +2906,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(BulkUpsertUpdate) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         TTestHelper testHelper(runnerSettings);
 
@@ -2911,14 +2919,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
         testHelper.CreateTable(testTable);
         {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).Add(10);
             testHelper.BulkUpsert(testTable, tableInserter);
         }
-//        while (csController->GetCompactionFinishedCounter().Val() < 1) {
-//            Cout << "Wait compaction..." << Endl;
-//            Sleep(TDuration::Seconds(2));
-//        }
         testHelper.ReadData("SELECT value FROM `/Root/ColumnTableTest` WHERE id = 1", "[[10]]");
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
@@ -3270,7 +3278,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto alterQuery =
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
                   {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1, "portions_count_available" : 3},
-                               {"class_name" : "Zero"}]}`);
+                               {"class_name" : "Zero", "expected_blobs_size" : 1}]}`);
                 )";
             auto result = session.ExecuteQuery(alterQuery, NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());

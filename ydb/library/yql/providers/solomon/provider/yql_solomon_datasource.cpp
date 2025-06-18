@@ -71,13 +71,13 @@ public:
         return *ConfigurationTransformer_;
     }
 
-   IGraphTransformer& GetIODiscoveryTransformer() override {
-       return *IODiscoveryTransformer_;
-   }
+    IGraphTransformer& GetIODiscoveryTransformer() override {
+        return *IODiscoveryTransformer_;
+    }
 
-   IGraphTransformer& GetLoadTableMetadataTransformer() override {
-       return *LoadMetaDataTransformer_;
-   }
+    IGraphTransformer& GetLoadTableMetadataTransformer() override {
+        return *LoadMetaDataTransformer_;
+    }
 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);

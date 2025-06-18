@@ -98,6 +98,7 @@ namespace {
             NYql::TExprContext& exprCtx,
             NYql::TTypeAnnotationContext& typeCtx,
             const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+            const NMiniKQL::IFunctionRegistry& funcRegistry,
             const TString& cluster) {
         NYql::NNodes::TExprBase expr(root);
         auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
@@ -135,6 +136,7 @@ namespace {
 
         auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
             .AddServiceTransformers()
+            .AddExpressionEvaluation(funcRegistry)
             .AddPreTypeAnnotation()
             .AddIOAnnotation()
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
@@ -428,6 +430,7 @@ TPrepareRewriteInfo PrepareRewrite(
         NYql::TExprContext& exprCtx,
         NYql::TTypeAnnotationContext& typeCtx,
         const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+        const NMiniKQL::IFunctionRegistry& funcRegistry,
         const TString& cluster) {
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement. (it was checked in CheckRewrite)
@@ -440,7 +443,7 @@ TPrepareRewriteInfo PrepareRewrite(
     });
     YQL_ENSURE(createTableAsNode);
 
-    return PrepareCreateTableAs(createTableAsNode, exprCtx, typeCtx, sessionCtx, cluster);
+    return PrepareCreateTableAs(createTableAsNode, exprCtx, typeCtx, sessionCtx, funcRegistry, cluster);
 }
 
 TVector<NYql::TExprNode::TPtr> RewriteExpression(

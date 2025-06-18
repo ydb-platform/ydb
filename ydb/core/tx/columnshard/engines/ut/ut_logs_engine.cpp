@@ -118,7 +118,10 @@ public:
         const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
             if (!pathId || *pathId == i.second->GetPathId()) {
-                callback(i.second->BuildConstructor(false, false), i.second->GetMeta().SerializeToProto());
+                callback(i.second->BuildConstructor(false, false),
+                    i.second->GetMeta().SerializeToProto(i.second->GetPortionType() == NOlap::EPortionType::Compacted
+                                                             ? NPortion::EProduced::SPLIT_COMPACTED
+                                                             : NPortion::EProduced::INSERTED));
             }
         }
         return true;
@@ -127,7 +130,9 @@ public:
     void WriteColumn(const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override {
         auto rowProto = row.GetMeta().SerializeToProto();
         if (firstPKColumnId == row.GetColumnId() && row.GetChunkIdx() == 0) {
-            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto();
+            *rowProto.MutablePortionMeta() = portion.GetMeta().SerializeToProto(portion.GetPortionType() == NOlap::EPortionType::Compacted
+                                                                                    ? NPortion::EProduced::SPLIT_COMPACTED
+                                                                                    : NPortion::EProduced::INSERTED);
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];

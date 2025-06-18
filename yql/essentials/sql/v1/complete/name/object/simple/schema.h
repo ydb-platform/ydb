@@ -13,7 +13,7 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<ISimpleSchema>;
 
-        virtual ~ISimpleSchema() = default;
+        ~ISimpleSchema() override = default;
 
         virtual TSplittedPath Split(TStringBuf path) const = 0;
 

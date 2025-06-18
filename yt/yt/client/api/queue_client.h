@@ -77,6 +77,7 @@ struct TListQueueConsumerRegistrationsResult
 
 struct TCreateQueueProducerSessionOptions
     : public TTimeoutOptions
+    , public TMutatingOptions
 {
     NYTree::INodePtr UserMeta;
 };

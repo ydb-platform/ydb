@@ -25,6 +25,10 @@ struct TInfoUnit {
     TInfoUnit(TString alias, TString column): Alias(alias), ColumnName(column) {}
     TInfoUnit(TString name);
 
+    TString GetFullName() const {
+       return ((Alias!="") ? ("_alias_" + Alias + ".") : "" ) + ColumnName;
+    }
+
     TString Alias;
     TString ColumnName;
 
@@ -37,7 +41,9 @@ struct TInfoUnit {
     };
 };
 
-inline bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs);
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);
+
+bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs);
 
 struct TFilterInfo {
     TExprNode::TPtr FilterBody;
@@ -63,7 +69,7 @@ struct TPhysicalOpProps {
 
 struct TConnection {
     TConnection(TString type, bool fromSourceStage) : Type(type), FromSourceStage(fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) = 0;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) = 0;
     virtual ~TConnection() = default;
 
     TString Type;
@@ -72,19 +78,19 @@ struct TConnection {
 
 struct TBroadcastConnection : public TConnection {
     TBroadcastConnection(bool fromSourceStage) : TConnection("Broadcast", fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) override;
 
 };
 
 struct TMapConnection : public TConnection {
     TMapConnection(bool fromSourceStage) : TConnection("Map", fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) override;
 
 };
 
 struct TUnionAllConnection : public TConnection {
     TUnionAllConnection(bool fromSourceStage) : TConnection("UnionAll", fromSourceStage) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) override;
 
 };
 
@@ -93,14 +99,14 @@ struct TShuffleConnection : public TConnection {
     ,Keys(keys)
     {}
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) override;
 
     TVector<TInfoUnit> Keys;
 };
 
 struct TSourceConnection : public TConnection {
     TSourceConnection() : TConnection("Source", true) {}
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprNode::TPtr & newStage, TExprContext& ctx) override;
 
 };
 

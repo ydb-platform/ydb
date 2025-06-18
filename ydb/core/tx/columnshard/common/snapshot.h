@@ -102,6 +102,10 @@ public:
 
     TString DebugString() const;
     NJson::TJsonValue DebugJson() const;
+
+    operator size_t() const {
+        return CombineHashes(PlanStep, TxId);
+    }
 };
 
 } // namespace NKikimr::NOlap

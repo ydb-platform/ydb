@@ -64,7 +64,7 @@ class TestClickbenchDiffProcessing(Clickbench, FunctionalTestBase):
         self.check_canonical = policy
         exc = None
         try:
-            Clickbench.test_clickbench(self, 1)
+            Clickbench.test_clickbench(self, "Query01")
         except BaseException as e:
             exc = e
         assert exc.__class__ == EXPECTED_ERRORS[policy]

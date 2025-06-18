@@ -465,6 +465,11 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
     if (specials.CompressionLevel) {
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
+    if (specials.GetUseForcedCompaction()) {
+        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer optimizer;
+        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = optimizer;
+        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets"); //TODO use appropriate lc-buckets configuration
+    }
 }
 
 }

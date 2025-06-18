@@ -13,7 +13,7 @@ namespace NYT::NNet {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TDialerConfig
-    : public NYTree::TYsonStruct
+    : public virtual NYTree::TYsonStruct
 {
     bool EnableNoDelay;
     bool EnableAggressiveReconnect;

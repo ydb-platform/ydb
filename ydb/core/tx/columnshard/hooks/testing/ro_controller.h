@@ -112,9 +112,10 @@ public:
         }
     }
 
-    void WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
+    bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
         TInstant start = TInstant::Now();
-        ui32 countStart = GetCleaningStartedCounter().Val();
+        const ui32 countStart0 = GetCleaningStartedCounter().Val();
+        ui32 countStart = countStart0;
         while (Now() - start < d) {
             if (countStart != GetCleaningStartedCounter().Val()) {
                 countStart = GetCleaningStartedCounter().Val();
@@ -127,6 +128,7 @@ public:
                 Sleep(TDuration::Seconds(1));
             }
         }
+        return GetCleaningStartedCounter().Val() != countStart0;
     }
 
     void WaitTtl(const TDuration d) const {

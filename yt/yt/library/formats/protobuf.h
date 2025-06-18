@@ -14,22 +14,22 @@ namespace NYT::NFormats {
 class TEnumerationDescription
 {
 public:
-    explicit TEnumerationDescription(const TString& name);
+    explicit TEnumerationDescription(const std::string& name);
 
-    const TString& GetEnumerationName() const;
+    const std::string& GetEnumerationName() const;
 
-    const TString& GetValueName(i32 value) const;
-    const TString* TryGetValueName(i32 value) const;
+    const std::string& GetValueName(i32 value) const;
+    const std::string* TryGetValueName(i32 value) const;
 
     i32 GetValue(TStringBuf name) const;
     std::optional<i32> TryGetValue(TStringBuf name) const;
 
-    void Add(TString name, i32 value);
+    void Add(std::string name, i32 value);
 
 private:
-    THashMap<TString, i32> NameToValue_;
-    THashMap<i32, TString> ValueToName_;
-    TString Name_;
+    THashMap<std::string, i32, THash<TStringBuf>, TEqualTo<>> NameToValue_;
+    THashMap<i32, std::string> ValueToName_;
+    std::string Name_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,7 +47,7 @@ struct TProtobufTag
 struct TProtobufFieldDescriptionBase
     : public TProtobufTag
 {
-    TString Name;
+    std::string Name;
 
     // Index of field inside struct (for fields corresponding to struct fields in schema).
     int StructFieldIndex = 0;
@@ -224,7 +224,7 @@ public:
     using TField = std::conditional_t<IsWriter, TProtobufWriterFieldDescription, TProtobufParserFieldDescription>;
     using TFieldPtr = std::unique_ptr<TField>;
 
-    TProtobufTypeBuilder(const THashMap<TString, TEnumerationDescription>& enumerations);
+    TProtobufTypeBuilder(const THashMap<std::string, TEnumerationDescription>& enumerations);
 
     TFieldPtr CreateField(
         int structFieldIndex,
@@ -234,7 +234,7 @@ public:
         bool allowEmbedded = false);
 
 private:
-    const THashMap<TString, TEnumerationDescription>& Enumerations_;
+    const THashMap<std::string, TEnumerationDescription>& Enumerations_;
 
 private:
     // Traverse type config, matching it with type descriptor from schema.
@@ -281,7 +281,7 @@ protected:
         const std::vector<NTableClient::TTableSchemaPtr>& schemas);
 
 private:
-    THashMap<TString, TEnumerationDescription> EnumerationDescriptionMap_;
+    THashMap<std::string, TEnumerationDescription> EnumerationDescriptionMap_;
 
 private:
     virtual void AddTable(NYT::TIntrusivePtr<TType> tableType) = 0;
@@ -341,7 +341,7 @@ private:
     struct TTableDescription
     {
         TProtobufWriterTypePtr Type;
-        THashMap<TString, const TProtobufWriterFieldDescription*> Columns;
+        THashMap<std::string, const TProtobufWriterFieldDescription*, THash<TStringBuf>, TEqualTo<>> Columns;
         std::vector<TProtobufWriterEmbeddingDescription> Embeddings;
 
         // Cached data.

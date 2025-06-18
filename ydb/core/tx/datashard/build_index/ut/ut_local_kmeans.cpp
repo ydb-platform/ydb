@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
     static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
         std::function<void(NKikimrTxDataShard::TEvLocalKMeansRequest&)> setupRequest,
-        TString expectedError, bool expectedErrorSubstring = false)
+        TString expectedError, bool expectedErrorSubstring = false, NKikimrIndexBuilder::EBuildStatus expectedStatus = NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
         rec.SetEmbeddingColumn("embedding");
 
         rec.SetLevelName(kLevelTable);
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
 
         setupRequest(rec);
 
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         TAutoPtr<IEventHandle> handle;
         auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvLocalKMeansResponse>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), expectedStatus);
         
         NYql::TIssues issues;
         NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 rec.AddDataColumns("data");
 
                 rec.SetLevelName(kLevelTable);
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
 
                 rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
             };
@@ -289,13 +289,23 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             request.SetParentFrom(100);
             request.SetParentTo(99);
         }, "{ <main>: Error: Parent from 100 should be less or equal to parent to 99 }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetParentFrom(0);
+            request.SetParentTo(0);
+            request.SetUpload(NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
+        }, "{ <main>: Error: Wrong upload for zero parent }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetParentFrom(100);
+            request.SetParentTo(200);
+            request.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD);
+        }, "{ <main>: Error: Wrong upload for non-zero parent }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.ClearLevelName();
         }, "{ <main>: Error: Empty level table name }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.SetEmbeddingColumn("some");
@@ -341,10 +351,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 "(4, \"\x65\x65\3\", \"four\"),"
                 "(5, \"\x75\x75\3\", \"five\");");
 
-        // TODO: https://github.com/ydb-platform/ydb/issues/18656
-        // DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
-        //     request.SetChild(Max<ui64>() - 100);
-        // }, TStringBuilder() << "");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetChild(Max<ui64>() - 100);
+        }, "Condition violated: `(parent & PostingParentFlag) == 0'", true, NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
     }
 
     Y_UNIT_TEST (MainToPosting) {

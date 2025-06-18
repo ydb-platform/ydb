@@ -49,6 +49,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         read.PathId = request.GetPathId();
         read.LockId = LockId;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
+        read.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
         std::unique_ptr<IScannerConstructor> scannerConstructor(new NPlain::TIndexScannerConstructor(context));
         read.ColumnIds = request.GetColumnIds();
         if (request.RangesFilter) {

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dummy.cpp
     frequency.cpp
     ranking.cpp
 )

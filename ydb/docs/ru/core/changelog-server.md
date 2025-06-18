@@ -10,7 +10,7 @@
 
 * Включены по умолчанию:
 
-  * поддержка [представлений (VIEW)](./concepts/datamodel/view.md);
+  * поддержка {% if feature_view %}[представлений (VIEW)](./concepts/datamodel/view.md){% else %}представлений (VIEW){% endif %};
   * режим [автопартиционирования](./concepts/topic.md#autopartitioning) топиков;
   * [транзакции с участием топиков и строковых таблиц](./concepts/transactions.md#topic-table-transactions);
   * [волатильные распределённые транзакции](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij).

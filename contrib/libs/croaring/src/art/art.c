@@ -237,10 +237,6 @@ static art_ref_t art_leaf_create(art_t *art, const art_key_chunk_t key[],
     return art_to_ref(index, CROARING_ART_LEAF_TYPE);
 }
 
-static inline void art_leaf_clear(art_leaf_t *leaf, art_ref_t next_free) {
-    leaf->next_free = next_free;
-}
-
 static art_node4_t *art_node4_create(art_t *art, const art_key_chunk_t prefix[],
                                      uint8_t prefix_size);
 static art_node16_t *art_node16_create(art_t *art,
@@ -270,11 +266,6 @@ static art_node4_t *art_node4_create(art_t *art, const art_key_chunk_t prefix[],
     art_init_inner_node(&node->base, prefix, prefix_size);
     node->count = 0;
     return node;
-}
-
-static inline void art_node4_clear(art_node4_t *node, art_ref_t next_free) {
-    node->count = 0;
-    node->next_free = next_free;
 }
 
 static inline art_ref_t art_node4_find_child(const art_node4_t *node,
@@ -479,11 +470,6 @@ static art_node16_t *art_node16_create(art_t *art,
     return node;
 }
 
-static inline void art_node16_clear(art_node16_t *node, art_ref_t next_free) {
-    node->count = 0;
-    node->next_free = next_free;
-}
-
 static inline art_ref_t art_node16_find_child(const art_node16_t *node,
                                               art_key_chunk_t key) {
     for (size_t i = 0; i < node->count; ++i) {
@@ -666,11 +652,6 @@ static art_node48_t *art_node48_create(art_t *art,
         node->keys[i] = CROARING_ART_NODE48_EMPTY_VAL;
     }
     return node;
-}
-
-static inline void art_node48_clear(art_node48_t *node, art_ref_t next_free) {
-    node->count = 0;
-    node->next_free = next_free;
 }
 
 static inline art_ref_t art_node48_find_child(const art_node48_t *node,
@@ -874,11 +855,6 @@ static art_node256_t *art_node256_create(art_t *art,
         node->children[i] = CROARING_ART_NULL_REF;
     }
     return node;
-}
-
-static inline void art_node256_clear(art_node256_t *node, art_ref_t next_free) {
-    node->count = 0;
-    node->next_free = next_free;
 }
 
 static inline art_ref_t art_node256_find_child(const art_node256_t *node,

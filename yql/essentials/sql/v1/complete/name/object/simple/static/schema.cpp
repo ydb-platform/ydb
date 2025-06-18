@@ -6,12 +6,14 @@ namespace NSQLComplete {
 
         class TSimpleSchema: public ISimpleSchema {
         public:
-            explicit TSimpleSchema(THashMap<TString, TVector<TFolderEntry>> data)
+            explicit TSimpleSchema(THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> data)
                 : Data_(std::move(data))
             {
-                for (const auto& [k, _] : Data_) {
-                    Y_ENSURE(k.StartsWith("/"), k << " must start with the '/'");
-                    Y_ENSURE(k.EndsWith("/"), k << " must end with the '/'");
+                for (const auto& [_, tables] : Data_) {
+                    for (const auto& [k, _] : tables) {
+                        Y_ENSURE(k.StartsWith("/"), k << " must start with the '/'");
+                        Y_ENSURE(k.EndsWith("/"), k << " must end with the '/'");
+                    }
                 }
             }
 
@@ -26,25 +28,31 @@ namespace NSQLComplete {
                 return {head, tail};
             }
 
-            NThreading::TFuture<TVector<TFolderEntry>> List(TString folder) const override {
+            NThreading::TFuture<TVector<TFolderEntry>> List(TString cluster, TString folder) const override {
                 if (!folder.StartsWith('/')) {
                     folder.prepend('/');
                 }
 
                 TVector<TFolderEntry> entries;
-                if (const auto* data = Data_.FindPtr(folder)) {
-                    entries = *data;
+
+                const THashMap<TString, TVector<TFolderEntry>>* tables = nullptr;
+                const TVector<TFolderEntry>* items = nullptr;
+                if ((tables = Data_.FindPtr(cluster)) &&
+                    (items = tables->FindPtr(folder))) {
+                    entries = *items;
                 }
+
                 return NThreading::MakeFuture(std::move(entries));
             }
 
         private:
-            THashMap<TString, TVector<TFolderEntry>> Data_;
+            THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> Data_;
         };
 
     } // namespace
 
-    ISimpleSchema::TPtr MakeStaticSimpleSchema(THashMap<TString, TVector<TFolderEntry>> fs) {
+    ISimpleSchema::TPtr MakeStaticSimpleSchema(
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs) {
         return new TSimpleSchema(std::move(fs));
     }
 

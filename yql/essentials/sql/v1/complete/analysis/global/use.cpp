@@ -1,14 +1,20 @@
 #include "use.h"
 
+#include "evaluate.h"
+#include "narrowing_visitor.h"
+
 namespace NSQLComplete {
 
     namespace {
 
-        class TVisitor: public SQLv1Antlr4BaseVisitor {
+        class TVisitor: public TSQLv1NarrowingVisitor {
         public:
-            TVisitor(antlr4::TokenStream* tokens, size_t cursorPosition)
-                : Tokens_(tokens)
-                , CursorPosition_(cursorPosition)
+            TVisitor(
+                antlr4::TokenStream* tokens,
+                size_t cursorPosition,
+                const TEnvironment* env)
+                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
+                , Env_(env)
             {
             }
 
@@ -33,7 +39,9 @@ namespace NSQLComplete {
                 }
 
                 if (SQLv1::Pure_column_or_namedContext* ctx = expr->pure_column_or_named()) {
-                    cluster = ctx->getText();
+                    if (auto id = GetId(ctx)) {
+                        cluster = std::move(*id);
+                    }
                 }
 
                 if (cluster.empty()) {
@@ -53,31 +61,26 @@ namespace NSQLComplete {
                 return aggregate;
             }
 
-            bool shouldVisitNextChild(antlr4::tree::ParseTree* node, const std::any& /*currentResult*/) override {
-                return TextInterval(node).a < static_cast<ssize_t>(CursorPosition_);
-            }
-
         private:
-            bool IsEnclosing(antlr4::tree::ParseTree* tree) const {
-                return TextInterval(tree).properlyContains(CursorInterval());
-            }
-
-            antlr4::misc::Interval TextInterval(antlr4::tree::ParseTree* tree) const {
-                auto tokens = tree->getSourceInterval();
-                if (tokens.b == -1) {
-                    tokens.b = tokens.a;
+            TMaybe<TString> GetId(SQLv1::Pure_column_or_namedContext* ctx) const {
+                if (auto* x = ctx->bind_parameter()) {
+                    return GetId(x);
+                } else if (auto* x = ctx->an_id()) {
+                    return x->getText();
+                } else {
+                    Y_ABORT("You should change implementation according grammar changes");
                 }
-                return antlr4::misc::Interval(
-                    Tokens_->get(tokens.a)->getStartIndex(),
-                    Tokens_->get(tokens.b)->getStopIndex());
             }
 
-            antlr4::misc::Interval CursorInterval() const {
-                return antlr4::misc::Interval(CursorPosition_, CursorPosition_);
+            TMaybe<TString> GetId(SQLv1::Bind_parameterContext* ctx) const {
+                NYT::TNode node = Evaluate(ctx, *Env_);
+                if (!node.HasValue() || !node.IsString()) {
+                    return Nothing();
+                }
+                return node.AsString();
             }
 
-            antlr4::TokenStream* Tokens_;
-            size_t CursorPosition_;
+            const TEnvironment* Env_;
         };
 
     } // namespace
@@ -85,8 +88,9 @@ namespace NSQLComplete {
     TMaybe<TUseContext> FindUseStatement(
         SQLv1::Sql_queryContext* ctx,
         antlr4::TokenStream* tokens,
-        size_t cursorPosition) {
-        std::any result = TVisitor(tokens, cursorPosition).visit(ctx);
+        size_t cursorPosition,
+        const TEnvironment& env) {
+        std::any result = TVisitor(tokens, cursorPosition, &env).visit(ctx);
         if (!result.has_value()) {
             return Nothing();
         }

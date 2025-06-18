@@ -24,7 +24,7 @@ def totuple(node):
     return ast.Tuple(node.elts, node.ctx)
 
 
-class ListToTuple(Transformation):
+class ListToTuple(Transformation[Aliases, FixedSizeList]):
 
     """
     Replace list nodes by tuple nodes when possible
@@ -39,9 +39,6 @@ class ListToTuple(Transformation):
         import numpy
         return numpy.ones((n, n))
     """
-    def __init__(self):
-        self.update = False
-        super(ListToTuple, self).__init__(Aliases, FixedSizeList)
 
     def visit_AugAssign(self, node):
         if not islist(node.value):

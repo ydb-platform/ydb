@@ -17,6 +17,8 @@
 #include <util/random/random.h>
 #include <util/string/split.h>
 
+#include "console_configuration_info_collector.h"
+
 namespace NKikimr::NConsole {
 
 void TConfigsManager::ClearState()
@@ -891,6 +893,11 @@ void TConfigsManager::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev, cons
 void TConfigsManager::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     ctx.Send(ev->Forward(MakeConfigsDispatcherID(SelfId().NodeId())));
+}
+
+void TConfigsManager::Handle(TEvConsole::TEvGetConfigurationVersionRequest::TPtr &ev, const TActorContext &ctx)
+{
+    ctx.Register(CreateConfigurationInfoCollector(ev->Sender, ev->Get()->Record.GetRequest().list_nodes()));
 }
 
 void TConfigsManager::Handle(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev, const TActorContext &ctx)

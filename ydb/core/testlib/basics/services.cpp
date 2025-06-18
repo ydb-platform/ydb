@@ -180,10 +180,12 @@ namespace NPDisk {
     static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TActorId (&replicas)[N])
     {
         auto info = MakeIntrusive<TStateStorageInfo>();
-        info->NToSelect = N;
-        info->Rings.resize(N);
+        info->RingGroups.resize(1);
+        auto& group = info->RingGroups.back();
+        group.NToSelect = N;
+        group.Rings.resize(N);
         for (size_t i = 0; i < N; ++i) {
-            info->Rings[i].Replicas.push_back(replicas[i]);
+            group.Rings[i].Replicas.push_back(replicas[i]);
         }
 
         return info;
@@ -195,13 +197,15 @@ namespace NPDisk {
         Y_ABORT_UNLESS(NToSelect <= nrings);
 
         auto info = MakeIntrusive<TStateStorageInfo>();
-        info->NToSelect = NToSelect;
-        info->Rings.resize(nrings);
+        info->RingGroups.resize(1);
+        auto& group = info->RingGroups.back();
+        group.NToSelect = NToSelect;
+        group.Rings.resize(nrings);
             
         ui32 inode = 0;
         for (size_t i = 0; i < nrings; ++i) {
             for (size_t j = 0; j < ringSize; ++j) {
-                info->Rings[i].Replicas.push_back(replicas[inode++]);
+                group.Rings[i].Replicas.push_back(replicas[inode++]);
             }
         }
 

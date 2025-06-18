@@ -141,9 +141,9 @@ def allure_test_description(
         }
     )
     table_strings = '\n'.join([f'<tr><td>{_pretty_str(k)}</td><td>{v}</td></tr>' for k, v in test_info.items()])
-    allure.dynamic.description_html(
-        f'''<table border='1' cellpadding='4px'><tbody>
+    html = f'''<table border='1' cellpadding='4px'><tbody>
         {table_strings}
         </tbody></table>
     '''
-    )
+    allure.dynamic.description_html(html)
+    allure.attach(html, "description.html", allure.attachment_type.HTML)

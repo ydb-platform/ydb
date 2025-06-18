@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         VectorIndexSettings settings;
         settings.set_vector_dimension(2);
-        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
         settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
         *rec.MutableSettings() = settings;
 
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         rec.SetEmbeddingColumn("embedding");
 
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
 
         setupRequest(rec);
 
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
 
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
             };
             fill(ev1);
             fill(ev2);
@@ -246,8 +246,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }, "{ <main>: Error: Should be requested at least single cluster }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.SetEmbeddingColumn("some");

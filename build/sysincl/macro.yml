@@ -781,18 +781,6 @@
     - BOOST_PP_ITERATE():
       - contrib/restricted/boost/variant/include/boost/variant/detail/substitute.hpp
 
-- source_filter: "^contrib/libs/gperftools"
-  includes:
-    - STACKTRACE_INL_HEADER:
-      - contrib/libs/gperftools/srcstacktrace_win32-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_generic-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_emscripten-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_x86-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_powerpc-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_aarch64-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_riscv-inl.inc
-      - contrib/libs/gperftools/srcstacktrace_unimplemented-inl.inc
-
 - source_filter: "^contrib/libs/lzo2"
   includes:
     - LZO_CODE_MATCH_INCLUDE_FILE:

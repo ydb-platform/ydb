@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSysView::NPortions {
 
 void TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionInfo& portion) const {
     NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
-    const std::string prod = ::ToString(portion.GetMeta().Produced);
+    const std::string prod = ::ToString(portion.GetProduced());
     NArrow::Append<arrow::StringType>(*builders[1], prod);
     NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
     NArrow::Append<arrow::UInt64Type>(*builders[3], portion.GetRecordsCount());

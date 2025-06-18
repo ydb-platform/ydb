@@ -77,4 +77,4 @@ void TWriteAggregation::Flush(const ui64 tabletId) {
     }
 }
 
-}   // namespace NKikimr::NColumnShard::NWritingPortions
+}   // namespace NKikimr::NOlap::NWritingPortions

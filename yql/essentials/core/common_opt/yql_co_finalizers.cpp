@@ -112,8 +112,8 @@ void FilterPushdownWithMultiusage(const TExprNode::TPtr& node, TNodeOnNodeOwnedM
         if (auto cond = parentFlatMap.Lambda().Body().Maybe<TCoConditionalValueBase>()) {
             const TCoArgument lambdaArg = parentFlatMap.Lambda().Args().Arg(0);
             auto pred = cond.Cast().Predicate();
-            if (pred.Maybe<TCoLikely>() ||
-                (pred.Maybe<TCoAnd>() && AnyOf(pred.Ref().ChildrenList(), [](const auto& p) { return p->IsCallable("Likely"); })) ||
+            if (pred.Maybe<TCoNoPushBase>() ||
+                (pred.Maybe<TCoAnd>() && AnyOf(pred.Ref().ChildrenList(), [](const auto& p) { return IsNoPush(*p); })) ||
                 !IsStrict(pred.Ptr()) ||
                 HasDependsOn(pred.Ptr(), lambdaArg.Ptr()) ||
                 IsDepended(parentFlatMap.Lambda().Ref(), *node))

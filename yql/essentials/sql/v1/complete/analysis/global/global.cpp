@@ -1,5 +1,6 @@
 #include "global.h"
 
+#include "named_node.h"
 #include "parse_tree.h"
 #include "use.h"
 
@@ -42,13 +43,15 @@ namespace NSQLComplete {
             Parser_.setErrorHandler(std::make_shared<TErrorStrategy>());
         }
 
-        TGlobalContext Analyze(TCompletionInput input) override {
+        TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
             SQLv1::Sql_queryContext* sqlQuery = Parse(input.Text);
             Y_ENSURE(sqlQuery);
 
             TGlobalContext ctx;
 
-            ctx.Use = FindUseStatement(sqlQuery, &Tokens_, input.CursorPosition);
+            // TODO(YQL-19747): Add ~ParseContext(Tokens, ParseTree, CursorPosition)
+            ctx.Use = FindUseStatement(sqlQuery, &Tokens_, input.CursorPosition, env);
+            ctx.Names = CollectNamedNodes(sqlQuery, &Tokens_, input.CursorPosition);
 
             return ctx;
         }
@@ -70,9 +73,9 @@ namespace NSQLComplete {
 
     class TGlobalAnalysis: public IGlobalAnalysis {
     public:
-        TGlobalContext Analyze(TCompletionInput input) override {
+        TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
             const bool isAnsiLexer = IsAnsiQuery(TString(input.Text));
-            return GetSpecialized(isAnsiLexer).Analyze(std::move(input));
+            return GetSpecialized(isAnsiLexer).Analyze(std::move(input), std::move(env));
         }
 
     private:

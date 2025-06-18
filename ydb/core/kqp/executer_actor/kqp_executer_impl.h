@@ -333,6 +333,7 @@ protected:
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
                 streamEv->Record.SetChannelId(channel.Id);
+                streamEv->Record.SetFinished(channelData.GetFinished());
                 const auto& snap = GetSnapshot();
                 if (snap.IsValid()) {
                     auto vt = streamEv->Record.MutableVirtualTimestamp();

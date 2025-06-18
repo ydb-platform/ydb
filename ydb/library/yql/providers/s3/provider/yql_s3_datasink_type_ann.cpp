@@ -179,8 +179,18 @@ private:
         }
 
         const auto format = tgt.Format();
+        const TTypeAnnotationNode* baseTargeType = nullptr;
 
-        auto baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+        if (TString error; !UseBlocksSink(format, keys, structType, State_->Configuration, error)) {
+            if (error) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), error));
+                return TStatus::Error;
+            }
+            baseTargeType = AnnotateTargetBase(format, keys, structType, ctx);
+        } else {
+            baseTargeType = AnnotateTargetBlocks(structType, ctx);
+        }
+
         if (!baseTargeType) {
             return TStatus::Error;
         }
@@ -358,7 +368,7 @@ private:
     }
 
     TStatus HandleSink(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 4, ctx)) {
+        if (!EnsureArgsCount(*input, 5, ctx)) {
             return TStatus::Error;
         }
         input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
@@ -445,6 +455,16 @@ private:
         }
 
         return listItemType;
+    }
+
+    static const TTypeAnnotationNode* AnnotateTargetBlocks(const TStructExprType* structType, TExprContext& ctx) {
+        TTypeAnnotationNode::TListType items;
+        items.reserve(structType->GetSize() + 1);
+        for (const auto* item : structType->GetItems()) {
+            items.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
+        }
+        items.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+        return ctx.MakeType<TMultiExprType>(items);
     }
 
 private:

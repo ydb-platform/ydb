@@ -11,7 +11,7 @@ namespace NSQLComplete {
 
     namespace {
 
-        static const THashSet<std::string> Keywords = [] {
+        const THashSet<std::string> Keywords = [] {
             const auto& grammar = GetSqlGrammar();
             const auto& vocabulary = grammar.GetVocabulary();
 
@@ -22,7 +22,7 @@ namespace NSQLComplete {
             return keywords;
         }();
 
-        static const THashSet<TString> TypeConstructors = {
+        const THashSet<TString> TypeConstructors = {
             "DECIMAL",
             "OPTIONAL",
             "TUPLE",

@@ -1,5 +1,60 @@
 # Changelog
 
+## [9.3.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.3.0...v9.3.1) (2025-06-03)
+
+
+### Bug Fixes
+
+* credentials for multipart for cross-origin ([#2361](https://github.com/ydb-platform/ydb-embedded-ui/issues/2361)) ([97dfc75](https://github.com/ydb-platform/ydb-embedded-ui/commit/97dfc750ef8a086303caba6452511e3d996215ab))
+* drawer is broken ([#2351](https://github.com/ydb-platform/ydb-embedded-ui/issues/2351)) ([ce13b7f](https://github.com/ydb-platform/ydb-embedded-ui/commit/ce13b7fca36d1e77f31221156ce09d1b6f35c418))
+* scrolling performance optimizations for table ([#2335](https://github.com/ydb-platform/ydb-embedded-ui/issues/2335)) ([6c72cce](https://github.com/ydb-platform/ydb-embedded-ui/commit/6c72ccedc206bc3b18f8d20f41d7be3a60f64829))
+* table is broken because of batching ([#2356](https://github.com/ydb-platform/ydb-embedded-ui/issues/2356)) ([7f3ea8c](https://github.com/ydb-platform/ydb-embedded-ui/commit/7f3ea8ca82581de6f2c10e473704cc30cf9697a7))
+* table is not scrolled to top on sorting ([#2347](https://github.com/ydb-platform/ydb-embedded-ui/issues/2347)) ([7bde143](https://github.com/ydb-platform/ydb-embedded-ui/commit/7bde143c44535cc78f87b366e72f3213d584e0a9))
+* **Tenants:** do not show actions for domain ([#2336](https://github.com/ydb-platform/ydb-embedded-ui/issues/2336)) ([828724d](https://github.com/ydb-platform/ydb-embedded-ui/commit/828724daf3ab8f0aa7ab6b6fd86c837e99be59d5))
+
+## [9.3.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.2.2...v9.3.0) (2025-05-27)
+
+
+### Features
+
+* **Tenants:** pass full db data to onDelete ([#2328](https://github.com/ydb-platform/ydb-embedded-ui/issues/2328)) ([b966aaa](https://github.com/ydb-platform/ydb-embedded-ui/commit/b966aaaa8abeb55cea2f579da0f99dd5f458ef0b))
+
+
+### Bug Fixes
+
+* **Versions:** properly include nodes with defined roles in other group ([#2327](https://github.com/ydb-platform/ydb-embedded-ui/issues/2327)) ([3f3a543](https://github.com/ydb-platform/ydb-embedded-ui/commit/3f3a543a688fe2370053d95aa0c051da625055c9))
+
+## [9.2.2](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.2.1...v9.2.2) (2025-05-26)
+
+
+### Bug Fixes
+
+* incorrect group numbers ([#2319](https://github.com/ydb-platform/ydb-embedded-ui/issues/2319)) ([a2e9cce](https://github.com/ydb-platform/ydb-embedded-ui/commit/a2e9cce5aed6840fc7e926dff0ffc8ac0a02d434))
+* initial params in useEffect ([#2321](https://github.com/ydb-platform/ydb-embedded-ui/issues/2321)) ([28a51ed](https://github.com/ydb-platform/ydb-embedded-ui/commit/28a51ed39ff4d15fba01376b89c2dec95f573e79))
+* update acl tests ([#2324](https://github.com/ydb-platform/ydb-embedded-ui/issues/2324)) ([84f0eee](https://github.com/ydb-platform/ydb-embedded-ui/commit/84f0eeeed3fb8490437cf9be8aa50476246afd33))
+
+## [9.2.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.2.0...v9.2.1) (2025-05-22)
+
+
+### Bug Fixes
+
+* paginated table in groups scrolled to top on refresh ([#2291](https://github.com/ydb-platform/ydb-embedded-ui/issues/2291)) ([f4971ee](https://github.com/ydb-platform/ydb-embedded-ui/commit/f4971eeb4846ba9468094fe039d4c4acb5ceb74d))
+* reset base offsets on selected partition change ([#2314](https://github.com/ydb-platform/ydb-embedded-ui/issues/2314)) ([6119f14](https://github.com/ydb-platform/ydb-embedded-ui/commit/6119f1490a0bb4c5f3e21ceb87dcf289a644d8b6))
+
+## [9.2.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.1.0...v9.2.0) (2025-05-22)
+
+
+### Features
+
+* **Preview:** add preview for topics ([#2292](https://github.com/ydb-platform/ydb-embedded-ui/issues/2292)) ([c4a4abf](https://github.com/ydb-platform/ydb-embedded-ui/commit/c4a4abf6119728abadad0a958afaaea4bba40309))
+* **Tenants:** add onEditDB to uiFactory, add edit button ([#2305](https://github.com/ydb-platform/ydb-embedded-ui/issues/2305)) ([21c7126](https://github.com/ydb-platform/ydb-embedded-ui/commit/21c7126f147631b9c75362efa72f749a51d91d8b))
+
+
+### Bug Fixes
+
+* **Cluster:** autorefresh cluster data ([#2307](https://github.com/ydb-platform/ydb-embedded-ui/issues/2307)) ([713315c](https://github.com/ydb-platform/ydb-embedded-ui/commit/713315c9029f108024503a9089b47dcc7b2d0608))
+* **Cluster:** side paddings ([#2301](https://github.com/ydb-platform/ydb-embedded-ui/issues/2301)) ([478c9e8](https://github.com/ydb-platform/ydb-embedded-ui/commit/478c9e8a5775ef1cc327dc46afe9402879721013))
+
 ## [9.1.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v9.0.0...v9.1.0) (2025-05-21)
 
 

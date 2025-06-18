@@ -13,7 +13,7 @@ tasks.compileJava.configure {
 tasks.compileTestJava.configure {
     dependsOn({{ taskvar }})
 }
-{%-     if not(disable_lombok_plugin) and (current_target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) %}
+{%-     if with_lombok_plugin %}
 tasks.getByName("delombok").mustRunAfter({{ taskvar }})
 {%-     endif -%}
 

@@ -6,12 +6,13 @@
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
+#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service//file/yql_yt_file_coordinator_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 
 namespace NYql::NFmr {
 
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{"Path","Cluster"},
+    .Input = TYtTableRef{"Path","Cluster", "FilePath"},
     .Output = TFmrTableRef{{"Cluster", "Path"}}
 };
 
@@ -26,7 +27,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
 
 Y_UNIT_TEST_SUITE(FmrWorkerTests) {
     Y_UNIT_TEST(GetSuccessfulOperationResult) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
@@ -48,7 +49,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
     }
 
     Y_UNIT_TEST(CancelOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             int numIterations = 0;
@@ -79,7 +80,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         TFmrCoordinatorSettings coordinatorSettings{};
         coordinatorSettings.WorkersNum = 2;
         coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
-        auto coordinator = MakeFmrCoordinator(coordinatorSettings);
+        auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
         std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {

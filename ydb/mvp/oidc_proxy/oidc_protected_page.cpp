@@ -19,6 +19,7 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
 {}
 
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
+    Send(Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), NActors::IEventHandle::FlagTrackDelivery);
     if (!CheckRequestedHost()) {
         return ReplyAndPassAway(CreateResponseForbiddenHost());
     }
@@ -50,6 +51,59 @@ void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomi
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
         BLOG_D("Can not process request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
         return ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(event->Get()->GetError()));
+    }
+}
+
+void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse::TPtr event) {
+    if (event->Get()->Response != nullptr) {
+        NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
+        BLOG_D("Incoming incomplete response for protected resource: " << response->Status);
+
+        StreamResponse = Request->CreateResponseString(response->AsString());
+        StreamConnection = event->Sender;
+
+        Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(StreamResponse));
+    } else {
+        static constexpr size_t MAX_LOGGED_SIZE = 1024;
+        BLOG_D("Can not process incomplete request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
+        ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource("Failed to process streaming response"));
+    }
+}
+
+void THandlerSessionServiceCheck::HandleDataChunk(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk::TPtr event) {
+    if (event->Get()->Error) {
+        BLOG_D("Incoming data chunk for protected resource error: " << event->Get()->Error);
+        Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(event->Get()->Error));
+        return PassAway();
+    }
+
+    BLOG_D("Incoming data chunk for protected resource: " << event->Get()->Data.size() << " bytes");
+    NHttp::THttpOutgoingDataChunkPtr dataChunk;
+    if (event->Get()->IsEndOfData()) {
+        dataChunk = StreamResponse->CreateIncompleteDataChunk();
+        dataChunk->SetEndOfData();
+    } else {
+        dataChunk = StreamResponse->CreateDataChunk(event->Get()->Data);
+    }
+
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+
+    if (dataChunk->IsEndOfData()) {
+        PassAway();
+    }
+}
+
+void THandlerSessionServiceCheck::HandleCancelled() {
+    BLOG_D("Connection closed");
+    if (StreamConnection) {
+        Send(StreamConnection, new NActors::TEvents::TEvPoisonPill());
+    }
+    PassAway();
+}
+
+void THandlerSessionServiceCheck::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr event) {
+    if (event->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
+        HandleCancelled();
     }
 }
 
@@ -92,7 +146,17 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool
     if (RequestedPageScheme.empty()) {
         httpRequest->Secure = secure;
     }
-    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+
+    auto requestEvent = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
+    requestEvent->Timeout = TDuration::Seconds(120);
+    requestEvent->AllowConnectionReuse = !Request->IsConnectionClose();
+    requestEvent->StreamContentTypes = {
+        "multipart/x-mixed-replace",
+        "multipart/form-data",
+        "text/event-stream",
+    };
+
+    Send(HttpProxyId, requestEvent.release());
 }
 
 TString THandlerSessionServiceCheck::FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {

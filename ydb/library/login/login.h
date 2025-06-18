@@ -1,6 +1,5 @@
 #pragma once
 #include <optional>
-#include <map>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -117,7 +116,7 @@ public:
 
     struct TCreateGroupRequest : TBasicRequest {
         struct TOptions {
-            bool CheckName = true;
+            bool StrongCheckName = true;
         };
 
         TString Group;
@@ -136,7 +135,7 @@ public:
 
     struct TRenameGroupRequest : TBasicRequest {
         struct TOptions {
-            bool CheckName = true;
+            bool StrongCheckName = true;
         };
 
         TString Group;
@@ -233,7 +232,9 @@ public:
 private:
     std::deque<TKeyRecord>::iterator FindKeyIterator(ui64 keyId);
     bool CheckSubjectExists(const TString& name, const ESidType::SidType& type);
-    static bool CheckAllowedName(const TString& name);
+    static bool StrongCheckAllowedName(const TString& name);
+    static bool BasicCheckAllowedName(const TString& name);
+    static bool CheckGroupNameAllowed(const bool strongCheckName, const TString& groupName);
 
     bool CheckLockoutByAttemptCount(const TSidRecord& sid) const;
     bool CheckLockout(const TSidRecord& sid) const;

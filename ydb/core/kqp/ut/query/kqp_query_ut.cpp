@@ -2663,7 +2663,123 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UPDATE test_table SET data = "a"
         )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(hangingResult.GetStatus(), EStatus::SUCCESS, hangingResult.GetIssues().ToString());
-    }    
+    }
+
+    Y_UNIT_TEST(CreateAsSelectView) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                CREATE TABLE `l_source` (
+                    id Uint64,
+                    num Uint64,
+                    unused String,
+                    PRIMARY KEY (id)
+                );
+
+                CREATE TABLE `r_source` (
+                    id Uint64,
+                    id2 Uint64,
+                    unused String,
+                    PRIMARY KEY (id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                CREATE VIEW `l`
+                with (security_invoker = TRUE)
+                AS (
+                    SELECT
+                        id,
+                        num
+                    FROM
+                        `l_source`
+                );
+
+                CREATE VIEW `r` 
+                with (security_invoker = TRUE)
+                AS (
+                    SELECT
+                        id,
+                        id2
+                    FROM
+                        `r_source`
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                INSERT INTO `/Root/l_source` (id, num) VALUES
+                    (1u, 1u), (100u, 100u), (10u, 10u);
+                INSERT INTO `/Root/r_source` (id, id2) VALUES
+                    (1u, 1u), (100u, 100u), (10u, 10u);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `table1`
+                    (PRIMARY KEY (id))
+                AS (
+                    SELECT
+                        id, num
+                    FROM `l`
+                )
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT id, num FROM `/Root/table1` ORDER BY id;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
+        }
+
+        {
+            auto prepareResult = client.ExecuteQuery(R"(
+                CREATE TABLE `table2`
+                    (PRIMARY KEY (id2))
+                AS (
+                    SELECT
+                        r.id2 AS id2,
+                        sum(l.num) AS num
+                    FROM `l` AS l
+                    LEFT JOIN `r` AS r ON l.id = r.id
+                    GROUP BY r.id2
+                )
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(prepareResult.IsSuccess(), prepareResult.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT id2, num FROM `/Root/table2` ORDER BY id2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
+        }
+    }
 }
 
 } // namespace NKqp

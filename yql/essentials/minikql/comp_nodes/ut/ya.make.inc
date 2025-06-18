@@ -28,6 +28,7 @@ SET(ORIG_SOURCES
     mkql_block_compress_ut.cpp
     mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp
+    mkql_block_logical_ut.cpp
     mkql_block_skiptake_ut.cpp
     mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp

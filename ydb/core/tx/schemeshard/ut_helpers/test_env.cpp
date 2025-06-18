@@ -1184,7 +1184,9 @@ bool NSchemeShardUT_Private::TTestWithReboots::PassUserRequests(TTestActorRuntim
            event->Type == TEvIndexBuilder::EvCreateRequest ||
            event->Type == TEvIndexBuilder::EvGetRequest ||
            event->Type == TEvIndexBuilder::EvCancelRequest ||
-           event->Type == TEvIndexBuilder::EvForgetRequest
+           event->Type == TEvIndexBuilder::EvForgetRequest ||
+           // without it, ut_vector_index_build_reboots test hangs on GetRequest on the very first reboot
+           event->Type == TEvTablet::EvCommitResult
         ;
 }
 

@@ -402,7 +402,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     TStringStream stream;
     stream << " [options...] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors, BEGIN, "", true);
     stream << Endl << Endl << colors.BoldColor() << "Commands in " << colors.Red() << colors.BoldColor() <<  "admin" << colors.OldColor() << colors.BoldColor() << " subtree may treat global flags and profile differently, see corresponding help" << colors.OldColor() << Endl;
 
     // detailed help

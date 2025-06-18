@@ -8,6 +8,8 @@
 #include <yql/essentials/core/file_storage/http_download/http_download.h>
 #include <yql/essentials/core/file_storage/defs/provider.h>
 
+#include <yql/essentials/public/issue/yql_issue.h>
+
 #include <yql/essentials/utils/fetch/fetch.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/context.h>
@@ -153,7 +155,7 @@ public:
         } catch (const std::exception& e) {
             const TString msg = TStringBuilder() << "FileStorage: Failed to download file by URL \"" << urlStr << "\", details: " << e.what();
             YQL_LOG(ERROR) << msg;
-            YQL_LOG_CTX_THROW yexception() << msg;
+            YQL_LOG_CTX_THROW TErrorException(UNEXPECTED_ERROR) << msg;
         }
     }
 

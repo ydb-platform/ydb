@@ -4,6 +4,7 @@
 #include "ydb_common.h"
 
 #include <util/generic/set.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 
 namespace NYdb::NConsoleClient::NDynamicConfig {
 
@@ -142,6 +143,17 @@ public:
     void Config(TConfig&) override;
     int Run(TConfig&) override;
 private:
+    bool AllowEmptyDatabase = false;
+};
+
+class TCommandVersionDynamicConfig : public TYdbReadOnlyCommand, public TCommandWithOutput {
+public:
+    TCommandVersionDynamicConfig(bool allowEmptyDatabase);
+    void Config(TConfig&) override;
+    void Parse(TConfig&) override;
+    int Run(TConfig&) override;
+private:
+    bool ListNodes = false;
     bool AllowEmptyDatabase = false;
 };
 

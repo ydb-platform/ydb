@@ -396,7 +396,10 @@ private:
             Identifier_ = Str_.SubString(start, Index_ - start);
             QuotedIdentifier_ = false;
         } else if (CurrentCharacter() == '\'') {
-            THROW_ERROR_EXCEPTION_UNLESS(allowQuotedIdentifier, "Unexpected literal string");
+            if (!allowQuotedIdentifier) {
+                THROW_ERROR_EXCEPTION("Unexpected literal string")
+                    << TErrorAttribute("type_string", Str_);
+            }
             // Skip '.
             Step();
 
@@ -422,7 +425,8 @@ private:
             }
 
             if (!identifierClosed) {
-                THROW_ERROR_EXCEPTION("Invalid enclosure: %Qv", Str_.SubStr(start, Index_ - start));
+                THROW_ERROR_EXCEPTION("Invalid enclosure: %Qv", Str_.SubStr(start, Index_ - start))
+                    << TErrorAttribute("type_string", Str_);
             }
 
             UnescapedIdentifierHolder_ = UnescapeC(Str_.SubStr(start, Index_ - start));
@@ -432,7 +436,8 @@ private:
         }
 
         if (Identifier_.empty()) {
-            THROW_ERROR_EXCEPTION("Unexpected character %qv, expected '_' or alphanumeric", CurrentCharacter());
+            THROW_ERROR_EXCEPTION("Unexpected character %qv, expected '_' or alphanumeric", CurrentCharacter())
+                << TErrorAttribute("type_string", Str_);
         }
 
         ConsumeWhitespaces();

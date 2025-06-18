@@ -102,7 +102,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
     auto normalizedName = NormalizeName(name);
     if (auto handler = Handlers.Value(normalizedName, TSettingHandler::TPtr())) {
         if (cluster != ALL_CLUSTERS) {
-            if (!handler->IsRuntime()) {
+            if (!handler->IsPerCluster()) {
                 return errorCallback(TStringBuilder() << "Static setting " << name.Quote() << " cannot be set for specific cluster", true);
             }
             if (!ValidClusters.contains(cluster)) {

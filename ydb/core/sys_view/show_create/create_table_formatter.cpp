@@ -457,14 +457,14 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
-    TString statement = Stream.Str();
-    TString formattedStatement;
+    TString createQuery = Stream.Str();
+    TString formattedCreateQuery;
     NYql::TIssues issues;
-    if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
+    if (!NYdb::NDump::Format(createQuery, formattedCreateQuery, issues)) {
         return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TFormatResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedCreateQuery));
 
     return result;
 }
@@ -996,6 +996,11 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
+    if (cdcStream.GetSchemaChanges()) {
+        Stream << del << "SCHEMA_CHANGES = TRUE";
+        del = ", ";
+    }
+
     if (cdcStream.HasAwsRegion() && !cdcStream.GetAwsRegion().empty()) {
         Stream << del << "AWS_REGION = \'" << cdcStream.GetAwsRegion() << "\'";
         del = ", ";
@@ -1260,14 +1265,14 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
         }
     }
 
-    TString statement = Stream.Str();
-    TString formattedStatement;
+    TString createQuery = Stream.Str();
+    TString formattedCreateQuery;
     NYql::TIssues issues;
-    if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
+    if (!NYdb::NDump::Format(createQuery, formattedCreateQuery, issues)) {
         return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TFormatResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedCreateQuery));
 
     return result;
 }

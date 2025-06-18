@@ -1524,7 +1524,7 @@ TExprBase FlatMapOverEquiJoin(
         const bool skipNulls = NeedEmitSkipNullMembers(types);
 
         for (const auto& andTerm : andTerms) {
-            if (andTerm->IsCallable("Likely")) {
+            if (IsNoPush(*andTerm)) {
                 continue;
             }
 

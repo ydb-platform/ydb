@@ -50,15 +50,20 @@ public:
                     }
                 }
 
+                ui64 maxParallelJobCount = JobFactory_->GetMaxParallelJobCount();
+                YQL_ENSURE(maxParallelJobCount >= WorkerState_->TaskStatuses.size());
+                ui64 availableSlots = maxParallelJobCount - WorkerState_->TaskStatuses.size();
                 auto heartbeatRequest = THeartbeatRequest(
                     WorkerId_,
                     VolatileId_,
-                    taskStates
+                    taskStates,
+                    availableSlots
                 );
                 auto heartbeatResponseFuture = Coordinator_->SendHeartbeatResponse(heartbeatRequest);
                 auto heartbeatResponse = heartbeatResponseFuture.GetValueSync();
                 std::vector<TTask::TPtr> tasksToRun = heartbeatResponse.TasksToRun;
                 std::unordered_set<TString> taskToDeleteIds = heartbeatResponse.TaskToDeleteIds;
+                YQL_ENSURE(tasksToRun.size() <= availableSlots);
 
                 with_lock(WorkerState_->Mutex) {
                     for (auto task: tasksToRun) {

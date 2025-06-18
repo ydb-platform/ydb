@@ -10,7 +10,10 @@
 namespace NYql::NFmr {
 
 TTask::TPtr CreateTestTask() {
-    auto input = TYtTableRef("test_cluster", "test_path");
+    auto input = TYtTableTaskRef{
+        .RichPaths = {NYT::TRichYPath("test_path").Cluster("test_cluster")},
+        .FilePaths = {"test_file_path"}
+    };
     auto output = TFmrTableOutputRef("test_table_id");
     auto params = TDownloadTaskParams(input, output);
     return MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id");

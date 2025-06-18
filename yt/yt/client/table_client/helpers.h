@@ -132,6 +132,18 @@ void FromUnversionedValue(NNet::TIP6Address* value, TUnversionedValue unversione
 void ToUnversionedValue(TUnversionedValue* unversionedValue, const TError& value, const TRowBufferPtr& rowBuffer, int id = 0, EValueFlags flags = EValueFlags::None);
 void FromUnversionedValue(TError* value, TUnversionedValue unversionedValue);
 
+template <NYTree::CYsonStructDerived T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id = 0,
+    EValueFlags flags = EValueFlags::None);
+template <NYTree::CYsonStructDerived T>
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue);
+
 template <class T>
     requires TEnumTraits<T>::IsEnum
 void ToUnversionedValue(

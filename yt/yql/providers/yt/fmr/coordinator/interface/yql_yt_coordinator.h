@@ -11,6 +11,7 @@ struct THeartbeatRequest {
     ui32 WorkerId;
     TString VolatileId;
     std::vector<TTaskState::TPtr> TaskStates;
+    ui64 AvailableSlots = 0;
 };
 // Worker sends requests in loop or long polling
 
@@ -57,7 +58,7 @@ struct TGetFmrTableInfoRequest {
 };
 
 struct TGetFmrTableInfoResponse {
-    TTableStats TableStats; // for only one PartId
+    TTableStats TableStats;
     std::vector<TFmrError> ErrorMessages = {};
 };
 

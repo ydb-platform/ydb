@@ -158,7 +158,7 @@ private:
         }
 
         void OnClientError(TStatus status) override {
-            Self.SendSessionError(ReadActorId, status);
+            Self.SendSessionError(ReadActorId, status, false);
         }
 
         void StartClientSession() override {
@@ -325,7 +325,7 @@ private:
     void SendStatistics();
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
     TMaybe<ui64> GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings);
-    void SendSessionError(TActorId readActorId, TStatus status);
+    void SendSessionError(TActorId readActorId, TStatus status, bool isFatalError);
     void RestartSessionIfOldestClient(const TClientsInfo& info);
     void RefreshParsers();
 
@@ -753,7 +753,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
 
     if (auto status = formatIt->second->AddClient(clientInfo); status.IsFail()) {
-        SendSessionError(clientInfo->ReadActorId, status);
+        SendSessionError(clientInfo->ReadActorId, status, false);
         return;
     }
 
@@ -828,7 +828,7 @@ void TTopicSession::FatalError(const TStatus& status) {
 
     for (auto& [readActorId, info] : Clients) {
         LOG_ROW_DISPATCHER_DEBUG("Send TEvSessionError to " << readActorId);
-        SendSessionError(readActorId, status);
+        SendSessionError(readActorId, status, true);
     }
     StopReadSession();
     Become(&TTopicSession::ErrorState);
@@ -839,12 +839,13 @@ void TTopicSession::ThrowFatalError(const TStatus& status) {
     ythrow yexception() << "FatalError: " << status.GetErrorMessage();
 }
 
-void TTopicSession::SendSessionError(TActorId readActorId, TStatus status) {
+void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool isFatalError) {
     LOG_ROW_DISPATCHER_WARN("SendSessionError to " << readActorId << ", status: " << status.GetErrorMessage());
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
     event->Record.SetStatusCode(status.GetStatus());
     NYql::IssuesToMessage(status.GetErrorDescription(), event->Record.MutableIssues());
     event->ReadActorId = readActorId;
+    event->IsFatalError = isFatalError;
     Send(RowDispatcherActorId, event.release());
 }
 
@@ -926,14 +927,14 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
         LOG_ROW_DISPATCHER_ERROR("Such a client already exists");
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Client with id " << ev->Sender << " already exists"));
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Client with id " << ev->Sender << " already exists"), false);
         return false;
     }
 
     const auto& source = ev->Get()->Record.GetSource();
     if (!Config.GetWithoutConsumer() && ConsumerName && ConsumerName != source.GetConsumerName()) {
         LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << source.GetConsumerName() << ", send error");
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"));
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"), false);
         return false;
     }
 

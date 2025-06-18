@@ -11,6 +11,5 @@ PEERDIR(
 END()
 
 RECURSE(
-    dispatch
     simple
 )

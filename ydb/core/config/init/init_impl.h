@@ -338,6 +338,7 @@ struct TCommonAppOptions {
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
     EWorkload Workload = EWorkload::Hybrid;
+    TString BridgePileName;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -371,6 +372,8 @@ struct TCommonAppOptions {
             .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
         opts.AddLongOption("node-address", "address for dynamic node")
             .RequiredArgument("ADDR").StoreResult(&NodeAddress);
+        opts.AddLongOption("bridge-pile-name", "pile name for bridged mode")
+            .RequiredArgument("PILE").StoreResult(&BridgePileName);
         opts.AddLongOption("node-host", "hostname for dynamic node")
             .RequiredArgument("NAME").StoreResult(&NodeHost);
         opts.AddLongOption("node-resolve-host", "resolve hostname for dynamic node")
@@ -1249,6 +1252,7 @@ public:
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
         Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
+        Labels["node_kind"] = CommonAppOptions.IsStaticNode() ? "static" : "dynamic";
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();
@@ -1298,6 +1302,7 @@ public:
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
             AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
+            cf.BridgePileName ? std::make_optional(cf.BridgePileName) : std::nullopt,
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
@@ -1319,14 +1324,58 @@ public:
         }
     }
 
+    class TAppConfigFieldsPreserver {
+    public:
+        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
+            : AppConfig(appConfig)
+            , ConfigDirPath(appConfig.HasConfigDirPath() ? std::make_optional(appConfig.GetConfigDirPath()) : std::nullopt)
+            , StoredConfigYaml(appConfig.HasStoredConfigYaml() ? std::make_optional(appConfig.GetStoredConfigYaml()) : std::nullopt)
+            , StartupConfigYaml(appConfig.HasStartupConfigYaml() ? std::make_optional(appConfig.GetStartupConfigYaml()) : std::nullopt)
+            , StartupStorageYaml(appConfig.HasStartupStorageYaml() ? std::make_optional(appConfig.GetStartupStorageYaml()) : std::nullopt)
+        {}
+
+        ~TAppConfigFieldsPreserver() {
+            if (ConfigDirPath) {
+                AppConfig.SetConfigDirPath(*ConfigDirPath);
+            }
+            if (StoredConfigYaml) {
+                AppConfig.MutableStoredConfigYaml()->CopyFrom(*StoredConfigYaml);
+            }
+            if (StartupConfigYaml) {
+                AppConfig.SetStartupConfigYaml(*StartupConfigYaml);
+            }
+            if (StartupStorageYaml) {
+                AppConfig.SetStartupStorageYaml(*StartupStorageYaml);
+            }
+        }
+
+    private:
+        NKikimrConfig::TAppConfig& AppConfig;
+        std::optional<TString> ConfigDirPath;
+        std::optional<NKikimrBlobStorage::TYamlConfig> StoredConfigYaml;
+        std::optional<TString> StartupConfigYaml;
+        std::optional<TString> StartupStorageYaml;
+    };
+
     void InitStaticNode() {
         CommonAppOptions.ValidateStaticNodeConfig();
-
+        Labels["node_kind"] = "static";
         Labels["dynamic"] = "false";
+
+        if (!AppConfig.HasStartupConfigYaml()) {
+            return;
+        }
+
+        TAppConfigFieldsPreserver preserver(AppConfig);
+
+        NKikimrConfig::TAppConfig appConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(AppConfig.GetStartupConfigYaml(), {}, Labels, appConfig);
+        ApplyConfigForNode(appConfig);
     }
 
     void InitDynamicNode() {
         Labels["dynamic"] = "true";
+        Labels["node_kind"] = "dynamic";
         RegisterDynamicNode(CommonAppOptions);
 
         Labels["node_id"] = ToString(NodeId);

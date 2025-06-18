@@ -8,6 +8,8 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 #include <util/network/socket.h>
+#include <util/generic/queue.h>
+#include <util/system/spinlock.h>
 
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/httpcodes.h>
@@ -50,7 +52,12 @@ public:
     TKeepAliveHttpClient(const TString& host,
                          ui32 port,
                          TDuration socketTimeout = TDuration::Seconds(5),
-                         TDuration connectTimeout = TDuration::Seconds(30));
+                         TDuration connectTimeout = TDuration::Seconds(30),
+                         bool useKeepAlive = true,
+                         bool useConnectionPool = false);
+
+    TKeepAliveHttpClient(TKeepAliveHttpClient&&) = default;
+    ~TKeepAliveHttpClient();
 
     THttpCode DoGet(const TStringBuf relativeUrl,
                     IOutputStream* output = nullptr,
@@ -117,7 +124,12 @@ private:
     const ui32 Port;
     const TDuration SocketTimeout;
     const TDuration ConnectTimeout;
+    const bool UseKeepAlive;
+    const bool UseConnectionPool;
     const bool IsHttps;
+
+    static TSpinLock ConnectionQuarantineMutex;
+    static TQueue<THolder<NPrivate::THttpConnection>> ConnectionQuarantine;
 
     THolder<NPrivate::THttpConnection> Connection;
     bool IsClosingRequired;
@@ -158,6 +170,8 @@ protected:
     const ui32 Port;
     const TDuration SocketTimeout;
     const TDuration ConnectTimeout;
+    const bool UseKeepAlive = true;
+    const bool UseConnectionPool = false;
     bool HttpsVerification = false;
 
 public:
@@ -215,7 +229,8 @@ namespace NPrivate {
                         TDuration connTimeout,
                         bool isHttps,
                         const TMaybe<TOpenSslClientIO::TOptions::TClientCert>& clientCert,
-                        const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert);
+                        const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert,
+                        bool keepAlive = true);
 
         bool IsOk() const {
             return IsNotSocketClosedByOtherSide(Socket);

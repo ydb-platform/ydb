@@ -1152,7 +1152,7 @@ void UnversionedValueToListImpl(
 
 void MapToUnversionedValueImpl(
     TUnversionedValue* unversionedValue,
-    const std::function<bool(TString*, TUnversionedValue*)> producer,
+    const std::function<bool(std::string*, TUnversionedValue*)> producer,
     const TRowBufferPtr& rowBuffer,
     int id,
     EValueFlags flags)
@@ -1162,7 +1162,7 @@ void MapToUnversionedValueImpl(
     NYT::NYson::TYsonWriter writer(&outputStream);
     writer.OnBeginMap();
 
-    TString itemKey;
+    std::string itemKey;
     TUnversionedValue itemValue;
     while (true) {
         if (!producer(&itemKey, &itemValue)) {
@@ -1292,10 +1292,10 @@ void UnversionedValueToMapImpl(
         }
 
     private:
-        const std::function<google::protobuf::Message*(TString)> Appender_;
+        const std::function<google::protobuf::Message*(std::string)> Appender_;
         const TProtobufMessageType* const Type_;
 
-        std::optional<TString> Key_;
+        std::optional<std::string> Key_;
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
@@ -1315,7 +1315,7 @@ void UnversionedValueToMapImpl(
         {
             FlushElement();
             WireBytes_.clear();
-            Key_ = TString(key);
+            Key_ = std::string(key);
             Underlying_ = CreateProtobufWriter(&OutputStream_, Type_);
         }
 

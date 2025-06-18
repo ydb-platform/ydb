@@ -25,9 +25,10 @@ TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<
     if (result.IsFail()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
             "tablet_id", GetTabletId())("message", result.GetErrorMessage());
-        SendErrorMessage(result.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+        SendErrorMessage(result.GetErrorMessage(), result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED ? NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::ConstraintViolation :  NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+        return TConclusionStatus::Fail(result.GetErrorMessage());
     }
-    return result;
+    return TConclusionStatus::Success();
 }
 
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
@@ -37,12 +38,10 @@ void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
-    {
-        auto result = Merger->Finish();
-        if (result.IsFail()) {
-            OnError("cannot finish merger: " + result.GetErrorMessage());
-            return result;
-        }
+    auto result = Merger->Finish();
+    if (result.IsFail()) {
+        OnError("cannot finish merger: " + result.GetErrorMessage());
+        return TConclusionStatus::Fail(result.GetErrorMessage());
     }
 
     auto batchResult = Merger->BuildResultBatch();

@@ -153,7 +153,7 @@ SELECT * FROM test;
 
 При использовании `SELECT foo.* FROM ... AS foo` убрать префикс  `foo.` у имен результирующих колонок.
 
-Работает в том числе и для [JOIN](join.md), но в этом случае имеет право упасть в случае конфликта имен (который можно разрешить с помощью [WITHOUT](select/without.md) и переименования колонок). Для JOIN в режиме SimpleColumns производится неявный Coalesce для ключевых колонок: запрос `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` в режиме SimpleColumns работает как `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`
+Работает в том числе и для [JOIN](select/join.md), но в этом случае имеет право упасть в случае конфликта имен (который можно разрешить с помощью [WITHOUT](select/without.md) и переименования колонок). Для JOIN в режиме SimpleColumns производится неявный Coalesce ключевых колонок: запрос `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` в режиме SimpleColumns работает аналогично `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
 
 ### CoalesceJoinKeysOnQualifiedAll
 
@@ -173,7 +173,7 @@ SELECT * FROM test;
 | --- | --- |
 | Флаг | false |
 
-Если флаг установлен, то [JOIN](join.md) будет требовать строгого совпадения типов ключей.
+Если флаг установлен, то [JOIN](select/join.md) будет требовать строгого совпадения типов ключей.
 По умолчанию JOIN предварительно конвертирует ключи к общему типу, что может быть нежелательно с точки зрения производительности.
 StrictJoinKeyTypes является [scoped](#pragmascope) настройкой.
 
@@ -302,7 +302,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 | --- | --- |
 | Положительное число | 32 |
 
-Увеличение лимита на число  группировок в [GROUP BY](group_by.md).
+Увеличение лимита на число  группировок в [GROUP BY](select/group-by.md).
 
 {% if feature_group_by_rollup_cube %}
 
@@ -312,7 +312,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 | --- | --- |
 | Положительное число | 5 |
 
-Увеличение лимита на число размерностей [GROUP BY](group_by.md#rollup-cube-group-sets).
+Увеличение лимита на число размерностей [GROUP BY](select/group-by.md#rollup-cube-group-sets).
 
 Использовать нужно аккуратно, так как вычислительная сложность запроса растет экспоненциально по отношению к числу размерностей.
 

@@ -383,7 +383,7 @@ private:
 
         auto retryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
             [](CURLcode, long httpCode) {
-                if (httpCode == 429 /*RESOURCE_EXHAUSTED*/) {
+                if (httpCode == 429 /* RESOURCE_EXHAUSTED */ || httpCode == 503 /* shard in not ready yet */) {
                     return ERetryErrorClass::ShortRetry;
                 }
                 return ERetryErrorClass::NoRetry;

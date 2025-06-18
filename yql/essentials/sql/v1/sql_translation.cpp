@@ -745,6 +745,88 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
     return true;
 }
 
+bool TSqlTranslation::ParseDatabaseSettings(const TRule_database_settings& in, THashMap<TString, TNodePtr>& out) {
+    if (!ParseDatabaseSetting(in.GetRule_database_setting1(), out)) {
+        return false;
+    }
+    for (const auto& setting : in.GetBlock2()) {
+        if (!ParseDatabaseSetting(setting.GetRule_database_setting2(), out)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+namespace {
+
+TMaybe<bool> ParseBool(TContext& ctx, const TRule_bool_value& node) {
+    bool value = false;
+    const TString& token = ctx.Token(node.GetToken1());
+    if (!TryFromString<bool>(token, value)) {
+        ctx.Error() << "Cannot parse bool from " << token;
+        return Nothing();
+    }
+    return value;
+}
+
+TMaybe<ui64> ParseInteger(TContext& ctx, const TRule_integer& node) {
+    ui64 value = 0;
+    const TString& token = ctx.Token(node.GetToken1());
+    TString suffix;
+    if (!ParseNumbers(ctx, token, value, suffix)) {
+        ctx.Error() << "Cannot parse integer from " << token;
+        return Nothing();
+    }
+    return value;
+}
+
+TNodePtr ParseDatabaseSettingValue(TContext& ctx, const TRule_database_setting_value& node) {
+    switch (node.GetAltCase()) {
+        case TRule_database_setting_value::kAltDatabaseSettingValue1:
+            // bool
+            if (auto result = ParseBool(ctx, node.GetAlt_database_setting_value1().GetRule_bool_value1())) {
+                return BuildLiteralBool(ctx.Pos(), *result);
+            }
+            return nullptr;
+
+        case TRule_database_setting_value::kAltDatabaseSettingValue2:
+            // integer
+            if (auto result = ParseInteger(ctx, node.GetAlt_database_setting_value2().GetRule_integer1())) {
+                return MakeIntrusive<TLiteralNumberNode<ui64>>(ctx.Pos(), "Uint64", ToString(*result));
+            }
+            return nullptr;
+
+        case TRule_database_setting_value::kAltDatabaseSettingValue3: {
+            // string
+            const auto& token = node.GetAlt_database_setting_value3().GetToken1();
+            if (auto result = BuildLiteralSmartString(ctx, ctx.Token(token))) {
+                return result;
+            }
+            return nullptr;
+        }
+        case TRule_database_setting_value::ALT_NOT_SET:
+            YQL_ENSURE(false, "You should change implementation according to grammar changes.");
+    }
+}
+
+}
+
+bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out) {
+    const auto setting = to_upper(Id(in.GetRule_an_id1(), *this));
+
+    if (out.contains(setting)) {
+        Ctx.Error() << "Duplicate setting: " << setting;
+        return false;
+    }
+
+    auto node = ParseDatabaseSettingValue(Ctx, in.GetRule_database_setting_value3());
+    if (!node) {
+        return false;
+    }
+    out[setting] = node;
+    return true;
+}
+
 bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& settingsNode,
         TIndexDescription::EType indexType,
         TIndexDescription::TIndexSettings& indexSettings) {

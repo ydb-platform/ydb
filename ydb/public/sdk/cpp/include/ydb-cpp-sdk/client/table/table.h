@@ -397,6 +397,8 @@ public:
 
     // Enable virtual timestamps
     TChangefeedDescription& WithVirtualTimestamps();
+    // Enable schema changes
+    TChangefeedDescription& WithSchemaChanges();
     // Enable resolved timestamps
     TChangefeedDescription& WithResolvedTimestamps(const TDuration& interval);
     // Customise retention period of underlying topic (24h by default).
@@ -415,6 +417,7 @@ public:
     EChangefeedFormat GetFormat() const;
     EChangefeedState GetState() const;
     bool GetVirtualTimestamps() const;
+    bool GetSchemaChanges() const;
     const std::optional<TDuration>& GetResolvedTimestamps() const;
     bool GetInitialScan() const;
     const std::unordered_map<std::string, std::string>& GetAttributes() const;
@@ -442,6 +445,7 @@ private:
     EChangefeedFormat Format_;
     EChangefeedState State_ = EChangefeedState::Unknown;
     bool VirtualTimestamps_ = false;
+    bool SchemaChanges_ = false;
     std::optional<TDuration> ResolvedTimestamps_;
     std::optional<TDuration> RetentionPeriod_;
     bool InitialScan_ = false;

@@ -60,7 +60,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
         *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
     }
 
-    *proto.MutableMeta() = Meta.SerializeToProto();
+    *proto.MutableMeta() = Meta.SerializeToProto(GetProduced());
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {

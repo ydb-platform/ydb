@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
@@ -54,6 +55,7 @@ protected:
     YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
     YDB_SDK_CLIENT(NYdb::NScheme::TSchemeClient, YdbSchemeClient);
     YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
+    YDB_SDK_CLIENT(NYdb::NTopic::TTopicClient, YdbTopicClient);
 
 #undef YDB_SDK_CLIENT
 

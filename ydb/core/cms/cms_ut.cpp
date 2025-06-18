@@ -1376,9 +1376,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         THashMap<ui32, ui32> NodeToRing;
         THashSet<ui32> StateStorageNodes;
-
-        for (ui32 ring = 0; ring < info->Rings.size(); ++ring) {
-            for (auto& replica : info->Rings[ring].Replicas) {
+        auto &group = info->RingGroups[0];
+        for (ui32 ring = 0; ring < group.Rings.size(); ++ring) {
+            for (auto& replica : group.Rings[ring].Replicas) {
                 ui32 nodeId = replica.NodeId();
 
                 NodeToRing[nodeId] = ring;

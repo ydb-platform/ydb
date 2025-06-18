@@ -95,6 +95,7 @@ namespace NKikimr {
                     requiredSpace = ExpectedSlotSize.front();
                     ExpectedSlotSize.pop_front();
                 }
+                ui32 groupSizeInUnits = StoragePool.DefaultGroupSizeInUnits;
                 AllocateOrSanitizeGroup(groupId, group, {}, {}, requiredSpace, false, &TGroupGeometryInfo::AllocateGroup);
 
                 // scan all comprising PDisks for PDiskCategory
@@ -130,7 +131,7 @@ namespace NKikimr {
                 TGroupInfo *groupInfo = State.Groups.ConstructInplaceNewEntry(groupId, groupId, 1,
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
                     StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
-                    groupKeyNonce, MainKeyVersion, false, false, StoragePoolId, Geometry.GetNumFailRealms(),
+                    groupKeyNonce, MainKeyVersion, false, false, groupSizeInUnits, StoragePoolId, Geometry.GetNumFailRealms(),
                     Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
 
                 // bind group to storage pool
@@ -429,7 +430,7 @@ namespace NKikimr {
                 State.CheckConsistency();
             }
 
-        private:            
+        private:
             template<typename T>
             std::invoke_result_t<T, TGroupGeometryInfo&, TGroupMapper&, TGroupId, TGroupMapper::TGroupDefinition&, TGroupMapper::TGroupConstraintsDefinition&,
                     const THashMap<TVDiskIdShort, TPDiskId>&, TGroupMapper::TForbiddenPDisks, i64> AllocateOrSanitizeGroup(

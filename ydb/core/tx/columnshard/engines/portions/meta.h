@@ -115,10 +115,6 @@ public:
         CompactionLevel = level;
     }
 
-    using EProduced = NPortion::EProduced;
-
-    EProduced Produced = EProduced::UNSPECIFIED;
-
     std::optional<TString> GetTierNameOptional() const;
 
     ui64 GetMetadataMemorySize() const {
@@ -133,11 +129,7 @@ public:
         return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize() + TBase::GetMetadataDataSize();
     }
 
-    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;
-
-    EProduced GetProduced() const {
-        return Produced;
-    }
+    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto(const NPortion::EProduced produced) const;
 
     TString DebugString() const;
 };

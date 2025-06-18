@@ -29,11 +29,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TGeneralCompactColumnEngineChanges
     if (shardingActual) {
         shardingActualVersion = shardingActual->GetSnapshotVersion();
     }
-    auto result = merger.Execute(stats, CheckPoints, resultFiltered, GranuleMeta->GetPathId(), shardingActualVersion);
-    for (auto&& p : result) {
-        p.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::SPLIT_COMPACTED);
-    }
-    return result;
+    return merger.Execute(stats, CheckPoints, resultFiltered, GranuleMeta->GetPathId(), shardingActualVersion);
 }
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
@@ -42,12 +38,12 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     THashMap<ui32, TSimplePortionsGroupInfo> portionGroups;
     for (auto&& i : SwitchedPortions) {
         portionGroups[i->GetMeta().GetCompactionLevel()].AddPortion(i);
-        if (i->GetMeta().GetProduced() == TPortionMeta::EProduced::INSERTED) {
+        if (i->GetProduced() == NPortion::EProduced::INSERTED) {
             insertedPortions.AddPortion(i);
-        } else if (i->GetMeta().GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED) {
+        } else if (i->GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
             compactedPortions.AddPortion(i);
         } else {
-            AFL_VERIFY(false);
+            AFL_VERIFY(false)("portion_prod", i->GetProduced())("portion_type", i->GetPortionType());
         }
     }
     NChanges::TGeneralCompactionCounters::OnRepackPortions(insertedPortions + compactedPortions);

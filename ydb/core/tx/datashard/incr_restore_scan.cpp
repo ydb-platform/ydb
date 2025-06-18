@@ -18,6 +18,7 @@ using namespace NTable;
 
 class TIncrementalRestoreScan
     : public IActorCallback
+    , public IActorExceptionHandler
     , public NTable::IScan
     , protected TChangeRecordBodySerializer
 {
@@ -186,17 +187,25 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
-        LOG_D("Finish " << static_cast<ui64>(abort));
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        LOG_D("Finish " << status);
 
-        if (abort != EAbort::None) {
-            // FIXME
+        if (status != EStatus::Done) {
+            // TODO: https://github.com/ydb-platform/ydb/issues/18797
         }
 
         Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void Describe(IOutputStream& o) const override {

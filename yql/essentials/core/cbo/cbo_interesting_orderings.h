@@ -3,6 +3,7 @@
 #include <yql/essentials/core/yql_cost_function.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/algorithm.h>
 
 #include <bitset>
 #include <stdint.h>
@@ -20,7 +21,8 @@ namespace NYql::NDq {
 
 struct TOrdering {
     enum EType : uint32_t {
-        EShuffle
+        EShuffle = 0,
+        ESorting = 1
     };
 
     bool operator==(const TOrdering& other) const;
@@ -52,11 +54,18 @@ struct TOrdering {
  */
 struct TFunctionalDependency {
     enum EType : uint32_t {
-        EEquivalence
+        /* default fd: a -> b */
+        EImplication = 0,
+        /* equivalence: a = b */
+        EEquivalence = 1
     };
 
     bool IsEquivalence() const;
-    bool MatchesAntecedentItems(const TOrdering& ordering) const;
+    bool IsImplication() const;
+    bool IsConstant() const;
+
+    // Returns index of the first matching antecedent item in the ordering, if it matches
+    TMaybe<std::size_t> MatchesAntecedentItems(const TOrdering& ordering) const;
     TString ToString() const;
 
     std::vector<std::size_t> AntecedentItems;
@@ -65,6 +74,8 @@ struct TFunctionalDependency {
     EType Type;
     bool AlwaysActive;
 };
+
+bool operator==(const TFunctionalDependency& lhs, const TFunctionalDependency& rhs);
 
 // Map of table aliases to their original table names
 struct TTableAliasMap : public TSimpleRefCount<TTableAliasMap> {
@@ -102,6 +113,7 @@ public:
     TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn);
     TString ToString() const;
     void Merge(const TTableAliasMap& other);
+    bool Empty() const { return TableByAlias.empty() && BaseColumnByRename.empty(); }
 
 private:
     TString GetBaseTableByAlias(const TString& alias);
@@ -123,13 +135,40 @@ public:
         TTableAliasMap* tableAliases = nullptr
     );
 
+public:
+    // Deprecated, use the others in this public section instead
     std::size_t AddFD(
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
         TFunctionalDependency::EType type,
+        bool alwaysActive = false,
+        TTableAliasMap* tableAliases = nullptr
+    );
+
+    std::size_t AddConstant(
+        const TJoinColumn& constantColumn,
         bool alwaysActive,
         TTableAliasMap* tableAliases = nullptr
     );
+
+    std::size_t AddImplication(
+        const TVector<TJoinColumn>& antecedentColumns,
+        const TJoinColumn& consequentColumn,
+        bool alwaysActive,
+        TTableAliasMap* tableAliases = nullptr
+    );
+
+    std::size_t AddEquivalence(
+        const TJoinColumn& lhs,
+        const TJoinColumn& rhs,
+        bool alwaysActive,
+        TTableAliasMap* tableAliases = nullptr
+    );
+
+private:
+    std::size_t AddFDImpl(TFunctionalDependency fd);
+
+public:
 
     i64 FindInterestingOrderingIdx(
         const std::vector<TJoinColumn>& interestingOrdering,
@@ -139,6 +178,12 @@ public:
 
     std::size_t AddInterestingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
+        TOrdering::EType type,
+        TTableAliasMap* tableAliases = nullptr
+    );
+
+    std::size_t AddInterestingOrdering(
+        const TVector<TString>& interestingOrdering, // column names
         TOrdering::EType type,
         TTableAliasMap* tableAliases = nullptr
     );
@@ -190,8 +235,8 @@ private:
     class TDFSM;
     enum _ : std::uint32_t {
         EMaxFDCount = 64,
-        EMaxNFSMStates = 512,
-        EMaxDFSMStates = 32768,
+        EMaxNFSMStates = 256,
+        EMaxDFSMStates = 512,
     };
 
 public:
@@ -211,17 +256,22 @@ public:
         {}
 
     public: // API
-        bool ContainsShuffle(std::size_t orderingIdx);
+        bool ContainsShuffle(i64 orderingIdx);
+        bool ContainsSorting(i64 orderingIdx);
         void InduceNewOrderings(const TFDSet& fds);
         void RemoveState();
         void SetOrdering(i64 orderingIdx);
         i64 GetShuffleHashFuncArgsCount();
         void SetShuffleHashFuncArgsCount(std::size_t value);
         TFDSet GetFDs();
-        bool HasState();
-        bool HasState() const;
         bool IsSubsetOf(const TLogicalOrderings& logicalOrderings);
         i64 GetState() const;
+
+    public:
+        bool HasState();
+        bool HasState() const;
+        bool IsInitialized();
+        bool IsInitialized() const;
 
     private:
         bool IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs);
@@ -240,10 +290,13 @@ public:
 public:
     TOrderingsStateMachine() = default;
 
-    TOrderingsStateMachine(TFDStorage fdStorage)
+    TOrderingsStateMachine(
+        TFDStorage fdStorage,
+        TOrdering::EType machineType = TOrdering::EShuffle
+    )
         : FDStorage(std::move(fdStorage))
-        , DFSM(MakeSimpleShared<TDFSM>())
     {
+        EraseIf(FDStorage.InterestingOrderings, [machineType](const TOrdering& ordering){ return ordering.Type != machineType; });
         Build(FDStorage.FDs, FDStorage.InterestingOrderings);
     }
 
@@ -251,7 +304,6 @@ public:
         const std::vector<TFunctionalDependency>& fds,
         const std::vector<TOrdering>& interestingOrderings
     ) {
-        DFSM = MakeSimpleShared<TDFSM>();
         Build(fds, interestingOrderings);
     }
 
@@ -281,7 +333,7 @@ private:
 
             TNode(TOrdering ordering, EType type, i64 interestingOrderingIdx = -1)
                 : Type(type)
-                , Ordering(ordering)
+                , Ordering(std::move(ordering))
                 , InterestingOrderingIdx(interestingOrderingIdx)
             {}
 
@@ -303,6 +355,8 @@ private:
                 EPSILON = -1 // eps edges with give us nodes without applying any FDs.
             };
 
+            bool operator==(const TEdge& other) const;
+
             TString ToString() const;
         };
 
@@ -317,7 +371,10 @@ private:
         std::size_t AddNode(const TOrdering& ordering, TNode::EType type, i64 interestingOrderingIdx = -1);
         void AddEdge(std::size_t srcNodeIdx, std::size_t dstNodeIdx, i64 fdIdx);
         void PrefixClosure();
-        void ApplyFDs(const std::vector<TFunctionalDependency>& fds);
+        void ApplyFDs(
+            const std::vector<TFunctionalDependency>& fds,
+            const std::vector<TOrdering>& interesting
+        );
 
     private:
         std::vector<TNode> Nodes;
@@ -333,6 +390,7 @@ private:
             std::vector<std::size_t> NFSMNodes;
             std::bitset<EMaxFDCount> OutgoingFDs;
             std::bitset<EMaxNFSMStates> NFSMNodesBitset;
+            std::bitset<EMaxNFSMStates> InterestingOrderings;
 
             TString ToString() const;
         };
@@ -359,12 +417,12 @@ private:
         std::vector<std::size_t> CollectNodesWithEpsOrFdEdge(
             const TNFSM& nfsm,
             const std::vector<std::size_t>& startNFSMNodes,
+            const std::vector<TFunctionalDependency>& fds,
             i64 fdIdx = TNFSM::TEdge::EPSILON
         );
         void Precompute(
             const TNFSM& nfsm,
-            const std::vector<TFunctionalDependency>& fds,
-            const std::vector<TOrdering>& interestingOrderings
+            const std::vector<TFunctionalDependency>& fds
         );
 
     private:

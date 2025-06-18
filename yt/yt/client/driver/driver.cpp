@@ -355,7 +355,7 @@ public:
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, true,  false);
         REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, true,  false);
 
-        REGISTER    (TGetCurrentUserCommand,               "get_current_user",                Null,       Structured, false, false, ApiVersion4);
+        REGISTER_ALL(TGetCurrentUserCommand,               "get_current_user",                Null,       Structured, false, false);
 
         REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, true,  false);
         REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, true,  false);

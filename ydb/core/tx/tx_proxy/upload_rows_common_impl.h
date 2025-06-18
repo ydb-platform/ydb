@@ -581,6 +581,30 @@ private:
             ctx);
     }
 
+    bool IsTimestampColumnsArePositive(const std::shared_ptr<arrow::RecordBatch>& batch, TString& error) {
+        if (!batch) {
+            return true;
+        }
+        for (int i = 0; i < batch->num_columns(); ++i) {
+            std::shared_ptr<arrow::Array> column = batch->column(i);
+            std::shared_ptr<arrow::DataType> type = column->type();
+            std::string columnName = batch->schema()->field(i)->name();
+            if (type->id() == arrow::Type::TIMESTAMP) {
+                auto timestampArray = std::static_pointer_cast<arrow::TimestampArray>(column);
+                for (int64_t j = 0; j < timestampArray->length(); ++j) {
+                    if (timestampArray->IsValid(j)) {
+                        int64_t timestampValue = timestampArray->Value(j);
+                        if (timestampValue < 0) {
+                            error = TStringBuilder{} << "Negative timestamp value found at column " << columnName << ", row " << j << ", value " << timestampValue;
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         Span && Span.Event("DataSerialization");
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
@@ -683,6 +707,11 @@ private:
 
                 break;
             }
+        }
+
+        TString error;
+        if (!IsTimestampColumnsArePositive(Batch, error)) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, error, ctx);
         }
 
         if (Batch) {

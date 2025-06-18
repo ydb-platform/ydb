@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
 
         auto ev = new TEvDataShard::TEvBuildIndexCreateRequest;
         NKikimrTxDataShard::TEvBuildIndexCreateRequest& rec = ev->Record;
-        rec.SetBuildIndexId(1);
+        rec.SetId(1);
 
         rec.SetTabletId(datashards[0]);
         rec.SetOwnerId(tableId.PathId.OwnerId);
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
         for (auto tid: datashards) {
             auto ev = new TEvDataShard::TEvBuildIndexCreateRequest;
             NKikimrTxDataShard::TEvBuildIndexCreateRequest& rec = ev->Record;
-            rec.SetBuildIndexId(1);
+            rec.SetId(1);
 
             rec.SetTabletId(tid);
             rec.SetOwnerId(tableId.PathId.OwnerId);

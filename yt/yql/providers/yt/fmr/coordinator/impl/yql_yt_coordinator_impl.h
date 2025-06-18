@@ -6,6 +6,8 @@
 #include <util/system/guard.h>
 #include <util/generic/queue.h>
 #include <yt/yql/providers/yt/fmr/coordinator/interface/yql_yt_coordinator.h>
+#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface/yql_yt_coordinator_service_interface.h>
+#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/impl/yql_yt_coordinator_service_impl.h>
 
 namespace NYql::NFmr {
 
@@ -19,6 +21,9 @@ struct TFmrCoordinatorSettings {
     TFmrCoordinatorSettings();
 };
 
-IFmrCoordinator::TPtr MakeFmrCoordinator(const TFmrCoordinatorSettings& settings = TFmrCoordinatorSettings());
+IFmrCoordinator::TPtr MakeFmrCoordinator(
+    const TFmrCoordinatorSettings& settings = TFmrCoordinatorSettings(),
+    IYtCoordinatorService::TPtr ytCoordinatorService = MakeYtCoordinatorService()
+);
 
 } // namespace NYql::NFmr

@@ -76,7 +76,6 @@ TParser<TInstant> GetDefaultParser<TInstant>();
 YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 
-#ifdef YQL_BETTER_CONF_SETTING_API
 template<typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::StaticPerCluster>& setting, const TString& cluster) {
     return setting.Get(cluster);
@@ -92,28 +91,6 @@ TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingT
     Y_UNUSED(cluster);
     return setting.Get();
 }
-#else
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true, false>& setting, const TString& cluster) {
-    return setting.Get(cluster);
-}
-
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true, true>& setting, const TString& cluster) {
-    return setting.Get(cluster);
-}
-
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false, true>& setting, const TString& cluster) {
-    return setting.Get(cluster);
-}
-
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false, false>& setting, const TString& cluster) {
-    Y_UNUSED(cluster);
-    return setting.Get();
-}
-#endif
 
 }
 
@@ -148,16 +125,13 @@ public:
         virtual void FreezeDefault() = 0;
         virtual void Restore(const TString& cluster) = 0;
         virtual bool IsRuntime() const = 0;
+        virtual bool IsPerCluster() const = 0;
 
     protected:
         TString Name_;
     };
 
-#ifdef YQL_BETTER_CONF_SETTING_API
     template <typename TType, EConfSettingType SettingType>
-#else
-    template <typename TType, bool RUNTIME, bool PERCLUSTER>
-#endif
     class TSettingHandlerImpl : public TSettingHandler {
     public:
         using TValueCallback = std::function<void(const TString&, TType)>;
@@ -165,11 +139,7 @@ public:
     private:
         friend class TSettingDispatcher;
 
-#ifdef YQL_BETTER_CONF_SETTING_API
         TSettingHandlerImpl(const TString& name, TConfSetting<TType, SettingType>& setting)
-#else
-        TSettingHandlerImpl(const TString& name, TConfSetting<TType, RUNTIME, PERCLUSTER>& setting)
-#endif
             : TSettingHandler(name)
             , Setting_(setting)
             , Parser_(::NYql::NPrivate::GetDefaultParser<TType>())
@@ -228,6 +198,10 @@ public:
     public:
         bool IsRuntime() const override {
             return Setting_.IsRuntime();
+        }
+
+        bool IsPerCluster() const override {
+            return Setting_.IsPerCluster();
         }
 
         TSettingHandlerImpl& Lower(TType lower) {
@@ -348,13 +322,8 @@ public:
         }
 
     private:
-#ifdef YQL_BETTER_CONF_SETTING_API
         TConfSetting<TType, SettingType>& Setting_;
         TMaybe<TConfSetting<TType, SettingType>> Defaul_;
-#else
-        TConfSetting<TType, RUNTIME, PERCLUSTER>& Setting_;
-        TMaybe<TConfSetting<TType, RUNTIME, PERCLUSTER>> Defaul_;
-#endif
         ::NYql::NPrivate::TParser<TType> Parser_;
         TValueCallback ValueSetter_;
         TVector<TValueCallback> Validators_;
@@ -380,15 +349,9 @@ public:
         ValidClusters.insert(cluster);
     }
 
-#ifdef YQL_BETTER_CONF_SETTING_API
     template <typename TType, EConfSettingType SettingType>
     TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
         TIntrusivePtr<TSettingHandlerImpl<TType, SettingType>> handler = new TSettingHandlerImpl<TType, SettingType>(name, setting);
-#else
-    template <typename TType, bool RUNTIME, bool PERCLUSTER>
-    TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>& AddSetting(const TString& name, TConfSetting<TType, RUNTIME, PERCLUSTER>& setting) {
-        TIntrusivePtr<TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>> handler = new TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>(name, setting);
-#endif
         if (!Handlers.insert({NormalizeName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }

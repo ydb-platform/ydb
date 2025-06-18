@@ -67,6 +67,7 @@ struct Schema : NIceDb::Schema {
         struct Down : Column<13, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupDecommitStatus::E; };
+        struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
@@ -82,8 +83,8 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, VirtualGroupName, VirtualGroupState, HiveId, Database, BlobDepotConfig,
-              BlobDepotId, ErrorReason, NeedAlter, Metrics>;
+              SeenOperational, DecommitStatus, GroupSizeInUnits, VirtualGroupName, VirtualGroupState, HiveId, Database,
+              BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics>;
     };
 
     struct State : Table<1> {
@@ -308,13 +309,15 @@ struct Schema : NIceDb::Schema {
         struct PathItemId : Column<24, NScheme::NTypeIds::Uint64> {};
         // flag used to minimize correlation between groups and drives
         struct RandomizeGroupMapping : Column<25, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        // this value is only accounted when new groups are added to the pool
+        struct DefaultGroupSizeInUnits : Column<26, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<BoxId, StoragePoolId>;
 
         using TColumns = TableColumns<BoxId, StoragePoolId, Name, ErasureSpecies, RealmLevelBegin, RealmLevelEnd,
           DomainLevelBegin, DomainLevelEnd, NumFailRealms, NumFailDomainsPerFailRealm, NumVDisksPerFailDomain,
           VDiskKind, SpaceBytes, WriteIOPS, WriteBytesPerSecond, ReadIOPS, ReadBytesPerSecond, InMemCacheBytes,
-          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping>;
+          Kind, NumGroups, Generation, EncryptionMode, SchemeshardId, PathItemId, RandomizeGroupMapping, DefaultGroupSizeInUnits>;
     };
 
     struct BoxStoragePoolUser : Table<121> {

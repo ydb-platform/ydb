@@ -231,7 +231,7 @@ abseil_cpp = CMakeNinjaNixProject(
         "absl_strings": [
             # FIXME thegeorg@:
             #   put crc libraries together with strings libraries
-            #   to resolve dependency loop around absl_crc_cor
+            #   to resolve dependency loop around absl_crc_cord_state
             "absl_crc32c",
             "absl_crc_cpu_detect",
             "absl_crc_internal",

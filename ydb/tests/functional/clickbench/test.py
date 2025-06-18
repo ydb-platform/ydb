@@ -127,8 +127,7 @@ def save_canonical_data(data, fname):
 
 
 @pytest.mark.parametrize("store", ["row", "column"])
-@pytest.mark.parametrize("executer", ["scan", "generic"])
-def test_run_benchmark(store, executer):
+def test_run_benchmark(store):
     path = "clickbench/benchmark/{}/hits".format(store)
     ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
     assert_that(ret.exit_code, is_(0))
@@ -143,7 +142,7 @@ def test_run_benchmark(store, executer):
 
     # just validating that benchmark can be executed successfully on this data.
     out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.{}.results'.format(store))
-    ret = run_cli(["workload", "clickbench", "--path", path, "run", "--output", out_fpath, "--executer", executer])
+    ret = run_cli(["workload", "clickbench", "--path", path, "run", "--output", out_fpath])
     assert_that(ret.exit_code, is_(0))
 
 

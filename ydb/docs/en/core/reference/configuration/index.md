@@ -123,6 +123,12 @@ hosts:
 
 When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](#host-configs-k8s) must be specified.
 
+## log_config: Logging configuration {#log-config}
+
+The `log_config` section controls how {{ ydb-short-name }} processes and manages logs. It allows you to customize logging levels, formats, and destinations for different components.
+
+For detailed information about log configuration options, see [{#T}](log_config.md).
+
 ## domains_config: Cluster domain {#domains-config}
 
 This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage) and [State Storage](#domains-state) configurations.

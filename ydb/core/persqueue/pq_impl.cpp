@@ -1802,8 +1802,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& 
 {
     PQ_LOG_T("Handle TEvPersQueue::TEvStatus");
 
-    ReadBalancerActorId = ev->Sender;
-
     if (!ConfigInited || !AllOriginalPartitionsInited()) {
         PQ_LOG_D("Postpone the request." <<
                  " ConfigInited " << static_cast<int>(ConfigInited) <<

@@ -1258,6 +1258,12 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
     }
 
+    if (runConfig.AppConfig.HasBridgeConfig()) {
+        AppData->BridgeConfig->CopyFrom(runConfig.AppConfig.GetBridgeConfig());
+    } else {
+        AppData->BridgeConfig = nullptr;
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

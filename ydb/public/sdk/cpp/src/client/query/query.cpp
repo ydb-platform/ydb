@@ -53,7 +53,7 @@ TScriptExecutionOperation::TScriptExecutionOperation(TStatus&& status, Ydb::Oper
         for (const auto& column : resultSetMeta.columns()) {
             columns.emplace_back(column.name(), column.type());
         }
-        Metadata_.ResultSetsMeta.emplace_back(std::move(columns)); 
+        Metadata_.ResultSetsMeta.emplace_back(std::move(columns), resultSetMeta.number_rows(), resultSetMeta.finished()); 
     }
 
     if (metadata.has_script_content()) {

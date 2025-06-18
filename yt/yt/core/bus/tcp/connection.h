@@ -2,7 +2,6 @@
 
 #include "packet.h"
 #include "dispatcher_impl.h"
-#include "ssl_helpers.h"
 
 #include <yt/yt/core/bus/private.h>
 #include <yt/yt/core/bus/bus.h>
@@ -10,6 +9,8 @@
 #include <yt/yt_proto/yt/core/bus/proto/bus.pb.h>
 
 #include <yt/yt/core/actions/future.h>
+
+#include <yt/yt/core/crypto/tls.h>
 
 #include <yt/yt/core/logging/log.h>
 
@@ -30,8 +31,6 @@
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <util/network/init.h>
-
-#include <openssl/ssl.h>
 
 #ifdef _win_
 #include <winsock2.h>
@@ -274,7 +273,7 @@ private:
     bool SslAckEnqueued_ = false;
     bool SslAckReceived_ = false;
     bool SslAckSent_ = false;
-    std::unique_ptr<SSL, TDeleter> Ssl_;
+    NCrypto::TSslPtr Ssl_;
     std::atomic<ESslState> SslState_ = ESslState::None;
 
     const EEncryptionMode EncryptionMode_;

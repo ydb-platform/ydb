@@ -69,7 +69,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             auto response = Self->LoginProvider.CreateGroup({
                 .Group = defaultGroup.GetName(),
                 .Options = {
-                    .CheckName = false
+                    .StrongCheckName = false
                 }
             });
             if (response.Error) {

@@ -103,16 +103,25 @@ public:
             outVGetResult.MakeError(Status, TString(), request);
             return;
         }
-        //ui64 messageCookie = request->Record.GetCookie();
 
         outVGetResult.Record.SetStatus(NKikimrProto::OK);
-        // Ignore RangeQuery (pretend there are no results)
+
+        Y_ABORT_UNLESS(request.HasVDiskID());
+        TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
+        VDiskIDFromVDiskID(vDiskId, outVGetResult.Record.MutableVDiskID());
+        if (request.HasCookie()) {
+            outVGetResult.Record.SetCookie(request.GetCookie());
+        }
+
+        if (request.HasRangeQuery()) {
+            ProcessRangeIndexQuery(vGet, outVGetResult);
+            return;
+        }
 
         // TODO: Check for overlapping / out of order queries
         size_t size = request.ExtremeQueriesSize();
         for (unsigned i = 0; i < size; i++) {
             const NKikimrBlobStorage::TExtremeQuery &query = request.GetExtremeQueries(i);
-            Y_ABORT_UNLESS(request.HasVDiskID());
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
             ui64 partId = id.PartId();
             ui64 partBegin = partId ? partId : 1;
@@ -152,11 +161,48 @@ public:
                 outVGetResult.AddResult(NKikimrProto::NODATA, id, cookie);
             }
         }
-        Y_ABORT_UNLESS(request.HasVDiskID());
-        TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
-        VDiskIDFromVDiskID(vDiskId, outVGetResult.Record.MutableVDiskID());
-        if (request.HasCookie()) {
-            outVGetResult.Record.SetCookie(request.GetCookie());
+    }
+
+    void ProcessRangeIndexQuery(const TEvBlobStorage::TEvVGet& vGet, TEvBlobStorage::TEvVGetResult& outVGetResult) {
+        const auto& record = vGet.Record;
+        auto vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+        const NKikimrBlobStorage::TRangeQuery& query = record.GetRangeQuery();
+
+        auto first = LogoBlobIDFromLogoBlobID(query.GetFrom());
+        auto last = LogoBlobIDFromLogoBlobID(query.GetTo());
+
+        ui64 *cookie = nullptr;
+        ui64 cookieValue = 0;
+        if (query.HasCookie()) {
+            cookieValue = query.GetCookie();
+            cookie = &cookieValue;
+        }
+
+        TMap<TLogoBlobID, TIngress> resultBlobs;
+
+        if (first <= last) {
+            auto from = Blobs.lower_bound(first);
+            auto to = Blobs.upper_bound(last);
+            for (auto it = from; it != to; ++it) {
+                auto& id = it->first;
+                auto ingress = TIngress::CreateIngressWithLocal(&Info->GetTopology(), vDiskId, id);
+                resultBlobs[id.FullID()].Merge(*ingress);
+            }
+        } else {
+            auto from = Blobs.upper_bound(first);
+            auto to = Blobs.lower_bound(last);
+            for (auto it = std::reverse_iterator(from); it != std::reverse_iterator(to); ++it) {
+                auto& id = it->first;
+                auto ingress = TIngress::CreateIngressWithLocal(&Info->GetTopology(), vDiskId, id);
+                resultBlobs[id.FullID()].Merge(*ingress);
+            }
+        }
+
+        for (auto& [id, ingress] : resultBlobs) {
+            ui64 ingr = ingress.Raw();
+            ui64 *pingr = (record.GetShowInternals() ? &ingr : nullptr);
+            const NMatrix::TVectorType local = ingress.LocalParts(Info->GetTopology().GType);
+            outVGetResult.AddResult(NKikimrProto::OK, id, cookie, pingr, &local, true, false);
         }
     }
 };
@@ -476,7 +522,9 @@ public:
         }
     }
 
-    void Put(const TLogoBlobID id, const TString &data, ui32 handoffsToUse = 0) {
+    void Put(const TLogoBlobID id, const TString &data, ui32 handoffsToUse = 0,
+        const THashSet<ui32>* selectedParts = nullptr)
+    {
         const ui32 hash = id.Hash();
         const ui32 totalvd = Info->Type.BlobSubgroupSize();
         const ui32 totalParts = Info->Type.TotalPartCount();
@@ -494,6 +542,9 @@ public:
         partSet.Parts.resize(totalParts);
         Info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), encryptedData, partSet);
         for (ui32 i = 0; i < totalParts; ++i) {
+            if (selectedParts && !selectedParts->contains(i + 1)) {
+                continue;
+            }
             TLogoBlobID pId(id, i + 1);
             TRope pData = partSet.Parts[i].OwnedString;
             if (i < handoffsToUse) {

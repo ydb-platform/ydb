@@ -33,6 +33,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     TVector<TString> KeyColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ETableKind TableKind = ETableKind::Unknown;
+    TMaybe<NKikimrSysView::ESysViewType> SysViewType;
     THashMap<TString, std::pair<TString, NYql::TKikimrPathId>> Sequences;
     THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
     bool IsBuildInProgress = false;
@@ -118,6 +119,10 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
                 return;
             default:
                 YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
+        }
+
+        if (phyTable.HasSysViewType()) {
+            SysViewType = static_cast<NKikimrSysView::ESysViewType>(phyTable.GetSysViewType());
         }
 
         for (const auto& [_, phyColumn] : phyTable.GetColumns()) {

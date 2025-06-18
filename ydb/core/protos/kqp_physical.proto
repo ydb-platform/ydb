@@ -416,6 +416,7 @@ message TKqpPhyStage {
     uint32 TaskCount = 14;
     double StageCost = 15;
     bool IsShuffleEliminated = 16;
+    repeated uint32 TasksNodes = 17;
 }
 
 message TKqpPhyResult {

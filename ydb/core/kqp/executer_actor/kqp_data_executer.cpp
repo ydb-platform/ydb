@@ -1942,6 +1942,9 @@ private:
                 SecretNames.push_back(secretName);
             }
             for (const auto& stage : transaction.Body->GetStages()) {
+                if (!stage.GetTasksNodes().empty()) {
+                    ResourceSnapshotRequired = true;
+                }
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
@@ -2059,7 +2062,7 @@ private:
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.ShardOperations.empty() || stage.SinksSize() > 0) {
-                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()));
+                    BuildComputeTasks(stageInfo, std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()), ResourcesSnapshot);
                 } else {
                     BuildDatashardTasks(stageInfo);
                 }

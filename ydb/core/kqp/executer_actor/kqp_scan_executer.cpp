@@ -191,7 +191,7 @@ private:
                             YQL_ENSURE(false, "unknown source type");
                     }
                 } else if (stageInfo.Meta.ShardOperations.empty()) {
-                    BuildComputeTasks(stageInfo, ShardsOnNode.size());
+                    BuildComputeTasks(stageInfo, ShardsOnNode.size(), {});
                 } else if (stageInfo.Meta.IsSysView()) {
                     BuildSysViewScanTasks(stageInfo);
                 } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {

@@ -1023,6 +1023,27 @@ protected:
         }
     }
 
+    std::function<ui32(ui32 taskIdx)> GetStageNodesHint(const NKqpProto::TKqpPhyStage& stage, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+        const auto& nodesHint = stage.GetTasksNodes();
+        if (nodesHint.empty()) {
+            return nullptr;
+        }
+
+        std::unordered_set<ui32> availableNodes;
+        availableNodes.reserve(resourceSnapshot.size());
+        for (const auto& nodeResource : resourceSnapshot) {
+            availableNodes.emplace(nodeResource.GetNodeId());
+        }
+
+        for (const auto nodeId : nodesHint) {
+            YQL_ENSURE(availableNodes.contains(nodeId), "Invalid node id " << nodeId << " in stage override, available nodes: " << JoinSeq(", ", availableNodes));
+        }
+
+        return [nodesHint](ui32 taskIdx) {
+            return nodesHint[taskIdx % nodesHint.size()];
+        };
+    }
+
     void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -1056,12 +1077,18 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
-        ui64 selfNodeIdx = 0;
-        for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
-            if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
-                selfNodeIdx = i;
-                break;
+        auto nodesPlaner = GetStageNodesHint(stage, resourceSnapshot);
+        if (!nodesPlaner && !resourceSnapshot.empty()) {
+            ui64 selfNodeIdx = 0;
+            for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
+                if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
+                    selfNodeIdx = i;
+                    break;
+                }
             }
+            nodesPlaner = [&resourceSnapshot, selfNodeIdx](ui32 taskIdx) {
+                return resourceSnapshot[(selfNodeIdx + taskIdx) % resourceSnapshot.size()].GetNodeId();
+            };
         }
 
         TVector<ui64> tasksIds;
@@ -1082,10 +1109,10 @@ protected:
             }
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
-            if (resourceSnapshot.empty()) {
+            if (!nodesPlaner) {
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
             } else {
-                task.Meta.NodeId = resourceSnapshot[(selfNodeIdx + i) % resourceSnapshot.size()].GetNodeId();
+                task.Meta.NodeId = nodesPlaner(i);
                 task.Meta.Type = TTaskMeta::TTaskType::Scan;
             }
 
@@ -1413,7 +1440,7 @@ protected:
         }
     }
 
-    void BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
+    void BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         ui32 partitionsCount = 1;
@@ -1478,9 +1505,15 @@ protected:
             }
         }
 
+        auto nodesPlaner = GetStageNodesHint(stage, resourceSnapshot);
         for (ui32 i = 0; i < partitionsCount; ++i) {
             auto& task = TasksGraph.AddTask(stageInfo);
-            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+            if (!nodesPlaner) {
+                task.Meta.Type = TTaskMeta::TTaskType::Compute;
+            } else {
+                task.Meta.NodeId = nodesPlaner(i);
+                task.Meta.Type = TTaskMeta::TTaskType::Scan;
+            }
             task.Meta.ExecuterId = SelfId();
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
             BuildSinks(stage, stageInfo, task);

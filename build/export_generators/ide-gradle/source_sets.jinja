@@ -14,9 +14,8 @@
 #}
         {{ module }}.srcDir({{ PatchRoots(dir) }})
 {%-     endif -%}
-{%- endmacro -%}
+{%- endmacro %}
 
-{#- empty string #}
 sourceSets {
 {%- set target_jar_source_set = target.jar_source_set|unique -%}
 {%- set target_jar_resource_set = target.jar_resource_set|unique -%}

@@ -1,20 +1,24 @@
 {%- macro JvmArgs(jvm_args) -%}
-{%-     if jvm_args|length %}
+{%-     if jvm_args|length -%}
+{%-         set jnis_args = jvm_args|select('startsWith', 'jnis=') -%}
+{%-         set other_jvm_args = jvm_args|reject('startsWith', 'jnis=') -%}
+{%-         if jnis_args|length %}
+    val library_path = listOf(
+{%-             for jnis_arg in jnis_args -%}
+{%-                 set jnis = split(jnis_arg|replace('jnis=', ''), ',') -%}
+{%-                 for jni in jnis -%}
+{%-                     set path_and_name = rsplit(jni, "/", 2) %}
+        "$arcadia_root/{{ path_and_name[0] }}",
+{%-                 endfor -%}
+{%-             endfor %}
+    ).joinToString(":")
+{%          endif %}
     jvmArgs = mutableListOf(
-{%-         set jnis_args = jvm_args|select('startsWith', 'jnis=') %}
 {%-         if jnis_args|length -%}
 {#-             Increase heap, else happened java.lang.OutOfMemoryError #}
         "-Xmx2048m",
-{%-             for jnis_arg in jnis_args -%}
-{%-                 set jnis = split(jnis_arg|replace('jnis=', ''), ',') -%}
-{#-                 Put paths to JNI libraries direct to JVM args -#}
-{%-                 for jni in jnis -%}
-{%-                     set path_and_name = rsplit(jni, "/", 2) %}
-        "-Djava.library.path=$arcadia_root/{{ path_and_name[0] }}",
-{%-                 endfor -%}
-{%-             endfor -%}
+        "-Djava.library.path=$library_path",
 {%-         endif -%}
-{%-         set other_jvm_args = jvm_args|reject('startsWith', 'jnis=') %}
 {%-         if other_jvm_args|length -%}
 {%-             for jvm_arg in other_jvm_args %}
         "{{ jvm_arg }}",

@@ -25,9 +25,10 @@ tasks.{{ task }}.configure {
 {%-         if compiler_jvm_flags|length %}
     options.isFork = true
     options.forkOptions.jvmArgs = listOf(
-{%-             for compiler_jvm_flag in compiler_jvm_flags -%}
-"{{ compiler_jvm_flag|replace("-J", "") }}"{% if not loop.last %}, {% endif -%}
-{%-             endfor -%})
+{%-             for compiler_jvm_flag in compiler_jvm_flags %}
+        "{{ compiler_jvm_flag|replace("-J", "") }}",
+{%-             endfor %}
+    )
 {%          endif -%}
 
 {%-         if has_errorprone -%}

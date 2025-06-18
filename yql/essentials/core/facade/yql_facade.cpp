@@ -1989,6 +1989,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
     typeAnnotationContext->LangVer = LangVer_;
+    typeAnnotationContext->UseTypeDiffForConvertToError = true;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = Credentials_;
     typeAnnotationContext->Modules = Modules_;

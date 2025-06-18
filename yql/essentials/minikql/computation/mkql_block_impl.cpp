@@ -7,6 +7,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
+#include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
@@ -33,6 +34,7 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+// TODO(YQL): This must be rewrited via traits dispatcher.
 template<typename T>
 arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& pool) {
     std::shared_ptr<arrow::DataType> arrowType;
@@ -40,15 +42,13 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
     if (!value) {
         return arrow::MakeNullScalar(arrowType);
     }
+    auto needWrapWithExternalOptional = NeedWrapWithExternalOptional(type);
 
-    bool isOptional = false;
     if (type->IsOptional()) {
         type = AS_TYPE(TOptionalType, type)->GetItemType();
-        isOptional = true;
     }
 
-    if (type->IsOptional() || (isOptional && type->IsPg())) {
-        // nested optionals
+    if (needWrapWithExternalOptional) {
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
         arrowValue.emplace_back(DoConvertScalar(type, value.GetOptionalValue(), pool).scalar());
         return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));

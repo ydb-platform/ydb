@@ -185,7 +185,7 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
         }                                                                \
     }
 
-#define STRING_ASCII_CMP_IGNORE_CASE_UDF(udfName, function)                    \
+#define STRING_ASCII_CMP_IGNORE_CASE_UDF(udfName, function, minVersion)        \
     TUnboxedValuePod udfName##Impl(const TUnboxedValuePod* args) {             \
         if (args[0]) {                                                         \
             const TString haystack(args[0].AsStringRef());                     \
@@ -215,7 +215,7 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
                                                                                \
     BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(T##udfName,                          \
         bool(TOptional<char*>, char*),                                         \
-        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))                 \
+        builder.SetMinLangVer(minVersion))                                     \
     {                                                                          \
         Y_UNUSED(valueBuilder);                                                \
         return udfName##Impl(args);                                            \
@@ -439,10 +439,10 @@ SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
     XX(HasPrefixIgnoreCase, AsciiHasPrefixIgnoreCase)  \
     XX(HasSuffixIgnoreCase, AsciiHasSuffixIgnoreCase)
 
-#define STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(XX)            \
-    XX(AsciiStartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
-    XX(AsciiEndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)   \
-    XX(AsciiEqualsIgnoreCase, AsciiEqualsIgnoreCase)
+#define STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(XX)                                            \
+    XX(AsciiStartsWithIgnoreCase, AsciiHasPrefixIgnoreCase, NYql::MakeLangVersion(2025, 1)) \
+    XX(AsciiEndsWithIgnoreCase, AsciiHasSuffixIgnoreCase, NYql::MakeLangVersion(2025, 1))   \
+    XX(AsciiEqualsIgnoreCase, AsciiEqualsIgnoreCase, NYql::MakeLangVersion(2025, 2))
 
 // NOTE: The functions below are marked as deprecated, so block implementation
 // is not required for them. Hence, STROKA_UDF provides only the scalar one at

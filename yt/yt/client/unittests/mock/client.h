@@ -913,6 +913,15 @@ public:
         const TShuffleWriterOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (
+        const TChaosLeaseStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options),
+        (override));
+
 private:
     NTabletClient::ITableMountCachePtr TableMountCache_;
     NTransactionClient::ITimestampProviderPtr TimestampProvider_;

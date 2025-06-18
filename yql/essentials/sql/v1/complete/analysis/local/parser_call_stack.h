@@ -21,6 +21,8 @@ namespace NSQLComplete {
 
     bool IsLikelyClusterStack(const TParserCallStack& stack);
 
+    bool IsLikelyColumnStack(const TParserCallStack& stack);
+
     bool IsLikelyBindingStack(const TParserCallStack& stack);
 
     TMaybe<EStatementKind> StatementKindOf(const TParserCallStack& stack);

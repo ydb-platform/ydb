@@ -9,6 +9,10 @@ namespace NSQLComplete {
         TStringBuf NameHint;
     };
 
+    struct TTableDetails {
+        TVector<TString> Columns;
+    };
+
     class ISimpleSchema: public TThrRefBase {
     public:
         using TPtr = TIntrusivePtr<ISimpleSchema>;
@@ -22,6 +26,9 @@ namespace NSQLComplete {
 
         virtual NThreading::TFuture<TVector<TFolderEntry>>
         List(TString cluster, TString folder) const;
+
+        virtual NThreading::TFuture<TMaybe<TTableDetails>>
+        DescribeTable(const TString& cluster, const TString& path) const;
     };
 
     ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple);

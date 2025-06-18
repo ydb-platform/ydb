@@ -1,6 +1,7 @@
 #include "client_impl.h"
 
 #include "config.h"
+#include "chaos_lease.h"
 #include "helpers.h"
 #include "private.h"
 #include "row_batch_reader.h"
@@ -26,6 +27,8 @@
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
+
+#include <yt/yt/client/object_client/helpers.h>
 
 #include <yt/yt/client/api/distributed_table_session.h>
 
@@ -235,6 +238,64 @@ ITransactionPtr TClient::AttachTransaction(
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
         "Transaction attached");
+}
+
+TFuture<IPrerequisitePtr> TClient::AttachChaosLease(
+    TChaosLeaseId chaosLeaseId,
+    const TChaosLeaseAttachOptions& options)
+{
+    auto connection = GetRpcProxyConnection();
+    auto client = GetRpcProxyClient();
+    auto channel = GetRetryingChannel();
+
+    auto chaosLeasePath = Format("#%v/@", chaosLeaseId);
+
+    return client->GetNode(chaosLeasePath, {}).Apply(BIND([=](const TYsonString& value) {
+        auto attributes = ConvertToAttributes(value);
+        auto timeoutValue = attributes->Get<i64>("timeout");
+        auto timeout = TDuration::MilliSeconds(timeoutValue);
+
+        auto chaosLease = CreateChaosLease(
+            std::move(client),
+            std::move(channel),
+            chaosLeaseId,
+            timeout,
+            options.PingAncestors,
+            options.PingPeriod);
+
+        if (options.Ping) {
+            return chaosLease->Ping({}).Apply(BIND([=] {
+                return chaosLease;
+            }));
+        }
+
+        return MakeFuture<IPrerequisitePtr>(chaosLease);
+    }));
+}
+
+TFuture<IPrerequisitePtr> TClient::StartChaosLease(const TChaosLeaseStartOptions& options)
+{
+    auto connection = GetRpcProxyConnection();
+    auto client = GetRpcProxyClient();
+    auto channel = GetRetryingChannel();
+
+    auto createOptions = TCreateNodeOptions{};
+    auto timeout = options.LeaseTimeout.value_or(connection->GetConfig()->DefaultChaosLeaseTimeout);
+    createOptions.Attributes = ConvertToAttributes(BuildYsonStringFluently()
+        .BeginMap()
+            .Item("timeout").Value(timeout)
+            .OptionalItem("parent_id", options.ParentId)
+        .EndMap());
+
+    return client->CreateObject(EObjectType::ChaosLease, {}).Apply(BIND([=](const TChaosLeaseId& chaosLeaseId) {
+        return CreateChaosLease(
+            std::move(client),
+            std::move(channel),
+            chaosLeaseId,
+            timeout,
+            options.PingAncestors,
+            options.PingPeriod);
+    }));
 }
 
 IPrerequisitePtr TClient::AttachPrerequisite(

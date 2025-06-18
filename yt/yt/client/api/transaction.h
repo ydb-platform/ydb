@@ -121,6 +121,8 @@ struct ITransaction
 
     virtual TFuture<TTransactionCommitResult> Commit(const TTransactionCommitOptions& options = {}) = 0;
 
+    virtual void Detach() = 0;
+
     virtual TFuture<void> Abort(const TPrerequisiteAbortOptions& options = {}) override;
     virtual TFuture<void> Abort(const TTransactionAbortOptions& options) = 0;
 

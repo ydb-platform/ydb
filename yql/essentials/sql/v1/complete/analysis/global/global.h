@@ -1,7 +1,8 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/complete/core/input.h>
 #include <yql/essentials/sql/v1/complete/core/environment.h>
+#include <yql/essentials/sql/v1/complete/core/input.h>
+#include <yql/essentials/sql/v1/complete/core/name.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
@@ -15,12 +16,20 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
+    struct TColumnContext {
+        TVector<TTableId> Tables;
+
+        friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
+    };
+
     struct TGlobalContext {
         TMaybe<TUseContext> Use;
         TVector<TString> Names;
         TMaybe<TString> EnclosingFunction;
+        TMaybe<TColumnContext> Column;
     };
 
+    // TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
     class IGlobalAnalysis {
     public:
         using TPtr = THolder<IGlobalAnalysis>;

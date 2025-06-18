@@ -693,6 +693,18 @@ private:
 
     EFetchResult FetchAndPackData(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
         const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft->FetchValues(ctx, LeftPacker->TuplePtrs.data());
+
+        // Early finish if the very first left fetch returns Finish and the join result
+        // is guaranteed to be empty without any data on the left side.
+        if (resultLeft == EFetchResult::Finish) {
+            *HaveMoreLeftRows = false;
+            if (LeftPacker->TuplesPacked == 0 && ShouldSkipRightIfLeftEmpty(JoinKind)) {
+                // There is no need to read the right side at all – the join result is empty.
+                *HaveMoreRightRows = false;
+                return EFetchResult::Finish;
+            }
+        }
+
         NKikimr::NMiniKQL::EFetchResult resultRight;
 
         if (resultLeft == EFetchResult::One) {
@@ -766,6 +778,15 @@ private:
                     CounterOutputRows_.Inc();
                     return EFetchResult::One;
                 }
+            }
+        }
+
+        // Early finish if the very first right fetch returns Finish and the join result
+        // is guaranteed to be empty without any data on the right side.
+        if (resultRight == EFetchResult::Finish) {
+            *HaveMoreRightRows = false;
+            if (RightPacker->TuplesPacked == 0 && ShouldSkipLeftIfRightEmpty(JoinKind)) {
+                return EFetchResult::Finish;
             }
         }
 
@@ -1212,96 +1233,6 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const bool IsSelfJoin_;
         const bool IsSpillingAllowed;
 };
-
-}
-
-IComputationNode* WrapGraceJoinCommon(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool isSelfJoin, bool isSpillingAllowed) {
-    const auto leftFlowNodeIndex = 0;
-    const auto rightFlowNodeIndex = 1;
-    const auto joinKindNodeIndex = isSelfJoin ? 1 : 2;
-    const auto leftKeyColumnsNodeIndex = joinKindNodeIndex + 1;
-    const auto rightKeyColumnsNodeIndex = leftKeyColumnsNodeIndex + 1;
-    const auto leftRenamesNodeIndex = rightKeyColumnsNodeIndex + 1;
-    const auto rightRenamesNodeIndex = leftRenamesNodeIndex + 1;
-    const auto anyJoinSettingsIndex = rightRenamesNodeIndex + 1;
-
-    const auto leftFlowNode = callable.GetInput(leftFlowNodeIndex);
-    const auto joinKindNode = callable.GetInput(joinKindNodeIndex);
-    const auto leftKeyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(leftKeyColumnsNodeIndex));
-    const auto rightKeyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(rightKeyColumnsNodeIndex));
-    const auto leftRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(leftRenamesNodeIndex));
-    const auto rightRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(rightRenamesNodeIndex));
-    const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(anyJoinSettingsIndex))->AsValue().Get<ui32>());
-
-    const auto leftFlowComponents = GetWideComponents(AS_TYPE(TFlowType, leftFlowNode));
-    const ui32 rawJoinKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
-
-
-    const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 0));
-    IComputationWideFlowNode* flowRight = nullptr;
-    if (!isSelfJoin) {
-        flowRight = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 1));
-    }
-
-    const auto outputFlowComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
-    std::vector<EValueRepresentation> outputRepresentations;
-    outputRepresentations.reserve(outputFlowComponents.size());
-    for (ui32 i = 0U; i < outputFlowComponents.size(); ++i) {
-        outputRepresentations.emplace_back(GetValueRepresentation(outputFlowComponents[i]));
-    }
-
-    std::vector<ui32> leftKeyColumns, leftRenames, rightKeyColumns, rightRenames;
-    std::vector<TType*> leftColumnsTypes(leftFlowComponents.begin(), leftFlowComponents.end());
-    std::vector<TType*> rightColumnsTypes;
-    if (isSelfJoin) {
-        rightColumnsTypes = {leftColumnsTypes};
-    } else {
-        const auto rightFlowNode = callable.GetInput(rightFlowNodeIndex);
-        const auto rightFlowComponents = GetWideComponents(AS_TYPE(TFlowType, rightFlowNode));
-        rightColumnsTypes = {rightFlowComponents.begin(), rightFlowComponents.end()};
-    }
-
-    leftKeyColumns.reserve(leftKeyColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < leftKeyColumnsNode->GetValuesCount(); ++i) {
-        leftKeyColumns.emplace_back(AS_VALUE(TDataLiteral, leftKeyColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    leftRenames.reserve(leftRenamesNode->GetValuesCount());
-    for (ui32 i = 0; i < leftRenamesNode->GetValuesCount(); ++i) {
-        leftRenames.emplace_back(AS_VALUE(TDataLiteral, leftRenamesNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    rightKeyColumns.reserve(rightKeyColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < rightKeyColumnsNode->GetValuesCount(); ++i) {
-        rightKeyColumns.emplace_back(AS_VALUE(TDataLiteral, rightKeyColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    if (isSelfJoin) {
-        MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Number of key columns for self join should be equal");
-    }
-
-    rightRenames.reserve(rightRenamesNode->GetValuesCount());
-    for (ui32 i = 0; i < rightRenamesNode->GetValuesCount(); ++i) {
-        rightRenames.emplace_back(AS_VALUE(TDataLiteral, rightRenamesNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    return new TGraceJoinWrapper(
-        ctx.Mutables, flowLeft, flowRight, GetJoinKind(rawJoinKind), anyJoinSettings,
-        std::move(leftKeyColumns), std::move(rightKeyColumns), std::move(leftRenames), std::move(rightRenames),
-        std::move(leftColumnsTypes), std::move(rightColumnsTypes), std::move(outputRepresentations), isSelfJoin, isSpillingAllowed);
-}
-
-IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
-
-    return WrapGraceJoinCommon(callable, ctx, false, HasSpillingFlag(callable));
-}
-
-IComputationNode* WrapGraceSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
-
-    return WrapGraceJoinCommon(callable, ctx, true, HasSpillingFlag(callable));
-}
 
 }
 

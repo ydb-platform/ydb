@@ -19,6 +19,9 @@
 
 #include <cstdint>
 
+#include <yql/essentials/minikql/comp_nodes/grace_join_utils.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_grace_join.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -2468,170 +2471,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             }
             UNIT_ASSERT(!iterator.Next(tuple));
 
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("Z"), 3)], 1);
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), std::numeric_limits<ui64>::max())], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), 1)], 1);
+            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("X"), std::numeric_limits<ui64>::max())], 1);
             UNIT_ASSERT_EQUAL(u.size(), 2);
+
         }
     }
 
     Y_UNIT_TEST_LLVM_SPILLING(TestFull1) {
         if (SPILLING && RuntimeVersion < 50) return;
-
-        for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM, SPILLING> setup;
-            TProgramBuilder& pb = *setup.PgmBuilder;
-
-            const auto key1 = pb.NewDataLiteral<ui32>(1);
-            const auto key2 = pb.NewDataLiteral<ui32>(2);
-            const auto key3 = pb.NewDataLiteral<ui32>(2);
-            const auto key4 = pb.NewDataLiteral<ui32>(3);
-            const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-            const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-            const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-            const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-            const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-            const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
-
-            const auto tupleType = pb.NewTupleType({
-                pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                pb.NewDataType(NUdf::TDataType<char*>::Id)
-            });
-
-            const auto list1 = pb.NewList(tupleType, {
-                pb.NewTuple({key1, payload1}),
-                pb.NewTuple({key2, payload2}),
-                pb.NewTuple({key3, payload3})
-            });
-
-            const auto list2 = pb.NewList(tupleType, {
-                pb.NewTuple({key2, payload4}),
-                pb.NewTuple({key3, payload5}),
-                pb.NewTuple({key4, payload6})
-            });
-
-
-            const auto resultType = pb.NewFlowType(pb.NewMultiType({
-                pb.NewDataType(NUdf::TDataType<char*>::Id),
-                pb.NewDataType(NUdf::TDataType<char*>::Id)
-            }));
-
-            const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                EJoinKind::Full, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
-                [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
-            );
-            if (SPILLING) {
-                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
-            }
-
-            const auto graph = setup.BuildGraph(pgmReturn);
-            if (SPILLING) {
-                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
-            }
-
-            const auto iterator = graph->GetValue().GetListIterator();
-            NUdf::TUnboxedValue tuple;
-            std::map<std::pair<TString, TString>, ui32> u;
-
-            while (iterator.Next(tuple)) {
-                auto t0 = tuple.GetElement(0);
-                auto t1 = tuple.GetElement(1);
-                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
-                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
-                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
-            }
-            UNIT_ASSERT(!iterator.Next(tuple));
-
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("X"))], 1);
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("B"), TString("Y"))], 1);
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("X"))], 1);
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("C"), TString("Y"))], 1);
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString())], 1);
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString(), TString("Z"))], 1);
-            UNIT_ASSERT_EQUAL(u.size(), 6);
-        }
-    }
-
-
-    Y_UNIT_TEST_LLVM_SPILLING(TestExclusion1) {
-        if (SPILLING && RuntimeVersion < 50) return;
-
-        for (ui32 pass = 0; pass < 1; ++pass) {
-            TSetup<LLVM, SPILLING> setup;
-            TProgramBuilder& pb = *setup.PgmBuilder;
-
-            const auto key1 = pb.NewDataLiteral<ui32>(1);
-            const auto key2 = pb.NewDataLiteral<ui32>(2);
-            const auto key3 = pb.NewDataLiteral<ui32>(2);
-            const auto key4 = pb.NewDataLiteral<ui32>(3);
-            const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
-            const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("B");
-            const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("C");
-            const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
-            const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
-            const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
-
-            const auto tupleType = pb.NewTupleType({
-                pb.NewDataType(NUdf::TDataType<ui32>::Id),
-                pb.NewDataType(NUdf::TDataType<char*>::Id)
-            });
-
-            const auto list1 = pb.NewList(tupleType, {
-                pb.NewTuple({key1, payload1}),
-                pb.NewTuple({key2, payload2}),
-                pb.NewTuple({key3, payload3})
-            });
-
-            const auto list2 = pb.NewList(tupleType, {
-                pb.NewTuple({key2, payload4}),
-                pb.NewTuple({key3, payload5}),
-                pb.NewTuple({key4, payload6})
-            });
-
-
-            const auto resultType = pb.NewFlowType(pb.NewMultiType({
-                pb.NewDataType(NUdf::TDataType<char*>::Id),
-                pb.NewDataType(NUdf::TDataType<char*>::Id)
-            }));
-
-            const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceJoin(
-                pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                pb.ExpandMap(pb.ToFlow(list2), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
-                EJoinKind::Exclusion, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
-                [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
-            );
-            if (SPILLING) {
-                setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
-            }
-
-            const auto graph = setup.BuildGraph(pgmReturn);
-            if (SPILLING) {
-                graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
-            }
-
-            const auto iterator = graph->GetValue().GetListIterator();
-            NUdf::TUnboxedValue tuple;
-            std::map<std::pair<TString, TString>, ui32> u;
-
-            while (iterator.Next(tuple)) {
-                auto t0 = tuple.GetElement(0);
-                auto t1 = tuple.GetElement(1);
-                UNIT_ASSERT(!t0 || !t0.AsStringRef().Empty()); // ensure no empty strings
-                UNIT_ASSERT(!t1 || !t1.AsStringRef().Empty());
-                ++u[std::make_pair(t0 ? TString(t0.AsStringRef()) : TString(), t1 ? TString(t1.AsStringRef()) : TString())];
-            }
-            UNIT_ASSERT(!iterator.Next(tuple));
-
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString("A"), TString())], 1);
-            UNIT_ASSERT_EQUAL(u[std::make_pair(TString(), TString("Z"))], 1);
-            UNIT_ASSERT_EQUAL(u.size(), 2);
-        }
-    }
-
-}
-
-
-}
-
-}

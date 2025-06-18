@@ -531,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         auto session = db.GetSession().GetValueSync().GetSession();
 
         auto query = Q_(R"(
-            BATCH DELETE Test
+            BATCH DELETE FROM Test
                 WHERE UnknownColumn = 123;
         )");
 

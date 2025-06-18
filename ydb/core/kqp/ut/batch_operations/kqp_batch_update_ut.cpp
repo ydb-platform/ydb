@@ -659,8 +659,8 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Member not found: UnknownColumn", result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Column 'UnknownColumn' does not exist", result.GetIssues().ToString());
         }
     }
 

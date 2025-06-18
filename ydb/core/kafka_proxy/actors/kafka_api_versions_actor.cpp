@@ -37,6 +37,7 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     AddApiKey<TSaslHandshakeRequestData>(response->ApiKeys, SASL_HANDSHAKE, {.MaxVersion=1});
     AddApiKey<TSaslAuthenticateRequestData>(response->ApiKeys, SASL_AUTHENTICATE, {.MaxVersion=2});
     AddApiKey<TListOffsetsRequestData>(response->ApiKeys, LIST_OFFSETS, {.MinVersion=1, .MaxVersion=1});
+    AddApiKey<TListGroupsRequestData>(response->ApiKeys, LIST_GROUPS, {.MinVersion=0, .MaxVersion=4});
     AddApiKey<TFetchRequestData>(response->ApiKeys, FETCH, {.MaxVersion=3});
     AddApiKey<TJoinGroupRequestData>(response->ApiKeys, JOIN_GROUP, {.MaxVersion=9});
     AddApiKey<TSyncGroupRequestData>(response->ApiKeys, SYNC_GROUP, {.MaxVersion=3});

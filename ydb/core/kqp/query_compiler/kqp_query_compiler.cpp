@@ -509,16 +509,11 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
     }
 
     const auto extractUint = [](const NJson::TJsonValue& node, ui32* result) -> TString {
-        if (!node.IsInteger()) {
-            return "Expected integer json value";
-        }
-
-        const auto value = node.GetIntegerSafe();
-        if (value < 0) {
+        if (!node.IsUInteger()) {
             return "Expected non negative integer json value";
         }
 
-        *result = value;
+        *result = node.GetIntegerSafe();
         return "";
     };
 

@@ -42,10 +42,10 @@ def setup_logging():
     logging.basicConfig(
         level=logging.DEBUG,  # Изменено обратно с INFO на DEBUG для видимости всех сообщений
         format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler('compatibility_report.log', encoding='utf-8')
-        ]
+       # handlers=[
+        #    logging.StreamHandler(sys.stdout) #,
+            #logging.FileHandler('compatibility_report.log', encoding='utf-8')
+        #]
     )
     
     # Устанавливаем уровень DEBUG для нашего модуля чтобы видеть детальную отладку
@@ -3439,6 +3439,10 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
                 'last_run_time': tests_b[normalized_name].get('last_run_time')  # Добавляем время последнего запуска
             })
     
+    # Инициализация переменных для отчета
+    skipped_tests = []
+    not_run_recently = []
+    
     # Генерируем отчет
     report_content = f"""# Сравнение версий: {version_a} vs {version_b}
 
@@ -3457,9 +3461,6 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
 | ➡️ **Без изменений** | {len(unchanged_tests)} |
 | ➕ **Только в {version_a}** | {len(only_in_a)} |
 | ➖ **Только в {version_b}** | {len(only_in_b)} |
-| 📋 **Общих тестов** | {len(set(tests_a.keys()) & set(tests_b.keys()))} |
-| 📊 **Всего в {version_a}** | {len(tests_a)} |
-| 📊 **Всего в {version_b}** | {len(tests_b)} |
 
 """
     

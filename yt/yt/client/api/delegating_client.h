@@ -548,6 +548,11 @@ public:
         const TGetJobFailContextOptions& options),
         (operationIdOrAlias, jobId, options))
 
+    DELEGATE_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options),
+        (operationIdOrAlias, options))
+
     DELEGATE_METHOD(TFuture<TListOperationsResult>, ListOperations, (
         const TListOperationsOptions& options),
         (options))

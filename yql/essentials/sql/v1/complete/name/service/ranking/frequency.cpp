@@ -50,7 +50,7 @@ namespace NSQLComplete {
             return items;
         }
 
-        static TVector<TFrequencyItem> ParseListFromJsonText(const TStringBuf text) {
+        static TVector<TFrequencyItem> ParseListFromJsonText(TStringBuf text) {
             NJson::TJsonValue json = NJson::ReadJsonFastTree(text);
             return ParseListFromJsonArray(json.GetArraySafe());
         }
@@ -104,7 +104,7 @@ namespace NSQLComplete {
         });
     }
 
-    TFrequencyData ParseJsonFrequencyData(const TStringBuf text) {
+    TFrequencyData ParseJsonFrequencyData(TStringBuf text) {
         return Collect(TFrequencyItem::ParseListFromJsonText(text));
     }
 

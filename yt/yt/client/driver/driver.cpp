@@ -307,6 +307,7 @@ public:
         REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Structured, false, true );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
+        REGISTER_ALL(TListOperationEventsCommand,          "list_operation_events",           Null,       Structured, false, false);
         REGISTER_ALL(TListOperationsCommand,               "list_operations",                 Null,       Structured, false, false);
         REGISTER_ALL(TListJobsCommand,                     "list_jobs",                       Null,       Structured, false, false);
         REGISTER_ALL(TGetJobCommand,                       "get_job",                         Null,       Structured, false, false);
@@ -355,7 +356,7 @@ public:
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, true,  false);
         REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, true,  false);
 
-        REGISTER    (TGetCurrentUserCommand,               "get_current_user",                Null,       Structured, false, false, ApiVersion4);
+        REGISTER_ALL(TGetCurrentUserCommand,               "get_current_user",                Null,       Structured, false, false);
 
         REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, true,  false);
         REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, true,  false);

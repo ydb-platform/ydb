@@ -27,8 +27,6 @@ PEERDIR(
 )
 
 SRCS(
-    auditlog_helpers.cpp
-    auditlog_helpers.h
     data_erasure_helpers.cpp
     export_reboots_common.cpp
     failing_mtpq.cpp

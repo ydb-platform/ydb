@@ -414,6 +414,15 @@ public:
             this->Consumer_->OnEndAttributes();
             return TAnyWithoutAttributes<TParent>(this->Consumer_, std::move(this->Parent_));
         }
+
+        TAnyWithoutAttributes<TParent> DoAttributesIf(bool condition, auto funcMap)
+        {
+            if (condition) {
+                return DoAttributes(funcMap);
+            }
+
+            return TAnyWithoutAttributes<TParent>(this->Consumer_, std::move(this->Parent_));
+        }
     };
 
     template <class TParent = TFluentYsonVoid>

@@ -177,6 +177,14 @@ common:
     to: /yql/reference/syntax/alter-topic.md
   - from: /yql/reference/syntax/create_topic.md
     to: /yql/reference/syntax/create-topic.md
+  - from: /yql/reference/syntax/flatten.md
+    to: /yql/reference/syntax/select/flatten.md
+  - from: /yql/reference/syntax/group_by.md
+    to: /yql/reference/syntax/select/group-by.md
+  - from: /yql/reference/syntax/join.md
+    to: /yql/reference/syntax/select/join.md
+  - from: /yql/reference/syntax/window.md
+    to: /yql/reference/syntax/select/window.md
   - from: /yql/reference/ddl/create-index.md
     to: /yql/reference/syntax/create_table/secondary_index.md
 
@@ -436,32 +444,15 @@ ru:
   - from: /cluster/system-requirements.md
     to: /devops/concepts/system-requirements.md
 
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1
-
 en:
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment.md
-  - from: /maintenance/manual/dynamic-config.md
-    to: /devops/deployment-options/manual/dynamic-config.md
-  - from: /maintenance/manual/config-overview.md
-    to: /devops/deployment-options/manual/config-overview.md
-  - from: /maintenance/manual/node_restarting.md
-    to: /devops/deployment-options/manual/node-restarting.md
-  - from: /maintenance/manual/cluster_expansion.md
-    to: /devops/deployment-options/manual/cluster-expansion.md
+
   - from: /maintenance/manual/selfheal.md
     to: /devops/deployment-options/manual/selfheal.md
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
-  - from: /maintenance/manual/change_actorsystem_configs.md
-    to: /devops/deployment-options/manual/change-actorsystem-configs.md
   - from: /maintenance/manual/cms.md
     to: /devops/deployment-options/manual/cms.md
-
-  # Redirects for maintenance folder
-  - from: /maintenance/(.*)$
-    to: /devops/deployment-options/manual/$1

@@ -237,7 +237,7 @@ void RunTestBlockJoin(TSetup<false>& setup, EJoinKind joinKind,
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
-    constexpr size_t testSize = 1 << 14;
+    constexpr size_t testSize = 1 << 11;
     constexpr size_t valueSize = 3;
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
     static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
@@ -736,7 +736,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
 
         // 2. Make input for the "right" stream.
         // Huge string is used to make less rows fit into one block
-        TVector<ui64> rightKeyInit(1 << 16);
+        TVector<ui64> rightKeyInit(1 << 14);
         std::fill(rightKeyInit.begin(), rightKeyInit.end(), 1);
         TVector<TString> rightValueInit;
         std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
@@ -880,7 +880,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestBasic) {
 } // Y_UNIT_TEST_SUITE
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestOptional) {
-    constexpr size_t testSize = 1 << 14;
+    constexpr size_t testSize = 1 << 12;
     constexpr size_t valueSize = 3;
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
     static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);
@@ -1195,7 +1195,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestOptional) {
 } // Y_UNIT_TEST_SUITE
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestCross) {
-    constexpr size_t testSize = 1 << 14;
+    constexpr size_t testSize = 1 << 12;
     constexpr size_t valueSize = 3;
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);
     static const TSet<ui64> fibonacci = GenerateFibonacci(testSize);

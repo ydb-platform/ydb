@@ -56,7 +56,7 @@ void TLogDigestConfig::Register(TRegistrar registrar)
 void TFairShareHierarchicalSchedulerDynamicConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("window_size", &TThis::WindowSize)
-        .Default(TDuration::Minutes(5));
+        .Default(TDuration::Minutes(1));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

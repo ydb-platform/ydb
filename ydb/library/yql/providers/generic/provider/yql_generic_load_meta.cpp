@@ -598,6 +598,8 @@ namespace NYql {
                     auto* options = request.mutable_data_source_instance()->mutable_mongodb_options();
                     return SetMongoDBOptions(*options, clusterConfig);
                 } break;
+                case NYql::EGenericDataSourceKind::OPENSEARCH:
+                    break; 
                 default:
                     throw yexception() << "Unexpected data source kind: '"
                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";

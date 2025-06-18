@@ -48,12 +48,15 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
     auto newJoin = std::make_shared<TJoinOptimizerNode>(left, right, join->LeftJoinKeys, join->RightJoinKeys, join->JoinType, join->JoinAlgo, join->LeftAny, join->RightAny);
     newJoin->Stats = std::move(join->Stats);
 
-    if (!enableShuffleElimination && join->JoinAlgo == EJoinAlgoType::GraceJoin) {
+    if (
+        !enableShuffleElimination && join->JoinAlgo == EJoinAlgoType::GraceJoin ||
+        join->ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::NoOrdering
+    ) {
         left->Stats.ShuffledByColumns =
             TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
                 new TOptimizerStatistics::TShuffledByColumns(join->LeftJoinKeys)
             );
-    } else if (join->ShuffleLeftSideByOrderingIdx != -1 && fdStorage) {
+    } else if (join->ShuffleLeftSideByOrderingIdx >= 0 && fdStorage) {
         auto shuffledBy = fdStorage->GetInterestingOrderingsColumnNamesByIdx(join->ShuffleLeftSideByOrderingIdx);
 
         left->Stats.ShuffledByColumns =
@@ -64,12 +67,15 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
         left->Stats.ShuffledByColumns = nullptr;
     }
 
-    if (!enableShuffleElimination && join->JoinAlgo == EJoinAlgoType::GraceJoin) {
+    if (
+        (!enableShuffleElimination && join->JoinAlgo == EJoinAlgoType::GraceJoin) ||
+        join->ShuffleRightSideByOrderingIdx == TJoinOptimizerNodeInternal::NoOrdering
+    ) {
         right->Stats.ShuffledByColumns =
             TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
                 new TOptimizerStatistics::TShuffledByColumns(join->RightJoinKeys)
             );
-    } else if (join->ShuffleRightSideByOrderingIdx != -1 && fdStorage) {
+    } else if (join->ShuffleRightSideByOrderingIdx >= 0 && fdStorage) {
         auto shuffledBy = fdStorage->GetInterestingOrderingsColumnNamesByIdx(join->ShuffleRightSideByOrderingIdx);
 
         right->Stats.ShuffledByColumns =

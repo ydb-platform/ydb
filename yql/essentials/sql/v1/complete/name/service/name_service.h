@@ -125,8 +125,8 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<INameService>;
 
+        ~INameService() override = default;
         virtual NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const = 0;
-        virtual ~INameService() = default;
     };
 
     TString NormalizeName(TStringBuf name);

@@ -146,8 +146,32 @@ chkResponseList(
 		"ldap_chkResponseList ld %p msgid %d all %d\n",
 		(void *)ld, msgid, all );
 
+	lm = ld->ld_responses;
+	if ( lm && msgid == LDAP_RES_ANY && all == LDAP_MSG_RECEIVED ) {
+		/*
+		 * ITS#10229: asked to return all messages received so far,
+		 * draft-ietf-ldapext-ldap-c-api which defines LDAP_MSG_RECEIVED lets
+		 * us mix different msgids in what we return
+		 *
+		 * We have two choices in *how* we return the messages:
+		 * - we link all chains together
+		 * - we keep the chains intact and use lm_next
+		 *
+		 * The former will make life harder for ldap_parse_result finding a
+		 * result message, the latter affects routines that iterate over
+		 * messages. This take does the former.
+		 */
+		ld->ld_responses = NULL;
+		while ( lm->lm_next ) {
+			lm->lm_chain_tail->lm_chain = lm->lm_next;
+			lm->lm_chain_tail = lm->lm_next->lm_chain_tail;
+			lm->lm_next = lm->lm_next->lm_next;
+		}
+		return lm;
+	}
+
 	lastlm = &ld->ld_responses;
-	for ( lm = ld->ld_responses; lm != NULL; lm = nextlm ) {
+	for ( ; lm != NULL; lm = nextlm ) {
 		nextlm = lm->lm_next;
 		++cnt;
 
@@ -385,6 +409,37 @@ wait4msg(
 					rc = -1;
 			}
 			LDAP_MUTEX_UNLOCK( &ld->ld_conn_mutex );
+		}
+
+		if ( all == LDAP_MSG_RECEIVED ) {
+			/*
+			 * ITS#10229: we looped over all ready connections accumulating
+			 * messages in ld_responses, check if we have something to return
+			 * right now.
+			 */
+			LDAPMessage **lp, *lm = ld->ld_responses;
+
+			if ( lm && msgid == LDAP_RES_ANY ) {
+				*result = lm;
+
+				ld->ld_responses = NULL;
+				while ( lm->lm_next ) {
+					lm->lm_chain_tail->lm_chain = lm->lm_next;
+					lm->lm_chain_tail = lm->lm_next->lm_chain_tail;
+					lm->lm_next = lm->lm_next->lm_next;
+				}
+				rc = lm->lm_msgtype;
+				break;
+			}
+
+			for ( lp = &ld->ld_responses; lm; lp = &lm->lm_next, lm = *lp ) {
+				if ( msgid == lm->lm_msgid ) break;
+			}
+			if ( lm ) {
+				*lp = lm->lm_next;
+				*result = lm;
+				rc = lm->lm_msgtype;
+			}
 		}
 
 		if ( rc == LDAP_MSG_X_KEEP_LOOKING && tvp != NULL ) {
@@ -1096,7 +1151,10 @@ nextresp2:
 
 	/* is this the one we're looking for? */
 	if ( msgid == LDAP_RES_ANY || id == msgid ) {
-		if ( all == LDAP_MSG_ONE
+		if ( msgid == LDAP_RES_ANY && all == LDAP_MSG_RECEIVED ) {
+			/* ITS#10229: We want to keep going so long as there's anything to
+			 * read. */
+		} else if ( all == LDAP_MSG_ONE
 			|| ( newmsg->lm_msgtype != LDAP_RES_SEARCH_RESULT
 				&& newmsg->lm_msgtype != LDAP_RES_SEARCH_ENTRY
 				&& newmsg->lm_msgtype != LDAP_RES_INTERMEDIATE

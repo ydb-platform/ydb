@@ -2256,14 +2256,14 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
     const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
     // TODO(mbkkt) We can make it more granular
 
-    // if new range is not intersect with other ranges, it's local
+    // the new range does not intersect with other ranges, just add it with 1 shard
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
     if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
-        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Local = shard});
+        Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
         return;
     }
 
-    // otherwise, this range is global and we need to merge all intersecting ranges
+    // otherwise, this range has multiple shards and we need to merge all intersecting ranges
     auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
     if (itTo == Cluster2Shards.end()) {
         itTo = Cluster2Shards.rbegin().base();
@@ -2275,25 +2275,16 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
         itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
         itFrom = needsToReplaceFrom ? itTo : itFrom;
     }
-    auto& [toFrom, toLocal, toGlobal] = itTo->second;
+    auto& [toFrom, toShards] = itTo->second;
 
     toFrom = std::min(toFrom, parentFrom);
-    if (toLocal != InvalidShardIdx) {
-        toGlobal.emplace_back(toLocal);
-        toLocal = InvalidShardIdx;
-    }
-    toGlobal.emplace_back(shard);
+    toShards.emplace_back(shard);
 
     while (itFrom != itTo) {
-        const auto& [fromFrom, fromLocal, fromGlobal] = itFrom->second;
+        const auto& [fromFrom, fromShards] = itFrom->second;
         toFrom = std::min(toFrom, fromFrom);
-        if (fromLocal != InvalidShardIdx) {
-            Y_ASSERT(fromGlobal.empty());
-            toGlobal.emplace_back(fromLocal);
-        } else {
-            Y_ASSERT(!fromGlobal.empty());
-            toGlobal.insert(toGlobal.end(), fromGlobal.begin(), fromGlobal.end());
-        }
+        Y_ASSERT(!fromShards.empty());
+        toShards.insert(toShards.end(), fromShards.begin(), fromShards.end());
         itFrom = Cluster2Shards.erase(itFrom);
     }
 }
@@ -2464,39 +2455,6 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
 
     TString unused;
     return FillKeySchema(proto, unused);
-}
-
-TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
-}
-
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ENSURE(UploadRows >= other.UploadRows);
-    Y_ENSURE(UploadBytes >= other.UploadBytes);
-    Y_ENSURE(ReadRows >= other.ReadRows);
-    Y_ENSURE(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
-}
-
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
-}
-
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
 }
 
 TSequenceInfo::TSequenceInfo(

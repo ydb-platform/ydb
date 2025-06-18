@@ -6,9 +6,9 @@
 #include <yql/essentials/sql/v1/complete/name/service/binding/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
-#include <yql/essentials/sql/v1/complete/syntax/local.h>
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
 #include <yql/essentials/sql/v1/complete/analysis/global/global.h>
+#include <yql/essentials/sql/v1/complete/analysis/local/local.h>
 
 #include <util/generic/algorithm.h>
 #include <util/charset/utf8.h>
@@ -17,7 +17,7 @@ namespace NSQLComplete {
 
     class TSqlCompletionEngine: public ISqlCompletionEngine {
     public:
-        explicit TSqlCompletionEngine(
+        TSqlCompletionEngine(
             TLexerSupplier lexer,
             INameService::TPtr names,
             ISqlCompletionEngine::TConfiguration configuration)
@@ -28,11 +28,12 @@ namespace NSQLComplete {
         {
         }
 
-        TCompletion Complete(TCompletionInput input) override {
-            return CompleteAsync(std::move(input), {}).ExtractValueSync();
+        TCompletion
+        Complete(TCompletionInput input, TEnvironment env = {}) override {
+            return CompleteAsync(input, env).ExtractValueSync();
         }
 
-        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input, TEnvironment env) override {
+        NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input, TEnvironment env) override {
             if (
                 input.CursorPosition < input.Text.length() &&
                     IsUTF8ContinuationByte(input.Text.at(input.CursorPosition)) ||
@@ -78,7 +79,7 @@ namespace NSQLComplete {
 
         TNameRequest NameRequestFrom(
             TCompletionInput input,
-            const TLocalSyntaxContext& context,
+            const TLocalSyntaxContext& context, // TODO(YQL-19747): rename to `local`
             const TGlobalContext& global) const {
             TNameRequest request = {
                 .Prefix = TString(GetCompletedToken(input, context.EditRange).Content),
@@ -131,6 +132,14 @@ namespace NSQLComplete {
                 TClusterName::TConstraints constraints;
                 constraints.Namespace = ""; // TODO(YQL-19747): filter by provider
                 request.Constraints.Cluster = std::move(constraints);
+            }
+
+            if (auto name = global.EnclosingFunction.Transform(NormalizeName);
+                name && name == "concat") {
+                auto& object = request.Constraints.Object;
+                object = object.Defined() ? object : TObjectNameConstraints();
+                object->Kinds.emplace(EObjectKind::Folder);
+                object->Kinds.emplace(EObjectKind::Table);
             }
 
             return request;
@@ -195,14 +204,14 @@ namespace NSQLComplete {
 
                 if constexpr (std::is_base_of_v<TFolderName, T>) {
                     name.Indentifier.append('/');
-                    if (!context.Object->IsQuoted) {
+                    if (!context.Object || !context.Object->IsQuoted) {
                         name.Indentifier.prepend('`');
                     }
                     return {ECandidateKind::FolderName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TTableName, T>) {
-                    if (!context.Object->IsQuoted) {
+                    if (!context.Object || !context.Object->IsQuoted) {
                         name.Indentifier.prepend('`');
                     }
                     return {ECandidateKind::TableName, std::move(name.Indentifier)};
@@ -285,8 +294,8 @@ namespace NSQLComplete {
 } // namespace NSQLComplete
 
 template <>
-void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandidateKind kind) {
-    switch (kind) {
+void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandidateKind value) {
+    switch (value) {
         case NSQLComplete::ECandidateKind::Keyword:
             out << "Keyword";
             break;
@@ -321,6 +330,6 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
 }
 
 template <>
-void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& candidate) {
-    out << "{" << candidate.Kind << ", \"" << candidate.Content << "\"}";
+void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& value) {
+    out << "{" << value.Kind << ", \"" << value.Content << "\"}";
 }

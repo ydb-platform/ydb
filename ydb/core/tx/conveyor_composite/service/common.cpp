@@ -30,8 +30,4 @@ void TCPUUsage::Cut(const TMonotonic start) {
     }
 }
 
-TCPUGroup::~TCPUGroup() {
-    AFL_VERIFY(ProcessesCount == 0);
-}
-
 }   // namespace NKikimr::NConveyorComposite

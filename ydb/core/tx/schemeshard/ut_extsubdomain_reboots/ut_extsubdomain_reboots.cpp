@@ -1,7 +1,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/testlib/actors/wait_events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -315,6 +316,127 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                 TestMkDir(runtime, subdomainSchemeshard, ++t.TxId, "/MyRoot/USER_0", "A");
                 TestMkDir(runtime, subdomainSchemeshard, ++t.TxId, "/MyRoot/USER_0", "B");
                 TestMkDir(runtime, subdomainSchemeshard, ++t.TxId, "/MyRoot/USER_0", "C", {NKikimrScheme::StatusResourceExhausted});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(AlterSchemeLimits) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TSchemeLimits limits;
+            limits.MaxShards = 7;
+            limits.MaxShardsInPath = 3;
+            limits.MaxPaths = 5;
+            limits.MaxChildrenInDir = 3;
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
+                    R"(Name: "Alice")"
+                );
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestAlterExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
+                    R"(
+                        StoragePools {
+                            Name: "tenant-1:hdd"
+                            Kind: "hdd"
+                        }
+                        PlanResolution: 50
+                        Coordinators: 1
+                        Mediators: 1
+                        TimeCastBucketsPerMediator: 2
+                        ExternalSchemeShard: true
+                        Name: "Alice"
+                    )"
+                );
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            activeZone = false;
+            using TEvSync = TEvSchemeShard::TEvUpdateTenantSchemeShard;
+            TWaitForFirstEvent<TEvSync> syncWaiter(runtime, [](const TEvSync::TPtr& ev) {
+                return ev.Get()->Get()->Record.HasSchemeLimits();
+            });
+            activeZone = true;
+
+            TestAlterExtSubDomain(runtime, ++t.TxId,  "/MyRoot",
+                Sprintf(R"(
+                    Name: "Alice"
+                    SchemeLimits {
+                        MaxShards: %lu
+                        MaxShardsInPath: %lu
+                        MaxPaths: %lu
+                        MaxChildrenInDir: %lu
+                    }
+                )", limits.MaxShards, limits.MaxShardsInPath, limits.MaxPaths, limits.MaxChildrenInDir
+            ));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                const auto tenantSchemeShard = TTestTxConfig::FakeHiveTablets;
+                // test what the parent knows about the subdomain
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Alice"), {
+                    NLs::PathExist,
+                    NLs::IsExternalSubDomain("Alice"),
+                    NLs::SchemeLimits(limits.AsProto()),
+                    NLs::ShardsInsideDomain(3),
+                    NLs::PathsInsideDomain(0)
+                });
+
+                syncWaiter.Wait();
+                syncWaiter.Stop();
+                // test what the subdomain knows about itself
+                TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/Alice"), {
+                    NLs::PathExist,
+                    NLs::SchemeLimits(limits.AsProto()),
+                    NLs::ShardsInsideDomain(3),
+                    NLs::PathsInsideDomain(0)
+                });
+
+                const auto defaultLimits = TSchemeLimits().AsProto();
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+                    NLs::ChildrenCount(2),
+                    NLs::SchemeLimits(defaultLimits)
+                });
+
+                TestCreateTable(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice", R"(
+                        Name: "TableA"
+                        Columns { Name: "Id" Type: "Uint32" }
+                        KeyColumnNames: ["Id"]
+                        UniformPartitionsCount: 4
+                    )", { NKikimrScheme::StatusResourceExhausted } // blocked by the max shards in path limit
+                );
+                TestCreateTable(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice", R"(
+                        Name: "TableA"
+                        Columns { Name: "Id" Type: "Uint32" }
+                        KeyColumnNames: ["Id"]
+                        UniformPartitionsCount: 3
+                    )"
+                );
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                TestCreateTable(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice", R"(
+                        Name: "TableB"
+                        Columns { Name: "Id" Type: "Uint32" }
+                        KeyColumnNames: ["Id"]
+                        UniformPartitionsCount: 2
+                    )", { NKikimrScheme::StatusResourceExhausted } // blocked by the max shards limit
+                );
+                TestCreateTable(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice", R"(
+                        Name: "TableB"
+                        Columns { Name: "Id" Type: "Uint32" }
+                        KeyColumnNames: ["Id"]
+                    )"
+                );
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestMkDir(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice", "A");
+                TestMkDir(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice", "B", {NKikimrScheme::StatusResourceExhausted}); // blocked by the max children in dir limit
+                TestMkDir(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice/A", "A");
+                TestMkDir(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice/A", "B");
+                TestMkDir(runtime, tenantSchemeShard, ++t.TxId, "/MyRoot/Alice/A", "C", {NKikimrScheme::StatusResourceExhausted}); // blocked by the max paths limit
             }
         });
     }

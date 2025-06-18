@@ -312,6 +312,24 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
     return ComparisonPushdown(parameters, predicate, ctx, pos);
 }
 
+namespace {
+
+//Workarownd for #19125
+NYql::NNodes::TCoUtf8 RemoveJsonPathUnnecessaryQuote(const NYql::NNodes::TCoUtf8& node, TExprContext& ctx) {
+    const std::string_view& path = node.Literal().StringValue();
+    if (UTF8Detect(path) == ASCII && path.starts_with("$.\"") && path.substr(3).ends_with("\"")) {
+        const auto& nakedPath = path.substr(3, path.length()-4);
+        for (auto c: nakedPath) {
+            if (!isalpha(c) && !isdigit(c) && c != '_') {
+                return node;
+            }
+        }
+        return Build<TCoUtf8>(ctx, node.Pos()).Literal().Build(TString("$.") + nakedPath).Done();
+    }
+    return node;
+}
+
+} //namespace
 
 std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos, bool allowApply)
 {
@@ -346,7 +364,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
 
             auto builder = Build<TKqpOlapJsonValue>(ctx, pos)
                 .Column(maybeColMember.Cast().Name())
-                .Path(maybePathUtf8.Cast());
+                .Path(RemoveJsonPathUnnecessaryQuote(maybePathUtf8.Cast(), ctx));
             if (maybeReturningType) {
                 builder.ReturningType(maybeReturningType.Cast());
             } else {

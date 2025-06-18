@@ -338,6 +338,7 @@ struct TCommonAppOptions {
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
     EWorkload Workload = EWorkload::Hybrid;
+    TString BridgePileName;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -371,6 +372,8 @@ struct TCommonAppOptions {
             .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
         opts.AddLongOption("node-address", "address for dynamic node")
             .RequiredArgument("ADDR").StoreResult(&NodeAddress);
+        opts.AddLongOption("bridge-pile-name", "pile name for bridged mode")
+            .RequiredArgument("PILE").StoreResult(&BridgePileName);
         opts.AddLongOption("node-host", "hostname for dynamic node")
             .RequiredArgument("NAME").StoreResult(&NodeHost);
         opts.AddLongOption("node-resolve-host", "resolve hostname for dynamic node")
@@ -1299,6 +1302,7 @@ public:
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
             AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
+            cf.BridgePileName ? std::make_optional(cf.BridgePileName) : std::nullopt,
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
@@ -1324,10 +1328,10 @@ public:
     public:
         TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
             : AppConfig(appConfig)
-            , ConfigDirPath(appConfig.GetConfigDirPath())
-            , StoredConfigYaml(appConfig.GetStoredConfigYaml())
-            , StartupConfigYaml(appConfig.GetStartupConfigYaml())
-            , StartupStorageYaml(appConfig.GetStartupStorageYaml())
+            , ConfigDirPath(appConfig.HasConfigDirPath() ? std::make_optional(appConfig.GetConfigDirPath()) : std::nullopt)
+            , StoredConfigYaml(appConfig.HasStoredConfigYaml() ? std::make_optional(appConfig.GetStoredConfigYaml()) : std::nullopt)
+            , StartupConfigYaml(appConfig.HasStartupConfigYaml() ? std::make_optional(appConfig.GetStartupConfigYaml()) : std::nullopt)
+            , StartupStorageYaml(appConfig.HasStartupStorageYaml() ? std::make_optional(appConfig.GetStartupStorageYaml()) : std::nullopt)
         {}
 
         ~TAppConfigFieldsPreserver() {
@@ -1344,6 +1348,7 @@ public:
                 AppConfig.SetStartupStorageYaml(*StartupStorageYaml);
             }
         }
+
     private:
         NKikimrConfig::TAppConfig& AppConfig;
         std::optional<TString> ConfigDirPath;

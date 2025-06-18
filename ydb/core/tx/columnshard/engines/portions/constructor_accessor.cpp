@@ -38,20 +38,12 @@ TPortionDataAccessor TPortionAccessorConstructor::Build(const bool needChunksNor
 
     AFL_VERIFY(Records.size());
 
-    PortionInfo->MetaConstructor.ColumnRawBytes = 0;
-    PortionInfo->MetaConstructor.ColumnBlobBytes = 0;
-    PortionInfo->MetaConstructor.IndexRawBytes = 0;
-    PortionInfo->MetaConstructor.IndexBlobBytes = 0;
+    PortionInfo->MetaConstructor.ColumnRawBytes = GetColumnRawBytes();
+    PortionInfo->MetaConstructor.ColumnBlobBytes = GetColumnBlobBytes();
+    PortionInfo->MetaConstructor.IndexRawBytes = GetIndexRawBytes();
+    PortionInfo->MetaConstructor.IndexBlobBytes = GetIndexBlobBytes();
 
     PortionInfo->MetaConstructor.RecordsCount = CalcRecordsCount();
-    for (auto&& r : Records) {
-        *PortionInfo->MetaConstructor.ColumnRawBytes += r.GetMeta().GetRawBytes();
-        *PortionInfo->MetaConstructor.ColumnBlobBytes += r.GetBlobRange().GetSize();
-    }
-    for (auto&& r : Indexes) {
-        *PortionInfo->MetaConstructor.IndexRawBytes += r.GetRawBytes();
-        *PortionInfo->MetaConstructor.IndexBlobBytes += r.GetDataSize();
-    }
 
     std::shared_ptr<TPortionInfo> result = PortionInfo->Build();
 

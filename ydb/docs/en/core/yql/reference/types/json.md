@@ -42,7 +42,7 @@ Real 8-byte number.
 
 ## Decimal {#decimal}
 
-Fixed-precision number. Only Decimal(22, 9) is supported.
+Fixed-precision number.
 
 * Type in JSON: `string`.
 * Sample {{ backend_name }} value: `-320.789`.

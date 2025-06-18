@@ -2039,6 +2039,12 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
     return res;
 }
 
+TExprNode::TPtr KeepUniqueDistinct(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    auto res = KeepUniqueConstraint<true>(node, src, ctx);
+    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
+    return res;
+}
+
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
     if (joinTree.IsAtom()) {
         return true;
@@ -2054,14 +2060,20 @@ bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
+    bool withOptionals)
 {
+    auto kind = node->GetTypeAnn()->GetKind();
 
     // Ignore stream input, because it cannot be used multiple times
-    if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+    if (!(kind == ETypeAnnotationKind::List || (withOptionals && kind == ETypeAnnotationKind::Optional))) {
         return;
     }
-    auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
+    auto itemType = kind == ETypeAnnotationKind::Optional ?
+        node->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType() :
+        node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
     if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
         return;
     }
@@ -2088,6 +2100,9 @@ void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, cons
                 usedFields.insert(member.Value());
             }
         }
+        else if (auto maybeMember = TMaybeNode<TCoMember>(parent)) {
+            usedFields.insert(maybeMember.Cast().Name().Value());
+        }
         else {
             return;
         }
@@ -2108,12 +2123,18 @@ void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, cons
 
     for (auto parent: it->second) {
         if (TCoExtractMembers::Match(parent)) {
-            if (parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
+            auto parentItemType = kind == ETypeAnnotationKind::Optional ?
+                parent->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType() :
+                parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            if (parentItemType->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
                 toOptimize[parent] = newInput;
             } else {
                 toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
             }
+        } else if (TCoMember::Match(parent)) {
+            toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
         } else {
+            YQL_ENSURE(TCoFlatMapBase::Match(parent));
             toOptimize[parent] = ctx.Builder(parent->Pos())
                 .Callable(parent->Content())
                     .Add(0, newInput)

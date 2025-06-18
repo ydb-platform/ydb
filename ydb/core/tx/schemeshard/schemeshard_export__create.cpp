@@ -387,10 +387,17 @@ private:
             // to do: enable view checksum validation
             constexpr bool EnableChecksums = false;
             metadata.SetVersion(EnableChecksums ? 1 : 0);
+            metadata.SetEnablePermissions(exportInfo.EnablePermissions);
+
+            TMaybe<NBackup::TEncryptionIV> iv;
+            if (exportSettings.has_encryption_settings()) {
+                iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+            }
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions
+                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions,
+                iv
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }

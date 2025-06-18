@@ -941,11 +941,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(false)] == 0);
 
             // using followers resolver.
-            if (config.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
-                UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] == 0);
-            } else {
-                UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
-            }
+            UNIT_ASSERT(countResolveTablet[NKikimr::MakePipePerNodeCacheID(true)] > 0);
         }
     }
 

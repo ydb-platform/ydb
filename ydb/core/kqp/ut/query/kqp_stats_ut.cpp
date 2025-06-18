@@ -790,7 +790,13 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Session is on node 1, read task is for node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = session.ExecuteDataQuery(R"(
@@ -799,7 +805,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         UNIT_ASSERT(result.IsSuccess());
 
         if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
-            // If UseSink is enabled, CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            // If UseSink is enabled, compute is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
             // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
             UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
         } else {
@@ -811,7 +817,13 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
             SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+
+        if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
+            // Session is on node 1, read task is for node 2 -> TotalSingleNodeReqCount does not increase
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), ++expectedTotalSingleNodeReqCount);
+        }
     }
     {
         auto result = kikimr.GetQueryClient().ExecuteQuery(R"(
@@ -820,7 +832,7 @@ Y_UNIT_TEST_TWIN(OneShardNonLocalExec, UseSink) {
         UNIT_ASSERT(result.IsSuccess());
 
         if (app.GetTableServiceConfig().GetEnableParallelPointReadConsolidation()) {
-            // If UseSink is enabled, CA is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
+            // If UseSink is enabled, compute is on node 1, write is on node 2 -> TotalSingleNodeReqCount does not increase
             // If UseSink is disabled, the execution is on node 2 -> TotalSingleNodeReqCount increases
             UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), expectedTotalSingleNodeReqCount += (UseSink) ? 0 : 1);
         } else {

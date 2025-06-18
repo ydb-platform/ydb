@@ -1176,10 +1176,13 @@ protected:
             task.Meta.ExecuterId = this->SelfId();
             if (nodeId) {
                 task.Meta.NodeId = *nodeId;
-            } else {
+            }
+
+            if (!nodeId || !ShardsResolved) {
                 YQL_ENSURE(!ShardsResolved);
                 task.Meta.ShardId = taskLocation;
             }
+
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
             const auto& stageSource = stage.GetSources(0);

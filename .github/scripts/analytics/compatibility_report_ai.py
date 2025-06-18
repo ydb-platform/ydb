@@ -3640,7 +3640,6 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             report_content += f"| {display_name} | ❌ {common['version_a_status']} | ❌ {common['version_b_status']} | {common['test_context']} | {error_formatted} |\n"
     
     # Секция пропущенных тестов (skipped)
-    skipped_tests = []
     for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
         status_a = tests_a[normalized_name]['status']
         status_b = tests_b[normalized_name]['status']

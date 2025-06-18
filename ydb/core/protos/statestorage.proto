@@ -101,6 +101,8 @@ message TEvReplicaBoardPublish {
     optional uint64 TtlMs = 3;
     optional bool Register = 4;
     optional NActorsProto.TActorId Owner = 5;
+    optional uint64 ClusterStateGeneration = 6;
+    optional fixed64 ClusterStateGuid = 7;
 };
 
 message TEvReplicaBoardPublishAck {
@@ -110,6 +112,8 @@ message TEvReplicaBoardLookup {
     optional string Path = 1;
     reserved 2;
     optional bool Subscribe = 3;
+    optional uint64 ClusterStateGeneration = 4;
+    optional fixed64 ClusterStateGuid = 5;
 };
 
 message TEvReplicaBoardCleanup {
@@ -128,11 +132,15 @@ message TEvReplicaBoardInfo {
     optional string Path = 1;
     optional bool Dropped = 2;
     repeated TBoardEntryInfo Info = 3;
+    optional uint64 ClusterStateGeneration = 4;
+    optional fixed64 ClusterStateGuid = 5;
 };
 
 message TEvReplicaBoardInfoUpdate {
     optional string Path = 1;
     optional TBoardEntryInfo Info = 3;
+    optional uint64 ClusterStateGeneration = 4;
+    optional fixed64 ClusterStateGuid = 5;
 };
 
 message TEndpointBoardEntry {

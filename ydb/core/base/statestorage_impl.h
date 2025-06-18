@@ -146,7 +146,7 @@ struct TEvStateStorage::TEvResolveReplicasList : public TEventLocal<TEvResolveRe
     ui64 ClusterStateGeneration;
     ui64 ClusterStateGuid;
 
-    TVector<TActorId> GetPlainReplicas() {
+    TVector<TActorId> GetPlainReplicas() const {
         TVector<TActorId> result;
         ui32 size = 0;
         for (const auto& rg : ReplicaGroups) {
@@ -305,12 +305,14 @@ struct TEvStateStorage::TEvReplicaBoardPublish : public TEventPB<TEvStateStorage
     TEvReplicaBoardPublish()
     {}
 
-    TEvReplicaBoardPublish(const TString &path, const TString &payload, ui64 ttlMs, bool reg, TActorId owner)
+    TEvReplicaBoardPublish(const TString &path, const TString &payload, ui64 ttlMs, bool reg, TActorId owner, ui64 clusterStateGeneration, ui64 clusterStateGuid)
     {
         Record.SetPath(path);
         Record.SetPayload(payload);
         Record.SetTtlMs(ttlMs);
         Record.SetRegister(reg);
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
         ActorIdToProto(owner, Record.MutableOwner());
     }
 };
@@ -319,10 +321,12 @@ struct TEvStateStorage::TEvReplicaBoardLookup : public TEventPB<TEvStateStorage:
     TEvReplicaBoardLookup()
     {}
 
-    TEvReplicaBoardLookup(const TString &path, bool sub)
+    TEvReplicaBoardLookup(const TString &path, bool sub, ui64 clusterStateGeneration, ui64 clusterStateGuid)
     {
         Record.SetPath(path);
         Record.SetSubscribe(sub);
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
     }
 };
 
@@ -346,10 +350,12 @@ struct TEvStateStorage::TEvReplicaBoardInfo : public TEventPB<TEvStateStorage::T
     TEvReplicaBoardInfo()
     {}
 
-    TEvReplicaBoardInfo(const TString &path, bool dropped)
+    TEvReplicaBoardInfo(const TString &path, bool dropped, ui64 clusterStateGeneration, ui64 clusterStateGuid)
     {
         Record.SetPath(path);
         Record.SetDropped(dropped);
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
     }
 };
 
@@ -358,9 +364,11 @@ struct TEvStateStorage::TEvReplicaBoardInfoUpdate : public TEventPB<TEvStateStor
     TEvReplicaBoardInfoUpdate()
     {}
 
-    TEvReplicaBoardInfoUpdate(const TString &path)
+    TEvReplicaBoardInfoUpdate(const TString &path, ui64 clusterStateGeneration, ui64 clusterStateGuid)
     {
         Record.SetPath(path);
+        Record.SetClusterStateGeneration(clusterStateGeneration);
+        Record.SetClusterStateGuid(clusterStateGuid);
     }
 };
 

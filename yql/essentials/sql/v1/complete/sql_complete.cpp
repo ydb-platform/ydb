@@ -68,8 +68,8 @@ namespace NSQLComplete {
 
             return MakeUnionNameService(std::move(children), MakeDummyRanking())
                 ->Lookup(std::move(request))
-                .Apply([this, input, context = std::move(context)](auto f) {
-                    return ToCompletion(input, context, f.ExtractValue());
+                .Apply([this, input, context = std::move(context), global = std::move(global)](auto f) {
+                    return ToCompletion(input, std::move(context), global, f.ExtractValue());
                 });
         }
 
@@ -148,7 +148,7 @@ namespace NSQLComplete {
 
             if (context.Column && global.Column) {
                 request.Constraints.Column = TColumnName::TConstraints();
-                request.Constraints.Column->Tables = std::move(global.Column->Tables);
+                request.Constraints.Column->Tables = global.Column->TablesWithAlias(context.Column->Table);
             }
 
             return request;
@@ -157,10 +157,11 @@ namespace NSQLComplete {
         TCompletion ToCompletion(
             TCompletionInput input,
             TLocalSyntaxContext context,
+            const TGlobalContext& global,
             TNameResponse response) const {
             TCompletion completion = {
                 .CompletedToken = GetCompletedToken(input, context.EditRange),
-                .Candidates = Convert(std::move(response.RankedNames), std::move(context)),
+                .Candidates = Convert(std::move(response.RankedNames), std::move(context), global),
             };
 
             if (response.NameHintLength) {
@@ -175,16 +176,33 @@ namespace NSQLComplete {
             return completion;
         }
 
-        static TVector<TCandidate> Convert(TVector<TGenericName> names, TLocalSyntaxContext context) {
+        static TVector<TCandidate> Convert(
+            TVector<TGenericName> names,
+            TLocalSyntaxContext context,
+            const TGlobalContext& global) {
             TVector<TCandidate> candidates;
             candidates.reserve(names.size());
             for (auto& name : names) {
-                candidates.emplace_back(Convert(std::move(name), context));
+                candidates.emplace_back(Convert(std::move(name), context, global));
             }
             return candidates;
         }
 
-        static TCandidate Convert(TGenericName name, TLocalSyntaxContext& context) {
+        // TODO(YQL-19747): extract to a separate file
+        static TCandidate Convert(
+            TGenericName name,
+            TLocalSyntaxContext& context,
+            const TGlobalContext& global) {
+            // TODO(YQL-19747): support multiple aliases for a single table
+            THashMap<TTableId, TString> aliasByTable;
+            global.Column.Transform([&](auto&& column) {
+                aliasByTable.reserve(column.Tables.size());
+                for (const auto& table : column.Tables) {
+                    aliasByTable[table] = table.Alias;
+                }
+                return std::monostate();
+            });
+
             return std::visit([&](auto&& name) -> TCandidate {
                 using T = std::decay_t<decltype(name)>;
 
@@ -241,6 +259,12 @@ namespace NSQLComplete {
                 }
 
                 if constexpr (std::is_base_of_v<TColumnName, T>) {
+                    const TString& alias = aliasByTable.at(name.Table);
+                    if (context.Column->Table.empty() && !alias.empty()) {
+                        name.Indentifier.prepend('.');
+                        name.Indentifier.prepend(alias);
+                    }
+
                     return {ECandidateKind::ColumnName, std::move(name.Indentifier)};
                 }
 

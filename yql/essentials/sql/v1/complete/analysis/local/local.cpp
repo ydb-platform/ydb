@@ -107,7 +107,7 @@ namespace NSQLComplete {
             result.Hint = HintMatch(candidates);
             result.Object = ObjectMatch(context, candidates);
             result.Cluster = ClusterMatch(context, candidates);
-            result.Column = ColumnMatch(candidates);
+            result.Column = ColumnMatch(context, candidates);
             result.Binding = BindingMatch(candidates);
 
             return result;
@@ -322,8 +322,19 @@ namespace NSQLComplete {
             return cluster;
         }
 
-        bool ColumnMatch(const TC3Candidates& candidates) const {
-            return AnyOf(candidates.Rules, RuleAdapted(IsLikelyColumnStack));
+        TMaybe<TLocalSyntaxContext::TColumn> ColumnMatch(
+            const TCursorTokenContext& context, const TC3Candidates& candidates) const {
+            if (!AnyOf(candidates.Rules, RuleAdapted(IsLikelyColumnStack))) {
+                return Nothing();
+            }
+
+            TLocalSyntaxContext::TColumn column;
+            if (TMaybe<TRichParsedToken> begin;
+                (begin = context.MatchCursorPrefix({"ID_PLAIN", "DOT"})) ||
+                (begin = context.MatchCursorPrefix({"ID_PLAIN", "DOT", ""}))) {
+                column.Table = begin->Base->Content;
+            }
+            return column;
         }
 
         bool BindingMatch(const TC3Candidates& candidates) const {

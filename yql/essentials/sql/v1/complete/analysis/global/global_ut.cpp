@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
 
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-            TColumnContext expected = {.Tables = {{"plato", "Input"}}};
+            TColumnContext expected = {.Tables = {TTableId{"plato", "Input"}}};
             UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
         }
         {
@@ -113,7 +113,15 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
 
             TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-            TColumnContext expected = {.Tables = {{"plato", "//home/input"}}};
+            TColumnContext expected = {.Tables = {TTableId{"plato", "//home/input"}}};
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+        {
+            TString query = "SELECT # FROM plato.Input AS x";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {.Tables = {TAliased<TTableId>("x", TTableId{"plato", "Input"})}};
             UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
         }
     }

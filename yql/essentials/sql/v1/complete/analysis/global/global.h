@@ -8,6 +8,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/hash.h>
 
 namespace NSQLComplete {
 
@@ -16,8 +17,28 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
+    template <std::regular T>
+    struct TAliased: T {
+        TString Alias;
+
+        TAliased(TString alias, T value)
+            : T(std::move(value))
+            , Alias(std::move(alias))
+        {
+        }
+
+        TAliased(T value)
+            : T(std::move(value))
+        {
+        }
+
+        friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
+    };
+
     struct TColumnContext {
-        TVector<TTableId> Tables;
+        TVector<TAliased<TTableId>> Tables;
+
+        TVector<TTableId> TablesWithAlias(TStringBuf alias) const;
 
         friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
     };

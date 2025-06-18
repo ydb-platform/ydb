@@ -1,5 +1,6 @@
 #include "global.h"
 
+#include "column.h"
 #include "function.h"
 #include "named_node.h"
 #include "parse_tree.h"
@@ -7,6 +8,10 @@
 
 #include <yql/essentials/sql/v1/complete/antlr4/pipeline.h>
 #include <yql/essentials/sql/v1/complete/syntax/ansi.h>
+
+#include <library/cpp/iterator/functools.h>
+
+#include <util/string/join.h>
 
 namespace NSQLComplete {
 
@@ -54,6 +59,11 @@ namespace NSQLComplete {
             ctx.Use = FindUseStatement(sqlQuery, &Tokens_, input.CursorPosition, env);
             ctx.Names = CollectNamedNodes(sqlQuery, &Tokens_, input.CursorPosition);
             ctx.EnclosingFunction = EnclosingFunction(sqlQuery, &Tokens_, input.CursorPosition);
+            ctx.Column = InferColumnContext(sqlQuery, &Tokens_, input.CursorPosition);
+
+            if (ctx.Use && ctx.Column) {
+                EnrichTableClusters(*ctx.Column, *ctx.Use);
+            }
 
             return ctx;
         }
@@ -65,6 +75,14 @@ namespace NSQLComplete {
             Tokens_.setTokenSource(&Lexer_);
             Parser_.reset();
             return Parser_.sql_query();
+        }
+
+        void EnrichTableClusters(TColumnContext& column, const TUseContext& use) {
+            for (auto& table : column.Tables) {
+                if (table.Cluster.empty()) {
+                    table.Cluster = use.Cluster;
+                }
+            }
         }
 
         antlr4::ANTLRInputStream Chars_;
@@ -97,3 +115,10 @@ namespace NSQLComplete {
     }
 
 } // namespace NSQLComplete
+
+template <>
+void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::TColumnContext& value) {
+    out << "TColumnContext { ";
+    out << "Tables: " << JoinSeq(", ", value.Tables);
+    out << " }";
+}

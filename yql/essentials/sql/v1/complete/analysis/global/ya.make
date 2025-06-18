@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    column.cpp
     evaluate.cpp
     function.cpp
     global.cpp

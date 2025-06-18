@@ -24,37 +24,38 @@
                     ];
                 ];
                 [
-                    "value";
+                    "string_field";
                     [
                         "OptionalType";
                         [
                             "DataType";
                             "String"
                         ]
-                    ]
+                    ];
                 ];
                 [
-                    "codec";
+                    "int64_field";
                     [
                         "OptionalType";
                         [
                             "DataType";
-                            "String"
+                            "Int64"
                         ]
-                    ]
+                    ];
                 ];
                 [
-                    "dummy";
+                    "bool_field";
                     [
                         "OptionalType";
                         [
                             "DataType";
-                            "String"
-                        ]
+                            "Bool"
+                        ];
                     ]
                 ];
             ]
         ]
     };
-    "dynamic" = %true;
+    "_yql_dynamic" = %true;
+    "enable_dynamic_store_read" = %true;
 }

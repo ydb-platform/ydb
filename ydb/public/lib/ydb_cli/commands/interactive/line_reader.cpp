@@ -6,7 +6,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/string_util.h>
+#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>

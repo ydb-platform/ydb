@@ -96,7 +96,16 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             std::unordered_map<TString, ui32> consumerToOffset;
             for (auto& consumerResult : partResult.GetConsumerResult()) {
                 if (consumerResult.GetErrorCode() == NPersQueue::NErrorCode::OK) {
-                    consumerToOffset[consumerResult.GetConsumer()] = consumerResult.GetCommitedOffset();
+                    std::optional<TString> committedMetadata = consumerResult.HasCommittedMetadata() ?
+                        static_cast<std::optional<TString>>(consumerResult.GetCommittedMetadata()) :
+                        std::nullopt;
+                    TEvKafka::PartitionConsumerOffset partitionConsumerOffset = TEvKafka::PartitionConsumerOffset{
+                        static_cast<ui64>(partResult.GetPartition()),
+                        static_cast<ui64>(consumerResult.GetCommitedOffset()),
+                        committedMetadata};
+                    consumerToOffset.emplace(
+                        consumerResult.GetConsumer(),
+                        partitionConsumerOffset);
                 }
             }
             (*PartitionIdToOffsets)[partResult.GetPartition()] = consumerToOffset;

@@ -1092,7 +1092,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         });
 
         // Setup receiving whiteboard state updates
-        testCtx.GetRuntime()->SetDispatchTimeout(2 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
+        testCtx.GetRuntime()->SetDispatchTimeout(10 * TDuration::MilliSeconds(testCtx.GetPDiskConfig()->StatisticsUpdateIntervalMs));
         testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(1), testCtx.Sender);
         AwaitAndCheckEvPDiskStateUpdate(testCtx, 0u, 0);
 

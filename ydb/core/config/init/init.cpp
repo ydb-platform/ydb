@@ -532,17 +532,17 @@ private:
         const IEnv& env,
         IInitLogger& logger)
     {
-        NYdb::NConfig::TFetchConfigResult result;
+        std::optional<NYdb::NConfig::TFetchConfigResult> result;
         SetRandomSeed(TInstant::Now().MicroSeconds());
 
         auto attempt = [&](const TString& addr) {
             logger.Out() << "Trying to fetch config from " << addr << Endl;
             result = TryToFetchConfig(grpcSettings, addr, env);
-            if (result.IsSuccess()) {
+            if (result->IsSuccess()) {
                 logger.Out() << "Success. Fetched config from " << addr << Endl;
                 return true;
             }
-            logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(result) << Endl;
+            logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(*result) << Endl;
             return false;
         };
 
@@ -551,9 +551,9 @@ private:
         if (!retryResult.Success) {
              logger.Err() << "WARNING: couldn't fetch config from Console after " 
                         << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds 
-                        << " rounds. Last error: " << static_cast<NYdb::TStatus>(result) << Endl;
+                        << " rounds. Last error: " << static_cast<NYdb::TStatus>(*result) << Endl;
         }
-        return result;
+        return *result;
     }
 
 public:
@@ -564,6 +564,9 @@ public:
         IInitLogger& logger) const override
     {
         auto result = FetchConfigImpl(grpcSettings, addrs, env, logger);
+        if (!result.IsSuccess()) {
+            return nullptr;
+        }
         return std::make_shared<TConfigResultWrapper>(std::move(result));
     }
 };

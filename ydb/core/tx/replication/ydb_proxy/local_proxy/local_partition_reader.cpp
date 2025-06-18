@@ -42,6 +42,7 @@ std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> TLocalTopicPartitionReaderActor
 STATEFN(TLocalTopicPartitionReaderActor::OnInitEvent) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvYdbProxy::TEvReadTopicRequest, HandleInit);
+        hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
     default:
         Y_DEBUG_ABORT_S(TStringBuilder() << "Unhandled message " << ev->GetTypeName());
     }
@@ -57,6 +58,10 @@ void TLocalTopicPartitionReaderActor::HandleInit(TEvYdbProxy::TEvReadTopicReques
     LOG_T("Handle on init " << ev->Get()->ToString());
 
     RequestsQueue.emplace_back(ev->Sender, ev->Cookie, GetSkipCommit(ev));
+}
+
+void TLocalTopicPartitionReaderActor::Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
+    LOG_T("Handle " << ev->Get()->ToString());
 }
 
 void TLocalTopicPartitionReaderActor::DoInitOffset() {
@@ -174,6 +179,7 @@ std::unique_ptr<TEvPersQueue::TEvRequest> TLocalTopicPartitionReaderActor::Creat
 STATEFN(TLocalTopicPartitionReaderActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
+        hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
 
         hFunc(TEvTabletPipe::TEvClientDestroyed, TBase::Handle);
         sFunc(TEvents::TEvPoison, PassAway);

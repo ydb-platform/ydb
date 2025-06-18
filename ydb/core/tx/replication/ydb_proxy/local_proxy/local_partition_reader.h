@@ -34,6 +34,7 @@ protected:
 
 private:
     void HandleInit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev);
+    void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev);
 
 private:
     void DoInitOffset();

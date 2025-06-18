@@ -15,11 +15,14 @@ private:
     YDB_READONLY_DEF(TDuration, Duration);
 
 public:
-    void Cut(const TMonotonic start) {
-        AFL_VERIFY(start < Finish);
+    [[nodiscard]] bool Cut(const TMonotonic start) {
+        if (Finish <= start) {
+            return false;
+        }
         if (Start <= start) {
             Start = start;
         }
+        return true;
     }
 
     TTaskCPUUsage(const TMonotonic start, const TMonotonic finish)
@@ -92,8 +95,7 @@ public:
 
     void AddUsage(const TTaskCPUUsage& extUsage) {
         TTaskCPUUsage usage = extUsage;
-        usage.Cut(StartInstant);
-        if (usage.GetDuration()) {
+        if (usage.Cut(StartInstant)) {
             Usage.emplace_back(usage);
             Duration += usage.GetDuration();
         }

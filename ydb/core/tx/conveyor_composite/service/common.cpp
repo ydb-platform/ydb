@@ -7,8 +7,7 @@ namespace NKikimr::NConveyorComposite {
 void TCPUUsage::Exchange(const TDuration predicted, const TMonotonic start, const TMonotonic finish) {
     {
         TTaskCPUUsage usage(start, finish);
-        usage.Cut(StartInstant);
-        if (usage.GetDuration()) {
+        if (usage.Cut(StartInstant)) {
             Usage.emplace_back(TTaskCPUUsage(start, finish));
             Duration += Usage.back().GetDuration();
         }
@@ -30,7 +29,7 @@ void TCPUUsage::Cut(const TMonotonic start) {
             std::swap(Usage[idx], Usage.back());
             Usage.pop_back();
         } else {
-            Usage[idx].Cut(start);
+            AFL_VERIFY(Usage[idx].Cut(start));
             Duration += Usage[idx].GetDuration();
             ++idx;
         }

@@ -43,7 +43,7 @@ public:
             if (!WeightedProcesses.empty() && !it->second->GetInProgressTasksCount()) {
                 it->second->SetBaseWeight(WeightedProcesses.begin()->first);
             }
-            WeightedProcesses[it->second->GetWeight()].emplace_back(it->second);
+            WeightedProcesses[it->second->GetWeightedUsage()].emplace_back(it->second);
         }
         it->second->RegisterTask(std::move(task), Category);
     }

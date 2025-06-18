@@ -3,7 +3,7 @@
 namespace NKikimr::NConveyorComposite {
 
 bool TProcessCategory::HasTasks() const {
-    return ProcessesWithTasks.size();
+    return WeightedProcesses.size();
 }
 
 void TProcessCategory::DoQuant(const TMonotonic newStart) {
@@ -17,7 +17,7 @@ std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
         for (ui32 i = 0; i < it->second.size(); ++i) {
-            if (!processes[i]->GetScope()->CheckToRun()) {
+            if (!it->second[i]->GetScope()->CheckToRun()) {
                 continue;
             }
             pMin = it->second[i];

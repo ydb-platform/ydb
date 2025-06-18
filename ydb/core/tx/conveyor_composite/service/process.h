@@ -87,7 +87,7 @@ public:
     void SetBaseWeight(const TDuration d) {
         BaseWeight = d;
         CPUUsage->Clear();
-        AFL_VERIFY(InProgressTasksCount->Val() == 0);
+        AFL_VERIFY(InProgressTasksCount.Val() == 0);
         AFL_VERIFY(WaitingTasksCount->Val() == 0);
     }
 

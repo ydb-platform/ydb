@@ -388,4 +388,6 @@ message TTableServiceConfig {
 
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = false];
 
+    optional bool EnableParallelPointReadConsolidation = 89 [default = false];
+
 };

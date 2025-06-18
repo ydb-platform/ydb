@@ -57,12 +57,8 @@ void TLocalTopicPartitionCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev
     const auto& record = ev->Get()->Record;
 
     TString error;
-    if (!NPQ::BasicCheck(record, error)) {
-        return OnError(TStringBuilder() << "Wrong response: " << error);
-    }
-
-    if (!record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
-        return OnError("Unsupported response from partition");
+    if (!NPQ::BasicCheck(record, error, false)) {
+        return OnError(TStringBuilder() << "Wrong commit response: " << error);
     }
 
     Send(Parent, CreateResponse(NYdb::EStatus::SUCCESS, ""));

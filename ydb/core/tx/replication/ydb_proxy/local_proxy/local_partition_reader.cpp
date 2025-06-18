@@ -197,7 +197,7 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
 
     TString error;
     if (!NPQ::BasicCheck(record, error)) {
-        return OnError(TStringBuilder() << "Wrong response: " << error);
+        return OnError(TStringBuilder() << "Wrong read response: " << error);
     }
 
     if (record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {

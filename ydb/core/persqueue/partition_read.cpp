@@ -2,7 +2,7 @@
 #include "mirrorer.h"
 #include "partition_log.h"
 #include "partition_util.h"
-#include "partition.h"
+#include "partition_common.h"
 #include "read.h"
 #include "dread_cache_service/caching_service.h"
 
@@ -115,32 +115,6 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
         //
         AddUserAct(event.Release());
     }
-}
-
-template<typename T>
-std::function<void(bool, T& r)> TPartition::GetResultPostProcessor(const TString& consumer) {
-    return [&, this](bool readingFinished, T& r) {
-        r.SetReadingFinished(readingFinished);
-        if (readingFinished) {
-            ui32 partitionId = Partition.OriginalPartitionId;
-
-            auto* node = PartitionGraph.GetPartition(partitionId);
-            for (auto* child : node->DirectChildren) {
-                r.AddChildPartitionIds(child->Id);
-
-                for (auto* p : child->DirectParents) {
-                    if (p->Id != partitionId) {
-                        r.AddAdjacentPartitionIds(p->Id);
-                    }
-                }
-            }
-
-            if constexpr (std::is_same<T, NKikimrClient::TCmdReadResult>::value) {
-                auto& userInfo = UsersInfoStorage->GetOrCreate(consumer, ActorContext());
-                r.SetCommittedToEnd(LastOffsetHasBeenCommited(userInfo));
-            }
-        }
-    };
 }
 
 TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> TPartition::MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished) {

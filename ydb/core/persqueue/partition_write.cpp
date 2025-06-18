@@ -25,7 +25,7 @@
 
 namespace NKikimr::NPQ {
 
-static const ui32 MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER = 100;
+static const ui64 MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER = std::numeric_limits<i32>::max() / 2;
 static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
@@ -247,6 +247,54 @@ void TPartition::HandleOnIdle(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ct
     HandlePendingRequests(ctx);
 }
 
+ui64 CalculateReplyOffset(bool already, bool kafkaDeduplication, ui64 maxOffset, ui64 offset, ui64 maxSeqNo, ui64 seqNo) {
+    if (!already) {
+        // If it's not a duplicate message, return its offset.
+        return offset;
+    }
+
+    if (!kafkaDeduplication) {
+        // If it's a duplicate message, return the maxOffset, if we're not dealing with Kafka protocol.
+        return maxOffset;
+    }
+
+    // At this point we're working with Kafka protocol deduplication.
+    // SeqNos in Kafka are of int32 type and may overflow, i.e. the next seqno after int32max is 0.
+
+    // Try to return offset of the message, given the maxOffset, maxSeqNo and seqNo.
+    // The basic formula is (maxOffset - (maxSeqNo - seqNo)), but we need to handle various overflows.
+
+    if (maxSeqNo < seqNo) {
+        maxSeqNo += 1ul << 31;
+    }
+
+    auto diff = maxSeqNo - seqNo;
+
+    if (maxOffset < diff) {
+        return 0;
+    }
+
+    return maxOffset - diff;
+}
+
+// IsDuplicate is only needed for Kafka protocol deduplication.
+// baseSequence field in Kafka protocol has type int32 and the numbers loop back from the maximum possible value back to 0.
+// I.e. the next seqno after int32max is 0.
+// To decide if we got a duplicate seqno or an out of order seqno,
+// we are comparing the difference between maxSeqNo and seqNo with MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER.
+// The value of MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER is half of the int32 range.
+bool IsDuplicate(ui64 maxSeqNo, ui64 seqNo) {
+    if (maxSeqNo < seqNo) {
+        maxSeqNo += 1ul << 31;
+    }
+    return maxSeqNo - seqNo < MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER;
+}
+
+// InSequence is only needed for Kafka protocol deduplication.
+bool InSequence(ui64 maxSeqNo, ui64 seqNo) {
+    return (maxSeqNo + 1 == seqNo) || (maxSeqNo == std::numeric_limits<i32>::max() && seqNo == 0);
+}
+
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AnswerCurrentWrites. Responses.size()=" << Responses.size());
     const auto now = ctx.Now();
@@ -283,7 +331,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                         writeResponse.Msg.EnableKafkaDeduplication &&
                         writeResponse.Msg.ProducerEpoch.Defined() &&
                         writeResponse.Msg.ProducerEpoch == it->second.ProducerEpoch &&
-                        (maxSeqNo + ((maxSeqNo < seqNo) ? (1ul << 32) : 0) - seqNo < MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER)
+                        IsDuplicate(maxSeqNo, seqNo)
                     );
             } else if (writeResponse.InitialSeqNo) {
                 maxSeqNo = writeResponse.InitialSeqNo.value();
@@ -315,11 +363,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
             }
 
-            ui64 replyOffset =
-                already ? (writeResponse.Msg.EnableKafkaDeduplication
-                            ? (maxOffset - (maxSeqNo - seqNo))
-                            : maxOffset)
-                        : offset;
+            ui64 replyOffset = CalculateReplyOffset(already, writeResponse.Msg.EnableKafkaDeduplication, maxOffset, offset, maxSeqNo, seqNo);
 
             ReplyWrite(
                 ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
@@ -1181,11 +1225,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             // At this point it must be defined, as we've already checked ProducerEpoch.
             Y_ABORT_UNLESS(sourceId.SeqNo().has_value());
             ui64 lastSeqNo = *sourceId.SeqNo();
-            bool inSequence = (lastSeqNo + 1 == p.Msg.SeqNo) || (lastSeqNo == std::numeric_limits<i32>::max() && p.Msg.SeqNo == 0);
-
-            if (!inSequence) {
-                bool isDuplicate = lastSeqNo + ((lastSeqNo < p.Msg.SeqNo) ? (1ul << 32) : 0) - p.Msg.SeqNo < MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER;
-                if (isDuplicate) {
+            if (!InSequence(lastSeqNo, p.Msg.SeqNo)) {
+                if (IsDuplicate(lastSeqNo, p.Msg.SeqNo)) {
                     // "DUPLICATE_SEQUENCE_NUMBER". Kafka sends successful answer in response
                     // to requests that exactly match some of the last 5 batches (that may contain multiple records each).
 

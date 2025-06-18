@@ -970,10 +970,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 5 })),
                 { .BaseOffset = 1, .ErrorCode = EKafkaErrors::NONE_ERROR });
 
-            //
+            // This is an incorrect request (we didn't send seqno=1). We try to guess the offset of the message
+            // with seqno=1 (maxOffset - (maxSeqNo - seqno)), but if the result is negative, we return 0.
             CheckResponse(
                 client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1 })),
-                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER });
+                { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
 
             AssertOffset(topic, 4);
         });
@@ -1013,11 +1014,31 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
             // Write a batch with seqnos (max<int32> - 1, max<int32>), then write a batch of messages with seqnos (0, 1).
             auto topic = *topicMetadata.Name;
+
             auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = std::numeric_limits<int32_t>::max() - 1, .RecordCount = 2 }));
             CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
             auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 0, .RecordCount = 2 }));
             CheckResponse(res2, { .BaseOffset = 2, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
             AssertOffset(topic, 4);
+        });
+
+        WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
+            // Write seqno=max<int32>, then seqno=1. Expect OUT_OF_ORDER_SEQUENCE_NUMBER.
+            // Then write seqno=max<int32> / 2 + 2. Expect "DUPLICATE_SEQUENCE_NUMBER".
+
+            auto topic = *topicMetadata.Name;
+            auto res1 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = std::numeric_limits<TBaseSequence>::max() }));
+            CheckResponse(res1, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            auto res2 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = 1 }));
+            CheckResponse(res2, { .ErrorCode = EKafkaErrors::OUT_OF_ORDER_SEQUENCE_NUMBER });
+
+            auto res3 = client.Produce(topic, 0, MakeBatch(id, epoch, { .BaseSequence = std::numeric_limits<TBaseSequence>::max() / 2 + 2 }));
+            CheckResponse(res3, { .BaseOffset = 0, .ErrorCode = EKafkaErrors::NONE_ERROR });
+
+            AssertOffset(topic, 1);
         });
 
         WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
@@ -1118,9 +1139,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         });
 
         WithNewTopic([&](TProducerId id, TProducerEpoch epoch, NKafka::TMetadataResponseData::TMetadataResponseTopic topicMetadata) {
-            // Write messages with producer epoch = -1. Any seqnos are allowed in any order.
-            // Then write a message with proper epoch.
-            // Then check that epoch -1 is not allowed anymore.
+            // 1. Write messages with producer epoch = -1. Any seqnos are allowed in any order.
+            // 2. Then write a message with proper epoch.
+            // 3. Then check that epoch -1 is still allowed (NOTE: non-conforming behavior, Kafka does not allow this).
 
             auto topic = *topicMetadata.Name;
 

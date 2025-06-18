@@ -2631,6 +2631,78 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 }
 
+Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinEmptyInputTest) {
+
+    Y_UNIT_TEST_LLVM_SPILLING(TestInnerEmptyLeft) {
+        if (SPILLING && RuntimeVersion < 50) return;
+
+        TSetup<LLVM, SPILLING> setup;
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        // Define tuple with simple key/payload structure
+        const auto tupleType = pb.NewTupleType({
+            pb.NewDataType(NUdf::TDataType<ui32>::Id),
+            pb.NewDataType(NUdf::TDataType<char*>::Id)
+        });
+
+        // Empty left list
+        const auto emptyLeft = pb.NewList(tupleType, {});
+
+        // Right list contains one element but wrapped with Ensure(false) that would throw
+        const auto key1 = pb.NewDataLiteral<ui32>(1);
+        const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("A");
+
+        const auto rightList = pb.NewList(tupleType, {
+            pb.NewTuple({key1, payload1})
+        });
+
+        const auto bomb = pb.NewDataLiteral<NUdf::EDataSlot::String>("BOMB");
+
+        // Build right flow which will fail if ever evaluated
+        const auto rightFlow = pb.ExpandMap(pb.ToFlow(rightList), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+            return {
+                pb.Ensure(pb.Nth(item, 0U), pb.NewDataLiteral<bool>(false), bomb, "", 0, 0),
+                pb.Nth(item, 1U)
+            };
+        });
+
+        const auto leftFlow = pb.ToFlow(emptyLeft);
+
+        const auto resultType = pb.NewFlowType(pb.NewMultiType({
+            pb.NewDataType(NUdf::TDataType<char*>::Id),
+            pb.NewDataType(NUdf::TDataType<char*>::Id)
+        }));
+
+        const auto joinFlow = pb.GraceJoin(
+            pb.ExpandMap(leftFlow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                return {pb.Nth(item, 0U), pb.Nth(item, 1U)};
+            }),
+            rightFlow,
+            EJoinKind::Inner,
+            {0U}, {0U},
+            {1U, 0U}, {1U, 1U},
+            resultType);
+
+        const auto pgmReturn = pb.Collect(pb.NarrowMap(joinFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pb.NewTuple(items);
+        }));
+
+        if (SPILLING) {
+            setup.RenameCallable(pgmReturn, "GraceJoin", "GraceJoinWithSpilling");
+        }
+
+        const auto graph = setup.BuildGraph(pgmReturn);
+        if (SPILLING) {
+            graph->GetContext().SpillerFactory = std::make_shared<TMockSpillerFactory>();
+        }
+
+        const auto iterator = graph->GetValue().GetListIterator();
+        NUdf::TUnboxedValue tuple;
+        // Result must be empty
+        UNIT_ASSERT(!iterator.Next(tuple));
+        UNIT_ASSERT(!iterator.Next(tuple));
+    }
+}
 
 }
 

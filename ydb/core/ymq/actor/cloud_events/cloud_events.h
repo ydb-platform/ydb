@@ -15,7 +15,7 @@ namespace NKikimr::NSQS {
 namespace NCloudEvents {
     class TEventIdGenerator {
     public:
-        static uint64_t Generate();
+        static ui64 Generate();
     };
 
     struct TEventInfo {

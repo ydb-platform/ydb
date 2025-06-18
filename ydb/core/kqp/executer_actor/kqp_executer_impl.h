@@ -1077,8 +1077,8 @@ protected:
             structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(SecureParams).ToJson();
         }
 
-        auto nodesPlaner = GetStageNodesHint(stage, resourceSnapshot);
-        if (!nodesPlaner && !resourceSnapshot.empty()) {
+        auto nodesPlanner = GetStageNodesHint(stage, resourceSnapshot);
+        if (!nodesPlanner && !resourceSnapshot.empty()) {
             ui64 selfNodeIdx = 0;
             for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
                 if (resourceSnapshot[i].GetNodeId() == SelfId().NodeId()) {
@@ -1086,7 +1086,7 @@ protected:
                     break;
                 }
             }
-            nodesPlaner = [&resourceSnapshot, selfNodeIdx](ui32 taskIdx) {
+            nodesPlanner = [&resourceSnapshot, selfNodeIdx](ui32 taskIdx) {
                 return resourceSnapshot[(selfNodeIdx + taskIdx) % resourceSnapshot.size()].GetNodeId();
             };
         }
@@ -1109,10 +1109,10 @@ protected:
             }
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
-            if (!nodesPlaner) {
+            if (!nodesPlanner) {
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
             } else {
-                task.Meta.NodeId = nodesPlaner(i);
+                task.Meta.NodeId = nodesPlanner(i);
                 task.Meta.Type = TTaskMeta::TTaskType::Scan;
             }
 
@@ -1505,13 +1505,13 @@ protected:
             }
         }
 
-        auto nodesPlaner = GetStageNodesHint(stage, resourceSnapshot);
+        auto nodesPlanner = GetStageNodesHint(stage, resourceSnapshot);
         for (ui32 i = 0; i < partitionsCount; ++i) {
             auto& task = TasksGraph.AddTask(stageInfo);
-            if (!nodesPlaner) {
+            if (!nodesPlanner) {
                 task.Meta.Type = TTaskMeta::TTaskType::Compute;
             } else {
-                task.Meta.NodeId = nodesPlaner(i);
+                task.Meta.NodeId = nodesPlanner(i);
                 task.Meta.Type = TTaskMeta::TTaskType::Scan;
             }
             task.Meta.ExecuterId = SelfId();

@@ -357,7 +357,8 @@ private:
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
             progress->Record.SetRowsDelta(WriteBuf.GetRows());
-            progress->Record.SetBytesDelta(WriteBuf.GetRowCellBytes());
+            // TODO: use GetRowCellBytes method?
+            progress->Record.SetBytesDelta(WriteBuf.GetBufferBytes());
             WriteBuf.Clear();
 
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);

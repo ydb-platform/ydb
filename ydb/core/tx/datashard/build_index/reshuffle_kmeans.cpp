@@ -167,54 +167,54 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
-        try {
-            LOG_T("Seek " << seq << " " << Debug());
+    try {
+        LOG_T("Seek " << seq << " " << Debug());
 
-            if (IsExhausted) {
-                return Uploader.CanFinish()
-                    ? EScan::Final
-                    : EScan::Sleep;
-            }
-
-            lead = Lead;
-
-            return EScan::Feed;
-        } catch (const std::exception& exc) {
-            Uploader.AddIssue(exc);
-            return EScan::Final;
+        if (IsExhausted) {
+            return Uploader.CanFinish()
+                ? EScan::Final
+                : EScan::Sleep;
         }
+
+        lead = Lead;
+
+        return EScan::Feed;
+    } catch (const std::exception& exc) {
+        Uploader.AddIssue(exc);
+        return EScan::Final;
+    }
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
-        try {
-            // LOG_T("Feed " << Debug());
+    try {
+        // LOG_T("Feed " << Debug());
 
-            ++ReadRows;
-            ReadBytes += CountBytes(key, row);
+        ++ReadRows;
+        ReadBytes += CountBytes(key, row);
 
-            Feed(key, *row);
+        Feed(key, *row);
 
-            return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
-        } catch (const std::exception& exc) {
-            Uploader.AddIssue(exc);
-            return EScan::Final;
-        }
+        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+    } catch (const std::exception& exc) {
+        Uploader.AddIssue(exc);
+        return EScan::Final;
+    }
     }
 
     EScan Exhausted() noexcept final
     {
-        try {
-            LOG_T("Exhausted " << Debug());
+    try {
+        LOG_T("Exhausted " << Debug());
 
-            IsExhausted = true;
+        IsExhausted = true;
 
-            // call Seek to wait uploads
-            return EScan::Reset;
-        } catch (const std::exception& exc) {
-            Uploader.AddIssue(exc);
-            return EScan::Final;
-        }
+        // call Seek to wait uploads
+        return EScan::Reset;
+    } catch (const std::exception& exc) {
+        Uploader.AddIssue(exc);
+        return EScan::Final;
+    }
     }
 
 protected:

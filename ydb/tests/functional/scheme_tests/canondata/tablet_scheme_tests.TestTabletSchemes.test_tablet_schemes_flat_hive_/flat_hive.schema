@@ -719,6 +719,11 @@
                 "ColumnId": 12,
                 "ColumnName": "DrainSeqNo",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "BridgePileId",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -736,7 +741,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

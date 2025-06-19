@@ -20,9 +20,11 @@ target_link_libraries(object-simple-static PUBLIC
   contrib-libs-cxxsupp
   yutil
   name-object-simple
+  library-cpp-json
 )
 
 target_sources(object-simple-static PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/object/simple/static/schema_json.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/object/simple/static/schema.cpp
 )
 

@@ -57,7 +57,7 @@ add_custom_command(
   ${TOOL_archiver_bin}
   -q
   -x
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/support/pp.lua:
+  ${PROJECT_SOURCE_DIR}/library/cpp/config/support/pp.lua\:
   -o
   ${PROJECT_BINARY_DIR}/library/cpp/config/code.inc
 )

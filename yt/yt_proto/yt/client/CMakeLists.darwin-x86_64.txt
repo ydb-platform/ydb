@@ -65,6 +65,7 @@ target_proto_messages(yt_proto-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/query_client/proto/query_statistics.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/scheduler/proto/spec_patch.proto
   ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/misc/proto/workload.proto
+  ${PROJECT_SOURCE_DIR}/yt/yt_proto/yt/client/misc/proto/signature.proto
 )
 
 target_sources(yt_proto-yt-client PRIVATE
@@ -92,6 +93,7 @@ target_sources(yt_proto-yt-client PRIVATE
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/query_client/proto/query_statistics.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/scheduler/proto/spec_patch.pb.h
   ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/misc/proto/workload.pb.h
+  ${PROJECT_BINARY_DIR}/yt/yt_proto/yt/client/misc/proto/signature.pb.h
 )
 
 

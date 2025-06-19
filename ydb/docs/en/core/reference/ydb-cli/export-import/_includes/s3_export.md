@@ -74,7 +74,7 @@ If successful, the `export s3` command prints summary information about the enqu
    ...
    ```
 
-- In the proto-json-base64 mode, the operation ID is in the "id" attribute:
+- In the `proto-json-base64` mode, the operation ID is in the "id" attribute:
 
    ```json
    {"id":"ydb://export/6?id=281474976788395&kind=s3","ready":true, ... }
@@ -105,7 +105,7 @@ You can track the export progress by changes in the "progress" attribute:
    ...
    ```
 
-- In the proto-json-base64 mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
+- In the `proto-json-base64` mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
 
    ```json
    {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
@@ -147,7 +147,7 @@ Exporting all DB objects whose names do not start with a dot and that are not st
 
 ### Exporting multiple directories {#example-specific-dirs}
 
-Exporting items from DB directories named dir1 and dir2 to the `export1` directory in `mybucket` using the explicitly set S3 authentication parameters:
+Exporting items from DB directories named `dir1` and `dir2` to the `export1` directory in `mybucket` using the explicitly set S3 authentication parameters:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \

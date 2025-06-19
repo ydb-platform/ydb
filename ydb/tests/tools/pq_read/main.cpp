@@ -118,7 +118,6 @@ int main(int argc, const char* argv[]) {
                 }
                 bool prev = false;
                 if (allCommitted && !state->Closing && state->Closing.compare_exchange_strong(prev, true)) {
-                    state->Closing = true;
                     Cerr << "Closing session. Got " << state->MessagesReceived << " messages" << Endl;
                     state->ReadSession->Close(TDuration::Seconds(5));
                     Cerr << "Session closed" << Endl;

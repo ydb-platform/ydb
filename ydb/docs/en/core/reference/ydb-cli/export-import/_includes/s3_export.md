@@ -156,7 +156,7 @@ Exporting items from DB directories named dir1 and dir2 to the `export1` directo
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
 ```
 
-Or with usage of the `--destination-prefix` and `--include` parameters:
+Or using the `--destination-prefix` and `--include` parameters:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \

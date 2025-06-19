@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} has an Entity Framework (EF) Core provider, an object-relational mapper (ORM) that enables .NET developers to work with a {{ ydb-short-name }} database using .NET objects. It behaves like other EF Core providers (for example, SQL Server). If you're just getting started with EF Core, the [EF Core documentation](https://docs.microsoft.com/ef/core/index) is the best place to start.
 
-`ydb-dotnet-sdk` is an open-source project. If you encounter any issues, report them in the [official repository on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main).
+EF Core Provider is being developed in the [open GitHub repository](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main), all problems should be reported there.
 
 ## Set Up the {{ ydb-short-name }} Entity Framework Core Provider
 

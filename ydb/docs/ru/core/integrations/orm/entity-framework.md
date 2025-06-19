@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} предоставляет поставщика Entity Framework (EF) Core — объектно-реляционный модуль сопоставления (ORM), который позволяет разработчикам .NET работать с базой данных {{ ydb-short-name }} с помощью объектов .NET. Он ведёт себя так же, как и другие поставщики EF Core (например, SQL Server), поэтому здесь применима [общая документация по EF Core](https://docs.microsoft.com/ef/core/index). Если вы только начинаете работать с EF Core, эта документация — лучшее место для начала.
 
-Разработка ведётся в репозитории [ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main), о всех проблемах следует сообщать там.
+Разработка EF Core Provider ведётся в [открытом GitHub репозитории](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main), о всех проблемах следует сообщать там.
 
 ## Настройка поставщика {{ ydb-short-name }} Entity Framework Core
 

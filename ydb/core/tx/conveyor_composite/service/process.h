@@ -88,7 +88,7 @@ public:
         BaseWeight = d;
         CPUUsage->Clear();
         AFL_VERIFY(InProgressTasksCount.Val() == 0);
-        AFL_VERIFY(WaitingTasksCount->Val() == 0);
+        AFL_VERIFY(Tasks.size() == 0);
     }
 
     TDuration GetWeightedUsage() const {

@@ -115,7 +115,7 @@ bool TProcessCategory::RemoveWeightedProcess(const std::shared_ptr<TProcess>& pr
         return false;
     }
     auto itW = WeightedProcesses.find(process->GetWeightedUsage());
-    AFL_VERIFY(itW != WeightedProcesses.end());
+    AFL_VERIFY(itW != WeightedProcesses.end())("weight", process->GetWeightedUsage())("size", WeightedProcesses.size());
     bool found = false;
     for (ui32 i = 0; i < itW->second.size(); ++i) {
         if (itW->second[i]->GetProcessId() == process->GetProcessId()) {

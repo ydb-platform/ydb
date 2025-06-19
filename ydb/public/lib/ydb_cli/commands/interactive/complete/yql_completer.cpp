@@ -41,7 +41,7 @@ namespace NYdb::NConsoleClient {
             for (auto& candidate : Apply(text, prefix, contextLen, /* light = */ true)) {
                 hints.emplace_back(std::move(candidate.text()));
             }
-            hints.emplace_back("");
+            hints.emplace_back(""); // Disable inline hints
             return hints;
         }
 

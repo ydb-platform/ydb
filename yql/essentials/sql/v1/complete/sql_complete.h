@@ -61,9 +61,9 @@ namespace NSQLComplete {
             size_t Limit = 256;
 
         private:
-            THashSet<TString> IgnoredRules;
-            THashMap<TString, THashSet<TString>> DisabledPreviousByToken;
-            THashMap<TString, THashSet<TString>> ForcedPreviousByToken;
+            THashSet<TString> IgnoredRules_;
+            THashMap<TString, THashSet<TString>> DisabledPreviousByToken_;
+            THashMap<TString, THashSet<TString>> ForcedPreviousByToken_;
         };
 
         virtual ~ISqlCompletionEngine() = default;

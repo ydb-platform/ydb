@@ -176,8 +176,8 @@ public:
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         TUnboxedValue* items = nullptr;
-        auto result = valueBuilder->NewArray(Argc, items);
-        for (size_t i = 0; i < Argc; ++i) {
+        auto result = valueBuilder->NewArray(Argc_, items);
+        for (size_t i = 0; i < Argc_; ++i) {
             items[i] = std::move(args[i]);
         }
         return result;
@@ -189,7 +189,7 @@ public:
     }
 
     TGenericAsStruct(size_t argc)
-        : Argc(argc)
+        : Argc_(argc)
     {}
 
     static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
@@ -236,20 +236,20 @@ public:
         }
     }
 private:
-    const size_t Argc;
+    const size_t Argc_;
 };
 
 class TLogging : public TBoxedValue {
 public:
     TLogging(TLoggerPtr logger, TLogComponentId component)
-        : Logger(logger)
-        , Component(component)
+        : Logger_(logger)
+        , Component_(component)
     {}
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
         Y_UNUSED(valueBuilder);
         auto level = Min(args[0].Get<ui32>(),static_cast<ui32>(ELogLevel::Trace));
-        Logger->Log(Component, (ELogLevel)level, args[1].AsStringRef());
+        Logger_->Log(Component_, (ELogLevel)level, args[1].AsStringRef());
         return TUnboxedValue::Void();
     }
 
@@ -280,8 +280,8 @@ public:
     }
 
 private:
-    const TLoggerPtr Logger;
-    const TLogComponentId Component;
+    const TLoggerPtr Logger_;
+    const TLogComponentId Component_;
 };
 
 SIMPLE_MODULE(TSimpleUdfModule,

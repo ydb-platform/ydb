@@ -20,8 +20,9 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 template <typename TType>
-void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, bool outIsOptional, arrow::MemoryPool& pool) {
-    auto bitmap = outIsOptional ? ARROW_RESULT(arrow::AllocateBitmap((left.array()->length + left.array()->offset % 8) * sizeof(ui8), &pool)) : nullptr;
+void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, arrow::MemoryPool& pool) {
+    bool outHasBitmask = (right.is_array() && right.null_count() > 0) || (right.is_scalar() && !right.scalar()->is_valid);
+    auto bitmap = outHasBitmask ? ARROW_RESULT(arrow::AllocateBitmap((left.array()->length + left.array()->offset % 8) * sizeof(ui8), &pool)) : nullptr;
     if (bitmap && bitmap->size() > 0) {
         // Fill first byte with zero to prevent further uninitialized memory access.
         bitmap->mutable_data()[0] = 0;
@@ -30,20 +31,12 @@ void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, a
                                  {std::move(bitmap),
                                   ARROW_RESULT(arrow::AllocateBuffer((left.array()->length + left.array()->offset % 8) * sizeof(TType), &pool))},
                                  arrow::kUnknownNullCount, left.array()->offset % 8);
-    if (outIsOptional) {
+    if (outHasBitmask) {
         if (right.is_scalar()) {
-            if (right.scalar()->is_valid) {
-                BlendCoalesce<TType, /*isScalar=*/true, /*rightIsOptional=*/true>(
-                    TDatumStorageView<TType>(left),
-                    TDatumStorageView<TType>(right),
-                    TDatumStorageView<TType>(out),
-                    left.array()->length);
-            } else {
-                out = left;
-            }
+            out = left;
         } else {
             MKQL_ENSURE(TDatumStorageView<TType>(right).bitMask(), "Right array must have a null mask");
-            BlendCoalesce<TType, /*isScalar=*/false, /*rightIsOptional=*/true>(
+            BlendCoalesce<TType, /*isScalar=*/false, /*rightHasBitmask=*/true>(
                 TDatumStorageView<TType>(left),
                 TDatumStorageView<TType>(right),
                 TDatumStorageView<TType>(out),
@@ -51,13 +44,13 @@ void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, a
         }
     } else {
         if (right.is_scalar()) {
-            BlendCoalesce<TType, /*isScalar=*/true, /*rightIsOptional=*/false>(
+            BlendCoalesce<TType, /*isScalar=*/true, /*rightHasBitmask=*/false>(
                 TDatumStorageView<TType>(left),
                 TDatumStorageView<TType>(right),
                 TDatumStorageView<TType>(out),
                 left.array()->length);
         } else {
-            BlendCoalesce<TType, /*isScalar=*/false, /*rightIsOptional=*/false>(
+            BlendCoalesce<TType, /*isScalar=*/false, /*rightHasBitmask=*/false>(
                 TDatumStorageView<TType>(left),
                 TDatumStorageView<TType>(right),
                 TDatumStorageView<TType>(out),
@@ -83,18 +76,18 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
         case NYql::NUdf::EDataSlot::Bool:
         case NYql::NUdf::EDataSlot::Int8:
         case NYql::NUdf::EDataSlot::Uint8:
-            DispatchCoalesceImpl<ui8>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
+            DispatchCoalesceImpl<ui8>(left, right, out, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int16:
         case NYql::NUdf::EDataSlot::Uint16:
         case NYql::NUdf::EDataSlot::Date:
-            DispatchCoalesceImpl<ui16>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
+            DispatchCoalesceImpl<ui16>(left, right, out, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int32:
         case NYql::NUdf::EDataSlot::Uint32:
         case NYql::NUdf::EDataSlot::Date32:
         case NYql::NUdf::EDataSlot::Datetime:
-            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
+            DispatchCoalesceImpl<ui32>(left, right, out, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int64:
         case NYql::NUdf::EDataSlot::Uint64:
@@ -103,15 +96,15 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
         case NYql::NUdf::EDataSlot::Interval64:
         case NYql::NUdf::EDataSlot::Interval:
         case NYql::NUdf::EDataSlot::Timestamp:
-            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
+            DispatchCoalesceImpl<ui64>(left, right, out, pool);
             return true;
         case NYql::NUdf::EDataSlot::Double:
             static_assert(sizeof(NUdf::TDataType<double>::TLayout) == sizeof(NUdf::TDataType<ui64>::TLayout));
-            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
+            DispatchCoalesceImpl<ui64>(left, right, out, pool);
             return true;
         case NYql::NUdf::EDataSlot::Float:
             static_assert(sizeof(NUdf::TDataType<float>::TLayout) == sizeof(NUdf::TDataType<ui32>::TLayout));
-            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/!needUnwrapFirst, pool);
+            DispatchCoalesceImpl<ui32>(left, right, out, pool);
             return true;
         default:
             // Fallback to general builder/reader pipeline.

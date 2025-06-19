@@ -51,7 +51,7 @@ void TAsyncSemaphore::Release(i64 slots)
         {
             auto guard = WriterGuard(SpinLock_);
             auto frontWaiterOverdraftsSlots = [&] {
-                return IsOverdraftingAvailable() && !Waiters_.empty() && Waiters_.front().Slots > TotalSlots_;
+                return CanOverdraft() && !Waiters_.empty() && Waiters_.front().Slots > TotalSlots_;
             };
             auto frontWaiterCanAcquireSlots = [&] {
                 return !Waiters_.empty() && FreeSlots_ >= Waiters_.front().Slots;
@@ -105,7 +105,7 @@ bool TAsyncSemaphore::TryAcquire(i64 slots)
 
     auto guard = WriterGuard(SpinLock_);
 
-    if (FreeSlots_ >= slots || IsOverdraftingAvailable()) {
+    if (FreeSlots_ >= slots || CanOverdraft()) {
         FreeSlots_ -= slots;
         return true;
     }
@@ -118,7 +118,7 @@ TFuture<TAsyncSemaphoreGuard> TAsyncSemaphore::AsyncAcquire(i64 slots)
 
     auto guard = WriterGuard(SpinLock_);
 
-    if (FreeSlots_ >= slots || IsOverdraftingAvailable()) {
+    if (FreeSlots_ >= slots || CanOverdraft()) {
         FreeSlots_ -= slots;
         return MakeFuture(TAsyncSemaphoreGuard(this, slots));
     } else {
@@ -176,7 +176,7 @@ TFuture<void> TAsyncSemaphore::GetReadyEvent()
     return ReadyEvent_.ToFuture().ToUncancelable();
 }
 
-bool TAsyncSemaphore::IsOverdraftingAvailable() const
+bool TAsyncSemaphore::CanOverdraft() const
 {
     YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 

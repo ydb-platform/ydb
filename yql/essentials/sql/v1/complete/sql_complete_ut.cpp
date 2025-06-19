@@ -6,6 +6,7 @@
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/static/schema_json.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/complete/name/service/cluster/name_service.h>
@@ -20,6 +21,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/iterator/iterate_keys.h>
 #include <library/cpp/iterator/functools.h>
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <util/charset/utf8.h>
 
@@ -84,38 +87,51 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             },
         };
 
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> folders = {
-            {"", {{"/", {{"Folder", "local"},
-                         {"Folder", "test"},
-                         {"Folder", "prod"},
-                         {"Folder", ".sys"}}},
-                  {"/local/", {{"Table", "example"},
-                               {"Table", "account"},
-                               {"Table", "abacaba"}}},
-                  {"/test/", {{"Folder", "service"},
-                              {"Table", "meta"}}},
-                  {"/test/service/", {{"Table", "example"}}},
-                  {"/.sys/", {{"Table", "status"}}}}},
-            {"example",
-             {{"/", {{"Table", "people"},
-                     {"Folder", "yql"}}},
-              {"/yql/", {{"Table", "tutorial"}}}}},
-            {"saurus",
-             {{"/", {{"Table", "maxim"}}}}},
-        };
+        TString clustersText = R"({
+            "": { "type": "Folder", "entries": {
+                "local": { "type": "Folder", "entries": {
+                    "example": { "type": "Table", "columns": {} },
+                    "account": { "type": "Table", "columns": {} },
+                    "abacaba": { "type": "Table", "columns": {} }
+                }},
+                "test": { "type": "Folder", "entries": {
+                    "service": { "type": "Folder", "entries": {
+                        "example": { "type": "Table", "columns": {} }
+                    }},
+                    "meta": { "type": "Table", "columns": {} }
+                }},
+                "prod": { "type": "Folder", "entries": {
+                }},
+                ".sys": { "type": "Folder", "entries": {
+                    "status": { "type": "Table", "columns": {} }
+                }}
+            }},
+            "example": { "type": "Folder", "entries": {
+                "people": { "type": "Table", "columns": {
+                    "name": {},
+                    "age": {}
+                }},
+                "yql": { "type": "Folder", "entries": {
+                    "tutorial": { "type": "Table", "columns": {} }
+                }}
+            }},
+            "saurus": { "type": "Folder", "entries": {
+                "maxim": { "type": "Table", "columns": {} }
+            }}
+        })";
 
-        THashMap<TString, THashMap<TString, TTableDetails>> tables = {
-            {"example", {{"/people", {{"name", "age"}}}}}};
+        NJson::TJsonMap clustersJson;
+        Y_ENSURE(NJson::ReadJsonTree(clustersText, &clustersJson));
 
         auto clustersIt = NFuncTools::Filter(
-            [](const auto& x) { return !x.empty(); }, IterateKeys(folders));
+            [](const auto& x) { return !x.empty(); }, IterateKeys(clustersJson.GetMapSafe()));
         TVector<TString> clusters(begin(clustersIt), end(clustersIt));
 
         TFrequencyData frequency;
 
         TVector<INameService::TPtr> children = {
             MakeStaticNameService(std::move(names), frequency),
-            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(folders), std::move(tables)))),
+            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(clustersJson))),
             MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
         };
         INameService::TPtr service = MakeUnionNameService(
@@ -1072,6 +1088,27 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE example; SELECT # FROM `/people`"), expected);
         }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "x.age"},
+                {ColumnName, "x.name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people` AS x"), expected);
+        }
+        { // It is parsed into ``` SELECT x.FROM example.`/people` AS x ```
+            TVector<TCandidate> expected = {};
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.# FROM example.`/people` AS x"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.a# FROM example.`/people` AS x"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {};
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT y.a# FROM example.`/people` AS x"), expected);
+        }
     }
 
     Y_UNIT_TEST(Typing) {
@@ -1348,13 +1385,17 @@ JOIN yt:$cluster_name.test;
             MakeSimpleSchema(
                 MakeCachedSimpleSchema(
                     cache, "alice",
-                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "alice"}}}}}}))));
+                    MakeStaticSimpleSchema(TSchemaData{
+                        .Folders = {{"", {{"/", {{"Table", "alice"}}}}}},
+                    }))));
 
         auto petyaService = MakeSchemaNameService(
             MakeSimpleSchema(
                 MakeCachedSimpleSchema(
                     cache, "petya",
-                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "petya"}}}}}}))));
+                    MakeStaticSimpleSchema(TSchemaData{
+                        .Folders = {{"", {{"/", {{"Table", "petya"}}}}}},
+                    }))));
 
         auto aliceEngine = MakeSqlCompletionEngine(lexer, std::move(aliceService));
         auto petyaEngine = MakeSqlCompletionEngine(lexer, std::move(petyaService));

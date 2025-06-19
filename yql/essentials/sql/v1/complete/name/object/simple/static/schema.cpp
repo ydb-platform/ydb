@@ -79,10 +79,8 @@ namespace NSQLComplete {
 
     } // namespace
 
-    ISimpleSchema::TPtr MakeStaticSimpleSchema(
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> folders,
-        THashMap<TString, THashMap<TString, TTableDetails>> tables) {
-        return new TSimpleSchema(std::move(folders), std::move(tables));
+    ISimpleSchema::TPtr MakeStaticSimpleSchema(TSchemaData data) {
+        return new TSimpleSchema(std::move(data.Folders), std::move(data.Tables));
     }
 
 } // namespace NSQLComplete

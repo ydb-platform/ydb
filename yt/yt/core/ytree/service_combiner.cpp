@@ -149,7 +149,7 @@ private:
 
         context->SetRequestInfo("Limit: %v", limit);
 
-        std::atomic<bool> incomplete = {false};
+        std::atomic<bool> incomplete = false;
 
         // TODO(max42): Make it more efficient :(
         std::vector<TFuture<THashMap<TString, INodePtr>>> serviceResultFutures;
@@ -219,7 +219,7 @@ private:
 
         context->SetRequestInfo("Limit: %v", limit);
 
-        std::atomic<bool> incomplete = {false};
+        std::atomic<bool> incomplete = false;
 
         std::vector<TFuture<std::vector<IStringNodePtr>>> serviceResultFutures;
         for (const auto& service : Services_) {

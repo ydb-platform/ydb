@@ -15,6 +15,15 @@
 
 namespace NSQLComplete {
 
+    TVector<TTableId> TColumnContext::TablesWithAlias(TStringBuf alias) const {
+        if (alias.empty()) {
+            return TVector<TTableId>(Tables.begin(), Tables.end());
+        }
+
+        auto filtered = NFuncTools::Filter([&](const auto& x) { return x.Alias == alias; }, Tables);
+        return TVector<TTableId>(filtered.begin(), filtered.end());
+    }
+
     class TErrorStrategy: public antlr4::DefaultErrorStrategy {
     public:
         antlr4::Token* singleTokenDeletion(antlr4::Parser* /* recognizer */) override {
@@ -115,6 +124,12 @@ namespace NSQLComplete {
     }
 
 } // namespace NSQLComplete
+
+template <>
+void Out<NSQLComplete::TAliased<NSQLComplete::TTableId>>(IOutputStream& out, const NSQLComplete::TAliased<NSQLComplete::TTableId>& value) {
+    Out<NSQLComplete::TTableId>(out, value);
+    out << " AS " << value.Alias;
+}
 
 template <>
 void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::TColumnContext& value) {

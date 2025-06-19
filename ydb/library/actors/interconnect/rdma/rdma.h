@@ -29,7 +29,7 @@ class ICq {
     friend class TCqCommon;
     friend class TCqActor;
 public:
-    class IWr : public NNonCopyable::TNonCopyable {
+    class IWr {
     public:
         virtual ~IWr() = default;
         virtual ui64 GetId() noexcept = 0; // Returns id to post WR

@@ -34,7 +34,7 @@ public:
 
     int Init(const TRdmaCtx* ctx, int max_cqe) noexcept {
         const ibv_device_attr& attr = ctx->GetDevAttr();
-        if (max_cqe < 0) {
+        if (max_cqe <= 0) {
             max_cqe = attr.max_cqe;
         }
         Cq = ibv_create_cq(ctx->GetContext(), max_cqe, nullptr, nullptr, 0);
@@ -59,6 +59,15 @@ private:
 
 class TWr : public ICq::IWr {
 public:
+    TWr(ui64 id, TCqCommon* cqCommon) noexcept
+        : Id(id)
+        , CqCommon(cqCommon)
+    {}
+
+    TWr(const TWr&) = delete;
+    TWr& operator=(const TWr&) = delete;
+    TWr(TWr&& wr) noexcept = default;
+
     ui64 GetId() noexcept override {
         return Id;
     }
@@ -66,11 +75,6 @@ public:
     void Release() noexcept override {
         Cb = TCb(); 
         CqCommon->ReturnWr(this);
-    }
-
-    void Init(ui64 id, TCqCommon* cqCommon) noexcept {
-        CqCommon = cqCommon;
-        Id = id;
     }
 
     void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
@@ -100,8 +104,8 @@ public:
     }
 
 private:
-    TCqCommon* CqCommon;
-    ui64 Id;
+    const ui64 Id;
+    TCqCommon* const CqCommon;
     using TCb = std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)>;
     TCb Cb;
 };
@@ -110,12 +114,12 @@ class TSimpleCq : public TCqCommon {
 public:
     TSimpleCq(NActors::TActorSystem* as, size_t sz) noexcept
         : TCqCommon(as)
-        , WrBuf(sz)
         , Err(false)
     {
+        WrBuf.reserve(sz);
         // Enumerate all work requests for this CQ
         for (size_t i = 0; i < sz; i++) {
-            WrBuf[i].Init(i, this);
+            WrBuf.emplace_back(i, this);
         }
 
         // Fill queue
@@ -168,9 +172,6 @@ public:
                     //TODO: Is it correct err handling?
                     Err.store(true, std::memory_order_relaxed);
                 } else if (rv == 0) {
-                    Idle();
-                } else if (static_cast<size_t>(rv) < wcBatchSize) {
-                    HandleWc(wcs.data(), rv);
                     Idle();
                 } else {
                     Y_ABORT_UNLESS(static_cast<size_t>(rv) <= wcs.size(), "ibv_poll_cq returns more then requested");

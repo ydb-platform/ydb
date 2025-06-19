@@ -457,7 +457,6 @@ def normalize_result_schema(result):
                                           'EffectiveACL',
                                           'CreateTxId',
                                           'PathId',
-                                          'size_bytes',
                                           ])
 
 

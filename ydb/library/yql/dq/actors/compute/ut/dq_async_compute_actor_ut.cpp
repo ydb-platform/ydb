@@ -441,16 +441,16 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
 
         TMap<ui32, ui32> receivedData;
         while (ReceiveData(
-                    [&receivedData](const NUdf::TUnboxedValue& val, ui32 column) {
-                        LOGV(' ');
-                        UNIT_ASSERT_EQUAL(column, 0);
-                        UNIT_ASSERT(!!val);
-                        UNIT_ASSERT(val.IsEmbedded());
-                        LOGV(val.Get<ui32>());
-                        ++receivedData[val.Get<ui32>()];
-                        return true;
-                    },
-                    dqInputChannel))
+                [&receivedData](const NUdf::TUnboxedValue& val, ui32 column) {
+                    LOGV(' ');
+                    UNIT_ASSERT_EQUAL(column, 0);
+                    UNIT_ASSERT(!!val);
+                    UNIT_ASSERT(val.IsEmbedded());
+                    LOGV(val.Get<ui32>());
+                    ++receivedData[val.Get<ui32>()];
+                    return true;
+                },
+                dqInputChannel))
         {}
         UNIT_ASSERT_EQUAL(receivedData.size(), val);
         for (; val > 0; --val) {

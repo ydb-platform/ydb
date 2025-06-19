@@ -2276,10 +2276,10 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             protoLink.SetWeight(1);
-            if (Config.GetCompConveyorConfig().HasWorkersCount()) {
-                protoWorkersPool.SetWorkersCount(Config.GetCompConveyorConfig().GetWorkersCount());
-            } else if (Config.GetCompConveyorConfig().HasWorkersCountDouble()) {
+            if (Config.GetCompConveyorConfig().HasWorkersCountDouble()) {
                 protoWorkersPool.SetWorkersCount(Config.GetCompConveyorConfig().GetWorkersCountDouble());
+            } else if (Config.GetCompConveyorConfig().HasWorkersCount()) {
+                protoWorkersPool.SetWorkersCount(Config.GetCompConveyorConfig().GetWorkersCount());
             } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {
@@ -2302,10 +2302,10 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
-            if (Config.GetInsertConveyorConfig().HasWorkersCount()) {
-                protoWorkersPool.SetWorkersCount(Config.GetInsertConveyorConfig().GetWorkersCount());
-            } else if (Config.GetInsertConveyorConfig().HasWorkersCountDouble()) {
+            if (Config.GetInsertConveyorConfig().HasWorkersCountDouble()) {
                 protoWorkersPool.SetWorkersCount(Config.GetInsertConveyorConfig().GetWorkersCountDouble());
+            } else if (Config.GetInsertConveyorConfig().HasWorkersCount()) {
+                protoWorkersPool.SetWorkersCount(Config.GetInsertConveyorConfig().GetWorkersCount());
             } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {
@@ -2327,10 +2327,10 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             protoLink.SetWeight(1);
-            if (Config.GetScanConveyorConfig().HasWorkersCount()) {
-                protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCount());
-            } else if (Config.GetScanConveyorConfig().HasWorkersCountDouble()) {
+            if (Config.GetScanConveyorConfig().HasWorkersCountDouble()) {
                 protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCountDouble());
+            } else if (Config.GetScanConveyorConfig().HasWorkersCount()) {
+                protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCount());
             } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {

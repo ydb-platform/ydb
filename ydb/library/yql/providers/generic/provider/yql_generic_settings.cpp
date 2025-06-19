@@ -28,7 +28,7 @@ namespace NYql {
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
             AddCluster(cluster, databaseResolver, databaseAuth, credentials);
         }
-    
+
         // TODO: check if it's necessary
         FreezeDefaults();
     }

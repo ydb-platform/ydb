@@ -12,6 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(cached)
 add_subdirectory(static)
 
 add_library(name-object-simple)

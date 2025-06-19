@@ -13,5 +13,6 @@
 # changes in this file.
 
 add_subdirectory(service)
+add_subdirectory(cache)
 add_subdirectory(object)
 add_subdirectory(cluster)

@@ -21,8 +21,10 @@ target_link_libraries(commands-interactive-complete PUBLIC
   yutil
   restricted-patched-replxx
   sql-v1-complete
+  name-cache-local
   complete-name-object
   name-object-simple
+  object-simple-cached
   name-service-schema
   name-service-static
   name-service-union
@@ -33,7 +35,6 @@ target_link_libraries(commands-interactive-complete PUBLIC
 )
 
 target_sources(commands-interactive-complete PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/dummy_name_service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.cpp
 )

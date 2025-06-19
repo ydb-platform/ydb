@@ -12,24 +12,19 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(highlight)
-add_subdirectory(complete)
-
-add_library(ydb_cli-commands-interactive)
+add_library(name-cache-local)
 
 
-target_link_libraries(ydb_cli-commands-interactive PUBLIC
+target_link_libraries(name-cache-local PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  restricted-patched-replxx
-  v1-complete-text
-  common
-  commands-interactive-highlight
-  commands-interactive-complete
+  complete-name-cache
+  library-cpp-cache
+  library-cpp-time_provider
 )
 
-target_sources(ydb_cli-commands-interactive PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/line_reader.cpp
+target_sources(name-cache-local PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/cache/local/cache.cpp
 )
 

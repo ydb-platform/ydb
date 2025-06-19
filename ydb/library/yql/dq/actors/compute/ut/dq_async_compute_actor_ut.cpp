@@ -410,7 +410,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
             PushRow(CreateRow(++val), dqOutputChannel);
             if (doWatermark) {
                 NDqProto::TWatermark watermark;
-                watermark.SetTimestampUs(1000*packet);
+                watermark.SetTimestampUs(1000 * packet);
                 dqOutputChannel->Push(std::move(watermark));
             }
             if (packet + 1 == packets) {
@@ -454,7 +454,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
         {}
         UNIT_ASSERT_EQUAL(receivedData.size(), val);
         for (; val > 0; --val) {
-            UNIT_ASSERT_EQUAL_C(receivedData[val*val], 1, "expected count for " << (val*val));
+            UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
         }
     }
 };

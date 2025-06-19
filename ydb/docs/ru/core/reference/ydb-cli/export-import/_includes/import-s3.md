@@ -148,7 +148,7 @@
 Загрузка одной таблицы, которая была выгружена по пути `dir/my_table`, в путь `dir1/dir/my_table` из зашифрованной выгрузки, расположенной по префиксу `export1` в бакете `mybucket`, используя секретный ключ из файла `~/my_secret_key`.
 
 ```bashAdd commentMore actions
-ydb -p quickstart import s3 \
+{{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --source-prefix export1 --destination-path dir1 \

@@ -91,11 +91,7 @@ class WorkloadBase:
             try:
                 f()
             except Exception as e:
-                logger.error(f"FATAL: {e}")
-                stack = "Traceback: "
-                for line in traceback.format_stack():
-                    stack += line.strip()
-                logger.error(stack)
+                logger.exception(f"FATAL: {e}")
                 os._exit(1)
 
         for f in funcs:

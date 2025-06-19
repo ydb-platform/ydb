@@ -1,17 +1,18 @@
 UNITTEST_FOR(ydb/library/yql/dq/actors/compute)
 
 SRCS(
+    dq_async_compute_actor_ut.cpp
     dq_compute_actor_ut.cpp
     dq_compute_actor_async_input_helper_ut.cpp
     dq_compute_issues_buffer_ut.cpp
     dq_source_watermark_tracker_ut.cpp
-    dq_async_compute_actor_ut.cpp
 )
 
 PEERDIR(
     library/cpp/testing/unittest
     ydb/library/actors/testlib
     ydb/library/actors/wilson
+    ydb/library/services
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/task_runner
     ydb/library/yql/dq/comp_nodes

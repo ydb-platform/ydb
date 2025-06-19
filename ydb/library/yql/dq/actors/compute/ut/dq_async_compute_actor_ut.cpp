@@ -35,8 +35,7 @@ namespace {
 } while(0)
 }
 
-struct TActorSystem: NActors::TTestActorRuntimeBase
-{
+struct TActorSystem: NActors::TTestActorRuntimeBase {
     TActorSystem()
         : NActors::TTestActorRuntimeBase(1, true)
     {}
@@ -69,8 +68,7 @@ struct TDummyMemoryQuotaManager: IMemoryQuotaManager {
     TString MemoryConsumptionDetails() const override { return "No details"; }
 };
 
-struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
-{
+struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     static constexpr ui64 InputChannelId = 1;
     static constexpr ui64 OutputChannelId = 2;
     static constexpr ui32 InputStageId = 123;
@@ -385,7 +383,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
             auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelDataAck>({SrcEdgeActor});
             LOGV("Got ack " << ev->Get()->Record << Endl);
             UNIT_ASSERT_EQUAL(ev->Get()->Record.GetChannelId(), channelId);
-            if (ev->Get()->Record.GetSeqNo() == seqNo) break;
+            if (ev->Get()->Record.GetSeqNo() == seqNo) {
+                break;
+            }
             LOGV("...but waiting for " << seqNo << Endl);
         }
     }

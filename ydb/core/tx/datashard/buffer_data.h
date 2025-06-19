@@ -1,59 +1,67 @@
 #pragma once
 
-#include "ydb/core/scheme/scheme_tablecell.h"
-#include "ydb/core/tx/datashard/upload_stats.h"
-#include "ydb/core/tx/tx_proxy/upload_rows.h"
+#include "scan_common.h"
+#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 namespace NKikimr::NDataShard {
 
-class TBufferData: public IStatHolder, public TNonCopyable {
+// TODO: move to tx/datashard/build_index/
+class TBufferData: public TNonCopyable {
 public:
     TBufferData()
         : Rows{std::make_shared<NTxProxy::TUploadRows>()} {
-    }
-
-    ui64 GetRows() const override final {
-        return Rows->size();
     }
 
     std::shared_ptr<NTxProxy::TUploadRows> GetRowsData() const {
         return Rows;
     }
 
-    ui64 GetBytes() const override final {
-        return ByteSize;
-    }
-
-    void FlushTo(TBufferData& other) {
-        Y_ENSURE(this != &other);
-        Y_ENSURE(other.IsEmpty());
-        other.Rows.swap(Rows);
-        other.ByteSize = std::exchange(ByteSize, 0);
-        other.LastKey = std::exchange(LastKey, {});
-    }
-
-    void Clear() {
-        Rows->clear();
-        ByteSize = 0;
-        LastKey = {};
-    }
-
-    void AddRow(TSerializedCellVec&& rowKey, TString&& rowValue, TSerializedCellVec&& originalKey = {}) {
-        Rows->emplace_back(std::move(rowKey), std::move(rowValue));
-        ByteSize += Rows->back().first.GetBuffer().size() + Rows->back().second.size();
-        LastKey = std::move(originalKey);
+    ui64 GetRows() const {
+        return Rows->size();
     }
 
     bool IsEmpty() const {
         return Rows->empty();
     }
 
-    size_t Size() const {
-        return Rows->size();
+    ui64 GetBufferBytes() const {
+        return BufferBytes;
     }
 
-    bool HasReachedLimits(size_t rowsLimit, ui64 bytesLimit) const {
-        return Rows->size() > rowsLimit || ByteSize > bytesLimit;
+    ui64 GetRowCellBytes() const {
+        return RowCellBytes;
+    }
+
+    void FlushTo(TBufferData& other) {
+        Y_ENSURE(this != &other);
+        Y_ENSURE(other.IsEmpty());
+        other.Rows.swap(Rows);
+        other.BufferBytes = std::exchange(BufferBytes, 0);
+        other.RowCellBytes = std::exchange(RowCellBytes, 0);
+        other.LastKey = std::exchange(LastKey, {});
+    }
+
+    void Clear() {
+        Rows->clear();
+        BufferBytes = 0;
+        RowCellBytes = 0;
+        LastKey = {};
+    }
+
+    void AddRow(TConstArrayRef<TCell> rowKey, TConstArrayRef<TCell> rowValue, TConstArrayRef<TCell> originalKey = {}) {
+        AddRow(rowKey, rowValue, TSerializedCellVec::Serialize(rowValue), originalKey);
+    }
+
+    void AddRow(TConstArrayRef<TCell> rowKey, TConstArrayRef<TCell> rowValue, TString&& rowValueSerialized,  TConstArrayRef<TCell> originalKey = {}) {
+        RowCellBytes += CountRowCellBytes(rowKey, rowValue);
+        Rows->emplace_back(TSerializedCellVec{rowKey}, std::move(rowValueSerialized));
+        BufferBytes += Rows->back().first.GetBuffer().size() + Rows->back().second.size();
+        LastKey = TSerializedCellVec{originalKey};
+    }
+
+    bool HasReachedLimits(const TIndexBuildScanSettings& scanSettings) const {
+        return Rows->size() > scanSettings.GetMaxBatchRows() || BufferBytes > scanSettings.GetMaxBatchBytes();
     }
 
     auto&& ExtractLastKey() {
@@ -66,7 +74,8 @@ public:
 
 private:
     std::shared_ptr<NTxProxy::TUploadRows> Rows;
-    ui64 ByteSize = 0;
+    ui64 BufferBytes = 0;
+    ui64 RowCellBytes = 0;
     TSerializedCellVec LastKey;
 };
 

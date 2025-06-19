@@ -7,21 +7,17 @@ from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
 import requests
 from urllib.parse import urlencode
 import time
 import re
 
 
-cluster = KiKiMR(KikimrConfigGenerator(
-    extra_feature_flags={
-        'enable_alter_database_create_hive_first': True,
-        'enable_topic_transfer': True,
-        'enable_script_execution_operations': True,
-    },
-    additional_log_configs={'PERSQUEUE': LogLevels.DEBUG}
-    ))
+cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags={
+    'enable_alter_database_create_hive_first': True,
+    'enable_topic_transfer': True,
+    'enable_script_execution_operations': True,
+    }))
 cluster.start()
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"
@@ -891,7 +887,7 @@ def test_topic_data():
         'path': topic_path,
         'partition': '0',
         'offset': '0',
-        'last_offset': '4',
+        'last_offset': '3',
         'limit': '10'
     })
 

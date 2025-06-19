@@ -18,6 +18,15 @@ void TSchemaPreset::Deserialize(const NKikimrSchemeOp::TColumnTableSchemaPreset&
     Name = presetProto.GetName();
 }
 
+namespace {
+
+TInternalPathId GetInitialMaxInternalPathId(const ui64 tabletId) {
+    static constexpr ui64 InternalPathIdBase = 1'000'000'000; //Use a value presumably greater than any really used
+    static constexpr ui64 InternalPathIdTabletMod = 1'000'000; //Use different start value for tablets
+    return TInternalPathId::FromRawValue(InternalPathIdBase + tabletId * InternalPathIdTabletMod);
+}
+
+} //namespace
 
 std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSchemeShardLocalPathId(const TInternalPathId internalPathId) const {
     if (!HasTable(internalPathId)) {
@@ -71,6 +80,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
         if (maxPathId) {
             MaxInternalPathId =TInternalPathId::FromRawValue(*maxPathId);
+            AFL_VERIFY(MaxInternalPathId >= GetInitialMaxInternalPathId(TabletId));
         }
     }
     {
@@ -236,7 +246,8 @@ bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDelet
 }
 
 TInternalPathId TTablesManager::CreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
-    if (AppData()->ColumnShardConfig.GetGenerateInternalPathId()) {
+    if (NYDBTest::TControllers::GetColumnShardController()->IsForcedGenerateInternalPathId() ||
+        AppData()->ColumnShardConfig.GetGenerateInternalPathId()) {
         const auto result = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
         MaxInternalPathId = result;
         return result;
@@ -393,7 +404,8 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
-    , TabletId(tabletId) {
+    , TabletId(tabletId)
+    , MaxInternalPathId(GetInitialMaxInternalPathId(TabletId)) {
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const TInternalPathId pathId) const {

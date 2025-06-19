@@ -1,4 +1,5 @@
 #include "config.h"
+
 #include <util/string/builder.h>
 
 namespace NKikimr::NLimiter {
@@ -9,4 +10,4 @@ TString TConfig::DebugString() const {
     return sb;
 }
 
-}
+}   // namespace NKikimr::NLimiter

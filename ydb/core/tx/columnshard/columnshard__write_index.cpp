@@ -1,8 +1,8 @@
 #include "columnshard_impl.h"
+#include "columnshard_private_events.h"
 
 #include "blobs_action/transaction/tx_draft.h"
 #include "blobs_action/transaction/tx_write_index.h"
-#include "columnshard_private_events.h"
 #include "engines/changes/abstract/abstract.h"
 #include "engines/writer/compacted_blob_constructor.h"
 
@@ -32,9 +32,7 @@ public:
         : TBase(writeController->GetWriteVolume())
         , WriteController(writeController)
         , Changes(changes)
-        , TabletId(tabletId)
-    {
-
+        , TabletId(tabletId) {
     }
 };
 
@@ -84,4 +82,4 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
     }
 }
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -12,7 +12,7 @@ TEST_SRCS(
     test_ydb_table.py
 )
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
@@ -24,7 +24,6 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/apps/ydb
 )
 

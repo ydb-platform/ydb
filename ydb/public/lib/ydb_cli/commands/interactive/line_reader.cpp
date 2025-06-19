@@ -6,7 +6,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/string_util.h>
+#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -72,6 +72,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
         return YQLCompleter->ApplyHeavy(Rx.get_state().text(), prefix, contextLen);
     });
+
+    Rx.set_hint_delay(500);
     Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
         return YQLCompleter->ApplyLight(Rx.get_state().text(), prefix, contextLen);
     });
@@ -97,7 +99,6 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
         {'(', ')'},
         {'[', ']'},
         {'{', '}'},
-        {'`', '`'},
         {'\'', '\''},
         {'"', '"'},
     }) {

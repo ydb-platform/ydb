@@ -10,10 +10,9 @@
 #include <util/generic/overloaded.h>
 #include <util/stream/zlib.h>
 
+#include <gtest/gtest.h>
+
 #include <future>
-
-
-static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
 
 
 namespace NYdb::inline Dev::NPersQueue::NTests {
@@ -174,7 +173,7 @@ TIntrusivePtr<TManagedExecutor> CreateSyncManagedExecutor()
 
 class BasicUsage : public TTopicTestFixture {};
 
-TEST_F(BasicUsage, ConnectToYDB) {
+TEST_F(BasicUsage, TEST_NAME(ConnectToYDB)) {
     auto cfg = NYdb::TDriverConfig()
         .SetEndpoint("invalid:2136")
         .SetDatabase("/Invalid")
@@ -213,7 +212,7 @@ TEST_F(BasicUsage, ConnectToYDB) {
     }
 }
 
-TEST_F(BasicUsage, WriteRead) {
+TEST_F(BasicUsage, TEST_NAME(WriteRead)) {
     auto driver = MakeDriver();
 
     TTopicClient client(driver);
@@ -245,7 +244,7 @@ TEST_F(BasicUsage, WriteRead) {
 
     {
         auto readSettings = TReadSessionSettings()
-            .ConsumerName("test-consumer")
+            .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
             // .DirectRead(EnableDirectRead)
             ;
@@ -270,7 +269,7 @@ TEST_F(BasicUsage, WriteRead) {
     }
 }
 
-TEST_F(BasicUsage, MaxByteSizeEqualZero) {
+TEST_F(BasicUsage, TEST_NAME(MaxByteSizeEqualZero)) {
     auto driver = MakeDriver();
 
     TTopicClient client(driver);
@@ -283,7 +282,7 @@ TEST_F(BasicUsage, MaxByteSizeEqualZero) {
     writeSession->Close();
 
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
         ;
@@ -305,7 +304,7 @@ TEST_F(BasicUsage, MaxByteSizeEqualZero) {
     dataReceived.Commit();
 }
 
-TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
+TEST_F(BasicUsage, TEST_NAME(WriteAndReadSomeMessagesWithSyncCompression)) {
     auto driver = MakeDriver();
 
     IExecutor::TPtr executor = new TSyncExecutor();
@@ -353,7 +352,7 @@ TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
     // Create read session.
     TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
@@ -387,11 +386,11 @@ TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
     ReadSession->Close(TDuration::MilliSeconds(10));
     check.store(0);
 
-    auto status = topicClient.CommitOffset(GetTopicPath(), 0, "test-consumer", 50);
+    auto status = topicClient.CommitOffset(GetTopicPath(), 0, GetConsumerName(), 50);
     ASSERT_TRUE(status.GetValueSync().IsSuccess());
 
     auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-    auto result = topicClient.DescribeConsumer(GetTopicPath(), "test-consumer", describeConsumerSettings).GetValueSync();
+    auto result = topicClient.DescribeConsumer(GetTopicPath(), GetConsumerName(), describeConsumerSettings).GetValueSync();
     ASSERT_TRUE(result.IsSuccess());
 
     auto description = result.GetConsumerDescription();
@@ -401,7 +400,7 @@ TEST_F(BasicUsage, WriteAndReadSomeMessagesWithSyncCompression) {
     ASSERT_EQ(stats->GetCommittedOffset(), 50u);
 }
 
-TEST_F(BasicUsage, SessionNotDestroyedWhileCompressionInFlight) {
+TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileCompressionInFlight)) {
     auto driver = MakeDriver();
 
     // controlled executor
@@ -425,7 +424,7 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileCompressionInFlight) {
     // Create read session.
     TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .AppendTopics(GetTopicPath())
         .DecompressionExecutor(stepByStepExecutor)
@@ -511,7 +510,7 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileCompressionInFlight) {
     std::cerr << ">>> TEST: gracefully closed" << std::endl;
 }
 
-TEST_F(BasicUsage, SessionNotDestroyedWhileUserEventHandlingInFlight) {
+TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileUserEventHandlingInFlight)) {
     auto driver = MakeDriver();
 
     // controlled executor
@@ -542,7 +541,7 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileUserEventHandlingInFlight) {
 
     // Create read session.
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
@@ -643,7 +642,7 @@ TEST_F(BasicUsage, SessionNotDestroyedWhileUserEventHandlingInFlight) {
     std::cerr << ">>> TEST: gracefully closed" << std::endl;
 }
 
-TEST_F(BasicUsage, ReadSessionCorrectClose) {
+TEST_F(BasicUsage, TEST_NAME(ReadSessionCorrectClose)) {
     auto driver = MakeDriver();
 
     NPersQueue::TWriteSessionSettings writeSettings;
@@ -672,7 +671,7 @@ TEST_F(BasicUsage, ReadSessionCorrectClose) {
     // Create read session.
     NYdb::NTopic::TReadSessionSettings readSettings;
     readSettings
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(1_MB)
         .Decompress(false)
         .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy())
@@ -700,7 +699,7 @@ TEST_F(BasicUsage, ReadSessionCorrectClose) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
 }
 
-TEST_F(BasicUsage, ConfirmPartitionSessionWithCommitOffset) {
+TEST_F(BasicUsage, TEST_NAME(ConfirmPartitionSessionWithCommitOffset)) {
     // TStartPartitionSessionEvent::Confirm(readOffset, commitOffset) should work,
     // if commitOffset passed to Confirm is greater than the offset committed previously by the consumer.
     // https://st.yandex-team.ru/KIKIMR-23015
@@ -723,7 +722,7 @@ TEST_F(BasicUsage, ConfirmPartitionSessionWithCommitOffset) {
     {
         // Read messages:
         auto settings = NTopic::TReadSessionSettings()
-            .ConsumerName("test-consumer")
+            .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
             // .DirectRead(EnableDirectRead)
             ;
@@ -760,7 +759,7 @@ TEST_F(BasicUsage, ConfirmPartitionSessionWithCommitOffset) {
     }
 }
 
-TEST_F(BasicUsage, TWriteSession_WriteEncoded) {
+TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded)) {
     // This test was adapted from ydb_persqueue tests.
     // It writes 4 messages: 2 with default codec, 1 with explicitly set GZIP codec, 1 with RAW codec.
     // The last message MUST be sent in a separate WriteRequest, as it has a codec field applied for all messages in the request.
@@ -831,7 +830,7 @@ TEST_F(BasicUsage, TWriteSession_WriteEncoded) {
     ASSERT_EQ(tokens, 2u);
 
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)
         ;
@@ -886,7 +885,7 @@ namespace {
 
 class TSettingsValidation : public TTopicTestFixture {};
 
-TEST_F(TSettingsValidation, TestDifferentDedupParams) {
+TEST_F(TSettingsValidation, TEST_NAME(TestDifferentDedupParams)) {
     char* ydbVersion = std::getenv("YDB_VERSION");
     if (ydbVersion != nullptr && std::string(ydbVersion) != "trunk" && std::string(ydbVersion) < "24.3") {
         GTEST_SKIP() << "Skipping test for YDB version " << ydbVersion;
@@ -1003,13 +1002,13 @@ TEST_F(TSettingsValidation, TestDifferentDedupParams) {
     runTest({}, "msgGroup", {}, false, EExpectedTestResult::SUCCESS);
 }
 
-TEST_F(TSettingsValidation, ValidateSettingsFailOnStart) {
+TEST_F(TSettingsValidation, TEST_NAME(ValidateSettingsFailOnStart)) {
     auto driver = MakeDriver();
 
     TTopicClient client(driver);
 
     auto readSettings = TReadSessionSettings()
-        .ConsumerName("test-consumer")
+        .ConsumerName(GetConsumerName())
         .MaxMemoryUsageBytes(0)
         .AppendTopics(GetTopicPath())
         // .DirectRead(EnableDirectRead)

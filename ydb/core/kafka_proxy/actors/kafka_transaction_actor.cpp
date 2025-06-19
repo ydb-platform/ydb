@@ -321,6 +321,7 @@ namespace NKafka {
         KAFKA_LOG_D("Successfully added kafka operations to transaction. Committing transaction.");
         Kqp->SetTxId(kqpTransactionId);
         Kqp->CommitTx(++KqpCookie, ctx);
+        LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
     }
 
     void TTransactionActor::HandleCommitResponse(const TActorContext& ctx) {

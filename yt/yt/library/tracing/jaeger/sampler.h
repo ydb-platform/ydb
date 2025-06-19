@@ -59,8 +59,8 @@ private:
 
     struct TUserState final
     {
-        std::atomic<ui64> Sampled = {0};
-        std::atomic<NProfiling::TCpuInstant> LastReset = {0};
+        std::atomic<ui64> Sampled = 0;
+        std::atomic<NProfiling::TCpuInstant> LastReset = 0;
 
         bool TrySampleByMinCount(ui64 minCount, NProfiling::TCpuDuration period);
 

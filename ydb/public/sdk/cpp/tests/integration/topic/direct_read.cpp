@@ -882,7 +882,7 @@ TEST_F(DirectReadWithClient, OneMessage) {
         // Read the message:
 
         auto settings = TReadSessionSettings()
-            .ConsumerName("test-consumer")
+            .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
             // .DirectRead(true)
             ;
@@ -929,7 +929,7 @@ TEST_F(DirectReadWithClient, ManyMessages) {
     constexpr std::size_t partitionCount = 2;
     std::size_t messageCount = 100;
     std::size_t totalMessageCount = partitionCount * messageCount;
-    CreateTopic(GetTopicPath(), "test-consumer", partitionCount);
+    CreateTopic(GetTopicPath(), GetConsumerName(), partitionCount);
     TTopicClient client{MakeDriver()};
 
     std::string message(950_KB, 'x');
@@ -966,7 +966,7 @@ TEST_F(DirectReadWithClient, ManyMessages) {
         std::size_t gotMessages = 0;
         std::array<std::size_t, partitionCount> committedOffset{};
         auto settings = TReadSessionSettings()
-            .ConsumerName("test-consumer")
+            .ConsumerName(GetConsumerName())
             .AppendTopics(GetTopicPath())
             .MaxMemoryUsageBytes(1_MB)
             // .DirectRead(GetEnv("DIRECT", "0") == "1")
@@ -1064,6 +1064,9 @@ TEST_F(DirectReadWithControlSession, Init) {
 }
 
 TEST_F(DirectReadWithControlSession, StopPartitionSessionGracefully) {
+#ifdef __GNUC__
+    GTEST_SKIP() << "Skip for gcc";
+#endif
     auto const startPartitionSessionRequest = TStartPartitionSessionRequest{
         .PartitionId = 1,
         .PartitionSessionId = 2,

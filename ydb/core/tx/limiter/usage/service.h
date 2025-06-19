@@ -1,9 +1,11 @@
 #pragma once
 #include "config.h"
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/actor.h>
+
 #include <ydb/core/tx/limiter/service/service.h>
 #include <ydb/core/tx/limiter/usage/events.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NLimiter {
 
@@ -19,6 +21,7 @@ private:
         Y_ABORT_UNLESS(TLimiterPolicy::Name.size() == 4);
         return TLimiterPolicy::Name;
     }
+
 public:
     static bool AskResource(const std::shared_ptr<IResourceRequest>& request) {
         AFL_VERIFY(!!request);
@@ -42,7 +45,6 @@ public:
         Register(config);
         return new TLimiterActor(config, GetLimiterName(), baseSignals);
     }
-
 };
 
 class TCompDiskLimiterPolicy {
@@ -55,4 +57,4 @@ public:
 
 using TCompDiskOperator = TServiceOperatorImpl<TCompDiskLimiterPolicy>;
 
-}
+}   // namespace NKikimr::NLimiter

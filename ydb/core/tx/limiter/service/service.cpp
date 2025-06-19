@@ -5,8 +5,7 @@ namespace NKikimr::NLimiter {
 TLimiterActor::TLimiterActor(const TConfig& config, const TString& limiterName, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseCounters)
     : LimiterName(limiterName)
     , Config(config)
-    , Counters(LimiterName, baseCounters)
-{
+    , Counters(LimiterName, baseCounters) {
     Counters.InProgressLimit->Set(Config.GetLimit());
 }
 
@@ -41,7 +40,8 @@ void TLimiterActor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     if (RequestsInFlight.empty()) {
         AFL_VERIFY(!VolumeInFlight);
     }
-    while (RequestsQueue.size() && (RequestsInFlight.empty() || VolumeInFlight + RequestsQueue.front().GetRequest()->GetVolume() <= Config.GetLimit())) {
+    while (RequestsQueue.size() &&
+           (RequestsInFlight.empty() || VolumeInFlight + RequestsQueue.front().GetRequest()->GetVolume() <= Config.GetLimit())) {
         Counters.WaitingHistogram->Collect((i64)(now - RequestsQueue.front().GetInstant()).MilliSeconds(), 1);
         VolumeInFlight += RequestsQueue.front().GetRequest()->GetVolume();
         RequestsInFlight.emplace_back(now, RequestsQueue.front().GetRequest()->GetVolume());
@@ -60,4 +60,4 @@ void TLimiterActor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     Counters.WaitingQueueVolume->Set(VolumeInWaiting);
 }
 
-}
+}   // namespace NKikimr::NLimiter

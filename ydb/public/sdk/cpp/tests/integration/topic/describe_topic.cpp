@@ -56,7 +56,7 @@ protected:
         settings.IncludeLocation(requireLocation);
 
         {
-            auto result = client.DescribeConsumer(GetTopicPath(), "test-consumer", settings).GetValueSync();
+            auto result = client.DescribeConsumer(GetTopicPath(), GetConsumerName(), settings).GetValueSync();
             EXPECT_TRUE(result.IsSuccess()) << result.GetIssues().ToString();
 
             const auto& description = result.GetConsumerDescription();
@@ -149,7 +149,7 @@ protected:
     }
 };
 
-TEST_F(Describe, Basic) {
+TEST_F(Describe, TEST_NAME(Basic)) {
     TTopicClient client(MakeDriver());
 
     DescribeTopic(client, false, false, false);
@@ -157,7 +157,7 @@ TEST_F(Describe, Basic) {
     DescribePartition(client, false, false, false);
 }
 
-TEST_F(Describe, Statistics) {
+TEST_F(Describe, TEST_NAME(Statistics)) {
     // TODO(abcdef): temporarily deleted
     GTEST_SKIP() << "temporarily deleted";
 
@@ -184,7 +184,7 @@ TEST_F(Describe, Statistics) {
 
     // Read a message
     {
-        auto readSettings = TReadSessionSettings().ConsumerName("test-consumer").AppendTopics(GetTopicPath());
+        auto readSettings = TReadSessionSettings().ConsumerName(GetConsumerName()).AppendTopics(GetTopicPath());
         auto readSession = client.CreateReadSession(readSettings);
 
         // Event 1: start partition session
@@ -239,7 +239,7 @@ TEST_F(Describe, Statistics) {
     DescribePartition(client, true, true, false);
 }
 
-TEST_F(Describe, Location) {
+TEST_F(Describe, TEST_NAME(Location)) {
     TTopicClient client(MakeDriver());
 
     DescribeTopic(client, false, false, true);

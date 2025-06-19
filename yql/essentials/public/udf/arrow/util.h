@@ -251,9 +251,18 @@ inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* t
 const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* type);
 
 inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
-    type = SkipTaggedType(typeInfoHelper, type);
-
-    return TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type);
+    TOptionalTypeInspector typeOpt(typeInfoHelper, type);
+    if (!typeOpt) {
+        return false;
+    }
+    type = SkipTaggedType(typeInfoHelper, typeOpt.GetItemType());
+    TOptionalTypeInspector typeOptOpt(typeInfoHelper, type);
+    if (typeOptOpt) {
+        return true;
+    } else if (TPgTypeInspector(typeInfoHelper, type) ||  IsSingularType(typeInfoHelper, type)) {
+        return true;
+    }
+    return false;
 }
 
 } // namespace NUdf

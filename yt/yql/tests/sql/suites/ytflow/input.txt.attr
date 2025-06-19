@@ -24,21 +24,27 @@
                     ];
                 ];
                 [
-                    "value";
+                    "string_field";
                     [
-                        "DataType";
-                        "String"
-                    ]
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ];
                 ];
                 [
-                    "codec";
+                    "int64_field";
                     [
-                        "DataType";
-                        "String"
-                    ]
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Int64"
+                        ]
+                    ];
                 ];
             ]
         ]
     };
-    "dynamic" = %true;
+    "_yql_dynamic" = %true;
 }

@@ -80,7 +80,7 @@ GET_MAX_LIMIT(SharedCache)
 
 GET_LIMIT(QueryExecutionLimit)
 
-GET_LIMIT(ReadExecutionLimit)
-GET_LIMIT(CompactionLimit)
-GET_LIMIT(ReadCacheLimit)
+GET_LIMIT(ColumnTablesReadExecutionLimit)
+GET_LIMIT(ColumnTablesCompactionLimit)
+GET_LIMIT(ColumnTablesCacheLimit)
 }

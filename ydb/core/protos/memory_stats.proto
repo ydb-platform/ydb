@@ -27,7 +27,4 @@ message TMemoryStats {
 
     optional uint64 QueryExecutionConsumption = 18;
     optional uint64 QueryExecutionLimit = 19;
-
-    optional uint64 CompactionConsumption = 20;
-    optional uint64 CompactionLimit = 21;
 }

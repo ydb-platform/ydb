@@ -13,6 +13,7 @@
 #include <ydb/core/protos/memory_stats.pb.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -388,15 +389,14 @@ private:
         memoryStats.SetQueryExecutionConsumption(queryExecutionConsumption);
         memoryStats.SetQueryExecutionLimit(queryExecutionLimitBytes);
 
-        ui64 compactionConsumption = TAlignedPagePool::GetGlobalPagePoolSize(); // ?? Это откуда правильно брать?
-        ui64 compactionLimitBytes = GetCompactionLimitBytes(Config, hardLimitBytes);
-        setCounters("Compaction", compactionConsumption, compactionLimitBytes);
-        memoryStats.SetCompactionConsumption(compactionConsumption);
-        memoryStats.SetCompactionLimit(compactionLimitBytes);
+        ui64 compactionConsumption = 0; // TODO: get right value from resource broker
+        ui64 columnTablesCompactionLimitBytes = GetColumnTablesCompactionLimitBytes(Config, hardLimitBytes);
+        setCounters("ColumnTablesCompaction", compactionConsumption, columnTablesCompactionLimitBytes);
 
         // Note: for now ResourceBroker and its queues aren't MemoryController consumers and don't share limits with other caches
-        ApplyResourceBrokerConfig(
-            {.LimitBytes = activitiesLimitBytes, .QueryExecutionLimitBytes = queryExecutionLimitBytes, .CompactionLimitBytes = compactionLimitBytes});
+        ApplyResourceBrokerConfig({.LimitBytes = activitiesLimitBytes,
+                                   .QueryExecutionLimitBytes = queryExecutionLimitBytes,
+                                   .ColumnTablesCompactionLimitBytes = columnTablesCompactionLimitBytes});
     }
 
     void ApplyResourceBrokerConfig(TResourceBrokerConfig config) {
@@ -404,35 +404,31 @@ private:
             return;
         }
 
-        // ?? Куда вынести коэффициенты?
-        const double compactionIndexationQueueMemoryCoefficient = 0.125;
-        const double compactionTtlQueueCoefficient = 0.125;
-        const double compactionGeneralQueueCoefficient = 0.375;
-        const double compactionNormalizerQueueCoefficient = 0.375;
-
         TAutoPtr<TEvResourceBroker::TEvConfigure> configure = new TEvResourceBroker::TEvConfigure();
         configure->Merge = true;
-        configure->Record.MutableResourceLimit()->SetMemory(config.LimitBytes);
 
-        auto configureQueue = [&](const TString& name, ui64 limitBytes) {
-            auto queue = configure->Record.AddQueues();
-            queue->SetName(name);
-            queue->MutableLimit()->SetMemory(limitBytes);
-        };
+        auto& record = configure->Record;
+        record.MutableResourceLimit()->SetMemory(config.LimitBytes);
 
-        configureQueue(NLocalDb::KqpResourceManagerQueue, config.QueryExecutionLimitBytes);
-        configureQueue(NLocalDb::CompactionIndexationQueue, config.CompactionLimitBytes * compactionIndexationQueueMemoryCoefficient);
-        configureQueue(NLocalDb::CompactionTtlQueue, config.CompactionLimitBytes * compactionTtlQueueCoefficient);
-        configureQueue(NLocalDb::CompactionGeneralQueue, config.CompactionLimitBytes * compactionGeneralQueueCoefficient);
-        configureQueue(NLocalDb::CompactionNormalizerQueue, config.CompactionLimitBytes * compactionNormalizerQueueCoefficient);
-
-        auto queue = configure->Record.AddQueues();
-        queue->SetName(NLocalDb::KqpResourceManagerQueue);
-        queue->MutableLimit()->SetMemory(config.QueryExecutionLimitBytes);
+        AddLimitToQueueConfig(record, NLocalDb::KqpResourceManagerQueue, config.QueryExecutionLimitBytes);
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionIndexationQueue,
+                              config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionIndexationQueueLimitCoefficient);
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionTtlQueue,
+                              config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionTtlQueueLimitCoefficient);
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionGeneralQueue,
+                              config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionGeneralQueueLimitCoefficient);
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionNormalizerQueue,
+                              config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionNormalizerQueueLimitCoefficient);
 
         Send(MakeResourceBrokerID(), configure.Release());
 
         CurrentResourceBrokerConfig.emplace(std::move(config));
+    }
+
+    void AddLimitToQueueConfig(NKikimrResourceBroker::TResourceBrokerConfig& record, const TString& name, const ui64 limitBytes) {
+        auto queue = record.AddQueues();
+        queue->SetName(name);
+        queue->MutableLimit()->SetMemory(limitBytes);
     }
 
     TConsumerCounters& GetConsumerCounters(EMemoryConsumerKind consumer) {

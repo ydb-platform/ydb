@@ -31,7 +31,7 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 - `source`, `src`, or `s` is the key prefix in S3 that contains the imported directory or table.
 - `destination`, `dst`, or `d` is the database path to host the imported directory or table. The destination of the path must not exist. All the directories along the path will be created if missing.
 
-`--include PATH`: Object paths relative to export root that are included into import. Specify this parameter multiple times for different paths, or provide a single comma-separated list of values. If no `--item` or `--include` parameters are specified, all object from source prefix will be imported.
+`--include PATH`: Object paths relative to the export root that are included in the import. Specify this parameter multiple times for different paths, or provide a single comma-separated list of values. If no `--item` or `--include` parameters are specified, all objects from the source prefix will be imported.
 
 ### Additional parameters {#aux}
 

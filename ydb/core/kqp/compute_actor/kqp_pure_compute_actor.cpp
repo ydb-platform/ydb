@@ -33,7 +33,7 @@ TKqpComputeActor::TKqpComputeActor(
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(Meta.Get()), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(Meta->GetReads().size() == 1);
         YQL_ENSURE(!Meta->GetReads()[0].GetKeyRanges().empty());
-        YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty() || Meta->GetTable().HasSysViewType());
+        YQL_ENSURE(!Meta->GetTable().GetSysViewInfo().empty() || Meta->GetTable().HasSysViewInfo());
     }
 }
 
@@ -122,11 +122,11 @@ void TKqpComputeActor::DoBootstrap() {
         ScanData->TaskId = GetTask().GetId();
         ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputConsumed);
 
-        TMaybe<NKikimrSysView::ESysViewType> sysViewType;
-        if (Meta->GetTable().HasSysViewType()) {
-            sysViewType = Meta->GetTable().GetSysViewType();
+        TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
+        if (Meta->GetTable().HasSysViewDescription()) {
+            SysViewInfo = Meta->GetTable().GetSysViewDescription();
         }
-        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, sysViewType,
+        auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ScanData->TablePath, SysViewInfo,
                                                         ranges, columns, UserToken, Database, reverse);
 
         if (!scanActor) {

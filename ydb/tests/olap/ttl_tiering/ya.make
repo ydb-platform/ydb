@@ -11,7 +11,6 @@ TEST_SRCS(
     data_migration_when_alter_ttl.py
     tier_delete.py
     ttl_delete_s3.py
-    ttl_portion_size.py
     ttl_unavailable_s3.py
     unstable_connection.py
 )

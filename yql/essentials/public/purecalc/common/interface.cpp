@@ -51,10 +51,10 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetUDFsDir(TStringBuf dir) {
 TProgramFactoryOptions& TProgramFactoryOptions::AddLibrary(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
     auto& ref = UserData_.emplace_back();
 
-    ref.Type_ = NUserData::EType::LIBRARY;
-    ref.Disposition_ = disposition;
-    ref.Name_ = name;
-    ref.Content_ = content;
+    ref.Type = NUserData::EType::LIBRARY;
+    ref.Disposition = disposition;
+    ref.Name = name;
+    ref.Content = content;
 
     return *this;
 }
@@ -62,10 +62,10 @@ TProgramFactoryOptions& TProgramFactoryOptions::AddLibrary(NUserData::EDispositi
 TProgramFactoryOptions& TProgramFactoryOptions::AddFile(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
     auto& ref = UserData_.emplace_back();
 
-    ref.Type_ = NUserData::EType::FILE;
-    ref.Disposition_ = disposition;
-    ref.Name_ = name;
-    ref.Content_ = content;
+    ref.Type = NUserData::EType::FILE;
+    ref.Disposition = disposition;
+    ref.Name = name;
+    ref.Content = content;
 
     return *this;
 }
@@ -73,10 +73,10 @@ TProgramFactoryOptions& TProgramFactoryOptions::AddFile(NUserData::EDisposition 
 TProgramFactoryOptions& TProgramFactoryOptions::AddUDF(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
     auto& ref = UserData_.emplace_back();
 
-    ref.Type_ = NUserData::EType::UDF;
-    ref.Disposition_ = disposition;
-    ref.Name_ = name;
-    ref.Content_ = content;
+    ref.Type = NUserData::EType::UDF;
+    ref.Disposition = disposition;
+    ref.Name = name;
+    ref.Content = content;
 
     return *this;
 }

@@ -8,5 +8,15 @@
         {
             "uri": "file://test.test_Init_/results.txt"
         }
+    ],
+    "test.test[Sha512VersionFail_2025.02]": [
+        {
+            "uri": "file://test.test_Sha512VersionFail_2025.02_/extracted"
+        }
+    ],
+    "test.test[Sha512_2025.03]": [
+        {
+            "uri": "file://test.test_Sha512_2025.03_/results.txt"
+        }
     ]
 }

@@ -1,4 +1,5 @@
 #include "schemeshard__operation_common.h"
+#include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -441,10 +442,11 @@ bool TDone::Process(TOperationContext& context) {
     const auto& pathId = txState->TargetPathId;
     Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
     TPathElement::TPtr path = context.SS->PathsById.at(pathId);
-    Y_VERIFY_S(path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
+    Y_VERIFY_S(TargetState || path->PathState != TPathElement::EPathState::EPathStateNoChanges, "with context"
         << ", PathState: " << NKikimrSchemeOp::EPathState_Name(path->PathState)
         << ", PathId: " << path->PathId
-        << ", PathName: " << path->Name);
+        << ", TargetState: " << (TargetState ? NKikimrSchemeOp::EPathState_Name(*TargetState) : "null")
+        << ", OperationId: " << OperationId);
 
     if (path->IsPQGroup() && txState->IsCreate()) {
         TPathElement::TPtr parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -937,8 +939,16 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
     TShardInfo datashardInfo = TShardInfo::DataShardInfo(operationId.GetTxId(), txState.TargetPathId);
     datashardInfo.BindedChannels = channelsBinding;
 
-    context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo,
-        ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS));
+    auto newPartitioning = ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS);
+    TVector<TShardIdx> newShardsIdx;
+    newShardsIdx.reserve(newPartitioning.size());
+    for (const auto& part : newPartitioning) {
+        newShardsIdx.push_back(part.ShardIdx);
+    }
+    context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
+    if (context.SS->EnableDataErasure && context.SS->DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+        context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToDataErasure(std::move(newShardsIdx)));
+    }
 
     ui32 newShardCout = dstTableInfo->GetPartitions().size();
 

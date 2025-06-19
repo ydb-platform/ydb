@@ -53,7 +53,7 @@ def ensure_path_exists(path):
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
-                 binary_path=None, data_center=None, use_config_store=False):
+                 binary_path=None, data_center=None, use_config_store=False, seed_nodes_file=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
@@ -78,6 +78,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         self.__role = role
         self.__node_broker_port = node_broker_port
+        self.__seed_nodes_file = seed_nodes_file
 
         self.__working_dir = ensure_path_exists(
             os.path.join(
@@ -186,6 +187,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         else:
             command.append("--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"))
 
+        if self.__seed_nodes_file:
+            command.append("--seed-nodes=%s" % self.__seed_nodes_file)
+
         if self.__node_broker_port is not None:
             command.append("--node-broker=%s%s:%d" % (
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
@@ -275,6 +279,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     @property
     def port(self):
         return self.grpc_port
+
+    @property
+    def endpoint(self):
+        return "{}:{}".format(self.host, self.port)
 
     @property
     def pid(self):
@@ -489,7 +497,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes[node_id].start()
         return self._nodes[node_id]
 
-    def __register_node(self, configurator=None):
+    def __register_node(self, configurator=None, seed_nodes_file=None):
         configurator = configurator or self.__configurator
         node_index = next(self._node_index_allocator)
 
@@ -514,6 +522,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             tenant_affiliation=configurator.yq_tenant,
             binary_path=configurator.get_binary_path(node_index),
             data_center=data_center,
+            seed_nodes_file=seed_nodes_file,
         )
         return self._nodes[node_index]
 
@@ -601,10 +610,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             node.stop()
             node.start()
 
-    def prepare_node(self, configurator=None):
+    def prepare_node(self, configurator=None, seed_nodes_file=None):
         try:
-            new_node_object = self.__register_node(configurator)
-            self.__write_node_config(new_node_object.node_id, configurator)
+            new_node_object = self.__register_node(configurator, seed_nodes_file)
+            # Skip writing protocol configuration files if seeding nodes from a file
+            skip_proto_write = seed_nodes_file is not None
+            self.__write_node_config(new_node_object.node_id, configurator, skip_proto_write)
             logger.info("Successfully registered new node object with ID: %s" % str(new_node_object.node_id))
             return new_node_object
         except Exception as e:
@@ -646,11 +657,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             return self.__config_base_path
         return self.__config_path
 
-    def __write_node_config(self, node_id, configurator=None):
+    def __write_node_config(self, node_id, configurator=None, config_dir_only=False):
         configurator = configurator or self.__configurator
         node_config_path = ensure_path_exists(
             os.path.join(self.__config_base_path, "node_{}".format(node_id))
         )
+        if config_dir_only:
+            return
         configurator.write_proto_configs(node_config_path)
 
     def __write_configs(self):

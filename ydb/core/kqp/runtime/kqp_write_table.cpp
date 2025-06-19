@@ -1385,8 +1385,6 @@ public:
             for (const auto& [token, writeInfo] : WriteInfos) {
                 if (writeInfo.Closed) {
                     Close(token);
-                } else {
-                    FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
                 }
             }
         }
@@ -1442,10 +1440,6 @@ public:
             data->AttachAlloc(Alloc);
         }
         info.Serializer->AddData(std::move(data));
-
-        if (info.Metadata.Priority == 0) {
-            FlushSerializer(token, GetMemory() >= Settings.MemoryLimitTotal);
-        }
     }
 
     void Close(TWriteToken token) override {
@@ -1453,14 +1447,9 @@ public:
         AFL_ENSURE(info.Serializer);
         info.Closed = true;
         info.Serializer->Close();
-        if (info.Metadata.Priority == 0) {
-            FlushSerializer(token, true);
-            AFL_ENSURE(info.Serializer->IsFinished());
-        }
     }
 
     void CleanupClosedTokens() override {
-        AFL_ENSURE(IsEmpty());
         for (auto it = WriteInfos.begin(); it != WriteInfos.end();) {
             if (it->second.Closed) {
                 AFL_ENSURE(it->second.Serializer->IsFinished());
@@ -1474,13 +1463,8 @@ public:
     void FlushBuffers() override {
         TVector<TWriteToken> writeTokensFoFlush;
         for (const auto& [token, writeInfo] : WriteInfos) {
-            AFL_ENSURE(writeInfo.Closed);
-            if (writeInfo.Metadata.Priority != 0) {
-                if (!writeInfo.Serializer->IsFinished()) {
-                    writeTokensFoFlush.push_back(token);
-                }
-            } else {
-                AFL_ENSURE(writeInfo.Serializer->IsFinished());
+             if ((writeInfo.Metadata.Priority == 0 || writeInfo.Closed) && !writeInfo.Serializer->IsFinished()) {
+                writeTokensFoFlush.push_back(token);
             }
         }
 
@@ -1495,7 +1479,11 @@ public:
         
         for (const TWriteToken token : writeTokensFoFlush) {
             FlushSerializer(token, true);
-            AFL_ENSURE(WriteInfos.at(token).Serializer->IsFinished());
+            const auto& writeInfo = WriteInfos.at(token);
+            if (writeInfo.Metadata.Priority != 0) {
+                AFL_ENSURE(writeInfo.Closed);
+                AFL_ENSURE(writeInfo.Serializer->IsFinished());
+            }
         }
     }
 

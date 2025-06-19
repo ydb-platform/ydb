@@ -19,12 +19,12 @@ public:
     TOutput JoinSearch() override;
 
 private:
-    TInput Input;
-    std::function<void(const TString&)> Log;
-    std::map<TVarId, Var*> Vars;
-    std::vector<std::vector<RestrictInfo*>> RestrictInfos;
-    std::vector<RestrictInfo*> LeftRestriction;
-    std::vector<RestrictInfo*> RightRestriction;
+    TInput Input_;
+    std::function<void(const TString&)> Log_;
+    std::map<TVarId, Var*> Vars_;
+    std::vector<std::vector<RestrictInfo*>> RestrictInfos_;
+    std::vector<RestrictInfo*> LeftRestriction_;
+    std::vector<RestrictInfo*> RightRestriction_;
 
     void MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, const std::vector<TEq>& src);
     void LogNode(const TString& prefix, void* node);

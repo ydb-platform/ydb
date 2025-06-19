@@ -62,7 +62,7 @@ namespace {
 } // namespace
 
 
-void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo&) {
+void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo& sharedInfo) {
     NeedyPools.clear();
     HoggishPools.clear();
     IsNeedyByPool.clear();
@@ -78,7 +78,7 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
     LastSecondCpu = 0.0;
     for (size_t poolIdx = 0; poolIdx < pools.size(); ++poolIdx) {
         TPoolInfo& pool = *pools[poolIdx];
-        TotalCores += pool.DefaultThreadCount;
+        TotalCores += pool.ThreadQuota;
 
         AdditionalThreads += Max(0, pool.GetFullThreadCount() - pool.DefaultFullThreadCount);
         float currentThreadCount = pool.GetThreadCount();
@@ -103,7 +103,7 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
 
         bool isHoggish = IsHoggish(PoolConsumption[poolIdx].Elapsed, currentThreadCount);
         if (isHoggish) {
-            float freeCpu = std::max(currentThreadCount - PoolConsumption[poolIdx].Elapsed, currentThreadCount - PoolConsumption[poolIdx].LastSecondElapsed);
+            float freeCpu = currentThreadCount - PoolConsumption[poolIdx].Elapsed;
             HoggishPools.push_back({poolIdx, freeCpu});
         }
 
@@ -139,16 +139,14 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
 
     HARMONIZER_DEBUG_PRINT("NeedyPools", NeedyPools.size(), "HoggishPools", HoggishPools.size());
 
-    Budget = TotalCores - Max(Elapsed, LastSecondElapsed);
-    BudgetInt = static_cast<i16>(Max(Budget, 0.0f));
+    Budget = TotalCores - Elapsed;
+    BudgetWithoutSharedCpu = Budget - sharedInfo.FreeCpu;
+    Overbooked = -Budget;
+    LostCpu = Max<float>(0.0f, Elapsed - Cpu);
     if (Budget < -0.1) {
         IsStarvedPresent = true;
     }
-    Overbooked = Elapsed - Cpu;
-    if (Overbooked < 0) {
-        IsStarvedPresent = false;
-    }
-    HARMONIZER_DEBUG_PRINT("IsStarvedPresent", IsStarvedPresent, "Budget", Budget, "BudgetInt", BudgetInt, "Overbooked", Overbooked, "TotalCores", TotalCores, "Elapsed", Elapsed, "Cpu", Cpu, "LastSecondElapsed", LastSecondElapsed, "LastSecondCpu", LastSecondCpu);
+    HARMONIZER_DEBUG_PRINT("IsStarvedPresent", IsStarvedPresent, "Budget", Budget, "Overbooked", Overbooked, "TotalCores", TotalCores, "Elapsed", Elapsed, "Cpu", Cpu, "LastSecondElapsed", LastSecondElapsed, "LastSecondCpu", LastSecondCpu);
 }
 
 } // namespace NActors

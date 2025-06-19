@@ -231,7 +231,7 @@ THttpParser<THttpRequest>::EParseStage THttpParser<THttpRequest>::GetInitialStag
 
 template <>
 bool THttpParser<THttpResponse>::ExpectedBody() const {
-    return !Status.starts_with("1") && Status != "204" && Status != "304";
+    return !Status.starts_with("1") && Status != "204" && Status != "304" && Status != "202";
 }
 
 template <>

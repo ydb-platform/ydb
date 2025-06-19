@@ -23,8 +23,8 @@ template <class TDerived>
 class TCallableTransformerBase : public TGraphTransformerBase {
 public:
     TCallableTransformerBase(TTypeAnnotationContext& types, bool instantOnly)
-        : Types(types)
-        , InstantOnly(instantOnly)
+        : Types_(types)
+        , InstantOnly_(instantOnly)
     {}
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -38,7 +38,7 @@ public:
 
         auto name = input->Content();
         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
-            return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), 
+            return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
                 TStringBuilder() << "At function: " << NormalizeCallableName(name));
         });
 
@@ -88,7 +88,7 @@ public:
                 }
             } else {
                 bool foundFunc = false;
-                for (auto& datasource : Types.DataSources) {
+                for (auto& datasource : Types_.DataSources) {
                     if (!datasource->CanParse(*input)) {
                         continue;
                     }
@@ -99,7 +99,7 @@ public:
                 }
 
                 if (!foundFunc) {
-                    for (auto& datasink : Types.DataSinks) {
+                    for (auto& datasink : Types_.DataSinks) {
                         if (!datasink->CanParse(*input)) {
                             continue;
                         }
@@ -120,23 +120,23 @@ public:
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        const auto it = PendingNodes.find(&input);
-        YQL_ENSURE(it != PendingNodes.cend());
+        const auto it = PendingNodes_.find(&input);
+        YQL_ENSURE(it != PendingNodes_.cend());
         return static_cast<TDerived*>(this)->GetTransformer(*it->second.second).GetAsyncFuture(input);
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        const auto it = PendingNodes.find(input.Get());
-        YQL_ENSURE(it != PendingNodes.cend());
+        const auto it = PendingNodes_.find(input.Get());
+        YQL_ENSURE(it != PendingNodes_.cend());
         const auto provider = it->second.second;
         IGraphTransformer& transformer = static_cast<TDerived*>(this)->GetTransformer(*provider);
         const auto status = transformer.ApplyAsyncChanges(it->second.first, output, ctx);
-        PendingNodes.erase(it);
+        PendingNodes_.erase(it);
         return status;
     }
 
     void Rewind() override {
-        PendingNodes.clear();
+        PendingNodes_.clear();
     }
 
 protected:
@@ -171,7 +171,7 @@ protected:
         }
 
         auto datasinkName = input.Child(1)->Child(0)->Content();
-        auto datasink = Types.DataSinkMap.FindPtr(datasinkName);
+        auto datasink = Types_.DataSinkMap.FindPtr(datasinkName);
         if (!datasink) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
             return nullptr;
@@ -194,7 +194,7 @@ protected:
         }
 
         auto datasourceName = input.Child(1)->Child(0)->Content();
-        auto datasource = Types.DataSourceMap.FindPtr(datasourceName);
+        auto datasource = Types_.DataSourceMap.FindPtr(datasourceName);
         if (!datasource) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName));
             return nullptr;
@@ -217,7 +217,7 @@ protected:
         }
 
         auto datasinkName = input.Child(1)->Child(0)->Content();
-        auto datasink = Types.DataSinkMap.FindPtr(datasinkName);
+        auto datasink = Types_.DataSinkMap.FindPtr(datasinkName);
         if (!datasink) {
             ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
             return nullptr;
@@ -241,7 +241,7 @@ protected:
 
         if (input.Child(1)->IsCallable("DataSource")) {
             auto datasourceName = input.Child(1)->Child(0)->Content();
-            auto datasource = Types.DataSourceMap.FindPtr(datasourceName);
+            auto datasource = Types_.DataSourceMap.FindPtr(datasourceName);
             if (!datasource) {
                 ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasource: " << datasourceName));
                 return nullptr;
@@ -252,7 +252,7 @@ protected:
 
         if (input.Child(1)->IsCallable("DataSink")) {
             auto datasinkName = input.Child(1)->Child(0)->Content();
-            auto datasink = Types.DataSinkMap.FindPtr(datasinkName);
+            auto datasink = Types_.DataSinkMap.FindPtr(datasinkName);
             if (!datasink) {
                 ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unsupported datasink: " << datasinkName));
                 return nullptr;
@@ -268,22 +268,22 @@ protected:
         const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         auto status = static_cast<TDerived*>(this)->GetTransformer(dataProvider).Transform(input, output, ctx);
         if (status.Level == IGraphTransformer::TStatus::Async) {
-            if (InstantOnly) {
+            if (InstantOnly_) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() <<
                     "Async status is not allowed for instant transform, provider name: " << dataProvider.GetName()));
                 return IGraphTransformer::TStatus::Error;
             }
 
-            PendingNodes[input.Get()] = std::make_pair(input, &dataProvider);
+            PendingNodes_[input.Get()] = std::make_pair(input, &dataProvider);
         }
 
         return status;
     }
 
 protected:
-    TTypeAnnotationContext& Types;
-    const bool InstantOnly;
-    TNodeMap<std::pair<TExprNode::TPtr, IDataProvider*>> PendingNodes;
+    TTypeAnnotationContext& Types_;
+    const bool InstantOnly_;
+    TNodeMap<std::pair<TExprNode::TPtr, IDataProvider*>> PendingNodes_;
 };
 
 } // NYql

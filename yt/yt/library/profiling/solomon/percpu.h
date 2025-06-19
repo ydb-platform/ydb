@@ -74,7 +74,7 @@ private:
     struct alignas(CacheLineSize) TShard
     {
 #ifdef __clang__
-        std::atomic<__int128> Value = {};
+        std::atomic<__int128> Value = 0;
 #else
         TSpinLock Lock;
         TWrite Value;

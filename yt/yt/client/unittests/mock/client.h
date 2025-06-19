@@ -675,6 +675,11 @@ public:
         const TListOperationsOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<TListJobsResult>, ListJobs, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TListJobsOptions& options),
@@ -906,6 +911,15 @@ public:
         const std::string& partitionColumn,
         std::optional<int> writerIndex,
         const TShuffleWriterOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (
+        const TChaosLeaseStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options),
         (override));
 
 private:

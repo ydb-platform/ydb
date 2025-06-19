@@ -126,8 +126,16 @@ class TsConfig(object):
             dep_path = dep_paths.get(dep_name)
             if dep_path is None:
                 raise Exception(
-                    "referenceing from {}, data: {}\n: Dependency '{}' not found in dep_paths: {}".format(
-                        self.path, str(self.data), dep_name, dep_paths
+                    "referencing from {}, data: {}\n: Dependency '{}' not found in dep_paths: {}. "
+                    "Cannot use 'extends' with npm-package reference '{}' in the config '{}' because dependencies are not yet installed during configuration. "
+                    "Please use file-based extends (relative path) instead of package references. "
+                    "See details: https://docs.yandex-team.ru/frontend-in-arcadia/references/tsconfig-json#extends".format(
+                        self.path,
+                        str(self.data),
+                        dep_name,
+                        dep_paths,
+                        self.data.get(RootFields.extends, '<unknown>'),
+                        self.path,
                     )
                 )
             base_config_path = os.path.join(dep_path, file_path)

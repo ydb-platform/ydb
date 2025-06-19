@@ -50,8 +50,8 @@ public:
         , BuildFunc(buildFunc) {}
 
     TParent& Build() {
-        auto atom = this->Ctx.NewAtom(this->Pos, ResultProviderName);
-        auto node = this->Ctx.NewCallable(this->Pos, "DataSink", { atom });
+        auto atom = this->Ctx_.NewAtom(this->Pos_, ResultProviderName);
+        auto node = this->Ctx_.NewCallable(this->Pos_, "DataSink", { atom });
         return BuildFunc(TResultDataSink(node));
     }
 

@@ -33,6 +33,15 @@ public:
         AFL_VERIFY(EntityId);
     }
 
+    ui64 GetPackedSize() const {
+        ui64 result = 0;
+        for (auto&& i : Chunks) {
+            result += i->GetPackedSize();
+        }
+        AFL_VERIFY(Size == result)("size", Size)("result", result);
+        return result;
+    }
+
     class TEntityChunk {
     private:
         YDB_READONLY_DEF(TPositiveControlInteger, Size);

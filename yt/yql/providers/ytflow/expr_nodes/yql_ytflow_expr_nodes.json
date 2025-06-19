@@ -58,7 +58,7 @@
             "Match": {"Type": "Callable", "Name": "YtflowPersistentSource"},
             "Children": [
                 {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Input", "Type": "TYtflowReadWrap"}
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"}
             ]
         },
         {
@@ -83,7 +83,7 @@
             "Base": "TYtflowSinkBase",
             "Match": {"Type": "Callable", "Name": "YtflowPersistentSink"},
             "Children": [
-                {"Index": 1, "Name": "Input", "Type": "TYtflowWriteWrap"}
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"}
             ]
         },
         {

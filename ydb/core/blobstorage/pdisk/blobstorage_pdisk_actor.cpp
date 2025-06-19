@@ -59,6 +59,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     struct TInitQueueItem {
         TOwnerRound OwnerRound = 0;
         TVDiskID VDisk = TVDiskID::InvalidId;
+        ui32 SlotSizeInUnits = 0;
         ui64 PDiskGuid = 0;
         TActorId Sender;
         TActorId CutLogId;
@@ -75,10 +76,19 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
             , Cookie(cookie)
         {}
 
-        TInitQueueItem(TOwnerRound ownerRound, TVDiskID vDisk, ui64 pDiskGuid, TActorId sender, TActorId cutLogId,
-                TActorId whiteboardProxyId, ui32 slotId)
+        TInitQueueItem(
+                TOwnerRound ownerRound,
+                TVDiskID vDisk,
+                ui32 slotSizeInUnits,
+                ui64 pDiskGuid,
+                TActorId sender,
+                TActorId cutLogId,
+                TActorId whiteboardProxyId,
+                ui32 slotId
+        )
             : OwnerRound(ownerRound)
             , VDisk(vDisk)
+            , SlotSizeInUnits(slotSizeInUnits)
             , PDiskGuid(pDiskGuid)
             , Sender(sender)
             , CutLogId(cutLogId)
@@ -626,7 +636,7 @@ public:
                 PDisk->InputRequest(request);
             } else {
                 NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
-                    it->SlotId);
+                    it->SlotId, it->SlotSizeInUnits);
                 auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
                 PDisk->InputRequest(request);
             }
@@ -640,7 +650,7 @@ public:
 
     void InitHandle(NPDisk::TEvYardInit::TPtr &ev) {
         const NPDisk::TEvYardInit &evYardInit = *ev->Get();
-        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.PDiskGuid,
+        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.GroupSizeInUnits, evYardInit.PDiskGuid,
             ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);
     }
 
@@ -684,6 +694,10 @@ public:
         PDisk->Mon.YardSlay.CountResponse();
     }
 
+    void InitHandle(NPDisk::TEvYardResize::TPtr &ev) {
+        Y_UNUSED(ev);
+    }
+
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
         const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
         InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
@@ -715,7 +729,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
         PDisk->Mon.CheckSpace.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, StateErrorReason));
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, StateErrorReason));
         PDisk->Mon.CheckSpace.CountResponse();
     }
 
@@ -820,6 +834,10 @@ public:
         Send(ev->Sender, new NPDisk::TEvSlayResult(NKikimrProto::CORRUPTED, 0,
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
+    }
+
+    void ErrorHandle(NPDisk::TEvYardResize::TPtr &ev) {
+        Y_UNUSED(ev);
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
@@ -959,6 +977,11 @@ public:
 
     void Handle(NPDisk::TEvSlay::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TSlay>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvYardResize::TPtr &ev) {
+        TYardResize* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
@@ -1464,6 +1487,7 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, InitHandle);
             hFunc(NPDisk::TEvShredVDiskResult, InitHandle);
             hFunc(NPDisk::TEvContinueShred, InitHandle);
+            hFunc(NPDisk::TEvYardResize, InitHandle);
 
             hFunc(TEvReadMetadata, Handle);
             hFunc(TEvWriteMetadata, Handle);
@@ -1496,6 +1520,7 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, Handle);
             hFunc(NPDisk::TEvShredVDiskResult, Handle);
             hFunc(NPDisk::TEvContinueShred, Handle);
+            hFunc(NPDisk::TEvYardResize, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -1532,6 +1557,7 @@ public:
             hFunc(NPDisk::TEvPreShredCompactVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
+            hFunc(NPDisk::TEvYardResize, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

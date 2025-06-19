@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <string.h>
 #include "liburing.h"
+#include "helpers.h"
 
 #define BUFSIZE	512
 
@@ -42,13 +43,22 @@ int main(int argc, char *argv[])
 	struct data d;
 	int ret;
 
+	if (argc > 1)
+		return T_EXIT_SKIP;
+
 	if (pipe(d.fds) < 0) {
 		perror("pipe");
 		return 1;
 	}
 	d.str = buf;
 
-	io_uring_queue_init(8, &ring, 0);
+	ret = io_uring_queue_init(8, &ring, 0);
+	if (ret == -ENOMEM) {
+		return T_EXIT_SKIP;
+	} else if (ret) {
+		fprintf(stderr, "queue_init: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
 
 	pthread_create(&thread, NULL, t, &d);
 

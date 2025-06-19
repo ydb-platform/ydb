@@ -66,7 +66,7 @@ NThreading::TFuture<TStatus> GetSimulationTask(
 
     auto& Log = context.Log;
 
-    LOG_T("Terminal " << context.TerminalID << " started simulated transaction");
+    LOG_T("Terminal " << context.TerminalID << " started simulated transaction, session: " << session.GetId());
 
     // just to test if we have problems with generator (we don't)
     for (size_t i = 0; i < 10; ++i) {

@@ -1059,6 +1059,76 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(writeLog(), NKikimrProto::OK);
     }
 
+    Y_UNIT_TEST(PDiskSlotSizeInUnits) {
+        TActorTestContext testCtx({
+            .IsBad=false,
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        // Setup 2 vdisks
+        TVDiskMock vdisk1(&testCtx);
+        TVDiskMock vdisk2(&testCtx);
+
+        vdisk1.InitFull(0u);
+        vdisk2.InitFull(4u);
+
+        vdisk1.ReserveChunk();
+        vdisk2.ReserveChunk();
+
+        vdisk1.CommitReservedChunks();
+        vdisk2.CommitReservedChunks();
+
+        // Assert NumActiveSlots == 5
+        const auto evCheckSpaceResponse1 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse1->NumActiveSlots, 5);
+
+        // Graceful restart with same config
+        testCtx.GracefulPDiskRestart();
+        vdisk1.InitFull(0u);
+        vdisk1.SendEvLogSync();
+
+        // Don't restart vdisk2 yet, check NumActiveSlots
+        const auto evCheckSpaceResponse2 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse2->NumActiveSlots, 5);
+
+        // Check YardResize handler validates Owner and OwnerRound
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+            new NPDisk::TEvYardResize(vdisk1.PDiskParams->Owner-1, 1, 2u),
+            NKikimrProto::INVALID_OWNER);
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+            new NPDisk::TEvYardResize(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound-1, 2u),
+            NKikimrProto::INVALID_ROUND);
+
+        // Send YardResize for vdiskId1 with GroupSizeInUnits=2
+        testCtx.TestResponse<NPDisk::TEvYardResizeResult>(
+            new NPDisk::TEvYardResize(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound, 2u),
+            NKikimrProto::OK);
+
+        // Assert NumActiveSlots == 6
+        const auto evCheckSpaceResponse3 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk1.PDiskParams->Owner, vdisk1.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse3->NumActiveSlots, 6);
+
+        // Graceful restart with SlotSizeInUnits=2
+        auto cfg = testCtx.GetPDiskConfig();
+        cfg->SlotSizeInUnits = 2;
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        TVDiskMock vdisk3(&testCtx);
+        vdisk3.InitFull(2u);
+
+        // Assert NumActiveSlots == 4
+        const auto evCheckSpaceResponse4 = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk3.PDiskParams->Owner, vdisk3.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResponse4->NumActiveSlots, 4);
+    }
+
     Y_UNIT_TEST(TestChunkWriteCrossOwner) {
         TActorTestContext testCtx{{}};
 

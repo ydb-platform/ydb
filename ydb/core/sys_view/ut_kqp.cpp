@@ -425,7 +425,7 @@ private:
         TResultSetParser parser(resultSet);
         UNIT_ASSERT(parser.TryNextRow());
 
-        TString statement = "";
+        TString createQuery = "";
 
         for (const auto& column : columnsMeta) {
             TValueParser parserValue(parser.GetValue(column.Name));
@@ -437,15 +437,15 @@ private:
             } else if (column.Name == "PathType") {
                 auto actualType = to_upper(TString(value));
                 UNIT_ASSERT_VALUES_EQUAL(actualType, type);
-            } else if (column.Name == "Statement") {
-                statement = value;
+            } else if (column.Name == "CreateQuery") {
+                createQuery = value;
             } else {
                 UNIT_FAIL("Invalid column name: " << column.Name);
             }
         }
-        UNIT_ASSERT(statement);
+        UNIT_ASSERT(createQuery);
 
-        return statement;
+        return createQuery;
     }
 
     std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
@@ -1733,6 +1733,27 @@ R"(CREATE TABLE `test_show_create` (
 
 ALTER TABLE `test_show_create`
     ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('P1D'))
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` String,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', SCHEMA_CHANGES = TRUE, RETENTION_PERIOD = INTERVAL('P1D'))
 ;
 )"
         );

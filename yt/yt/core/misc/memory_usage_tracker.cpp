@@ -373,17 +373,6 @@ TErrorOr<TSharedRef> TryTrackMemory(
     return tracker->TryTrack(std::move(reference), keepExistingTracking);
 }
 
-TSharedRef TrackMemory(
-    const IMemoryUsageTrackerPtr& tracker,
-    TSharedRef reference,
-    bool keepExistingTracking)
-{
-    if (!tracker || !reference) {
-        return reference;
-    }
-    return tracker->Track(std::move(reference), keepExistingTracking);
-}
-
 TSharedRefArray TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRefArray array,

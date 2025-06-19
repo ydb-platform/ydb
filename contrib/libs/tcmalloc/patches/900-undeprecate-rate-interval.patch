@@ -1,5 +1,5 @@
 diff --git a/tcmalloc/malloc_extension.h b/tcmalloc/malloc_extension.h
-index 0505971..26e15b4 100644
+index dab6ea7..961072e 100644
 --- a/tcmalloc/malloc_extension.h
 +++ b/tcmalloc/malloc_extension.h
 @@ -476,11 +476,9 @@ class MallocExtension final {

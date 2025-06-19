@@ -53,17 +53,17 @@ public:
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries = true,
         THolder<TExprContext> ownedCtx = {}, TModuleChecker moduleChecker = {})
-        : Translators(translators)
-        , OwnedCtx(std::move(ownedCtx))
-        , LibsContext(nextUniqueId)
-        , Modules(std::move(modules))
-        , ClusterMapping(clusterMapping)
-        , SqlFlags(sqlFlags)
-        , ModuleChecker(moduleChecker)
-        , OptimizeLibraries(optimizeLibraries)
+        : Translators_(translators)
+        , OwnedCtx_(std::move(ownedCtx))
+        , LibsContext_(nextUniqueId)
+        , Modules_(std::move(modules))
+        , ClusterMapping_(clusterMapping)
+        , SqlFlags_(sqlFlags)
+        , ModuleChecker_(moduleChecker)
+        , OptimizeLibraries_(optimizeLibraries)
     {
-        if (OwnedCtx) {
-            FreezeGuard = MakeHolder<TExprContext::TFreezeGuard>(*OwnedCtx);
+        if (OwnedCtx_) {
+            FreezeGuard_ = MakeHolder<TExprContext::TFreezeGuard>(*OwnedCtx_);
         }
     }
 
@@ -71,50 +71,50 @@ public:
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
         THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix, TModuleChecker moduleChecker)
-        : Translators(translators)
-        , ParentModules(parentModules)
-        , LibsContext(nextUniqueId)
-        , KnownPackages(knownPackages)
-        , Libs(libs)
-        , ClusterMapping(clusterMapping)
-        , SqlFlags(sqlFlags)
-        , ModuleChecker(moduleChecker)
-        , OptimizeLibraries(optimizeLibraries)
-        , FileAliasPrefix(fileAliasPrefix)
+        : Translators_(translators)
+        , ParentModules_(parentModules)
+        , LibsContext_(nextUniqueId)
+        , KnownPackages_(knownPackages)
+        , Libs_(libs)
+        , ClusterMapping_(clusterMapping)
+        , SqlFlags_(sqlFlags)
+        , ModuleChecker_(moduleChecker)
+        , OptimizeLibraries_(optimizeLibraries)
+        , FileAliasPrefix_(fileAliasPrefix)
     {
     }
 
     static TString NormalizeModuleName(const TString& path);
 
     void AttachUserData(TUserDataStorage::TPtr userData) {
-        UserData = userData;
+        UserData_ = userData;
     }
 
     void SetUrlLoader(IUrlLoader::TPtr loader) {
-        UrlLoader = loader;
+        UrlLoader_ = loader;
     }
 
     void SetParameters(const NYT::TNode& node) {
-        Parameters = node;
+        Parameters_ = node;
     }
 
     void SetCredentials(TCredentials::TPtr credentials) {
-        Credentials = std::move(credentials);
+        Credentials_ = std::move(credentials);
     }
 
     void SetQContext(const TQContext& qContext) {
-        QContext = qContext;
+        QContext_ = qContext;
     }
 
     void SetClusterMapping(const THashMap<TString, TString>& clusterMapping) {
-        ClusterMapping = clusterMapping;
+        ClusterMapping_ = clusterMapping;
     }
     void SetSqlFlags(const THashSet<TString>& flags) {
-        SqlFlags = flags;
+        SqlFlags_ = flags;
     }
 
     void SetModuleChecker(TModuleChecker moduleChecker) {
-        ModuleChecker = moduleChecker;
+        ModuleChecker_ = moduleChecker;
     }
 
     void RegisterPackage(const TString& package) override;
@@ -139,26 +139,26 @@ private:
     TString SubstParameters(const TString& str);
 
 private:
-    const NSQLTranslation::TTranslators Translators;
-    THolder<TExprContext> OwnedCtx;
-    const TModulesTable* ParentModules = nullptr;
-    TUserDataStorage::TPtr UserData;
-    IUrlLoader::TPtr UrlLoader;
-    TMaybe<NYT::TNode> Parameters;
-    TCredentials::TPtr Credentials;
-    TQContext QContext;
-    TExprContext LibsContext;
-    TSet<TString> KnownPackages;
-    THashMap<TString, ui32> PackageVersions;
-    THashMap<TString, THashMap<int, TLibraryCohesion>> Libs;
-    TModulesTable Modules;
-    THashMap<TString, TString> ClusterMapping;
-    THashSet<TString> SqlFlags;
-    TModuleChecker ModuleChecker;
-    const bool OptimizeLibraries;
-    THolder<TExprContext::TFreezeGuard> FreezeGuard;
-    TString FileAliasPrefix;
-    TSet<TString> UsedSuffixes;
+    const NSQLTranslation::TTranslators Translators_;
+    THolder<TExprContext> OwnedCtx_;
+    const TModulesTable* ParentModules_ = nullptr;
+    TUserDataStorage::TPtr UserData_;
+    IUrlLoader::TPtr UrlLoader_;
+    TMaybe<NYT::TNode> Parameters_;
+    TCredentials::TPtr Credentials_;
+    TQContext QContext_;
+    TExprContext LibsContext_;
+    TSet<TString> KnownPackages_;
+    THashMap<TString, ui32> PackageVersions_;
+    THashMap<TString, THashMap<int, TLibraryCohesion>> Libs_;
+    TModulesTable Modules_;
+    THashMap<TString, TString> ClusterMapping_;
+    THashSet<TString> SqlFlags_;
+    TModuleChecker ModuleChecker_;
+    const bool OptimizeLibraries_;
+    THolder<TExprContext::TFreezeGuard> FreezeGuard_;
+    TString FileAliasPrefix_;
+    TSet<TString> UsedSuffixes_;
 };
 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
@@ -286,18 +286,18 @@ public:
     TColumnOrderStorage() = default;
 
     TMaybe<TColumnOrder> Lookup(ui64 uniqueId) const {
-        auto it = Storage.find(uniqueId);
-        if (it == Storage.end()) {
+        auto it = Storage_.find(uniqueId);
+        if (it == Storage_.end()) {
             return {};
         }
         return it->second;
     }
 
     void Set(ui64 uniqueId, const TColumnOrder& order) {
-        Storage[uniqueId] = order;
+        Storage_[uniqueId] = order;
     }
 private:
-    THashMap<ui64, TColumnOrder> Storage;
+    THashMap<ui64, TColumnOrder> Storage_;
 };
 
 enum class EHiddenMode {
@@ -383,8 +383,11 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
     TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
     TLangVersion LangVer = MinLangVersion;
+    EBackportCompatibleFeaturesMode BackportMode = EBackportCompatibleFeaturesMode::None;
+    bool UseTypeDiffForConvertToError = false;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;

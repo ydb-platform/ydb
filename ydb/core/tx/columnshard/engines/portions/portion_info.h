@@ -116,6 +116,9 @@ private:
 public:
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
+    NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
+        return NPortion::TPortionInfoForCompaction(GetTotalBlobBytes(), GetMeta().IndexKeyStart(), GetMeta().IndexKeyEnd());
+    }
 
     ui64 GetMemorySize() const {
         return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);

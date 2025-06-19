@@ -35,10 +35,10 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     TVector<TString> UDFsPaths;
     for (const auto& item: Options_.UserData_) {
         if (
-            item.Type_ == NUserData::EType::UDF &&
-            item.Disposition_ == NUserData::EDisposition::FILESYSTEM
+            item.Type == NUserData::EType::UDF &&
+            item.Disposition == NUserData::EDisposition::FILESYSTEM
         ) {
-            UDFsPaths.push_back(item.Content_);
+            UDFsPaths.push_back(item.Content);
         }
     }
 

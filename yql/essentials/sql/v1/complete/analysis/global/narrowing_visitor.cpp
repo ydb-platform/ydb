@@ -12,8 +12,19 @@ namespace NSQLComplete {
         return TextInterval(node).a < static_cast<ssize_t>(CursorPosition_);
     }
 
+    std::any TSQLv1NarrowingVisitor::aggregateResult(std::any aggregate, std::any nextResult) {
+        if (nextResult.has_value()) {
+            return nextResult;
+        }
+        return aggregate;
+    }
+
     bool TSQLv1NarrowingVisitor::IsEnclosing(antlr4::tree::ParseTree* tree) const {
         return TextInterval(tree).properlyContains(CursorInterval());
+    }
+
+    ssize_t TSQLv1NarrowingVisitor::CursorPosition() const {
+        return CursorPosition_;
     }
 
     antlr4::misc::Interval TSQLv1NarrowingVisitor::TextInterval(antlr4::tree::ParseTree* tree) const {
@@ -27,7 +38,8 @@ namespace NSQLComplete {
     }
 
     antlr4::misc::Interval TSQLv1NarrowingVisitor::CursorInterval() const {
-        return antlr4::misc::Interval(CursorPosition_, CursorPosition_);
+        auto cursor = CursorPosition();
+        return antlr4::misc::Interval(cursor, cursor);
     }
 
 } // namespace NSQLComplete

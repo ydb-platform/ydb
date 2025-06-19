@@ -25,6 +25,8 @@ public:
 
     TString TableName;
     TString IndexName;
+    std::string KeyColumn;
+    std::string EmbeddingColumn;
     std::optional<std::string> PrefixColumn;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;

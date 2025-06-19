@@ -219,6 +219,51 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(LocalTopic_WithPermission)
+    {
+        auto id = RandomNumber<ui16>();
+        auto username = TStringBuilder() << "u" << id;
+
+        MainTestCase permissionSetup;
+        permissionSetup.CreateUser(username);
+        permissionSetup.Grant("", username, {"ydb.granular.create_table", "ydb.granular.create_queue"});
+
+        MainTestCase testCase(username);
+        permissionSetup.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )", testCase.TableName.data()));
+        permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
+
+        testCase.CreateTopic(1);
+        permissionSetup.Grant(testCase.TopicName, username, {"ALL"});
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(true));
+        
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTopic();
+        testCase.DropTransfer();
+    }
+
     Y_UNIT_TEST(AlterLambda)
     {
         MainTestCase().Run({

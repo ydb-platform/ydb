@@ -166,7 +166,8 @@ private:
         Y_ABORT_UNLESS(readResult.ResultSize() > 0);
         bool isStart = false;
         if (!responseRecord.HasPartitionResponse()) {
-            Y_ABORT_UNLESS(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0); //starts from begin of record
+            Y_ABORT_UNLESS(!readResult.GetResult(0).HasPartNo() || readResult.GetResult(0).GetPartNo() == 0,
+                "Request: %s , ReadResult: %s", Request.ShortDebugString().data(), readResult.ShortDebugString().data()); //starts from begin of record
             auto partResp = responseRecord.MutablePartitionResponse();
             auto readRes = partResp->MutableCmdReadResult();
             readRes->SetBlobsFromDisk(readRes->GetBlobsFromDisk() + readResult.GetBlobsFromDisk());

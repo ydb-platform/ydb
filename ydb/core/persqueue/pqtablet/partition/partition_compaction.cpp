@@ -197,13 +197,22 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
     TVector<TRequestedBlob> blobs;
     TBlobKeyTokens tokens;
 
+    KeysForCompaction.clear();
+
     ui64 size = 0;
     for (const auto& k : BlobEncoder.DataKeysBody) {
+        if (k.Size >= GetCompactedBlobSizeLowerBound()) {
+            KeysForCompaction.emplace_back(k.Key, Max<size_t>());
+            continue;
+        }
+
         size += k.Size;
         if (size > cumulativeSize) {
             size -= k.Size;
             break;
         }
+
+        KeysForCompaction.emplace_back(k.Key, blobs.size());
 
         blobs.emplace_back(k.Key.GetOffset(),
                            k.Key.GetPartNo(),
@@ -251,6 +260,19 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     compactionRequest->Record.SetCookie(ERequestCookie::WriteBlobsForCompaction);
 
     AFL_ENSURE(CompactionBlobEncoder.NewHead.GetBatches().empty());
+
+    for (const auto& [key, pos] : KeysForCompaction) {
+        if (pos == Max<size_t>()) {
+            Rename_Key();
+        } else {
+            const TRequestedBlob& requestedBlob = blobs[pos];
+            Write_key();
+        }
+
+        Y_ABORT_UNLESS(pos != Max<size_t>(),
+                       "key=%s, pos=%" PRISZT,
+                       key.ToString().data(), pos);
+    }
 
     ui64 blobCreationUnixTime = 0;
 
@@ -321,7 +343,7 @@ void TPartition::BlobsForCompactionWereWrite()
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= CompactionBlobsCount);
 
-    for (size_t i = 0; i < CompactionBlobsCount; ++i) {
+    for (size_t i = 0; i < KeysForCompaction.size(); ++i) {
         BlobEncoder.BodySize -= BlobEncoder.DataKeysBody.front().Size;
         BlobEncoder.DataKeysBody.pop_front();
 
@@ -357,6 +379,7 @@ void TPartition::BlobsForCompactionWereWrite()
     CompactionBlobEncoder.CheckHeadConsistency(CompactLevelBorder, TotalLevels, TotalMaxCount);
 
     CompactionInProgress = false;
+    KeysForCompaction.clear();
     CompactionBlobsCount = 0;
 
     ProcessTxsAndUserActs(ctx); // Now you can delete unnecessary keys.

@@ -125,7 +125,7 @@ public:
         // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         Sampler.Add([&row](){
             return TSerializedCellVec::Serialize(*row);

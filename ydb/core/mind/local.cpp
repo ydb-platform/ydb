@@ -907,23 +907,32 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    void SendDrain(const TActorContext &ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
+        SentDrainNode = true;
+        LastDrainRequest->OnSend();
+        UpdateEstimate();
+        NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
+        ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
+    }
+
     void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
         if (!HivePipeClient) {
             TryToRegister(ctx);
         }
 
         if (!SentDrainNode) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
-            SentDrainNode = true;
-            ev->Get()->DrainProgress->OnSend();
             LastDrainRequest = ev->Get()->DrainProgress;
-            UpdateEstimate();
-            NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
-            ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
-            ev->Get()->DrainProgress->OnReceive();
+            SendDrain(ctx);
+            LastDrainRequest->OnReceive();
         } else {
             ev->Get()->DrainProgress->OnReceive();
         }
+    }
+
+    void HandleInit(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext&) {
+        LastDrainRequest = ev->Get()->DrainProgress;
+        LastDrainRequest->OnReceive();
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
@@ -935,6 +944,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
         }
         TryToRegister(ctx);
+        if (LastDrainRequest) {
+            SendDrain(ctx);
+        }
         Become(&TThis::StateWork);
     }
 
@@ -1032,6 +1044,9 @@ public:
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvUpdateSystemUsage, Handle);
             HFunc(TEvNodeWardenStorageConfig, Handle);
+            HFunc(TEvLocal::TEvEnumerateTablets, Handle);
+            HFunc(TEvLocal::TEvLocalDrainNode, HandleInit);
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateInit type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->ToString().data());

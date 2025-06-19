@@ -147,7 +147,7 @@ ydb -p quickstart import s3 \
 
 ### Importing encrypted export {#example-encryption}
 
-Importing one table, that was exported using path `dir/my_table`, to the path `dir1/dir/my_table` from encrypted export located in `export1` in the `mybucket` S3 bucket using the secret key stored in `~/my_secret_key` file.
+Importing one table that was exported using the `dir/my_table` path to the `dir1/dir/my_table` path from an encrypted export located in `export1` in the `mybucket` S3 bucket, using the secret key stored in the `~/my_secret_key` file.
 
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \

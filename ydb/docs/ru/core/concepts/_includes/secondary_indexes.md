@@ -55,7 +55,7 @@
 
 {% note info %}
 
-Пользователь, от имени которого создаётся вторичный индекс, должен обладать следующими [правами](../../yql/reference/syntax/grant#permissions-list):
+Пользователь, от имени которого создаётся вторичный индекс, должен обладать следующими [правами](../../yql/reference/syntax/grant.md#permissions-list):
 
 * `ydb.generic.read`;
 * `ydb.generic.write`.

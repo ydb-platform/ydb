@@ -61,6 +61,7 @@ target_link_options(ydb-core-tx-columnshard-ut_schema PRIVATE
 
 target_sources(ydb-core-tx-columnshard-ut_schema PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/ut_schema/ut_columnshard_schema.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/ut_schema/ut_columnshard_move_table.cpp
 )
 
 

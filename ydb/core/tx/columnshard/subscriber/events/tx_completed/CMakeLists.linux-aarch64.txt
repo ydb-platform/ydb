@@ -12,16 +12,16 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(tables_erased)
-add_subdirectory(tx_completed)
-
-add_library(columnshard-subscriber-events INTERFACE)
+add_library(subscriber-events-tx_completed)
 
 
-target_link_libraries(columnshard-subscriber-events INTERFACE
+target_link_libraries(subscriber-events-tx_completed PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  subscriber-events-tables_erased
-  subscriber-events-tx_completed
+)
+
+target_sources(subscriber-events-tx_completed PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/subscriber/events/tx_completed/event.cpp
 )
 

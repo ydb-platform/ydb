@@ -9,6 +9,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/logger/log.h>
@@ -165,7 +166,7 @@ private:
     void UpdateDisplayTuiMode(const TCalculatedStatusData& data);
     void ExitTuiMode();
 
-    void PrintTransactionStatisticsPretty(std::ostream& os);
+    void PrintTransactionStatisticsPretty(IOutputStream& os);
     void PrintFinalResultPretty();
 
 private:
@@ -470,8 +471,11 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
 }
 
 void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
+    TStringStream transactionsSs;
+    PrintTransactionStatisticsPretty(transactionsSs);
+
     std::stringstream ss;
-    ss << "\n\n\n" << data.Phase << " - " << data.ElapsedMinutes << ":"
+    ss << data.Phase << " - " << data.ElapsedMinutes << ":"
        << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " elapsed";
 
     if (data.ProgressPercent > 0) {
@@ -480,7 +484,7 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
            << data.RemainingSeconds << " remaining)";
     }
 
-    ss << std::endl << "Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
+    ss << " | Efficiency: " << std::setprecision(1) << data.Efficiency << "% | "
        << "tpmC: " << std::setprecision(1) << data.Tpmc;
 
     LOG_I(ss.str());
@@ -488,6 +492,9 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
     // Per thread statistics (two columns)
 
     std::stringstream debugSs;
+
+    debugSs << transactionsSs.Str();
+
     debugSs << "\nPer thread statistics:" << std::endl;
 
     size_t threadCount = LastStatisticsSnapshot->StatVec.size();
@@ -547,7 +554,6 @@ void TPCCRunner::UpdateDisplayTextMode(const TCalculatedStatusData& data) {
 
     // Transaction statistics
     debugSs << "\n";
-    PrintTransactionStatisticsPretty(debugSs);
 
     LOG_D(debugSs.str());
 }
@@ -825,32 +831,20 @@ void TPCCRunner::ExitTuiMode() {
     std::cout.flush();
 }
 
-void TPCCRunner::PrintTransactionStatisticsPretty(std::ostream& os) {
-    os << "Transaction Statistics:\n";
-
-    // Build header using stringstream to calculate width
-    std::stringstream txHeaderStream;
-    txHeaderStream << std::left
-                   << std::setw(12) << "Transaction"
-                   << std::setw(12) << std::right << "OK"
-                   << std::setw(10) << std::right << "Failed";
-    if (Config.ExtendedStats) {
-        txHeaderStream << std::setw(15) << std::right << "UserAborted";
-    }
-    txHeaderStream << std::setw(9) << std::right << "p50, ms"
-                   << std::setw(9) << std::right << "p90, ms"
-                   << std::setw(9) << std::right << "p99, ms";
-
-    std::string header = txHeaderStream.str();
-    size_t tableWidth = header.length();
-
-    os << std::string(tableWidth, '-') << std::endl;
-    os << header << std::endl;
-    os << std::string(tableWidth, '-') << std::endl;
-
+void TPCCRunner::PrintTransactionStatisticsPretty(IOutputStream& os) {
     size_t totalOK = 0;
     size_t totalFailed = 0;
     size_t totalUserAborted = 0;
+
+    TVector<TString> columnNames = {"Transaction", "OK", "Failed"};
+    if (Config.ExtendedStats) {
+        columnNames.emplace_back("UserAborted");
+    }
+    columnNames.emplace_back("p50, ms");
+    columnNames.emplace_back("p90, ms");
+    columnNames.emplace_back("p99, ms");
+
+    NConsoleClient::TPrettyTable table(columnNames);
 
     for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
         auto type = static_cast<ETransactionType>(i);
@@ -864,34 +858,35 @@ void TPCCRunner::PrintTransactionStatisticsPretty(std::ostream& os) {
         totalFailed += failed;
         totalUserAborted += aborted;
 
-        os << std::left
-           << std::setw(12) << std::string(typeStr)
-           << std::fixed << std::setprecision(1) << std::setw(12) << std::right << ok
-           << std::fixed << std::setprecision(1) << std::setw(10) << std::right << failed;
+        auto& row = table.AddRow();
+        size_t columnIndex = 0;
+        row.Column(columnIndex++, typeStr);
+        row.Column(columnIndex++, ToString(ok));
+        row.Column(columnIndex++, ToString(failed));
         if (Config.ExtendedStats) {
-            os << std::fixed << std::setprecision(1) << std::setw(15) << std::right << aborted;
+            row.Column(columnIndex++, ToString(aborted));
         }
-        os << std::fixed << std::setprecision(1) << std::setw(9) << std::right << stats.LatencyHistogramFullMs.GetValueAtPercentile(50)
-           << std::fixed << std::setprecision(1) << std::setw(9) << std::right << stats.LatencyHistogramFullMs.GetValueAtPercentile(90)
-           << std::fixed << std::setprecision(1) << std::setw(9) << std::right << stats.LatencyHistogramFullMs.GetValueAtPercentile(99)
-           << std::endl;
+        row.Column(columnIndex++, ToString(stats.LatencyHistogramFullMs.GetValueAtPercentile(50)));
+        row.Column(columnIndex++, ToString(stats.LatencyHistogramFullMs.GetValueAtPercentile(90)));
+        row.Column(columnIndex++, ToString(stats.LatencyHistogramFullMs.GetValueAtPercentile(99)));
     }
-    os << std::string(tableWidth, '-') << std::endl;
 
-    os << std::left << std::setw(12) << "TOTAL"
-        << std::setw(12) << std::fixed << std::setprecision(1) << std::right << totalOK
-        << std::setw(10) << std::fixed << std::setprecision(1) << std::right << totalFailed;
+    auto& row = table.AddRow();
+    size_t columnIndex = 0;
+    row.Column(columnIndex++, "TOTAL");
+    row.Column(columnIndex++, ToString(totalOK));
+    row.Column(columnIndex++, ToString(totalFailed));
     if (Config.ExtendedStats) {
-        os << std::setw(15) << std::fixed << std::setprecision(1) << std::right << totalUserAborted;
+        row.Column(columnIndex++, ToString(totalUserAborted));
     }
-    os << std::endl;
 
-    os << std::string(tableWidth, '-') << std::endl;
+    table.Print(os);
+    os << "\n";
 }
 
 void TPCCRunner::PrintFinalResultPretty() {
     if (MeasurementsStartTs == Clock::time_point{}) {
-        std::cout << "Stopped before measurements" << std::endl;
+        Cout << "Stopped before measurements" << Endl;
         return;
     }
 
@@ -902,8 +897,8 @@ void TPCCRunner::PrintFinalResultPretty() {
     CollectStatistics(now);
     TCalculatedStatusData data = CalculateStatusData(now);
 
-    std::cout << "\n\n";
-    PrintTransactionStatisticsPretty(std::cout);
+    Cout << "\n\n";
+    PrintTransactionStatisticsPretty(Cout);
 
     if (minutesPassed >= 1) {
         std::cout << "warehouses: " << Config.WarehouseCount << std::endl;

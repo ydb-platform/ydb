@@ -58,20 +58,22 @@ public:
     void UnregisterProcess(const ui64 processId) {
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
-        auto itW = WeightedProcesses.find(it->second->GetWeightedUsage());
-        AFL_VERIFY(itW != WeightedProcesses.end());
-        bool found = false;
-        for (ui32 i = 0; i < itW->second.size(); ++i) {
-            if (itW->second[i]->GetProcessId() == processId) {
-                found = true;
-                std::swap(itW->second[i], itW->second.back());
-                itW->second.pop_back();
-                break;
+        if (it->second->GetTasksCount()) {
+            auto itW = WeightedProcesses.find(it->second->GetWeightedUsage());
+            AFL_VERIFY(itW != WeightedProcesses.end());
+            bool found = false;
+            for (ui32 i = 0; i < itW->second.size(); ++i) {
+                if (itW->second[i]->GetProcessId() == processId) {
+                    found = true;
+                    std::swap(itW->second[i], itW->second.back());
+                    itW->second.pop_back();
+                    break;
+                }
             }
-        }
-        AFL_VERIFY(found);
-        if (itW->second.empty()) {
-            WeightedProcesses.erase(itW);
+            AFL_VERIFY(found);
+            if (itW->second.empty()) {
+                WeightedProcesses.erase(itW);
+            }
         }
         if (it->second->GetScope()->DecProcesses()) {
             AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));

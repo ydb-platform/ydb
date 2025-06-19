@@ -1,6 +1,8 @@
 # Права доступа
 
-[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} хранятся не у [субъекта](../concepts/glossary.md#access-subject), а у [объекта доступа](../concepts/glossary.md#access-object).
+**Право доступа** или **access right** — сущность, отражающая разрешение [субъекту доступа](../concepts/glossary.md#access-subject) выполнять конкретный набор операций в кластере или базе данных над конкретным [объектом доступа](../concepts/glossary.md#access-object).
+
+Права доступа в {{ ydb-short-name }} хранятся не у субъекта, а у объекта доступа.
 
 Для каждого объекта доступа ведется специальный список— [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
 

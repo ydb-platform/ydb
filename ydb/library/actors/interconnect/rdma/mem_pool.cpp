@@ -6,6 +6,7 @@
 
 #include <util/thread/lfstack.h>
 #include <util/stream/output.h>
+#include <util/system/align.h>
 
 #include <vector>
 
@@ -175,11 +176,13 @@ namespace NInterconnect::NRdma {
     public:
         TMemPoolBase()
             : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
+            , Alignment(NSystemInfo::GetPageSize())
         {
         }
     protected:
-        TMemRegion* AllocNewPage(int size) {
-            void* ptr = allocateMemory(size, NSystemInfo::GetPageSize());
+        TMemRegion* AllocNewPage(size_t size) {
+            size = AlignUp(size, Alignment);
+            void* ptr = allocateMemory(size, Alignment);
             if (!ptr) {
                 return nullptr;
             }
@@ -189,6 +192,7 @@ namespace NInterconnect::NRdma {
         }
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
+        size_t Alignment;
     };
 
     class TDummyMemPool: public TMemPoolBase {

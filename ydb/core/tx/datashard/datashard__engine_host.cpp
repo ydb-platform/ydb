@@ -370,7 +370,10 @@ public:
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
 
-        UserDb.UpsertRow(tableId, key, ops, {});
+        TSmallVec<NTable::TTag> defaultFilledColumnsIds;
+        wedwdwdwedwe(Scheme, tableInfo, commands, ops, nullptr);
+        
+        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnsIds);
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TStackVec<NTable::TTag>&  defaultFilledColumnsIds) override {

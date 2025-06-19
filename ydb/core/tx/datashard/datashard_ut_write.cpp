@@ -69,6 +69,110 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(UpsertWithDefaults) {
+
+        auto [runtime, server, sender] = TestCreateServer();
+        
+        // Define a table with different column types
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint64", true, false},           // key (id=1)
+                {"uint8_val", "Uint8", false, false},     // id=2
+                {"uint16_val", "Uint16", false, false},   // id=3
+                {"uint32_val", "Uint32", false, false},   // id=4
+                {"uint64_val", "Uint64", false, false},   // id=5
+                {"int8_val", "Int8", false, false},       // id=6
+                {"int16_val", "Int16", false, false},     // id=7
+                {"int32_val", "Int32", false, false},     // id=8
+                {"int64_val", "Int64", false, false},     // id=9
+                {"utf8_val", "Utf8", false, false},       // id=10 (not numerical)
+                {"double_val", "Double", false, false}   // id=11 (not supported by increment)
+            });
+    
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+
+        Cout << "========= Insert initial data =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7,8,9,10,11}; // all columns
+            TVector<TCell> cells = {
+                TCell::Make(ui64(1)),     // key = 1
+                TCell::Make(ui8(2)),
+                TCell::Make(ui16(3)),
+                TCell::Make(ui32(4)), 
+                TCell::Make(ui64(5)),
+                TCell::Make(i8(6)), 
+                TCell::Make(i16(7)),
+                TCell::Make(i32(8)),
+                TCell::Make(i64(9)),
+                TCell::Make("10"),
+                TCell::Make(double(11)),
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);          
+        }
+    
+        Cout << "========= Verify initial data =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 4, "
+                "uint64_val = 5, int8_val = 6, int16_val = 7, int32_val = 8, int64_val = 9, "
+                "utf8_val = 10\\0, double_val = 11\n"
+            );
+        }
+
+        Cout << "========= Upsert exist row with default values in columns 5, 6 =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // key and numerical columns
+            TVector<ui32> defaultFilledColumns = {5, 6};
+            
+            TVector<TCell> increments = {
+                TCell::Make(ui64(1)),    // key = 1
+                TCell::Make(ui8(22)),
+                TCell::Make(ui16(33)),
+                TCell::Make(ui32(44)),
+                TCell::Make(ui64(55)),
+                TCell::Make(i8(-66)),
+                TCell::Make(i16(-77)),
+                TCell::Make(i32(-88)),
+                TCell::Make(i64(-99)),
+                
+                TCell::Make(ui64(333)),    // key = 33
+                TCell::Make(ui8(22)),
+                TCell::Make(ui16(33)),
+                TCell::Make(ui32(44)),
+                TCell::Make(ui64(55)),
+                TCell::Make(i8(-66)),
+                TCell::Make(i16(-77)),
+                TCell::Make(i32(-88)),
+                TCell::Make(i64(-99))
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, 
+                                    NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, defaultFilledColumns);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+        
+        Cout << "========= Verify results =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
+                "uint64_val = 5, int8_val = 6, int16_val = -77, int32_val = -88, int64_val = -99, "
+                "utf8_val = 10\\0, double_val = 11\n"
+
+                "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
+                "uint64_val = 55, int8_val = -66, int16_val = -77, int32_val = -88, int64_val = -99, "
+                "utf8_val = NULL, double_val = NULL\n"
+
+            );
+        }
+    }
     Y_UNIT_TEST(IncrementImmediate) {
         
         auto [runtime, server, sender] = TestCreateServer();

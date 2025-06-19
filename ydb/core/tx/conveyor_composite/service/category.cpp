@@ -6,13 +6,6 @@ bool TProcessCategory::HasTasks() const {
     return WeightedProcesses.size();
 }
 
-void TProcessCategory::DoQuant(const TMonotonic newStart) {
-    CPUUsage->Cut(newStart);
-    for (auto&& i : Processes) {
-        i.second->DoQuant(newStart);
-    }
-}
-
 std::optional<TWorkerTask> TProcessCategory::ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds) {
     std::shared_ptr<TProcess> pMin;
     for (auto it = WeightedProcesses.begin(); it != WeightedProcesses.end(); ++it) {
@@ -114,22 +107,24 @@ bool TProcessCategory::RemoveWeightedProcess(const std::shared_ptr<TProcess>& pr
     if (!process->GetTasksCount()) {
         return false;
     }
+    AFL_VERIFY(WeightedProcesses.size());
     auto itW = WeightedProcesses.find(process->GetWeightedUsage());
-    AFL_VERIFY(itW != WeightedProcesses.end())("weight", process->GetWeightedUsage())("size", WeightedProcesses.size());
-    bool found = false;
+    AFL_VERIFY(itW != WeightedProcesses.end())("weight", process->GetWeightedUsage().GetValue())("size", WeightedProcesses.size())(
+                        "first", WeightedProcesses.begin()->first.GetValue());
     for (ui32 i = 0; i < itW->second.size(); ++i) {
-        if (itW->second[i]->GetProcessId() == process->GetProcessId()) {
-            found = true;
-            std::swap(itW->second[i], itW->second.back());
-            itW->second.pop_back();
-            break;
+        if (itW->second[i]->GetProcessId() != process->GetProcessId()) {
+            continue;
         }
+        itW->second[i] = itW->second.back();
+        if (itW->second.size() == 1) {
+            WeightedProcesses.erase(itW);
+        } else {
+            itW->second.pop_back();
+        }
+        return true;
     }
-    AFL_VERIFY(found);
-    if (itW->second.empty()) {
-        WeightedProcesses.erase(itW);
-    }
-    return true;
+    AFL_VERIFY(false);
+    return false;
 }
 
 }   // namespace NKikimr::NConveyorComposite

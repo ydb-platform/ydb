@@ -99,10 +99,6 @@ public:
         WaitingTasksCount->Sub(Tasks.size());
     }
 
-    void DoQuant(const TMonotonic newStart) {
-        CPUUsage->Cut(newStart);
-    }
-
     bool HasTasks() const {
         return Tasks.size();
     }

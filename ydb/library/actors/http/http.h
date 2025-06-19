@@ -35,6 +35,7 @@ TString CompressDeflate(TStringBuf source);
 TString DecompressDeflate(TStringBuf source);
 TString GetObfuscatedData(TString data, const THeaders& headers);
 TString ToHex(size_t value);
+bool IsReadableContent(TStringBuf contentType);
 
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
@@ -498,7 +499,11 @@ public:
     }
 
     TString AsReadableString() const {
-        return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        if (IsReadableContent(HeaderType::ContentType)) {
+            return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        } else {
+            return TString(Data(), GetHeadersSize());
+        }
     }
 
     TString GetObfuscatedData() const {
@@ -718,7 +723,11 @@ public:
     }
 
     TString AsReadableString() const {
-        return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        if (IsReadableContent(HeaderType::ContentType)) {
+            return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        } else {
+            return TString(Data(), GetHeadersSize());
+        }
     }
 
     TString GetObfuscatedData() const {

@@ -55,6 +55,16 @@ namespace NYdb::NConsoleClient {
 
             contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
 
+            if (light &&
+                completion.Candidates.size() == 1 &&
+                !completion.Candidates[0].Content.StartsWith(completion.CompletedToken.Content)) {
+                completion.Candidates.push_back({
+                    // Disable inline hint
+                    .Kind = NSQLComplete::ECandidateKind::Keyword,
+                    .Content = " ",
+                });
+            }
+
             return ReplxxCompletionsOf(std::move(completion.Candidates));
         }
 
@@ -79,6 +89,7 @@ namespace NYdb::NConsoleClient {
             const size_t prefixLen = candidate.Content.length() - candidate.CursorShift;
             candidate.Content.resize(prefixLen);
 
+            Y_ENSURE(!candidate.Content.empty());
             const auto back = candidate.Content.back();
             if (
                 !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName ||

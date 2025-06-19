@@ -206,8 +206,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
         // LangVer
     }
 
-    auto AddDummyInputChannel(NDqProto::TDqTask& task, ui64 channelId)
-    {
+    auto AddDummyInputChannel(NDqProto::TDqTask& task, ui64 channelId) {
         auto& input = *task.AddInputs();
         auto& channel = *input.AddChannels();
         input.MutableUnionAll(); // for side-effect
@@ -235,8 +234,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
                 logFunc);
     }
 
-    auto AddDummyOutputChannel(NDqProto::TDqTask& task, ui64 channelId)
-    {
+    auto AddDummyOutputChannel(NDqProto::TDqTask& task, ui64 channelId) {
         auto& output = *task.AddOutputs();
         output.MutableBroadcast(); // for side-effect
         auto& channel = *output.AddChannels();
@@ -258,8 +256,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
         return CreateDqInputChannel(channelId, ThisStageId, (IsWide ? (TType*)WideRowType : (TType *)RowType), 10_MB, TCollectStatsLevel::None, TypeEnv, HolderFactory, TransportVersion);
     }
 
-    auto CreateTestAsyncCA(NDqProto::TDqTask& task)
-    {
+    auto CreateTestAsyncCA(NDqProto::TDqTask& task) {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
             NYql::GetCommonDqFactory(),
             NKikimr::NMiniKQL::GetYqlFactory()

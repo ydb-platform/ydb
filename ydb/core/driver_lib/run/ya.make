@@ -109,7 +109,6 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/datashard
     ydb/core/tx/limiter/grouped_memory/usage
-    ydb/core/tx/limiter/service
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
@@ -141,6 +140,7 @@ PEERDIR(
     ydb/library/pdisk_io
     ydb/library/security
     ydb/library/signal_backtrace
+    ydb/library/slide_limiter/service
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base

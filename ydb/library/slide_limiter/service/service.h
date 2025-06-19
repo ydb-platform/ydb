@@ -1,8 +1,8 @@
 #pragma once
 #include <ydb/library/signals/owner.h>
-#include <ydb/core/tx/limiter/usage/abstract.h>
-#include <ydb/core/tx/limiter/usage/config.h>
-#include <ydb/core/tx/limiter/usage/events.h>
+#include <ydb/library/slide_limiter/usage/abstract.h>
+#include <ydb/library/slide_limiter/usage/config.h>
+#include <ydb/library/slide_limiter/usage/events.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>

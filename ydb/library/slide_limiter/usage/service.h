@@ -2,8 +2,8 @@
 #include "config.h"
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/core/tx/limiter/service/service.h>
-#include <ydb/core/tx/limiter/usage/events.h>
+#include <ydb/library/slide_limiter/service/service.h>
+#include <ydb/library/slide_limiter/usage/events.h>
 
 namespace NKikimr::NLimiter {
 

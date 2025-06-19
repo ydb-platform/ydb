@@ -43,9 +43,9 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 - `pretty`: Human-readable format (default).
 - `proto-json-base64`: Protobuf in JSON format, binary strings are Base64-encoded.
 
-`--encryption-key-file PATH`: File path that contains encryption key (only for encrypted exports).
+`--encryption-key-file PATH`: File path containing the encryption key (only for encrypted exports).
 
-`--list`: List objects in existing export.
+`--list`: List objects in an existing export.
 
 ## Importing {#exec}
 

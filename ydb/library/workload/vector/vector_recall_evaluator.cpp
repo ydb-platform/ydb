@@ -230,7 +230,7 @@ void TVectorRecallEvaluator::FillEtalons() {
             std::optional<i64> prefixValue;
             if (Params.PrefixColumn) {
                 prefixValue = GetPrefixValue(i);
-            };
+            }
 
             NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.TopK);
             

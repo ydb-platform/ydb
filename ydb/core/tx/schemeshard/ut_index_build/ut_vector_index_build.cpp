@@ -450,6 +450,15 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // Write data directly into shards
+        const ui32 K = 4;
+        const ui32 tableRows = 200;
+        const ui64 tableRowBytes = 9; // key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 tableBytes = tableRows * tableRowBytes;
+        const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 buildBytes = tableRows * buildRowBytes;
+        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
+        const ui64 postingBytes = tableRows * postingRowBytes;
+        const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
@@ -458,8 +467,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Cerr << "TEvWriteMeteringJson " << ev->Get()->MeteringJson << Endl;
             return true;
         });
+        TString previousBillId = "0-0-0-0";
 
         ui64 uploadRows = 0, uploadBytes = 0, readRows = 0, readBytes = 0;
+        ui64 expectedUploadRows = 0, expectedUploadBytes = 0, expectedReadRows = 0, expectedReadBytes = 0;
         auto logBillingStats = [&]() {
             Cerr << "BillingStats:"
                 << " uploadRows: " << uploadRows << " uploadBytes: " << uploadBytes
@@ -515,7 +526,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             }
             auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->Mutableglobal_vector_kmeans_tree_index();
             kmeansSettings->Mutablevector_settings()->Setlevels(2);
-            kmeansSettings->Mutablevector_settings()->Setclusters(4);
+            kmeansSettings->Mutablevector_settings()->Setclusters(K);
             ForwardToTablet(runtime, tenantSchemeShard, sender, request);
         }
 
@@ -523,57 +534,80 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             runtime.WaitFor("sampleK", [&]{ return sampleKBlocker.size(); });
             sampleKBlocker.Unblock();
         }
+        // SAMPLE reads table once, no writes:
+        expectedReadRows += tableRows;
+        expectedReadBytes += tableBytes;
         logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, 0);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 0);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, 200);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, 1800);
+        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
+        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
+        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
 
         runtime.WaitFor("uploadSampleK", [&]{ return uploadSampleKBlocker.size(); });
-        uploadSampleKBlocker.Unblock();
+        // upload SAMPLE writes K level rows, no reads:
+        expectedUploadRows += K;
+        expectedUploadBytes += K * levelRowBytes;
         logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, 4);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 148);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, 200);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, 1800);
-        
+        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
+        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
+        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
+        uploadSampleKBlocker.Unblock();
+
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
-            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto newBillId = TStringBuilder()
+                << expectedUploadRows << "-" << expectedReadRows << "-"
+                << expectedUploadBytes << "-" << expectedReadBytes;
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
             auto expectedBill = TBillRecord()
-                .Id("109-72075186233409549-2-0-0-0-0-4-200-148-1800")
+                .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            meteringBlocker.Unblock();
         }
-        meteringBlocker.Unblock();
 
         for (ui32 shard = 0; shard < 3; shard++) {
             runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
             reshuffleBlocker.Unblock();
         }
+        // RESHUFFLE reads and writes table once:
+        expectedUploadRows += tableRows;
+        expectedUploadBytes += buildBytes;
+        expectedReadRows += tableRows;
+        expectedReadBytes += tableBytes;
         logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, 204);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 3548);
-        UNIT_ASSERT_VALUES_EQUAL(readRows, 400);
-        UNIT_ASSERT_VALUES_EQUAL(readBytes, 3600);
+        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
+        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
+        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
 
         for (ui32 shard = 0; shard < 4; shard++) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
             localKMeansBlocker.Unblock();
         }
-        logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(uploadRows, 420);
-        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, 6284);
+        // KMEANS writes build table once and forms K * K level rows:
+        expectedUploadRows += tableRows + K * K;
+        expectedUploadBytes += postingBytes + K * K * levelRowBytes;
         if (smallScanBuffer) {
-            UNIT_ASSERT_VALUES_EQUAL(readRows, 1400); // SAMPLE + KMEANS * 3 + UPLOAD = 5 scans
-            UNIT_ASSERT_VALUES_EQUAL(readBytes, 20600);
+            // KMEANS reads build table five times (SAMPLE + KMEANS * 3 + UPLOAD):
+            expectedReadRows += tableRows * 5;
+            expectedReadBytes += buildBytes * 5;
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(readRows, 600);
-            UNIT_ASSERT_VALUES_EQUAL(readBytes, 7000);
+            // KMEANS reads build table once:
+            expectedReadRows += tableRows;
+            expectedReadBytes += buildBytes;
         }
+        logBillingStats();
+        UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
+        UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
+        UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
+        UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
 
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
         {
@@ -593,20 +627,21 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
-            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto newBillId = TStringBuilder()
+                << expectedUploadRows << "-" << expectedReadRows << "-"
+                << expectedUploadBytes << "-" << expectedReadBytes;
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
             auto expectedBill = TBillRecord()
+                .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
-            if (smallScanBuffer) {
-                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-1400-6284-20600");
-            } else {
-                expectedBill.Id("109-72075186233409549-2-4-200-148-1800-420-600-6284-7000");
-            }
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            meteringBlocker.Stop().Unblock();
         }
-        meteringBlocker.Stop().Unblock();
     }
 
     Y_UNIT_TEST_FLAG(DescriptionIsPersisted, prefixed) {

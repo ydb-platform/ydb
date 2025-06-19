@@ -269,6 +269,18 @@ public:
         builder.Args()->Add(argsTuple.GetElementType(0));
         const TType* retType;
         if (features & NUdf::ExtDateType) {
+            // FIXME: The condition below is required to untie the
+            // Gordian knot with the upgrade, when two MiniKQL
+            // runtimes with different versions are being used.
+            // See YQL-19967 for more info.
+            if (MKQL_RUNTIME_VERSION < 51U && typesOnly) {
+                ::TStringBuilder sb;
+                sb << "Invalid argument type: got ";
+                TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+                sb << ", but one of Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp/Interval expected";
+                builder.SetError(sb);
+                return true;
+            }
             retType = builder.SimpleType<TWResult>();
         } else if (features & NUdf::TimeIntervalType) {
             retType = builder.SimpleType<TSignedResult>();
@@ -2023,6 +2035,18 @@ public:
         const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
         if (features & NUdf::TimeIntervalType) {
             if (features & NUdf::ExtDateType) {
+                // FIXME: The condition below is required to untie the
+                // Gordian knot with the upgrade, when two MiniKQL
+                // runtimes with different versions are being used.
+                // See YQL-19967 for more info.
+                if (MKQL_RUNTIME_VERSION < 51U && typesOnly) {
+                    ::TStringBuilder sb;
+                    sb << "Invalid argument type: got ";
+                    TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+                    sb << ", but Interval expected";
+                    builder.SetError(sb);
+                    return true;
+                }
                 BuildSignature<TInterval64, TWResult>(builder, typesOnly);
             } else {
                 BuildSignature<TInterval, TResult>(builder, typesOnly);
@@ -2498,6 +2522,18 @@ public:
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
             if (features & NUdf::ExtDateType) {
+                // FIXME: The condition below is required to untie the
+                // Gordian knot with the upgrade, when two MiniKQL
+                // runtimes with different versions are being used.
+                // See YQL-19967 for more info.
+                if (MKQL_RUNTIME_VERSION < 51U && typesOnly) {
+                    ::TStringBuilder sb;
+                    sb << "Invalid argument type: got ";
+                    TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+                    sb << ", but Resource<" << TMResourceName << "> expected";
+                    builder.SetError(sb);
+                    return true;
+                }
                 BuildSignature<TM64ResourceName, WBoundary>(builder, typesOnly);
                 return true;
             }
@@ -2620,6 +2656,18 @@ public:
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
             if (features & NUdf::ExtDateType) {
+                // FIXME: The condition below is required to untie the
+                // Gordian knot with the upgrade, when two MiniKQL
+                // runtimes with different versions are being used.
+                // See YQL-19967 for more info.
+                if (MKQL_RUNTIME_VERSION < 51U && typesOnly) {
+                    ::TStringBuilder sb;
+                    sb << "Invalid argument type: got ";
+                    TTypePrinter(*typeInfoHelper, argType).Out(sb.Out);
+                    sb << ", but Resource<" << TMResourceName << "> expected";
+                    builder.SetError(sb);
+                    return true;
+                }
                 BuildSignature<TM64ResourceName>(builder, typesOnly);
                 return true;
             }

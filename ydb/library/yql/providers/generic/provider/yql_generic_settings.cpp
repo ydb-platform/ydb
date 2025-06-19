@@ -20,11 +20,17 @@ namespace NYql {
                                      const TCredentials::TPtr& credentials)
     {
         Dispatch(gatewayConfig.GetDefaultSettings());
-
+    
+        if (gatewayConfig.HasDescribeTableTimeoutSeconds()) {
+            DescribeTableTimeout = TDuration::Seconds(gatewayConfig.GetDescribeTableTimeoutSeconds());
+        } else {
+            DescribeTableTimeout = TDuration::Seconds(60);
+        }
+    
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
             AddCluster(cluster, databaseResolver, databaseAuth, credentials);
         }
-
+    
         // TODO: check if it's necessary
         FreezeDefaults();
     }

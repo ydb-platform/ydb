@@ -3,7 +3,6 @@ import ydb
 import os
 import threading
 import logging
-import traceback
 
 ydb.interceptor.monkey_patch_event_handler()
 

@@ -111,7 +111,7 @@ class WorkloadTablesCreateDrop(WorkloadBase):
                 if self.create_table_canceled_cnt > 3:
                     raise e
                 logger.info(f"Create table cancelled {e}")
-            else: 
+            else:
                 raise e
 
     def _create_tables_loop(self):
@@ -206,6 +206,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
     config_name = "StateStorage"
     loop_cnt = 0
     wait_for = 1
+    
     def __init__(self, client, cluster, prefix, stop, config_name):
         super().__init__(client, prefix, "reconfig_statestorage", stop)
         self.ringGroupActorIdOffset = 1

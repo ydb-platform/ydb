@@ -20,27 +20,7 @@ private:
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
     const NConfig::TCategory Config;
 
-    [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process) {
-        if (!process->GetTasksCount()) {
-            return false;
-        }
-        auto itW = WeightedProcesses.find(process->GetWeightedUsage());
-        AFL_VERIFY(itW != WeightedProcesses.end());
-        bool found = false;
-        for (ui32 i = 0; i < itW->second.size(); ++i) {
-            if (itW->second[i]->GetProcessId() == processId) {
-                found = true;
-                std::swap(itW->second[i], itW->second.back());
-                itW->second.pop_back();
-                break;
-            }
-        }
-        AFL_VERIFY(found);
-        if (itW->second.empty()) {
-            WeightedProcesses.erase(itW);
-        }
-        return true;
-    }
+    [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
 
 public:
     ui32 GetWaitingQueueSize() const {

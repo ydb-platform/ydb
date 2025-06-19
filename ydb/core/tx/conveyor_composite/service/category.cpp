@@ -110,4 +110,26 @@ void TProcessCategory::PutTaskResult(TWorkerTaskResult&& result, THashSet<TStrin
     }
 }
 
+bool TProcessCategory::RemoveWeightedProcess(const std::shared_ptr<TProcess>& process) {
+    if (!process->GetTasksCount()) {
+        return false;
+    }
+    auto itW = WeightedProcesses.find(process->GetWeightedUsage());
+    AFL_VERIFY(itW != WeightedProcesses.end());
+    bool found = false;
+    for (ui32 i = 0; i < itW->second.size(); ++i) {
+        if (itW->second[i]->GetProcessId() == process - GetProcessId()) {
+            found = true;
+            std::swap(itW->second[i], itW->second.back());
+            itW->second.pop_back();
+            break;
+        }
+    }
+    AFL_VERIFY(found);
+    if (itW->second.empty()) {
+        WeightedProcesses.erase(itW);
+    }
+    return true;
+}
+
 }   // namespace NKikimr::NConveyorComposite

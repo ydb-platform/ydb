@@ -29,11 +29,11 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 ### List of exported items {#items}
 
-`--destination-prefix PREFIX`: Destination prefix for export into bucket. Required for encrypted exports.
+`--destination-prefix PREFIX`: Destination prefix for export into the bucket. Required for encrypted exports.
 
-`--root-path PATH`: Root folder for the objects being exported, database root if not provided.
+`--root-path PATH`: Root folder for the objects being exported; defaults to the database root if not provided.
 
-`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. If no `--item` or `--include` parameters are specified, the whole root path will be exported. `STRING` is set in `<property>=<value>,...` format with the following properties:
+`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times to export multiple items. If no `--item` or `--include` parameters are specified, the entire root path will be exported. `STRING` is specified in the `<property>=<value>,...` format with the following properties:
 
 - `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
 - `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items. It can be generated automatically from the name of the exported object. In case of encrypted export, it is not recommended to specify an explicit destination path in order to anonymize exported object names.

@@ -470,6 +470,8 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
+        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
+        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
 
         return builder.Build();
     }
@@ -485,6 +487,8 @@ private:
 
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("forceCluster", DefaultReplica);
+        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToString());
+        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToString());
         builder.AddUrlParam("pageSize", std::to_string(pageSize));
         builder.AddUrlParam("page", std::to_string(page));
 

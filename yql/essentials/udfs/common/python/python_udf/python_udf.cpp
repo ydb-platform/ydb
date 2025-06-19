@@ -49,9 +49,9 @@ class TPythonModule: public IUdfModule
 {
 public:
     TPythonModule(const TString& resourceName, EPythonFlavor pythonFlavor, bool standalone = true)
-        : ResourceName(resourceName), Standalone(standalone)
+        : ResourceName_(resourceName), Standalone_(standalone)
     {
-        if (Standalone) {
+        if (Standalone_) {
             Py_SetProgramName(PYTHON_PROGRAMM_NAME);
             PrepareYqlModule();
             Py_Initialize();
@@ -67,7 +67,7 @@ public:
         }
 
 #ifndef _win_
-        if (Standalone) {
+        if (Standalone_) {
             TVector<TStringBuf> paths;
             if (pythonFlavor == EPythonFlavor::System) {
                 paths.push_back(TStringBuf("/usr/lib/python2.7/dist-packages"));
@@ -82,14 +82,14 @@ public:
         TPyObjectPtr pyExecutableStr = PyRepr(GetExecPath().data());
         Y_ABORT_UNLESS(PySys_SetObject(executableVar, pyExecutableStr.Get()) >= 0, "Can't set sys.executable");
 
-        if (Standalone) {
+        if (Standalone_) {
             PyEval_InitThreads();
             MainThreadState_ = PyEval_SaveThread();
         }
     }
 
     ~TPythonModule() {
-        if (Standalone) {
+        if (Standalone_) {
             PyEval_RestoreThread(MainThreadState_);
             Py_Finalize();
         }
@@ -121,15 +121,15 @@ public:
             }
 
             const auto pos = builder.GetSourcePosition();
-            builder.Implementation(new TPythonFunctionFactory(name, ResourceName, userType, std::move(typeHelper), pos));
+            builder.Implementation(new TPythonFunctionFactory(name, ResourceName_, userType, std::move(typeHelper), pos));
         } catch (const yexception& e) {
             builder.SetError(TStringBuf(e.what()));
         }
     }
 
 private:
-    TString ResourceName;
-    bool Standalone;
+    TString ResourceName_;
+    bool Standalone_;
     PyThreadState* MainThreadState_;
 };
 

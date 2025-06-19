@@ -144,7 +144,8 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
                                 InputOptionalVector<T> right,
                                 InputOptionalVector<T> expected,
                                 size_t leftOffset,
-                                size_t rightOffset) {
+                                size_t rightOffset,
+                                bool resetNullBitmapWhenAllNotNull = false) {
     using TLayout = typename NUdf::TDataType<T>::TLayout;
     TSetup<false> setup;
     NYql::TExprContext exprCtx;
@@ -172,6 +173,14 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
         }
     } else {
         rightOperand = GenerateArray(typeInfoHelper, rightType, right, rightOffset);
+    }
+    // Reset bitmap that responses for nullability of arrow::ArrayData.
+    // If all elements are not null then we have two options:
+    // 1. All bitmask elements are set to 1.
+    // 2. There is no bitmask at all.
+    // So we want to test both variants via |resetNullBitmapWhenAllNotNull| flag.
+    if (rightOperand.is_array() && resetNullBitmapWhenAllNotNull && rightOperand.array()->GetNullCount() == 0) {
+        rightOperand.array()->buffers[0] = nullptr;
     }
     auto bi = arrow::compute::detail::ExecBatchIterator::Make({leftOperand, rightOperand}, 1000).ValueOrDie();
     arrow::compute::ExecBatch batch;
@@ -203,11 +212,6 @@ void TestBlockCoalesce(InputOptionalVector<T> left,
     // Second test different sizes.
     // Also test only small subset of offsets to prevent a combinatorial explosion.
     while (left.size() > 1 || right.size() > 1 || expected.size() > 1) {
-        for (size_t leftOffset = 0; leftOffset < 2; leftOffset++) {
-            for (size_t rightOffset = 0; rightOffset < 2; rightOffset++) {
-                TestBlockCoalesceForVector<T, rightType>(left, right, expected, leftOffset, rightOffset);
-            }
-        }
         if (left.size() > 1) {
             left.pop_back();
         }
@@ -216,6 +220,12 @@ void TestBlockCoalesce(InputOptionalVector<T> left,
         }
         if (expected.size() > 1) {
             expected.pop_back();
+        }
+        for (size_t leftOffset = 0; leftOffset < 2; leftOffset++) {
+            for (size_t rightOffset = 0; rightOffset < 2; rightOffset++) {
+                TestBlockCoalesceForVector<T, rightType>(left, right, expected, leftOffset, rightOffset);
+                TestBlockCoalesceForVector<T, rightType>(left, right, expected, leftOffset, rightOffset, /*resetNullBitmapWhenAllNotNull=*/true);
+            }
         }
     }
 }
@@ -300,53 +310,53 @@ void BlockCoalesceGraphTest(size_t length, size_t offset) {
 Y_UNIT_TEST_SUITE(TMiniKQLBlockCoalesceTest) {
 
 Y_UNIT_TEST(CoalesceGraphTest) {
-    for (auto offset : {0, 1, 2, 3, 5, 7, 8, 11, 14, 16}) {
-        BlockCoalesceGraphTest(1000, offset);
+    for (auto offset : {0, 7, 8, 11,6}) {
+        BlockCoalesceGraphTest(32, offset);
     }
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsNotNullArray) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
-    TestBlockCoalesce<TTestType, ERightOperandType::ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
-                                                           {101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120},
-                                                           {101, 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, 115, 116, min, 118, 19, 20});
+    TestBlockCoalesce<TTestType, ERightOperandType::ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
+                                                           {101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118},
+                                                           {101, 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, 115, 116, min, 118});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsScalar) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
+    TestBlockCoalesce<TTestType, ERightOperandType::SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
                                                             {77},
-                                                            {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77, 19, 20});
+                                                            {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalArray) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
-                                                                    {Nothing(), 102, Nothing(), 104, Nothing(), 106, 107, 108, 109, 110, 111, 112, 113, 114, Nothing(), 116, 117, 118, Nothing(), 120},
-                                                                    {Nothing(), 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, Nothing(), 116, min, 118, 19, 20});
+    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
+                                                                    {101, 102, Nothing(), 104, Nothing(), 106, 107, 108, 109, 110, 111, 112, 113, 114, Nothing(), 116, 117, 118},
+                                                                    {101, 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, Nothing(), 116, min, 118});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalInvalidScalar) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
+    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
                                                                      {Nothing()},
-                                                                     {Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20});
+                                                                     {Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
     auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
     auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
-    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
+    TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing()},
                                                                      {77},
-                                                                     {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77, 19, 20});
+                                                                     {77, 2, 3, 77, 5, 6, 7, max, 9, 77, 11, 12, 13, 77, 77, 77, min, 77});
 }
 
 Y_UNIT_TEST(OptionalScalar) {

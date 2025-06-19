@@ -4003,6 +4003,13 @@
             "uri": "https://{canondata_backend}/1942525/94a477066ea16f69d4848bbe524485fc029978b8/resource.tar.gz#test_sql2yql.test_join-prune_keys_YQL-19979_/sql.yql"
         }
     ],
+    "test_sql2yql.test[join-prune_keys_YQL-19979]": [
+        {
+            "checksum": "0dad5d395f90148805e893a30f0b4963",
+            "size": 3845,
+            "uri": "https://{canondata_backend}/1942525/94a477066ea16f69d4848bbe524485fc029978b8/resource.tar.gz#test_sql2yql.test_join-prune_keys_YQL-19979_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[join-yql-19192]": [
         {
             "checksum": "fffdf1cbb40643da9daf9bdf3edec121",

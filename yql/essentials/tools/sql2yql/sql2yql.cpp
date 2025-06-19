@@ -177,15 +177,15 @@ bool TestComplete(const TString& query, NYql::TAstNode& root) {
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
 public:
     TStoreMappingFunctor(THashMap<TString, TString>* target, char delim = '@')
-        : Target(target)
-        , Delim(delim)
+        : Target_(target)
+        , Delim_(delim)
     {
     }
 
     void HandleOpt(const NLastGetopt::TOptsParser* parser) final {
         const TStringBuf val(parser->CurValOrDef());
-        const auto service = TString(val.After(Delim));
-        auto res = Target->emplace(TString(val.Before(Delim)), service);
+        const auto service = TString(val.After(Delim_));
+        auto res = Target_->emplace(TString(val.Before(Delim_)), service);
         if (!res.second) {
             /// force replace already exist parametr
             res.first->second = service;
@@ -193,8 +193,8 @@ public:
     }
 
 private:
-    THashMap<TString, TString>* Target;
-    char Delim;
+    THashMap<TString, TString>* Target_;
+    char Delim_;
 };
 
 int BuildAST(int argc, char* argv[]) {

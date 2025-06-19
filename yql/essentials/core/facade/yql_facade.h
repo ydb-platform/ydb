@@ -83,7 +83,7 @@ public:
     void UnrepeatableRandom();
 private:
     const bool UseRepeatableRandomAndTimeProviders_;
-    bool UseUnrepeatableRandom = false;
+    bool UseUnrepeatableRandom_ = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;

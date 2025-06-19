@@ -7,24 +7,24 @@ namespace NSQLTranslation {
 TClusterMapping::TClusterMapping(const THashMap<TString, TString>& mapping) {
     for (const auto& p : mapping) {
         if (p.second == KikimrProviderName) {
-            CaseSensitiveClusters.emplace(p);
+            CaseSensitiveClusters_.emplace(p);
             continue;
         }
 
         TString clusterLowerCase = to_lower(p.first);
-        CaseInsensitiveClusters.emplace(clusterLowerCase, p.second);
+        CaseInsensitiveClusters_.emplace(clusterLowerCase, p.second);
     }
 }
 
 TMaybe<TString> TClusterMapping::GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const {
-    auto providerPtr1 = CaseSensitiveClusters.FindPtr(cluster);
+    auto providerPtr1 = CaseSensitiveClusters_.FindPtr(cluster);
     if (providerPtr1) {
         normalizedClusterName = cluster;
         return *providerPtr1;
     }
 
     TString clusterLowerCase = to_lower(cluster);
-    auto providerPtr2 = CaseInsensitiveClusters.FindPtr(clusterLowerCase);
+    auto providerPtr2 = CaseInsensitiveClusters_.FindPtr(clusterLowerCase);
     if (providerPtr2) {
         normalizedClusterName = clusterLowerCase;
         return *providerPtr2;

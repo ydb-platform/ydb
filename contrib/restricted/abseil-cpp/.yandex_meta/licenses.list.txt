@@ -265,6 +265,11 @@ license. See [LICENSE](LICENSE) for more information.
 //   limitations under the License.
 
 
+====================Apache-2.0====================
+The Abseil C++ library is licensed under the terms of the Apache
+license. See [LICENSE](LICENSE) for more information.
+
+
 ====================COPYRIGHT====================
 // Copyright 2016 Google Inc. All Rights Reserved.
 
@@ -303,6 +308,10 @@ license. See [LICENSE](LICENSE) for more information.
 
 ====================COPYRIGHT====================
 // Copyright 2024 The Abseil Authors
+
+
+====================COPYRIGHT====================
+// Copyright 2025 The Abseil Authors
 
 
 ====================COPYRIGHT====================

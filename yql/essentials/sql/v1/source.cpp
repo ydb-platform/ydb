@@ -49,14 +49,14 @@ ISource::~ISource()
 TSourcePtr ISource::CloneSource() const {
     Y_DEBUG_ABORT_UNLESS(dynamic_cast<ISource*>(Clone().Get()), "Cloned node is no source");
     TSourcePtr result = static_cast<ISource*>(Clone().Get());
-    for (auto curFilter: Filters) {
-        result->Filters.emplace_back(curFilter->Clone());
+    for (auto curFilter: Filters_) {
+        result->Filters_.emplace_back(curFilter->Clone());
     }
     for (int i = 0; i < static_cast<int>(EExprSeat::Max); ++i) {
-        result->NamedExprs[i] = CloneContainer(NamedExprs[i]);
+        result->NamedExprs_[i] = CloneContainer(NamedExprs_[i]);
     }
-    result->FlattenColumns = FlattenColumns;
-    result->FlattenMode = FlattenMode;
+    result->FlattenColumns_ = FlattenColumns_;
+    result->FlattenMode_ = FlattenMode_;
     return result;
 }
 
@@ -73,7 +73,7 @@ const TColumns* ISource::GetColumns() const {
 }
 
 void ISource::GetInputTables(TTableList& tableList) const {
-    for (auto srcPtr: UsedSources) {
+    for (auto srcPtr: UsedSources_) {
         srcPtr->GetInputTables(tableList);
     }
     return;
@@ -81,7 +81,7 @@ void ISource::GetInputTables(TTableList& tableList) const {
 
 TMaybe<bool> ISource::AddColumn(TContext& ctx, TColumnNode& column) {
     if (column.IsReliable()) {
-        ctx.Error(Pos) << "Source does not allow column references";
+        ctx.Error(Pos_) << "Source does not allow column references";
         ctx.Error(column.GetPos()) << "Column reference " <<
             (column.GetColumnName() ? "'" + *column.GetColumnName() + "'" : "(expr)");
     }
@@ -94,25 +94,25 @@ void ISource::FinishColumns() {
 
 bool ISource::AddFilter(TContext& ctx, TNodePtr filter) {
     Y_UNUSED(ctx);
-    Filters.push_back(filter);
+    Filters_.push_back(filter);
     return true;
 }
 
 bool ISource::AddGroupKey(TContext& ctx, const TString& column) {
-    if (!GroupKeys.insert(column).second) {
+    if (!GroupKeys_.insert(column).second) {
         ctx.Error() << "Duplicate grouping column: " << column;
         return false;
     }
-    OrderedGroupKeys.push_back(column);
+    OrderedGroupKeys_.push_back(column);
     return true;
 }
 
 void ISource::SetCompactGroupBy(bool compactGroupBy) {
-    CompactGroupBy = compactGroupBy;
+    CompactGroupBy_ = compactGroupBy;
 }
 
 void ISource::SetGroupBySuffix(const TString& suffix) {
-    GroupBySuffix = suffix;
+    GroupBySuffix_ = suffix;
 }
 
 bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions, EExprSeat exprSeat) {
@@ -121,12 +121,12 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
     THashSet<TString> aliasSet;
     // TODO: merge FlattenBy with FlattenByExpr
     const bool isFlatten = (exprSeat == EExprSeat::FlattenBy || exprSeat == EExprSeat::FlattenByExpr);
-    THashSet<TString>& aliases = isFlatten ? FlattenByAliases : aliasSet;
+    THashSet<TString>& aliases = isFlatten ? FlattenByAliases_ : aliasSet;
     for (const auto& expr: expressions) {
         const auto& alias = expr->GetLabel();
         const auto& columnNamePtr = expr->GetColumnName();
         if (alias) {
-            ExprAliases.insert(alias);
+            ExprAliases_.insert(alias);
             if (!aliases.emplace(alias).second) {
                 ctx.Error(expr->GetPos()) << "Duplicate alias found: " << alias << " in " << exprSeat << " section";
                 return false;
@@ -151,7 +151,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
                 return false;
             }
             if (alias && exprSeat == EExprSeat::GroupBy) {
-                auto columnAlias = GroupByColumnAliases.emplace(columnName, alias);
+                auto columnAlias = GroupByColumnAliases_.emplace(columnName, alias);
                 auto oldAlias = columnAlias.first->second;
                 if (columnAlias.second && oldAlias != alias) {
                     ctx.Error(expr->GetPos()) << "Alias for column not same, column: " << columnName <<
@@ -163,20 +163,20 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
 
         if (exprSeat == EExprSeat::GroupBy) {
             if (auto sessionWindow = dynamic_cast<TSessionWindow*>(expr.Get())) {
-                if (SessionWindow) {
+                if (SessionWindow_) {
                     ctx.Error(expr->GetPos()) << "Duplicate session window specification:";
-                    ctx.Error(SessionWindow->GetPos()) << "Previous session window is declared here";
+                    ctx.Error(SessionWindow_->GetPos()) << "Previous session window is declared here";
                     return false;
                 }
-                SessionWindow = expr;
+                SessionWindow_ = expr;
             }
             if (auto hoppingWindow = dynamic_cast<THoppingWindow*>(expr.Get())) {
-                if (HoppingWindow) {
+                if (HoppingWindow_) {
                     ctx.Error(expr->GetPos()) << "Duplicate hopping window specification:";
-                    ctx.Error(HoppingWindow->GetPos()) << "Previous hopping window is declared here";
+                    ctx.Error(HoppingWindow_->GetPos()) << "Previous hopping window is declared here";
                     return false;
                 }
-                HoppingWindow = expr;
+                HoppingWindow_ = expr;
             }
         }
         Expressions(exprSeat).emplace_back(expr);
@@ -185,21 +185,21 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
 }
 
 void ISource::SetFlattenByMode(const TString& mode) {
-    FlattenMode = mode;
+    FlattenMode_ = mode;
 }
 
 void ISource::MarkFlattenColumns() {
-    FlattenColumns = true;
+    FlattenColumns_ = true;
 }
 
 bool ISource::IsFlattenColumns() const {
-    return FlattenColumns;
+    return FlattenColumns_;
 }
 
 TString ISource::MakeLocalName(const TString& name) {
-    auto iter = GenIndexes.find(name);
-    if (iter == GenIndexes.end()) {
-        iter = GenIndexes.emplace(name, 0).first;
+    auto iter = GenIndexes_.find(name);
+    if (iter == GenIndexes_.end()) {
+        iter = GenIndexes_.emplace(name, 0).first;
     }
     TStringBuilder str;
     str << name << iter->second;
@@ -210,16 +210,16 @@ TString ISource::MakeLocalName(const TString& name) {
 bool ISource::AddAggregation(TContext& ctx, TAggregationPtr aggr) {
     Y_UNUSED(ctx);
     YQL_ENSURE(aggr);
-    Aggregations.push_back(aggr);
+    Aggregations_.push_back(aggr);
     return true;
 }
 
 bool ISource::HasAggregations() const {
-    return !Aggregations.empty() || !GroupKeys.empty();
+    return !Aggregations_.empty() || !GroupKeys_.empty();
 }
 
 void ISource::AddWindowSpecs(TWinSpecs winSpecs) {
-    WinSpecs = winSpecs;
+    WinSpecs_ = winSpecs;
 }
 
 bool ISource::AddFuncOverWindow(TContext& ctx, TNodePtr expr) {
@@ -229,33 +229,33 @@ bool ISource::AddFuncOverWindow(TContext& ctx, TNodePtr expr) {
 }
 
 void ISource::AddTmpWindowColumn(const TString& column) {
-    TmpWindowColumns.push_back(column);
+    TmpWindowColumns_.push_back(column);
 }
 
 const TVector<TString>& ISource::GetTmpWindowColumns() const {
-    return TmpWindowColumns;
+    return TmpWindowColumns_;
 }
 
 void ISource::SetLegacyHoppingWindowSpec(TLegacyHoppingWindowSpecPtr spec) {
-    LegacyHoppingWindowSpec = spec;
+    LegacyHoppingWindowSpec_ = spec;
 }
 
 TLegacyHoppingWindowSpecPtr ISource::GetLegacyHoppingWindowSpec() const {
-    return LegacyHoppingWindowSpec;
+    return LegacyHoppingWindowSpec_;
 }
 
 TNodePtr ISource::GetSessionWindowSpec() const {
-    return SessionWindow;
+    return SessionWindow_;
 }
 
 TNodePtr ISource::GetHoppingWindowSpec() const {
-    return HoppingWindow;
+    return HoppingWindow_;
 }
 
 TWindowSpecificationPtr ISource::FindWindowSpecification(TContext& ctx, const TString& windowName) const {
-    auto winIter = WinSpecs.find(windowName);
-    if (winIter == WinSpecs.end()) {
-        ctx.Error(Pos) << "Unable to find window specification for window '" << windowName << "'";
+    auto winIter = WinSpecs_.find(windowName);
+    if (winIter == WinSpecs_.end()) {
+        ctx.Error(Pos_) << "Unable to find window specification for window '" << windowName << "'";
         return {};
     }
     YQL_ENSURE(winIter->second);
@@ -263,11 +263,11 @@ TWindowSpecificationPtr ISource::FindWindowSpecification(TContext& ctx, const TS
 }
 
 inline TVector<TNodePtr>& ISource::Expressions(EExprSeat exprSeat) {
-    return NamedExprs[static_cast<size_t>(exprSeat)];
+    return NamedExprs_[static_cast<size_t>(exprSeat)];
 }
 
 const TVector<TNodePtr>& ISource::Expressions(EExprSeat exprSeat) const {
-    return NamedExprs[static_cast<size_t>(exprSeat)];
+    return NamedExprs_[static_cast<size_t>(exprSeat)];
 }
 
 inline TNodePtr ISource::AliasOrColumn(const TNodePtr& node, bool withSource) {
@@ -300,7 +300,7 @@ bool ISource::AddAggregationOverWindow(TContext& ctx, const TString& windowName,
     if (!FindWindowSpecification(ctx, windowName)) {
         return false;
     }
-    AggregationOverWindow[windowName].emplace_back(std::move(func));
+    AggregationOverWindow_[windowName].emplace_back(std::move(func));
     return true;
 }
 
@@ -308,12 +308,12 @@ bool ISource::AddFuncOverWindow(TContext& ctx, const TString& windowName, TNodeP
     if (!FindWindowSpecification(ctx, windowName)) {
         return false;
     }
-    FuncOverWindow[windowName].emplace_back(std::move(func));
+    FuncOverWindow_[windowName].emplace_back(std::move(func));
     return true;
 }
 
 void ISource::SetMatchRecognize(TMatchRecognizeBuilderPtr matchRecognize) {
-    MatchRecognizeBuilder = matchRecognize;
+    MatchRecognizeBuilder_ = matchRecognize;
 }
 
 bool ISource::IsCompositeSource() const {
@@ -321,7 +321,7 @@ bool ISource::IsCompositeSource() const {
 }
 
 bool ISource::IsGroupByColumn(const TString& column) const {
-    return GroupKeys.contains(column);
+    return GroupKeys_.contains(column);
 }
 
 bool ISource::IsFlattenByColumns() const {
@@ -367,8 +367,8 @@ bool ISource::IsExprSeat(EExprSeat exprSeat, EExprType type) const {
 }
 
 TString ISource::GetGroupByColumnAlias(const TString& column) const {
-    auto iter = GroupByColumnAliases.find(column);
-    if (iter == GroupByColumnAliases.end()) {
+    auto iter = GroupByColumnAliases_.find(column);
+    if (iter == GroupByColumnAliases_.end()) {
         return {};
     }
     return iter->second;
@@ -379,12 +379,12 @@ const TString* ISource::GetWindowName() const {
 }
 
 bool ISource::IsCalcOverWindow() const {
-    return !AggregationOverWindow.empty() || !FuncOverWindow.empty() ||
-        AnyOf(WinSpecs, [](const auto& item) { return item.second->Session; });
+    return !AggregationOverWindow_.empty() || !FuncOverWindow_.empty() ||
+        AnyOf(WinSpecs_, [](const auto& item) { return item.second->Session; });
 }
 
 bool ISource::IsOverWindowSource() const {
-    return !WinSpecs.empty();
+    return !WinSpecs_.empty();
 }
 
 bool ISource::IsStream() const {
@@ -451,25 +451,25 @@ size_t ISource::GetGroupingColumnsCount() const {
 }
 
 TNodePtr ISource::BuildFilter(TContext& ctx, const TString& label) {
-    return Filters.empty() ? nullptr : Y(ctx.UseUnordered(*this) ? "OrderedFilter" : "Filter", label, BuildFilterLambda());
+    return Filters_.empty() ? nullptr : Y(ctx.UseUnordered(*this) ? "OrderedFilter" : "Filter", label, BuildFilterLambda());
 }
 
 TNodePtr ISource::BuildFilterLambda() {
-    if (Filters.empty()) {
-        return BuildLambda(Pos, Y("row"), Y("Bool", Q("true")));
+    if (Filters_.empty()) {
+        return BuildLambda(Pos_, Y("row"), Y("Bool", Q("true")));
     }
-    YQL_ENSURE(Filters[0]->HasState(ENodeState::Initialized));
-    TNodePtr filter(Filters[0]);
-    for (ui32 i = 1; i < Filters.size(); ++i) {
-        YQL_ENSURE(Filters[i]->HasState(ENodeState::Initialized));
-        filter = Y("And", filter, Filters[i]);
+    YQL_ENSURE(Filters_[0]->HasState(ENodeState::Initialized));
+    TNodePtr filter(Filters_[0]);
+    for (ui32 i = 1; i < Filters_.size(); ++i) {
+        YQL_ENSURE(Filters_[i]->HasState(ENodeState::Initialized));
+        filter = Y("And", filter, Filters_[i]);
     }
     filter = Y("Coalesce", filter, Y("Bool", Q("false")));
-    return BuildLambda(Pos, Y("row"), filter);
+    return BuildLambda(Pos_, Y("row"), filter);
 }
 
 TNodePtr ISource::BuildFlattenByColumns(const TString& label) {
-    auto columnsList = Y("FlattenByColumns", Q(FlattenMode), label);
+    auto columnsList = Y("FlattenByColumns", Q(FlattenMode_), label);
     for (const auto& column: Expressions(EExprSeat::FlattenBy)) {
         const auto columnNamePtr = column->GetColumnName();
         YQL_ENSURE(columnNamePtr);
@@ -518,13 +518,13 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 
     TNodePtr res;
     if (groupByExprs) {
-        auto body = BuildLambdaBodyForExprAliases(Pos, groupByExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
-        res = Y("FlatMap", "core", BuildLambda(Pos, Y("row"), body));
+        auto body = BuildLambdaBodyForExprAliases(Pos_, groupByExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
+        res = Y("FlatMap", "core", BuildLambda(Pos_, Y("row"), body));
     }
 
     if (distinctAggrExprs) {
-        auto body = BuildLambdaBodyForExprAliases(Pos, distinctAggrExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
-        auto lambda = BuildLambda(Pos, Y("row"), body);
+        auto body = BuildLambdaBodyForExprAliases(Pos_, distinctAggrExprs, ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride);
+        auto lambda = BuildLambda(Pos_, Y("row"), body);
         res = res ? Y("FlatMap", res,  lambda) : Y("FlatMap", "core", lambda);
     }
     return res;
@@ -533,25 +533,25 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
 TNodePtr ISource::BuildPreFlattenMap(TContext& ctx) {
     Y_UNUSED(ctx);
     YQL_ENSURE(IsFlattenByExprs());
-    return BuildLambdaBodyForExprAliases(Pos, Expressions(EExprSeat::FlattenByExpr), true);
+    return BuildLambdaBodyForExprAliases(Pos_, Expressions(EExprSeat::FlattenByExpr), true);
 }
 
 TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {
-    auto feed = BuildAtom(Pos, "row", TNodeFlags::Default);
+    auto feed = BuildAtom(Pos_, "row", TNodeFlags::Default);
     for (const auto& exprNode: Expressions(EExprSeat::WindowPartitionBy)) {
         const auto name = exprNode->GetLabel();
         if (name && !dynamic_cast<const TSessionWindow*>(exprNode.Get())) {
             feed = Y("AddMember", feed, Q(name), exprNode);
         }
     }
-    return Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Y("AsList", feed)));
+    return Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos_, Y("row"), Y("AsList", feed)));
 }
 
 bool ISource::BuildSamplingLambda(TNodePtr& node) {
-    if (!SamplingRate) {
+    if (!SamplingRate_) {
         return true;
     }
-    auto res = Y("Coalesce", Y("SafeCast", SamplingRate, Y("DataType", Q("Double"))), Y("Double", Q("0")));
+    auto res = Y("Coalesce", Y("SafeCast", SamplingRate_, Y("DataType", Q("Double"))), Y("Double", Q("0")));
     res = Y("/", res, Y("Double", Q("100")));
     res = Y(Y("let", "res", Y("OptionalIf", Y("<", Y("Random", Y("DependsOn", "row")), res), "row")));
     node = BuildLambda(GetPos(), Y("row"), res, "res");
@@ -563,25 +563,25 @@ bool ISource::SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samp
         if (!samplingRate->Init(ctx, this)) {
             return false;
         }
-        SamplingRate = PrepareSamplingRate(Pos, clause, samplingRate);
+        SamplingRate_ = PrepareSamplingRate(Pos_, clause, samplingRate);
     }
     return true;
 }
 
 std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TContext& ctx) {
-    if (GroupKeys.empty() && Aggregations.empty() && !IsCompositeSource() && !LegacyHoppingWindowSpec) {
+    if (GroupKeys_.empty() && Aggregations_.empty() && !IsCompositeSource() && !LegacyHoppingWindowSpec_) {
         return { nullptr, true };
     }
 
     auto keysTuple = Y();
-    YQL_ENSURE(GroupKeys.size() == OrderedGroupKeys.size());
-    for (const auto& key: OrderedGroupKeys) {
-        YQL_ENSURE(GroupKeys.contains(key));
-        keysTuple = L(keysTuple, BuildQuotedAtom(Pos, key));
+    YQL_ENSURE(GroupKeys_.size() == OrderedGroupKeys_.size());
+    for (const auto& key: OrderedGroupKeys_) {
+        YQL_ENSURE(GroupKeys_.contains(key));
+        keysTuple = L(keysTuple, BuildQuotedAtom(Pos_, key));
     }
 
     std::map<std::pair<bool, TString>, std::vector<IAggregation*>> genericAggrs;
-    for (const auto& aggr: Aggregations) {
+    for (const auto& aggr: Aggregations_) {
         if (const auto key = aggr->GetGenericKey()) {
             genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get());
         }
@@ -595,11 +595,11 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
 
     const auto listType = Y("TypeOf", label);
     auto aggrArgs = Y();
-    const bool overState = GroupBySuffix == "CombineState" || GroupBySuffix == "MergeState" ||
-        GroupBySuffix == "MergeFinalize" || GroupBySuffix == "MergeManyFinalize";
-    const bool allowAggApply = !LegacyHoppingWindowSpec && !SessionWindow && !HoppingWindow;
-    for (const auto& aggr: Aggregations) {
-        auto res = aggr->AggregationTraits(listType, overState, GroupBySuffix == "MergeManyFinalize", allowAggApply, ctx);
+    const bool overState = GroupBySuffix_ == "CombineState" || GroupBySuffix_ == "MergeState" ||
+        GroupBySuffix_ == "MergeFinalize" || GroupBySuffix_ == "MergeManyFinalize";
+    const bool allowAggApply = !LegacyHoppingWindowSpec_ && !SessionWindow_ && !HoppingWindow_;
+    for (const auto& aggr: Aggregations_) {
+        auto res = aggr->AggregationTraits(listType, overState, GroupBySuffix_ == "MergeManyFinalize", allowAggApply, ctx);
         if (!res.second) {
            return { nullptr, false };
         }
@@ -610,57 +610,57 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
     }
 
     auto options = Y();
-    if (CompactGroupBy || GroupBySuffix == "Finalize") {
+    if (CompactGroupBy_ || GroupBySuffix_ == "Finalize") {
         options = L(options, Q(Y(Q("compact"))));
     }
 
-    if (LegacyHoppingWindowSpec) {
+    if (LegacyHoppingWindowSpec_) {
         auto hoppingTraits = Y(
             "HoppingTraits",
             Y("ListItemType", listType),
-            BuildLambda(Pos, Y("row"), LegacyHoppingWindowSpec->TimeExtractor),
-            LegacyHoppingWindowSpec->Hop,
-            LegacyHoppingWindowSpec->Interval,
-            LegacyHoppingWindowSpec->Delay,
-            LegacyHoppingWindowSpec->DataWatermarks ? Q("true") : Q("false"),
+            BuildLambda(Pos_, Y("row"), LegacyHoppingWindowSpec_->TimeExtractor),
+            LegacyHoppingWindowSpec_->Hop,
+            LegacyHoppingWindowSpec_->Interval,
+            LegacyHoppingWindowSpec_->Delay,
+            LegacyHoppingWindowSpec_->DataWatermarks ? Q("true") : Q("false"),
             Q("v1"));
 
         options = L(options, Q(Y(Q("hopping"), hoppingTraits)));
     }
 
-    if (SessionWindow) {
-        YQL_ENSURE(SessionWindow->GetLabel());
-        auto sessionWindow = dynamic_cast<TSessionWindow*>(SessionWindow.Get());
+    if (SessionWindow_) {
+        YQL_ENSURE(SessionWindow_->GetLabel());
+        auto sessionWindow = dynamic_cast<TSessionWindow*>(SessionWindow_.Get());
         YQL_ENSURE(sessionWindow);
         options = L(options, Q(Y(Q("session"),
-            Q(Y(BuildQuotedAtom(Pos, SessionWindow->GetLabel()), sessionWindow->BuildTraits(label))))));
+            Q(Y(BuildQuotedAtom(Pos_, SessionWindow_->GetLabel()), sessionWindow->BuildTraits(label))))));
     }
 
-    if (HoppingWindow) {
-        YQL_ENSURE(HoppingWindow->GetLabel());
-        auto hoppingWindow = dynamic_cast<THoppingWindow*>(HoppingWindow.Get());
+    if (HoppingWindow_) {
+        YQL_ENSURE(HoppingWindow_->GetLabel());
+        auto hoppingWindow = dynamic_cast<THoppingWindow*>(HoppingWindow_.Get());
         YQL_ENSURE(hoppingWindow);
         options = L(options, Q(Y(Q("hopping"),
-            Q(Y(BuildQuotedAtom(Pos, HoppingWindow->GetLabel()), hoppingWindow->BuildTraits(label))))));
+            Q(Y(BuildQuotedAtom(Pos_, HoppingWindow_->GetLabel()), hoppingWindow->BuildTraits(label))))));
     }
 
-    return { Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple)), true };
+    return { Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix_, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple)), true };
 }
 
 TMaybe<TString> ISource::FindColumnMistype(const TString& name) const {
-    auto result = FindMistypeIn(GroupKeys, name);
-    return result ? result : FindMistypeIn(ExprAliases, name);
+    auto result = FindMistypeIn(GroupKeys_, name);
+    return result ? result : FindMistypeIn(ExprAliases_, name);
 }
 
 void ISource::AddDependentSource(TSourcePtr usedSource) {
-    UsedSources.push_back(usedSource);
+    UsedSources_.push_back(usedSource);
 }
 
 class TYqlFrameBound final: public TCallNode {
 public:
     TYqlFrameBound(TPosition pos, TNodePtr bound)
         : TCallNode(pos, "EvaluateExpr", 1, 1, { bound })
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {
     }
 
@@ -669,7 +669,7 @@ public:
             return false;
         }
 
-        if (!Args[0]->Init(ctx, FakeSource.Get())) {
+        if (!Args_[0]->Init(ctx, FakeSource_.Get())) {
             return false;
         }
 
@@ -677,10 +677,10 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlFrameBound(Pos, Args[0]->Clone());
+        return new TYqlFrameBound(Pos_, Args_[0]->Clone());
     }
 private:
-    TSourcePtr FakeSource;
+    TSourcePtr FakeSource_;
 };
 
 TNodePtr BuildFrameNode(const TFrameBound& frame, EFrameType frameType) {
@@ -747,7 +747,7 @@ class TSessionWindowTraits final: public TCallNode {
 public:
     TSessionWindowTraits(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "SessionWindowTraits", args)
-        , FakeSource(BuildFakeSource(pos))
+        , FakeSource_(BuildFakeSource(pos))
     {
         YQL_ENSURE(args.size() == 4);
     }
@@ -757,7 +757,7 @@ public:
             return false;
         }
 
-        if (!Args.back()->Init(ctx, FakeSource.Get())) {
+        if (!Args_.back()->Init(ctx, FakeSource_.Get())) {
             return false;
         }
 
@@ -765,23 +765,23 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TSessionWindowTraits(Pos, CloneContainer(Args));
+        return new TSessionWindowTraits(Pos_, CloneContainer(Args_));
     }
 private:
-    TSourcePtr FakeSource;
+    TSourcePtr FakeSource_;
 };
 
 TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
     YQL_ENSURE(IsCalcOverWindow());
 
     TSet<TString> usedWindows;
-    for (auto& it : AggregationOverWindow) {
+    for (auto& it : AggregationOverWindow_) {
         usedWindows.insert(it.first);
     }
-    for (auto& it : FuncOverWindow) {
+    for (auto& it : FuncOverWindow_) {
         usedWindows.insert(it.first);
     }
-    for (auto& it : WinSpecs) {
+    for (auto& it : WinSpecs_) {
         if (it.second->Session) {
             usedWindows.insert(it.first);
         }
@@ -799,11 +799,11 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
         auto spec = FindWindowSpecification(ctx, name);
         YQL_ENSURE(spec);
 
-        auto aggsIter = AggregationOverWindow.find(name);
-        auto funcsIter = FuncOverWindow.find(name);
+        auto aggsIter = AggregationOverWindow_.find(name);
+        auto funcsIter = FuncOverWindow_.find(name);
 
-        const auto& aggs = (aggsIter == AggregationOverWindow.end()) ? TVector<TAggregationPtr>() : aggsIter->second;
-        const auto& funcs = (funcsIter == FuncOverWindow.end()) ? TVector<TNodePtr>() : funcsIter->second;
+        const auto& aggs = (aggsIter == AggregationOverWindow_.end()) ? TVector<TAggregationPtr>() : aggsIter->second;
+        const auto& funcs = (funcsIter == FuncOverWindow_.end()) ? TVector<TNodePtr>() : funcsIter->second;
 
         auto frames = Y();
         TString frameType;
@@ -914,7 +914,7 @@ bool ISource::DoInit(TContext& ctx, ISource* src) {
 }
 
 bool ISource::InitFilters(TContext& ctx) {
-    for (auto& filter: Filters) {
+    for (auto& filter: Filters_) {
         if (!filter->Init(ctx, this)) {
             return false;
         }
@@ -953,7 +953,7 @@ void ISource::FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNode
         sortDirection = Q(sortDirection);
         expr = Q(exprList);
     }
-    sortKeySelector = BuildLambda(Pos, Y("row"), expr);
+    sortKeySelector = BuildLambda(Pos_, Y("row"), expr);
 }
 
 TNodePtr ISource::BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume) {
@@ -971,12 +971,12 @@ TNodePtr ISource::BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, c
 }
 
 bool ISource::HasMatchRecognize() const {
-    return static_cast<bool>(MatchRecognizeBuilder);
+    return static_cast<bool>(MatchRecognizeBuilder_);
 }
 
 TNodePtr ISource::BuildMatchRecognize(TContext& ctx, TString&& inputTable){
     YQL_ENSURE(HasMatchRecognize());
-    return MatchRecognizeBuilder->Build(ctx, std::move(inputTable), this);
+    return MatchRecognizeBuilder_->Build(ctx, std::move(inputTable), this);
 };
 
 IJoin::IJoin(TPosition pos)

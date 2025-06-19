@@ -128,29 +128,29 @@ namespace NSQLTranslationV1 {
 
         TNodePtr BuildWindowFrame(const TFrameSpecification& spec, bool isCompact);
 
-        THashSet<TString> ExprAliases;
-        THashSet<TString> FlattenByAliases;
-        THashMap<TString, TString> GroupByColumnAliases;
-        TVector<TNodePtr> Filters;
-        bool CompactGroupBy = false;
-        TString GroupBySuffix;
-        TSet<TString> GroupKeys;
-        TVector<TString> OrderedGroupKeys;
-        std::array<TVector<TNodePtr>, static_cast<unsigned>(EExprSeat::Max)> NamedExprs;
-        TVector<TAggregationPtr> Aggregations;
-        TMap<TString, TVector<TAggregationPtr>> AggregationOverWindow;
-        TMap<TString, TVector<TNodePtr>> FuncOverWindow;
-        TWinSpecs WinSpecs;
-        TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
-        TNodePtr SessionWindow;
-        TNodePtr HoppingWindow;
-        TVector<TSourcePtr> UsedSources;
-        TString FlattenMode;
-        bool FlattenColumns = false;
-        THashMap<TString, ui32> GenIndexes;
-        TVector<TString> TmpWindowColumns;
-        TNodePtr SamplingRate;
-        TMatchRecognizeBuilderPtr MatchRecognizeBuilder;
+        THashSet<TString> ExprAliases_;
+        THashSet<TString> FlattenByAliases_;
+        THashMap<TString, TString> GroupByColumnAliases_;
+        TVector<TNodePtr> Filters_;
+        bool CompactGroupBy_ = false;
+        TString GroupBySuffix_;
+        TSet<TString> GroupKeys_;
+        TVector<TString> OrderedGroupKeys_;
+        std::array<TVector<TNodePtr>, static_cast<unsigned>(EExprSeat::Max)> NamedExprs_;
+        TVector<TAggregationPtr> Aggregations_;
+        TMap<TString, TVector<TAggregationPtr>> AggregationOverWindow_;
+        TMap<TString, TVector<TNodePtr>> FuncOverWindow_;
+        TWinSpecs WinSpecs_;
+        TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec_;
+        TNodePtr SessionWindow_;
+        TNodePtr HoppingWindow_;
+        TVector<TSourcePtr> UsedSources_;
+        TString FlattenMode_;
+        bool FlattenColumns_ = false;
+        THashMap<TString, ui32> GenIndexes_;
+        TVector<TString> TmpWindowColumns_;
+        TNodePtr SamplingRate_;
+        TMatchRecognizeBuilderPtr MatchRecognizeBuilder_;
     };
 
     template<>
@@ -202,10 +202,10 @@ namespace NSQLTranslationV1 {
         TNodePtr DoClone() const override;
         TString GetOpName() const override;
 
-        TVector<TNodePtr> Args;
-        TSourcePtr FakeSource;
-        TNodePtr Node;
-        bool Valid;
+        TVector<TNodePtr> Args_;
+        TSourcePtr FakeSource_;
+        TNodePtr Node_;
+        bool Valid_;
     };
 
     class THoppingWindow final : public INode {
@@ -224,10 +224,10 @@ namespace NSQLTranslationV1 {
         TString GetOpName() const override;
         TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
-        TVector<TNodePtr> Args;
-        TSourcePtr FakeSource;
-        TNodePtr Node;
-        bool Valid;
+        TVector<TNodePtr> Args_;
+        TSourcePtr FakeSource_;
+        TNodePtr Node_;
+        bool Valid_;
     };
 
 

@@ -204,3 +204,7 @@ class TopicReaderSync:
     def _check_closed(self):
         if self._closed:
             raise TopicReaderClosedError()
+
+    @property
+    def read_session_id(self) -> Optional[str]:
+        return self._async_reader.read_session_id

@@ -48,6 +48,10 @@ namespace NSQLComplete {
             }
         };
 
+        struct TColumn {
+            TString Table;
+        };
+
         TKeywords Keywords;
         TMaybe<TPragma> Pragma;
         bool Type = false;
@@ -55,7 +59,7 @@ namespace NSQLComplete {
         TMaybe<THint> Hint;
         TMaybe<TObject> Object;
         TMaybe<TCluster> Cluster;
-        bool Column = false;
+        TMaybe<TColumn> Column;
         bool Binding = false;
         TEditRange EditRange;
     };

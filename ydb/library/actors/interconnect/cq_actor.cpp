@@ -195,6 +195,7 @@ private:
                 CqMap.erase(it);
             break;
             default:
+                std::get<0>(it->second).AsyncEventToken->Request(true, true);
             break;
         }
         ibv_ack_async_event(&async_event);

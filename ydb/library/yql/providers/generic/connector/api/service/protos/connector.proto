@@ -427,7 +427,10 @@ message TPredicate {
     // "$column IN $(set)"
     message TIn {
         TExpression value = 1;
-        repeated TExpression set = 2;
+        oneof {
+                repeated TExpression set = 2;
+                Ydb.TypedValue list = 3;
+        }
     }
 
     // "$column IS NULL"

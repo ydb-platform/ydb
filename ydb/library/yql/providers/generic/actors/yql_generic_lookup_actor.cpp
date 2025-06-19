@@ -496,13 +496,13 @@ namespace NYql::NDq {
             if (KeyType->GetMembersCount() == 1) {
                 auto& in = *select.mutable_where()->mutable_filter_typed()->mutable_in();
                 in.mutable_value()->set_column(TString(KeyType->GetMemberName(0)));
-                Ydb::Type type;
-                ExportTypeToProto(KeyType->GetMemberType(0), type);
-                auto& set = *in.mutable_set();
+                auto& list = *in.mutable_list();
+                ExportTypeToProto(
+                    KeyType->GetMemberType(0),
+                    *list.mutable_typed_value()->mutable_type()->mutable_list_type()->mutable_type());
                 for (const auto& [keys, _] : *Request) {
-                    auto& rightTypedValue = *set.Add()->mutable_typed_value();
-                    *rightTypedValue.mutable_type() = type;
-                    ExportValueToProto(KeyType->GetMemberType(0), keys.GetElement(0), *rightTypedValue.mutable_value());
+                    auto& rightValue = *list.mutable_items().Add();
+                    ExportValueToProto(KeyType->GetMemberType(0), keys.GetElement(0), *rightValue.mutable_value());
                 }
                 return {};
             }

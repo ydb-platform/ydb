@@ -1260,6 +1260,75 @@ public:
     //! Using the client after call this method causes UB
     NThreading::TFuture<void> Stop();
 
+    /**
+    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model.
+    *
+    * This method is not retryable with the same `rows` object because it moves the underlying data
+    * from the TValue object into the request proto model. The TValue class uses a shared pointer
+    * to store its implementation data, so when you make a copy of a TValue object, both copies
+    * share the same underlying data. When this method moves the data from one TValue instance,
+    * all other instances sharing the same implementation pointer will be left with moved-from data.
+    *
+    * Example of incorrect usage:
+    * ```
+    * TValue originalValue = BuildValue();
+    * retry {
+    *     TValue copy = originalValue;  // Both originalValue and copy share the same data
+    *     client.BulkUpsertUnretryableUnsafe(std::move(copy));  // Moves data from copy, leaving originalValue in moved-from state
+    * }
+    * ```
+    * CAUTION: It is unsafe to use the instance of `originalValue` because its underlying data is moved!
+    *
+    * To safely retry the operation, you need to create a new TValue with fresh data for each attempt.
+    */
+    TAsyncBulkUpsertResult BulkUpsertUnretryableUnsafe(const std::string& table, TValue&& rows,
+        const TBulkUpsertSettings& settings);
+
+    /**
+    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model. The `Ydb::Value` of `TValue` must be arena-allocated.
+    *
+    * This method is not retryable with the same `rows` object because it moves the underlying data
+    * from the `TValue` object into the request proto model. The `TValue` class uses a shared pointer
+    * to store its implementation data, so when you make a copy of a `TValue` object, both copies
+    * share the same underlying data. When this method moves the data from one `TValue` instance,
+    * all other instances sharing the same implementation pointer will be left with moved-from data.
+    *
+    * IMPORTANT: The `rows` parameter must contain arena-allocated protobuf data. This method
+    * should only be called when the `TValue`'s underlying data was allocated using the provided
+    * protobuf arena. Using this method with non-arena-allocated data will lead to undefined behavior.
+    * It is the caller's responsibility to ensure that the lifetime of the used arena is longer than the lifetime of the `TValue` object during the operation.
+    *
+    * @see: https://protobuf.dev/reference/cpp/arenas
+    *
+    * Example of incorrect usage:
+    * ```
+    * TValue originalValue = BuildValue();  // Not arena-allocated
+    * retry {
+    *     TValue copy = originalValue;  // Both originalValue and copy share the same data
+    *     client.BulkUpsertUnretryableArenaAllocated(std::move(copy), arena);  // WRONG: data not arena-allocated
+    * }
+    * ```
+    *
+    * Example of correct usage:
+    * ```
+    * google::protobuf::Arena arena;
+    * TValue arenaValue = BuildValueOnArena(&arena);  // Value built using arena allocation
+    * client.BulkUpsertUnretryableArenaAllocated(std::move(arenaValue), &arena);
+    * ```
+    *
+    * To safely retry the operation, you need to create a new `TValue` with fresh arena-allocated data for each attempt.
+    *
+    * @param arena The protobuf arena that was used to allocate the data in `rows`. Must be the same
+    *              arena that was used to create the TValue's underlying data.
+    * @param settings The settings for the bulk upsert operation.
+    */
+    TAsyncBulkUpsertResult BulkUpsertUnretryableArenaAllocatedUnsafe(
+        const std::string& table,
+        TValue&& rows,
+        google::protobuf::Arena* arena,
+        const TBulkUpsertSettings& settings
+    );
+
     //! Non-transactional fast bulk write.
     //! Interanlly it uses an implicit session and thus doesn't need a session to be passed.
     //! "rows" parameter must be a list of structs where each stuct represents one row.

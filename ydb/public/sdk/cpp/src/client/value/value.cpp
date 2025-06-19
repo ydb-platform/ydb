@@ -111,6 +111,10 @@ Ydb::Type& TType::GetProto()
     return Impl_->ProtoType_;
 }
 
+Ydb::Type&& TType::ExtractProto() && {
+    return std::move(Impl_->ProtoType_);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTypeParser::TImpl {
@@ -1046,14 +1050,41 @@ class TValue::TImpl {
 public:
     TImpl(const TType& type, const Ydb::Value& valueProto)
         : Type_(type)
-        , ProtoValue_(valueProto) {}
+        , ProtoValue_(valueProto)
+        , ArenaAllocatedValueProto_(nullptr) {}
 
     TImpl(const TType& type, Ydb::Value&& valueProto)
         : Type_(type)
-        , ProtoValue_(std::move(valueProto)) {}
+        , ProtoValue_(std::move(valueProto))
+        , ArenaAllocatedValueProto_(nullptr) {}
+
+    /**
+    * Lifetime of the arena, and hence the `Ydb::Value`, is expected to be managed by the caller.
+    * The `Ydb::Value` is expected to be arena-allocated.
+    *
+    * See: https://protobuf.dev/reference/cpp/arenas
+    */
+    TImpl(const TType& type, Ydb::Value* arenaAllocatedValueProto)
+        : Type_(type)
+        , ProtoValue_{}
+        , ArenaAllocatedValueProto_(arenaAllocatedValueProto) {}
+
+    const Ydb::Value& GetProto() const {
+        return ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_;
+    }
+
+    Ydb::Value& GetProto() {
+        return ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_;
+    }
+
+    Ydb::Value&& ExtractProto() && {
+        return std::move(ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_);
+    }
 
     TType Type_;
+private:
     Ydb::Value ProtoValue_;
+    Ydb::Value* ArenaAllocatedValueProto_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1064,6 +1095,9 @@ TValue::TValue(const TType& type, const Ydb::Value& valueProto)
 TValue::TValue(const TType& type, Ydb::Value&& valueProto)
     : Impl_(new TImpl(type, std::move(valueProto))) {}
 
+TValue::TValue(const TType& type, Ydb::Value* arenaAllocatedValueProto)
+    : Impl_(new TImpl(type, arenaAllocatedValueProto)) {}
+
 const TType& TValue::GetType() const {
     return Impl_->Type_;
 }
@@ -1073,11 +1107,15 @@ TType & TValue::GetType() {
 }
 
 const Ydb::Value& TValue::GetProto() const {
-    return Impl_->ProtoValue_;
+    return Impl_->GetProto();
 }
 
 Ydb::Value& TValue::GetProto() {
-    return Impl_->ProtoValue_;
+    return Impl_->GetProto();
+}
+
+Ydb::Value&& TValue::ExtractProto() && {
+    return std::move(std::move(*Impl_).ExtractProto());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1104,7 +1142,7 @@ public:
         : Value_(value.Impl_)
         , TypeParser_(value.GetType())
     {
-        Reset(Value_->ProtoValue_);
+        Reset(Value_->GetProto());
     }
 
     TImpl(const TType& type)
@@ -2781,7 +2819,6 @@ private:
     }
 
 private:
-
     //TTypeBuilder TypeBuilder_;
     TTypeBuilder::TImpl TypeBuilder_;
     Ydb::Value ProtoValue_;

@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
             {"col2", TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Int64).EndOptional().Build()},
             {"col3", TTypeBuilder().Primitive(EPrimitiveType::Bool).Build()},
         };
-        
+
         TString csvHeader = "col4,col3,col5,col1,col6";
         std::vector<TString> data = {
             "col4 unused value,true,col5 unused value,col1 value,col6 unused value"

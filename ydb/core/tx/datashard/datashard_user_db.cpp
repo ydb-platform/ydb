@@ -19,7 +19,7 @@ TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64
     , Counters(counters)
 {
 }
-fInt
+
 NTable::EReady TDataShardUserDb::SelectRow(
         const TTableId& tableId,
         TArrayRef<const TRawTypeValue> key,

@@ -221,6 +221,8 @@ public:
 
     TClientCommandOption& DefaultValue(const TString& defaultValue);
 
+    TClientCommandOption& ManualDefaultValueDescription(const TString& description);
+
     template <class TValue>
     TClientCommandOption& DefaultValue(const TValue& defaultValue) {
         return DefaultValue(ToString(defaultValue));
@@ -263,6 +265,7 @@ protected:
     TString* FilePath = nullptr;
     std::vector<TEnvInfo> EnvInfo;
     TString DefaultOptionValue;
+    TString ManualDefaultOptionValueDescription;
     TString ProfileParamName;
     bool ProfileParamIsFileName = false;
     bool CanParseFromProfile = false;

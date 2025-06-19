@@ -103,7 +103,11 @@ void TProcessCategory::PutTaskResult(TWorkerTaskResult&& result, THashSet<TStrin
     if (it == Processes.end()) {
         return;
     }
+    RemoveWeightedProcess(it->second);
     it->second->PutTaskResult(std::move(result));
+    if (it->second->GetTasksCount()) {
+        WeightedProcesses[it->second->GetWeightedUsage()].emplace_back(it->second);
+    }
 }
 
 }   // namespace NKikimr::NConveyorComposite

@@ -142,7 +142,7 @@ void run_container_offset(const run_container_t *c, container_t **loc,
     pivot = run_container_index_equalorlarger(c, top);
     // pivot is the index of the first run that is >= top or -1 if no such run
 
-    if(pivot >= 0) {
+    if (pivot >= 0) {
         split = c->runs[pivot].value < top;
         lo_cap = pivot + (split ? 1 : 0);
         hi_cap = c->n_runs - pivot;

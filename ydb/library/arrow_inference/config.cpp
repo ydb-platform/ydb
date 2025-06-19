@@ -10,8 +10,8 @@ namespace NYdb::NArrowInference {
 
 namespace {
 
-std::shared_ptr<FormatConfig> MakeCsvConfig(const THashMap<TString, TString>& params) {
-    auto config = std::make_shared<CsvConfig>();
+std::shared_ptr<TFormatConfig> MakeCsvConfig(const THashMap<TString, TString>& params) {
+    auto config = std::make_shared<TCsvConfig>();
     if (auto delimiter = params.FindPtr("csvdelimiter"); delimiter) {
         if (delimiter->size() != 1) {
             throw yexception() << "invalid parameter: csv_delimiter must be single character";
@@ -21,24 +21,24 @@ std::shared_ptr<FormatConfig> MakeCsvConfig(const THashMap<TString, TString>& pa
     return config;
 }
 
-std::shared_ptr<FormatConfig> MakeTsvConfig(const THashMap<TString, TString>&) {
-    auto config = std::make_shared<TsvConfig>();
+std::shared_ptr<TFormatConfig> MakeTsvConfig(const THashMap<TString, TString>&) {
+    auto config = std::make_shared<TTsvConfig>();
     config->ParseOpts.delimiter = '\t';
     return config;
 }
 
-std::shared_ptr<FormatConfig> MakeParquetConfig(const THashMap<TString, TString>&) {
-    return std::make_shared<ParquetConfig>();
+std::shared_ptr<TFormatConfig> MakeParquetConfig(const THashMap<TString, TString>&) {
+    return std::make_shared<TParquetConfig>();
 }
 
-std::shared_ptr<FormatConfig> MakeJsonEachRowConfig(const THashMap<TString, TString>&) {
-    auto config = std::make_shared<JsonConfig>();
+std::shared_ptr<TFormatConfig> MakeJsonEachRowConfig(const THashMap<TString, TString>&) {
+    auto config = std::make_shared<TJsonConfig>();
     config->ParseOpts.newlines_in_values = true;
     return config;
 }
 
-std::shared_ptr<FormatConfig> MakeJsonListConfig(const THashMap<TString, TString>&) {
-    return std::make_shared<JsonConfig>();
+std::shared_ptr<TFormatConfig> MakeJsonListConfig(const THashMap<TString, TString>&) {
+    return std::make_shared<TJsonConfig>();
 }
 
 } // namespace
@@ -81,7 +81,7 @@ TStringBuf ConvertFileFormat(EFileFormat format) {
     }
 }
 
-std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params) {
+std::shared_ptr<TFormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params) {
     static THashSet<TString> supportedParams {
         "format",
         "compression",
@@ -110,7 +110,7 @@ std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>&
         }
     }
 
-    std::shared_ptr<FormatConfig> config;
+    std::shared_ptr<TFormatConfig> config;
     switch (format) {
     case EFileFormat::CsvWithNames:
         config = MakeCsvConfig(params);

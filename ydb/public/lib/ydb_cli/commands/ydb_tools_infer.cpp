@@ -110,7 +110,7 @@ int TCommandToolsInferCsv::Run(TConfig& config) {
         }
     }
 
-    auto formatConfig = std::make_shared<NArrowInference::CsvConfig>();
+    auto formatConfig = std::make_shared<NArrowInference::TCsvConfig>();
     formatConfig->RowsToAnalyze = RowsToAnalyze;
     if (!ColumnNames.empty()) {
         NCsvFormat::CsvSplitter splitter(ColumnNames);

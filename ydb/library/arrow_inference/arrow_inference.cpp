@@ -18,7 +18,7 @@ namespace NYdb::NArrowInference {
 
 namespace {
 
-bool ShouldBeOptional(const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
+bool ShouldBeOptional(const arrow::DataType& type, std::shared_ptr<TFormatConfig> config) {
     if (!config->ShouldMakeOptional) {
         return false;
     }
@@ -66,29 +66,32 @@ std::shared_ptr<arrow::Schema> InferCommonSchema(const std::vector<std::shared_p
         return schemas[0];
     }
 
-    auto common_fields = schemas[0]->fields();
+    auto commonFields = schemas[0]->fields();
 
     for (size_t i = 1; i < schemas.size(); ++i) {
         auto schema = schemas[i];
         for (int j = 0; j < schema->num_fields(); ++j) {
-            auto currentField = common_fields[j];
+            auto currentField = commonFields[j];
             auto newField = schema->field(j);
             if (currentField->Equals(newField)) {
                 continue;
             }
 
-            auto common_type = GetCommonDataType(currentField->type(), newField->type());
+            auto commonType = GetCommonDataType(currentField->type(), newField->type());
             bool isNullable = currentField->nullable() || schema->field(j)->nullable();
-            common_fields[j] = arrow::field(common_fields[j]->name(), common_type, isNullable);
+            commonFields[j] = arrow::field(commonFields[j]->name(), commonType, isNullable);
         }
     }
 
-    return std::make_shared<arrow::Schema>(common_fields);
+    return std::make_shared<arrow::Schema>(commonFields);
 }
 
 std::shared_ptr<arrow::Schema> GetSchemaFromCsv(
     const std::shared_ptr<arrow::io::InputStream>& input,
-    std::shared_ptr<CsvConfig> config) {
+    std::shared_ptr<TCsvConfig> config) {
+    if (!config) {
+        return nullptr;
+    }
 
     config->ReadOpts.use_threads = false;
     config->ReadOpts.block_size = 1 << 20;
@@ -99,18 +102,18 @@ std::shared_ptr<arrow::Schema> GetSchemaFromCsv(
         return nullptr;
     }
 
-    auto streaming_reader = result.ValueOrDie();
-    int64_t rows_read = 0;
+    auto streamingReader = result.ValueOrDie();
+    int64_t rowsRead = 0;
     std::shared_ptr<arrow::Schema> schema = nullptr;
 
-    while (rows_read < config->RowsToAnalyze || config->RowsToAnalyze == 0) {
-        auto batch_result = streaming_reader->Next();
+    while (rowsRead < config->RowsToAnalyze || config->RowsToAnalyze == 0) {
+        auto batch_result = streamingReader->Next();
         if (!batch_result.ok() || !(*batch_result)) {
             break; // No more data
         }
 
         auto batch = *batch_result;
-        rows_read += batch->num_rows();
+        rowsRead += batch->num_rows();
 
         if (!schema) {
             schema = batch->schema(); // TODO: merge
@@ -120,15 +123,18 @@ std::shared_ptr<arrow::Schema> GetSchemaFromCsv(
     return schema;
 }
 
-std::shared_ptr<arrow::Schema> GetSchemaFromJson(const std::shared_ptr<arrow::io::InputStream>& input, std::shared_ptr<JsonConfig> config) {
+std::shared_ptr<arrow::Schema> GetSchemaFromJson(const std::shared_ptr<arrow::io::InputStream>& input, std::shared_ptr<TJsonConfig> config) {
+    if (!config) {
+        return nullptr;
+    }
     std::shared_ptr<arrow::json::TableReader> reader;
     arrow::json::ReadOptions readOptions = arrow::json::ReadOptions::Defaults();
     readOptions.use_threads = false;
-    if (auto random_file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(input)) {
-        int64_t file_size;
-        auto size_status = random_file->GetSize().Value(&file_size);
+    if (auto randomFile = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(input)) {
+        int64_t fileSize;
+        auto size_status = randomFile->GetSize().Value(&fileSize);
         if (size_status.ok()) {
-            readOptions.block_size = static_cast<int32_t>(file_size);
+            readOptions.block_size = static_cast<int32_t>(fileSize);
         }
     }
     auto result = arrow::json::TableReader::Make(arrow::default_memory_pool(), input, readOptions, config->ParseOpts).Value(&reader);
@@ -172,7 +178,7 @@ std::shared_ptr<arrow::Schema> GetSchemaFromParquet(const std::shared_ptr<arrow:
 
 } // namespace
 
-std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow::io::InputStream>>& inputs, std::shared_ptr<FormatConfig> config) {
+std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow::io::InputStream>>& inputs, std::shared_ptr<TFormatConfig> config) {
     if (inputs.empty()) {
         return TString{"no input files"};
     }
@@ -185,7 +191,7 @@ std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<
         switch (config->Format) {
         case EFileFormat::CsvWithNames:
         case EFileFormat::TsvWithNames:
-            schema = GetSchemaFromCsv(input, std::dynamic_pointer_cast<CsvConfig>(config));
+            schema = GetSchemaFromCsv(input, std::dynamic_pointer_cast<TCsvConfig>(config));
             break;
 
         case EFileFormat::Parquet:
@@ -194,7 +200,7 @@ std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<
         
         case EFileFormat::JsonEachRow:
         case EFileFormat::JsonList:
-            schema = GetSchemaFromJson(input, std::dynamic_pointer_cast<JsonConfig>(config));
+            schema = GetSchemaFromJson(input, std::dynamic_pointer_cast<TJsonConfig>(config));
             break;
 
         default:
@@ -216,8 +222,8 @@ std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<
     return commonSchema->fields();
 }
 
-bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
-    auto& resType = ShouldBeOptional(type, config) ? *maybeOptionalType.mutable_optional_type()->mutable_item() : maybeOptionalType;
+bool ArrowToYdbType(Ydb::Type& result, const arrow::DataType& type, std::shared_ptr<TFormatConfig> config) {
+    auto& resType = ShouldBeOptional(type, config) ? *result.mutable_optional_type()->mutable_item() : result;
     switch (type.id()) {
     case arrow::Type::NA:
         resType.set_type_id(Ydb::Type::UTF8);
@@ -274,7 +280,7 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
         return true;
     case arrow::Type::TIMESTAMP:
         if (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList) {
-            maybeOptionalType.set_type_id(Ydb::Type::UTF8);
+            result.set_type_id(Ydb::Type::UTF8);
         } else {
             resType.set_type_id(Ydb::Type::TIMESTAMP);
         }

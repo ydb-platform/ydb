@@ -51,7 +51,7 @@ STATEFN(TLocalTopicPartitionReaderActor::OnInitEvent) {
 bool GetSkipCommit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
     const auto args = std::move(ev->Get()->GetArgs());
     const auto& settings = std::get<TEvYdbProxy::TReadTopicSettings>(args);
-    return  settings.SkipCommit_;
+    return settings.SkipCommit_;
 }
 
 void TLocalTopicPartitionReaderActor::HandleInit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
@@ -78,13 +78,13 @@ void TLocalTopicPartitionReaderActor::HandleOnInitOffset(TEvPersQueue::TEvRespon
         return;
     }
     if (record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-        return OnError(TStringBuilder() << "Unimplimented response: " << record.GetErrorReason());
+        return OnError(TStringBuilder() << "Unimplemented response: " << record.GetErrorReason());
     }
     if (!record.HasPartitionResponse() || !record.GetPartitionResponse().HasCmdGetClientOffsetResult()) {
-        return OnError(TStringBuilder() << "Unimplimented response");
+        return OnError(TStringBuilder() << "Unimplemented response");
     }
 
-    auto resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
+    const auto& resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
     Offset = resp.GetOffset();
     SentOffset = Offset;
 
@@ -245,7 +245,7 @@ void TLocalTopicPartitionReaderActor::HandleOnWaitData(TEvPersQueue::TEvResponse
         auto proto = GetDeserializedData(result.GetData());
 
         if (proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
-            const  NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
+            const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
             TString decompressed = codecImpl->Decompress(proto.GetData());
             messages.emplace_back(result.GetOffset(), decompressed);
         } else {

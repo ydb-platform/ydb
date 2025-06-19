@@ -12,10 +12,6 @@ PEERDIR(
 )
 
 SRCS(
-    local_proxy/local_partition_actor.cpp
-    local_proxy/local_partition_committer.cpp
-    local_proxy/local_partition_reader.cpp
-    local_proxy/local_proxy.cpp
     topic_message.cpp
     ydb_proxy.cpp
 )

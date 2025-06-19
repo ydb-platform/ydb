@@ -14,6 +14,9 @@ enum class EWakeupType : ui64 {
 };
 
 class ILocalTopicPartitionActor {
+public:
+    virtual ~ILocalTopicPartitionActor() = default;
+
 protected:
     virtual void OnDescribeFinished() = 0;
     virtual void OnError(const TString& error) = 0;

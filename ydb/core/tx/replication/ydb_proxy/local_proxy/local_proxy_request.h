@@ -20,7 +20,7 @@ public:
         , Request(std::move(request))
         , SendResultCallback(sendResultCallback)
     {
-    };
+    }
 
     const TString path() const {
         return Path;
@@ -44,32 +44,32 @@ public:
 
     bool IsClientLost() const override {
         return false;
-    };
+    }
 
     const google::protobuf::Message* GetRequest() const override {
         return Request.get();
-    };
+    }
 
     const TMaybe<TString> GetRequestType() const override {
         return Nothing();
-    };
+    }
 
     void SetFinishAction(std::function<void()>&& cb) override {
         Y_UNUSED(cb);
-    };
+    }
 
     google::protobuf::Arena* GetArena() override {
         return nullptr;
-    };
+    }
 
     bool HasClientCapability(const TString& capability) const override {
         Y_UNUSED(capability);
         return false;
-    };
+    }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         ProcessYdbStatusCode(status, NULL);
-    };
+    }
 
     void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") override {
         Y_UNUSED(code);
@@ -103,58 +103,58 @@ public:
 
     void RaiseIssues(const NYql::TIssues& issues) override {
         Y_UNUSED(issues);
-    };
+    }
 
     const TString& GetRequestName() const override {
         return DummyString;
-    };
+    }
 
     bool GetDiskQuotaExceeded() const override {
         return false;
-    };
+    }
 
     void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
         Y_UNUSED(name);
         Y_UNUSED(value);
-    };
+    }
 
     const NKikimr::NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
         return DummyAuditLogParts;
-    };
+    }
 
     void SetRuHeader(ui64 ru) override {
         Y_UNUSED(ru);
-    };
+    }
 
     void AddServerHint(const TString& hint) override {
         Y_UNUSED(hint);
-    };
+    }
 
     void SetCostInfo(float consumed_units) override {
         Y_UNUSED(consumed_units);
-    };
+    }
 
     void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&& cb) override {
         Y_UNUSED(cb);
-    };
+    }
 
     void FinishStream(ui32 status) override {
         Y_UNUSED(status);
-    };
+    }
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, EStreamCtrl) override {
         Y_UNUSED(in);
         Y_UNUSED(status);
-    };
+    }
 
     void Reply(NProtoBuf::Message* resp, ui32 status = 0) override {
         Y_UNUSED(resp);
         Y_UNUSED(status);
-    };
+    }
 
     void SendOperation(const Ydb::Operations::Operation& operation) override {
         Y_UNUSED(operation);
-    };
+    }
 
     NWilson::TTraceId GetWilsonTraceId() const override {
         return {};
@@ -163,17 +163,17 @@ public:
     void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
         Y_UNUSED(result);
         ProcessYdbStatusCode(status, &result);
-    };
+    }
 
     void SendResult(
             const google::protobuf::Message& result,
             Ydb::StatusIds::StatusCode status,
-            const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override {
-
+            const google::protobuf::RepeatedPtrField<NKikimr::NGRpcService::TYdbIssueMessageType>& message) override
+    {
         Y_UNUSED(result);
         Y_UNUSED(message);
         ProcessYdbStatusCode(status, NULL);
-    };
+    }
 
     const Ydb::Operations::OperationParams& operation_params() const {
         return DummyParams;
@@ -185,7 +185,7 @@ public:
 
 protected:
     void FinishRequest() override {
-    };
+    }
 
 private:
     const Ydb::Operations::OperationParams DummyParams;

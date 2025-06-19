@@ -379,17 +379,16 @@ void TPCCRunner::RunSync() {
     // a huge queue of ready terminals, which we can't handle
     bool forcedWarmup = false;
     uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
-    uint32_t minWarmupMinutes = (minWarmupSeconds + 59) / 60;
-    uint32_t warmupMinutes;
-    if (Config.WarmupDuration.Minutes() < minWarmupMinutes) {
+    uint32_t warmupSeconds;
+    if (Config.WarmupDuration.Seconds() < minWarmupSeconds) {
         forcedWarmup = true; // we must print log message later after display update
-        warmupMinutes = minWarmupMinutes;
+        warmupSeconds = minWarmupSeconds;
     } else {
-        warmupMinutes = Config.WarmupDuration.Minutes();
+        warmupSeconds = Config.WarmupDuration.Seconds();
     }
 
     WarmupStartTs = Clock::now();
-    WarmupStopDeadline = WarmupStartTs + std::chrono::minutes(warmupMinutes);
+    WarmupStopDeadline = WarmupStartTs + std::chrono::seconds(warmupSeconds);
 
     // we want to switch buffers and draw UI ASAP to properly display logs
     // produced after this point and before the first screen update
@@ -398,10 +397,10 @@ void TPCCRunner::RunSync() {
     }
 
     if (forcedWarmup) {
-        LOG_I("Forced minimal warmup time: " << minWarmupMinutes << " minutes");
+        LOG_I("Forced minimal warmup time: " << TDuration::Seconds(warmupSeconds));
     }
 
-    LOG_I("Starting warmup for " << warmupMinutes << " minutes");
+    LOG_I("Starting warmup for " << TDuration::Seconds(warmupSeconds));
 
     size_t startedTerminalId = 0;
     for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
@@ -800,6 +799,8 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
     }
 
     // Calculate tpmC and efficiency
+    double maxPossibleTpmc = 0;
+    data.Efficiency = 0;
     if (data.ElapsedMinutes == 0 && data.ElapsedSeconds == 0) {
         data.Tpmc = 0;
     } else {
@@ -810,11 +811,16 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
 
         // there are two errors: rounding + approximation, we might overshoot
         // 100% efficiency very slightly because of errors and it's OK to "round down"
-        double maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / elapsed.count();
+        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / elapsed.count();
         data.Tpmc = std::min(maxPossibleTpmc, tpmc);
     }
 
-    data.Efficiency = (data.Tpmc * 100.0) / (Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE);
+    if (maxPossibleTpmc != 0) {
+        data.Efficiency = (data.Tpmc * 100.0) / maxPossibleTpmc;
+
+        // avoid slight rounding errors
+        data.Efficiency = std::min(data.Efficiency, 100.0);
+    }
 
     // Get running counts
     data.RunningTerminals = TaskQueue->GetRunningCount();

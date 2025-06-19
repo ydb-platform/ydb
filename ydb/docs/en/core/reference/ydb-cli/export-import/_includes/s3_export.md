@@ -44,7 +44,7 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 `--encryption-algorithm ALGORITHM`: Encryption algorithm (only for encrypted exports). Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
 
-`--encryption-key-file PATH`: File path that contains encryption key (only for encrypted exports).
+`--encryption-key-file PATH`: File path containing the encryption key (only for encrypted exports).
 
 ### Additional parameters {#aux}
 

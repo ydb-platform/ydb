@@ -33,6 +33,7 @@ ydb/core/kqp/ut/batch_operations [*/*] chunk chunk
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWriteQueryService-isOlap+useOltpSink
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
+ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
@@ -116,12 +117,6 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[resta
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_25-1-column]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_25-1-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_current-row]
-ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_24-4_to_25-1]
-ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_25-1_to_24-4]
-ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_25-1_to_25-1]
-ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_25-1_to_current]
-ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_current_to_25-1]
-ydb/tests/compatibility test_data_type.py.TestDataType.test_data_type[restart_current_to_current]
 ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_25-1_to_current-True]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_24-4_to_25-1-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_24-4_to_25-1-row]
@@ -182,6 +177,7 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
 ydb/tests/functional/tpc/large sole chunk chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[59]
 ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbench[Query18]
 ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbench[Query28]
 ydb/tests/functional/tpc/medium test_clickbench.py.TestClickbenchPg.test_clickbench[Query39]

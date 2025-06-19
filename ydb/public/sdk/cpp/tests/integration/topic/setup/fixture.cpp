@@ -29,10 +29,11 @@ void TTopicTestFixture::SetUp() {
     ConsumerName_ = consumerBuilder.str();
 
     client.DropTopic(TopicPath_).GetValueSync();
-    CreateTopic(TopicPath_);
+    CreateTopic();
 }
 
-void TTopicTestFixture::CreateTopic(const std::string& path, const std::string& consumer, size_t partitionCount, std::optional<size_t> maxPartitionCount) {
+void TTopicTestFixture::CreateTopic(const std::optional<std::string>& path, const std::optional<std::string>& consumer,
+                                    size_t partitionCount, std::optional<size_t> maxPartitionCount) {
     TTopicClient client(MakeDriver());
 
     TCreateTopicSettings topics;
@@ -48,22 +49,18 @@ void TTopicTestFixture::CreateTopic(const std::string& path, const std::string& 
             .Strategy(EAutoPartitioningStrategy::ScaleUp);
     }
 
-    TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer);
+    TConsumerSettings<TCreateTopicSettings> consumers(topics, consumer.value_or(ConsumerName_));
     topics.AppendConsumers(consumers);
 
-    auto status = client.CreateTopic(path, topics).GetValueSync();
+    auto status = client.CreateTopic(path.value_or(TopicPath_), topics).GetValueSync();
     Y_ENSURE(status.IsSuccess(), status);
 }
 
-void TTopicTestFixture::CreateTopic(const std::string& path, size_t partitionCount, std::optional<size_t> maxPartitionCount) {
-    CreateTopic(path, GetConsumerName(), partitionCount, maxPartitionCount);
-}
-
-std::string TTopicTestFixture::GetTopicPath() {
+std::string TTopicTestFixture::GetTopicPath() const {
     return TopicPath_;
 }
 
-std::string TTopicTestFixture::GetConsumerName() {
+std::string TTopicTestFixture::GetConsumerName() const {
     return ConsumerName_;
 }
 
@@ -92,7 +89,7 @@ std::uint16_t TTopicTestFixture::GetPort() const {
     return std::stoi(std::string(endpoint).substr(portPos + 1));
 }
 
-std::vector<std::uint32_t> TTopicTestFixture::GetNodeIds() const {
+std::vector<std::uint32_t> TTopicTestFixture::GetNodeIds() {
     NDiscovery::TDiscoveryClient client(MakeDriver());
     auto result = client.ListEndpoints().GetValueSync();
     Y_ENSURE(result.IsSuccess(), static_cast<TStatus>(result));

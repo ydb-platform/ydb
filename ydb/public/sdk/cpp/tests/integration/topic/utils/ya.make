@@ -1,7 +1,11 @@
 LIBRARY()
 
 SRCS(
+    describe.cpp
+    local_partition.cpp
+    managed_executor.cpp
     trace.cpp
+    setup.h
 )
 
 PEERDIR(

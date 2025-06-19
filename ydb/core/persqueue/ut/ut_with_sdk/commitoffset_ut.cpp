@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         PrepareFlatTopic(setup);
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1, "wrong-read-session-id");
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 1, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
             UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 0));
         }
@@ -91,13 +91,13 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         PrepareFlatTopic(setup);
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 2);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 2);
             UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
             UNIT_ASSERT_VALUES_EQUAL(2, GetCommittedOffset(setup, 0));
         }
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0, "wrong-read-session-id");
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 0, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
             UNIT_ASSERT_VALUES_EQUAL(2, GetCommittedOffset(setup, 0));
         }
@@ -107,19 +107,19 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
-        auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0);
+        auto status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 0);
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer has just started reading the inactive partition and he can commit");
 
-        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);
+        status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 1);
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages forward.");
 
-        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0);
+        status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 0);
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "A consumer who has not read to the end can commit messages back.");
 
-        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
+        status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 3);
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer can commit at the end of the inactive partition.");
 
-        status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0);
+        status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 0);
         UNIT_ASSERT_VALUES_EQUAL_C(NYdb::EStatus::SUCCESS, status.GetStatus(), "The consumer can commit an offset for inactive, read-to-the-end partitions.");
     }
 
@@ -129,20 +129,20 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         setup.CreateTopicWithAutoscale();
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 1);
             UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
             UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, 0));
         }
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, 1);
             UNIT_ASSERT_C(result.IsSuccess(), "Commited without session id. It is reset mode");
             UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
             UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, 1));
         }
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0, "wrong-read-session-id");
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 0, "wrong-read-session-id");
             UNIT_ASSERT_C(!result.IsSuccess(), "Commit doesn`t work with wrong session id");
             UNIT_ASSERT_VALUES_EQUAL_C(3, GetCommittedOffset(setup, 0), "Offset doesn`t changed");
             UNIT_ASSERT_VALUES_EQUAL_C(1, GetCommittedOffset(setup, 1), "Offset doesn`t changed");
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         {
             // Commit parent partition to non end
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 1);
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, 0));
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, 1);
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         {
             // Commit child partition to non end
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 3, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 3, 1);
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
 
         {
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, 1);
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         {
             // Commit parent partition to non end
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 1);
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(1, GetCommittedOffset(setup, 0));
@@ -222,12 +222,12 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
 
         {
-            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            auto r = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto& x) {
                 return x.GetMessages().back().GetData() != "message-3-3";
             });
 
             // Commit parent to middle
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1, r.StartPartitionSessionEvents.front().GetPartitionSession()->GetReadSessionId());
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, 1, r.StartPartitionSessionEvents.front().GetPartitionSession()->GetReadSessionId());
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
@@ -243,10 +243,10 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         PrepareAutopartitionedTopic(setup);
         TTopicClient client(setup.MakeDriver());
 
-        auto r0 = setup.Read(TEST_TOPIC, TEST_CONSUMER, [](auto&) { return false; }, 0);
-        auto r1 = setup.Read(TEST_TOPIC, TEST_CONSUMER, [](auto&) { return false; }, 1);
+        auto r0 = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [](auto&) { return false; }, 0);
+        auto r1 = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [](auto&) { return false; }, 1);
 
-        auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1,
+        auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, 1,
             r1.StartPartitionSessionEvents.back().GetPartitionSession()->GetReadSessionId());
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 0));
@@ -261,12 +261,12 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         PrepareAutopartitionedTopic(setup);
         TTopicClient client(setup.MakeDriver());
 
-        setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 3);
+        setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 3);
 
-        auto r0 = setup.Read(TEST_TOPIC, TEST_CONSUMER, [](auto&) { return false; }, 0);
-        auto r1 = setup.Read(TEST_TOPIC, TEST_CONSUMER, [](auto&) { return false; }, 1);
+        auto r0 = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [](auto&) { return false; }, 0);
+        auto r1 = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [](auto&) { return false; }, 1);
 
-        auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1,
+        auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, 1,
             r1.StartPartitionSessionEvents.back().GetPartitionSession()->GetReadSessionId());
         UNIT_ASSERT(result.IsSuccess());
 
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         {
             // Commit parent partition to non end
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 3, 1);
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 3, 1);
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
@@ -294,12 +294,12 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         }
 
         {
-            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto&) {
+            auto r = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto&) {
                 return false;
             });
 
             // Commit parent to middle
-            auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1, r.StartPartitionSessionEvents.front().GetPartitionSession()->GetReadSessionId());
+            auto result = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, 1, r.StartPartitionSessionEvents.front().GetPartitionSession()->GetReadSessionId());
             UNIT_ASSERT(result.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(3, GetCommittedOffset(setup, 0));
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         {
             bool committed = false;
 
-            auto r = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+            auto r = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto& x) {
                 for (auto & m: x.GetMessages()) {
                     if (x.GetPartitionSession()->GetPartitionId() == 0 && m.GetOffset() == 1) {
                         ui64 txId = 1006;
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         {
             static constexpr size_t commited = 2;
-            auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, commited);
+            auto status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 1, commited);
             UNIT_ASSERT(status.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL_C(3, GetCommittedOffset(setup, 0), "Must be commited to the partition end because it is the parent");
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         {
             static constexpr size_t commited = 3;
-            auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, commited);
+            auto status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, commited);
             UNIT_ASSERT(status.IsSuccess());
 
             UNIT_ASSERT_VALUES_EQUAL(commited, GetCommittedOffset(setup, 0));
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         auto count = 0;
         const auto expected = 15;
 
-        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+        auto result = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto& x) {
             auto& messages = x.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 ++count;
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> partition0Messages;
 
-        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+        auto result = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto& x) {
             auto& messages = x.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
@@ -462,7 +462,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
 
         std::unordered_map<std::string, size_t> counters;
 
-        auto result = setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+        auto result = setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto& x) {
             auto& messages = x.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
                 // check we get this SeqNo two times
                 if (message.GetData() == "message-0-3" && count == 1) {
                     Sleep(TDuration::MilliSeconds(300));
-                    auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1);
+                    auto status = setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 1);
                     UNIT_ASSERT(status.IsSuccess());
                 }
             }
@@ -504,13 +504,13 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         PrepareAutopartitionedTopic(setup);
 
         auto commit = [&](const std::string& sessionId, ui64 offset) {
-            return setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, offset, sessionId);
+            return setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, offset, sessionId);
         };
 
         auto commitSent = false;
         TString readSessionId = "";
 
-        setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+        setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto& x) {
             auto& messages = x.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
@@ -563,13 +563,13 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         PrepareFlatTopic(setup);
 
         auto commit = [&](const std::string& sessionId, ui64 offset) {
-            return setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, offset, sessionId);
+            return setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, offset, sessionId);
         };
 
         auto commitSent = false;
         TString readSessionId = "";
 
-        setup.Read(TEST_TOPIC, TEST_CONSUMER, [&](auto& x) {
+        setup.Read(setup.GetTopicPath(), setup.GetConsumerName(), [&](auto& x) {
             auto& messages = x.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];

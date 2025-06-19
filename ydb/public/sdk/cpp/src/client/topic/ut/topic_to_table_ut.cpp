@@ -24,7 +24,9 @@
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
-namespace NYdb::NTopic::NTests {
+#include <thread>
+
+namespace NYdb::inline Dev::NTopic::NTests {
 
 const auto TEST_MESSAGE_GROUP_ID_1 = TEST_MESSAGE_GROUP_ID + "_1";
 const auto TEST_MESSAGE_GROUP_ID_2 = TEST_MESSAGE_GROUP_ID + "_2";
@@ -91,79 +93,79 @@ protected:
 
     TTopicReadSessionPtr CreateReader();
 
-    void StartPartitionSession(TTopicReadSessionPtr reader, TTransactionBase& tx, ui64 offset);
-    void StartPartitionSession(TTopicReadSessionPtr reader, ui64 offset);
+    void StartPartitionSession(TTopicReadSessionPtr reader, TTransactionBase& tx, std::uint64_t offset);
+    void StartPartitionSession(TTopicReadSessionPtr reader, std::uint64_t offset);
 
     struct TReadMessageSettings {
         TTransactionBase& Tx;
         bool CommitOffsets = false;
-        std::optional<ui64> Offset;
+        std::optional<std::uint64_t> Offset;
     };
 
-    void ReadMessage(TTopicReadSessionPtr reader, TTransactionBase& tx, ui64 offset);
+    void ReadMessage(TTopicReadSessionPtr reader, TTransactionBase& tx, std::uint64_t offset);
     void ReadMessage(TTopicReadSessionPtr reader, const TReadMessageSettings& settings);
 
-    void WriteMessage(const TString& message);
-    void WriteMessages(const TVector<TString>& messages,
-                       const TString& topic, const TString& groupId,
+    void WriteMessage(const std::string& message);
+    void WriteMessages(const std::vector<std::string>& messages,
+                       const std::string& topic, const std::string& groupId,
                        TTransactionBase& tx);
 
-    void CreateTopic(const TString& path = TString{TEST_TOPIC},
-                     const TString& consumer = TEST_CONSUMER,
-                     size_t partitionCount = 1,
+    void CreateTopic(const std::string& path = TEST_TOPIC,
+                     const std::string& consumer = TEST_CONSUMER,
+                     std::size_t partitionCount = 1,
                      std::optional<size_t> maxPartitionCount = std::nullopt,
                      const TDuration retention = TDuration::Hours(1),
                      bool important = false);
-    TTopicDescription DescribeTopic(const TString& path);
+    TTopicDescription DescribeTopic(const std::string& path);
 
-    void AddConsumer(const TString& topicPath, const TVector<TString>& consumers);
-    void AlterAutoPartitioning(const TString& topicPath,
-                               ui64 minActivePartitions,
-                               ui64 maxActivePartitions,
+    void AddConsumer(const std::string& topicPath, const std::vector<std::string>& consumers);
+    void AlterAutoPartitioning(const std::string& topicPath,
+                               std::uint64_t minActivePartitions,
+                               std::uint64_t maxActivePartitions,
                                EAutoPartitioningStrategy strategy,
                                TDuration stabilizationWindow,
-                               ui64 downUtilizationPercent,
-                               ui64 upUtilizationPercent);
+                               std::uint64_t downUtilizationPercent,
+                               std::uint64_t upUtilizationPercent);
     void SetPartitionWriteSpeed(const std::string& topicPath,
-                                size_t bytesPerSeconds);
+                                std::size_t bytesPerSeconds);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
-    TTopicWriteSessionPtr CreateTopicWriteSession(const TString& topicPath,
-                                                  const TString& messageGroupId,
-                                                  std::optional<ui32> partitionId);
-    TTopicWriteSessionContext& GetTopicWriteSession(const TString& topicPath,
-                                                    const TString& messageGroupId,
-                                                    std::optional<ui32> partitionId);
+    TTopicWriteSessionPtr CreateTopicWriteSession(const std::string& topicPath,
+                                                  const std::string& messageGroupId,
+                                                  std::optional<std::uint32_t> partitionId);
+    TTopicWriteSessionContext& GetTopicWriteSession(const std::string& topicPath,
+                                                    const std::string& messageGroupId,
+                                                    std::optional<std::uint32_t> partitionId);
 
-    TTopicReadSessionPtr CreateTopicReadSession(const TString& topicPath,
-                                                const TString& consumerName,
-                                                TMaybe<ui32> partitionId);
-    TTopicReadSessionPtr GetTopicReadSession(const TString& topicPath,
-                                             const TString& consumerName,
-                                             TMaybe<ui32> partitionId);
+    TTopicReadSessionPtr CreateTopicReadSession(const std::string& topicPath,
+                                                const std::string& consumerName,
+                                                std::optional<std::uint32_t> partitionId);
+    TTopicReadSessionPtr GetTopicReadSession(const std::string& topicPath,
+                                             const std::string& consumerName,
+                                             std::optional<std::uint32_t> partitionId);
 
-    void WriteToTopic(const TString& topicPath,
-                      const TString& messageGroupId,
-                      const TString& message,
+    void WriteToTopic(const std::string& topicPath,
+                      const std::string& messageGroupId,
+                      const std::string& message,
                       TTransactionBase* tx = nullptr,
-                      std::optional<ui32> partitionId = std::nullopt);
-    TVector<TString> ReadFromTopic(const TString& topicPath,
-                                   const TString& consumerName,
+                      std::optional<std::uint32_t> partitionId = std::nullopt);
+    std::vector<std::string> ReadFromTopic(const std::string& topicPath,
+                                   const std::string& consumerName,
                                    const TDuration& duration,
                                    TTransactionBase* tx = nullptr,
-                                   TMaybe<ui32> partitionId = Nothing());
-    void WaitForAcks(const TString& topicPath,
-                     const TString& messageGroupId,
-                     size_t writtenInTxCount = Max<size_t>());
-    void WaitForSessionClose(const TString& topicPath,
-                             const TString& messageGroupId,
+                                   std::optional<std::uint32_t> partitionId = std::nullopt);
+    void WaitForAcks(const std::string& topicPath,
+                     const std::string& messageGroupId,
+                     std::size_t writtenInTxCount = std::numeric_limits<std::size_t>::max());
+    void WaitForSessionClose(const std::string& topicPath,
+                             const std::string& messageGroupId,
                              NYdb::EStatus status);
-    void CloseTopicWriteSession(const TString& topicPath,
-                                const TString& messageGroupId,
+    void CloseTopicWriteSession(const std::string& topicPath,
+                                const std::string& messageGroupId,
                                 bool force = false);
-    void CloseTopicReadSession(const TString& topicPath,
-                               const TString& consumerName);
+    void CloseTopicReadSession(const std::string& topicPath,
+                               const std::string& consumerName);
 
     enum EEndOfTransaction {
         Commit,
@@ -172,46 +174,46 @@ protected:
     };
 
     struct TTransactionCompletionTestDescription {
-        TVector<TString> Topics;
+        std::vector<std::string> Topics;
         EEndOfTransaction EndOfTransaction = Commit;
     };
 
     void TestTheCompletionOfATransaction(const TTransactionCompletionTestDescription& d);
     void RestartLongTxService();
-    void RestartPQTablet(const TString& topicPath, ui32 partition);
-    void DumpPQTabletKeys(const TString& topicName, ui32 partition);
-    void PQTabletPrepareFromResource(const TString& topicPath,
-                                     ui32 partitionId,
-                                     const TString& resourceName);
+    void RestartPQTablet(const std::string& topicPath, std::uint32_t partition);
+    void DumpPQTabletKeys(const std::string& topicName, std::uint32_t partition);
+    void PQTabletPrepareFromResource(const std::string& topicPath,
+                                     std::uint32_t partitionId,
+                                     const std::string& resourceName);
 
-    void DeleteSupportivePartition(const TString& topicName,
-                                   ui32 partition);
+    void DeleteSupportivePartition(const std::string& topicName,
+                                   std::uint32_t partition);
 
     struct TTableRecord {
         TTableRecord() = default;
-        TTableRecord(const TString& key, const TString& value);
+        TTableRecord(const std::string& key, const std::string& value);
 
-        TString Key;
-        TString Value;
+        std::string Key;
+        std::string Value;
     };
 
-    TVector<TTableRecord> MakeTableRecords();
-    TString MakeJsonDoc(const TVector<TTableRecord>& records);
+    std::vector<TTableRecord> MakeTableRecords();
+    std::string MakeJsonDoc(const std::vector<TTableRecord>& records);
 
-    void CreateTable(const TString& path);
-    void UpsertToTable(const TString& tablePath,
-                      const TVector<TTableRecord>& records,
+    void CreateTable(const std::string& path);
+    void UpsertToTable(const std::string& tablePath,
+                      const std::vector<TTableRecord>& records,
                       ISession& session,
                       TTransactionBase* tx);
-    void InsertToTable(const TString& tablePath,
-                      const TVector<TTableRecord>& records,
+    void InsertToTable(const std::string& tablePath,
+                      const std::vector<TTableRecord>& records,
                       ISession& session,
                       TTransactionBase* tx);
-    void DeleteFromTable(const TString& tablePath,
-                      const TVector<TTableRecord>& records,
+    void DeleteFromTable(const std::string& tablePath,
+                      const std::vector<TTableRecord>& records,
                       ISession& session,
                       TTransactionBase* tx);
-    size_t GetTableRecordsCount(const TString& tablePath);
+    size_t GetTableRecordsCount(const std::string& tablePath);
 
     enum ERestartPQTabletMode {
         ERestartNo,
@@ -233,11 +235,11 @@ protected:
     const TDriver& GetDriver() const;
     NTable::TTableClient& GetTableClient();
 
-    void CheckTabletKeys(const TString& topicName);
-    void DumpPQTabletKeys(const TString& topicName);
+    void CheckTabletKeys(const std::string& topicName);
+    void DumpPQTabletKeys(const std::string& topicName);
 
-    TVector<TString> Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                                        const TString& consumerName,
+    std::vector<std::string> Read_Exactly_N_Messages_From_Topic(const std::string& topicPath,
+                                                        const std::string& consumerName,
                                                         size_t count);
 
     void TestSessionAbort();
@@ -341,22 +343,22 @@ protected:
     void TestWriteToTopic50();
 
     struct TAvgWriteBytes {
-        ui64 PerSec = 0;
-        ui64 PerMin = 0;
-        ui64 PerHour = 0;
-        ui64 PerDay = 0;
+        std::uint64_t PerSec = 0;
+        std::uint64_t PerMin = 0;
+        std::uint64_t PerHour = 0;
+        std::uint64_t PerDay = 0;
     };
 
-    TAvgWriteBytes GetAvgWriteBytes(const TString& topicPath,
-                                    ui32 partitionId);
+    TAvgWriteBytes GetAvgWriteBytes(const std::string& topicPath,
+                                    std::uint32_t partitionId);
 
-    void CheckAvgWriteBytes(const TString& topicPath,
-                            ui32 partitionId,
-                            size_t minSize, size_t maxSize);
+    void CheckAvgWriteBytes(const std::string& topicPath,
+                            std::uint32_t partitionId,
+                            std::size_t minSize, std::size_t maxSize);
 
-    void SplitPartition(const TString& topicPath,
-                        ui32 partitionId,
-                        const TString& boundary);
+    void SplitPartition(const std::string& topicPath,
+                        std::uint32_t partitionId,
+                        const std::string& boundary);
 
     virtual bool GetEnableOltpSink() const;
     virtual bool GetEnableOlapSink() const;
@@ -439,33 +441,33 @@ private:
     E ReadEvent(TTopicReadSessionPtr reader);
 
     ui64 GetTopicTabletId(const TActorId& actorId,
-                          const TString& topicPath,
-                          ui32 partition);
+                          const std::string& topicPath,
+                          std::uint32_t partition);
     std::vector<std::string> GetTabletKeys(const TActorId& actorId,
-                                           ui64 tabletId);
+                                           std::uint64_t tabletId);
     std::vector<std::string> GetPQTabletDataKeys(const TActorId& actorId,
-                                                 ui64 tabletId);
+                                                 std::uint64_t tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
-                                        ui64 tabletId);
+                                        std::uint64_t tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
-                              ui64 tabletId,
+                              std::uint64_t tabletId,
                               const NPQ::TWriteId& writeId,
                               NKikimrLongTxService::TEvLockStatus::EStatus status);
     void WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
-                                              ui64 tabletId,
+                                              std::uint64_t tabletId,
                                               const NPQ::TWriteId& writeId);
 
-    ui64 GetSchemeShardTabletId(const TActorId& actorId);
+    std::uint64_t GetSchemeShardTabletId(const TActorId& actorId);
 
     std::unique_ptr<TTopicSdkTestSetup> Setup;
     std::unique_ptr<TDriver> Driver;
     std::unique_ptr<NTable::TTableClient> TableClient;
     std::unique_ptr<NQuery::TQueryClient> QueryClient;
 
-    THashMap<std::pair<TString, TString>, TTopicWriteSessionContext> TopicWriteSessions;
-    THashMap<TString, TTopicReadSessionPtr> TopicReadSessions;
+    std::unordered_map<std::pair<std::string, std::string>, TTopicWriteSessionContext> TopicWriteSessions;
+    std::unordered_map<std::string, TTopicReadSessionPtr> TopicReadSessions;
 
-    ui64 SchemaTxId = 1000;
+    std::uint64_t SchemaTxId = 1000;
 };
 
 class TFixtureTable : public TFixture {
@@ -489,7 +491,7 @@ protected:
     }
 };
 
-TFixture::TTableRecord::TTableRecord(const TString& key, const TString& value) :
+TFixture::TTableRecord::TTableRecord(const std::string& key, const std::string& value) :
     Key(key),
     Value(value)
 {
@@ -829,7 +831,7 @@ E TFixture::ReadEvent(TTopicReadSessionPtr reader)
     return *ev;
 }
 
-void TFixture::WriteMessage(const TString& message)
+void TFixture::WriteMessage(const std::string& message)
 {
     NTopic::TWriteSessionSettings options;
     options.Path(TEST_TOPIC);
@@ -841,8 +843,8 @@ void TFixture::WriteMessage(const TString& message)
     session->Close();
 }
 
-void TFixture::WriteMessages(const TVector<TString>& messages,
-                             const TString& topic, const TString& groupId,
+void TFixture::WriteMessages(const std::vector<std::string>& messages,
+                             const std::string& topic, const std::string& groupId,
                              TTransactionBase& tx)
 {
     NTopic::TWriteSessionSettings options;
@@ -861,19 +863,18 @@ void TFixture::WriteMessages(const TVector<TString>& messages,
     UNIT_ASSERT(session->Close());
 }
 
-void TFixture::CreateTopic(const TString& path,
-                           const TString& consumer,
-                           size_t partitionCount,
+void TFixture::CreateTopic(const std::string& path,
+                           const std::string& consumer,
+                           std::size_t partitionCount,
                            std::optional<size_t> maxPartitionCount,
                            const TDuration retention,
                            bool important)
-
 {
     Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount, retention, important);
 }
 
-void TFixture::AddConsumer(const TString& topicPath,
-                           const TVector<TString>& consumers)
+void TFixture::AddConsumer(const std::string& topicPath,
+                           const std::vector<std::string>& consumers)
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TAlterTopicSettings settings;
@@ -886,13 +887,13 @@ void TFixture::AddConsumer(const TString& topicPath,
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void TFixture::AlterAutoPartitioning(const TString& topicPath,
-                                     ui64 minActivePartitions,
-                                     ui64 maxActivePartitions,
+void TFixture::AlterAutoPartitioning(const std::string& topicPath,
+                                     std::uint64_t minActivePartitions,
+                                     std::uint64_t maxActivePartitions,
                                      EAutoPartitioningStrategy strategy,
                                      TDuration stabilizationWindow,
-                                     ui64 downUtilizationPercent,
-                                     ui64 upUtilizationPercent)
+                                     std::uint64_t downUtilizationPercent,
+                                     std::uint64_t upUtilizationPercent)
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TAlterTopicSettings settings;
@@ -926,7 +927,7 @@ void TFixture::SetPartitionWriteSpeed(const std::string& topicPath,
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-TTopicDescription TFixture::DescribeTopic(const TString& path)
+TTopicDescription TFixture::DescribeTopic(const std::string& path)
 {
     return Setup->DescribeTopic(path);
 }
@@ -1175,9 +1176,9 @@ Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession_Query, TFixtureQuery)
     TestWriteToTopicTwoWriteSession();
 }
 
-auto TFixture::CreateTopicWriteSession(const TString& topicPath,
-                                       const TString& messageGroupId,
-                                       std::optional<ui32> partitionId) -> TTopicWriteSessionPtr
+auto TFixture::CreateTopicWriteSession(const std::string& topicPath,
+                                       const std::string& messageGroupId,
+                                       std::optional<std::uint32_t> partitionId) -> TTopicWriteSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
     NTopic::TWriteSessionSettings options;
@@ -1189,11 +1190,11 @@ auto TFixture::CreateTopicWriteSession(const TString& topicPath,
     return client.CreateWriteSession(options);
 }
 
-auto TFixture::GetTopicWriteSession(const TString& topicPath,
-                                    const TString& messageGroupId,
-                                     std::optional<ui32> partitionId) -> TTopicWriteSessionContext&
+auto TFixture::GetTopicWriteSession(const std::string& topicPath,
+                                    const std::string& messageGroupId,
+                                    std::optional<std::uint32_t> partitionId) -> TTopicWriteSessionContext&
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
 
     if (i == TopicWriteSessions.end()) {
@@ -1208,20 +1209,20 @@ auto TFixture::GetTopicWriteSession(const TString& topicPath,
     return i->second;
 }
 
-NTopic::TTopicReadSettings MakeTopicReadSettings(const TString& topicPath,
-                                                 TMaybe<ui32> partitionId)
+NTopic::TTopicReadSettings MakeTopicReadSettings(const std::string& topicPath,
+                                                 std::optional<std::uint32_t> partitionId)
 {
     TTopicReadSettings options;
     options.Path(topicPath);
-    if (partitionId.Defined()) {
+    if (partitionId) {
         options.AppendPartitionIds(*partitionId);
     }
     return options;
 }
 
-NTopic::TReadSessionSettings MakeTopicReadSessionSettings(const TString& topicPath,
-                                                          const TString& consumerName,
-                                                          TMaybe<ui32> partitionId)
+NTopic::TReadSessionSettings MakeTopicReadSessionSettings(const std::string& topicPath,
+                                                          const std::string& consumerName,
+                                                          std::optional<std::uint32_t> partitionId)
 {
     NTopic::TReadSessionSettings options;
     options.AppendTopics(MakeTopicReadSettings(topicPath, partitionId));
@@ -1229,9 +1230,9 @@ NTopic::TReadSessionSettings MakeTopicReadSessionSettings(const TString& topicPa
     return options;
 }
 
-auto TFixture::CreateTopicReadSession(const TString& topicPath,
-                                      const TString& consumerName,
-                                      TMaybe<ui32> partitionId) -> TTopicReadSessionPtr
+auto TFixture::CreateTopicReadSession(const std::string& topicPath,
+                                      const std::string& consumerName,
+                                      std::optional<std::uint32_t> partitionId) -> TTopicReadSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
     return client.CreateReadSession(MakeTopicReadSessionSettings(topicPath,
@@ -1239,9 +1240,9 @@ auto TFixture::CreateTopicReadSession(const TString& topicPath,
                                                                  partitionId));
 }
 
-auto TFixture::GetTopicReadSession(const TString& topicPath,
-                                   const TString& consumerName,
-                                   TMaybe<ui32> partitionId) -> TTopicReadSessionPtr
+auto TFixture::GetTopicReadSession(const std::string& topicPath,
+                                   const std::string& consumerName,
+                                   std::optional<std::uint32_t> partitionId) -> TTopicReadSessionPtr
 {
     TTopicReadSessionPtr session;
 
@@ -1304,11 +1305,11 @@ void TFixture::TTopicWriteSessionContext::Write(const std::string& message, TTra
     ContinuationToken = std::nullopt;
 }
 
-void TFixture::CloseTopicWriteSession(const TString& topicPath,
-                                      const TString& messageGroupId,
+void TFixture::CloseTopicWriteSession(const std::string& topicPath,
+                                      const std::string& messageGroupId,
                                       bool force)
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
 
     UNIT_ASSERT(i != TopicWriteSessions.end());
@@ -1319,18 +1320,18 @@ void TFixture::CloseTopicWriteSession(const TString& topicPath,
     TopicWriteSessions.erase(key);
 }
 
-void TFixture::CloseTopicReadSession(const TString& topicPath,
-                                     const TString& consumerName)
+void TFixture::CloseTopicReadSession(const std::string& topicPath,
+                                     const std::string& consumerName)
 {
     Y_UNUSED(consumerName);
     TopicReadSessions.erase(topicPath);
 }
 
-void TFixture::WriteToTopic(const TString& topicPath,
-                            const TString& messageGroupId,
-                            const TString& message,
+void TFixture::WriteToTopic(const std::string& topicPath,
+                            const std::string& messageGroupId,
+                            const std::string& message,
                             TTransactionBase* tx,
-                            std::optional<ui32> partitionId)
+                            std::optional<std::uint32_t> partitionId)
 {
     TTopicWriteSessionContext& context = GetTopicWriteSession(topicPath, messageGroupId, partitionId);
     context.WaitForContinuationToken();
@@ -1338,13 +1339,13 @@ void TFixture::WriteToTopic(const TString& topicPath,
     context.Write(message, tx);
 }
 
-TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
-                                         const TString& consumerName,
+std::vector<std::string> TFixture::ReadFromTopic(const std::string& topicPath,
+                                         const std::string& consumerName,
                                          const TDuration& duration,
                                          TTransactionBase* tx,
-                                         TMaybe<ui32> partitionId)
+                                         std::optional<std::uint32_t> partitionId)
 {
-    TVector<TString> messages;
+    std::vector<std::string> messages;
 
     TInstant end = TInstant::Now() + duration;
     TDuration remain = duration;
@@ -1380,9 +1381,9 @@ TVector<TString> TFixture::ReadFromTopic(const TString& topicPath,
     return messages;
 }
 
-void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroupId, size_t writtenInTxCount)
+void TFixture::WaitForAcks(const std::string& topicPath, const std::string& messageGroupId, std::size_t writtenInTxCount)
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
     UNIT_ASSERT(i != TopicWriteSessions.end());
 
@@ -1396,16 +1397,16 @@ void TFixture::WaitForAcks(const TString& topicPath, const TString& messageGroup
 
     UNIT_ASSERT((context.WrittenAckCount + context.WrittenInTxAckCount) == context.WriteCount);
 
-    if (writtenInTxCount != Max<size_t>()) {
+    if (writtenInTxCount != std::numeric_limits<std::size_t>::max()) {
         UNIT_ASSERT_VALUES_EQUAL(context.WrittenInTxAckCount, writtenInTxCount);
     }
 }
 
-void TFixture::WaitForSessionClose(const TString& topicPath,
-                                   const TString& messageGroupId,
+void TFixture::WaitForSessionClose(const std::string& topicPath,
+                                   const std::string& messageGroupId,
                                    NYdb::EStatus status)
 {
-    std::pair<TString, TString> key(topicPath, messageGroupId);
+    std::pair<std::string, std::string> key(topicPath, messageGroupId);
     auto i = TopicWriteSessions.find(key);
     UNIT_ASSERT(i != TopicWriteSessions.end());
 
@@ -1473,13 +1474,13 @@ ui64 TFixture::GetSchemeShardTabletId(const TActorId& actorId)
     return front.Self->Info.GetSchemeshardId();
 }
 
-ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPath, ui32 partition)
+std::uint64_t TFixture::GetTopicTabletId(const TActorId& actorId, const std::string& topicPath, std::uint32_t partition)
 {
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = "/Root";
 
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.Path = SplitPath(topicPath);
+    entry.Path = SplitPath(TString{topicPath});
     entry.SyncVersion = true;
     entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
@@ -1601,11 +1602,11 @@ void TFixture::RestartLongTxService()
     }
 }
 
-TVector<TString> TFixture::Read_Exactly_N_Messages_From_Topic(const TString& topicPath,
-                                                              const TString& consumerName,
-                                                              size_t limit)
+std::vector<std::string> TFixture::Read_Exactly_N_Messages_From_Topic(const std::string& topicPath,
+                                                                      const std::string& consumerName,
+                                                                      std::size_t limit)
 {
-    TVector<TString> result;
+    std::vector<std::string> result;
 
     while (result.size() < limit) {
         auto messages = ReadFromTopic(topicPath, consumerName, TDuration::Seconds(2));
@@ -1884,12 +1885,12 @@ void TFixture::TestWriteToTopic27()
     }
 }
 
-auto TFixture::GetAvgWriteBytes(const TString& topicName,
-                                ui32 partitionId) -> TAvgWriteBytes
+auto TFixture::GetAvgWriteBytes(const std::string& topicName,
+                                std::uint32_t partitionId) -> TAvgWriteBytes
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partitionId);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partitionId);
 
     runtime.SendToPipe(tabletId, edge, new NKikimr::TEvPersQueue::TEvStatus());
     auto response = runtime.GrabEdgeEvent<NKikimr::TEvPersQueue::TEvStatusResponse>();
@@ -1898,7 +1899,7 @@ auto TFixture::GetAvgWriteBytes(const TString& topicName,
 
     TAvgWriteBytes result;
 
-    for (size_t i = 0; i < response->Record.PartResultSize(); ++i) {
+    for (std::size_t i = 0; i < response->Record.PartResultSize(); ++i) {
         const auto& partition = response->Record.GetPartResult(i);
         if (partition.GetPartition() == static_cast<int>(partitionId)) {
             result.PerSec = partition.GetAvgWriteSpeedPerSec();
@@ -2252,7 +2253,7 @@ void TFixture::SendLongTxLockStatus(const TActorId& actorId,
 }
 
 void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
-                                                    ui64 tabletId,
+                                                    std::uint64_t tabletId,
                                                     const NPQ::TWriteId& writeId)
 {
     while (true) {
@@ -2293,21 +2294,21 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
     }
 }
 
-void TFixture::RestartPQTablet(const TString& topicName, ui32 partition)
+void TFixture::RestartPQTablet(const std::string& topicName, std::uint32_t partition)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
     runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
 
     Sleep(TDuration::Seconds(2));
 }
 
-void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partition)
+void TFixture::DeleteSupportivePartition(const std::string& topicName, std::uint32_t partition)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
     NPQ::TWriteId writeId = GetTransactionWriteId(edge, tabletId);
 
     SendLongTxLockStatus(edge, tabletId, writeId, NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
@@ -2315,11 +2316,11 @@ void TFixture::DeleteSupportivePartition(const TString& topicName, ui32 partitio
     WaitForTheTabletToDeleteTheWriteInfo(edge, tabletId, writeId);
 }
 
-void TFixture::CheckTabletKeys(const TString& topicName)
+void TFixture::CheckTabletKeys(const std::string& topicName)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
 
     const THashSet<char> types {
         NPQ::TKeyPrefix::TypeInfo,
@@ -2365,27 +2366,27 @@ void TFixture::CheckTabletKeys(const TString& topicName)
     }
 }
 
-void TFixture::DumpPQTabletKeys(const TString& topicName)
+void TFixture::DumpPQTabletKeys(const std::string& topicName)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
     auto keys = GetTabletKeys(edge, tabletId);
     for (const auto& key : keys) {
         Cerr << key << Endl;
     }
 }
 
-void TFixture::PQTabletPrepareFromResource(const TString& topicPath,
-                                           ui32 partitionId,
-                                           const TString& resourceName)
+void TFixture::PQTabletPrepareFromResource(const std::string& topicPath,
+                                           std::uint32_t partitionId,
+                                           const std::string& resourceName)
 {
     auto& runtime = Setup->GetRuntime();
     TActorId edge = runtime.AllocateEdgeActor();
-    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
+    std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
 
     auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-    size_t count = 0;
+    std::size_t count = 0;
 
     for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {
         TString key, encoded;
@@ -2414,7 +2415,7 @@ void TFixture::PQTabletPrepareFromResource(const TString& topicPath,
 
     UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), count);
 
-    for (size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
+    for (std::size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
         const auto &result = response->Record.GetWriteResult(i);
         UNIT_ASSERT(result.HasStatus());
         UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
@@ -2449,7 +2450,7 @@ void TFixture::TestTheCompletionOfATransaction(const TTransactionCompletionTestD
         }
     }
 
-    Sleep(TDuration::Seconds(5));
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
     for (auto& topic : d.Topics) {
         CheckTabletKeys(topic);
@@ -2746,11 +2747,11 @@ Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_21,  0, 2, 10);
 Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_22,  0, 0, 10);
 Y_UNIT_TEST_WITH_REBOOTS(WriteToTopic_Demo_23,  0, 2,  0);
 
-void TFixture::CreateTable(const TString& tablePath)
+void TFixture::CreateTable(const std::string& tablePath)
 {
     UNIT_ASSERT(!tablePath.empty());
 
-    TString path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
+    std::string path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
 
     auto createSessionResult = GetTableClient().CreateSession().ExtractValueSync();
     UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
@@ -2765,9 +2766,9 @@ void TFixture::CreateTable(const TString& tablePath)
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-auto TFixture::MakeTableRecords() -> TVector<TTableRecord>
+auto TFixture::MakeTableRecords() -> std::vector<TTableRecord>
 {
-    TVector<TTableRecord> records;
+    std::vector<TTableRecord> records;
     records.emplace_back("key-1", "value-1");
     records.emplace_back("key-2", "value-2");
     records.emplace_back("key-3", "value-3");
@@ -2775,7 +2776,7 @@ auto TFixture::MakeTableRecords() -> TVector<TTableRecord>
     return records;
 }
 
-auto TFixture::MakeJsonDoc(const TVector<TTableRecord>& records) -> TString
+auto TFixture::MakeJsonDoc(const std::vector<TTableRecord>& records) -> std::string
 {
     auto makeJsonObject = [](const TTableRecord& r) {
         return Sprintf(R"({"key":"%s", "value":"%s"})",
@@ -2799,15 +2800,15 @@ auto TFixture::MakeJsonDoc(const TVector<TTableRecord>& records) -> TString
     return s;
 }
 
-void TFixture::UpsertToTable(const TString& tablePath,
-                            const TVector<TTableRecord>& records,
-                            ISession& session,
-                            TTransactionBase* tx)
+void TFixture::UpsertToTable(const std::string& tablePath,
+                             const std::vector<TTableRecord>& records,
+                             ISession& session,
+                             TTransactionBase* tx)
 {
-    TString query = Sprintf("DECLARE $key AS Utf8;"
-                            "DECLARE $value AS Utf8;"
-                            "UPSERT INTO `%s` (key, value) VALUES ($key, $value);",
-                            tablePath.data());
+    auto query = Sprintf("DECLARE $key AS Utf8;"
+                         "DECLARE $value AS Utf8;"
+                         "UPSERT INTO `%s` (key, value) VALUES ($key, $value);",
+                         tablePath.data());
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2819,15 +2820,15 @@ void TFixture::UpsertToTable(const TString& tablePath,
     }
 }
 
-void TFixture::InsertToTable(const TString& tablePath,
-                            const TVector<TTableRecord>& records,
-                            ISession& session,
-                            TTransactionBase* tx)
+void TFixture::InsertToTable(const std::string& tablePath,
+                             const std::vector<TTableRecord>& records,
+                             ISession& session,
+                             TTransactionBase* tx)
 {
-    TString query = Sprintf("DECLARE $key AS Utf8;"
-                            "DECLARE $value AS Utf8;"
-                            "INSERT INTO `%s` (key, value) VALUES ($key, $value);",
-                            tablePath.data());
+    auto query = Sprintf("DECLARE $key AS Utf8;"
+                         "DECLARE $value AS Utf8;"
+                         "INSERT INTO `%s` (key, value) VALUES ($key, $value);",
+                         tablePath.data());
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2839,15 +2840,15 @@ void TFixture::InsertToTable(const TString& tablePath,
     }
 }
 
-void TFixture::DeleteFromTable(const TString& tablePath,
-                            const TVector<TTableRecord>& records,
+void TFixture::DeleteFromTable(const std::string& tablePath,
+                            const std::vector<TTableRecord>& records,
                             ISession& session,
                             TTransactionBase* tx)
 {
-    TString query = Sprintf("DECLARE $key AS Utf8;"
-                            "DECLARE $value AS Utf8;"
-                            "DELETE FROM `%s` ON (key, value) VALUES ($key, $value);",
-                            tablePath.data());
+    auto query = Sprintf("DECLARE $key AS Utf8;"
+                         "DECLARE $value AS Utf8;"
+                         "DELETE FROM `%s` ON (key, value) VALUES ($key, $value);",
+                         tablePath.data());
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2859,10 +2860,10 @@ void TFixture::DeleteFromTable(const TString& tablePath,
     }
 }
 
-size_t TFixture::GetTableRecordsCount(const TString& tablePath)
+std::size_t TFixture::GetTableRecordsCount(const std::string& tablePath)
 {
-    TString query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)",
-                            tablePath.data());
+    auto query = Sprintf(R"(SELECT COUNT(*) FROM `%s`)",
+                         tablePath.data());
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
@@ -3356,9 +3357,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_44_Query, TFixtureQuery)
     TestWriteToTopic44();
 }
 
-void TFixture::CheckAvgWriteBytes(const TString& topicPath,
-                                  ui32 partitionId,
-                                  size_t minSize, size_t maxSize)
+void TFixture::CheckAvgWriteBytes(const std::string& topicPath,
+                                  std::uint32_t partitionId,
+                                  std::size_t minSize, std::size_t maxSize)
 {
 #define UNIT_ASSERT_AVGWRITEBYTES(v, minSize, maxSize) \
     UNIT_ASSERT_LE_C(minSize, v, ", actual " << minSize << " > " << v); \
@@ -3374,15 +3375,15 @@ void TFixture::CheckAvgWriteBytes(const TString& topicPath,
 #undef UNIT_ASSERT_AVGWRITEBYTES
 }
 
-void TFixture::SplitPartition(const TString& topicName,
-                              ui32 partitionId,
-                              const TString& boundary)
+void TFixture::SplitPartition(const std::string& topicName,
+                              std::uint32_t partitionId,
+                              const std::string& boundary)
 {
     NKikimr::NPQ::NTest::SplitPartition(Setup->GetRuntime(),
                                         ++SchemaTxId,
-                                        topicName,
+                                        TString(topicName),
                                         partitionId,
-                                        boundary);
+                                        TString(boundary));
 }
 
 void TFixture::TestWriteToTopic45()
@@ -3393,7 +3394,7 @@ void TFixture::TestWriteToTopic45()
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    TString message(1'000, 'x');
+    std::string message(1'000, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
@@ -3402,8 +3403,8 @@ void TFixture::TestWriteToTopic45()
 
     session->CommitTx(*tx, EStatus::SUCCESS);
 
-    size_t minSize = (message.size() + TEST_MESSAGE_GROUP_ID_1.size()) * 2;
-    size_t maxSize = minSize + 200;
+    std::size_t minSize = (message.size() + TEST_MESSAGE_GROUP_ID_1.size()) * 2;
+    std::size_t maxSize = minSize + 200;
 
     CheckAvgWriteBytes("topic_A", 0, minSize, maxSize);
 
@@ -3432,7 +3433,7 @@ void TFixture::TestWriteToTopic46()
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    TString message(1'000, 'x');
+    std::string message(1'000, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
@@ -3463,7 +3464,7 @@ void TFixture::TestWriteToTopic47()
     // The `split` operation of the topic partition does not affect the reading in the transaction.
     CreateTopic("topic_A", TEST_CONSUMER, 2, 10);
 
-    TString message(1'000, 'x');
+    std::string message(1'000, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, nullptr, 0);
@@ -3509,7 +3510,7 @@ void TFixture::TestWriteToTopic48()
     auto session = CreateSession();
     auto tx = session->BeginTx();
 
-    TString message(1_MB, 'x');
+    std::string message(1_MB, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message, tx.get(), 0);
@@ -3550,7 +3551,7 @@ void TFixture::TestWriteToTopic50()
     CreateTopic("topic_A", TEST_CONSUMER);
     CreateTopic("topic_B", TEST_CONSUMER);
 
-    TString message(128_KB, 'x');
+    std::string message(128_KB, 'x');
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message);
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
@@ -4226,14 +4227,14 @@ void TFixture::TestWriteRandomSizedMessagesInWideTransactions()
         auto& tx = transactions.back();
 
         for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            std::string sourceId = TEST_MESSAGE_GROUP_ID;
             sourceId += "_";
             sourceId += ToString(i);
             sourceId += "_";
             sourceId += ToString(j);
 
             size_t count = RandomNumber<size_t>(20) + 3;
-            WriteToTopic("topic_A", sourceId, TString(512 * 1000 * count, 'x'), tx.get(), j);
+            WriteToTopic("topic_A", sourceId, std::string(512 * 1000 * count, 'x'), tx.get(), j);
 
             WaitForAcks("topic_A", sourceId);
         }
@@ -4290,13 +4291,13 @@ void TFixture::TestWriteOnlyBigMessagesInWideTransactions()
         auto& tx = transactions.back();
 
         for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            std::string sourceId = TEST_MESSAGE_GROUP_ID;
             sourceId += "_";
             sourceId += ToString(i);
             sourceId += "_";
             sourceId += ToString(j);
 
-            WriteToTopic("topic_A", sourceId, TString(6'500'000, 'x'), tx.get(), j);
+            WriteToTopic("topic_A", sourceId, std::string(6'500'000, 'x'), tx.get(), j);
 
             WaitForAcks("topic_A", sourceId);
         }
@@ -4340,7 +4341,7 @@ void TFixture::TestTransactionsConflictOnSeqNo()
     std::vector<std::shared_ptr<NTopic::ISimpleBlockingWriteSession>> topicWriteSessions;
 
     for (ui32 i = 0; i < PARTITIONS_COUNT; ++i) {
-        TString sourceId = TEST_MESSAGE_GROUP_ID;
+        std::string sourceId = TEST_MESSAGE_GROUP_ID;
         sourceId += "_";
         sourceId += ToString(i);
 
@@ -4368,7 +4369,7 @@ void TFixture::TestTransactionsConflictOnSeqNo()
         auto& tx = transactions.back();
 
         for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            std::string sourceId = TEST_MESSAGE_GROUP_ID;
             sourceId += "_";
             sourceId += ToString(j);
 

@@ -22,7 +22,7 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 ### List of imported objects {#items}
 
-`--source-prefix PREFIX`: Source prefix for export in bucket. Required for encrypted exports.
+`--source-prefix PREFIX`: Source prefix for export in the bucket. Required for encrypted exports.
 
 `--destination-path PATH`: Root destination folder for the objects being imported, database root if not provided.
 

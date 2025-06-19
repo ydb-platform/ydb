@@ -232,7 +232,7 @@ default_access:
 
 {% endnote %}
 
-## Настройки встроенной настройки безопасности
+## Управление встроенной настройкой безопасности
 
 Флаги `disable_builtin_security`, `disable_builtin_groups`, `disable_builtin_access` влияют на настройку кластера, осуществляемую только при первом старте кластера {{ ydb-short-name }}.
 

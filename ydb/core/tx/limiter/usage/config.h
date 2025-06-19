@@ -1,6 +1,8 @@
 #pragma once
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/accessor/accessor.h>
+
 #include <util/datetime/base.h>
 
 namespace NKikimr::NLimiter {
@@ -10,6 +12,7 @@ private:
     YDB_READONLY(TDuration, Period, TDuration::Seconds(1));
     YDB_READONLY(ui64, Limit, 0);
     YDB_READONLY_FLAG(Enabled, true);
+
 public:
     template <class TPolicy>
     bool DeserializeFromProto(const NKikimrConfig::TLimiterConfig& config) {
@@ -34,4 +37,4 @@ public:
     TString DebugString() const;
 };
 
-}
+}   // namespace NKikimr::NLimiter

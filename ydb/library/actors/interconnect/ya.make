@@ -8,6 +8,7 @@ ENDIF()
 
 SRCS(
     channel_scheduler.h
+    cq_actor.cpp
     event_filter.h
     event_holder_pool.h
     events_local.h

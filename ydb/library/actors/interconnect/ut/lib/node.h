@@ -11,6 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 using namespace NActors;
@@ -69,6 +70,8 @@ public:
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
             TMailboxType::ReadAsFilled, 0));
+        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(), TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1),
+        TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");
 

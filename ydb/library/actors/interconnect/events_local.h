@@ -60,8 +60,6 @@ namespace NActors {
         // external data channel messages
         EvSubscribeForConnection,
         EvReportConnection,
-        // rdma
-        EvRdmaIoHandshakeDone,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
@@ -400,9 +398,5 @@ namespace NActors {
             : HandshakeId(std::move(handshakeId))
             , Socket(std::move(socket))
         {}
-    };
-
-    struct TEvRdmaIoHandshakeDone : TEventLocal<TEvRdmaIoHandshakeDone, (ui32)ENetwork::EvRdmaIoHandshakeDone> {
-
     };
 }

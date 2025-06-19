@@ -1,46 +1,272 @@
 #include "rdma.h"
 #include "ctx.h"
+#include "events.h"
 #include <util/stream/output.h>
+#include <util/thread/lfqueue.h>
+
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/datetime/base.h>
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
+#include <thread>
+
 namespace NInterconnect::NRdma {
+
+class TCqCommon : public ICq {
+public:
+    TCqCommon(NActors::TActorSystem* as)
+        : As(as)
+        , Cq(nullptr)
+    {}
+
+    virtual ~TCqCommon() {
+        if (Cq) {
+            ibv_destroy_cq(Cq);
+        }
+    }
+
+    virtual void ReturnWr(IWr*) noexcept = 0;
+
+    ibv_cq* GetCq() noexcept {
+        return Cq;
+    }
+
+    int Init(const TRdmaCtx* ctx, int max_cqe) noexcept {
+        const ibv_device_attr& attr = ctx->GetDevAttr();
+        if (max_cqe <= 0) {
+            max_cqe = attr.max_cqe;
+        }
+        Cq = ibv_create_cq(ctx->GetContext(), max_cqe, nullptr, nullptr, 0);
+        if (!Cq) {
+            return errno;
+        }
+        return 0;
+    }
+
+    int Do(std::span<ibv_wc> wc) noexcept {
+        return ibv_poll_cq(Cq, wc.size(), &wc.front());
+    }
+
+    void Idle() noexcept {
+        SpinLockPause();
+    }
+protected:
+    NActors::TActorSystem* const As;
+private:
+    ibv_cq* Cq;
+};
+
+class TWr : public ICq::IWr {
+public:
+    TWr(ui64 id, TCqCommon* cqCommon) noexcept
+        : Id(id)
+        , CqCommon(cqCommon)
+    {}
+
+    TWr(const TWr&) = delete;
+    TWr& operator=(const TWr&) = delete;
+    TWr(TWr&& wr) noexcept = default;
+
+    ui64 GetId() noexcept override {
+        return Id;
+    }
+
+    void Release() noexcept override {
+        Cb = TCb(); 
+        CqCommon->ReturnWr(this);
+    }
+
+    void Reply(NActors::TActorSystem* as, const ibv_wc* wc) noexcept {
+        if (Cb) {
+            if (wc) {
+                if (wc->status == IBV_WC_SUCCESS) {
+                    Cb(as, TEvRdmaIoDone::Success());
+                } else {
+                    Cb(as, TEvRdmaIoDone::WcError(wc->status));
+                }
+            } else {
+                Cb(as, TEvRdmaIoDone::CqError());
+            }
+            Cb = TCb();
+        }
+    }
+
+    void ReplyErr(NActors::TActorSystem* as) noexcept {
+        if (Cb) {
+            Cb(as, TEvRdmaIoDone::CqError());
+            Cb = TCb();
+        }
+    }
+
+    void AttachCb(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept {
+        Cb = std::move(cb);
+    }
+
+private:
+    const ui64 Id;
+    TCqCommon* const CqCommon;
+    using TCb = std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)>;
+    TCb Cb;
+};
+
+class TSimpleCq : public TCqCommon {
+public:
+    TSimpleCq(NActors::TActorSystem* as, size_t sz) noexcept
+        : TCqCommon(as)
+        , Err(false)
+    {
+        WrBuf.reserve(sz);
+        // Enumerate all work requests for this CQ
+        for (size_t i = 0; i < sz; i++) {
+            WrBuf.emplace_back(i, this);
+        }
+
+        // Fill queue
+        for (size_t i = 0; i < sz; i++) {
+            Queue.Enqueue(&WrBuf[i]);
+        }
+    }
+
+    ~TSimpleCq() {
+        Cont.store(false, std::memory_order_relaxed);
+        if (Thread)
+             Thread->join();
+    }
+
+    TAllocResult AllocWr(std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> cb) noexcept override  {
+        if (Err.load(std::memory_order_relaxed)) {
+            return TErr();
+        }
+        TWr* wr = nullptr;
+        Queue.Dequeue(&wr);
+        if (wr) {
+            wr->AttachCb(std::move(cb));
+            if (Err.load(std::memory_order_relaxed)) {
+                return TErr();
+            }
+            return static_cast<IWr*>(wr);
+        } else {
+            return  TBusy();
+        }
+    }
+
+    void ReturnWr(IWr* wr) noexcept override {
+        Queue.Enqueue(static_cast<TWr*>(wr));
+    }
+
+    void NotifyErr() noexcept override {
+        Err.store(true, std::memory_order_relaxed);
+    }
+
+    void Loop() noexcept {
+        while (Cont.load(std::memory_order_relaxed)) {
+            const constexpr size_t wcBatchSize = 16;
+            std::array<ibv_wc, wcBatchSize> wcs;
+            if (Err.load(std::memory_order_relaxed)) {
+                HandleErr();
+                Cont.store(false, std::memory_order_relaxed);
+            } else {
+                int rv = Do(wcs);
+                if (rv < 0) {
+                    //TODO: Is it correct err handling?
+                    Err.store(true, std::memory_order_relaxed);
+                } else if (rv == 0) {
+                    Idle();
+                } else {
+                    Y_ABORT_UNLESS(static_cast<size_t>(rv) <= wcs.size(), "ibv_poll_cq returns more then requested");
+                    HandleWc(wcs.data(), rv);
+                }
+            }
+        }
+    }
+
+    void HandleErr() noexcept {
+        for (size_t i = 0; i < WrBuf.size(); i++) {
+            TWr* wr = &WrBuf[i];
+            wr->ReplyErr(As);
+            Queue.Enqueue(wr);
+        }
+    }
+
+    void HandleWc(ibv_wc* wc, size_t sz) noexcept {
+        for (size_t i = 0; i < sz; i++, wc++) {
+            TWr* wr = &WrBuf[wc->wr_id];
+            wr->Reply(As, wc);
+            Queue.Enqueue(wr); 
+        }
+    }
+
+    int Start() noexcept {
+        Cont.store(true, std::memory_order_relaxed);
+        try {
+            Thread.emplace(&TSimpleCq::Loop, this);
+        } catch (std::exception& ex) {
+            Cerr << "Unable to launch cq poller thread" << Endl;
+            return 1;
+        }
+        return 0;
+    }
+private:
+    std::optional<std::thread> Thread;
+    std::atomic<bool> Cont;
+
+    std::vector<TWr> WrBuf;
+    std::atomic<size_t> WrCurSz;
+    // Queue is used to commnicate with client code (from actors)
+    // It is possible to use Single Producer Multiple Consumer queue here but in this case
+    // imlementation of Release() methos on IWr* will be musch more difficult
+    TLockFreeQueue<TWr*> Queue;
+    std::atomic<bool> Err;
+};
+
+ICq::TPtr ICq::MakeSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int max_cqe) noexcept {
+    auto p = std::make_shared<TSimpleCq>(as, 16);
+    int err = p->Init(ctx, max_cqe);
+    if (err) {
+        return nullptr;
+    }
+    err = p->Start();
+    if (err) {
+       return nullptr;
+    }
+
+    return p;
+}
 
 TQueuePair::~TQueuePair() {
     if (Qp) {
         ibv_destroy_qp(Qp);
     }
-    if (Cq) {
-        ibv_destroy_cq(Cq);
-    }
 }
 
-int TQueuePair::Init(TRdmaCtx* ctx) noexcept {
+int TQueuePair::Init(TRdmaCtx* ctx, ICq* icq, int maxWr) noexcept {
+    ibv_cq* cq = icq->GetCq();
+    Y_ABORT_UNLESS(cq);
     const ibv_device_attr& attr = ctx->GetDevAttr();
-    Cq = ibv_create_cq(ctx->GetContext(), attr.max_cqe, nullptr, nullptr, 0);
-    if (!Cq) {
-        return -1;
+
+    if (maxWr < 0) {
+        maxWr = attr.max_qp_wr;
     }
-    ibv_qp_init_attr qpInitAttr = {
-        .send_cq = Cq,
-        .recv_cq = Cq,
-        .cap = {
-            .max_send_wr = static_cast<ui32>(attr.max_qp_wr),
-            .max_recv_wr = static_cast<ui32>(attr.max_qp_wr),
-            .max_send_sge = static_cast<ui32>(attr.max_sge),
-            .max_recv_sge = static_cast<ui32>(attr.max_sge),
-            .max_inline_data = 0,
-        },
-        .qp_type = IBV_QPT_RC,
-        .sq_sig_all = 0,
-    };
+
+    ibv_qp_init_attr qpInitAttr;
+    bzero(&qpInitAttr, sizeof(qpInitAttr));
+    qpInitAttr.send_cq = cq;
+    qpInitAttr.recv_cq = cq;
+    qpInitAttr.cap.max_send_wr = static_cast<ui32>(maxWr);
+    qpInitAttr.cap.max_recv_wr = static_cast<ui32>(maxWr);
+    qpInitAttr.cap.max_send_sge = static_cast<ui32>(attr.max_sge);
+    qpInitAttr.cap.max_recv_sge = static_cast<ui32>(attr.max_sge);
+    qpInitAttr.qp_type = IBV_QPT_RC;
+
+    TStringStream ss;
+    ctx->Output(ss);
 
     Qp = ibv_create_qp(ctx->GetProtDomain(), &qpInitAttr);
     if (Qp) {
         return 0;
     } else {
-        return -1;
+        return errno;
     }
 }
 
@@ -141,25 +367,6 @@ void TQueuePair::Output(IOutputStream& os) const noexcept {
         os << "query err: " << err;
     } else {
         os << attr.qp_state;
-    }
-}
-
-void TQueuePair::ProcessCq() noexcept {
-    const int wcBatchSize = 1;
-    std::vector<ibv_wc> wcs(wcBatchSize);
-
-    int i = 0;
-
-    // Just for test.
-    while (i < 2) {
-        int numComp = ibv_poll_cq(Cq, wcBatchSize, &wcs.front());
-        if (numComp < 0) {
-            Cerr << "ibv_poll_cq failed: " << strerror(errno) << Endl;
-            return;
-        }
-        Cerr << "DONE " << wcs.front().wr_id << " " << ibv_wc_status_str(wcs.front().status)  << " " << wcs.front().qp_num << Endl;
-        Sleep(TDuration::Seconds(0.1));
-        i++;
     }
 }
 

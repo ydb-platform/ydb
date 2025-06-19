@@ -4,7 +4,9 @@
 #include "rdma/link_manager.h"
 #include "rdma/ctx.h"
 #include "rdma/rdma.h"
+#include "cq_actor.h"
 #include "rdma/mem_pool.h"
+#include "rdma/events.h"
 
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
@@ -248,6 +250,7 @@ namespace NActors {
         bool SubscribedForConnection = false;
         NInterconnect::NRdma::TRdmaCtx* RdmaCtx = nullptr;
         std::unique_ptr<NInterconnect::NRdma::TQueuePair> RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
         NInterconnect::NRdma::TMemRegionPtr HandShakeMemRegion; // region which will be read by RDMA during handshake
         static const size_t RdmaHandshakeRegionSize = 4096;
 
@@ -291,7 +294,6 @@ namespace NActors {
                 PeerAddr.clear();
             }
 
-            CreateRdmaQp();
         }
 
         void UpdatePrefix() {
@@ -738,20 +740,50 @@ namespace NActors {
             void* addr = mr->GetAddr();
             bzero(addr, cred.GetSize());
 
-            int err = RdmaQp->SendRdmaReadWr(1234, mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());
+            auto actorId = SelfActorId;
+            auto cb = [actorId](NActors::TActorSystem* as, NInterconnect::NRdma::TEvRdmaIoDone* ev){
+                as->Send(actorId, ev);
+            };
+
+            NInterconnect::NRdma::ICq::IWr* wr;
+            auto allocResult = RdmaCq->AllocWr(cb);
+            if (!NInterconnect::NRdma::ICq::IsWrSuccess(allocResult)) {
+                TStringBuilder sb;
+                sb << "Unable to allocate work reqeust, cq is " << NInterconnect::NRdma::ICq::IsWrBusy(allocResult) ? TString("full") : TString("err");
+                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                    sb.c_str());
+                    rdmaReadAck.SetErr(sb);
+                return rdmaReadAck;
+            } else {
+                wr = std::get<0>(allocResult);
+            }
+
+            int err = RdmaQp->SendRdmaReadWr(wr->GetId(), mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());
             if (err) {
                 TStringBuilder sb;
                 sb << "Unable to post rdma READ work request, error " << err;
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     sb.c_str());
                     rdmaReadAck.SetErr(sb);
+                wr->Release();
                 return rdmaReadAck;
             }
 
-            RdmaQp->ProcessCq();
-            //auto ev = WaitForSpecificEvent<TEvRdmaIoHandshakeDone>("TryRdmaRead");
-            ui32 crc = Crc32cExtendMSanCompatible(0, mr->GetAddr(), cred.GetSize());
-            rdmaReadAck.SetDigest(crc);
+            {
+                auto ev = WaitForSpecificEvent<NInterconnect::NRdma::TEvRdmaIoDone>("TryRdmaRead");
+                if (ev->Get()->IsSuccess()) {
+                    ui32 crc = Crc32cExtendMSanCompatible(0, mr->GetAddr(), cred.GetSize());
+                    rdmaReadAck.SetDigest(crc);
+                } else {
+                    if (ev->Get()->IsWcError()) {
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                        "Unable to complete rdma READ work request due to wc error, code: %d", ev->Get()->GetErrCode());
+                    } else {
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                            "Unable to complete rdma READ work request due to cq runtime error");
+                    }
+                }
+            }
 
             return rdmaReadAck; 
         }
@@ -1028,6 +1060,8 @@ namespace NActors {
             // set up incoming socket
             MainChannel.SetupSocket();
             MainChannel.RegisterInPoller();
+
+            CreateRdmaQp();
 
             // wait for initial request packet
             TInitialPacket request;
@@ -1335,12 +1369,33 @@ namespace NActors {
             }
 
             if (RdmaCtx) {
-                RdmaQp.reset(new NInterconnect::NRdma::TQueuePair);
-                int err = RdmaQp->Init(RdmaCtx);
-                if (err) {
-                    LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");
+                if (auto cqPtr = CreateRdmaCq()) {
+                    LOG_DEBUG_IC("ICRDMA", "Got CQ handle at: %p", (void*)cqPtr.get());
+                    RdmaQp.reset(new NInterconnect::NRdma::TQueuePair);
+                    int err = RdmaQp->Init(RdmaCtx, cqPtr.get(), 16); //TODO: move in to settings
+                    if (err) {
+                        LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");
+                        RdmaQp.reset();
+                        RdmaCtx = nullptr;
+                    } else {
+                        RdmaCq = cqPtr;
+                    }
+                 } else {
+                    LOG_ERROR_IC("ICRDMA", "Unable to get CQ handle, no more attempt to use RDMA on this session");
                     RdmaCtx = nullptr;
                 }
+            }
+        }
+
+        NInterconnect::NRdma::ICq::TPtr CreateRdmaCq() {
+            const bool success = Send(NInterconnect::NRdma::MakeCqActorId(), new NInterconnect::NRdma::TEvGetCqHandle(RdmaCtx));
+            Y_ABORT_UNLESS(success);
+            auto ev = WaitForSpecificEvent<NInterconnect::NRdma::TEvGetCqHandle>("TEvGetCqHandle");
+            if (!ev) {
+                LOG_CRIT_IC("ICRDMA", "Unable to get response from CQ actor");
+                return nullptr;
+            } else {
+                return ev->Get()->CqPtr;
             }
         }
 

@@ -41,6 +41,7 @@ namespace NYdb::NConsoleClient {
             for (auto& candidate : Apply(text, prefix, contextLen, /* light = */ true)) {
                 hints.emplace_back(std::move(candidate.text()));
             }
+            hints.emplace_back("");
             return hints;
         }
 
@@ -79,6 +80,7 @@ namespace NYdb::NConsoleClient {
             const size_t prefixLen = candidate.Content.length() - candidate.CursorShift;
             candidate.Content.resize(prefixLen);
 
+            Y_ENSURE(!candidate.Content.empty());
             const auto back = candidate.Content.back();
             if (
                 !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName ||

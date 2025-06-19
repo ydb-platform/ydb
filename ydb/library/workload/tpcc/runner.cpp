@@ -378,17 +378,16 @@ void TPCCRunner::RunSync() {
     // a huge queue of ready terminals, which we can't handle
     bool forcedWarmup = false;
     uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
-    uint32_t minWarmupMinutes = (minWarmupSeconds + 59) / 60;
-    uint32_t warmupMinutes;
-    if (Config.WarmupDuration.Minutes() < minWarmupMinutes) {
+    uint32_t warmupSeconds;
+    if (Config.WarmupDuration.Seconds() < minWarmupSeconds) {
         forcedWarmup = true; // we must print log message later after display update
-        warmupMinutes = minWarmupMinutes;
+        warmupSeconds = minWarmupSeconds;
     } else {
-        warmupMinutes = Config.WarmupDuration.Minutes();
+        warmupSeconds = Config.WarmupDuration.Seconds();
     }
 
     WarmupStartTs = Clock::now();
-    WarmupStopDeadline = WarmupStartTs + std::chrono::minutes(warmupMinutes);
+    WarmupStopDeadline = WarmupStartTs + std::chrono::seconds(warmupSeconds);
 
     // we want to switch buffers and draw UI ASAP to properly display logs
     // produced after this point and before the first screen update
@@ -397,10 +396,10 @@ void TPCCRunner::RunSync() {
     }
 
     if (forcedWarmup) {
-        LOG_I("Forced minimal warmup time: " << minWarmupMinutes << " minutes");
+        LOG_I("Forced minimal warmup time: " << TDuration::Seconds(warmupSeconds));
     }
 
-    LOG_I("Starting warmup for " << warmupMinutes << " minutes");
+    LOG_I("Starting warmup for " << TDuration::Seconds(warmupSeconds));
 
     size_t startedTerminalId = 0;
     for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {

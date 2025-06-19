@@ -457,7 +457,6 @@ def normalize_result_schema(result):
                                           'EffectiveACL',
                                           'CreateTxId',
                                           'PathId',
-                                          'size_bytes',
                                           ])
 
 
@@ -494,6 +493,7 @@ def normalize_result(result):
                                      'ReadThroughput',
                                      'Read',
                                      'Write',
+                                     'size_bytes',
                                      ])
     result = wipe_values_by_key(result, ['LatencyGetFast',
                                          'LatencyPutTabletLog',

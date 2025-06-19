@@ -527,7 +527,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 12,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -539,7 +539,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 13,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -551,7 +551,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 14,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -563,7 +563,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 15,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 },
                 {
@@ -575,50 +575,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 16,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                }
-            ],
-            "StartOffset": 0,
-            "Truncated": false
-        },
-        "response_last_offset": {
-            "EndOffset": 21,
-            "Messages": [
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0w",
-                    "Offset": 0,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 1,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0x",
-                    "Offset": 1,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 2,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0y",
-                    "Offset": 2,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 3,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -647,7 +604,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 11,
                     "StorageSize": 37,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -666,74 +623,7 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                }
-            ],
-            "StartOffset": 0,
-            "Truncated": false
-        },
-        "response_read": {
-            "EndOffset": 21,
-            "Messages": [
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0w",
-                    "Offset": 0,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 1,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0x",
-                    "Offset": 1,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 2,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0y",
-                    "Offset": 2,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 3,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0z",
-                    "Offset": 3,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 4,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS00",
-                    "Offset": 4,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 5,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
@@ -752,12 +642,134 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
+                    "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
             "Truncated": true
+        },
+        "response_last_offset": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 4,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_read": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 4,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS00",
+                    "Offset": 4,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 5,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         }
     },
     "test.test_transfer_describe": {

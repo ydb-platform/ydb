@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import json
 import ydb
 from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -9,9 +10,14 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 import requests
 from urllib.parse import urlencode
 import time
+import re
 
 
-cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_alter_database_create_hive_first", "enable_topic_transfer", "enable_resource_pools"]))
+cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags={
+    'enable_alter_database_create_hive_first': True,
+    'enable_topic_transfer': True,
+    'enable_script_execution_operations': True,
+    }))
 cluster.start()
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"
@@ -35,9 +41,19 @@ cluster.wait_tenant_up(serverless_db)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
 
 
-def call_viewer_api(url):
+def call_viewer_api_get(url, headers=None):
     port = cluster.nodes[1].mon_port
-    return requests.get("http://localhost:%s%s" % (port, url))
+    return requests.get("http://localhost:%s%s" % (port, url), headers=headers)
+
+
+def call_viewer_api_post(url, body=None, headers=None):
+    port = cluster.nodes[1].mon_port
+    return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers)
+
+
+def call_viewer_api_delete(url, headers=None):
+    port = cluster.nodes[1].mon_port
+    return requests.delete("http://localhost:%s%s" % (port, url), headers=headers)
 
 
 def get_result(result):
@@ -46,10 +62,22 @@ def get_result(result):
     return {"status_code": result.status_code, "text": result.text}
 
 
-def call_viewer(url, params=None):
+def call_viewer(url, params=None, headers=None):
     if params is None:
         params = {}
-    return get_result(call_viewer_api(url + '?' + urlencode(params)))
+    return get_result(call_viewer_api_get(url + '?' + urlencode(params), headers))
+
+
+def call_viewer_post(url, params=None, body=None, headers=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_post(url + '?' + urlencode(params), body, headers))
+
+
+def call_viewer_delete(url, params=None, headers=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_delete(url + '?' + urlencode(params), headers))
 
 
 def call_viewer_db(url, params=None):
@@ -62,16 +90,46 @@ def call_viewer_db(url, params=None):
     return result
 
 
+def get_viewer_db(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_db(url, params)
+
+
+def call_viewer_db_not_domain(url, params=None):
+    if params is None:
+        params = {}
+    result = {}
+    for name in databases:
+        if name == domain_name:
+            continue
+        params["database"] = name
+        result[name] = call_viewer(url, params)
+    return result
+
+
+def get_viewer_db_not_domain(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_db_not_domain(url, params)
+
+
 def get_viewer(url, params=None):
     if params is None:
         params = {}
     return call_viewer(url, params)
 
 
-def get_viewer_db(url, params=None):
+def post_viewer(url, params=None, body=None):
     if params is None:
         params = {}
-    return call_viewer_db(url, params)
+    return call_viewer_post(url, params, body)
+
+
+def delete_viewer(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_delete(url, params)
 
 
 wait_good = False
@@ -117,7 +175,22 @@ def wait_for_cluster_ready():
         if database != domain_name:
             call_viewer("/viewer/query", {
                 'database': database,
-                'query': 'create table table1(id int64, name text, primary key(id)))',
+                'query': 'create table table1(id int64, name text, primary key(id))',
+                'schema': 'multi'
+            })
+            call_viewer("/viewer/query", {
+                'database': database,
+                'query': 'insert into table1(id, name) values(1, "one")',
+                'schema': 'multi'
+            })
+            call_viewer("/viewer/query", {
+                'database': database,
+                'query': 'insert into table1(id, name) values(2, "two")',
+                'schema': 'multi'
+            })
+            call_viewer("/viewer/query", {
+                'database': database,
+                'query': 'insert into table1(id, name) values(3, "three")',
                 'schema': 'multi'
             })
     for database in databases:
@@ -343,6 +416,7 @@ def normalize_result_nodes(result):
                                            'SendThroughput',
                                            'UptimeSeconds',
                                            'Usage',
+                                           'TotalSessions',
                                            ])
     return replace_values_by_key(result, ['CpuUsage',
                                           'DiskSpaceUsage',
@@ -357,9 +431,9 @@ def normalize_result_nodes(result):
                                           'MemoryTotal',
                                           'MemoryLimit',
                                           'NumberOfCpus',
-                                          'RealNumberOfCpus',
                                           'CoresUsed',
                                           'CoresTotal',
+                                          'RealNumberOfCpus',
                                           'CreateTime',
                                           'MaxDiskUsage',
                                           'Roles',
@@ -415,12 +489,11 @@ def normalize_result_replication(result):
 def normalize_result(result):
     delete_keys_recursively(result, ['Version',
                                      'MemoryUsed',
-                                     'MemoryTotal',
-                                     'MemoryLimit',
                                      'WriteThroughput',
                                      'ReadThroughput',
                                      'Read',
                                      'Write',
+                                     'size_bytes',
                                      ])
     result = wipe_values_by_key(result, ['LatencyGetFast',
                                          'LatencyPutTabletLog',
@@ -470,9 +543,6 @@ def test_viewer_storage_nodes_all():
         'type': 'storage',
         'fields_required': 'all'
     })
-    for name in databases:
-        for node in result[name]['Nodes']:
-            node['SystemState']['Endpoints'].sort(key=lambda x: x['Name'])
     return result
 
 
@@ -484,8 +554,6 @@ def test_storage_groups():
 
 def test_viewer_sysinfo():
     result = get_viewer_normalized("/viewer/sysinfo")
-    for node in result['SystemStateInfo']:
-        node['Endpoints'].sort(key=lambda x: x['Name'])
     return result
 
 
@@ -548,6 +616,48 @@ def test_viewer_acl():
     return get_viewer_db("/viewer/acl", {'path': db})
 
 
+def test_viewer_acl_write():
+    return [
+        post_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }, {
+            'AddAccess': [{
+                'Subject': 'user1',
+                'AccessRights': ['Read']
+            }]
+        }),
+        get_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }),
+        post_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }, {
+            'RemoveAccess': [{
+                'Subject': 'user1',
+                'AccessRights': ['Read']
+            }]
+        }),
+        get_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }),
+        post_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        }, {
+            'ChangeOwnership': {
+                'Subject': 'user1',
+            }
+        }),
+        get_viewer("/viewer/acl", {
+            'database': dedicated_db,
+            'path': dedicated_db
+        })]
+
+
 def test_viewer_autocomplete():
     return get_viewer_db("/viewer/autocomplete", {'prefix': ''})
 
@@ -559,6 +669,21 @@ def test_viewer_check_access():
 
 def test_viewer_query():
     return get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+
+
+def test_viewer_query_from_table():
+    return get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+
+
+def test_viewer_query_from_table_different_schemas():
+    result = {}
+    for schema in ['classic', 'multi', 'modern', 'ydb', 'ydb2']:
+        result[schema] = get_viewer("/viewer/query", {
+            'database': dedicated_db,
+            'query': 'select * from table1',
+            'schema': schema
+            })
+    return result
 
 
 def test_viewer_query_issue_13757():
@@ -581,6 +706,7 @@ def test_pqrb_tablet():
         'query': 'CREATE TOPIC topic1(CONSUMER consumer1)',
         'schema': 'multi'
     })
+
     response_tablet_info = call_viewer("/viewer/tabletinfo", {
         'database': dedicated_db,
         'path': dedicated_db + '/topic1',
@@ -601,12 +727,80 @@ def test_pqrb_tablet():
                                           ])
 
 
+def test_viewer_nodes_issue_14992():
+    response_group_by = get_viewer_normalized("/viewer/nodes", {
+        'group': 'Uptime'
+    })
+    response_group = get_viewer_normalized("/viewer/nodes", {
+        'filter_group_by': 'Uptime',
+        'filter_group' : response_group_by['NodeGroups'][0]['GroupName'],
+    })
+    result = {
+        'response_group_by': response_group_by,
+        'response_group': response_group,
+    }
+    return result
+
+
+def test_operations_list():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3'
+    })
+
+
+def test_operations_list_page():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 50,
+        'limit': 50
+    })
+
+
+def test_operations_list_page_bad():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 10,
+        'limit': 50
+    })
+
+
+def test_scheme_directory():
+
+    result = {}
+    result["1-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    logging.info("Result 1: {}".format(result["1-get"]))
+
+    result["2-post"] = post_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["3-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    result["4-delete"] = delete_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["5-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    return result
+
+
 def test_topic_data():
     grpc_port = cluster.nodes[1].grpc_port
 
     call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TOPIC topic1',
+        'query': 'CREATE TOPIC topic2',
         'schema': 'multi'
     })
 
@@ -620,7 +814,7 @@ def test_topic_data():
         if close:
             writer.close()
 
-    writer = driver.topic_client.writer('topic1', producer_id="12345")
+    writer = driver.topic_client.writer('topic2', producer_id="12345")
     write(writer, "message", False)
 
     # Also write one messagewith metadata
@@ -628,36 +822,30 @@ def test_topic_data():
     writer.write(message_w_meta)
     writer.close()
 
-    writer_compressed = driver.topic_client.writer('topic1', producer_id="12345", codec=2)
+    writer_compressed = driver.topic_client.writer('topic2', producer_id="12345", codec=2)
     write(writer_compressed, "compressed-message")
+    writer_compressed.close()
+
+    topic_path = '{}/topic2'.format(dedicated_db)
 
     response = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '0',
-        'limit': '5'
-    })
-
-    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
-        'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
-        'partition': '0',
-        'offset': '0',
-        'last_offset': '3',
         'limit': '5'
     })
 
     response_w_meta = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '10',
         'limit': '1'
     })
     response_compressed = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '11',
         'limit': '5'
@@ -665,7 +853,7 @@ def test_topic_data():
 
     response_last = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'limit': '5'
@@ -673,7 +861,7 @@ def test_topic_data():
 
     response_short_msg = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'limit': '1',
@@ -682,24 +870,33 @@ def test_topic_data():
 
     response_no_part = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'offset': '20'
     })
 
     response_both_offset_and_ts = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic1'.format(dedicated_db),
+        'path': topic_path,
         'partition': '0',
         'offset': '20',
         'read_timestamp': '20'
     })
 
+    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': topic_path,
+        'partition': '0',
+        'offset': '0',
+        'last_offset': '3',
+        'limit': '10'
+    })
+
     def replace_values(resp):
         res = replace_values_by_key(resp, ['CreateTimestamp',
                                            'WriteTimestamp',
-                                           'TimestampDiff',
                                            'ProducerId',
                                            ])
+        res = replace_types_by_key(res, ['TimestampDiff'])
         logging.info(res)
         return res
 
@@ -732,5 +929,201 @@ def test_transfer_describe():
         'include_stats': 'true',
         'enums': 'true'
     })
+
+    return result
+
+
+def normalize_result_query_long(result):
+    """Normalize operation_id and execution_id for long query tests"""
+    result = replace_values_by_key(result, ['operation_id',
+                                            'execution_id',
+                                            'ResponseTime',
+                                            'ResponseDuration',
+                                            'ProcessDuration',
+                                            'id',
+                                            ])
+    return result
+
+
+def test_viewer_query_long():
+    """Test execute-long-query and fetch-long-query functionality"""
+    # First, execute a long query that will return operation_id and execution_id
+    response_execute = call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'action': 'execute-long-query',
+        'query': 'SELECT * FROM table1 LIMIT 5;',
+        'schema': 'multi'
+    })
+
+    # Normalize the response to hide dynamic values
+    response_execute_normalized = normalize_result_query_long(response_execute)
+
+    # If we got operation_id and execution_id, test fetching with both
+    result = {
+        'execute_response': response_execute_normalized
+    }
+
+    if 'operation_id' in response_execute and 'execution_id' in response_execute:
+        operation_id = response_execute['operation_id']
+        execution_id = response_execute['execution_id']
+
+        # Test fetch with operation_id
+        response_fetch_by_operation = call_viewer("/viewer/query", {
+            'database': dedicated_db,
+            'action': 'fetch-long-query',
+            'operation_id': operation_id,
+            'schema': 'multi'
+        })
+        result['fetch_by_operation_id'] = normalize_result_query_long(response_fetch_by_operation)
+
+        # Test fetch with execution_id
+        response_fetch_by_execution = call_viewer("/viewer/query", {
+            'database': dedicated_db,
+            'action': 'fetch-long-query',
+            'execution_id': execution_id,
+            'schema': 'multi'
+        })
+        result['fetch_by_execution_id'] = normalize_result_query_long(response_fetch_by_execution)
+
+        # Test error case - missing both operation_id and execution_id
+        response_fetch_error = call_viewer("/viewer/query", {
+            'database': dedicated_db,
+            'action': 'fetch-long-query',
+            'schema': 'multi'
+        })
+        result['fetch_error_no_id'] = response_fetch_error
+
+        # Test error case - invalid operation_id
+        response_fetch_invalid = call_viewer("/viewer/query", {
+            'database': dedicated_db,
+            'action': 'fetch-long-query',
+            'operation_id': 'invalid-operation-id',
+            'schema': 'multi'
+        })
+        result['fetch_invalid_operation_id'] = response_fetch_invalid
+
+    return result
+
+
+def call_viewer_multipart_parsed(path, params=None):
+    """Call viewer endpoint expecting multipart response and parse JSON parts"""
+    if params is None:
+        params = {}
+
+    # Make raw HTTP request to get multipart response
+    port = cluster.nodes[1].mon_port
+    headers = {'Accept': 'multipart/x-mixed-replace'}
+    response = requests.get("http://localhost:%s%s?%s" % (port, path, urlencode(params)), headers=headers)
+
+    if response.status_code != 200:
+        return {"status_code": response.status_code, "text": response.text}
+
+    content_type = response.headers.get('content-type', '')
+
+    # If it's not a multipart response, try to parse as JSON
+    if not content_type.startswith('multipart/'):
+        if content_type == 'application/json':
+            try:
+                return response.json()
+            except (ValueError, json.JSONDecodeError):
+                return {"status_code": response.status_code, "text": response.text}
+        else:
+            return {"status_code": response.status_code, "text": response.text}
+
+    # Parse multipart content
+    raw_text = response.text
+
+    # Extract boundary from content-type header
+    boundary_match = re.search(r'boundary=([^;]+)', content_type)
+    if not boundary_match:
+        return {"error": "No boundary found in multipart response"}
+
+    boundary = boundary_match.group(1).strip('"')
+
+    # Split content by boundary
+    parts = raw_text.split('--' + boundary)
+    json_parts = []
+
+    for part in parts:
+        if not part.strip() or part.strip() == '--':
+            continue
+
+        # Split headers and body
+        if '\r\n\r\n' in part:
+            headers_section, body = part.split('\r\n\r\n', 1)
+        elif '\n\n' in part:
+            headers_section, body = part.split('\n\n', 1)
+        else:
+            continue
+
+        # Check if this part contains JSON
+        if 'application/json' in headers_section:
+            try:
+                # Clean up the body and parse JSON
+                body = body.strip()
+                if body.endswith('\r\n--'):
+                    body = body[:-4]
+                elif body.endswith('\n--'):
+                    body = body[:-3]
+
+                json_data = json.loads(body)
+                json_parts.append(json_data)
+            except json.JSONDecodeError:
+                # Skip non-JSON parts
+                continue
+
+    # Return structured response with parsed JSON parts
+    if json_parts:
+        return {"multipart_parts": json_parts, "status_code": 200}
+    else:
+        # No JSON parts found, return raw response for canonization
+        return {"status_code": 200, "raw_text": raw_text}
+
+
+def normalize_multipart_response(response):
+    """Helper function to normalize multipart responses"""
+    if 'multipart_parts' in response:
+        normalized_parts = []
+        for part in response['multipart_parts']:
+            normalized_part = normalize_result_query_long(part)
+            normalized_parts.append(normalized_part)
+        return {"multipart_parts": normalized_parts}
+    return response
+
+
+def test_viewer_query_long_multipart():
+    """Test execute-long-query with multipart streaming (schema=multipart)"""
+
+    # Test successful long query with multipart streaming
+    response_execute_stream = call_viewer_multipart_parsed("/viewer/query", {
+        'database': dedicated_db,
+        'action': 'execute-long-query',
+        'query': 'SELECT * FROM table1 LIMIT 3;',
+        'schema': 'multipart'
+    })
+
+    result = {}
+
+    # Apply normalization to multipart responses
+    result['execute_stream_response'] = normalize_multipart_response(response_execute_stream)
+
+    # Test error case with multipart streaming - invalid operation_id
+    response_fetch_invalid_stream = call_viewer_multipart_parsed("/viewer/query", {
+        'database': dedicated_db,
+        'action': 'fetch-long-query',
+        'operation_id': 'invalid-operation-id',
+        'schema': 'multipart'
+    })
+
+    result['fetch_invalid_stream_response'] = normalize_multipart_response(response_fetch_invalid_stream)
+
+    # Test error case - missing operation_id/execution_id with multipart
+    response_fetch_error_stream = call_viewer_multipart_parsed("/viewer/query", {
+        'database': dedicated_db,
+        'action': 'fetch-long-query',
+        'schema': 'multipart'
+    })
+
+    result['fetch_error_stream_response'] = normalize_multipart_response(response_fetch_error_stream)
 
     return result

@@ -181,7 +181,7 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=0");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_continue")("deadline", GetComputeDeadline())("timeout", Timeout)("now", TMonotonic::Now());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "scan_continue")("deadline", GetComputeDeadlineOptional())("timeout", Timeout)("now", TMonotonic::Now());
         ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
     }
 }
@@ -441,7 +441,15 @@ TMonotonic TColumnShardScan::GetScanDeadline() const {
 }
 
 TMonotonic TColumnShardScan::GetComputeDeadline() const {
-    AFL_VERIFY(!AckReceivedInstant);
+    auto result = GetComputeDeadlineOptional();
+    AFL_VERIFY(!!result);
+    return *result;
+}
+
+std::optional<TMonotonic> TColumnShardScan::GetComputeDeadlineOptional() const {
+    if (AckReceivedInstant) {
+        return std::nullopt;
+    }
     return (LastResultInstant ? *LastResultInstant : *StartInstant) + Timeout;
 }
 

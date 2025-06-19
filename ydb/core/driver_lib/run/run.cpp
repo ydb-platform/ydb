@@ -1114,8 +1114,19 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const auto& cfg = runConfig.AppConfig;
 
     bool useAutoConfig = !cfg.HasActorSystemConfig() || (cfg.GetActorSystemConfig().HasUseAutoConfig() && cfg.GetActorSystemConfig().GetUseAutoConfig());
+    bool useSharedThreads = cfg.HasActorSystemConfig() && cfg.GetActorSystemConfig().HasUseSharedThreads() && cfg.GetActorSystemConfig().GetUseSharedThreads();
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
+
+    if (useSharedThreads) {
+        pools.SystemPoolId = 0;
+        pools.UserPoolId = 1;
+        pools.BatchPoolId = 2;
+        pools.IOPoolId = 3;
+        pools.ICPoolId = 4;
+        servicePools.clear();
+        servicePools["Interconnect"] = 4;
+    }
 
     AppData.Reset(new TAppData(pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
                                servicePools,

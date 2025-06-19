@@ -3,6 +3,7 @@ import ydb
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
+
 class TestUpgradeToInternalPathId:
     cluster = None
     session = None
@@ -63,11 +64,11 @@ class TestUpgradeToInternalPathId:
         for row in rows:
             internalPathId = row["InternalPathId"]
             pathId = row["PathId"]
-            if not internalPathId in result:
+            if internalPathId not in result:
                 result[internalPathId] = {}
-            if not pathId in result[internalPathId]:
+            if pathId not in result[internalPathId]:
                 result[internalPathId][pathId] = 0
-            result [internalPathId][pathId] += 1
+            result[internalPathId][pathId] += 1
         return result
 
     def test(self):

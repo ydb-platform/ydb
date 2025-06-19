@@ -102,7 +102,7 @@ public:
                 p->Get()->CqPtr = cqPtr;
                 TlsActivationContext->Send(p->Sender, std::unique_ptr<TEvGetCqHandle>(p->Release().Release()));
             }
-            std::get<0>(it->second).AsyncEventToken->Request(true, true);
+            std::get<0>(it->second).AsyncEventToken->Request(true, false);
         } else {
             for (auto p : waiters) {
                 TlsActivationContext->Send(p->Sender, std::unique_ptr<TEvGetCqHandle>(p->Release().Release()));
@@ -195,7 +195,7 @@ private:
                 CqMap.erase(it);
             break;
             default:
-                std::get<0>(it->second).AsyncEventToken->Request(true, true);
+                std::get<0>(it->second).AsyncEventToken->Request(true, false);
             break;
         }
         ibv_ack_async_event(&async_event);

@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -634,7 +634,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "meta"},
+                {TableName, "meta`"},
                 {FolderName, "service/"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `test/"), expected);
@@ -658,13 +658,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:saurus."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people"},
+                {TableName, "`people`"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example."), expected);
         }
@@ -680,7 +680,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -689,14 +689,14 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people"},
+                {TableName, "`people`"},
                 {FolderName, "`yql/"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE yt:saurus; SELECT * FROM example."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -706,7 +706,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {BindingName, "$hello"},
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {BindingName, "$action"},
-                {TableName, "`people"},
+                {TableName, "`people`"},
                 {FolderName, "`yql/"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
@@ -1401,8 +1401,8 @@ JOIN yt:$cluster_name.test;
         auto petyaEngine = MakeSqlCompletionEngine(lexer, std::move(petyaService));
 
         TVector<TCandidate> empty;
-        TVector<TCandidate> aliceExpected = {{TableName, "`alice"}};
-        TVector<TCandidate> petyaExpected = {{TableName, "`petya"}};
+        TVector<TCandidate> aliceExpected = {{TableName, "`alice`"}};
+        TVector<TCandidate> petyaExpected = {{TableName, "`petya`"}};
 
         // Cache is empty
         UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), empty);

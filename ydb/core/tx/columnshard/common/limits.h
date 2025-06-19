@@ -17,6 +17,7 @@ public:
     static constexpr double CompactionTtlQueueLimitCoefficient = 0.125;
     static constexpr double CompactionGeneralQueueLimitCoefficient = 0.375;
     static constexpr double CompactionNormalizerQueueLimitCoefficient = 0.375;
+    static constexpr double GroupedMemoryLimiterCompactionLimitCoefficient = 0.375;
 
     static_assert((CompactionIndexationQueueLimitCoefficient + CompactionTtlQueueLimitCoefficient +
                    CompactionGeneralQueueLimitCoefficient + CompactionNormalizerQueueLimitCoefficient - 1.0 <
@@ -25,5 +26,7 @@ public:
                    CompactionGeneralQueueLimitCoefficient + CompactionNormalizerQueueLimitCoefficient) <
                    std::numeric_limits<double>::epsilon()),
                   "Compaction coefficients sum must be equal to 1.0");
+    
+    static constexpr double GroupedMemoryLimiterSoftLimitCoefficient = 0.3;
 };
 }

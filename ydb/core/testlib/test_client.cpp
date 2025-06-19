@@ -445,10 +445,8 @@ namespace Tests {
         const auto nodeCount = StaticNodes() + DynamicNodes();
 
         if (Settings->AuditLogBackendLines) {
-            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, 
-                                                    Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
-                                                    Settings->UseRealThreads,
-                                                    CreateTestAuditLogBackends(*Settings->AuditLogBackendLines));
+            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
+                                                    Settings->UseRealThreads, CreateTestAuditLogBackends(*Settings->AuditLogBackendLines));
         } else {
             Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
                                                     Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
@@ -688,7 +686,7 @@ namespace Tests {
                 if (const auto& domain = appData.DomainsInfo->Domain) {
                     rootDomains.emplace_back("/" + domain->Name);
                 }
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());    
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
             } else {
                 desc->ServedDatabases.emplace_back(CanonizePath(*tenant));
             }
@@ -1171,6 +1169,13 @@ namespace Tests {
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
+            auto* actor = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::CreateService(NOlap::NGroupedMemoryManager::TConfig(),
+                                                                                                  new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid,
+                                     nodeIdx);
+        }
+        {
             auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), new ::NMonitoring::TDynamicCounters());
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
@@ -1454,7 +1459,7 @@ namespace Tests {
             IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
-            
+
             TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateTransactionsCoordinator(), nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeTransactionsServiceID(Runtime->GetNodeId(nodeIdx)), kafkaTxnCoordinatorActorId, nodeIdx);
 

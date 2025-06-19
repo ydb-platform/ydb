@@ -7,13 +7,13 @@
 namespace NKikimr::NReplication {
 
 TLocalTopicPartitionCommitActor::TLocalTopicPartitionCommitActor(
-    const TActorId& parent,
-    const std::string& database,
-    std::string&& topicName,
-    ui64 partitionId,
-    std::string&& consumerName,
-    std::optional<std::string>&& readSessionId,
-    ui64 offset)
+        const TActorId& parent,
+        const std::string& database,
+        std::string&& topicName,
+        ui64 partitionId,
+        std::string&& consumerName,
+        std::optional<std::string>&& readSessionId,
+        ui64 offset)
     : TBaseLocalTopicPartitionActor(database, std::move(topicName), partitionId)
     , Parent(parent)
     , ConsumerName(std::move(consumerName))

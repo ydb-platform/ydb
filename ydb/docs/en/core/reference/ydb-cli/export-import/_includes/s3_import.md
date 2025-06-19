@@ -65,7 +65,7 @@ If successful, the `import s3` command prints summary information about the enqu
    ...
    ```
 
-- In the proto-json-base64 mode, the operation ID is in the "id" attribute:
+- In the `proto-json-base64` mode, the operation ID is in the "id" attribute:
 
    ```json
    {"id":"ydb://export/8?id=281474976788395&kind=s3","ready":true, ... }
@@ -96,7 +96,7 @@ You can track the import by changes in the "progress" attribute:
    ...
    ```
 
-- In the proto-json-base64 mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
+- In the `proto-json-base64` mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
 
    ```json
    {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
@@ -129,17 +129,17 @@ The `operation list` format is also set by the `--format` option.
 Importing to the database root the contents of the `export1` directory in the `mybucket` bucket using the S3 authentication parameters taken from the environment variables or the `~/.aws/credentials` file:
 
 ```bash
-ydb -p quickstart import s3 \
+{{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --item src=export1,dst=.
 ```
 
 ### Importing multiple directories {#example-specific-dirs}
 
-Importing items from the dir1 and dir2 directories in the `mybucket` S3 bucket to the same-name database directories using explicitly specified S3 authentication parameters:
+Importing items from the `dir1` and `dir2` directories in the `mybucket` S3 bucket to the same-name database directories using explicitly specified S3 authentication parameters:
 
 ```bash
-ydb -p quickstart import s3 \
+{{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2

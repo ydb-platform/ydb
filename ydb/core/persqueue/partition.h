@@ -35,7 +35,7 @@ static const ui32 MAX_USER_ACTS = 1000;
 // after transaction timeout has passed.
 //
 // Total time till kafka supportive partition deletion = AppData.KafkaProxyConfig.TransactionTimeoutMs + KAFKA_TRANSACTION_DELETE_DELAY_MS
-static const ui32 KAFKA_TRANSACTION_DELETE_DELAY_MS = 60 * 60 * 1000; // 1 hour;
+static const ui32 KAFKA_TRANSACTION_DELETE_DELAY_MS = TDuration::Hours(1).MilliSeconds(); // 1 hour;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 

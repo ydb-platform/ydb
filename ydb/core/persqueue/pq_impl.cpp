@@ -927,6 +927,8 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
             SubscribeWriteId(writeId, ctx);
         }
 
+        // this branch will be executed only if EnableKafkaTransactions feature flag is enabled, cause 
+        // sending transactional requests through Kafka API is restricted by feature flag here: ydb/core/kafka_proxy/kafka_connection.cpp
         if (txWrite.GetKafkaTransaction() && txWrite.HasCreatedAt()) {
             writeInfo.KafkaTransaction = true;
             writeInfo.CreatedAt = TInstant::MilliSeconds(txWrite.GetCreatedAt());
@@ -3185,7 +3187,7 @@ void TPersQueue::ScheduleDeleteExpiredKafkaTransactions() {
     };
 
     for (auto& pair : TxWrites) {
-        if (pair.second.KafkaTransaction && txnExpired(pair.second)) {
+        if (txnExpired(pair.second)) {
             BeginDeletePartitions(pair.second);
         }
     }

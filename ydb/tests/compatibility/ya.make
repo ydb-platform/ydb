@@ -29,11 +29,17 @@ REQUIREMENTS(ram:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
+
 DEPENDS(
-    ydb/apps/ydb
-    ydb/apps/ydbd
     ydb/tests/library/compatibility/binaries
 )
+IF(${YDB_COMPAT_TARGET_REF} == "current" OR NOT ${YDB_COMPAT_TARGET_REF})
+    DEPENDS(
+        ydb/apps/ydb
+        ydb/apps/ydbd
+    )
+ENDIF()
+
 
 PEERDIR(
     contrib/python/boto3

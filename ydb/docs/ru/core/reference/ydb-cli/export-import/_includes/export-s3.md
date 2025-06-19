@@ -169,7 +169,7 @@
 
 Выгрузка директории dir1 базы данных с шифрованием секретным ключом, содержащимся в файле `~/my_secret_key`, в директорию `export1` бакета `mybucket` с использованием параметров аутентификации S3 из переменных окружения или файла `~/.aws/credentials`:
 
-```bashAdd commentMore actions
+```bash
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --root-path dir1 \

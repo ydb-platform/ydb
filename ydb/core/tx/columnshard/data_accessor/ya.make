@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     actor.cpp
-    metadata_cache_actor.cpp
+    shared_metadata_accessor_cache_actor.cpp
     events.cpp
     request.cpp
     manager.cpp

@@ -95,9 +95,9 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TSharedMetadaCacheInitializer : public IKikimrServicesInitializer {
+class TSharedMetadataAccessorCacheInitializer : public IKikimrServicesInitializer {
 public:
-TSharedMetadaCacheInitializer(const TKikimrRunConfig& runConfig);
+TSharedMetadataAccessorCacheInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };

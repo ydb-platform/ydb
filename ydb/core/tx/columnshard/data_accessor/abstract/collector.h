@@ -103,14 +103,14 @@ public:
         }
     };
 
-    using TMetadataCache = TLRUCache<std::tuple<TActorId, TInternalPathId, ui64>, TPortionDataAccessor, TNoopDelete, IGranuleDataAccessor::TMetadataSizeProvider>;
+    using TSharedMetadataAccessorCache = TLRUCache<std::tuple<TActorId, TInternalPathId, ui64>, TPortionDataAccessor, TNoopDelete, IGranuleDataAccessor::TMetadataSizeProvider>;
 private:
     const TInternalPathId PathId;
 
     virtual void DoAskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) = 0;
     virtual TDataCategorized DoAnalyzeData(const TPortionsByConsumer& portions) = 0;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) = 0;
-    virtual void DoSetCache(std::shared_ptr<TMetadataCache>) = 0;
+    virtual void DoSetCache(std::shared_ptr<TSharedMetadataAccessorCache>) = 0;
     virtual void DoSetOwner(const TActorId& owner) = 0;
 
 public:
@@ -130,7 +130,7 @@ public:
     void ModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
         return DoModifyPortions(add, remove);
     }
-    void SetCache(std::shared_ptr<TMetadataCache> cache) {
+    void SetCache(std::shared_ptr<TSharedMetadataAccessorCache> cache) {
         DoSetCache(cache);
     }
     void SetOwner(const TActorId& owner) {

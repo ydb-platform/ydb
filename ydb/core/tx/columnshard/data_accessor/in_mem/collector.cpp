@@ -28,7 +28,7 @@ void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, 
     }
 }
 
-void TCollector::DoSetCache(std::shared_ptr<TMetadataCache>) {
+void TCollector::DoSetCache(std::shared_ptr<TSharedMetadataAccessorCache>) {
     AFL_VERIFY(false);
 }
 

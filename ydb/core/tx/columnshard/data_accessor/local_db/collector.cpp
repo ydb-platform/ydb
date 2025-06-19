@@ -14,8 +14,7 @@ TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) 
         TConsumerPortions* cPortions = nullptr;
         for (auto&& p : c.second.GetPortions()) {
             auto key = std::tuple{Owner, p->GetPathId(), p->GetPortionId()};
-            auto it = AccessorsCache->Find(key);
-            if (it != AccessorsCache->End()) {
+            if (auto it = AccessorsCache->Find(key); it != AccessorsCache->End()) {
                 AFL_VERIFY(it.Key() == key);
                 result.AddFromCache(it.Value());
             } else {
@@ -39,7 +38,7 @@ void TCollector::DoModifyPortions(const std::vector<TPortionDataAccessor>& add, 
     }
 }
 
-void TCollector::DoSetCache(std::shared_ptr<TMetadataCache> cache) {
+void TCollector::DoSetCache(std::shared_ptr<TSharedMetadataAccessorCache> cache) {
     AccessorsCache = cache;
 }
 

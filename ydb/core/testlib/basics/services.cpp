@@ -32,7 +32,6 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/statistics/service/service.h>
-#include <ydb/core/tx/columnshard/data_accessor/metadata_cache_actor.h>
 
 #include <util/system/env.h>
 
@@ -384,9 +383,6 @@ namespace NPDisk {
             SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
             SetupStatService(runtime, nodeIndex);
-
-            runtime.AddLocalService(NKikimr::NOlap::NDataAccessorControl::TMetadataCacheActor::MakeActorId(runtime.GetNodeId(nodeIndex)),
-            TActorSetupCmd(NKikimr::NOlap::NDataAccessorControl::TMetadataCacheActor::CreateActor(), TMailboxType::HTSwap, 0), nodeIndex);
 
             if (factory)
                 factory->Birth(nodeIndex);

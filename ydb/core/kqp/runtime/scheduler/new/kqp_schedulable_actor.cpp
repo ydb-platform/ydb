@@ -74,7 +74,6 @@ void TSchedulableTask::DecreaseThrottle() {
 TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
     : SchedulableTask(std::move(options.SchedulableTask))
     , Schedulable(options.IsSchedulable)
-    , PoolId(options.PoolId)
     , LastExecutionTime(AverageExecutionTime)
 {
     Y_ENSURE(SchedulableTask);

@@ -29,15 +29,10 @@ public:
     struct TOptions {
         TSchedulableTaskPtr SchedulableTask;
         bool IsSchedulable;
-        TString PoolId; // TODO: for debug
     };
 
 protected:
     explicit TSchedulableActorHelper(TOptions&& options);
-
-    const TString& GetPoolId() const { // TODO: for debug
-        return PoolId;
-    }
 
     static TMonotonic Now();
     bool IsSchedulable() const;
@@ -55,7 +50,6 @@ protected:
 private:
     TSchedulableTaskPtr SchedulableTask;
     const bool Schedulable;
-    const TString PoolId; // TODO: for debug
     THPTimer Timer;
     bool Executed = false;
     bool Throttled = false;

@@ -167,7 +167,7 @@ Or using the `--destination-prefix` and `--include` parameters:
 
 ### Exporting a directory with encryption {#example-encryption}
 
-Exporting subdirectory dir1 of the database with encryption with the secret key stored in `~/my_secret_key` file to the `export1` directory in `mybucket` using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
+Exporting the subdirectory `dir1` of the database with encryption, using the secret key stored in the `~/my_secret_key` file, to the `export1` directory in `mybucket`, using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \

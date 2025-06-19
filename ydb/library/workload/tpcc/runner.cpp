@@ -793,6 +793,8 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
     }
 
     // Calculate tpmC and efficiency
+    double maxPossibleTpmc = 0;
+    data.Efficiency = 0;
     if (data.ElapsedMinutes == 0 && data.ElapsedSeconds == 0) {
         data.Tpmc = 0;
     } else {
@@ -803,11 +805,16 @@ TPCCRunner::TCalculatedStatusData TPCCRunner::CalculateStatusData(Clock::time_po
 
         // there are two errors: rounding + approximation, we might overshoot
         // 100% efficiency very slightly because of errors and it's OK to "round down"
-        double maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / elapsed.count();
+        maxPossibleTpmc = Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE * 60 / elapsed.count();
         data.Tpmc = std::min(maxPossibleTpmc, tpmc);
     }
 
-    data.Efficiency = (data.Tpmc * 100.0) / (Config.WarehouseCount * MAX_TPMC_PER_WAREHOUSE);
+    if (maxPossibleTpmc != 0) {
+        data.Efficiency = (data.Tpmc * 100.0) / maxPossibleTpmc;
+
+        // avoid slight rounding errors
+        data.Efficiency = std::min(data.Efficiency, 100.0);
+    }
 
     // Get running counts
     data.RunningTerminals = TaskQueue->GetRunningCount();

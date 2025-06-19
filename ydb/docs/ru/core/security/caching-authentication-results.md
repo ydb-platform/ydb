@@ -85,7 +85,7 @@ sequenceDiagram
 
 {% note info %}
 
-Количество ошибок при обновлении токена пользователя можно увидеть в поле `Error` на странице **Developer UI** > **Actors** > **Ticket Parser** или в [метриках]() `auth.TicketParser.TicketsErrors`, `auth.TicketParser.TicketsErrorsPermanent`, и `auth.TicketParser.TicketsErrorsRetryable`.
+Количество ошибок при обновлении токена пользователя можно увидеть в поле `Error` на странице **Developer UI** > **Actors** > **Ticket Parser** или в [метриках](../reference/observability/metrics/index.md) `auth.TicketParser.TicketsErrors`, `auth.TicketParser.TicketsErrorsPermanent`, и `auth.TicketParser.TicketsErrorsRetryable`.
 
 Ошибки могут возникать из-за следующих проблем:
 

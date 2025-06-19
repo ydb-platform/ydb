@@ -12,7 +12,7 @@ Release date: 2025.
 * Added support for the parameterized Decimal type.
 * Added support for [auto-partitioning topics for row-oriented tables in CDC](./concepts/cdc.md#topic-partitions). This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` expression.
-* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [`DEBEZIUM_JSON` format for CDC](./concepts/cdc.md#debezium-json-record-structure). Enabled by setting the flag `enable_changefeed_debezium_json_format`.
+* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the `DEBEZIUM_JSON` format for CDC](./concepts/cdc.md#debezium-json-record-structure), which can be enabled by setting the `enable_changefeed_debezium_json_format` flag.
 * The scope of supported objects in backup and restore operations has been expanded:
   * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the `enable_changefeeds_export` and `enable_changefeeds_import` flags).
   * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the `enable_view_export` flag).
@@ -27,7 +27,7 @@ Release date: 2025.
   * [Implemented](https://github.com/ydb-platform/ydb/pull/12578) automatic user lockout after a specified number of failed attempts to enter the correct password.
   * [Added](https://github.com/ydb-platform/ydb/pull/12983) the ability for users to change their own passwords.
 * [Implemented](https://github.com/ydb-platform/ydb/issues/9748) the ability to toggle functional flags at runtime. Changes to the flags, for which the `(RequireRestart) = true` parameter  is not specified in the [proto file](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60), will be applied without a restart.
-* [Changed](https://github.com/ydb-platform/ydb/pull/11329) oldest (not newest) locks into full-shard ones when the number of locks on shards is exceeded.
+* [Changed](https://github.com/ydb-platform/ydb/pull/11329) lock behavior when the number of locks on shards exceeds the limit. Now, once the limit is exceeded, the oldest locks (rather than the newest) are converted into full-shard locks.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/12567) a mechanism to preserve optimistic locks in memory when datashards are gracefully restarted, which should reduce the number of ABORTED errors due to lock loss during table balancing between nodes.
 * [Implemented](https://github.com/ydb-platform/ydb/pull/12689) a mechanism to abort volatile transactions with the ABORTED status when datashards are gracefully restarted.
 * [Added](https://github.com/ydb-platform/ydb/pull/6342) the ability to remove NOT NULL constraints on a column in a table using the `ALTER TABLE _ ALTER COLUMN _ DROP NOT NULL` query.

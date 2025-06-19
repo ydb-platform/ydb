@@ -1,10 +1,10 @@
 # {{ ydb-short-name }} Entity Framework Core Provider
 
-{{ ydb-short-name }} has an Entity Framework (EF) Core provider — an object-relational mapper (ORM) that enables .NET developers to work with a {{ ydb-short-name }} database using .NET objects. It behaves like other EF Core providers (e.g. SQL Server). If you're just getting started with EF Core, the [EF Core documentation](https://docs.microsoft.com/ef/core/index) is the best place to start.
+{{ ydb-short-name }} has an Entity Framework (EF) Core provider, an object-relational mapper (ORM) that enables .NET developers to work with a {{ ydb-short-name }} database using .NET objects. It behaves like other EF Core providers (for example, SQL Server). If you're just getting started with EF Core, the [EF Core documentation](https://docs.microsoft.com/ef/core/index) is the best place to start.
 
-ydb-dotnet-sdk is an open source project. If you encounter any issues, report them in the [official repository on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main).
+`ydb-dotnet-sdk` is an open-source project. If you encounter any issues, report them in the [official repository on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main).
 
-## Set up the {{ ydb-short-name }} Entity Framework Core provider
+## Set Up the {{ ydb-short-name }} Entity Framework Core Provider
 
 To get started, you need to add the necessary NuGet packages to your project:
 
@@ -12,9 +12,9 @@ To get started, you need to add the necessary NuGet packages to your project:
 dotnet add package EntityFrameworkCore.Ydb
 ```
 
-## Defining a model and a DbContext
+## Defining a Model and a DbContext
 
-Let's say you want to store blogs and their posts in a database; you can model these as .NET types as follows:
+Let's say you want to store blogs and their posts in a database. You can model these as .NET types as follows:
 
 ```c#
 public class Blog
@@ -36,13 +36,13 @@ public class Post
 }
 ```
 
-You then define a `DbContext` type which you'll use to interact with the database:
+You then define a `DbContext` type, which you'll use to interact with the database:
 
 {% list tabs %}
 
 - OnConfiguring
 
-  Using `OnConfiguring()` to configure your context is the easiest way to get started, but is discouraged for most production applications:
+  Using `OnConfiguring()` to configure your context is the easiest way to get started but is discouraged for most production applications:
 
   ```c#
   public class BloggingContext : DbContext
@@ -91,7 +91,7 @@ You then define a `DbContext` type which you'll use to interact with the databas
 
 For more information on getting started with EF, see the [Getting Started guide](https://learn.microsoft.com/en-us/ef/core/get-started/overview/first-app?tabs=netcore-cli).
 
-## Additional {{ ydb-short-name }} configuration
+## Additional {{ ydb-short-name }} Configuration
 
 The Entity Framework (EF) Core provider for {{ ydb-short-name }} has its own additional configuration parameters.
 
@@ -112,7 +112,7 @@ Below is an example of how to specify the necessary parameters for connecting to
 
 To ensure that database schema migrations are executed correctly, disable the automatic retry strategy (`ExecutionStrategy`), which is enabled by default in `EntityFrameworkCore.Ydb`.
 
-To do this, explicitly override the IDesignTimeDbContextFactory interface and use the `DisableRetryOnFailure()` method.
+To do this, explicitly override the `IDesignTimeDbContextFactory` interface and use the `DisableRetryOnFailure()` method.
 
 An example implementation of a context factory for migrations is shown below:
 
@@ -145,4 +145,4 @@ dotnet ef database update
 
 ## Examples
 
-You can find usage examples in the repository on [GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples)
+You can find complete usage examples on [GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples).

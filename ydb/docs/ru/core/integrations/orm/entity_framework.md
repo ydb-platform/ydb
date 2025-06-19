@@ -1,12 +1,12 @@
 # {{ ydb-short-name }} Entity Framework Core Provider
 
-{{ ydb-short-name }} предоставляет поставщика Entity Framework (EF) Core — объектно-реляционный модуль сопоставления (ORM), который позволяет разработчикам .NET работать с базой данных {{ ydb-short-name }} с помощью объектов .NET. Он ведет себя так же, как и другие поставщики EF Core (например, SQL Server), поэтому здесь применима [общая документация по EF Core](https://docs.microsoft.com/ef/core/index). Если вы только начинаете работать с EF Core, эта документация — лучшее место для начала.
+{{ ydb-short-name }} предоставляет поставщика Entity Framework (EF) Core — объектно-реляционный модуль сопоставления (ORM), который позволяет разработчикам .NET работать с базой данных {{ ydb-short-name }} с помощью объектов .NET. Он ведёт себя так же, как и другие поставщики EF Core (например, SQL Server), поэтому здесь применима [общая документация по EF Core](https://docs.microsoft.com/ef/core/index). Если вы только начинаете работать с EF Core, эта документация — лучшее место для начала.
 
-Разработка ведется в репозитории [ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main), о всех проблемах следует сообщать там.
+Разработка ведётся в репозитории [ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main), о всех проблемах следует сообщать там.
 
 ## Настройка поставщика {{ ydb-short-name }} Entity Framework Core
 
-Чтобы начать работу, вам необходимо добавить необходимые пакеты NuGet в свой проект:
+Чтобы начать работу, необходимо добавить необходимые пакеты NuGet в свой проект:
 
 ```dotnet
 dotnet add package EntityFrameworkCore.Ydb
@@ -36,13 +36,13 @@ public class Post
 }
 ```
 
-Затем вы определяете `DbContext`, который вы будете использовать для взаимодействия с базой данных:
+Затем вы определяете `DbContext`, который будете использовать для взаимодействия с базой данных:
 
 {% list tabs %}
 
 - OnConfiguring
 
-  Использование `OnConfiguring()` для настройки контекста — это самый простой способ начать работу, но для большинства приложений в рабочей среде он не рекомендуется:
+  Использование `OnConfiguring()` для настройки контекста — самый простой способ начать работу, но для большинства приложений в рабочей среде он не рекомендуется:
 
   ```c#
   public class BloggingContext : DbContext
@@ -95,7 +95,7 @@ public class Post
 
 Поставщик Entity Framework (EF) Core для {{ ydb-short-name }} имеет собственные дополнительные параметры конфигурации.
 
-### Подключение ADO.NET to Yandex Cloud
+### Подключение ADO.NET к Yandex Cloud
 
 Подробнее ознакомиться с различными способами аутентификации в Yandex Cloud можно в [документации по ADO.NET](../../reference/languages-and-apis/ado-net/yandex-cloud.md).
 
@@ -112,7 +112,7 @@ public class Post
 
 Для корректного выполнения миграций схемы базы данных необходимо отключить стратегию автоматического повтора запросов (`ExecutionStrategy`), которая по умолчанию активирована в пакете `EntityFrameworkCore.Ydb`.
 
-Чтобы отключить ExecutionStrategy при выполнении миграций, следует явно переопределить интерфейс IDesignTimeDbContextFactory и воспользоваться методом `DisableRetryOnFailure()`.
+Чтобы отключить `ExecutionStrategy` при выполнении миграций, следует явно переопределить интерфейс `IDesignTimeDbContextFactory` и воспользоваться методом `DisableRetryOnFailure()`.
 
 Пример реализации фабрики контекста данных для миграций:
 
@@ -145,4 +145,4 @@ dotnet ef database update
 
 ## Примеры
 
-Примеры использования вы можете найти в репозитории на [GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples).
+Полные примеры использования [доступны на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples).

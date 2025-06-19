@@ -3311,6 +3311,7 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
     improvements = []
     common_failures = []
     compatibility_tests = []  # Новая категория для тестов совместимости
+    skipped_tests = []  # Инициализируем список пропущенных тестов
     
     for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
         status_a = tests_a[normalized_name]['status']
@@ -3322,6 +3323,28 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
         
         is_compat_test = (is_compatibility_test_for_versions(test_name_a, version_a, version_b) or 
                          is_compatibility_test_for_versions(test_name_b, version_a, version_b))
+        
+        # Если тест пропущен (skipped) в любой из версий
+        if status_a == 'skipped' or status_b == 'skipped':
+            # Выбираем информацию об ошибке из версии, где тест пропущен
+            error_description = ''
+            log_url = ''
+            
+            if status_a == 'skipped':
+                error_description = tests_a[normalized_name]['error_description']
+                log_url = tests_a[normalized_name]['log_url']
+            elif status_b == 'skipped':
+                error_description = tests_b[normalized_name]['error_description']
+                log_url = tests_b[normalized_name]['log_url']
+            
+            skipped_tests.append({
+                'test_name': tests_b[normalized_name]['original_name'],
+                'version_a_status': status_a,
+                'version_b_status': status_b,
+                'test_context': tests_b[normalized_name]['test_context'],
+                'error_description': error_description,
+                'log_url': log_url
+            })
         
         if is_compat_test:
             # Это тест совместимости - добавляем в отдельную категорию
@@ -3419,6 +3442,8 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
     
     # Находим тесты без изменений статуса
     unchanged_tests = []
+    not_run_recently = []  # Инициализируем список тестов, которые не запускались недавно
+    
     for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
         status_a = tests_a[normalized_name]['status']
         status_b = tests_b[normalized_name]['status']
@@ -3438,10 +3463,6 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
                 'test_type': tests_b[normalized_name]['test_type'],
                 'last_run_time': tests_b[normalized_name].get('last_run_time')  # Добавляем время последнего запуска
             })
-    
-    # Инициализация переменных для отчета
-    skipped_tests = []
-    not_run_recently = []
     
     # Генерируем отчет
     report_content = f"""# Сравнение версий: {version_a} vs {version_b}
@@ -3640,26 +3661,13 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             report_content += f"| {display_name} | ❌ {common['version_a_status']} | ❌ {common['version_b_status']} | {common['test_context']} | {error_formatted} |\n"
     
     # Секция пропущенных тестов (skipped)
-    for normalized_name in set(tests_a.keys()) & set(tests_b.keys()):
-        status_a = tests_a[normalized_name]['status']
-        status_b = tests_b[normalized_name]['status']
-        
-        # Если тест пропущен (skipped) в любой из версий
-        if status_a == 'skipped' or status_b == 'skipped':
-            skipped_tests.append({
-                'test_name': tests_b[normalized_name]['original_name'],
-                'version_a_status': status_a,
-                'version_b_status': status_b,
-                'test_context': tests_b[normalized_name]['test_context']
-            })
-    
     if skipped_tests:
         report_content += f"""
 ## ⏩ Тесты не выполнялись ({len(skipped_tests)})
 *Тесты, которые были пропущены (skipped) в одной или обеих версиях*
 
-| Тест | {version_a} | {version_b} | Контекст |
-|------|-------------|-------------|----------|
+| Тест | {version_a} | {version_b} | Контекст | Причина пропуска |
+|------|-------------|-------------|----------|-----------------|
 """
         
         # Сортируем пропущенные тесты по имени
@@ -3682,8 +3690,11 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
                 display_name = skip['test_name'][len(common_prefix):]
             else:
                 display_name = skip['test_name']
+            
+            # Форматируем причину пропуска
+            skip_reason = format_error_pattern_for_table(skip.get('error_description', ''), skip.get('log_url', ''))
                 
-            report_content += f"| {display_name} | {status_a_emoji} {skip['version_a_status']} | {status_b_emoji} {skip['version_b_status']} | {skip['test_context']} |\n"
+            report_content += f"| {display_name} | {status_a_emoji} {skip['version_a_status']} | {status_b_emoji} {skip['version_b_status']} | {skip['test_context']} | {skip_reason} |\n"
     
     # Секция тестов, которые не выполнялись более 24 часов
     not_run_recently = []

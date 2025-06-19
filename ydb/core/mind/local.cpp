@@ -1048,7 +1048,7 @@ public:
             HFunc(TEvLocal::TEvLocalDrainNode, HandleInit);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateInit type: %" PRIx32
+                Y_DEBUG_ABORT("TLocalNodeRegistrar: Unhandled in StateInit type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }

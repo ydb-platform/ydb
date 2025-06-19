@@ -40,12 +40,14 @@ public:
     virtual void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TStackVec<NTable::TTag>&  defaultFilledColumnsIds) = 0;
 
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TStackVec<NTable::TTag>& defaultFilledColumnsIds) = 0;
     
     virtual void InsertRow(
             const TTableId& tableId,
@@ -120,12 +122,14 @@ public:
     void UpsertRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TStackVec<NTable::TTag>&  defaultFilledColumnsIds) override;
     
     void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops,
+            const TStackVec<NTable::TTag>& defaultFilledColumnsIds) override;
             
     void InsertRow(
             const TTableId& tableId,
@@ -198,6 +202,10 @@ private:
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+
+    void ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp op, const TTableId& tableId, ui64 localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TStackVec<NTable::TTag>& defaultFilledColumnsIds);
+    void UpsertIncrease(NTable::ERowOp op, const TTableId& tableId, ui64& localTableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
+
 private:
     TDataShard& Self;
     NTable::TDatabase& Db;

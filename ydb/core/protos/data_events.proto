@@ -103,6 +103,7 @@ message TEvWrite {
         optional uint64 PayloadIndex = 4;
         optional EDataFormat PayloadFormat = 5;
         optional string PayloadSchema = 6;
+        repeated uint32 DefaultFilledColumnIds = 7 [packed = true];
     }
 
     // Transaction operations

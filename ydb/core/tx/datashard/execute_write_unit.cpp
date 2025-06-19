@@ -84,6 +84,13 @@ public:
         return false;
     }
 
+    TStackVec<NTable::TTag> GetDefaultFilledColumns(const TValidatedWriteTxOperation& validatedOperation)
+    {
+        auto x = validatedOperation.GetDefaultFilledColumnsIds();
+        TStackVec<NTable::TTag> columnIds = TStackVec<NTable::TTag>(x.begin(), x.end());
+        return columnIds;
+        
+    }
     void FillOps(const NTable::TScheme& scheme, const TUserTable& userTable, const NTable::TScheme::TTableInfo& tableInfo, const TValidatedWriteTxOperation& validatedOperation, ui32 rowIdx, TSmallVec<NTable::TUpdateOp>& ops) {
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto& columnIds = validatedOperation.GetColumnIds();
@@ -179,6 +186,7 @@ public:
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
+        TStackVec<NTable::TTag> defaultFilledColumnsIds = GetDefaultFilledColumns(validatedOperation);
 
         // Main update cycle
 
@@ -189,12 +197,12 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops);
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnsIds);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.ReplaceRow(fullTableId, key, ops);
+                    userDb.ReplaceRow(fullTableId, key, ops, defaultFilledColumnsIds);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {

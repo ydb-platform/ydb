@@ -64,10 +64,83 @@ ui64 CalculateValueBytes(const TArrayRef<const NIceDb::TUpdateOp> ops) {
     return bytes;
 };
 
+void TDataShardUserDb::UpsertIncrease(
+    NTable::ERowOp op,
+    const TTableId& tableId,
+    ui64& localTableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops
+)
+{
+    UpsertRowInt(op, tableId, localTableId, key, ops);
+    IncreaseUpdateCounters(key, ops);
+}
+
+void DeleteSomeOpsByTagIds(TStackVec<NTable::TTag> IdsToDelete, TStackVec<NIceDb::TUpdateOp> &ops)
+{
+    std::sort(IdsToDelete.begin(), IdsToDelete.end());
+    std::sort(ops.begin(), ops.end(), [](const NIceDb::TUpdateOp a, const NIceDb::TUpdateOp b){
+                                                                            return a.Tag < b.Tag;
+                                                                    });
+
+    Y_ENSURE(IdsToDelete.size() != 0);
+    
+    int newSize = ops.size();
+    int index = (int)IdsToDelete.size() - 1;
+    for (int i = (int)ops.size() - 1; i >= 0; i--) { // order in ops is not important?
+        if (ops[i].Tag == IdsToDelete[index]) {
+            std::swap(ops[i], ops[--newSize]);
+        }
+    }
+
+    ops.resize(newSize);
+}
+
+void TDataShardUserDb::ChangeOptsDefaultColumnsFilledLogic(
+    NTable::ERowOp op,
+    const TTableId& tableId,
+    ui64 localTableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    const TStackVec<NTable::TTag>& defaultFilledColumnsIds
+)
+{
+    if (defaultFilledColumnsIds.size() == 0) {
+        // no default columns - no changes need
+        UpsertIncrease(op, tableId, localTableId, key, ops);
+        return;
+    }
+
+    TStackVec<NTable::TTag> columns(ops.size());
+    for (size_t i = 0; i < ops.size(); i++) {
+        columns[i] = ops[i].Tag;
+    }
+
+    auto currentRow = GetRowState(tableId, key, columns);
+    
+    if (currentRow.Size() == 0) {
+        // row not exist - no changes need
+        UpsertIncrease(op, tableId, localTableId, key, ops);
+        return;
+    }
+    
+    TStackVec<NIceDb::TUpdateOp> newOps;
+    newOps.reserve(ops.size());
+    for (const NIceDb::TUpdateOp& op : ops) {
+        newOps.push_back(op);
+    }
+
+    DeleteSomeOpsByTagIds(defaultFilledColumnsIds, newOps);
+    
+    UpsertIncrease(op, tableId, localTableId, key, newOps); // todo проверить что другой порядок - это ок
+}
+
 void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    const TStackVec<NTable::TTag>& defaultFilledColumnsIds
+)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -110,27 +183,22 @@ void TDataShardUserDb::UpsertRow(
         if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
-
-        IncreaseUpdateCounters(key, extendedOps);
+        ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps, defaultFilledColumnsIds);
     } else {
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
-
-        IncreaseUpdateCounters(key, ops);
+        ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, defaultFilledColumnsIds);
     }
 }
 
 void TDataShardUserDb::ReplaceRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    const TStackVec<NTable::TTag>& defaultFilledColumnsIds)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
 
-    UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops);
-
-    IncreaseUpdateCounters(key, ops);
+    ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Reset, tableId, localTableId, key, ops, defaultFilledColumnsIds);
 }
 
 void TDataShardUserDb::InsertRow(

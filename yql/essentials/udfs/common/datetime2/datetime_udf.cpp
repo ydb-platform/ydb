@@ -1264,15 +1264,57 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
     }
     END_SIMPLE_ARROW_UDF(TMakeTzTimestamp, TMakeDateKernelExec<TTzTimestamp>::Do);
 
+class TConvert: public ::NYql::NUdf::TBoxedValue {
+    public:
+        explicit TConvert(TSourcePosition pos)
+            : Pos_(pos)
+        {}
 
-    SIMPLE_STRICT_UDF(TConvert, TResource<TM64ResourceName>(TAutoMap<TResource<TMResourceName>>)) {
-        Y_UNUSED(valueBuilder);
-        TUnboxedValuePod result(0);
-        auto& arg = Reference<TMResourceName>(args[0]);
-        auto& storage = Reference<TM64ResourceName>(result);
-        storage.From(arg);
-        return result;
-    }
+        static const ::NYql::NUdf::TStringRef& Name() {
+            static auto name = TStringRef::Of("Convert");
+            return name;
+        }
+
+        static bool DeclareSignature(
+            const ::NYql::NUdf::TStringRef& name,
+            ::NYql::NUdf::TType*,
+            ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,
+            bool typesOnly)
+        {
+            if (Name() != name) {
+                return false;
+            }
+
+            // Convert is emitted in scope of type annotation phase to
+            // implicitly cast basic DateTime resource to the extended
+            // one. Extended dates can't be handled by MKQL prior to
+            // runtime version 51, hence Convert has to be nop for the
+            // versions older than 51 in case the YQL frontend emitted
+            // Convert call.
+            if constexpr (MKQL_RUNTIME_VERSION < 51U) {
+                builder.SimpleSignature<NYql::NUdf::TResource<TMResourceName>(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TMResourceName>>)>()
+                       .IsStrict();
+            } else {
+                builder.SimpleSignature<NYql::NUdf::TResource<TM64ResourceName>(NYql::NUdf::TAutoMap<NYql::NUdf::TResource<TMResourceName>>)>()
+                       .IsStrict();
+            }
+            if (!typesOnly) {
+                builder.Implementation(new TConvert(builder.GetSourcePosition()));
+            }
+            return true;
+        }
+    private:
+        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+            Y_UNUSED(valueBuilder);
+            TUnboxedValuePod result(0);
+            auto& arg = Reference<TMResourceName>(args[0]);
+            auto& storage = Reference<TM64ResourceName>(result);
+            storage.From(arg);
+            return result;
+        }
+
+        const TSourcePosition Pos_;
+    };
 
     SIMPLE_STRICT_UDF(TMakeDate32, TDate32(TAutoMap<TResource<TM64ResourceName>>)) {
         auto& storage = Reference<TM64ResourceName>(args[0]);

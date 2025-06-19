@@ -41,7 +41,6 @@ namespace NYdb::NConsoleClient {
             for (auto& candidate : Apply(text, prefix, contextLen, /* light = */ true)) {
                 hints.emplace_back(std::move(candidate.text()));
             }
-            hints.emplace_back(""); // Disable inline hints
             return hints;
         }
 
@@ -55,6 +54,16 @@ namespace NYdb::NConsoleClient {
             auto completion = GetEngine(light)->CompleteAsync(input).ExtractValueSync();
 
             contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
+
+            if (light &&
+                completion.Candidates.size() == 1 &&
+                !completion.Candidates[0].Content.StartsWith(completion.CompletedToken.Content)) {
+                completion.Candidates.push_back({
+                    // Disable inline hint
+                    .Kind = NSQLComplete::ECandidateKind::Keyword,
+                    .Content = " ",
+                });
+            }
 
             return ReplxxCompletionsOf(std::move(completion.Candidates));
         }

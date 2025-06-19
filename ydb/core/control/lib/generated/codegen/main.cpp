@@ -268,40 +268,6 @@ void CodeGenControlsForTablets(TCodeGenContext& context) {
     }
 }
 
-void CodeGenColumnShardControls(TCodeGenContext& context) {
-    TImmediateControlsClass columnShardControls {
-        .Name = "ColumnShardControls",
-        .ClassName = "TColumnShardControls",
-    };
-    for (const auto& field: {
-        "MinBytesToIndex",
-        "MaxBytesToIndex",
-        "InsertTableCommittedSize",
-        "IndexGoodBlobSize",
-        "GranuleOverloadBytes",
-        "CompactionDelaySec",
-        "GranuleIndexedPortionsSizeLimit",
-        "GranuleIndexedPortionsCountLimit",
-        "BlobWriteGrouppingEnabled",
-        "CacheDataAfterIndexing",
-        "CacheDataAfterCompaction"
-    }) {
-        auto fieldPath = TStringBuilder() << columnShardControls.Name << "." << field;
-        TImmediateControl control {
-            .Name = field,
-            .FullPath = fieldPath,
-            .HtmlName = fieldPath,
-            .IsConfigBasedControl = false
-        };
-        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
-        context.JinjaControls.push_back(emplacedControlPtr);
-        columnShardControls.Controls.push_back(emplacedControlPtr);
-    }
-    auto* res = &context.ControlClasses.emplace_back(std::move(columnShardControls));
-    context.JinjaControlClasses.push_back(res);
-    context.JinjaRootControlClasses.push_back(res);
-}
-
 void CodeGenBlobCacheControls(TCodeGenContext& context) {
     TImmediateControlsClass blobCacheControls {
         .Name = "BlobCache",
@@ -403,7 +369,6 @@ int main(int argc, char** argv) {
         }
         CodeGenClass(*protoField, TVector<TString>{}, codeGenContext, true);
     }
-    CodeGenColumnShardControls(codeGenContext);
     CodeGenBlobCacheControls(codeGenContext);
     CodeGenBlobStorageNonConfigControls(codeGenContext);
     CodeGenSchemeShardNonConfigControls(codeGenContext);

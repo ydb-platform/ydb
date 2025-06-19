@@ -1834,6 +1834,76 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TColumnShardControls {
+        optional uint64 BlobWriteGrouppingEnabled = 1 [(ControlOptions) = {
+            Description: "Enables blobs groupping on write",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1
+        }];
+
+        optional uint64 CacheDataAfterIndexing = 2 [(ControlOptions) = {
+            Description: "Enables data caching after indexing",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1
+        }];
+        optional uint64 CacheDataAfterCompaction = 3 [(ControlOptions) = {
+            Description: "Enables data caching after compaction",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1
+        }];
+        optional uint64 MinBytesToIndex = 4 [(ControlOptions) = {
+            Description: "Min bytes to start indexing",
+            MinValue: 1,
+            MaxValue: 33554432, // 32MB
+            DefaultValue: 4194304 // 4 MB
+        }];
+        optional uint64 MaxBytesToIndex = 5 [(ControlOptions) = {
+            Description: "Min bytes to start indexing",
+            MinValue: 0,
+            MaxValue: 503316480, // 480MB
+            DefaultValue: 251658240 // 240 MB
+        }];
+        optional uint64 InsertTableCommittedSize = 6 [(ControlOptions) = {
+            Description: "Min small blobs to insert",
+            MinValue: 0,
+            MaxValue: 200,
+            DefaultValue: 1000
+        }];
+        optional uint64 IndexGoodBlobSize = 7 [(ControlOptions) = {
+            Description: "Blob size to index",
+            MinValue: 262144, // 256KB
+            MaxValue: 8388608, // 8MB
+            DefaultValue: 262144 // 256KB
+        }];
+        optional uint64 GranuleOverloadBytes = 8 [(ControlOptions) = {
+            Description: "Min blob size to overload",
+            MinValue: 8388608, // 8MB
+            MaxValue: 838860800, // 800MB
+            DefaultValue: 167772160 // 160MB
+        }];
+        optional uint64 CompactionDelaySec = 9 [(ControlOptions) = {
+            Description: "Compaction delay in seconds",
+            MinValue: 10,
+            MaxValue: 120,
+            DefaultValue: 3600
+        }];
+        optional uint64 GranuleIndexedPortionsSizeLimit = 10 [(ControlOptions) = {
+            Description: "Max indexed bytes in granule",
+            MinValue: 0,
+            MaxValue: 9223372036854775807, // 2 ** 63 - 1
+            DefaultValue: 20971520
+        }];
+        optional uint64 GranuleIndexedPortionsCountLimit = 11 [(ControlOptions) = {
+            Description: "Max number of Indexed portions in Granule",
+            MinValue: 0,
+            MaxValue: 9223372036854775807, // 2 ** 63 - 1
+            DefaultValue: 100
+        }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1850,6 +1920,7 @@ message TImmediateControlsConfig {
     optional TGRpcControls GRpcControls = 14;
     optional TKeyValueVolumeControls KeyValueVolumeControls = 15;
     optional TKQPSessionControls KQPSessionControls = 16;
+    optional TColumnShardControls ColumnShardControls = 17;
 };
 
 message TMeteringConfig {

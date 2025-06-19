@@ -365,6 +365,10 @@ namespace NActors {
         CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStatsCopy);
     }
 
+    IHarmonizer* TActorSystem::GetHarmonizer() const {
+        return CpuManager->GetHarmonizer();
+    }
+
     THarmonizerStats TActorSystem::GetHarmonizerStats() const {
         return CpuManager->GetHarmonizerStats();
 

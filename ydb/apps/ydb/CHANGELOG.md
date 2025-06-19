@@ -1,3 +1,4 @@
+* Added named expressions completion in interactive mode, cache schema responses.
 * Added processing of special values `null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.
 * Fixed bug when `ydb wokrload` commands did not work with absolute paths.
 

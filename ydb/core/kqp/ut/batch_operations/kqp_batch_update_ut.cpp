@@ -606,6 +606,63 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
         }
     }
 
+    Y_UNIT_TEST(TableNotExists) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestBatchNotExists
+                    SET Amount = 1000;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/TestBatchNotExists]'", result.GetIssues().ToString());
+        }
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestBatchNotExists
+                    SET Amount = 1000
+                    WHERE Key IN [1, 3, 5];
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/TestBatchNotExists]'", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(UnknownColumn) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
+                    SET Amount = 1000
+                    WHERE UnknownColumn = 123;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Member not found: UnknownColumn", result.GetIssues().ToString());
+        }
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
+                    SET UnknownColumn = 1000
+                    WHERE Group IN [1, 3, 5];
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Column 'UnknownColumn' does not exist", result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(HasTxControl) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();

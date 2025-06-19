@@ -140,7 +140,7 @@ public:
     TTableAliasMap() = default;
 
     void AddMapping(const TString& table, const TString& alias);
-    void AddRename(const TString& from, const TString& to);
+    void AddRename(TString from, TString to);
     TBaseColumn GetBaseColumnByRename(const TString& renamedColumn);
     TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn);
     TString ToString() const;
@@ -153,6 +153,19 @@ private:
 private:
     THashMap<TString, TString> TableByAlias_;
     THashMap<TString, TBaseColumn> BaseColumnByRename_;
+};
+
+struct TSorting {
+    TSorting(
+        std::vector<TJoinColumn> ordering,
+        std::vector<TOrdering::TItem::EDirection> directions
+    )
+        : Ordering(std::move(ordering))
+        , Directions(std::move(directions))
+    {}
+
+    std::vector<TJoinColumn> Ordering;
+    std::vector<TOrdering::TItem::EDirection> Directions;
 };
 
 /*
@@ -215,14 +228,12 @@ public: // deprecated section, use the section below instead of this
 
 public:
     std::size_t FindSorting(
-        const std::vector<TJoinColumn>& interestingOrdering,
-        const std::vector<TOrdering::TItem::EDirection>& directions,
+        const TSorting& sorting,
         TTableAliasMap* tableAliases = nullptr
     );
 
     std::size_t AddSorting(
-        const std::vector<TJoinColumn>& interestingOrdering,
-        std::vector<TOrdering::TItem::EDirection> directions,
+        const TSorting& sortings,
         TTableAliasMap* tableAliases = nullptr
     );
 
@@ -238,6 +249,8 @@ public:
 
 public:
     TVector<TJoinColumn> GetInterestingOrderingsColumnNamesByIdx(std::size_t interestingOrderingIdx) const;
+
+    TSorting GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const;
     TString ToString() const;
 
 public:
@@ -328,6 +341,7 @@ public:
         TFDSet GetFDs();
         bool IsSubsetOf(const TLogicalOrderings& logicalOrderings);
         i64 GetState() const;
+        i64 GetInitOrderingIdx() const;
 
     public:
         bool HasState();
@@ -342,7 +356,11 @@ public:
         TDFSM* Dfsm_ = nullptr;
         /* we can have different args in hash shuffle function, so shuffles can be incompitable in this case */
         i64 ShuffleHashFuncArgsCount_ = -1;
+
         i64 State_ = -1;
+
+        /* Index of the state which was set in SetOrdering */
+        i64 InitOrderingIdx_ = -1;
         TFDSet AppliedFDs_{};
     };
 

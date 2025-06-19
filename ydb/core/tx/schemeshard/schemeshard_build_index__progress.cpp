@@ -52,14 +52,14 @@ protected:
 
     const TActorId ResponseActorId;
     const TIndexBuildId BuildId;
-    TIndexBuildInfo::TSample::TRows Init;
+    TIndexBuildInfo::TSample::TRows Sample;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
-    std::shared_ptr<NTxProxy::TUploadRows> Rows;
+    std::shared_ptr<NTxProxy::TUploadRows> UploadRows;
 
     TActorId Uploader;
     ui32 RetryCount = 0;
-    ui32 RowsBytes = 0;
+    ui32 UploadBytes = 0;
     const NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
@@ -71,7 +71,7 @@ public:
                    const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    TIndexBuildId buildId,
-                   TIndexBuildInfo::TSample::TRows init,
+                   TIndexBuildInfo::TSample::TRows sample,
                    NTableIndex::TClusterId parent,
                    NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
@@ -79,14 +79,14 @@ public:
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildId(buildId)
-        , Init(std::move(init))
+        , Sample(std::move(sample))
         , Parent(parent)
         , Child(child)
     {
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildId
             << " ResponseActorId: " << ResponseActorId;
-        Y_ENSURE(!Init.empty());
+        Y_ENSURE(!Sample.empty());
         Y_ENSURE(Parent < Child);
         Y_ENSURE(Child != 0);
     }
@@ -109,12 +109,11 @@ public:
     }
 
     void Bootstrap() {
-        Rows = std::make_shared<NTxProxy::TUploadRows>();
-        Rows->reserve(Init.size());
+        UploadRows = std::make_shared<NTxProxy::TUploadRows>();
+        UploadRows->reserve(Sample.size());
         std::array<TCell, 2> pk;
         pk[0] = TCell::Make(Parent);
-        for (auto& [_, row] : Init) {
-            RowsBytes += row.size();
+        for (auto& [_, row] : Sample) {
             auto child = Child++;
             if (IsPostingLevel) {
                 child = SetPostingParentFlag(child);
@@ -123,11 +122,11 @@ public:
             }
             pk[1] = TCell::Make(child);
 
-            // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
-            Rows->emplace_back(TSerializedCellVec{pk}, std::move(row));
+            TSerializedCellVec vec(row);
+            UploadBytes += NDataShard::CountRowCellBytes(pk, vec.GetCells());
+            UploadRows->emplace_back(TSerializedCellVec{pk}, std::move(row));
         }
-        Init = {}; // release memory
-        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(pk);
+        Sample = {}; // release memory
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
@@ -155,7 +154,7 @@ private:
     void HandleWakeup() {
         LOG_D("Retry upload " << Debug());
 
-        if (Rows) {
+        if (UploadRows) {
             Upload(true);
         }
     }
@@ -187,8 +186,8 @@ private:
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
 
         response->Record.SetId(ui64(BuildId));
-        response->Record.SetUploadRows(Rows->size());
-        response->Record.SetUploadBytes(RowsBytes);
+        response->Record.SetUploadRows(UploadRows->size());
+        response->Record.SetUploadBytes(UploadBytes);
 
         UploadStatusToMessage(response->Record);
 
@@ -207,7 +206,7 @@ private:
             SelfId(),
             TargetTable,
             Types,
-            Rows,
+            UploadRows,
             NTxProxy::EUploadRowsMode::WriteToTableShadow, // TODO(mbkkt) is it fastest?
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
@@ -1899,7 +1898,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
 
     TBillingStats GetBillingStats() const override {
         auto& record = Response->Get()->Record;
-        // TODO(mbkkt) we should account uploads and reads separately
+        // secondary index reads and writes almost the same amount of data
+        // do not count them separately for simplicity
         return {record.GetRowsDelta(), record.GetBytesDelta(), record.GetRowsDelta(), record.GetBytesDelta()};
     }
 };

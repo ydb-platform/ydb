@@ -119,8 +119,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
         WideRowType = TMultiType::Create(components.size(), components.data(), TypeEnv);
     }
 
-    void SetUp(NUnitTest::TTestContext& /* context */) override
-    {
+    void SetUp(NUnitTest::TTestContext& /* context */) override {
         ActorSystem.Start();
 
         EdgeActor = ActorSystem.AllocateEdgeActor();
@@ -128,8 +127,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
         DstEdgeActor = ActorSystem.AllocateEdgeActor();
     }
 
-    void GenerateProgram(NDqProto::TDqTask& task)
-    {
+    void GenerateProgram(NDqProto::TDqTask& task) {
+        // TODO: parse sexpr from text and use automated type annotation
         auto& program = *task.MutableProgram();
         using namespace NNodes;
         TExprContext ctx;
@@ -330,25 +329,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
         }
     }
 
-    void RunInActorContext(const std::function<void(void)>& f) {
-        bool executed = false;
-        auto prev = ActorSystem.SetEventFilter([&](TTestActorRuntimeBase &, TAutoPtr<IEventHandle> &) -> bool {
-            if (!executed) {
-                executed = true;
-                f();
-                return true;
-            } else {
-                return false;
-            }
-        });
-        ActorSystem.Send(
-            EdgeActor,
-            TActorId{},
-            new TEvents::TEvWakeup
-        );
-        ActorSystem.SetEventFilter(prev);
-    }
-
     bool ReceiveData(auto&& cb, auto dqInputChannel) {
         auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor});
         LOGV("Got " << ev->Get()->Record.DebugString() << Endl);
@@ -412,76 +392,81 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture
             LOGV("...but waiting for " << seqNo << Endl);
         }
     }
+
+    void BasicTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
+        LOGV("Test for: packets=" << packets << " doWatermark=" << doWatermark << " waitIntermediateAcks=" << waitIntermediateAcks << Endl);
+        NDqProto::TDqTask task;
+        GenerateProgram(task);
+        auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
+        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId);
+
+        auto asyncCA = CreateTestAsyncCA(task);
+        ActorSystem.EnableScheduleForActor(asyncCA, true);
+        ui32 seqNo = 0;
+        ui32 val = 0;
+        for (ui32 packet = 0; packet < packets; ++packet) {
+            PushRow(CreateRow(++val), dqOutputChannel);
+            PushRow(CreateRow(++val), dqOutputChannel);
+            PushRow(CreateRow(++val), dqOutputChannel);
+            if (doWatermark) {
+                NDqProto::TWatermark watermark;
+                watermark.SetTimestampUs(1000*packet);
+                dqOutputChannel->Push(std::move(watermark));
+            }
+            if (packet + 1 == packets) {
+                dqOutputChannel->Finish();
+            }
+
+            auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+            evInputChannelData->Record.SetSeqNo(++seqNo);
+            auto& chData = *evInputChannelData->Record.MutableChannelData();
+            if (TDqSerializedBatch serializedBatch; dqOutputChannel->Pop(serializedBatch)) {
+                *chData.MutableData() = serializedBatch.Proto;
+                Y_ENSURE(serializedBatch.Payload.Empty()); // TODO
+            }
+            if (NDqProto::TWatermark watermark; dqOutputChannel->Pop(watermark)) {
+                *chData.MutableWatermark() = watermark;
+            }
+            if (NDqProto::TCheckpoint checkpoint; dqOutputChannel->Pop(checkpoint)) {
+                *chData.MutableCheckpoint() = checkpoint;
+            }
+            chData.SetChannelId(InputChannelId);
+            chData.SetFinished(dqOutputChannel->IsFinished());
+            LOGV("Sending " << (packet + 1) << "/" << packets << " "  << chData << Endl);
+            ActorSystem.Send(asyncCA, SrcEdgeActor, evInputChannelData.Release());
+            if (packet + 1 == packets || waitIntermediateAcks) {
+                WaitForChannelDataAck(InputChannelId, seqNo);
+            }
+        }
+
+        TMap<ui32, ui32> receivedData;
+        while (ReceiveData(
+                    [&receivedData](const NUdf::TUnboxedValue& val, ui32 column) {
+                        LOGV(' ');
+                        UNIT_ASSERT_EQUAL(column, 0);
+                        UNIT_ASSERT(!!val);
+                        UNIT_ASSERT(val.IsEmbedded());
+                        LOGV(val.Get<ui32>());
+                        ++receivedData[val.Get<ui32>()];
+                        return true;
+                    },
+                    dqInputChannel))
+        {}
+        UNIT_ASSERT_EQUAL(receivedData.size(), val);
+        for (; val > 0; --val) {
+            UNIT_ASSERT_EQUAL_C(receivedData[val*val], 1, "expected count for " << (val*val));
+        }
+    }
 };
 
 Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TAsyncCATestFixture) { }
 
-    Y_UNIT_TEST_F(AsyncCAWatermark, TAsyncCATestFixture) {
+    Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
         for (bool waitIntermediateAcks: { false, true }) {
             for (bool doWatermark: { false, true }) {
                 for (ui32 packets: { 1, 2, 3 }) {
-                    NDqProto::TDqTask task;
-                    GenerateProgram(task);
-                    auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
-                    auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId);
-
-                    auto asyncCA = CreateTestAsyncCA(task);
-                    ActorSystem.EnableScheduleForActor(asyncCA, true);
-                    ui32 seqNo = 0;
-                    ui32 val = 0;
-                    for (ui32 packet = 0; packet < packets; ++packet) {
-                        PushRow(CreateRow(++val), dqOutputChannel);
-                        PushRow(CreateRow(++val), dqOutputChannel);
-                        PushRow(CreateRow(++val), dqOutputChannel);
-                        if (doWatermark) {
-                            NDqProto::TWatermark watermark;
-                            watermark.SetTimestampUs(1000*packet);
-                            dqOutputChannel->Push(std::move(watermark));
-                        }
-                        if (packet + 1 == packets) {
-                            dqOutputChannel->Finish();
-                        }
-
-                        auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
-                        evInputChannelData->Record.SetSeqNo(++seqNo);
-                        auto& chData = *evInputChannelData->Record.MutableChannelData();
-                        if (TDqSerializedBatch serializedBatch; dqOutputChannel->Pop(serializedBatch)) {
-                            *chData.MutableData() = serializedBatch.Proto;
-                            Y_ENSURE(serializedBatch.Payload.Empty()); // TODO
-                        }
-                        if (NDqProto::TWatermark watermark; dqOutputChannel->Pop(watermark)) {
-                            *chData.MutableWatermark() = watermark;
-                        }
-                        if (NDqProto::TCheckpoint checkpoint; dqOutputChannel->Pop(checkpoint)) {
-                            *chData.MutableCheckpoint() = checkpoint;
-                        }
-                        chData.SetChannelId(InputChannelId);
-                        chData.SetFinished(dqOutputChannel->IsFinished());
-                        LOGV("Sending " << (packet + 1) << "/" << packets << " "  << chData << Endl);
-                        ActorSystem.Send(asyncCA, SrcEdgeActor, evInputChannelData.Release());
-                        if (packet + 1 == packets || waitIntermediateAcks) {
-                            WaitForChannelDataAck(InputChannelId, seqNo);
-                        }
-                    }
-
-                    TMap<ui32, ui32> receivedData;
-                    while (ReceiveData(
-                                [&receivedData](const NUdf::TUnboxedValue& val, ui32 column) {
-                                    LOGV(' ');
-                                    UNIT_ASSERT_EQUAL(column, 0);
-                                    UNIT_ASSERT(!!val);
-                                    UNIT_ASSERT(val.IsEmbedded());
-                                    LOGV(val.Get<ui32>());
-                                    ++receivedData[val.Get<ui32>()];
-                                    return true;
-                                },
-                                dqInputChannel))
-                    {}
-                    UNIT_ASSERT_EQUAL(receivedData.size(), val);
-                    for (; val > 0; --val) {
-                        UNIT_ASSERT_EQUAL(receivedData[val*val], 1);
-                    }
+                    BasicTests(packets, doWatermark, waitIntermediateAcks);
                 }
             }
         }

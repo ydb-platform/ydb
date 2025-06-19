@@ -150,7 +150,7 @@ ydb -p quickstart import s3 \
 Importing one table, that was exported using path `dir/my_table`, to the path `dir1/dir/my_table` from encrypted export located in `export1` in the `mybucket` S3 bucket using the secret key stored in `~/my_secret_key` file.
 
 ```bash
-ydb -p quickstart import s3 \
+{{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
   --source-prefix export1 --destination-path dir1 \

@@ -100,10 +100,10 @@ namespace NKikimr {
             // (1) and (2). That is, prefix gives us unique domains in which we can find realms to operate, while
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
-                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, i64 requiredSpace,
+                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace,
                 bool requireOperational, std::optional<TBridgePileId> bridgePileId, TString& error);
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
-                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
+                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
                 TString& error);
 
             struct TMisplacedVDisks {
@@ -132,10 +132,10 @@ namespace NKikimr {
                 }
             };
 
-            TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group);
+            TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group, ui32 groupSizeInUnits);
 
-            std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk, 
-                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
+            std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk,
+                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, std::optional<TBridgePileId> bridgePileId,
                 TString& error);
         };
 

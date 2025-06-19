@@ -1578,7 +1578,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
-        pdiskState.SetNumActiveSlots(TotalOwners);
+        pdiskState.SetNumActiveSlots(GetNumActiveSlots());
+        pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
         }
@@ -1599,6 +1600,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
             vdiskInfo.SetAvailableSize(ownerFree);
             vdiskInfo.SetAllocatedSize(ownerAllocated);
+            vdiskInfo.SetGroupSizeInUnits(data.GroupSizeInUnits);
 
             NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = reportResult->DiskMetrics->Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vdiskId, vdiskMetrics->MutableVDiskId());
@@ -1835,6 +1837,7 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(),
         Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), OwnerSystem, 0,
+        0, Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), TVector<TChunkIdx>(),
         Cfg->RetrieveDeviceType(), error.Str()));
     Mon.YardInit.CountResponse();
@@ -1883,11 +1886,13 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     }
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
+    ui32 ownerWeight = Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits);
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(NKikimrProto::OK,
                 DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
                 DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
                 DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner,
-                ownerRound, GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
+                ownerRound, ownerWeight, Cfg->SlotSizeInUnits,
+                GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
                 Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(owner, result->StartingPoints);
     ownerData.VDiskId = vDiskId;
@@ -1904,7 +1909,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
     ownerData.GroupSizeInUnits = evYardInit.GroupSizeInUnits;
 
-    Keeper.SetOwnerWeight(owner, Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits));
+    Keeper.SetOwnerWeight(owner, ownerWeight);
     AddCbsSet(owner);
 
     P_LOG(PRI_NOTICE, BPD30, "Registered known VDisk",
@@ -2049,6 +2054,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner, ownerRound,
+        Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits), Cfg->SlotSizeInUnits,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
         Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);

@@ -234,8 +234,6 @@ Y_UNIT_TEST_SUITE(Transfer)
                     Key Uint64 NOT NULL,
                     Message Utf8,
                     PRIMARY KEY (Key)
-                )  WITH (
-                    STORE = COLUMN
                 );
             )", testCase.TableName.data()));
         permissionSetup.Grant(testCase.TableName, username, {"ydb.generic.write", "ydb.generic.read"});
@@ -258,6 +256,44 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTopic();
+        testCase.DropTransfer();
+    }
+
+    Y_UNIT_TEST(LocalTopic_BigMessage)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:LENGTH($x._data)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(true));
+
+        TStringBuilder sb;
+        sb.reserve(10_MB);
+        for (size_t i = 0; i < sb.capacity(); ++i) {
+            sb << RandomNumber<char>();
+        }
+
+        testCase.Write({sb});
+
+        testCase.CheckResult({{
+            _C("Message", ui32(sb.size()))
         }});
 
         testCase.DropTopic();

@@ -89,6 +89,10 @@ message TActorSystemConfig {
         optional bool HasSharedThread = 18;
         optional uint32 MaxLocalQueueSize = 20;
         optional uint32 MinLocalQueueSize = 21;
+
+        // Tiny YDB
+        repeated uint32 AdjacentPools = 22;
+        optional uint32 ForcedForeignSlots = 23;
     }
 
     message TScheduler {

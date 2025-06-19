@@ -68,9 +68,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         NSnapshot::TQuery* TakeSnapshot() const override;
 
-        // TODO(scheduler): for calculate delay scheme.
-        std::atomic<i64> DelayedSumBatches = 0;
-        std::atomic<ui64> DelayedCount = 0;
+        std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
+        std::atomic<ui64> WaitingTasksTime = 0; // sum of average execution time for all throttled tasks
 
     private:
         const TQueryId Id;

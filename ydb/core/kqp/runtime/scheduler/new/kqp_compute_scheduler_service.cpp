@@ -67,12 +67,6 @@ public:
             .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
         };
 
-        {
-            TStringStream ss;
-            ss << "New pool limit: " << poolId << " " << attrs.GetLimit() << Endl;
-            Cerr << ss.Str();
-        }
-
         Y_ASSERT(!poolId.empty());
 
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {false, resourceWeight}}).second) {
@@ -131,12 +125,6 @@ public:
         NHdrf::TStaticAttributes const attrs {
             .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
         };
-
-        {
-            TStringStream ss;
-            ss << "Add query: " << databaseId << " " << poolId << " " << queryId << Endl;
-            Cerr << ss.Str();
-        }
 
         Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
     }

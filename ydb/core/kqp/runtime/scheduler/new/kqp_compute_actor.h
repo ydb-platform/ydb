@@ -73,12 +73,6 @@ namespace NKikimr::NKqp::NScheduler {
 
             auto delay = CalculateDelay(now);
 
-            {
-                TStringStream ss;
-                ss << "Delay, pool: " << delay.MicroSeconds() << " " << GetPoolId() << Endl;
-                Cerr << ss.Str();
-            }
-
             if (!IsThrottled()) {
                 Throttle(now);
             }

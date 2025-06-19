@@ -4,7 +4,7 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
-static constexpr TDuration AverageBatchTime = TDuration::MicroSeconds(100);
+static constexpr TDuration AverageExecutionTime = TDuration::MicroSeconds(100);
 
 using namespace NHdrf::NDynamic;
 
@@ -75,7 +75,7 @@ TSchedulableActorHelper::TSchedulableActorHelper(TOptions&& options)
     : SchedulableTask(std::move(options.SchedulableTask))
     , Schedulable(options.IsSchedulable)
     , PoolId(options.PoolId)
-    , BatchTime(AverageBatchTime)
+    , LastExecutionTime(AverageExecutionTime)
 {
     Y_ENSURE(SchedulableTask);
 }
@@ -95,6 +95,7 @@ bool TSchedulableActorHelper::StartExecution(const TDuration& burstThrottle) {
 
     Y_DEFER {
         Timer.Reset();
+        SchedulableTask->Query->CurrentTasksTime += LastExecutionTime.MicroSeconds();
     };
 
     if (IsSchedulable() && SchedulableTask->Query->GetSnapshot()) {
@@ -115,8 +116,8 @@ void TSchedulableActorHelper::StopExecution() {
     Y_ASSERT(!Throttled);
 
     TDuration timePassed = TDuration::MicroSeconds(Timer.Passed() * 1'000'000);
-    SchedulableTask->Query->DelayedSumBatches += (timePassed - BatchTime).MicroSeconds();
-    BatchTime = timePassed;
+    SchedulableTask->Query->CurrentTasksTime -= LastExecutionTime.MicroSeconds();
+    LastExecutionTime = timePassed;
     SchedulableTask->DecreaseUsage(timePassed);
     Executed = false;
 }
@@ -126,9 +127,10 @@ void TSchedulableActorHelper::Throttle(TMonotonic now) {
     Y_ASSERT(!Throttled);
 
     Throttled = true;
-    SchedulableTask->Query->DelayedSumBatches += BatchTime.MicroSeconds();
-    SchedulableTask->Query->DelayedCount++;
+    SchedulableTask->Query->WaitingTasksTime += LastExecutionTime.MicroSeconds();
+    SchedulableTask->IncreaseThrottle();
     StartThrottle = now;
+    ++ExecuteAttempts;
 }
 
 bool TSchedulableActorHelper::IsThrottled() const {
@@ -140,33 +142,36 @@ TDuration TSchedulableActorHelper::Resume(TMonotonic now) {
     Y_ASSERT(Throttled);
 
     Throttled = false;
-    SchedulableTask->Query->DelayedSumBatches -= BatchTime.MicroSeconds();
-    SchedulableTask->Query->DelayedCount--;
+    SchedulableTask->Query->WaitingTasksTime -= LastExecutionTime.MicroSeconds();
+    SchedulableTask->DecreaseThrottle();
+    ExecuteAttempts = 0;
+
     return now - StartThrottle;
 }
 
-TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic now) const {
-    const auto MaxDelay = TDuration::Seconds(10);
-    const auto ActivationPenalty = TDuration::MicroSeconds(10);
+TDuration TSchedulableActorHelper::CalculateDelay(TMonotonic) const {
+    const auto MaxDelay = TDuration::Seconds(5);
+    const auto MinDelay = TDuration::MicroSeconds(10);
+    const auto AttemptBonus = TDuration::MicroSeconds(5);
 
     const auto query = SchedulableTask->Query;
     const auto snapshot = query->GetSnapshot();
 
-    const auto usage = query->BurstUsage.load();
     const auto share = snapshot->FairShare;
 
     if (share < 1e-9) {
         return MaxDelay;
     }
 
-    return Min(
-        MaxDelay,
-        TDuration::MicroSeconds(
-            (usage - snapshot->AdjustedUsage + Max<i64>(0, query->DelayedSumBatches) +
-             (BatchTime + ActivationPenalty * (query->DelayedCount + 1)).MicroSeconds()
-            ) / share
-        ) - (now - snapshot->Timestamp)
-    );
+    i64 delay =
+        + (query->CurrentTasksTime / share)               // current tasks to complete
+        + (query->WaitingTasksTime / share)               // waiting tasks to complete
+        // TODO: (currentUsage - averageUsage) * penalty  // penalty for usage since last snapshot
+        - (ExecuteAttempts * AttemptBonus.MicroSeconds()) // bonus for number of attempts
+        + (RandomNumber<ui64>() % 100)                    // random delay
+    ;
+
+    return Min(MaxDelay, Max(MinDelay, TDuration::MicroSeconds(Max<i64>(0, delay))));
 }
 
 } // namespace NKikimr::NKqp::NScheduler

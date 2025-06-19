@@ -60,7 +60,9 @@ private:
     bool Executed = false;
     bool Throttled = false;
     TMonotonic StartThrottle;
-    TDuration BatchTime;
+
+    TDuration LastExecutionTime;
+    ui64 ExecuteAttempts = 0;
 };
 
 } // namespace NKikimr::NKqp::NScheduler

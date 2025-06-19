@@ -93,7 +93,9 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     // Create the query string
     std::string query = MakeSelect(
         Params.TableName, 
-        Params.IndexName, 
+        Params.IndexName,
+        Params.KeyColumn,
+        Params.EmbeddingColumn,
         Params.PrefixColumn,
         Params.KmeansTreeSearchClusters,
         Params.Metric

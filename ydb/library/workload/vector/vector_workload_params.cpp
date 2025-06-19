@@ -83,6 +83,10 @@ void TVectorWorkloadParams::Init() {
     
     // Find the specified index
     bool indexFound = false;
+
+    Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1, 
+        "Only single key is supported. But table %s has %d keys columns", TableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
+    KeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
     
     for (const auto& index : tableDescription.GetIndexDescriptions()) {
         if (index.GetIndexName() == IndexName) {
@@ -94,6 +98,7 @@ void TVectorWorkloadParams::Init() {
                 // The first column is the prefix column, the last column is the embedding
                 PrefixColumn = keyColumns[0];
             }
+            EmbeddingColumn = keyColumns.back();
             
             // Extract the distance metric from index settings
             const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
@@ -104,20 +109,16 @@ void TVectorWorkloadParams::Init() {
         }
     }
 
-    // If a prefix column was found, verify that it has an integer type
-    if (PrefixColumn.has_value()) {
-        // Find the column in table schema
-        for (const auto& column : tableDescription.GetColumns()) {
-            if (column.Name == PrefixColumn.value()) {
-                // Check column type
-                const NYdb::TType& typeInfo = column.Type;
-                
-                // Check if it's an integer type
-                Y_ABORT_UNLESS(typeInfo.ToString().contains("int") || typeInfo.ToString().contains("Int"), 
-                    "Prefix column '%s' in index '%s' must be an integer type. Found type: %s", 
-                    PrefixColumn->c_str(), IndexName.c_str(), typeInfo.ToString().c_str());          
-            }
-        }
+    // Verify that key and prefix columns have integer types
+    for (const auto& column : tableDescription.GetColumns()) {
+        if (PrefixColumn.has_value() && column.Name == PrefixColumn.value())
+            Y_ABORT_UNLESS(column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"), 
+                "Prefix column '%s' in index '%s' must be an integer type. Found type: %s", 
+                PrefixColumn->c_str(), IndexName.c_str(), column.Type.ToString().c_str());
+        if (column.Name == KeyColumn)
+            Y_ABORT_UNLESS(column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"), 
+                "Key column '%s' in index '%s' must be an integer type. Found type: %s", 
+                KeyColumn.c_str(), IndexName.c_str(), column.Type.ToString().c_str());
     }
     
     Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableName.c_str());

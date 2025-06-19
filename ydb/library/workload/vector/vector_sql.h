@@ -17,8 +17,9 @@ std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::
 
 
 // Utility function to create select query
-std::string MakeSelect(const TString& tableName, const TString& indexName, const std::optional<std::string>& prefixColumn, 
-                     size_t kmeansTreeClusters, NYdb::NTable::TVectorIndexSettings::EMetric metric);
+std::string MakeSelect(const TString& tableName, const TString& indexName, 
+    const std::string& keyColumn, const std::string& embeddingColumn, const std::optional<std::string>& prefixColumn, 
+    size_t kmeansTreeClusters, NYdb::NTable::TVectorIndexSettings::EMetric metric);
 
 
 // Utility function to create parameters for select query

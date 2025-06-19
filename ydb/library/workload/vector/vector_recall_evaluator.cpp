@@ -113,16 +113,16 @@ void TVectorRecallEvaluator::SampleExistingVectors() {
         std::string vectorQuery;
         if (Params.PrefixColumn) {
             vectorQuery = std::format(R"_(--!syntax_v1
-                SELECT id, Unwrap(embedding) as embedding, Unwrap({0}) as prefix_value 
-                FROM {1} 
-                WHERE id = {2};
-            )_", Params.PrefixColumn->c_str(), Params.TableName.c_str(), randomId);
+                SELECT {0}, Unwrap({1}) as embedding, Unwrap({2}) as prefix_value 
+                FROM {3} 
+                WHERE id = {4};
+            )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.PrefixColumn->c_str(), Params.TableName.c_str(), randomId);
         } else {
             vectorQuery = std::format(R"_(--!syntax_v1
-                SELECT id, Unwrap(embedding) as embedding 
-                FROM {0} 
-                WHERE id = {1};
-            )_", Params.TableName.c_str(), randomId);
+                SELECT {0}, Unwrap({1}) as embedding 
+                FROM {2} 
+                WHERE id = {3};
+            )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.TableName.c_str(), randomId);
         }
         
         std::optional<NYdb::TResultSet> vectorResultSet;
@@ -145,8 +145,8 @@ void TVectorRecallEvaluator::SampleExistingVectors() {
             continue;
         }
         
-        ui64 id = vectorParser.ColumnParser("id").GetUint64();
-        std::string embeddingBytes = vectorParser.ColumnParser("embedding").GetString();
+        ui64 id = vectorParser.ColumnParser(Params.KeyColumn).GetUint64();
+        std::string embeddingBytes = vectorParser.ColumnParser(Params.EmbeddingColumn).GetString();
         
         // Ensure we got a valid embedding
         Y_ABORT_UNLESS(!embeddingBytes.empty(), "Empty embedding retrieved for id %" PRIu64, id);
@@ -212,7 +212,7 @@ void TVectorRecallEvaluator::FillEtalons() {
     Cout << "Recall initialization..." << Endl;
     
     // Prepare the query template
-    std::string queryTemplate = MakeSelect(Params.TableName, {}, Params.PrefixColumn, 0, Params.Metric);
+    std::string queryTemplate = MakeSelect(Params.TableName, {}, Params.KeyColumn, Params.EmbeddingColumn, Params.PrefixColumn, 0, Params.Metric);
     
     // Maximum number of concurrent queries to execute
     const size_t MAX_CONCURRENT_QUERIES = 20;
@@ -259,7 +259,7 @@ void TVectorRecallEvaluator::FillEtalons() {
             
             // Extract all IDs from the result set
             while (parser.TryNextRow()) {
-                ui64 id = parser.ColumnParser("id").GetUint64();
+                ui64 id = parser.ColumnParser(Params.KeyColumn).GetUint64();
                 SelectTargets[targetIndex].Etalons.push_back(id);
             }
             if (SelectTargets[targetIndex].Etalons.empty()) {
@@ -324,7 +324,7 @@ void TVectorRecallEvaluator::ProcessQueryResult(const NYdb::NQuery::TExecuteQuer
     // Extract IDs from index search results
     std::vector<ui64> indexResults;
     while (parser.TryNextRow()) {
-        ui64 id = parser.ColumnParser("id").GetUint64();
+        ui64 id = parser.ColumnParser(Params.KeyColumn).GetUint64();
         indexResults.push_back(id);
     }
     

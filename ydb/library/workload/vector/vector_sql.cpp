@@ -37,8 +37,9 @@ std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::
 
 
 // Utility function to create select query
-std::string MakeSelect(const TString& tableName, const TString& indexName, const std::optional<std::string>& prefixColumn, 
-                     size_t kmeansTreeClusters, NYdb::NTable::TVectorIndexSettings::EMetric metric) {
+std::string MakeSelect(const TString& tableName, const TString& indexName, 
+        const std::string& keyColumn, const std::string& embeddingColumn, const std::optional<std::string>& prefixColumn, 
+        size_t kmeansTreeClusters, NYdb::NTable::TVectorIndexSettings::EMetric metric) {
 
     auto [functionName, isAscending] = GetMetricInfo(metric);
 
@@ -48,12 +49,12 @@ std::string MakeSelect(const TString& tableName, const TString& indexName, const
     if (prefixColumn)
         ret << "DECLARE $PrefixValue as Int64;" << "\n";
     ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << kmeansTreeClusters << "\";" << "\n";
-    ret << "SELECT id FROM " << tableName << "\n";
+    ret << "SELECT " << keyColumn << " FROM " << tableName << "\n";
     if (!indexName.empty())
         ret << "VIEW " << indexName << "\n";
     if (prefixColumn)
         ret << "WHERE " << prefixColumn << " = $PrefixValue" << "\n";
-    ret << "ORDER BY Knn::" << functionName << "(embedding, $Embedding) " << (isAscending ? "ASC" : "DESC") << "\n";
+    ret << "ORDER BY Knn::" << functionName << "(" << embeddingColumn << ", $Embedding) " << (isAscending ? "ASC" : "DESC") << "\n";
     ret << "LIMIT $TopK" << "\n";
     return ret;
 }

@@ -4461,25 +4461,28 @@ Y_UNIT_TEST_F(TestRetentionOnLongTxAndBigMessages, TFixtureQuery)
 
     auto session = CreateSession();
     auto tx0 = session->BeginTx();
-    //auto tx1 = session->BeginTx();
+    auto tx1 = session->BeginTx();
 
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, msg, tx0.get());
-    //WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, msg, tx1.get());
-
-    Sleep(TDuration::Seconds(3));
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, msg, tx0.get());
-    //WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, msg, tx1.get());
+    WriteToTopic("topic_A", "grp-0", msg, tx0.get());
+    WriteToTopic("topic_A", "grp-1", msg, tx1.get());
 
     Sleep(TDuration::Seconds(3));
 
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, msg, tx0.get());
-    //WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, msg, tx1.get());
+    WriteToTopic("topic_A", "grp-0", "short-msg", tx0.get());
+    WriteToTopic("topic_A", "grp-1", "short-msg", tx1.get());
+
+    WriteToTopic("topic_A", "grp-0", msg, tx0.get());
+    WriteToTopic("topic_A", "grp-1", msg, tx1.get());
+
+    Sleep(TDuration::Seconds(3));
+
+    WriteToTopic("topic_A", "grp-0", msg, tx0.get());
+    WriteToTopic("topic_A", "grp-1", msg, tx1.get());
 
     Sleep(TDuration::Seconds(3));
 
     session->CommitTx(*tx0, EStatus::SUCCESS);
-    //session->CommitTx(*tx1, EStatus::SUCCESS);
+    session->CommitTx(*tx1, EStatus::SUCCESS);
 
     //RestartPQTablet("topic_A", 0);
 
@@ -4487,7 +4490,6 @@ Y_UNIT_TEST_F(TestRetentionOnLongTxAndBigMessages, TFixtureQuery)
     UNIT_ASSERT(read.size() > 0);
     UNIT_ASSERT_EQUAL(msg, read[0]);
 }
-
 
 }
 

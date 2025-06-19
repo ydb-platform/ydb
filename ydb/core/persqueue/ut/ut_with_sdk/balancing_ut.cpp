@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
     void Simple(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 10);
+        setup.CreateTopic(setup.GetTopicPath(), setup.GetConsumerName(), 10);
 
         auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk });
         {
@@ -116,31 +116,31 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
     void ManyTopics(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 10);
-        setup.CreateTopic("other-test-topic", std::string{TEST_CONSUMER}, 10);
+        setup.CreateTopic(setup.GetTopicPath(), setup.GetConsumerName(), 10);
+        setup.CreateTopic("other-test-topic", setup.GetConsumerName(), 10);
 
         TTopicClient client = setup.MakeClient();
 
-        auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .Topics = {TEST_TOPIC, "other-test-topic"} });
+        auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .Topics = {setup.GetTopicPath(), "other-test-topic"} });
         Sleep(TDuration::Seconds(1));
 
         {
             auto p = readSession0->GetPartitionsA();
-            UNIT_ASSERT_VALUES_EQUAL(10, p[std::string{TEST_TOPIC}].size());
+            UNIT_ASSERT_VALUES_EQUAL(10, p[setup.GetTopicPath()].size());
             UNIT_ASSERT_VALUES_EQUAL(10, p["other-test-topic"].size());
         }
 
-        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = sdk, .Topics = {TEST_TOPIC, "other-test-topic"} });
+        auto readSession1 = CreateTestReadSession({ .Name="Session-1", .Setup=setup, .Sdk = sdk, .Topics = {setup.GetTopicPath(), "other-test-topic"} });
         Sleep(TDuration::Seconds(1));
 
         {
             auto p = readSession0->GetPartitionsA();
-            UNIT_ASSERT_VALUES_EQUAL(5, p[std::string{TEST_TOPIC}].size());
+            UNIT_ASSERT_VALUES_EQUAL(5, p[setup.GetTopicPath()].size());
             UNIT_ASSERT_VALUES_EQUAL(5, p["other-test-topic"].size());
         }
         {
             auto p = readSession1->GetPartitionsA();
-            UNIT_ASSERT_VALUES_EQUAL(5, p[std::string{TEST_TOPIC}].size());
+            UNIT_ASSERT_VALUES_EQUAL(5, p[setup.GetTopicPath()].size());
             UNIT_ASSERT_VALUES_EQUAL(5, p["other-test-topic"].size());
         }
 

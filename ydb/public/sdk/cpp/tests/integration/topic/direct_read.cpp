@@ -871,8 +871,8 @@ TEST_F(DirectReadWithClient, OneMessage) {
 
         auto settings = TWriteSessionSettings()
             .Path(GetTopicPath())
-            .ProducerId("test-message_group_id")
-            .MessageGroupId("test-message_group_id");
+            .ProducerId(TEST_MESSAGE_GROUP_ID)
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID);
         auto writer = client.CreateSimpleBlockingWriteSession(settings);
         ASSERT_TRUE(writer->Write("message"));
         writer->Close();
@@ -936,7 +936,7 @@ TEST_F(DirectReadWithClient, ManyMessages) {
 
     // Write messages to all partitions:
     for (std::size_t partitionId = 0; partitionId < partitionCount; ++partitionId) {
-        std::string messageGroup = "test-message_group_id_" + std::to_string(partitionId);
+        std::string messageGroup = TEST_MESSAGE_GROUP_ID + "_" + std::to_string(partitionId);
         auto settings = TWriteSessionSettings()
             .Path(GetTopicPath())
             .Codec(ECodec::RAW)

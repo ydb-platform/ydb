@@ -1,5 +1,7 @@
 #include "setup/fixture.h"
 
+#include "utils/managed_executor.h"
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
@@ -41,136 +43,6 @@ std::uint64_t TSimpleWriteSessionTestAdapter::GetAcquiredMessagesCount() const {
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
-class TManagedExecutor : public IExecutor {
-public:
-    using TExecutorPtr = IExecutor::TPtr;
-
-    explicit TManagedExecutor(TExecutorPtr executor);
-
-    bool IsAsync() const override;
-    void Post(TFunction&& f) override;
-
-    void StartFuncs(const std::vector<size_t>& indicies);
-
-    size_t GetFuncsCount() const;
-
-    size_t GetPlannedCount() const;
-    size_t GetRunningCount() const;
-    size_t GetExecutedCount() const;
-
-    void RunAllTasks();
-
-private:
-    void DoStart() override;
-
-    TFunction MakeTask(TFunction func);
-    void RunTask(TFunction&& func);
-
-    TExecutorPtr Executor;
-    mutable std::mutex Mutex;
-    std::vector<TFunction> Funcs;
-    std::atomic<size_t> Planned = 0;
-    std::atomic<size_t> Running = 0;
-    std::atomic<size_t> Executed = 0;
-};
-
-TManagedExecutor::TManagedExecutor(TExecutorPtr executor) :
-    Executor{std::move(executor)}
-{
-}
-
-bool TManagedExecutor::IsAsync() const
-{
-    return Executor->IsAsync();
-}
-
-void TManagedExecutor::Post(TFunction &&f)
-{
-    std::lock_guard lock(Mutex);
-
-    Funcs.push_back(std::move(f));
-    ++Planned;
-}
-
-void TManagedExecutor::DoStart()
-{
-    Executor->Start();
-}
-
-auto TManagedExecutor::MakeTask(TFunction func) -> TFunction
-{
-    return [this, func = std::move(func)]() {
-        ++Running;
-
-        func();
-
-        --Running;
-        ++Executed;
-    };
-}
-
-void TManagedExecutor::RunTask(TFunction&& func)
-{
-    Y_ABORT_UNLESS(Planned > 0);
-    --Planned;
-    Executor->Post(MakeTask(std::move(func)));
-}
-
-void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)
-{
-    std::lock_guard lock(Mutex);
-
-    for (auto index : indicies) {
-            Y_ABORT_UNLESS(index < Funcs.size());
-            Y_ABORT_UNLESS(Funcs[index]);
-
-        RunTask(std::move(Funcs[index]));
-    }
-}
-
-size_t TManagedExecutor::GetFuncsCount() const
-{
-    std::lock_guard lock(Mutex);
-
-    return Funcs.size();
-}
-
-size_t TManagedExecutor::GetPlannedCount() const
-{
-    return Planned;
-}
-
-size_t TManagedExecutor::GetRunningCount() const
-{
-    return Running;
-}
-
-size_t TManagedExecutor::GetExecutedCount() const
-{
-    return Executed;
-}
-
-void TManagedExecutor::RunAllTasks()
-{
-    std::lock_guard lock(Mutex);
-
-    for (auto& func : Funcs) {
-        if (func) {
-            RunTask(std::move(func));
-        }
-    }
-}
-
-TIntrusivePtr<TManagedExecutor> CreateThreadPoolManagedExecutor(size_t threads)
-{
-    return MakeIntrusive<TManagedExecutor>(NYdb::NTopic::CreateThreadPoolExecutor(threads));
-}
-
-TIntrusivePtr<TManagedExecutor> CreateSyncManagedExecutor()
-{
-    return MakeIntrusive<TManagedExecutor>(NYdb::NTopic::CreateSyncExecutor());
-}
-
 class BasicUsage : public TTopicTestFixture {};
 
 TEST_F(BasicUsage, TEST_NAME(ConnectToYDB)) {
@@ -185,7 +57,7 @@ TEST_F(BasicUsage, TEST_NAME(ConnectToYDB)) {
 
         auto writeSettings = TWriteSessionSettings()
             .Path(GetTopicPath())
-            .MessageGroupId("test-message_group_id")
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             // TODO why retries? see LOGBROKER-8490
             .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
         auto writeSession = client.CreateWriteSession(writeSettings);
@@ -203,7 +75,7 @@ TEST_F(BasicUsage, TEST_NAME(ConnectToYDB)) {
 
         auto writeSettings = TWriteSessionSettings()
             .Path(GetTopicPath())
-            .MessageGroupId("test-message_group_id")
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
             .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
         auto writeSession = client.CreateWriteSession(writeSettings);
 
@@ -220,8 +92,8 @@ TEST_F(BasicUsage, TEST_NAME(WriteRead)) {
     for (size_t i = 0; i < 100; ++i) {
         auto writeSettings = TWriteSessionSettings()
                     .Path(GetTopicPath())
-                    .ProducerId("test-message_group_id")
-                    .MessageGroupId("test-message_group_id");
+                    .ProducerId(TEST_MESSAGE_GROUP_ID)
+                    .MessageGroupId(TEST_MESSAGE_GROUP_ID);
         std::cerr << ">>> open write session " << i << std::endl;
         auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
         ASSERT_TRUE(writeSession->Write("message_using_MessageGroupId"));
@@ -232,7 +104,7 @@ TEST_F(BasicUsage, TEST_NAME(WriteRead)) {
     {
         auto writeSettings = TWriteSessionSettings()
                     .Path(GetTopicPath())
-                    .ProducerId("test-message_group_id")
+                    .ProducerId(TEST_MESSAGE_GROUP_ID)
                     .PartitionId(0);
         std::cerr << ">>> open write session 100" << std::endl;
         auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -276,7 +148,7 @@ TEST_F(BasicUsage, TEST_NAME(MaxByteSizeEqualZero)) {
 
     auto writeSettings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id");
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID);
     auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
     ASSERT_TRUE(writeSession->Write("message"));
     writeSession->Close();
@@ -310,7 +182,7 @@ TEST_F(BasicUsage, TEST_NAME(WriteAndReadSomeMessagesWithSyncCompression)) {
     IExecutor::TPtr executor = new TSyncExecutor();
     auto writeSettings = NPersQueue::TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id")
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID)
         .Codec(NPersQueue::ECodec::RAW)
         .CompressionExecutor(executor);
 
@@ -417,8 +289,8 @@ TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileCompressionInFlight)) {
 
     TWriteSessionSettings writeSettings;
     writeSettings.Path(GetTopicPath())
-                    .MessageGroupId("test-message_group_id")
-                    .ProducerId("test-message_group_id")
+                    .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                    .ProducerId(TEST_MESSAGE_GROUP_ID)
                     .CompressionExecutor(stepByStepExecutor);
 
     // Create read session.
@@ -527,8 +399,8 @@ TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileUserEventHandlingInFlight))
 
     auto writeSettings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id")
-        .ProducerId("test-message_group_id");
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+        .ProducerId(TEST_MESSAGE_GROUP_ID);
 
     auto writeSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
     std::string message(2'000, 'x');
@@ -646,7 +518,7 @@ TEST_F(BasicUsage, TEST_NAME(ReadSessionCorrectClose)) {
     auto driver = MakeDriver();
 
     NPersQueue::TWriteSessionSettings writeSettings;
-    writeSettings.Path(GetTopicPath()).MessageGroupId("src_id");
+    writeSettings.Path(GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
     writeSettings.Codec(NPersQueue::ECodec::RAW);
     IExecutor::TPtr executor = new TSyncExecutor();
     writeSettings.CompressionExecutor(executor);
@@ -710,8 +582,8 @@ TEST_F(BasicUsage, TEST_NAME(ConfirmPartitionSessionWithCommitOffset)) {
         // Write 2 messages:
         auto settings = NTopic::TWriteSessionSettings()
             .Path(GetTopicPath())
-            .MessageGroupId("test-message_group_id")
-            .ProducerId("test-message_group_id");
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .ProducerId(TEST_MESSAGE_GROUP_ID);
         TTopicClient client(driver);
         auto writer = client.CreateSimpleBlockingWriteSession(settings);
         writer->Write("message");
@@ -771,7 +643,7 @@ TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded)) {
 
     auto settings = TWriteSessionSettings()
         .Path(GetTopicPath())
-        .MessageGroupId("test-message_group_id");
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID);
 
     size_t batchSize = 100000000;
     settings.BatchFlushInterval(TDuration::Seconds(1000)); // Batch on size, not on time.

@@ -29,8 +29,10 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     ydb/public/sdk/cpp/src/library/issue
 
-    ydb/core/tx/schemeshard/ut_helpers
+    ydb/public/sdk/cpp/tests/integration/topic/utils
+
     ydb/core/persqueue/ut/common
+    ydb/core/tx/schemeshard/ut_helpers
 )
 
 YQL_LAST_ABI_VERSION()

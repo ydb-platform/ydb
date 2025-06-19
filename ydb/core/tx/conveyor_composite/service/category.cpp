@@ -103,7 +103,7 @@ void TProcessCategory::PutTaskResult(TWorkerTaskResult&& result, THashSet<TStrin
     if (it == Processes.end()) {
         return;
     }
-    RemoveWeightedProcess(it->second);
+    Y_UNUSED(RemoveWeightedProcess(it->second));
     it->second->PutTaskResult(std::move(result));
     if (it->second->GetTasksCount()) {
         WeightedProcesses[it->second->GetWeightedUsage()].emplace_back(it->second);
@@ -118,7 +118,7 @@ bool TProcessCategory::RemoveWeightedProcess(const std::shared_ptr<TProcess>& pr
     AFL_VERIFY(itW != WeightedProcesses.end());
     bool found = false;
     for (ui32 i = 0; i < itW->second.size(); ++i) {
-        if (itW->second[i]->GetProcessId() == process - GetProcessId()) {
+        if (itW->second[i]->GetProcessId() == process->GetProcessId()) {
             found = true;
             std::swap(itW->second[i], itW->second.back());
             itW->second.pop_back();

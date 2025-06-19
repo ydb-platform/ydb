@@ -65,6 +65,10 @@ namespace NInterconnect::NRdma {
         bool IsWcError() const noexcept {
             return Record.index() == 1; 
         }
+
+        bool IsCqError() const noexcept {
+            return Record.index() == 2;
+        }
         
         int GetErrCode() const noexcept {
             if (IsWcError()) {

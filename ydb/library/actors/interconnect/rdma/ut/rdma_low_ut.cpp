@@ -119,8 +119,10 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
 
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
         
-        int attempt = 4;
+        // Number of attempt to trigger overflow
+        int attempt = 10000;
 
+        std::atomic<bool> wasOverflow = false;
         while (attempt--) {
             auto cqPtr = GetCqHandle(actorSystem.Get(), ctx, cqActorId);
             std::atomic<int> postedNum = 0;
@@ -152,6 +154,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
             std::vector<NThreading::TFuture<bool>> completed;
             completed.reserve(inflight);
             auto reg2 = memPool->Alloc(MEM_REG_SZ);
+
             bool wasAlloc = false;
 
             for (size_t i = 0; i < inflight; i++) {
@@ -160,10 +163,13 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                 auto asptr = actorSystem->GetActorSystem(0);
                 NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
                 auto future = promise.GetFuture();
-                auto cb = [promise, asptr, &completedNum](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) mutable {
+                auto cb = [promise, asptr, &completedNum, &wasOverflow](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) mutable {
                     Y_ABORT_UNLESS(as == asptr);
                     completedNum.fetch_add(1);
                     promise.SetValue(ioDone->IsSuccess());
+                    if (ioDone->IsCqError()) {
+                        wasOverflow.store(true, std::memory_order_relaxed);
+                    }
                 };
                 while (wr == nullptr) {
                     auto ar = cqPtr->AllocWr(cb); 
@@ -171,6 +177,7 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                         wasAlloc = true;
                         wr = std::get<0>(ar);
                     } else if (ICq::IsWrErr(ar)) {
+                        wasOverflow.store(true, std::memory_order_relaxed);
                         break;
                     } else {
                         UNIT_ASSERT(ICq::IsWrBusy(ar));
@@ -192,7 +199,11 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                     completed.emplace_back(future);
                 }
             }
+
             UNIT_ASSERT(wasAlloc); // Check it was at least one sucess wr allocation
+            if (wasOverflow && attempt) {
+                attempt = 1;
+            }
 
             Cerr << "Whait for futures" << Endl;
 
@@ -203,6 +214,8 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
             }
             UNIT_ASSERT(strncmp((char*)reg1->GetAddr(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
         }
+
+        UNIT_ASSERT(wasOverflow.load(std::memory_order_relaxed)); // Check it was at least one sucess wr allocation
     }
 }
  

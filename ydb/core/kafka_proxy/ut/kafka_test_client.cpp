@@ -31,6 +31,9 @@ TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent)
     return WriteAndRead<TApiVersionsResponseData>(header, request, silent);
 }
 
+// YDB ignores AllowAutoTopicCreation, i.e. it never creates a new topic implicitly.
+// But in Apache Kafka the default behavior is to create a new topic, if there is no one at the moment of the request.
+// With this flag, allowAutoTopicCreation, you can stop this behavior in Apache Kafka.
 TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation) {
     Cerr << ">>>>> MetadataRequest\n";
 
@@ -38,6 +41,7 @@ TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TStr
 
     TMetadataRequestData request;
     if (allowAutoTopicCreation.has_value()) {
+        // If allowAutoTopicCreation does not have a value, use the default value (= true).
         request.AllowAutoTopicCreation = allowAutoTopicCreation.value() ? 1 : 0;
     }
     request.Topics.reserve(topics.size());
@@ -75,7 +79,7 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslAuthenticate(co
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
 
-TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const std::optional<TString> transactionalId) {
+TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const std::optional<TString>& transactionalId) {
     Cerr << ">>>>> TInitProducerIdRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::INIT_PRODUCER_ID, 4);
@@ -406,7 +410,6 @@ TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::p
     TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 3);
 
     TFetchRequestData request;
-    // request.MaxBytes = 1024;
     request.MaxWaitMs = 1000;
     request.MinBytes = 1;
     request.ReplicaId = -1;
@@ -433,7 +436,6 @@ TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::p
     TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 13);
 
     TFetchRequestData request;
-    // request.MaxBytes = 1024;
     request.MaxWaitMs = 1000;
     request.MinBytes = 1;
     request.ReplicaId = -1;

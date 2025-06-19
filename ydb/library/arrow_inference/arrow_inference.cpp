@@ -55,6 +55,7 @@ std::shared_ptr<arrow::DataType> GetCommonDataType(const std::shared_ptr<arrow::
         return arrow::int64();
     }
 
+    // TODO: Format specific. Utf8 is ok for all CSV data. For parquet its probably binary
     return arrow::utf8();
 }
 

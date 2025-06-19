@@ -60,7 +60,7 @@ public:
     void UnregisterProcess(const ui64 processId) {
         auto it = Processes.find(processId);
         AFL_VERIFY(it != Processes.end());
-        Y_UNUSED(RemoveWeightedProcess(processId));
+        Y_UNUSED(RemoveWeightedProcess(it->second));
         if (it->second->GetScope()->DecProcesses()) {
             AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
         }

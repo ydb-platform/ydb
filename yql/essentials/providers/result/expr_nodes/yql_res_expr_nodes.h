@@ -47,16 +47,16 @@ public:
 
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc(buildFunc) {}
+        , BuildFunc_(buildFunc) {}
 
     TParent& Build() {
         auto atom = this->Ctx_.NewAtom(this->Pos_, ResultProviderName);
         auto node = this->Ctx_.NewCallable(this->Pos_, "DataSink", { atom });
-        return BuildFunc(TResultDataSink(node));
+        return BuildFunc_(TResultDataSink(node));
     }
 
 private:
-    BuildFuncType BuildFunc;
+    BuildFuncType BuildFunc_;
 };
 
 } // namespace NNodes

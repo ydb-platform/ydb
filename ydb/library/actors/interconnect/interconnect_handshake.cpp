@@ -746,16 +746,16 @@ namespace NActors {
             };
 
             NInterconnect::NRdma::ICq::IWr* wr;
-            auto ar = RdmaCq->AllocWr(cb);
-            if (!NInterconnect::NRdma::ICq::IsWrSuccess(ar)) {
+            auto allocResult = RdmaCq->AllocWr(cb);
+            if (!NInterconnect::NRdma::ICq::IsWrSuccess(allocResult)) {
                 TStringBuilder sb;
-                sb << "Unable to allocate work reqeust, cq is " << NInterconnect::NRdma::ICq::IsWrBusy(ar) ? TString("full") : TString("err");
+                sb << "Unable to allocate work reqeust, cq is " << NInterconnect::NRdma::ICq::IsWrBusy(allocResult) ? TString("full") : TString("err");
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     sb.c_str());
                     rdmaReadAck.SetErr(sb);
                 return rdmaReadAck;
             } else {
-                wr = std::get<0>(ar);
+                wr = std::get<0>(allocResult);
             }
 
             int err = RdmaQp->SendRdmaReadWr(wr->GetId(), mr->GetAddr(), mr->GetLKey(RdmaCtx->GetDeviceIndex()), (void*)cred.GetAddress(), cred.GetRkey(), cred.GetSize());

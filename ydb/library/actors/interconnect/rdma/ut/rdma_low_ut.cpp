@@ -55,8 +55,8 @@ static std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTes
 static NInterconnect::NRdma::TMemRegionPtr AllocSourceRegion(std::shared_ptr<IMemPool> memPool) {
     auto reg = memPool->Alloc(MEM_REG_SZ);
     memset(reg->GetAddr(), 0, MEM_REG_SZ);
-    const char* testRtring = "-_RMDA_YDB_INTERCONNRCT_-";
-    strncpy((char*)reg->GetAddr(), testRtring, MEM_REG_SZ);
+    const char* testString = "-_RMDA_YDB_INTERCONNRCT_-";
+    strncpy((char*)reg->GetAddr(), testString, MEM_REG_SZ);
     return reg;
 }
 
@@ -102,8 +102,8 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
             promise.SetValue(ioDone->IsSuccess());
         };
 
-        auto ar = cqPtr->AllocWr(cb); 
-        ICq::IWr* wr = (ar.index() == 0) ? std::get<0>(ar) : nullptr;
+        auto allocResult = cqPtr->AllocWr(cb);
+        ICq::IWr* wr = (allocResult.index() == 0) ? std::get<0>(allocResult) : nullptr;
 
         UNIT_ASSERT(wr);
 
@@ -172,15 +172,15 @@ Y_UNIT_TEST_SUITE(RdmaLow) {
                     }
                 };
                 while (wr == nullptr) {
-                    auto ar = cqPtr->AllocWr(cb); 
-                    if (ICq::IsWrSuccess(ar)) {
+                    auto allocResult = cqPtr->AllocWr(cb);
+                    if (ICq::IsWrSuccess(allocResult)) {
                         wasAlloc = true;
-                        wr = std::get<0>(ar);
-                    } else if (ICq::IsWrErr(ar)) {
+                        wr = std::get<0>(allocResult);
+                    } else if (ICq::IsWrErr(allocResult)) {
                         wasOverflow.store(true, std::memory_order_relaxed);
                         break;
                     } else {
-                        UNIT_ASSERT(ICq::IsWrBusy(ar));
+                        UNIT_ASSERT(ICq::IsWrBusy(allocResult));
                     }
                 }
 

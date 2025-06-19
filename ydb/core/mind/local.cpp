@@ -947,6 +947,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (LastDrainRequest) {
             SendDrain(ctx);
         }
+        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
         Become(&TThis::StateWork);
     }
 
@@ -1002,7 +1003,6 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap");
-        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
         StartTime = ctx.Now();
         const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
         Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
@@ -1042,7 +1042,6 @@ public:
 
     STFUNC(StateInit) {
         switch(ev->GetTypeRewrite()) {
-            HFunc(TEvPrivate::TEvUpdateSystemUsage, Handle);
             HFunc(TEvNodeWardenStorageConfig, Handle);
             HFunc(TEvLocal::TEvEnumerateTablets, Handle);
             HFunc(TEvLocal::TEvLocalDrainNode, HandleInit);

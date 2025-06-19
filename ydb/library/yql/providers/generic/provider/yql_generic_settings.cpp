@@ -20,7 +20,7 @@ namespace NYql {
                                      const TCredentials::TPtr& credentials)
     {
         Dispatch(gatewayConfig.GetDefaultSettings());
-    
+
         DescribeTableTimeout = gatewayConfig.HasDescribeTableTimeoutSeconds() ? 
                                TDuration::Seconds(gatewayConfig.GetDescribeTableTimeoutSeconds()) :
                                TDuration::Seconds(60);

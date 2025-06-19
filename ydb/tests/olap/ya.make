@@ -41,4 +41,5 @@ RECURSE(
     scenario
     ttl_tiering
     data_quotas
+    delete
 )

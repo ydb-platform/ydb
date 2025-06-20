@@ -179,7 +179,6 @@ namespace NKikimr {
                 return false;
             }
 
-            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "START RunLevelCompactionSelector");
             //////////////////////// CHOOSE WHAT TO COMPACT ///////////////////////////////
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateCompPolicyAtWork);
             auto barriersSnap = HullDs->Barriers->GetIndexSnapshot();
@@ -277,8 +276,6 @@ namespace NKikimr {
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     if (CompactionTask->GetHugeBlobsToDelete().Empty()) {
                         ApplyCompactionResult(ctx, {}, {}, 0);
-                        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
-                            << "HugeBlobsToDelete is empty in compaction task");
                     } else {
                         const ui64 cookie = NextPreCompactCookie++;
                         LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix

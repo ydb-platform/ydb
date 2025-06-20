@@ -150,7 +150,7 @@ namespace NKikimr {
                     added++;
                     it.Next();
                 }
-                Y_VERIFY_S(added > 0, HullCtx->VCtx->VDiskLogPrefix);
+                Y_ABORT_UNLESS(added > 0);
 
                 LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                         HullCtx->VCtx->VDiskLogPrefix << " TBalanceLevel0 decided to compact, Task# " << CompactSsts.ToString());
@@ -237,7 +237,7 @@ namespace NKikimr {
                 }
 
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    LOG_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: TBalancePartiallySortedLevels::CalculateRank: %s, "
                                 "freeLevels: %" PRIu32 ", totalPsl %" PRIu32,
@@ -315,7 +315,7 @@ namespace NKikimr {
                     }
                     added++;
                 }
-                Y_VERIFY_S(added, HullCtx->VCtx->VDiskLogPrefix);
+                Y_ABORT_UNLESS(added);
 
                 LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                     HullCtx->VCtx->VDiskLogPrefix << " TBalancePartiallySortedLevels decided to compact, Task# " << CompactSsts.ToString()
@@ -409,7 +409,7 @@ namespace NKikimr {
 
                 // find sst to compact
                 const TSortedLevel &srcLevelData = SliceSnap.GetLevelXRef(srcLevelArrIdx);
-                const TKey &lastCompactedKey = TKey::First(); // We don't use it and don't care even more than earlier!
+                const TKey &lastCompactedKey = srcLevelData.LastCompactedKey;
                 const TSegments &srcSegs = srcLevelData.Segs->Segments;
                 Y_DEBUG_ABORT_UNLESS(!srcSegs.empty());
                 typename TSegments::const_iterator srcIt = ::LowerBound(srcSegs.begin(),

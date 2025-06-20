@@ -24,7 +24,7 @@ namespace NKikimr {
             using TStrategyBalance = NHullComp::TStrategyBalance<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategyDelSst = NHullComp::TStrategyDelSst<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategyFreeSpace = NHullComp::TStrategyFreeSpace<TKeyLogoBlob, TMemRecLogoBlob>;
-            //using TStrategyPromoteSsts = NHullComp::TStrategyPromoteSsts<TKeyLogoBlob, TMemRecLogoBlob>;
+            using TStrategyPromoteSsts = NHullComp::TStrategyPromoteSsts<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategyStorageRatio = NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>;
             using TStrategySqueeze = NHullComp::TStrategySqueeze<TKeyLogoBlob, TMemRecLogoBlob>;
 
@@ -41,7 +41,7 @@ namespace NKikimr {
             }
 
             // try to promote ssts on higher levels w/o merging
-            /*action = TStrategyPromoteSsts(HullCtx, Params.Boundaries, LevelSnap, Task).Select();
+            action = TStrategyPromoteSsts(HullCtx, Params.Boundaries, LevelSnap, Task).Select();
             if (action != ActNothing) {
                 ++HullCtx->CompactionStrategyGroup.BlobsPromoteSsts();
                 return action;
@@ -52,7 +52,7 @@ namespace NKikimr {
             if (action != ActNothing) {
                 ++HullCtx->CompactionStrategyGroup.BlobsExplicit();
                 return action;
-            }*/
+            }
 
             // try to find what to compact based on levels balance
             action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();

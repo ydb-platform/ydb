@@ -4,6 +4,7 @@
 #include <util/stream/input.h>
 #include <util/stream/multi.h>
 #include <util/stream/mem.h>
+#include <ydb/library/formats/arrow/csv/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -18,6 +19,7 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/ydb_cli/import/cli_arrow_helpers.h>
@@ -1219,7 +1221,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
             line.erase(line.size() - Settings.Delimiter_.size());
         }
 
-        buffer.push_back(td::move(line));
+        buffer.push_back(std::move(line));
 
         if (readBytes >= nextReadBorder && Settings.Verbose_) {
             nextReadBorder += VerboseModeStepSize;

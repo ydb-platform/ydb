@@ -1271,6 +1271,30 @@ public:
         const std::string& data, const std::string& schema = {}, const TBulkUpsertSettings& settings = TBulkUpsertSettings());
 
     /**
+    * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model.
+    *
+    * This method is not retryable with the same `rows` object because it moves the underlying data
+    * from the TValue object into the request proto model. The TValue class uses a shared pointer
+    * to store its implementation data, so when you make a copy of a TValue object, both copies
+    * share the same underlying data. When this method moves the data from one TValue instance,
+    * all other instances sharing the same implementation pointer will be left with moved-from data.
+    *
+    * Example of incorrect usage:
+    * ```
+    * TValue originalValue = BuildValue();
+    * retry {
+    *     TValue copy = originalValue;  // Both originalValue and copy share the same data
+    *     client.BulkUpsertUnretryableUnsafe(std::move(copy));  // Moves data from copy, leaving originalValue in moved-from state
+    * }
+    * ```
+    * CAUTION: It is unsafe to use the instance of `originalValue` because its underlying data is moved!
+    *
+    * To safely retry the operation, you need to create a new TValue with fresh data for each attempt.
+    */
+    TAsyncBulkUpsertResult BulkUpsertUnretryableUnsafe(const std::string& table, TValue&& rows,
+        const TBulkUpsertSettings& settings);
+
+    /**
     * @brief Upsert data into table moving `Ydb::Value` from `rows` into request proto model. The `Ydb::Value` of `TValue` must be arena-allocated.
     *
     * This method is not retryable with the same `rows` object because it moves the underlying data

@@ -133,4 +133,13 @@ void TStageFeatures::Add(const ui64 volume, const bool allocated) {
     }
 }
 
+bool TStageFeatures::UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit) {
+    const bool isIncreased = limit > Limit;
+
+    Limit = limit;
+    HardLimit = hardLimit;
+
+    return isIncreased;
+}
+
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

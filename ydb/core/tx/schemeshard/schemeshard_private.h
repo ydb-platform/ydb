@@ -294,7 +294,7 @@ namespace TEvPrivate {
     public:
         const NLogin::TLoginProvider::TLoginUserRequest Request;
         NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
         const TString PasswordHash;
     };
 
@@ -317,7 +317,7 @@ namespace TEvPrivate {
     public:
         const NLogin::TLoginProvider::TLoginUserRequest Request;
         const NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
         const TString PasswordHash;
         const bool NeedUpdateCache;
     };

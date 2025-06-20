@@ -599,7 +599,22 @@ namespace Tests {
             SetupProxies(nodeIdx);
         }
 
+        // Create Observer to catch an event of system views update finished.
+        // This doesn't apply in case when UseRealThreads flag is enabled
+        // because we can't catch events from other threads
+        if (GetSettings().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            AddSysViewsRosterUpdateObserver();
+        }
+
         CreateBootstrapTablets();
+
+        // Wait until schemeshard completes creating system view paths,
+        // otherwise these transactions may destabilize invariants used in tests
+        // (e.g. PathIds values of paths created in tests, general database path count etc.).
+        if (GetSettings().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            WaitForSysViewsRosterUpdate();
+        }
+
         SetupStorage();
     }
 
@@ -1663,6 +1678,24 @@ namespace Tests {
         }
     }
 
+    void TServer::AddSysViewsRosterUpdateObserver() {
+        if (Runtime && !Runtime->IsRealThreads()) {
+            SysViewsRosterUpdateFinished = false;
+            SysViewsRosterUpdateObserver = Runtime->AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
+                SysViewsRosterUpdateFinished = true;
+            });
+        }
+    }
+
+    void TServer::WaitForSysViewsRosterUpdate() {
+        if (Runtime && !Runtime->IsRealThreads()) {
+            Runtime->WaitFor("SysViewsRoster update finished", [this] {
+                return SysViewsRosterUpdateFinished;
+            });
+            SysViewsRosterUpdateObserver.Remove();
+        }
+    }
+
     void TServer::StartDummyTablets() {
         if (!Runtime)
             ythrow TWithBackTrace<yexception>() << "Server is redirected";
@@ -1722,6 +1755,7 @@ namespace Tests {
 
         if (Runtime) {
             WaitFinalization();
+            SysViewsRosterUpdateObserver.Remove();
             Runtime.Destroy();
         }
 

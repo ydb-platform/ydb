@@ -1172,7 +1172,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value String,
                 PRIMARY KEY (Key)
             )
-            )") 
+            )")
             + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -4847,6 +4847,111 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                                                 .Permissions = {}
                                             }
                                         });
+        }
+    }
+
+    Y_UNIT_TEST(ModifySysViewDirPermissions) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRealSystemViewPaths(true);
+        TKikimrRunner kikimr(featureFlags, "user@builtin");
+
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+
+        auto userSchemeClient = kikimr.GetSchemeClient();
+        auto userSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
+            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                GRANT DESCRIBE SCHEMA ON `/Root/.sys` TO `root@builtin`;
+                )";
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = userSchemeClient.ListDirectory("/Root/.sys").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                GRANT DESCRIBE SCHEMA ON `/Root/.sys` TO `user@builtin`;
+                )";
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(adminSession, {
+                                            {.Path = "/Root/.sys",
+                                                .Permissions = {
+                                                    {"root@builtin", {"ydb.granular.describe_schema"}},
+                                                    {"user@builtin", {"ydb.granular.describe_schema"}}
+                                                }
+                                            },
+                                        });
+        }
+        {
+            auto result = userSchemeClient.ListDirectory("/Root/.sys").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto children = result.GetChildren();
+            THashSet<TString> names;
+            for (const auto& child : children) {
+                names.insert(TString{child.Name});
+                UNIT_ASSERT_VALUES_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::SysView);
+            }
+            UNIT_ASSERT(names.contains("partition_stats"));
+        }
+    }
+
+    Y_UNIT_TEST(ModifySysViewPermissions) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRealSystemViewPaths(true);
+        TKikimrRunner kikimr(featureFlags, "root@builtin");
+
+        auto userSchemeClient = kikimr.GetSchemeClient();
+        auto db = kikimr.GetTableClient();
+        auto userSession = db.CreateSession().GetValueSync().GetSession();
+        auto querySelect = TStringBuilder() << R"(
+            --!syntax_v1
+            SELECT * FROM `/Root/.sys/partition_stats`;
+            )";
+
+        {
+            auto result = userSession.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "it does not exist or you do not have access permissions",
+                result.GetIssues().ToString()
+            );
+        }
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                GRANT SELECT ON `/Root/.sys/partition_stats` TO `root@builtin`;
+                )";
+            auto result = userSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CheckPermissions(userSession, {
+                                            {.Path = "/Root/.sys/partition_stats",
+                                                .Permissions = {
+                                                    {"root@builtin", {"ydb.generic.read"}}
+                                                }
+                                            },
+                                        });
+        }
+        {
+            auto result = userSession.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+            auto rs = result.GetResultSet(0);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 34);
+            UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 30);
         }
     }
 

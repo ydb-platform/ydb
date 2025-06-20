@@ -332,6 +332,8 @@ namespace Tests {
         void SetupConfigurators(ui32 nodeIdx);
         void SetupProxies(ui32 nodeIdx);
         void SetupLogging();
+        void AddSysViewsRosterUpdateObserver();
+        void WaitForSysViewsRosterUpdate();
 
         void Initialize();
 
@@ -398,6 +400,9 @@ namespace Tests {
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         NFq::IYqSharedResources::TPtr YqSharedResources;
+
+        TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
+        bool SysViewsRosterUpdateFinished;
 
         struct TGRpcInfo {
             std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;

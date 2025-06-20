@@ -152,7 +152,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         TMeteringStatsCalculator::AddTo(billed, toBill);
         Self->PersistBuildIndexBilled(db, buildInfo);
 
-        ui64 requestUnits = TRUCalculator::Calculate(toBill);
+        TString requestUnitsExplain;
+        ui64 requestUnits = TRUCalculator::Calculate(toBill, requestUnitsExplain);
 
         const TString billRecord = TBillRecord()
             .Id(id)
@@ -163,13 +164,11 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_N("ApplyBill: make a bill, id#" << id
-              << ", toBill: " << toBill
-              << ", requestUnits: " << requestUnits
-              << ", ReadTableRU: " << TRUCalculator::ReadTable(toBill.GetReadBytes())
-              << ", BulkUpsertRU: " << TRUCalculator::BulkUpsert(toBill.GetUploadBytes(), toBill.GetUploadRows())
-              << ", buildInfo: " << buildInfo
-              << ", billRecord: " << billRecord);
+        LOG_N("ApplyBill: make a bill, id#" << buildId
+            << ", billRecord: " << billRecord
+            << ", toBill: " << toBill
+            << ", explain: " << requestUnitsExplain
+            << ", buildInfo: " << buildInfo);
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(std::move(billRecord));
         // send message at Complete stage

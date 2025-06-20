@@ -8,7 +8,6 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/login/login.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/datetime/base.h>
 
@@ -297,7 +296,7 @@ namespace TEvPrivate {
     public:
         const NLogin::TLoginProvider::TLoginUserRequest Request;
         NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
         const TString PasswordHash;
     };
 
@@ -320,7 +319,7 @@ namespace TEvPrivate {
     public:
         const NLogin::TLoginProvider::TLoginUserRequest Request;
         const NLogin::TLoginProvider::TPasswordCheckResult CheckResult;
-        const NActors::TActorId Source;
+        const NActors::TActorId Source; // actorId of the initial schemeshard client which requested user login
         const TString PasswordHash;
         const bool NeedUpdateCache;
     };

@@ -11,8 +11,10 @@ namespace NSchemeShard {
 
 struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvLogin::TPtr Request;
+    NLogin::TLoginProvider::TLoginUserResponse Response;
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
+    bool SendFinalizeEvent = false;
     TString ErrMessage;
 
     TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
@@ -60,7 +62,6 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             return;
         }
 
-        NLogin::TLoginProvider::TLoginUserResponse Response;
         TString passwordHash;
         if (Self->LoginProvider.NeedVerifyHash(loginRequest, &Response, &passwordHash)) {
             ctx.Send(
@@ -70,18 +71,23 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
                 Request->Cookie
             );
         } else {
-            ctx.Send(
-                Self->SelfId(),
-                MakeHolder<TEvPrivate::TEvLoginFinalize>(loginRequest, Response, Request->Sender, "", /*needUpdateCache*/ false),
-                0,
-                Request->Cookie
-            );
+            SendFinalizeEvent = true;
         }
     }
 
     void DoComplete(const TActorContext &ctx) override {
         if (NeedPublishOnComplete) {
             Self->PublishToSchemeBoard(TTxId(), {SubDomainPathId}, ctx);
+        }
+
+        if (SendFinalizeEvent) {
+            auto event = MakeHolder<TEvPrivate::TEvLoginFinalize>(
+                GetLoginRequest(), Response, Request->Sender, "", /*needUpdateCache*/ false
+            );
+            TEvPrivate::TEvLoginFinalize::TPtr eventPtr = (TEventHandle<TEvPrivate::TEvLoginFinalize>*) new IEventHandle(
+                Self->SelfId(), Self->SelfId(), event.Release()
+            );
+            Self->Execute(Self->CreateTxLoginFinalize(eventPtr), ctx);
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

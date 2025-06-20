@@ -1882,6 +1882,32 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
 
+    void TestSuccess(const TVector<TString>& admins, const TString& testUser, bool isAdmin) {
+        TTestBasicRuntime runtime;
+        if (!admins.empty()) {
+            runtime.AddAppDataInit([&admins](ui32, NKikimr::TAppData& appData){
+                for (const auto& admin : admins) {
+                    appData.AdministrationAllowedSIDs.emplace_back(admin);
+                }
+            });
+        }
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", testUser, "password1");
+
+        const auto check = NLogin::TLoginProvider::TPasswordCheckResult{.Status =
+            NLogin::TLoginProvider::TPasswordCheckResult::EStatus::SUCCESS};
+        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = testUser});
+        // public keys are filled after the first login
+        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, testUser, "wrong-password1").error(), "Invalid password");
+        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        CheckToken(resultLogin.token(), describe, testUser);
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetIsAdmin(), isAdmin);
+    }
+
     Y_UNIT_TEST(NoPublicKeys) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1916,20 +1942,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
     }
 
     Y_UNIT_TEST(Success) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-
-        const auto check = NLogin::TLoginProvider::TPasswordCheckResult{.Status =
-            NLogin::TLoginProvider::TPasswordCheckResult::EStatus::SUCCESS};
-        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
-        // public keys are filled after the first login
-        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", "wrong-password1").error(), "Invalid password");
-        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckToken(resultLogin.token(), describe, "user1");
+        TestSuccess({}, "user1", true);
+        TestSuccess({"user-admin"}, "user1", false);
+        TestSuccess({"user1"}, "user1", true);
     }
 }

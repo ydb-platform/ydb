@@ -30,6 +30,7 @@ enum class EConsumer {
     WRITING_OPERATOR,
     NORMALIZER,
     STATISTICS,
+    DUPLICATE_FILTERING,
     UNDEFINED,
 
     COUNT

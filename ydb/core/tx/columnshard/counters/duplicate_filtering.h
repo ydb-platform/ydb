@@ -14,6 +14,9 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsRejected;
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsBulkAccepted;
 
+    NMonitoring::TDynamicCounters::TCounterPtr SourceCacheHits;
+    NMonitoring::TDynamicCounters::TCounterPtr SourceCacheMisses;
+
 public:
     TDuplicateFilteringCounters();
 
@@ -21,6 +24,11 @@ public:
         MergeRowsAccepted->Add(accepted);
         MergeRowsRejected->Add(rejected);
         MergeRowsBulkAccepted->Add(bulkAccepted);
+    }
+
+    void OnSourceCacheRequest(const ui64 hits, const ui64 misses) const {
+        SourceCacheHits->Add(hits);
+        SourceCacheMisses->Add(misses);
     }
 };
 }   // namespace NKikimr::NColumnShard

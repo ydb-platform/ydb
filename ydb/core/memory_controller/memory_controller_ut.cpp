@@ -507,18 +507,17 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
 
     auto resourceBrokerConfig = serverSettings.AppConfig->MutableResourceBrokerConfig();
     resourceBrokerConfig->MutableResourceLimit()->SetMemory(1000_MB);
-    auto queue = resourceBrokerConfig->AddQueues();
-    queue->SetName(NLocalDb::ColumnShardCompactionIndexationQueue);
-    queue->MutableLimit()->SetMemory(1_MB);
-    queue = resourceBrokerConfig->AddQueues();
-    queue->SetName(NLocalDb::ColumnShardCompactionTtlQueue);
-    queue->MutableLimit()->SetMemory(1_MB);
-    queue = resourceBrokerConfig->AddQueues();
-    queue->SetName(NLocalDb::ColumnShardCompactionGeneralQueue);
-    queue->MutableLimit()->SetMemory(1_MB);
-    queue = resourceBrokerConfig->AddQueues();
-    queue->SetName(NLocalDb::ColumnShardCompactionNormalizerQueue);
-    queue->MutableLimit()->SetMemory(1_MB);
+
+    auto addQueueWithMemoryLimit = [&](const TString& name, const ui64 memoryLimit) {
+        auto queue = resourceBrokerConfig->AddQueues();
+        queue->SetName(name);
+        queue->MutableLimit()->SetMemory(memoryLimit);
+    };
+
+    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, 1_MB);
+    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, 1_MB);
+    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, 1_MB);
+    addQueueWithMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, 1_MB);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
@@ -530,47 +529,25 @@ Y_UNIT_TEST(ResourceBroker_ConfigCS) {
 
     runtime.SimulateSleep(TDuration::Seconds(2));
 
-    runtime.Send(
-        new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionIndexationQueue)));
-    auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 40_MB);
+    auto checkMemoryLimit = [&](const TString& queueName, const ui64 expectedLimit) {
+        runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(queueName)));
+        auto config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), expectedLimit);
+    };
 
-    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionTtlQueue)));
-    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 40_MB);
-
-    runtime.Send(
-        new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionGeneralQueue)));
-    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 120_MB);
-
-    runtime.Send(
-        new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionNormalizerQueue)));
-    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 120_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, 40_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, 40_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, 120_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, 120_MB);
 
     // Check memory change
     server->ProcessMemoryInfo->CGroupLimit = 50_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
 
-    runtime.Send(
-        new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionIndexationQueue)));
-    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 2_MB);
-
-    runtime.Send(new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionTtlQueue)));
-    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 2_MB);
-
-    runtime.Send(
-        new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionGeneralQueue)));
-    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 6_MB);
-
-    runtime.Send(
-        new IEventHandle(MakeResourceBrokerID(), sender, new TEvResourceBroker::TEvConfigRequest(NLocalDb::ColumnShardCompactionNormalizerQueue)));
-    config = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(handle);
-    UNIT_ASSERT_VALUES_EQUAL(config->QueueConfig->GetLimit().GetMemory(), 6_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionIndexationQueue, 2_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionTtlQueue, 2_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionGeneralQueue, 6_MB);
+    checkMemoryLimit(NLocalDb::ColumnShardCompactionNormalizerQueue, 6_MB);
 }
 }
 

@@ -141,7 +141,7 @@ Importing items from the `dir1` and `dir2` directories in the `mybucket` S3 buck
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --access-key <access-key> --secret-key <secret-key> \
   --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
 ```
 
@@ -152,7 +152,7 @@ Importing one table that was exported using the `dir/my_table` path to the `dir1
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --access-key <access-key> --secret-key <secret-key> \
   --source-prefix export1 --destination-path dir1 \
   --item src_path=dir/my_table \
   --encryption-key-file ~/my_secret_key

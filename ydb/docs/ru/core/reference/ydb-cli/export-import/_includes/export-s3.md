@@ -152,7 +152,7 @@
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --access-key <access-key> --secret-key <secret-key> \
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
 ```
 
@@ -161,7 +161,7 @@
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --access-key <access-key> --secret-key <secret-key> \
   --destination-prefix export1 --include dir1,dir2
 ```
 

@@ -54,7 +54,6 @@ SRCS(
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__conditional_erase_rows.cpp
-    datashard__data_cleanup.cpp
     datashard__engine_host.cpp
     datashard__engine_host.h
     datashard__get_state_tx.cpp
@@ -79,6 +78,7 @@ SRCS(
     datashard__stats.cpp
     datashard__store_scan_state.cpp
     datashard__store_table_path.cpp
+    datashard__vacuum.cpp
     datashard__write.cpp
     datashard_active_transaction.cpp
     datashard_active_transaction.h

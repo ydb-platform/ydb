@@ -19,7 +19,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    datashard_ut_data_cleanup.cpp
+    datashard_ut_vacuum.cpp
 )
 
 END()

@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         };
 
         auto setAllowConditionalEraseOperations = [&](bool value) {
-            TControlBoard::SetValue(value, runtime.GetAppData()->Icb->SchemeShard.AllowConditionalEraseOperations);
+            TControlBoard::SetValue(value, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
         };
 
         const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");

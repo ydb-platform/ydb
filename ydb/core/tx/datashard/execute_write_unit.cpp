@@ -84,13 +84,6 @@ public:
         return false;
     }
 
-    TStackVec<NTable::TTag> GetDefaultFilledColumns(const TValidatedWriteTxOperation& validatedOperation)
-    {
-        auto x = validatedOperation.GetDefaultFilledColumnsIds();
-        TStackVec<NTable::TTag> columnIds = TStackVec<NTable::TTag>(x.begin(), x.end());
-        return columnIds;
-        
-    }
     void FillOps(const NTable::TScheme& scheme, const TUserTable& userTable, const NTable::TScheme::TTableInfo& tableInfo, const TValidatedWriteTxOperation& validatedOperation, ui32 rowIdx, TSmallVec<NTable::TUpdateOp>& ops) {
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto& columnIds = validatedOperation.GetColumnIds();
@@ -186,7 +179,7 @@ public:
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
-        TStackVec<NTable::TTag> defaultFilledColumnsIds = GetDefaultFilledColumns(validatedOperation);
+        TStackVec<NTable::TTag> defaultFilledColumnsIds = validatedOperation.GetDefaultFilledColumnsIds();
 
         // Main update cycle
 

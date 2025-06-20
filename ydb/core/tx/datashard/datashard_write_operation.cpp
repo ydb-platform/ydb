@@ -104,8 +104,14 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
     DefaultFilledColumnsIds = {recordOperation.GetDefaultFilledColumnIds().begin(), recordOperation.GetDefaultFilledColumnIds().end()};
-    // todo проверить что там нет ключевых столбллвы и нет при операциях нет replace upsert
     
+    if (DefaultFilledColumnsIds.size() != 0 && 
+        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT &&
+        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE) 
+    {
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " doesn't support DefaultFilledColumnsIds"};
+    }
+
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());
@@ -159,6 +165,24 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
             if (cell.Size() > NLimits::MaxWriteValueSize)
                 return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize};
         }
+    }
+
+    for (size_t i = 0; i < DefaultFilledColumnsIds.size(); i++) {
+        auto* col = tableInfo.Columns.FindPtr(DefaultFilledColumnsIds[i]);
+        if (col->IsKey) {
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "DefaultFilledColumnsIds not allowed for key column " << DefaultFilledColumnsIds[i]};
+        }
+        // todo stupid
+        bool ok = false;
+        for (size_t j = 0; j < ColumnIds.size(); j++ ) {
+            if (ColumnIds[j] == DefaultFilledColumnsIds[i]) {
+                ok = true;
+            }
+        }
+        if (!ok) {
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "DefaultFilledColumnsIds should be subset of ColumnsIds"};
+        }
+        
     }
 
     if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT) {

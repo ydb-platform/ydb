@@ -30,7 +30,7 @@ namespace {
 
 static constexpr size_t MAC_SIZE = 16;
 static constexpr size_t MAX_HEADER_SIZE = 16_KB; // Header does not contain much data
-static constexpr size_t MAX_BLOCK_SIZE = 30_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
+static constexpr size_t MAX_BLOCK_SIZE = 50_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format. // Real value is bound to 32 MB in TBackupTask.TScanSettings.BytesBatchSize setting.
 
 THashMap<TString, TString> AlgNames = {
     {"aes128gcm", "AES-128-GCM"},

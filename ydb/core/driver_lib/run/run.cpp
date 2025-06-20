@@ -99,6 +99,7 @@
 #include <ydb/library/grpc/server/actors/logger.h>
 
 #include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/bridge/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/config/grpc_service.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
@@ -635,6 +636,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["view"] = &hasView;
         TServiceCfg hasConfig = services.empty();
         names["config"] = &hasConfig;
+        TServiceCfg hasBridge = services.empty();
+        names["bridge"] = &hasBridge;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -930,6 +933,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasConfig) {
             server.AddService(new NGRpcService::TConfigGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
+        }
+
+        if (hasBridge) {
+            server.AddService(new NGRpcService::TBridgeGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {

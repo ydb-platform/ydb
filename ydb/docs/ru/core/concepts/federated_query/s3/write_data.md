@@ -30,3 +30,22 @@ SELECT
     "value" AS value, "name" AS name
 ```
 
+## Экспорт данных в объектное хранилище S3 {#export-to-s3}
+
+{{ ydb-short-name }} поддерживает экспорт данных из таблиц в S3 с помощью [внешнего соединения](../../datamodel/external_data_source.md).
+
+Экспорт из [колоночных таблиц](../../datamodel/table.md#column-oriented-tables) (OLAP-таблиц) поддерживается без ограничений. Экспорт из [строковых таблиц](../../datamodel/table.md#row-oriented-tables) поддерживается только для таблиц размером до 1 ГБ.
+
+Для экспорта нужно использовать запрос [записи во внешнее соединение](#connection-write) с указанием [формата экспортируемого файла](./formats.md):
+
+```yql
+INSERT INTO `connection`.`test/`
+WITH
+(
+    FORMAT = "csv_with_names"
+)
+SELECT
+    *
+FROM table
+```
+

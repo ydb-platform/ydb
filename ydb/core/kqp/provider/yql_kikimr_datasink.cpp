@@ -7,7 +7,7 @@
 
 #include <yql/essentials/utils/log/log.h>
 
-#include <ydb/core/kqp/common/batch/params.h>
+#include <ydb/core/kqp/common/batch/batch_operations_helpers.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
@@ -96,8 +96,8 @@ TExprBase MakeBatchRange(const TVector<TExprBase>& params, const TVector<TExprBa
 TCoOr MakeBatchRangesWithPrefixSize(const TVector<TExprBase>& members, const TVector<const TTypeAnnotationNode*>& types, const TString& sign,
     bool isBegin, TPositionHandle pos, TExprContext& ctx)
 {
-    auto paramName = (isBegin) ? NKqp::NBatchParams::Begin : NKqp::NBatchParams::End;
-    auto prefixParamName = (isBegin) ? NKqp::NBatchParams::BeginPrefixSize : NKqp::NBatchParams::EndPrefixSize;
+    auto paramName = (isBegin) ? NKqp::NBatchOperations::Begin : NKqp::NBatchOperations::End;
+    auto prefixParamName = (isBegin) ? NKqp::NBatchOperations::BeginPrefixSize : NKqp::NBatchOperations::EndPrefixSize;
 
     TVector<TExprBase> cur_params;
     TVector<TExprBase> cur_members;
@@ -158,24 +158,24 @@ TCoLambda RewriteBatchFilter(const TCoLambda& lambda, const TKikimrTableDescript
     auto newFilter = Build<TCoAnd>(ctx, pos)
         .Add<TCoOr>()
             .Add<TCoAnd>()
-                .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveLeft, "Bool", pos, ctx))
+                .Add(MakeCustomTypedParameter(NKqp::NBatchOperations::IsInclusiveLeft, "Bool", pos, ctx))
                 .Add(MakeBatchRangesWithPrefixSize(members, types, "<=", /* isBegin */ true, pos, ctx))
                 .Build()
             .Add<TCoAnd>()
                 .Add<TCoNot>()
-                    .Value(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveLeft, "Bool", pos, ctx))
+                    .Value(MakeCustomTypedParameter(NKqp::NBatchOperations::IsInclusiveLeft, "Bool", pos, ctx))
                     .Build()
                 .Add(MakeBatchRangesWithPrefixSize(members, types, "<", /* isBegin */ true, pos, ctx))
                 .Build()
             .Build()
         .Add<TCoOr>()
             .Add<TCoAnd>()
-                .Add(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveRight, "Bool", pos, ctx))
+                .Add(MakeCustomTypedParameter(NKqp::NBatchOperations::IsInclusiveRight, "Bool", pos, ctx))
                 .Add(MakeBatchRangesWithPrefixSize(members, types, ">=", /* isBegin */ false, pos, ctx))
                 .Build()
             .Add<TCoAnd>()
                 .Add<TCoNot>()
-                    .Value(MakeCustomTypedParameter(NKqp::NBatchParams::IsInclusiveRight, "Bool", pos, ctx))
+                    .Value(MakeCustomTypedParameter(NKqp::NBatchOperations::IsInclusiveRight, "Bool", pos, ctx))
                     .Build()
                 .Add(MakeBatchRangesWithPrefixSize(members, types, ">", /* isBegin */ false, pos, ctx))
                 .Build()

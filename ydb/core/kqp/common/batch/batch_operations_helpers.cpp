@@ -1,6 +1,10 @@
-#include "batch_operation_settings.h"
+#include "batch_operations_helpers.h"
 
-namespace NKikimr::NKqp {
+namespace NKikimr::NKqp::NBatchOperations {
+
+// TBatchOperationPrunerSettings MakeBatchOperationPrunerSettings(TMaybe<TKeyDesc::TPartitionRangeInfo> , TMaybe<TKeyDesc::TPartitionRangeInfo> ) {
+//     return TBatchOperationPrunerSettings{};
+// }
 
 TBatchOperationSettings SetBatchOperationSettings(const NKikimrConfig::TTableServiceConfig::TBatchOperationSettings& settings) {
     TBatchOperationSettings res;
@@ -14,4 +18,4 @@ TBatchOperationSettings SetBatchOperationSettings(const NKikimrConfig::TTableSer
     return res;
 }
 
-} // namespace NKikimr::NKqp
+} // namespace NKikimr::NKqp::NBatchOperations

@@ -114,7 +114,7 @@ actor_system_config:
     threads: 1
     spin_threshold: 10
     name: "IC"
-    time_per_mailbox_micro_secs: 101
+    time_per_mailbox_micro_secs: 102
   scheduler:
     resolution: 256
     spin_threshold: 0

@@ -76,8 +76,8 @@ struct TEvListRequest;
 }
 
 namespace NKikimr::TEvKeyValue {
-    struct TEvCleanUpDataResponse;
-    using TEvCleanUpDataResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvCleanUpDataResponse>>;
+    struct TEvVacuumResponse;
+    using TEvVacuumResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvVacuumResponse>>;
 }
 
 
@@ -1196,7 +1196,7 @@ public:
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvKeyValue::TEvCleanUpDataResponse__HandlePtr& ev, const TActorContext& ctx);
+    void Handle(TEvKeyValue::TEvVacuumResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);

@@ -61,7 +61,7 @@ WHERE
 1. Поддерживаются только запросы чтения данных - `SELECT` и `INSERT`, остальные виды запросов не поддерживаются.
 1. {% include [!](../_includes/datetime_limits.md)%}
 
-## Импорт данных из S3 в колоночную таблицу {#import-from-s3-to-olap}
+## Импорт данных из S3 в таблицу {#import-from-s3}
 
 {{ ydb-short-name }} поддерживает загрузку данных из S3 в колоночную таблицу {{ ydb-short-name }} с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). В результате будет создана [колоночная таблица](../../datamodel/table.md#column-oriented-tables) со схемой, соответствующей использованной для импорта [внешней таблицы](../../datamodel/external_table.md):
 

@@ -1,4 +1,4 @@
-#include "flat_executor_data_cleanup_logic.h"
+#include "flat_executor_vacuum_logic.h"
 
 namespace NKikimr::NTabletFlatExecutor {
 

@@ -40,7 +40,7 @@ using namespace NKMeans;
  * - Mean value is calculated for each centroid and returned in the response
  */
 
-class TRecomputeKMeansScan: public TActor<TRecomputeKMeansScan>, public IActorExceptionHandler, public NTable::IScan {
+class TRecomputeKMeansScan: public TActor<TRecomputeKMeansScan>, public NTable::IScan {
 protected:
     const ui64 TabletId = 0;
     const ui64 BuildId = 0;
@@ -88,7 +88,7 @@ public:
         Lead.SetTags(ScanTags);
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_I("Prepare " << Debug());
@@ -98,22 +98,13 @@ public:
         return {EScan::Feed, {}};
     }
 
-    TAutoPtr<IDestructable> Finish(const std::exception& exc) final
-    {
-        Issues.AddIssue(NYql::TIssue(TStringBuilder()
-            << "Scan failed " << exc.what()));
-        return Finish(EStatus::Exception);
-    }
-
-    TAutoPtr<IDestructable> Finish(EStatus status) final
+    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
     {
         auto& record = Response->Record;
         record.SetReadRows(ReadRows);
         record.SetReadBytes(ReadBytes);
 
-        if (status == EStatus::Exception) {
-            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-        } else if (status != NTable::EStatus::Done) {
+        if (abort != EAbort::None) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
@@ -134,31 +125,28 @@ public:
         return nullptr;
     }
 
-    bool OnUnhandledException(const std::exception& exc) final
-    {
-        if (!Driver) {
-            return false;
-        }
-        Driver->Throw(exc);
-        return true;
-    }
-
-    void Describe(IOutputStream& out) const final
+    void Describe(IOutputStream& out) const noexcept final
     {
         out << Debug();
     }
 
-    EScan Seek(TLead& lead, ui64 seq) final
+    EScan Seek(TLead& lead, ui64 seq) noexcept final
     {
+    try {
         LOG_T("Seek " << seq << " " << Debug());
 
         lead = Lead;
 
         return EScan::Feed;
+    } catch (const std::exception& exc) {
+        Issues.AddIssue(exc.what());
+        return EScan::Final;
+    }
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
+    try {
         // LOG_T("Feed " << Debug());
 
         ++ReadRows;
@@ -167,13 +155,22 @@ public:
         Feed(key, *row);
 
         return EScan::Feed;
+    } catch (const std::exception& exc) {
+        Issues.AddIssue(exc.what());
+        return EScan::Final;
+    }
     }
 
-    EScan Exhausted() final
+    EScan Exhausted() noexcept final
     {
+    try {
         LOG_T("Exhausted " << Debug());
 
         return EScan::Final;
+    } catch (const std::exception& exc) {
+        Issues.AddIssue(exc.what());
+        return EScan::Final;
+    }
     }
 
 protected:
@@ -198,8 +195,9 @@ protected:
         }
     }
 
-    void FillResponse()
+    void FillResponse() noexcept
     {
+    try{
         auto& record = Response->Record;
         Clusters->RecomputeClusters();
         const auto& clusters = Clusters->GetClusters();
@@ -209,6 +207,9 @@ protected:
             record.AddClusterSizes(sizes[i]);
         }
         record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
+    } catch (const std::exception& exc) {
+        Issues.AddIssue(exc.what());
+    }
     }
 };
 

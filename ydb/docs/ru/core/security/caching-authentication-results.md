@@ -85,7 +85,7 @@ sequenceDiagram
 
 {% note info %}
 
-Количество ошибок при обновлении токена пользователя можно увидеть в [метриках](../reference/observability/metrics/index.md) `auth.TicketParser.TicketsErrors`, `auth.TicketParser.TicketsErrorsPermanent`, и `auth.TicketParser.TicketsErrorsRetryable` или в поле `Error` на странице **Developer UI** > **Actors** > **Ticket Parser** (https://<ydb-server-address>:<ydb-port>/actors/ticket_parser).
+Количество ошибок при обновлении токена пользователя можно увидеть в [метриках](../reference/observability/metrics/index.md) `auth.TicketParser.TicketsErrors`, `auth.TicketParser.TicketsErrorsPermanent`, и `auth.TicketParser.TicketsErrorsRetryable` или в поле `Error` на странице **Developer UI** > **Actors** > **Ticket Parser** (https://&lt;ydb-server-address&gt;:&lt;ydb-port&gt;/actors/ticket_parser).
 
 Ошибки могут возникать из-за следующих проблем:
 

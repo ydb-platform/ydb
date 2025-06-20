@@ -1429,6 +1429,13 @@ namespace NSchemeShardUT_Private {
         };
     }
 
+    TLocalPathId GetNextLocalPathId(TTestActorRuntime& runtime, ui64& txId) {
+        TestMkDir(runtime, ++txId, "/MyRoot", "test42");
+        TLocalPathId res = DescribePath(runtime, "/MyRoot/test42").GetPathId() + 1;
+        TestRmDir(runtime, ++txId, "/MyRoot", "test42");
+        return res;
+    }
+
     TString SetAllowLogBatching(TTestActorRuntime& runtime, ui64 tabletId, bool v) {
         NTabletFlatScheme::TSchemeChanges scheme;
         TString errStr;
@@ -2738,6 +2745,9 @@ namespace NSchemeShardUT_Private {
         TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
             StoragePools {
               Name: "pool-1"
@@ -2765,9 +2775,9 @@ namespace NSchemeShardUT_Private {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = R"(
@@ -2792,4 +2802,54 @@ namespace NSchemeShardUT_Private {
             NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
     }
 
+    void MeteringDataEqual(const TString& leftMsg, const TString& rightMsg) {
+        const auto leftMeteringData = NJson::ReadJsonFastTree(leftMsg);
+        const auto rightMeteringData = NJson::ReadJsonFastTree(rightMsg);
+
+        const auto leftIdParts = SplitString(leftMeteringData["id"].GetString(), "-");
+        const auto rightIdParts = SplitString(rightMeteringData["id"].GetString(), "-");
+        UNIT_ASSERT_VALUES_EQUAL(leftIdParts.size(), rightIdParts.size());
+
+        size_t localPathIdIndex = 2;
+        if (leftMeteringData["source_id"] == "sless-docapi-ydb-storage") {
+            localPathIdIndex = 1;
+        }
+
+        for (size_t i = 0; i < leftIdParts.size(); ++i) {
+            if (i != localPathIdIndex) { // no need to compare localPathIds
+                UNIT_ASSERT_VALUES_EQUAL(leftIdParts[i], rightIdParts[i]);
+            }
+        }
+
+        const auto& leftUsage = leftMeteringData["usage"];
+        const auto& rightUsage = rightMeteringData["usage"];
+        for (const auto& field : {"quantity", "unit", "type"}) {
+            Cerr << field << ": " << leftUsage[field] << ", " << rightUsage[field] << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(leftUsage[field], rightUsage[field]);
+        }
+
+        for (const auto& field : {"version", "schema", "cloud_id", "folder_id", "resource_id", "source_id"}) {
+            UNIT_ASSERT_VALUES_EQUAL(leftMeteringData[field], rightMeteringData[field]);
+        }
+
+        const auto& leftTags = leftMeteringData["tags"].GetMap();
+        const auto& rightTags = rightMeteringData["tags"].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(leftTags.size(), rightTags.size());
+
+        for (const auto& [tag, value] : leftTags) {
+            auto it = rightTags.find(tag);
+            UNIT_ASSERT(it != rightTags.end());
+            UNIT_ASSERT_VALUES_EQUAL(value, it->second);
+        }
+
+        const auto& leftLabels = leftMeteringData["labels"].GetMap();
+        const auto& rightLabels = rightMeteringData["labels"].GetMap();
+        UNIT_ASSERT_VALUES_EQUAL(leftLabels.size(), rightLabels.size());
+
+        for (const auto& [label, value] : leftLabels) {
+            auto it = rightLabels.find(label);
+            UNIT_ASSERT(it != rightLabels.end());
+            UNIT_ASSERT_VALUES_EQUAL(value, it->second);
+        }
+    }
 }

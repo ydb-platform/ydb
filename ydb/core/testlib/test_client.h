@@ -332,6 +332,7 @@ namespace Tests {
         void SetupConfigurators(ui32 nodeIdx);
         void SetupProxies(ui32 nodeIdx);
         void SetupLogging();
+        void WaitForSysViewsRosterUpdate();
 
         void Initialize();
 

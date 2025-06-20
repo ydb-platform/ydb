@@ -598,6 +598,9 @@ namespace Tests {
         }
 
         CreateBootstrapTablets();
+        if (GetSettings().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            WaitForSysViewsRosterUpdate();
+        }
         SetupStorage();
     }
 
@@ -688,7 +691,7 @@ namespace Tests {
                 if (const auto& domain = appData.DomainsInfo->Domain) {
                     rootDomains.emplace_back("/" + domain->Name);
                 }
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());    
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
             } else {
                 desc->ServedDatabases.emplace_back(CanonizePath(*tenant));
             }
@@ -1454,7 +1457,7 @@ namespace Tests {
             IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
-            
+
             TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateTransactionsCoordinator(), nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeTransactionsServiceID(Runtime->GetNodeId(nodeIdx)), kafkaTxnCoordinatorActorId, nodeIdx);
 
@@ -1649,6 +1652,12 @@ namespace Tests {
         if (Settings->LoggerInitializer) {
             Settings->LoggerInitializer(*Runtime);
         }
+    }
+
+    void TServer::WaitForSysViewsRosterUpdate() {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(NSysView::TEvSysView::EvRosterUpdateFinished);
+        Runtime->DispatchEvents(options, TDuration::Seconds(3));
     }
 
     void TServer::StartDummyTablets() {

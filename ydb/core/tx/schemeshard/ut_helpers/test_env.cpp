@@ -615,6 +615,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
+    app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 
@@ -683,6 +684,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     BootTxAllocator(runtime, txAllocator);
     BootFakeCoordinator(runtime, coordinator, CoordinatorState);
     BootFakeHive(runtime, hive, HiveState, &GetTabletCreationFunc);
+
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        WaitForSysViewsRosterUpdate(runtime);
+    }
 
     InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid);
 
@@ -920,6 +925,12 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
 
 void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> localIds) {
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForSysViewsRosterUpdate(NActors::TTestActorRuntime& runtime) {
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back(NSysView::TEvSysView::EvRosterUpdateFinished);
+    runtime.DispatchEvents(options, TDuration::Seconds(3));
 }
 
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {

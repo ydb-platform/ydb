@@ -4,6 +4,7 @@
 
 #include <util/system/getpid.h>
 #include <ydb/core/sys_view/service/query_history.h>
+#include <ydb/core/tx/tx_proxy/proxy_ut_helpers.h>
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
 
 namespace NKikimr {
@@ -46,8 +47,22 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         CompareYson(R"([[["::1"];["/Root/KeyValue"];[2u]]])", StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(Sessions) {
-        TKikimrRunner kikimr("root@builtin");
+    Y_UNIT_TEST_FLAG(Sessions, EnableRealSystemViewPaths) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRealSystemViewPaths(EnableRealSystemViewPaths);
+        TKikimrRunner kikimr(featureFlags, "root@builtin");
+
+        if (EnableRealSystemViewPaths) {
+            TPermissions permissions("root@builtin",
+                {"ydb.granular.describe_schema", "ydb.granular.select_row"}
+            );
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/.sys",
+                TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
         auto client = kikimr.GetQueryClient();
         auto tableClient = kikimr.GetTableClient();
         const size_t sessionsCount = 50;
@@ -695,6 +710,9 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             );
         )").GetValueSync());
 
+        const auto describeResult = kikimr.GetTestClient().Describe(&runtime, "/Root/Followers");
+        const auto tablePathId = describeResult.GetPathId();
+
         Cerr << "... UPSERT" << Endl;
         AssertSuccessResult(session.ExecuteDataQuery(R"(
             --!syntax_v1
@@ -712,7 +730,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 SELECT * FROM Followers WHERE Key = 11;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(R"([
                 [[11u];["Two"]]
@@ -722,7 +740,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         // from master - should read
         CheckTableReads(session, "/Root/Followers", false, true);
         // from followers - should NOT read yet
-        CheckTableReads(session, "/Root/Followers", true, false);        
+        CheckTableReads(session, "/Root/Followers", true, false);
 
         Cerr << "... SELECT from follower" << Endl;
         {
@@ -731,7 +749,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 SELECT * FROM Followers WHERE Key >= 21;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(R"([
                 [[21u];["Three"]];
@@ -748,7 +766,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         {
             Cerr << "... SELECT from partition_stats, attempt " << attempt << Endl;
             auto result = session.ExecuteDataQuery(R"(
-                SELECT OwnerId, PartIdx, Path, PathId, TabletId, 
+                SELECT OwnerId, PartIdx, Path, PathId, TabletId,
                     RowCount, RowUpdates, RowReads, RangeReadRows,
                     IF(FollowerId = 0, 'L', 'F') AS LeaderFollower
                 FROM `/Root/.sys/partition_stats`
@@ -765,15 +783,15 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
             // Leader and follower have different row stats
             TString actual = FormatResultSetYson(rs);
-            CompareYson(R"([
-                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[0u];[0u];[2u];"F"];
-                [[72057594046644480u];[0u];["/Root/Followers"];[2u];[72075186224037888u];[4u];[4u];[1u];[0u];"L"]
-            ])", actual);
+            CompareYson(Sprintf(R"([
+                [[72057594046644480u];[0u];["/Root/Followers"];[%luu];[72075186224037888u];[4u];[0u];[0u];[2u];"F"];
+                [[72057594046644480u];[0u];["/Root/Followers"];[%luu];[72075186224037888u];[4u];[4u];[1u];[0u];"L"]
+            ])", tablePathId, tablePathId), actual);
             return;
         }
 
         Y_FAIL("Timeout waiting for from partition_stats");
-    }    
+    }
 }
 
 } // namspace NKqp

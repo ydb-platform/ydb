@@ -235,10 +235,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                     }
                 )", port));
             }
-    
+
             const ui64 exportId = t.TxId;
             t.TestEnv->TestWaitNotification(runtime, exportId);
-    
+
             {
                 TInactiveZone inactive(activeZone);
                 TestGetExport(runtime, exportId, "/MyRoot");
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     public:
         static const TTypedScheme& Table() {
             return TableScheme;
-        } 
+        }
 
         static const TTypedScheme& Changefeed() {
             return ChangefeedScheme;
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             default:
                 Y_ABORT("not supported");
             }
-            
+
         }
 
     private:
@@ -632,6 +632,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
@@ -646,10 +647,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
                 TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(TTestData::Request().data(), port));
             }
-    
+
             const ui64 exportId = t.TxId;
             t.TestEnv->TestWaitNotification(runtime, exportId);
-    
+
             {
                 TInactiveZone inactive(activeZone);
                 TestGetExport(runtime, exportId, "/MyRoot");
@@ -666,6 +667,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
@@ -680,10 +682,10 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
 
                 TestExport(runtime, ++t.TxId, "/MyRoot", Sprintf(TTestData::Request().data(), port));
             }
-    
+
             const ui64 exportId = t.TxId;
             t.TestEnv->TestWaitNotification(runtime, exportId);
-    
+
             {
                 TInactiveZone inactive(activeZone);
                 TestGetExport(runtime, exportId, "/MyRoot");

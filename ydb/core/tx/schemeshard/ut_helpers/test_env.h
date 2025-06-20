@@ -79,6 +79,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
         OPTION(std::optional<bool>, EnableLocalDBBtreeIndex, std::nullopt);
         OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
+        OPTION(std::optional<bool>, EnableRealSystemViewPaths, std::nullopt);
 
         #undef OPTION
     };
@@ -133,6 +134,8 @@ namespace NSchemeShardUT_Private {
         void TestWaitShardDeletion(TTestActorRuntime& runtime, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds);
+
+        void WaitForSysViewsRosterUpdate(TTestActorRuntime& runtime);
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 

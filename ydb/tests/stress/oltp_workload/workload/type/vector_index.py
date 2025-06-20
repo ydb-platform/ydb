@@ -220,12 +220,6 @@ class WorkloadVectorIndex(WorkloadBase):
         vector_dimension_data = [5]
         self._create_table(table_path)
 
-        for vector_type in vector_type_data:
-            for vector_dimension in vector_dimension_data:
-                self._upsert_values(
-                    table_path=table_path, vector_type=vector_type, vector_dimension=vector_dimension
-                )
-
         distance_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, distance_data))
         similarity_index_data = list(product(vector_type_data, vector_dimension_data, levels_data, clusters_data, similarity_data))
 
@@ -237,6 +231,10 @@ class WorkloadVectorIndex(WorkloadBase):
         while not self.is_stop_requested():
             distance_idx_data = next(distance_iter)
             try:
+                self._upsert_values(
+                    table_path=table_path, vector_type=distance_idx_data[0], vector_dimension=distance_idx_data[1]
+                )
+
                 self._check_loop(
                     table_path=table_path,
                     vector_type=distance_idx_data[0],
@@ -245,6 +243,10 @@ class WorkloadVectorIndex(WorkloadBase):
                     clusters=distance_idx_data[3],
                     distance=distance_idx_data[4])
                 similarity_idx_data = next(similarity_iter)
+
+                self._upsert_values(
+                    table_path=table_path, vector_type=similarity_idx_data[0], vector_dimension=similarity_idx_data[1]
+                )
                 self._check_loop(
                     table_path=table_path,
                     vector_type=similarity_idx_data[0],

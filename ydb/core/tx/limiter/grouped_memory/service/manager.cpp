@@ -119,9 +119,15 @@ void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 e
     RefreshSignals();
 }
 
-void TManager::UpdateMemoryLimits(const ui64 externalProcessId, const ui64 externalProcessScopeId) {
-    if (DefaultStage) {
-        DefaultStage->UpdateMemoryLimits(externalProcessId, externalProcessScopeId);
+void TManager::UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit) {
+    if (!DefaultStage) {
+        return;
+    }
+
+    bool isLimitIncreased = false;
+    DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased);
+    if (isLimitIncreased) {
+        TryAllocateWaiting();
     }
 }
 

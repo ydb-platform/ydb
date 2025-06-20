@@ -33,7 +33,7 @@ public:
     bool IsAllocatable(const ui64 volume, const ui64 additional) const;
     void Add(const ui64 volume, const bool allocated);
 
-    void UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit);
+    void UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit, bool& isLimitIncreased);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

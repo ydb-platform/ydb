@@ -14,6 +14,7 @@
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/events.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -288,6 +289,7 @@ private:
 
         ProcessResourceBrokerConfig(ctx, memoryStats, hardLimitBytes, activitiesLimitBytes);
         ProcessGroupedMemoryLimiterConfig(ctx, memoryStats, hardLimitBytes);
+        ProcessCacheConfig(ctx, memoryStats, hardLimitBytes);
 
         Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), memoryStatsUpdate);
 
@@ -377,7 +379,7 @@ private:
     void ProcessGroupedMemoryLimiterConfig(const TActorContext& /*ctx*/, NKikimrMemory::TMemoryStats& /*memoryStats*/, ui64 hardLimitBytes) {
         ui64 columnTablesScanLimitBytes = GetColumnTablesReadExecutionLimitBytes(Config, hardLimitBytes);
         ui64 columnTablesCompactionLimitBytes = GetColumnTablesCompactionLimitBytes(Config, hardLimitBytes) *
-                                                NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
+            NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterCompactionLimitCoefficient;
 
         ApplyGroupedMemoryLimiterConfig(columnTablesScanLimitBytes, columnTablesCompactionLimitBytes);
     }
@@ -387,12 +389,25 @@ private:
         using UpdateMemoryLimitsEv = NGroupedMemoryManager::NEvents::TEvExternal::TEvUpdateMemoryLimits;
 
         Send(NGroupedMemoryManager::TScanMemoryLimiterOperator::MakeServiceId(SelfId().NodeId()),
-             new UpdateMemoryLimitsEv(scanHardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient,
-                                      scanHardLimitBytes));
+            new UpdateMemoryLimitsEv(scanHardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient,
+                scanHardLimitBytes));
 
         Send(NGroupedMemoryManager::TCompMemoryLimiterOperator::MakeServiceId(SelfId().NodeId()),
-             new UpdateMemoryLimitsEv(compactionHardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient,
-                                      compactionHardLimitBytes));
+            new UpdateMemoryLimitsEv(compactionHardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient,
+                compactionHardLimitBytes));
+    }
+
+    void ProcessCacheConfig(const TActorContext& /*ctx*/, NKikimrMemory::TMemoryStats& /*memoryStats*/, ui64 hardLimitBytes) {
+        ui64 columnTablesBlobCacheLimitBytes = GetColumnTablesCacheLimitBytes(Config, hardLimitBytes);
+
+        ApplyCacheConfig(columnTablesBlobCacheLimitBytes);
+    }
+
+    void ApplyCacheConfig(const ui64 cacheLimitBytes) {
+        namespace NBlobCache = ::NKikimr::NBlobCache;
+        using UpdateMaxCacheDataSizeEv = NBlobCache::TEvBlobCache::TEvUpdateMaxCacheDataSize;
+
+        Send(NBlobCache::MakeBlobCacheServiceId(), new UpdateMaxCacheDataSizeEv(cacheLimitBytes * NKikimr::NOlap::TGlobalLimits::BlobCacheCoefficient));
     }
 
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes,
@@ -416,14 +431,6 @@ private:
             .ColumnTablesCompactionLimitBytes = columnTablesCompactionLimitBytes});
     }
 
-    void SetConsumerCounters(const TActorContext& ctx, const TString& name, const ui64 consumption, const ui64 limit) {
-        LOG_INFO_S(ctx, NKikimrServices::MEMORY_CONTROLLER,
-                   "Consumer " << name << " state:"
-                               << " Consumption: " << HumanReadableBytes(consumption) << " Limit: " << HumanReadableBytes(limit));
-        Counters->GetCounter(TStringBuilder() << "Consumer/" << name << "/Consumption")->Set(consumption);
-        Counters->GetCounter(TStringBuilder() << "Consumer/" << name << "/Limit")->Set(limit);
-    }
-
     void ApplyResourceBrokerConfig(TResourceBrokerConfig config) {
         if (config == CurrentResourceBrokerConfig) {
             return;
@@ -438,13 +445,13 @@ private:
         // Compaction uses 4 queues, but there is only one memory limit setting in the configuration,
         // so the coefficients are used to split allocated memory between the queues.
         AddLimitToQueueConfig(record, NLocalDb::KqpResourceManagerQueue, config.QueryExecutionLimitBytes);
-        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionIndexationQueue, 
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionIndexationQueue,
             config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionIndexationQueueLimitCoefficient);
-        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionTtlQueue, 
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionTtlQueue,
             config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionTtlQueueLimitCoefficient);
-        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionGeneralQueue, 
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionGeneralQueue,
             config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionGeneralQueueLimitCoefficient);
-        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionNormalizerQueue, 
+        AddLimitToQueueConfig(record, NLocalDb::ColumnShardCompactionNormalizerQueue,
             config.ColumnTablesCompactionLimitBytes * NKikimr::NOlap::TGlobalLimits::CompactionNormalizerQueueLimitCoefficient);
 
         Send(MakeResourceBrokerID(), configure.Release());

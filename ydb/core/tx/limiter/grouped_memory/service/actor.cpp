@@ -3,7 +3,6 @@
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 void TMemoryLimiterActor::Bootstrap() {
-    Cerr << "!! Started " << Name << Endl;
     Manager = std::make_shared<TManager>(SelfId(), Config, Name, Signals, DefaultStage);
     Become(&TThis::StateWait);
 }

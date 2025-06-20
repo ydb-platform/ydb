@@ -119,9 +119,9 @@ void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 e
     RefreshSignals();
 }
 
-void TManager::UpdateMemoryLimits(const ui64 externalProcessId, const ui64 externalProcessScopeId) {
-    if (DefaultStage) {
-        DefaultStage->UpdateMemoryLimits(externalProcessId, externalProcessScopeId);
+void TManager::UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit) {
+    if (DefaultStage && DefaultStage->UpdateMemoryLimits(limit, hardLimit)) {
+        TryAllocateWaiting();
     }
 }
 

@@ -375,6 +375,11 @@ public:
         Periodic_->Start();
     }
 
+    TFuture<void> Stop() override
+    {
+        return Periodic_->Stop();
+    }
+
     void TrackInvoker(
         TStringBuf name,
         const IInvokerPtr& invoker) override

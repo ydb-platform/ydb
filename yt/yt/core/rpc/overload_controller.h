@@ -40,6 +40,7 @@ public:
     DECLARE_INTERFACE_SIGNAL(void(), LoadAdjusted);
 
     virtual void Start() = 0;
+    virtual TFuture<void> Stop() = 0;
     virtual void Reconfigure(TOverloadControllerConfigPtr config) = 0;
 
     virtual void TrackInvoker(

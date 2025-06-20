@@ -153,7 +153,7 @@ message TKqpTransaction {
         // reserved 4
         optional string SysViewInfo = 5;
         optional uint32 TableKind = 6;      // NKikimr::NKqp::ETableKind
-        optional NKikimrSysView.ESysViewType SysViewType = 7;
+        optional NKikimrSysView.TSysViewDescription SysViewDescription = 7;
     }
 
     // Data-query task meta

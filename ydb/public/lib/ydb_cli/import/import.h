@@ -38,7 +38,7 @@ namespace NConsoleClient {
 struct TImportFileSettings : public TOperationRequestSettings<TImportFileSettings> {
     using TSelf = TImportFileSettings;
 
-    static constexpr ui64 MaxBytesPerRequest = 8_MB;
+    static constexpr ui64 MaxBytesPerRequest = 40_MB;
     static constexpr const char * DefaultDelimiter = ",";
     static constexpr ui32 MaxRetries = 10000;
 
@@ -47,7 +47,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, OperationTimeout_ + TDuration::Seconds(5));
     FLUENT_SETTING_DEFAULT(EDataFormat, Format, EDataFormat::Default);
     FLUENT_SETTING_DEFAULT(EBinaryStringEncoding, BinaryStringsEncoding, EBinaryStringEncoding::Unicode);
-    FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
+    FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 4_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
     // Main thread that reads input file is CPU intensive so make room for it too

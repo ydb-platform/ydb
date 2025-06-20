@@ -193,7 +193,7 @@ private:
                 }
                 owner.Send(MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
                     new TEvPipeCache::TEvForward(
-                        new TEvTxProcessing::TEvReadSetAck(0, GetTxId(), owner.TabletID(), i, owner.TabletID(), 0), i, true),
+                        new TEvTxProcessing::TEvReadSetAck(GetStep(), GetTxId(), owner.TabletID(), i, owner.TabletID(), 0), i, true),
                     IEventHandle::FlagTrackDelivery, GetTxId());
             }
         }

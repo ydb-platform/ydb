@@ -145,15 +145,46 @@ public:
     }
 
     ui64 GetTotalBlobsSize() const {
+        return GetColumnBlobBytes() + GetIndexBlobBytes();
+    }
+
+    NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
+        return NPortion::TPortionInfoForCompaction(
+            GetTotalBlobsSize(), PortionInfo->GetMeta().GetFirstAndLastPK().GetFirst(), PortionInfo->GetMeta().GetFirstAndLastPK().GetLast());
+    }
+
+    ui64 GetColumnBlobBytes() const {
         AFL_VERIFY(Records.size());
-        ui64 size = 0;
+        ui64 result = 0;
         for (auto&& r : Records) {
-            size += r.GetBlobRange().GetSize();
+            result += r.GetBlobRange().GetSize();
         }
+        return result;
+    }
+
+    ui64 GetColumnRawBytes() const {
+        AFL_VERIFY(Records.size());
+        ui64 result = 0;
+        for (auto&& r : Records) {
+            result += r.GetMeta().GetRawBytes();
+        }
+        return result;
+    }
+
+    ui64 GetIndexBlobBytes() const {
+        ui64 result = 0;
         for (auto&& r : Indexes) {
-            size += r.GetDataSize();
+            result += r.GetDataSize();
         }
-        return size;
+        return result;
+    }
+
+    ui64 GetIndexRawBytes() const {
+        ui64 result = 0;
+        for (auto&& r : Indexes) {
+            result += r.GetRawBytes();
+        }
+        return result;
     }
 
     static TPortionAccessorConstructor BuildForRewriteBlobs(const TPortionInfo& portion) {

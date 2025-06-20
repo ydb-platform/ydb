@@ -84,14 +84,9 @@ enum class ERuntimeClusterSelectionMode {
 
 struct TYtSettings {
 private:
-#ifdef YQL_BETTER_CONF_SETTING_API
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
     static constexpr NCommon::EConfSettingType Dynamic = NCommon::EConfSettingType::Dynamic;
     static constexpr NCommon::EConfSettingType StaticPerCluster = NCommon::EConfSettingType::StaticPerCluster;
-#else
-    static constexpr bool Static = false;
-    static constexpr bool Dynamic = true;
-#endif
 public:
 
     using TConstPtr = std::shared_ptr<const TYtSettings>;
@@ -99,21 +94,12 @@ public:
     // should be static, because are used on earlier stages
 
     // static per-cluster
-#ifdef YQL_BETTER_CONF_SETTING_API
     NCommon::TConfSetting<TGUID, StaticPerCluster> ExternalTx;
     NCommon::TConfSetting<TString, StaticPerCluster> TmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> TablesTmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> BinaryTmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> StaticPool;
     NCommon::TConfSetting<TString, StaticPerCluster> CoreDumpPath;
-#else
-    NCommon::TConfSetting<TGUID, false, true> ExternalTx;
-    NCommon::TConfSetting<TString, false, true> TmpFolder;
-    NCommon::TConfSetting<TString, false, true> TablesTmpFolder;
-    NCommon::TConfSetting<TString, false, true> BinaryTmpFolder;
-    NCommon::TConfSetting<TString, false, true> StaticPool;
-    NCommon::TConfSetting<TString, false, true> CoreDumpPath;
-#endif
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -241,6 +227,7 @@ public:
     NCommon::TConfSetting<bool, Dynamic> _EnableYtPartitioning;
     NCommon::TConfSetting<bool, Dynamic> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, Dynamic> EnforceJobUtc;
+    NCommon::TConfSetting<ui64, Static> _EnforceRegexpProbabilityFail;
     NCommon::TConfSetting<bool, Dynamic> UseRPCReaderInDQ;
     NCommon::TConfSetting<size_t, Dynamic> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, Dynamic> DQRPCReaderTimeout;

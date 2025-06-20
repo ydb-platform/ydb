@@ -16,6 +16,7 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(TTypeAnnotationContex
 
 IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
+
     VisitExprLambdasLast(
         input, [&](const TExprNode::TPtr& input) {
             BeforeLambdas(input, ctx) || BeforeLambdasSpecific(input, ctx) || BeforeLambdasUnmatched(input, ctx);
@@ -32,6 +33,7 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
         [&](const TExprNode::TPtr& input) {
             return AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx) || true;
         });
+
     return IGraphTransformer::TStatus::Ok;
 }
 
@@ -46,8 +48,8 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoSkipNullMembers::Match(input.Get())){
         InferStatisticsForSkipNullMembers(input, TypeCtx);
     }
-    else if(TCoAggregateCombine::Match(input.Get())){
-        InferStatisticsForAggregateCombine(input, TypeCtx);
+    else if(auto aggregateBase = TMaybeNode<TCoAggregateBase>(input.Get())){
+        InferStatisticsForAggregateBase(input, TypeCtx);
     }
     else if(TCoAggregateMergeFinalize::Match(input.Get())){
         InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
@@ -74,6 +76,21 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
+        auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();
+        for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+            auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+
+            auto scope = input.Scope();
+            if (!scope.Maybe<TCoAtom>()){
+                continue;
+            }
+
+            TString label = scope.Cast<TCoAtom>().StringValue();
+            auto joinArg = input.List();
+            if (auto stats = TypeCtx->GetStats(joinArg.Raw()); stats && stats->Aliases) {
+                stats->Aliases->insert(std::move(label));
+            }
+        }
     }
 
     // In case of DqSource, propagate the statistics from the correct argument
@@ -84,6 +101,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     // In case of DqCnMerge, update the sorted info with correct sorting
     else if (TDqCnMerge::Match(input.Get())) {
         InferStatisticsForDqMerge(input, TypeCtx);
+    }
+    else if (auto extendBase = TMaybeNode<TCoExtendBase>(input)) { // == union all
+        InferStatisticsForExtendBase(input, TypeCtx);
     }
     else {
         matched = false;

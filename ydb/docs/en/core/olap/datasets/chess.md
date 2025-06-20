@@ -54,6 +54,7 @@ The dataset includes 513 million chess position evaluations performed by the Sto
           UNIFORM_PARTITIONS = 50
       );'
       ```
+
     {% endlist %}
 
 3. Execute the import command:

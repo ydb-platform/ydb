@@ -13,7 +13,7 @@ public:
     using TBase::Schedule;
     using TBase::SelfId;
 
-    const TActorId Owner;
+    TActorId Owner;
     SocketAddressType Address;
     TString Destination;
     TActorId RequestOwner;
@@ -43,10 +43,17 @@ public:
         PerformRequest();
     }
 
+    bool IsAlive() const {
+        return static_cast<bool>(Owner);
+    }
+
     void PassAway() override {
-        Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionClosed(SelfId(), Destination));
-        TSocketImpl::Shutdown(); // to avoid errors when connection already closed
-        TBase::PassAway();
+        if (IsAlive()) {
+            Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionClosed(SelfId(), Destination));
+            TSocketImpl::Shutdown(); // to avoid errors when connection already closed
+            TBase::PassAway();
+            Owner = {};
+        }
     }
 
     TString GetSocketName() {
@@ -102,9 +109,11 @@ public:
             ALOG_DEBUG(HttpLog, GetSocketName() << "connection closed");
             PassAway();
         } else {
-            ALOG_DEBUG(HttpLog, GetSocketName() << "connection available for reuse");
             CheckClose();
-            Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(SelfId(), Destination));
+            if (IsAlive()) {
+                ALOG_DEBUG(HttpLog, GetSocketName() << "connection available for reuse");
+                Send(Owner, new TEvHttpProxy::TEvHttpOutgoingConnectionAvailable(SelfId(), Destination));
+            }
         }
     }
 
@@ -184,7 +193,7 @@ protected:
     }
 
     void FlushOutput() {
-        if (Request != nullptr) {
+        if (IsAlive() && Request != nullptr) {
             Request->Finish();
             while (auto size = Request->Size()) {
                 bool read = false, write = false;
@@ -214,7 +223,7 @@ protected:
 
     void CheckClose() {
         char buf[8];
-        for (;;) {
+        while (IsAlive()) {
             bool read = false, write = false;
             ssize_t res = TSocketImpl::Recv(&buf, 0, read, write);
             if (res > 0) {
@@ -238,7 +247,7 @@ protected:
     }
 
     void PullInput() {
-        for (;;) {
+        while (IsAlive()) {
             if (Response == nullptr) {
                 Response = new THttpIncomingResponse(Request);
             }

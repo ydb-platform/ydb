@@ -1,5 +1,4 @@
 import base64
-import yaml
 import os
 import io
 import re
@@ -7,6 +6,11 @@ import re
 from urllib import parse as urlparse
 
 from ..base import PackageJson, BaseLockfile, LockfilePackageMeta, LockfilePackageMetaInvalidError
+
+try:
+    import ymakeyaml as yaml
+except Exception:
+    import yaml
 
 LOCKFILE_VERSION = "lockfileVersion"
 IMPORTER_KEYS = PackageJson.DEP_KEYS + ("specifiers",)

@@ -1,5 +1,9 @@
 import os
-import yaml
+
+try:
+    import ymakeyaml as yaml
+except Exception:
+    import yaml
 
 
 class PnpmWorkspace(object):

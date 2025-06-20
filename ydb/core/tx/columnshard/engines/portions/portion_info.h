@@ -116,6 +116,9 @@ private:
 public:
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
+    NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
+        return NPortion::TPortionInfoForCompaction(GetTotalBlobBytes(), GetMeta().IndexKeyStart(), GetMeta().IndexKeyEnd());
+    }
 
     ui64 GetMemorySize() const {
         return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);
@@ -310,7 +313,7 @@ public:
         if (GetTierNameDef(NBlobOperations::TGlobal::DefaultStorageId) != NBlobOperations::TGlobal::DefaultStorageId) {
             return NPortion::EVICTED;
         }
-        return GetMeta().GetProduced();
+        return GetPortionType() == EPortionType::Compacted ? NPortion::EProduced::SPLIT_COMPACTED : NPortion::EProduced::INSERTED;
     }
 
     bool ValidSnapshotInfo() const {

@@ -127,10 +127,10 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort reason) override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
-        if (reason == EAbort::None) {
+        if (status == EStatus::Done) {
             TString buffer = BlockBuilder->Finish();
             buffer.resize(BlockBuilder->Bytes());
             BlockBuilder.reset();
@@ -146,10 +146,11 @@ public:
                         << Result->Record.GetBlocks().size() << ") shardFinished: " << ShardFinished);
         } else {
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, TabletId
-                        << " Read columns scan failed for table [" << TableName << "]");
+                        << " Read columns scan failed for table [" << TableName << "]"
+                        << ", status: " << status);
 
             Result->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
-            Result->Record.SetErrorDescription("Scan aborted");
+            Result->Record.SetErrorDescription(TStringBuilder() << "Scan finished unsuccessfully with status " << status);
         }
 
         TlsActivationContext->Send(new IEventHandle(ReplyTo, TActorId(), Result.Release()));

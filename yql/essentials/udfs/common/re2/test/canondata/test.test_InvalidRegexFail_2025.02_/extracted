@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Execution
+
+    <tmp_path>/program.sql:<main>:8:1: Error: Execution of node: Result
+    	SELECT $invalidRe("abaa");
+	^
+        <tmp_path>/program.sql:<main>:4:19: Error: Regexp compilation failed. Regexp: "[". Original error is: "missing ]: ["
+        	$invalidRe = Re2::FindAndConsume("[");
+	                  ^

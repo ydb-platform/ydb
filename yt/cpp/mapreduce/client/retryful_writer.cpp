@@ -21,6 +21,10 @@ namespace NYT {
 TRetryfulWriter::~TRetryfulWriter()
 {
     NDetail::FinishOrDie(this, AutoFinish_, "TRetryfulWriter");
+    if (WriterState_ == Ok) {
+        Y_ABORT_IF(AutoFinish_); // if AutoFinish_, FinishOrDie would have called Finish
+        Abort();
+    }
 }
 
 void TRetryfulWriter::CheckWriterState()

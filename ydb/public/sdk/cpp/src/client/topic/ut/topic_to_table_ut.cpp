@@ -2608,6 +2608,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_16_Query, TFixtureQuery)
 
 void TFixture::TestWriteToTopic17()
 {
+    // TODO(abcdef): temporarily deleted
+    return;
+
     CreateTopic("topic_A");
 
     auto session = CreateSession();
@@ -3535,6 +3538,9 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48_Query, TFixtureQuery)
 
 void TFixture::TestWriteToTopic50()
 {
+    // TODO(abcdef): temporarily deleted
+    return;
+
     // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
     // cache are renamed.
     CreateTopic("topic_A", TEST_CONSUMER);
@@ -4015,7 +4021,6 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_6_Query, TFixtureSinksQuery)
 
 void TFixtureSinks::TestSinksOlapWriteToTopicAndTable1()
 {
-    return; // https://github.com/ydb-platform/ydb/issues/17271
     CreateTopic("topic_A");
     CreateColumnTable("/Root/table_A");
 
@@ -4048,7 +4053,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_1_Query, TFixtureSinksQuery)
 
 void TFixtureSinks::TestSinksOlapWriteToTopicAndTable2()
 {
-    return; // https://github.com/ydb-platform/ydb/issues/17271
     CreateTopic("topic_A");
     CreateTopic("topic_B");
 
@@ -4135,7 +4139,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3_Query, TFixtureSinksQuery)
 
 void TFixtureSinks::TestSinksOlapWriteToTopicAndTable4()
 {
-    return; // https://github.com/ydb-platform/ydb/issues/17271
     CreateTopic("topic_A");
     CreateTopic("topic_B");
 

@@ -2680,12 +2680,23 @@
             "ListBase": "TCoReplicationTarget"
         },
         {
-            "Name" : "TCoLikely",
+            "Name" : "TCoNoPushBase",
             "Base" : "TCallable",
-            "Match": {"Type": "Callable", "Name": "Likely"},
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 0, "Name": "Predicate", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name" : "TCoNoPush",
+            "Base" : "TCoNoPushBase",
+            "Match": {"Type": "Callable", "Name": "NoPush"}
+        },
+        {
+            "Name" : "TCoLikely",
+            "Base" : "TCoNoPushBase",
+            "Match": {"Type": "Callable", "Name": "Likely"}
         }
     ]
 }

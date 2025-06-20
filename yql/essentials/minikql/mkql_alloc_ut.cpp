@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
     Y_UNIT_TEST(TestDeallocated) {
         TScopedAlloc alloc(__LOCATION__);
 #if defined(_asan_enabled_)
-        constexpr size_t EXTRA_ALLOCATION_SPACE = ASAN_EXTRA_ALLOCATION_SPACE;
+        constexpr size_t EXTRA_ALLOCATION_SPACE = NYql::NUdf::SANITIZER_EXTRA_ALLOCATION_SPACE;
 #else  // defined(_asan_enabled_)
         constexpr size_t EXTRA_ALLOCATION_SPACE = 0;
 #endif // defined(_asan_enabled_)

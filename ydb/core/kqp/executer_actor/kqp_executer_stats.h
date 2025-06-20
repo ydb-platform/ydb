@@ -76,6 +76,7 @@ struct TExternalStats : public TTimeMultiSeriesStats {
     TPartitionedStats ExternalBytes;
     TPartitionedStats FirstMessageMs;
     TPartitionedStats LastMessageMs;
+    TPartitionedStats WaitOutputTimeUs;
 
     void Resize(ui32 taskCount);
     void SetHistorySampleCount(ui32 historySampleCount);
@@ -227,6 +228,7 @@ struct TStageExecutionStats {
     TMinStats CurrentWaitInputTimeUs;
     TMinStats CurrentWaitOutputTimeUs;
     ui64 UpdateTimeMs = 0;
+    ui64 MaxFinishTimeMs = 0;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;

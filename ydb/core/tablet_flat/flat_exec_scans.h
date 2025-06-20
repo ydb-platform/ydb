@@ -19,7 +19,7 @@ namespace NTabletFlatExecutor {
     class TScans { /* NOps state tracker */
 
         using IScan = NTable::IScan;
-        using EAbort = NTable::EAbort;
+        using EStatus = NTable::EStatus;
         using IOps = NActors::IActorOps;
         using ITablet = NFlatExecutorSetup::ITablet;
         using TEvResourceBroker = NResourceBroker::TEvResourceBroker;
@@ -29,7 +29,7 @@ namespace NTabletFlatExecutor {
             Task    = 1,    /* Waiting for resource     */
             Ready   = 2,    /* Waiting for Start(..)    */
             Scan    = 3,    /* Scan is in progress      */
-            Forget  = 4,    /* Explicit cancelation     */
+            Forget  = 4,    /* Explicit cancellation     */
             Gone    = 5,    /* Internal termination     */
         };
 
@@ -276,7 +276,7 @@ namespace NTabletFlatExecutor {
             return Cancel(*one, EState::Forget);
         }
 
-        TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result)
+        TScanOutcome Release(ui64 serial, EStatus &code, TAutoPtr<IDestructable> &result)
         {
             auto *one = Lookup(serial, true);
 
@@ -286,7 +286,7 @@ namespace NTabletFlatExecutor {
                 NUtil::SubSafe(CounterAlive, ui32(1));
 
                 if (one->State == EState::Forget) {
-                    code = EAbort::Term;
+                    code = EStatus::Term;
                 }
 
                 return Throw(*one, one->State, code, result);
@@ -365,7 +365,7 @@ namespace NTabletFlatExecutor {
         {
             if (one.State == EState::Task || one.State == EState::Ready) {
                 TAutoPtr<IDestructable> result;
-                Throw(one, state, EAbort::Term, result);
+                Throw(one, state, EStatus::Term, result);
                 return true;
             } else if (one.State == EState::Scan) {
                 one.State = state;
@@ -379,7 +379,7 @@ namespace NTabletFlatExecutor {
             return false;
         }
 
-        TScanOutcome Throw(TOne &one, EState last, EAbort status, TAutoPtr<IDestructable> &result)
+        TScanOutcome Throw(TOne &one, EState last, EStatus status, TAutoPtr<IDestructable> &result)
         {
             if (auto task = std::exchange(one.TaskId, 0)) {
                 if (one.State == EState::Task) {

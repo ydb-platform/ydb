@@ -1,0 +1,25 @@
+columns {
+  name: "value"
+  type {
+    optional_type {
+      item {
+        type_id: DOUBLE
+      }
+    }
+  }
+}
+rows {
+  items {
+    double_value: 100
+  }
+}
+rows {
+  items {
+    double_value: 200
+  }
+}
+rows {
+  items {
+    double_value: 300
+  }
+}

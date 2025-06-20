@@ -6,12 +6,13 @@
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
+#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service//file/yql_yt_file_coordinator_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 
 namespace NYql::NFmr {
 
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{"Path","Cluster"},
+    .Input = TYtTableRef{"Path","Cluster", "FilePath"},
     .Output = TFmrTableRef{{"Cluster", "Path"}}
 };
 
@@ -26,7 +27,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
 
 Y_UNIT_TEST_SUITE(FmrWorkerTests) {
     Y_UNIT_TEST(GetSuccessfulOperationResult) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
@@ -48,7 +49,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
     }
 
     Y_UNIT_TEST(CancelOperation) {
-        auto coordinator = MakeFmrCoordinator();
+        auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             int numIterations = 0;
@@ -79,7 +80,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         TFmrCoordinatorSettings coordinatorSettings{};
         coordinatorSettings.WorkersNum = 2;
         coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
-        auto coordinator = MakeFmrCoordinator(coordinatorSettings);
+        auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
         std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
@@ -100,6 +101,40 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
         Sleep(TDuration::Seconds(3));
         UNIT_ASSERT_VALUES_EQUAL(operationResult->load(), 1);
+    }
+    Y_UNIT_TEST(SimpleWorkerFailover) {
+        TFmrCoordinatorSettings coordinatorSettings{};
+        coordinatorSettings.WorkersNum = 2;
+        coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
+        auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
+        std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
+        // TODO - maybe improve test
+        ui64 numIterations = 5;
+        auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+            ui64 pos = 0;
+            while (!cancelFlag->load()) {
+                if (pos == numIterations) {
+                    return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
+                }
+                (*operationResult)++;
+                Sleep(TDuration::Seconds(1));
+                ++pos;
+            }
+            *operationResult = 0; // reset counter in case of cancel
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
+        };
+        TFmrJobFactorySettings settings{.NumThreads = 3, .Function=func};
+        TFmrWorkerSettings firstWorkerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        TFmrWorkerSettings secondWorkerSettings{.WorkerId = 1, .RandomProvider = CreateDeterministicRandomProvider(2)};
+        auto firstWorker = MakeFmrWorker(coordinator,  MakeFmrJobFactory(settings), firstWorkerSettings);
+        auto secondWorker = MakeFmrWorker(coordinator,  MakeFmrJobFactory(settings), secondWorkerSettings);
+        firstWorker->Start();
+        coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        Sleep(TDuration::Seconds(2));
+        firstWorker->Stop();
+        secondWorker->Start();
+        Sleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(operationResult->load(), numIterations);
     }
 }
 

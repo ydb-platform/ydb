@@ -36,8 +36,9 @@ public:
 
     bool IsRequired() const;
     bool IsNullable() const;
-    std::optional<NSkiff::EWireType> Simplify() const;
-    NSkiff::EWireType ValidatedSimplify() const;
+
+    NSkiff::EWireType ValidatedGetDeoptionalizeType(bool simplify) const;
+    std::optional<NSkiff::EWireType> GetDeoptionalizeType(bool simplify) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,6 +83,10 @@ std::vector<TSkiffTableDescription> CreateTableDescriptionList(
 std::vector<std::shared_ptr<NSkiff::TSkiffSchema>> ParseSkiffSchemas(
     const NYTree::IMapNodePtr& skiffSchemaRegistry,
     const NYTree::IListNodePtr& tableSkiffSchemas);
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::pair<std::shared_ptr<NSkiff::TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<NSkiff::TSkiffSchema> skiffSchema);
 
 ////////////////////////////////////////////////////////////////////////////////
 

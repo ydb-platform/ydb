@@ -18,17 +18,16 @@ public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
     using TBase::TBase;
 
-    std::vector<TCommittedBlob> CommittedBlobs;
     virtual bool Empty() const override {
         Y_ABORT_UNLESS(SelectInfo);
-        return SelectInfo->Portions.empty() && CommittedBlobs.empty();
+        return SelectInfo->Portions.empty();
     }
 
     virtual std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const override;
     virtual std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& readContext) const override;
 
     virtual TString DebugString() const override {
-        return TBase::DebugString() + ";committed=" + ::ToString(CommittedBlobs.size());
+        return TBase::DebugString();
     }
 };
 

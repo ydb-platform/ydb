@@ -180,7 +180,7 @@ void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
 
     auto topicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-        NKikimr::AppData(ctx)->PQConfig, ""
+        true, "", ""
     );
 
     auto topicHandler = std::make_unique<NPersQueue::TTopicsListController>(

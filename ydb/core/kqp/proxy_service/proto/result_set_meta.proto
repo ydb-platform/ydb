@@ -9,4 +9,7 @@ message ResultSetMeta {
     repeated Ydb.Column columns = 1;
 
     bool truncated = 2;
+    bool enabled_runtime_results = 3;  // For backward compatability
+    uint64 number_rows = 4;
+    bool finished = 5;
 }

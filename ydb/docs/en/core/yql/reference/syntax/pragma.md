@@ -119,7 +119,7 @@ When set to "auto", it enables a new compute engine. Computing is made, whenever
 
 When you use `SELECT foo.* FROM ... AS foo`, remove the `foo.` prefix from the names of the result columns.
 
-It can be also used with a [JOIN](join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](select/without.md) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is made for key columns: the query `SELECT * FROM T1 AS a JOIN T2 AS b USING(key)` in the SimpleColumns mode works same as `SELECT a.key ?? b.key AS key, ... FROM T1 AS a JOIN T2 AS b USING(key)`.
+It can be also used with a [JOIN](select/join.md), but in this case it may fail in the case of a name conflict (that can be resolved by using [WITHOUT](select/without.md) and renaming columns). For JOIN in SimpleColumns mode, an implicit Coalesce is applied to the key columns.
 
 ### CoalesceJoinKeysOnQualifiedAll
 
@@ -139,7 +139,7 @@ Controls implicit Coalesce for the key `JOIN` columns in the SimpleColumns mode.
 | --- | --- |
 | Flag | false |
 
-If the flag is set, then [JOIN](join.md) will require strict matching of key types.
+If the flag is set, then [JOIN](select/join.md) will require strict matching of key types.
 By default, JOIN preconverts keys to a shared type, which might result in performance degradation.
 StrictJoinKeyTypes is a [scoped](pragma.md#pragmascope) setting.
 
@@ -272,7 +272,7 @@ Generate a warning if a column name was automatically generated for an unnamed e
 | --- | --- |
 | Positive number | 32 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](group_by.md).
+Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md).
 
 {% if feature_group_by_rollup_cube %}
 
@@ -282,7 +282,7 @@ Increasing the limit on the number of dimensions in [GROUP BY](group_by.md).
 | --- | --- |
 | Positive number | 5 |
 
-Increasing the limit on the number of dimensions in [GROUP BY](group_by.md#rollup-cube-group-sets).
+Increasing the limit on the number of dimensions in [GROUP BY](select/group-by.md#rollup-cube-group-sets).
 
 Use this option with care, because the computational complexity of the query grows exponentially with the number of dimensions.
 

@@ -249,6 +249,10 @@ public:
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
+        if (Context.ComputeCtx) {
+            Context.ComputeCtx->StartTs = &Stats->StartTs;
+            Context.ComputeCtx->InputConsumed = &InputConsumed;
+        }
         if (Y_UNLIKELY(CollectFull())) {
             Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
         }

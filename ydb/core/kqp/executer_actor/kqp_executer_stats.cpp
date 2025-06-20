@@ -578,6 +578,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
                     index, key, partitionStat.GetFirstMessageMs(), false, EPartitionedAggKind::PartitionedAggMin);
                 asyncBufferStats.External.SetNonZero(asyncBufferStats.External.LastMessageMs,
                     index, key, partitionStat.GetLastMessageMs(), false, EPartitionedAggKind::PartitionedAggMax);
+                asyncBufferStats.External.SetNonZero(asyncBufferStats.External.WaitOutputTimeUs,
+                    index, key, partitionStat.GetWaitOutputTimeUs(), false, EPartitionedAggKind::PartitionedAggMax);
             }
         }
     }
@@ -660,8 +662,17 @@ bool TStageExecutionStats::IsDeadlocked(ui64 deadline) {
     }
 
     for (auto stat : InputStages) {
-        if (stat->CurrentWaitOutputTimeUs.MinValue < deadline || stat->IsFinished()) {
-            return false;
+        if (stat->IsFinished()) {
+            if (stat->MaxFinishTimeMs == 0) {
+                stat->MaxFinishTimeMs = ExportMaxStats(stat->FinishTimeMs);
+            }
+            if (stat->UpdateTimeMs < stat->MaxFinishTimeMs || stat->UpdateTimeMs - stat->MaxFinishTimeMs < deadline) {
+                return false;
+            }
+        } else {
+            if (stat->CurrentWaitOutputTimeUs.MinValue < deadline) {
+                return false;
+            }
         }
     }
     return true;

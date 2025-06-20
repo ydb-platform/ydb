@@ -35,6 +35,6 @@ Now, being in the `yandex_cloud` subdirectory, you can run the following sequenc
 
 1. `terraform init` – installing the provider and initializing modules.
 1. `terraform plan` – creating a plan for future infrastructure.
-1. `terraform init` – create resources in the cloud.
+1. `terraform apply` – create resources in the cloud.
 
-Next, use the commands `terraform plan`, `terraform init`, and `terraform destroy` (destruction of the created infrastructure) to apply further changes as necessary.
+Next, use the commands `terraform plan`, `terraform apply`, and `terraform destroy` (destruction of the created infrastructure) to apply further changes as necessary.

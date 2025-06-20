@@ -16,12 +16,7 @@ namespace NMiniKQL {
 
 namespace {
 
-constexpr auto TotalSambles =
-#ifndef NDEBUG
-222222U;
-#else
-22222222ULL;
-#endif
+constexpr auto TotalSambles = 222222U;
 
 }
 

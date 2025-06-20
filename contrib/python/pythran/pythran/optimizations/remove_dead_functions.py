@@ -5,7 +5,7 @@ from pythran.passmanager import Transformation
 import pythran.metadata as metadata
 
 
-class RemoveDeadFunctions(Transformation):
+class RemoveDeadFunctions(Transformation[DefUseChains]):
     """
     Remove useless local functions
 
@@ -23,9 +23,6 @@ class RemoveDeadFunctions(Transformation):
     >>> print(pm.dump(backend.Python, node))
     <BLANKLINE>
     """
-
-    def __init__(self):
-        super(RemoveDeadFunctions, self).__init__(DefUseChains)
 
     def visit_FunctionDef(self, node):
         if metadata.get(node, metadata.Local):

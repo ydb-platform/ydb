@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(freezegun)
 
-VERSION(1.5.1)
+VERSION(1.5.2)
 
 LICENSE(Apache-2.0)
 

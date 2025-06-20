@@ -114,8 +114,8 @@ SELECT Digest::FarmHashFingerprint128("Who set this ancient quarrel new abroach?
 * `Digest::SuperFastHash(String{Flags:AutoMap}) -> Uint32`
 * `Digest::Sha1(String{Flags:AutoMap}) -> String`
 * `Digest::Sha256(String{Flags:AutoMap}) -> String`
+* `Digest::Sha512(String{Flags:AutoMap}) -> String` - добавлена в версии [2025.03](../../changelog/2025.03.md)
 * `Digest::IntHash64(Uint64{Flags:AutoMap}) -> Uint64`
-
 * `Digest::XXH3(String{Flags:AutoMap}) -> Uint64`
 * `Digest::XXH3_128(String{Flags:AutoMap}) -> Tuple<Uint64,Uint64>`
 

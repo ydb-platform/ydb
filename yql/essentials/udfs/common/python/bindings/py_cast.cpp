@@ -27,11 +27,11 @@
 #include <util/string/builder.h>
 
 #ifdef HAVE_LONG_LONG
-#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongLongMask
+#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongLongMask // NOLINT(readability-identifier-naming)
 #   define YQL_PyLong_Asi64 PyLong_AsLongLong
 #   define YQL_PyLong_Asui64 PyLong_AsUnsignedLongLong
 #else
-#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongMask
+#   define YQL_PyLong_AsUnsignedMask PyLong_AsUnsignedLongMask // NOLINT(readability-identifier-naming)
 #   define YQL_PyLong_Asi64 PyLong_AsLong
 #   define YQL_PyLong_Asui64 PyLong_AsUnsignedLong
 #endif

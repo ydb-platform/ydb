@@ -33,61 +33,50 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 001270d0986e016a64e4488c035ddac5
+KEEP     COPYRIGHT_SERVICE_LABEL 001a887e8ab3ae7b989352695b3afd87
 BELONGS ya.make
-    License text:
-        ; Copyright (C) 2011, 2016, D. R. Commander.
-        ; Copyright (C) 2015, Intel Corporation.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/i386/jcgray-avx2.asm [4:5]
-        simd/i386/jcgray-mmx.asm [4:5]
-        simd/i386/jcgray-sse2.asm [4:4]
-        simd/i386/jcgryext-avx2.asm [4:5]
-        simd/i386/jcgryext-mmx.asm [4:5]
-        simd/i386/jcgryext-sse2.asm [4:4]
-        simd/x86_64/jcgray-avx2.asm [4:5]
-        simd/x86_64/jcgray-sse2.asm [4:4]
-        simd/x86_64/jcgryext-avx2.asm [4:6]
-        simd/x86_64/jcgryext-sse2.asm [4:5]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 03620b5e1cb0526b5c8fb74838b3a3ef
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdmainct.c at line 8
+FILE_INCLUDE README.ijg found in files: src/rdtarga.c at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdmainct.c [5:9]
+        src/rdtarga.c [5:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 048093befc4541c84a0b4aff0eb0e58a
+KEEP     COPYRIGHT_SERVICE_LABEL 03b8571b70e9345e88a4b5c470d861ae
 BELONGS ya.make
-    License text:
-         * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-         * Copyright (C) 2009-2011, 2014, 2016, 2018, 2022, D. R. Commander.
-         * Copyright (C) 2015-2016, 2018, Matthieu Darbois.
+FILE_INCLUDE README.ijg found in files: src/jcdiffct.c at line 10, src/jddiffct.c at line 10
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        simd/x86_64/jsimd.c [4:6]
+        src/jcdiffct.c [5:11]
+        src/jddiffct.c [5:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 05117f6a64c717808d7abe982066f754
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jddctmgr.c at line 11
+FILE_INCLUDE README.ijg found in files: src/jddctmgr.c at line 11
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jddctmgr.c [5:12]
+        src/jddctmgr.c [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0541a81da4dde61b003817670d836267
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jquant1.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jquant1.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 07e12474a71a9c9264beced90941125c
 BELONGS ya.make
@@ -104,241 +93,11 @@ FILE_INCLUDE README.ijg found in files: simd/arm/aarch64/jchuff-neon.c at line 9
         simd/arm/jquanti-neon.c [4:4]
         simd/arm/neon-compat.h [3:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 085866dc673ec19d97c4979b0d3203f8
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jquant2.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jquant2.c [5:9]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 090deb413327d7c4ccdeb6f33c67502b
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcapimin.c at line 9, jcprepct.c at line 9, jerror.c at line 9, jinclude.h at line 9, jutils.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcapimin.c [5:10]
-        jcprepct.c [5:9]
-        jerror.c [5:9]
-        jinclude.h [5:9]
-        jutils.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 09adeb42ae4a6bea0b7aa5aaf65de91a
-BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jchuff.h at line 8, src/jclhuff.c at line 8, src/jdcoefct.h at line 8, src/jdlhuff.c at line 8, src/jdmainct.h at line 8, src/jdsample.h at line 8, src/jlossls.h at line 8, src/jsamplecomp.h at line 7, src/jutils.c at line 8, src/rdcolmap.c at line 8
     License text:
-        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2009, 2016, 2020, D. R. Commander.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/x86_64/jfdctint-sse2.asm [4:5]
-        simd/x86_64/jidctint-sse2.asm [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 0ae009ac16fbacd31d4b77e95303858a
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cderror.h at line 9, cdjpeg.h at line 9, jccoefct.c at line 9, jcomapi.c at line 9, jdcoefct.c at line 9, jdcoefct.h at line 9, jerror.h at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        cderror.h [5:10]
-        cdjpeg.h [5:10]
-        jccoefct.c [5:8]
-        jcomapi.c [5:8]
-        jdcoefct.c [5:11]
-        jdcoefct.h [5:10]
-        jerror.h [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 0d16e03bc8aea0727b77e84f46679705
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdmaster.h at line 6
-    License text:
-         * Copyright (C) 1991-1995, Thomas G. Lane.
-         * For conditions of distribution and use, see the accompanying README.ijg
-         * file.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdmaster.h [5:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 0f8337340bfc4fc39a2fe07a61afd6b0
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdarith.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdarith.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 0f897163c7037d3f0adbe0fe504532f8
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcmarker.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcmarker.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 10c71bcfc53b06ea8660c6ef781bbbe9
-BELONGS ya.make
-    License text:
-        ; Copyright 2009, 2012 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2012, 2016, D. R. Commander.
-        ; Copyright (C) 2015, Intel Corporation.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/i386/jdcolext-avx2.asm [4:6]
-        simd/i386/jdcolext-sse2.asm [4:5]
-        simd/i386/jdmrgext-avx2.asm [4:6]
-        simd/i386/jdmrgext-sse2.asm [4:5]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 11e733d6a587075ab68bcc53d29822a6
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: djpeg.c at line 10, jdapistd.c at line 10, jdinput.c at line 10, jdmaster.c at line 10, jdsample.c at line 10, jpegint.h at line 10, jpeglib.h at line 10
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        djpeg.c [5:11]
-        jdapistd.c [5:10]
-        jdinput.c [5:10]
-        jdmaster.c [5:12]
-        jdsample.c [5:13]
-        jpegint.h [5:12]
-        jpeglib.h [5:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1249c3d3fb0e107f4cabda7b2efba8b8
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcphuff.c at line 11, jdphuff.c at line 11, jdtrans.c at line 11
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcphuff.c [5:12]
-        jdphuff.c [5:9]
-        jdtrans.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 152add89d1791fb293414e86b81304ef
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdapimin.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdapimin.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 165527239955f985662e0f2fe1203f1b
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: transupp.c at line 8, transupp.h at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        transupp.c [5:9]
-        transupp.h [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1acdcc86793fefc64c4fe4c565b2f14f
-BELONGS ya.make
-    License text:
-         * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-         * Copyright (C) 2011, 2014, D. R. Commander.
-         * Copyright (C) 2015-2016, 2018, Matthieu Darbois.
-         * Copyright (C) 2020, Arm Limited.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jsimd.h [4:7]
-        jsimd_none.c [4:7]
-        simd/arm/aarch32/jsimd.c [4:9]
-        simd/arm/aarch32/jsimd_neon.S [10:10]
-        simd/arm/aarch64/jsimd.c [4:8]
-        simd/arm/aarch64/jsimd_neon.S [10:10]
-        simd/i386/jsimd.c [4:6]
-        simd/jsimd.h [4:10]
-        simd/x86_64/jsimd.c [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1ad7e944e1e9a46ed48b14a55138bda8
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jpegint.h at line 11
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jpegint.h [5:12]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1afd790e43464ee897b6f4dad7e6ce6d
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: rdtarga.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        rdtarga.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1b892e92391ba1d018a5507c7b63228c
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcarith.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcarith.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1ba19ef1d18e94a36d48de79900507c6
-BELONGS ya.make
-    License text:
-        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2009, 2016, 2018, D. R. Commander.
-        ; Copyright (C) 2016, Matthieu Darbois.
-        ; Copyright (C) 2018, Matthias Räncker.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/x86_64/jquanti-avx2.asm [4:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1e45cf53e9734d2459db159d28f16e4b
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jinclude.h at line 8
-    License text:
-         * Copyright (C) 1991-1994, Thomas G. Lane.
+         * Copyright (C) 1991-1997, Thomas G. Lane.
          * libjpeg-turbo Modifications:
          * Copyright (C) 2022, D. R. Commander.
          * For conditions of distribution and use, see the accompanying README.ijg
@@ -348,13 +107,301 @@ FILE_INCLUDE README.ijg found in files: jinclude.h at line 8
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jinclude.h [5:9]
+        src/jchuff.h [5:9]
+        src/jclhuff.c [5:11]
+        src/jdcoefct.h [5:11]
+        src/jdlhuff.c [5:11]
+        src/jdmainct.h [5:9]
+        src/jdsample.h [5:9]
+        src/jlossls.h [5:11]
+        src/jsamplecomp.h [4:6]
+        src/jutils.c [5:9]
+        src/rdcolmap.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 091aff5add79bba2d915578002de5fbb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 091d20e644e181ef6d43e970c0153f2c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jsimd.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a2388305f986260897a9cef72004a37
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jstdhuff.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jstdhuff.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a6b4f46b94dba174b5acc7622b52c81
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/x86_64/jquanti-avx2.asm [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0a9e2d8330eff722b30011904f8dbbb7
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/rdgif.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdgif.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ae009ac16fbacd31d4b77e95303858a
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/cderror.h at line 9, src/cdjpeg.h at line 9, src/jccoefct.c at line 9, src/jcomapi.c at line 9, src/jdcoefct.c at line 9, src/jdcoefct.h at line 9, src/jerror.h at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/cderror.h [5:10]
+        src/cdjpeg.h [5:10]
+        src/jccoefct.c [5:9]
+        src/jcomapi.c [5:9]
+        src/jdcoefct.c [5:11]
+        src/jdcoefct.h [5:11]
+        src/jerror.h [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d0bb3c79a54d91c1597b0c7d63f162a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jsimd.h [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0d16e03bc8aea0727b77e84f46679705
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcmaster.h at line 8, src/jdmaster.h at line 8
+    License text:
+         * Copyright (C) 1991-1995, Thomas G. Lane.
+         * libjpeg-turbo Modifications:
+         * Copyright (C) 2016, D. R. Commander.
+         * For conditions of distribution and use, see the accompanying README.ijg
+         * file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcmaster.h [5:9]
+        src/jdmaster.h [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0f8337340bfc4fc39a2fe07a61afd6b0
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdarith.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdarith.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0ff49e46b4d6713fa662cb325e7b5c06
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdcolor.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdcolor.c [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 118cad472f27d313e079bc76599be316
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdapistd.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdapistd.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 11e733d6a587075ab68bcc53d29822a6
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/djpeg.c at line 10, src/jdapistd.c at line 10, src/jdinput.c at line 10, src/jdmaster.c at line 10, src/jdsample.c at line 10, src/jpegint.h at line 10, src/jpeglib.h at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/djpeg.c [5:11]
+        src/jdapistd.c [5:10]
+        src/jdinput.c [5:12]
+        src/jdmaster.c [5:14]
+        src/jdsample.c [5:13]
+        src/jpegint.h [5:14]
+        src/jpeglib.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1249c3d3fb0e107f4cabda7b2efba8b8
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdtrans.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdtrans.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 13010cb8c6cab093c8f6d215b932ef04
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/cjpeg.c at line 12, src/jcdiffct.c at line 12, src/jchuff.c at line 12, src/jcinit.c at line 12, src/jclhuff.c at line 12, src/jclossls.c at line 12, src/jcmainct.c at line 12, src/jcmarker.c at line 12, src/jcmaster.c at line 12, src/jcparam.c at line 12, src/jcphuff.c at line 12, src/jcprepct.c at line 12, src/jcsample.c at line 12, src/jdapimin.c at line 12, src/jddiffct.c at line 12, src/jdhuff.c at line 12, src/jdhuff.h at line 12, src/jdinput.c at line 12, src/jdlhuff.c at line 12, src/jdlossls.c at line 12, src/jdmarker.c at line 12, src/jdmaster.c at line 12, src/jdphuff.c at line 12, src/jerror.h at line 12, src/jlossls.h at line 12, src/jmorecfg.h at line 12, src/jpegint.h at line 12, src/jpeglib.h at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/cjpeg.c [5:12]
+        src/jcdiffct.c [5:11]
+        src/jchuff.c [5:15]
+        src/jcinit.c [5:11]
+        src/jclhuff.c [5:11]
+        src/jclossls.c [5:11]
+        src/jcmainct.c [5:11]
+        src/jcmarker.c [5:12]
+        src/jcmaster.c [5:12]
+        src/jcparam.c [5:12]
+        src/jcphuff.c [5:14]
+        src/jcprepct.c [5:11]
+        src/jcsample.c [5:13]
+        src/jdapimin.c [5:11]
+        src/jddiffct.c [5:11]
+        src/jdhuff.c [5:12]
+        src/jdhuff.h [5:12]
+        src/jdinput.c [5:12]
+        src/jdlhuff.c [5:11]
+        src/jdlossls.c [5:11]
+        src/jdmarker.c [5:11]
+        src/jdmaster.c [5:14]
+        src/jdphuff.c [5:11]
+        src/jerror.h [5:12]
+        src/jlossls.h [5:11]
+        src/jmorecfg.h [5:12]
+        src/jpegint.h [5:14]
+        src/jpeglib.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 143ba446de26dcc2a95b3e675795bb10
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [97:97]
+        jversion.h [39:53]
+        src/turbojpeg-mp.c [2:2]
+        src/turbojpeg.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 165527239955f985662e0f2fe1203f1b
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/transupp.c at line 8, src/transupp.h at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/transupp.c [5:9]
+        src/transupp.h [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1acdcc86793fefc64c4fe4c565b2f14f
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2015-2016, 2018, Matthieu Darbois.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/aarch32/jsimd_neon.S [10:10]
+        simd/arm/aarch64/jsimd_neon.S [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1b892e92391ba1d018a5507c7b63228c
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcarith.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcarith.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1bbbadfd105e774195bc459116383e34
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdhuff.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdhuff.c [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e373e5d7c214caaf091c17519bd8315
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/cmyk.h at line 5
+    License text:
+         * Copyright (C) 2017-2018, 2022, 2024, D. R. Commander.
+         * For conditions of distribution and use, see the accompanying README.ijg
+         * file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/cmyk.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1e45cf53e9734d2459db159d28f16e4b
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jinclude.h at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jinclude.h [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1e540cb130e098262d5aec64669768fd
 BELONGS ya.make
     License text:
         ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2016, 2018, D. R. Commander.
+        ; Copyright (C) 2016, 2018, 2024, D. R. Commander.
         ; Copyright (C) 2016, Matthieu Darbois.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -363,17 +410,6 @@ BELONGS ya.make
     Files with this license:
         simd/i386/jquanti-avx2.asm [4:6]
         simd/x86_64/jquanti-avx2.asm [4:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 1e9cc28e6b04389db80412d634fddb7e
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdhuff.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdhuff.c [5:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1f57de85739b7a14cfcd6ca84f7bfb7e
 BELONGS ya.make
@@ -388,159 +424,116 @@ BELONGS ya.make
         simd/arm/aarch32/jsimd_neon.S [4:5]
         simd/arm/aarch64/jsimd_neon.S [4:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1fb659a53f330f9569a89bd858ef3ce1
+KEEP     COPYRIGHT_SERVICE_LABEL 200ee19517ce77ef6c893573353f1ebb
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdcol565.c at line 9
-    Note: matched license text is too long. Read it in the source files.
+    License text:
+         * Copyright (C) 2020, 2024, D. R. Commander.  All Rights Reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdcol565.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 20b2a093ccd5225bc6fc55fe4031949c
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdmrgext.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdmrgext.c [5:9]
+        simd/arm/jccolor-neon.c [5:5]
+        simd/arm/jdsample-neon.c [5:5]
+        simd/arm/jfdctint-neon.c [5:5]
+        simd/arm/jidctint-neon.c [5:5]
+        simd/arm/jidctred-neon.c [5:5]
+        simd/arm/neon-compat.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 212c71fc80caadb4a16b0e0298e0ca71
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdcoefct.c at line 10
+FILE_INCLUDE README.ijg found in files: src/jdcoefct.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdcoefct.c [5:11]
+        src/jdcoefct.c [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22a18d55dccda56d9cc221cd8a48bab8
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdcol565.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdcol565.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 22f1d7c5732ac02efd9bb275cb633b92
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdpostct.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdpostct.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 23088d1c57488b04621001ac1f22cd37
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdcoefct.h at line 9
+FILE_INCLUDE README.ijg found in files: src/jdcoefct.h at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdcoefct.h [5:10]
+        src/jdcoefct.h [5:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 233835017fd9ed43858ecd8787bb95f6
+KEEP     COPYRIGHT_SERVICE_LABEL 24842b1335c13d4de45693097c32a1c3
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cderror.h at line 9
+FILE_INCLUDE README.ijg found in files: src/cderror.h at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        cderror.h [5:10]
+        src/cderror.h [5:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 25274b14836176e3a440bcf831a85954
+KEEP     COPYRIGHT_SERVICE_LABEL 24bddd7ebee3a5424a8538fb19ec4dd5
 BELONGS ya.make
-    License text:
-         * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-         * Copyright (C) 2011, 2014, D. R. Commander.
-         * Copyright (C) 2015-2016, 2018, Matthieu Darbois.
-         * Copyright (C) 2020, Arm Limited.
+FILE_INCLUDE README.ijg found in files: src/jcsample.c at line 12
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jsimd.h [4:7]
+        src/jcsample.c [5:13]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 260db70ba88e7f60351667e8f9254026
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cjpeg.c at line 9, jcmarker.c at line 9, jcparam.c at line 9, jdmarker.c at line 9, jerror.c at line 9, jidctint.c at line 9, jpeglib.h at line 9, jstdhuff.c at line 9
+FILE_INCLUDE README.ijg found in files: src/cjpeg.c at line 12, src/jcmarker.c at line 12, src/jcparam.c at line 12, src/jerror.c at line 12, src/jidctint.c at line 12, src/jpeglib.h at line 12, src/jstdhuff.c at line 12
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        cjpeg.c [5:10]
-        jcmarker.c [5:10]
-        jcparam.c [5:10]
-        jdmarker.c [5:9]
-        jerror.c [5:9]
-        jidctint.c [5:10]
-        jpeglib.h [5:11]
-        jstdhuff.c [5:9]
+        src/cjpeg.c [5:12]
+        src/jcmarker.c [5:12]
+        src/jcparam.c [5:12]
+        src/jerror.c [5:9]
+        src/jidctint.c [5:10]
+        src/jpeglib.h [5:14]
+        src/jstdhuff.c [5:9]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 263caad4ba33bd3ef6290d6aeecbe970
+KEEP     COPYRIGHT_SERVICE_LABEL 2870222b259e7ae538e6e763d9317be5
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jchuff.c at line 11
-    Note: matched license text is too long. Read it in the source files.
+    License text:
+         * Copyright (C) 2020, 2022, 2024, D. R. Commander.  All Rights Reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jchuff.c [5:12]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 2672fb937e60710dec1b0b8a7906d209
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcparam.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcparam.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 26eb00d97e3ef709d9a86754532ff978
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENSE.md [94:94]
-        jversion.h [39:51]
-        turbojpeg.c [2:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 295e5b669dd969a48ac39f34bc8fd7d3
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdcolor.c at line 11
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdcolor.c [5:12]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 29b99ba4246a9d3cc7b50e48a274da0d
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: rdbmp.c at line 10
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        rdbmp.c [5:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 2abf650befa8dcfcd29490f514c687d3
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdapistd.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdapistd.c [5:10]
+        simd/arm/aarch64/jchuff-neon.c [5:5]
+        src/jcinit.c [5:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 2e20febfc45f1f8ef6742ee1936089c4
 BELONGS ya.make
@@ -552,11 +545,33 @@ BELONGS ya.make
     Files with this license:
         simd/jsimd.h [4:10]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 3256dbeb994e6b4ac351be827ae3c0a2
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdmrg565.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdmrg565.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 32b610376fe997211b9614807b396e0a
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdcoefct.c at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdcoefct.c [5:11]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 366e4b10a51306ff66614307ac53900d
 BELONGS ya.make
     License text:
         ; Copyright 2009, 2012 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2012, 2016, D. R. Commander.
+        ; Copyright (C) 2012, 2016, 2024, D. R. Commander.
         ; Copyright (C) 2015, Intel Corporation.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -567,33 +582,84 @@ BELONGS ya.make
         simd/i386/jdcolext-sse2.asm [4:5]
         simd/i386/jdmrgext-avx2.asm [4:6]
         simd/i386/jdmrgext-sse2.asm [4:5]
-        simd/x86_64/jdcolext-avx2.asm [4:7]
-        simd/x86_64/jdcolext-sse2.asm [4:6]
-        simd/x86_64/jdmrgext-avx2.asm [4:7]
-        simd/x86_64/jdmrgext-sse2.asm [4:6]
+        simd/x86_64/jdcolext-avx2.asm [4:8]
+        simd/x86_64/jdcolext-sse2.asm [4:7]
+        simd/x86_64/jdmrgext-avx2.asm [4:8]
+        simd/x86_64/jdmrgext-sse2.asm [4:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 36e84c409abecc7cefe7cd5dfd105381
+KEEP     COPYRIGHT_SERVICE_LABEL 37cd0f481fff20f5d588c9096610f193
 BELONGS ya.make
-    License text:
-         * Copyright (C)2009-2015, 2017, 2020-2021 D. R. Commander.
-         *                                         All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        turbojpeg.h [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 3d8a221d5e85eceaf22464a0b1bc72cd
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdinput.c at line 9
+FILE_INCLUDE README.ijg found in files: src/jidctflt.c at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdinput.c [5:10]
+        src/jidctflt.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 38c62e15766b92959225434671d5f9ea
+BELONGS ya.make
+    License text:
+        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+        ; Copyright (C) 2016, 2020, 2024, D. R. Commander.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jfdctint-mmx.asm [4:5]
+        simd/i386/jfdctint-sse2.asm [4:5]
+        simd/i386/jidctint-mmx.asm [4:5]
+        simd/i386/jidctint-sse2.asm [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 39c134755a04f799cfbf116467767bc0
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdmrgext.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdmrgext.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3d3a87c635f1834fb097a2c158a581c7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/x86_64/jdcolext-avx2.asm [4:8]
+        simd/x86_64/jdcolext-sse2.asm [4:7]
+        simd/x86_64/jdmrgext-avx2.asm [4:8]
+        simd/x86_64/jdmrgext-sse2.asm [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3d5f8ebe6fdc7782fd1a1dd36969c848
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jpegint.h at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jpegint.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3f8bd016bf1d87514ec74f2f9a2120fb
+BELONGS ya.make
+    License text:
+        ; Copyright (C) 2009-2011, 2014-2017, 2019, 2024, D. R. Commander.
+        ; Copyright (C) 2015, Matthieu Darbois.
+        ; Copyright (C) 2018, Matthias Räncker.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jchuff-sse2.asm [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3ff1e15ee5c983f31a11845ba1303bdd
 BELONGS ya.make
@@ -606,76 +672,42 @@ FILE_INCLUDE README.ijg found in files: simd/arm/jchuff.h at line 10
     Files with this license:
         simd/arm/jchuff.h [5:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 4292948c897bb7af094f64c57edbd8ef
+KEEP     COPYRIGHT_SERVICE_LABEL 402e747f73ff1991b3433a9178fb3a35
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jerror.h at line 9
+FILE_INCLUDE README.ijg found in files: src/jccolor.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jerror.h [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 44be2ad22f421bfaf11c38a97ec194fa
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdatadst-tj.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdatadst-tj.c [5:10]
+        src/jccolor.c [5:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 44c57ae8756c03a43cc49d652ea73313
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jccolext.c at line 8, jccolor.c at line 8, jcsample.c at line 8, jdsample.c at line 8, jdsample.h at line 8, jfdctint.c at line 8, jquant1.c at line 8, jquant2.c at line 8, jutils.c at line 8, rdswitch.c at line 8, rdtarga.c at line 8, wrppm.c at line 8, wrtarga.c at line 8
+FILE_INCLUDE README.ijg found in files: src/jccolext.c at line 8, src/jccolor.c at line 8, src/jdsample.c at line 8, src/jdsample.h at line 8, src/jfdctint.c at line 8, src/jquant1.c at line 8, src/jquant2.c at line 8, src/jutils.c at line 8, src/rdswitch.c at line 8, src/rdtarga.c at line 8, src/wrppm.c at line 8, src/wrtarga.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jccolext.c [5:9]
-        jccolor.c [5:11]
-        jcsample.c [5:11]
-        jdsample.c [5:13]
-        jdsample.h [5:7]
-        jfdctint.c [5:9]
-        jquant1.c [5:9]
-        jquant2.c [5:9]
-        jutils.c [5:9]
-        rdswitch.c [5:9]
-        rdtarga.c [5:10]
-        wrppm.c [5:10]
-        wrtarga.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 450015c7f57bc091445dc56f6b2cdfc0
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: wrppm.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        wrppm.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 45dfad5b2ebfed97272719e6f1ef717c
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: rdgif.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        rdgif.c [5:10]
+        src/jccolext.c [5:9]
+        src/jccolor.c [5:11]
+        src/jdsample.c [5:13]
+        src/jdsample.h [5:9]
+        src/jfdctint.c [5:9]
+        src/jquant1.c [5:9]
+        src/jquant2.c [5:9]
+        src/jutils.c [5:9]
+        src/rdswitch.c [5:9]
+        src/rdtarga.c [5:10]
+        src/wrppm.c [5:10]
+        src/wrtarga.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4636a62a8d91a4cbe9262bf83287b971
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcicc.c at line 6, jdicc.c at line 6
+FILE_INCLUDE README.ijg found in files: src/jcicc.c at line 6, src/jdicc.c at line 6
     License text:
          * Copyright (C) 1997-1998, Thomas G. Lane, Todd Newman.
          * Copyright (C) 2017, D. R. Commander.
@@ -686,8 +718,43 @@ FILE_INCLUDE README.ijg found in files: jcicc.c at line 6, jdicc.c at line 6
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jcicc.c [4:7]
-        jdicc.c [4:7]
+        src/jcicc.c [4:7]
+        src/jdicc.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4680c0f004365095e326c17cb51c6201
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdmainct.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdmainct.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 473be9b7b1577b58d7f5c445411cd215
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdmaster.c at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdmaster.c [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4745f7542f4d4774799559824b14e0be
+BELONGS ya.make
+    License text:
+        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+        ; Copyright (C) 2016, 2018, 2024, D. R. Commander.
+        ; Copyright (C) 2016, Matthieu Darbois.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jquanti-avx2.asm [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 47fc44857c47b9fc7886e2d4af29d56d
 BELONGS ya.make
@@ -697,37 +764,32 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jversion.h [39:51]
+        jversion.h [39:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 480cafc45780df29ac6b7113176124d9
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jmemnobs.c at line 8
+FILE_INCLUDE README.ijg found in files: src/jmemnobs.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jmemnobs.c [5:9]
+        src/jmemnobs.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4855c5404dbb62841cec15bacf070c2e
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jchuff.c at line 11, jcphuff.c at line 11, jsimd.h at line 10, jsimd_none.c at line 10, simd/arm/aarch32/jccolext-neon.c at line 10, simd/arm/aarch32/jchuff-neon.c at line 10, simd/arm/aarch32/jsimd.c at line 10, simd/arm/aarch64/jccolext-neon.c at line 10, simd/arm/aarch64/jsimd.c at line 10, simd/arm/align.h at line 8, simd/arm/jccolor-neon.c at line 10, simd/arm/jcgray-neon.c at line 10, simd/arm/jcgryext-neon.c at line 10, simd/arm/jcsample-neon.c at line 10, simd/arm/jdcolext-neon.c at line 10, simd/arm/jdcolor-neon.c at line 10, simd/arm/jdmerge-neon.c at line 10, simd/arm/jdmrgext-neon.c at line 10, simd/arm/jdsample-neon.c at line 10, simd/arm/jfdctfst-neon.c at line 10, simd/arm/jfdctint-neon.c at line 10, simd/arm/jidctfst-neon.c at line 10, simd/arm/jidctint-neon.c at line 10, simd/arm/jidctred-neon.c at line 10, simd/jsimd.h at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jchuff.c [5:12]
-        jcphuff.c [5:12]
-        jsimd.h [4:7]
-        jsimd_none.c [4:7]
         simd/arm/aarch32/jccolext-neon.c [4:4]
         simd/arm/aarch32/jchuff-neon.c [4:4]
         simd/arm/aarch32/jsimd.c [4:9]
         simd/arm/aarch64/jccolext-neon.c [4:4]
-        simd/arm/aarch64/jsimd.c [4:8]
+        simd/arm/aarch64/jsimd.c [4:9]
         simd/arm/align.h [2:2]
         simd/arm/jccolor-neon.c [4:4]
         simd/arm/jcgray-neon.c [4:4]
@@ -744,6 +806,10 @@ FILE_INCLUDE README.ijg found in files: jchuff.c at line 11, jcphuff.c at line 1
         simd/arm/jidctint-neon.c [4:4]
         simd/arm/jidctred-neon.c [4:4]
         simd/jsimd.h [4:10]
+        src/jchuff.c [5:15]
+        src/jcphuff.c [5:14]
+        src/jpeg_nbits.h [2:4]
+        src/jsimd.h [4:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 4a3493336b28feee7d6c4e061d0a2d2b
 BELONGS ya.make
@@ -757,76 +823,83 @@ BELONGS ya.make
     Files with this license:
         simd/arm/aarch64/jsimd_neon.S [6:7]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 4f6b6761b55823e2cea9a9046a1374b4
+KEEP     COPYRIGHT_SERVICE_LABEL 4b3c97219276828ed14366b07f0aede2
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdmrg565.c at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdmrg565.c [5:10]
+        simd/arm/aarch32/jsimd.c [4:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c2163e51b9ed8090a26069dbdde61c2
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/wrppm.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/wrppm.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4c248b089801d682326ecc4cb1f391ee
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcphuff.c at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcphuff.c [5:14]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 501d9d9fd254b645bfdd5c1afeaf2b7b
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jmemsys.h at line 8
+FILE_INCLUDE README.ijg found in files: src/jmemsys.h at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jmemsys.h [5:8]
+        src/jmemsys.h [5:8]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 518ffe97c21503649bc9db24a865cf6b
+KEEP     COPYRIGHT_SERVICE_LABEL 50ea42652e559cc597bbb9ae3ecb4852
 BELONGS ya.make
-    License text:
-        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2010, 2016, 2018-2019, D. R. Commander.
-        ; Copyright (C) 2018, Matthieu Darbois.
-        ; Copyright (C) 2018, Matthias Räncker.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/nasm/jsimdext.inc [4:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 519b50edb8a80de408600b1899cfb023
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jfdctint.c at line 8, jidctint.c at line 8
+FILE_INCLUDE README.ijg found in files: src/jdapimin.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jfdctint.c [5:9]
-        jidctint.c [5:10]
+        src/jdapimin.c [5:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 51bad5f487918501ea2be46512c58c6b
+KEEP     COPYRIGHT_SERVICE_LABEL 51fe983e8c48efc39f1eeacf5d16ab44
 BELONGS ya.make
-    License text:
-        Copyright (c) 1991-2022 The libjpeg-turbo Project
+FILE_INCLUDE README.ijg found in files: src/cdjpeg.h at line 9
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jversion.h [53:54]
+        src/cdjpeg.h [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 522d100a3ff80be6a2059ed5e2ff8060
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcdctmgr.c at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcdctmgr.c [5:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 52ef6eff15e58ea7a30014a18522a0b8
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/jsimd.h [4:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 55d69ef5c2827524a7c5cdd2ef41b997
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -847,11 +920,46 @@ FILE_INCLUDE README.ijg found in files: jversion.h at line 8
     Files with this license:
         jversion.h [5:9]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 5aa53b258f764fbe51be48c4ab1f1d1f
+KEEP     COPYRIGHT_SERVICE_LABEL 5942dca4c7f00924e5a7857157ce7c07
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcphuff.c at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcphuff.c [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 59da30b54ba158e496b715ee3eac50ff
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jmemmgr.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jmemmgr.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5c71cfc1b39a982a71325ed95841ac87
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2014, 2021, 2024, D. R. Commander.
+         * Copyright (C) 2014, Olle Liljenzin.
+         * Copyright (C) 2020, Arm Limited.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jpeg_nbits.h [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5cc27d8bf4d188df85aa70dfe3186b2a
 BELONGS ya.make
     License text:
         ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2009, 2016, 2018, 2020, D. R. Commander.
+        ; Copyright (C) 2009, 2016, 2018, 2020, 2024, D. R. Commander.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -861,41 +969,6 @@ BELONGS ya.make
         simd/i386/jidctint-avx2.asm [4:5]
         simd/x86_64/jfdctint-avx2.asm [4:5]
         simd/x86_64/jidctint-avx2.asm [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 5b4d2ba74e51eb91bbd5aef822f9aae3
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jpegtran.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jpegtran.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 5be2bec78aaafa60d86afed2fe95055c
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: djpeg.c at line 10
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        djpeg.c [5:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 5f6a538b377c16ee13ee1496c713b176
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/x86_64/jdcolext-avx2.asm [4:7]
-        simd/x86_64/jdcolext-sse2.asm [4:6]
-        simd/x86_64/jdmrgext-avx2.asm [4:7]
-        simd/x86_64/jdmrgext-sse2.asm [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 600b52ef1b2e8a91bced51054f66f3b1
 BELONGS ya.make
@@ -907,32 +980,83 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jchuff.c [583:584]
-        jcphuff.c [521:522]
+        src/jchuff.c [581:582]
+        src/jcphuff.c [498:499]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 60905578d76ff9b2e20929c31ca32f13
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdhuff.h at line 9
+FILE_INCLUDE README.ijg found in files: src/jdhuff.h at line 11
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdhuff.h [5:10]
+        src/jdhuff.h [5:12]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 60bbb1946c5720a631b0e530309742ec
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jchuff.c at line 11, simd/i386/jchuff-sse2.asm at line 10, simd/x86_64/jchuff-sse2.asm at line 10
+    License text:
+        ; Copyright (C) 2009-2011, 2014-2017, 2019, 2024, D. R. Commander.
+        ; Copyright (C) 2015, Matthieu Darbois.
+        ; Copyright (C) 2018, Matthias Räncker.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jchuff-sse2.asm [4:6]
+        simd/x86_64/jchuff-sse2.asm [4:7]
+        src/jchuff.c [5:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6363414eb2a9b1f11930b884e2f08af4
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jerror.h at line 11
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jchuff.c [5:12]
-        simd/i386/jchuff-sse2.asm [4:6]
-        simd/x86_64/jchuff-sse2.asm [4:6]
+        src/jerror.h [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 63a479db7fe698014dbeba22194b04d5
+BELONGS ya.make
+    License text:
+        ; Copyright (C) 2009, 2016, 2024, D. R. Commander.
+        ; Copyright (C) 2015, Intel Corporation.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jccolor-avx2.asm [4:5]
+        simd/i386/jccolor-mmx.asm [4:5]
+        simd/i386/jccolor-sse2.asm [4:4]
+        simd/i386/jdcolor-mmx.asm [4:5]
+        simd/i386/jdcolor-sse2.asm [4:5]
+        simd/i386/jdmerge-avx2.asm [4:6]
+        simd/i386/jdmerge-mmx.asm [4:5]
+        simd/i386/jdmerge-sse2.asm [4:5]
+        simd/x86_64/jccolext-avx2.asm [4:7]
+        simd/x86_64/jccolext-sse2.asm [4:6]
+        simd/x86_64/jccolor-avx2.asm [4:5]
+        simd/x86_64/jccolor-sse2.asm [4:4]
+        simd/x86_64/jcsample-avx2.asm [4:7]
+        simd/x86_64/jcsample-sse2.asm [4:6]
+        simd/x86_64/jdcolor-avx2.asm [4:6]
+        simd/x86_64/jdcolor-sse2.asm [4:5]
+        simd/x86_64/jdmerge-avx2.asm [4:6]
+        simd/x86_64/jdmerge-sse2.asm [4:5]
+        simd/x86_64/jdsample-avx2.asm [4:8]
+        simd/x86_64/jdsample-sse2.asm [4:7]
+        simd/x86_64/jfdctflt-sse.asm [4:6]
+        simd/x86_64/jfdctfst-sse2.asm [4:6]
+        simd/x86_64/jidctflt-sse2.asm [4:7]
+        simd/x86_64/jidctfst-sse2.asm [4:7]
+        simd/x86_64/jidctred-sse2.asm [4:7]
+        simd/x86_64/jquantf-sse2.asm [4:6]
+        simd/x86_64/jquanti-sse2.asm [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 660eca46c511999474ff8017e496f51c
 BELONGS ya.make
@@ -942,115 +1066,112 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6671698e9a2a769e8f652725e0cd494a
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cdjpeg.h at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        cdjpeg.h [5:10]
+        jversion.h [39:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 66e5c8e9af8d0ef7cf8741f0659c1e0c
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jpegtran.c at line 8
+FILE_INCLUDE README.ijg found in files: src/jpegtran.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jpegtran.c [5:9]
+        src/jpegtran.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 67b26c4c62038ed9d521916ec59fa891
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jpeglib.h at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jpeglib.h [5:14]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6810534b9bd4aab0c6b7827b6c0f1fd9
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcinit.c at line 8, jdmerge.h at line 8, jdtrans.c at line 8, simd/arm/aarch32/jccolext-neon.c at line 8, simd/arm/jccolor-neon.c at line 8, simd/arm/jdcolext-neon.c at line 8, simd/arm/jdmrgext-neon.c at line 8, simd/arm/jdsample-neon.c at line 8, simd/arm/jfdctint-neon.c at line 8, simd/arm/jidctint-neon.c at line 8, simd/arm/jidctred-neon.c at line 8, simd/arm/neon-compat.h at line 5
     License text:
-         * Copyright (C) 1991-1997, Thomas G. Lane.
-         * libjpeg-turbo Modifications:
-         * Copyright (C) 2020, D. R. Commander.
-         * For conditions of distribution and use, see the accompanying README.ijg
-         * file.
+         * Copyright (C) 2020, D. R. Commander.  All Rights Reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jcinit.c [5:9]
-        jdmerge.h [5:9]
-        jdtrans.c [5:9]
         simd/arm/aarch32/jccolext-neon.c [5:5]
-        simd/arm/jccolor-neon.c [5:5]
         simd/arm/jdcolext-neon.c [5:5]
         simd/arm/jdmrgext-neon.c [5:5]
-        simd/arm/jdsample-neon.c [5:5]
-        simd/arm/jfdctint-neon.c [5:5]
-        simd/arm/jidctint-neon.c [5:5]
-        simd/arm/jidctred-neon.c [5:5]
-        simd/arm/neon-compat.h [2:2]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 6813c2b6fb9997bdcb51ad621d1a371b
+KEEP     COPYRIGHT_SERVICE_LABEL 6907b11c6726886d220d1f0eb4046ea0
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdmarker.c at line 8
+FILE_INCLUDE README.ijg found in files: src/jpegtran.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdmarker.c [5:9]
+        src/jpegtran.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a226d15ee49bc0c567717275b3183c4
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcmaster.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcmaster.c [5:12]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6aff4539cc564a76b36cfd2daf2e3833
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jchuff.c at line 11, jdhuff.c at line 11, jdhuff.h at line 11, simd/arm/jchuff.h at line 11, simd/i386/jchuff-sse2.asm at line 10, simd/nasm/jsimdext.inc at line 10, simd/x86_64/jccolext-avx2.asm at line 10, simd/x86_64/jccolext-sse2.asm at line 10, simd/x86_64/jcgryext-avx2.asm at line 10, simd/x86_64/jcgryext-sse2.asm at line 10, simd/x86_64/jchuff-sse2.asm at line 10, simd/x86_64/jcsample-avx2.asm at line 10, simd/x86_64/jcsample-sse2.asm at line 10, simd/x86_64/jdcolext-avx2.asm at line 10, simd/x86_64/jdcolext-sse2.asm at line 10, simd/x86_64/jdmrgext-avx2.asm at line 10, simd/x86_64/jdmrgext-sse2.asm at line 10, simd/x86_64/jdsample-avx2.asm at line 10, simd/x86_64/jdsample-sse2.asm at line 10, simd/x86_64/jidctflt-sse2.asm at line 10, simd/x86_64/jidctfst-sse2.asm at line 10, simd/x86_64/jidctint-avx2.asm at line 10, simd/x86_64/jidctint-sse2.asm at line 10, simd/x86_64/jidctred-sse2.asm at line 10, simd/x86_64/jquantf-sse2.asm at line 10, simd/x86_64/jquanti-avx2.asm at line 10, simd/x86_64/jquanti-sse2.asm at line 10
+FILE_INCLUDE README.ijg found in files: simd/arm/jchuff.h at line 10, simd/i386/jchuff-sse2.asm at line 9, simd/nasm/jsimdext.inc at line 9, simd/x86_64/jccolext-avx2.asm at line 9, simd/x86_64/jccolext-sse2.asm at line 9, simd/x86_64/jcgryext-avx2.asm at line 9, simd/x86_64/jcgryext-sse2.asm at line 9, simd/x86_64/jchuff-sse2.asm at line 9, simd/x86_64/jcsample-avx2.asm at line 9, simd/x86_64/jcsample-sse2.asm at line 9, simd/x86_64/jdcolext-avx2.asm at line 9, simd/x86_64/jdcolext-sse2.asm at line 9, simd/x86_64/jdmrgext-avx2.asm at line 9, simd/x86_64/jdmrgext-sse2.asm at line 9, simd/x86_64/jdsample-avx2.asm at line 9, simd/x86_64/jdsample-sse2.asm at line 9, simd/x86_64/jidctflt-sse2.asm at line 9, simd/x86_64/jidctfst-sse2.asm at line 9, simd/x86_64/jidctint-avx2.asm at line 9, simd/x86_64/jidctint-sse2.asm at line 9, simd/x86_64/jidctred-sse2.asm at line 9, simd/x86_64/jquantf-sse2.asm at line 9, simd/x86_64/jquanti-avx2.asm at line 9, simd/x86_64/jquanti-sse2.asm at line 9, src/jchuff.c at line 10, src/jdhuff.c at line 10, src/jdhuff.h at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jchuff.c [5:12]
-        jdhuff.c [5:10]
-        jdhuff.h [5:10]
         simd/arm/jchuff.h [5:11]
         simd/i386/jchuff-sse2.asm [4:6]
-        simd/nasm/jsimdext.inc [4:7]
-        simd/x86_64/jccolext-avx2.asm [4:6]
-        simd/x86_64/jccolext-sse2.asm [4:5]
-        simd/x86_64/jcgryext-avx2.asm [4:6]
-        simd/x86_64/jcgryext-sse2.asm [4:5]
-        simd/x86_64/jchuff-sse2.asm [4:6]
+        simd/nasm/jsimdext.inc [4:8]
+        simd/x86_64/jccolext-avx2.asm [4:7]
+        simd/x86_64/jccolext-sse2.asm [4:6]
+        simd/x86_64/jcgryext-avx2.asm [4:7]
+        simd/x86_64/jcgryext-sse2.asm [4:6]
+        simd/x86_64/jchuff-sse2.asm [4:7]
         simd/x86_64/jcsample-avx2.asm [4:7]
         simd/x86_64/jcsample-sse2.asm [4:6]
-        simd/x86_64/jdcolext-avx2.asm [4:7]
-        simd/x86_64/jdcolext-sse2.asm [4:6]
-        simd/x86_64/jdmrgext-avx2.asm [4:7]
-        simd/x86_64/jdmrgext-sse2.asm [4:6]
-        simd/x86_64/jdsample-avx2.asm [4:7]
-        simd/x86_64/jdsample-sse2.asm [4:6]
-        simd/x86_64/jidctflt-sse2.asm [4:6]
-        simd/x86_64/jidctfst-sse2.asm [4:6]
+        simd/x86_64/jdcolext-avx2.asm [4:8]
+        simd/x86_64/jdcolext-sse2.asm [4:7]
+        simd/x86_64/jdmrgext-avx2.asm [4:8]
+        simd/x86_64/jdmrgext-sse2.asm [4:7]
+        simd/x86_64/jdsample-avx2.asm [4:8]
+        simd/x86_64/jdsample-sse2.asm [4:7]
+        simd/x86_64/jidctflt-sse2.asm [4:7]
+        simd/x86_64/jidctfst-sse2.asm [4:7]
         simd/x86_64/jidctint-avx2.asm [4:6]
-        simd/x86_64/jidctint-sse2.asm [4:6]
-        simd/x86_64/jidctred-sse2.asm [4:6]
+        simd/x86_64/jidctint-sse2.asm [4:7]
+        simd/x86_64/jidctred-sse2.asm [4:7]
         simd/x86_64/jquantf-sse2.asm [4:6]
         simd/x86_64/jquanti-avx2.asm [4:7]
         simd/x86_64/jquanti-sse2.asm [4:6]
+        src/jchuff.c [5:15]
+        src/jdhuff.c [5:12]
+        src/jdhuff.h [5:12]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6b27b02a83f5acbedf97e2af93f106ce
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: rdswitch.c at line 8
+FILE_INCLUDE README.ijg found in files: src/rdswitch.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        rdswitch.c [5:9]
+        src/rdswitch.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6e387c76ad0c9566059a9f9d957682f1
 BELONGS ya.make
@@ -1060,42 +1181,18 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6eb2b24499a14d2c8a22f88b12735a09
-BELONGS ya.make
-    License text:
-        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2016, 2018, D. R. Commander.
-        ; Copyright (C) 2016, Matthieu Darbois.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/i386/jquanti-avx2.asm [4:6]
+        jversion.h [39:53]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 6eb3d0c5f735d6c9284f341dc1236bed
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdphuff.c at line 8
+FILE_INCLUDE README.ijg found in files: src/jdphuff.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdphuff.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 703a7a65a9b856b35aa7c7808a7287fc
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jquant1.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jquant1.c [5:9]
+        src/jdphuff.c [5:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 70c1e29ed3f2dcad843e598653327b67
 BELONGS ya.make
@@ -1118,26 +1215,39 @@ BELONGS ya.make
     Files with this license:
         simd/arm/aarch64/jsimd_neon.S [11:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 73b8c8c41571d643184b1c9d911eca42
+KEEP     COPYRIGHT_SERVICE_LABEL 72d5fcfb41124f4802b06973321d05dc
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdmaster.c at line 11
+FILE_INCLUDE README.ijg found in files: src/jcphuff.c at line 13, src/jdphuff.c at line 13
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdmaster.c [5:12]
+        src/jcphuff.c [5:14]
+        src/jdphuff.c [5:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 742c1fe44d959285f890f38257b78a56
+KEEP     COPYRIGHT_SERVICE_LABEL 7368078051aa15ee967ba1109dd6af7e
 BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdapimin.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        simd/arm/aarch64/jsimd.c [4:8]
+        src/jdapimin.c [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73b43db9033e7e818ebb5a650a5e9bab
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/transupp.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/transupp.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7620be1aff6ecbf9c6bdaeacf1b9cc57
 BELONGS ya.make
@@ -1147,55 +1257,32 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        rdgif.c [26:32]
+        src/rdgif.c [26:32]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 77086af1369f22e7eb3a40f2c5a423e9
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcphuff.c at line 11, simd/i386/jcphuff-sse2.asm at line 10, simd/x86_64/jcphuff-sse2.asm at line 11
-    Note: matched license text is too long. Read it in the source files.
+    License text:
+        ; Copyright (C) 2016, 2018, Matthieu Darbois
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jcphuff.c [5:12]
         simd/i386/jcphuff-sse2.asm [4:4]
-        simd/x86_64/jcphuff-sse2.asm [5:5]
+        simd/x86_64/jcphuff-sse2.asm [5:7]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7868e712d11159d5f95f6227307c9ea9
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jccolor.c at line 10, jcsample.c at line 10, jdsample.c at line 10
+FILE_INCLUDE README.ijg found in files: src/jccolor.c at line 10, src/jcsample.c at line 10, src/jdsample.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jccolor.c [5:11]
-        jcsample.c [5:11]
-        jdsample.c [5:13]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 79ef6f7b35853561e461606aaf6f3d14
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jidctflt.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jidctflt.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 7e31d53b19f09cda635bcecb2051e38c
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: rdppm.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        rdppm.c [5:10]
+        src/jccolor.c [5:11]
+        src/jcsample.c [5:13]
+        src/jdsample.c [5:13]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7e915a2a5af4ecd6601c584b49121ec7
 BELONGS ya.make
@@ -1206,23 +1293,21 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE.md [95:95]
+        LICENSE.md [98:98]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 804ebbe411e8d8ad599ecb18d89742e7
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcdctmgr.c at line 10, jsimd.h at line 15, jsimd_none.c at line 15, jsimddct.h at line 12, simd/arm/aarch32/jsimd.c at line 17, simd/arm/aarch64/jsimd.c at line 16, simd/i386/jccolext-avx2.asm at line 13, simd/i386/jccolext-mmx.asm at line 13, simd/i386/jccolext-sse2.asm at line 12, simd/i386/jccolor-avx2.asm at line 13, simd/i386/jccolor-mmx.asm at line 13, simd/i386/jccolor-sse2.asm at line 12, simd/i386/jcgray-avx2.asm at line 13, simd/i386/jcgray-mmx.asm at line 13, simd/i386/jcgray-sse2.asm at line 12, simd/i386/jcgryext-avx2.asm at line 13, simd/i386/jcgryext-mmx.asm at line 13, simd/i386/jcgryext-sse2.asm at line 12, simd/i386/jchuff-sse2.asm at line 14, simd/i386/jcphuff-sse2.asm at line 12, simd/i386/jcsample-avx2.asm at line 14, simd/i386/jcsample-mmx.asm at line 13, simd/i386/jcsample-sse2.asm at line 13, simd/i386/jdcolext-avx2.asm at line 14, simd/i386/jdcolext-mmx.asm at line 13, simd/i386/jdcolext-sse2.asm at line 13, simd/i386/jdcolor-avx2.asm at line 14, simd/i386/jdcolor-mmx.asm at line 13, simd/i386/jdcolor-sse2.asm at line 13, simd/i386/jdmerge-avx2.asm at line 14, simd/i386/jdmerge-mmx.asm at line 13, simd/i386/jdmerge-sse2.asm at line 13, simd/i386/jdmrgext-avx2.asm at line 14, simd/i386/jdmrgext-mmx.asm at line 13, simd/i386/jdmrgext-sse2.asm at line 13, simd/i386/jdsample-avx2.asm at line 14, simd/i386/jdsample-mmx.asm at line 13, simd/i386/jdsample-sse2.asm at line 13, simd/i386/jfdctflt-3dn.asm at line 13, simd/i386/jfdctflt-sse.asm at line 13, simd/i386/jfdctfst-mmx.asm at line 13, simd/i386/jfdctfst-sse2.asm at line 13, simd/i386/jfdctint-avx2.asm at line 13, simd/i386/jfdctint-mmx.asm at line 13, simd/i386/jfdctint-sse2.asm at line 13, simd/i386/jidctflt-3dn.asm at line 13, simd/i386/jidctflt-sse.asm at line 13, simd/i386/jidctflt-sse2.asm at line 13, simd/i386/jidctfst-mmx.asm at line 13, simd/i386/jidctfst-sse2.asm at line 13, simd/i386/jidctint-avx2.asm at line 13, simd/i386/jidctint-mmx.asm at line 13, simd/i386/jidctint-sse2.asm at line 13, simd/i386/jidctred-mmx.asm at line 13, simd/i386/jidctred-sse2.asm at line 13, simd/i386/jquant-3dn.asm at line 13, simd/i386/jquant-mmx.asm at line 13, simd/i386/jquant-sse.asm at line 13, simd/i386/jquantf-sse2.asm at line 13, simd/i386/jquanti-avx2.asm at line 14, simd/i386/jquanti-sse2.asm at line 13, simd/i386/jsimd.c at line 14, simd/i386/jsimdcpu.asm at line 13, simd/jsimd.h at line 18, simd/nasm/jcolsamp.inc at line 13, simd/nasm/jdct.inc at line 13, simd/nasm/jsimdext.inc at line 16, simd/x86_64/jccolext-avx2.asm at line 14, simd/x86_64/jccolext-sse2.asm at line 13, simd/x86_64/jccolor-avx2.asm at line 13, simd/x86_64/jccolor-sse2.asm at line 12, simd/x86_64/jcgray-avx2.asm at line 13, simd/x86_64/jcgray-sse2.asm at line 12, simd/x86_64/jcgryext-avx2.asm at line 14, simd/x86_64/jcgryext-sse2.asm at line 13, simd/x86_64/jchuff-sse2.asm at line 14, simd/x86_64/jcphuff-sse2.asm at line 13, simd/x86_64/jcsample-avx2.asm at line 15, simd/x86_64/jcsample-sse2.asm at line 14, simd/x86_64/jdcolext-avx2.asm at line 15, simd/x86_64/jdcolext-sse2.asm at line 14, simd/x86_64/jdcolor-avx2.asm at line 14, simd/x86_64/jdcolor-sse2.asm at line 13, simd/x86_64/jdmerge-avx2.asm at line 14, simd/x86_64/jdmerge-sse2.asm at line 13, simd/x86_64/jdmrgext-avx2.asm at line 15, simd/x86_64/jdmrgext-sse2.asm at line 14, simd/x86_64/jdsample-avx2.asm at line 15, simd/x86_64/jdsample-sse2.asm at line 14, simd/x86_64/jfdctflt-sse.asm at line 13, simd/x86_64/jfdctfst-sse2.asm at line 13, simd/x86_64/jfdctint-avx2.asm at line 13, simd/x86_64/jfdctint-sse2.asm at line 13, simd/x86_64/jidctflt-sse2.asm at line 14, simd/x86_64/jidctfst-sse2.asm at line 14, simd/x86_64/jidctint-avx2.asm at line 14, simd/x86_64/jidctint-sse2.asm at line 14, simd/x86_64/jidctred-sse2.asm at line 14, simd/x86_64/jquantf-sse2.asm at line 14, simd/x86_64/jquanti-avx2.asm at line 15, simd/x86_64/jquanti-sse2.asm at line 14, simd/x86_64/jsimd.c at line 14, simd/x86_64/jsimdcpu.asm at line 14
-    Note: matched license text is too long. Read it in the source files.
+FILE_INCLUDE simd/nasm/jsimdext.inc found in files: simd/arm/aarch32/jsimd.c at line 13, simd/arm/aarch64/jsimd.c at line 13, simd/i386/jccolext-avx2.asm at line 9, simd/i386/jccolext-mmx.asm at line 9, simd/i386/jccolext-sse2.asm at line 8, simd/i386/jccolor-avx2.asm at line 9, simd/i386/jccolor-mmx.asm at line 9, simd/i386/jccolor-sse2.asm at line 8, simd/i386/jcgray-avx2.asm at line 9, simd/i386/jcgray-mmx.asm at line 9, simd/i386/jcgray-sse2.asm at line 8, simd/i386/jcgryext-avx2.asm at line 9, simd/i386/jcgryext-mmx.asm at line 9, simd/i386/jcgryext-sse2.asm at line 8, simd/i386/jchuff-sse2.asm at line 10, simd/i386/jcphuff-sse2.asm at line 8, simd/i386/jcsample-avx2.asm at line 10, simd/i386/jcsample-mmx.asm at line 9, simd/i386/jcsample-sse2.asm at line 9, simd/i386/jdcolext-avx2.asm at line 10, simd/i386/jdcolext-mmx.asm at line 9, simd/i386/jdcolext-sse2.asm at line 9, simd/i386/jdcolor-avx2.asm at line 10, simd/i386/jdcolor-mmx.asm at line 9, simd/i386/jdcolor-sse2.asm at line 9, simd/i386/jdmerge-avx2.asm at line 10, simd/i386/jdmerge-mmx.asm at line 9, simd/i386/jdmerge-sse2.asm at line 9, simd/i386/jdmrgext-avx2.asm at line 10, simd/i386/jdmrgext-mmx.asm at line 9, simd/i386/jdmrgext-sse2.asm at line 9, simd/i386/jdsample-avx2.asm at line 10, simd/i386/jdsample-mmx.asm at line 9, simd/i386/jdsample-sse2.asm at line 9, simd/i386/jfdctflt-3dn.asm at line 9, simd/i386/jfdctflt-sse.asm at line 9, simd/i386/jfdctfst-mmx.asm at line 9, simd/i386/jfdctfst-sse2.asm at line 9, simd/i386/jfdctint-avx2.asm at line 9, simd/i386/jfdctint-mmx.asm at line 9, simd/i386/jfdctint-sse2.asm at line 9, simd/i386/jidctflt-3dn.asm at line 9, simd/i386/jidctflt-sse.asm at line 9, simd/i386/jidctflt-sse2.asm at line 9, simd/i386/jidctfst-mmx.asm at line 9, simd/i386/jidctfst-sse2.asm at line 9, simd/i386/jidctint-avx2.asm at line 9, simd/i386/jidctint-mmx.asm at line 9, simd/i386/jidctint-sse2.asm at line 9, simd/i386/jidctred-mmx.asm at line 9, simd/i386/jidctred-sse2.asm at line 9, simd/i386/jquant-3dn.asm at line 9, simd/i386/jquant-mmx.asm at line 9, simd/i386/jquant-sse.asm at line 9, simd/i386/jquantf-sse2.asm at line 9, simd/i386/jquanti-avx2.asm at line 10, simd/i386/jquanti-sse2.asm at line 9, simd/i386/jsimd.c at line 10, simd/i386/jsimdcpu.asm at line 9, simd/jsimd.h at line 14, simd/nasm/jcolsamp.inc at line 9, simd/nasm/jdct.inc at line 9, simd/nasm/jsimdext.inc at line 13, simd/x86_64/jccolext-avx2.asm at line 11, simd/x86_64/jccolext-sse2.asm at line 10, simd/x86_64/jccolor-avx2.asm at line 9, simd/x86_64/jccolor-sse2.asm at line 8, simd/x86_64/jcgray-avx2.asm at line 9, simd/x86_64/jcgray-sse2.asm at line 8, simd/x86_64/jcgryext-avx2.asm at line 11, simd/x86_64/jcgryext-sse2.asm at line 10, simd/x86_64/jchuff-sse2.asm at line 11, simd/x86_64/jcphuff-sse2.asm at line 11, simd/x86_64/jcsample-avx2.asm at line 11, simd/x86_64/jcsample-sse2.asm at line 10, simd/x86_64/jdcolext-avx2.asm at line 12, simd/x86_64/jdcolext-sse2.asm at line 11, simd/x86_64/jdcolor-avx2.asm at line 10, simd/x86_64/jdcolor-sse2.asm at line 9, simd/x86_64/jdmerge-avx2.asm at line 10, simd/x86_64/jdmerge-sse2.asm at line 9, simd/x86_64/jdmrgext-avx2.asm at line 12, simd/x86_64/jdmrgext-sse2.asm at line 11, simd/x86_64/jdsample-avx2.asm at line 12, simd/x86_64/jdsample-sse2.asm at line 11, simd/x86_64/jfdctflt-sse.asm at line 10, simd/x86_64/jfdctfst-sse2.asm at line 10, simd/x86_64/jfdctint-avx2.asm at line 9, simd/x86_64/jfdctint-sse2.asm at line 10, simd/x86_64/jidctflt-sse2.asm at line 11, simd/x86_64/jidctfst-sse2.asm at line 11, simd/x86_64/jidctint-avx2.asm at line 10, simd/x86_64/jidctint-sse2.asm at line 11, simd/x86_64/jidctred-sse2.asm at line 11, simd/x86_64/jquantf-sse2.asm at line 10, simd/x86_64/jquanti-avx2.asm at line 11, simd/x86_64/jquanti-sse2.asm at line 10, simd/x86_64/jsimd.c at line 10, simd/x86_64/jsimdcpu.asm at line 11, src/jcdctmgr.c at line 6, src/jsimd.h at line 11, src/jsimddct.h at line 8
+    License text:
+         * Copyright (C) 1999-2006, MIYASAKA Masaru.
+         * For conditions of distribution and use, see copyright notice in jsimdext.inc
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jcdctmgr.c [5:11]
-        jsimd.h [10:11]
-        jsimd_none.c [10:11]
-        jsimddct.h [7:8]
         simd/arm/aarch32/jsimd.c [12:13]
-        simd/arm/aarch64/jsimd.c [11:12]
+        simd/arm/aarch64/jsimd.c [12:13]
         simd/i386/jccolext-avx2.asm [8:9]
         simd/i386/jccolext-mmx.asm [8:9]
         simd/i386/jccolext-sse2.asm [7:8]
@@ -1283,546 +1368,76 @@ FILE_INCLUDE README.ijg found in files: jcdctmgr.c at line 10, jsimd.h at line 1
         simd/jsimd.h [13:14]
         simd/nasm/jcolsamp.inc [8:9]
         simd/nasm/jdct.inc [8:9]
-        simd/nasm/jsimdext.inc [11:11]
-        simd/x86_64/jccolext-avx2.asm [9:10]
-        simd/x86_64/jccolext-sse2.asm [8:9]
+        simd/nasm/jsimdext.inc [12:12]
+        simd/x86_64/jccolext-avx2.asm [10:11]
+        simd/x86_64/jccolext-sse2.asm [9:10]
         simd/x86_64/jccolor-avx2.asm [8:9]
         simd/x86_64/jccolor-sse2.asm [7:8]
         simd/x86_64/jcgray-avx2.asm [8:9]
         simd/x86_64/jcgray-sse2.asm [7:8]
-        simd/x86_64/jcgryext-avx2.asm [9:10]
-        simd/x86_64/jcgryext-sse2.asm [8:9]
-        simd/x86_64/jchuff-sse2.asm [9:10]
-        simd/x86_64/jcphuff-sse2.asm [8:9]
+        simd/x86_64/jcgryext-avx2.asm [10:11]
+        simd/x86_64/jcgryext-sse2.asm [9:10]
+        simd/x86_64/jchuff-sse2.asm [10:11]
+        simd/x86_64/jcphuff-sse2.asm [10:11]
         simd/x86_64/jcsample-avx2.asm [10:11]
         simd/x86_64/jcsample-sse2.asm [9:10]
-        simd/x86_64/jdcolext-avx2.asm [10:11]
-        simd/x86_64/jdcolext-sse2.asm [9:10]
+        simd/x86_64/jdcolext-avx2.asm [11:12]
+        simd/x86_64/jdcolext-sse2.asm [10:11]
         simd/x86_64/jdcolor-avx2.asm [9:10]
         simd/x86_64/jdcolor-sse2.asm [8:9]
         simd/x86_64/jdmerge-avx2.asm [9:10]
         simd/x86_64/jdmerge-sse2.asm [8:9]
-        simd/x86_64/jdmrgext-avx2.asm [10:11]
-        simd/x86_64/jdmrgext-sse2.asm [9:10]
-        simd/x86_64/jdsample-avx2.asm [10:11]
-        simd/x86_64/jdsample-sse2.asm [9:10]
-        simd/x86_64/jfdctflt-sse.asm [8:9]
-        simd/x86_64/jfdctfst-sse2.asm [8:9]
+        simd/x86_64/jdmrgext-avx2.asm [11:12]
+        simd/x86_64/jdmrgext-sse2.asm [10:11]
+        simd/x86_64/jdsample-avx2.asm [11:12]
+        simd/x86_64/jdsample-sse2.asm [10:11]
+        simd/x86_64/jfdctflt-sse.asm [9:10]
+        simd/x86_64/jfdctfst-sse2.asm [9:10]
         simd/x86_64/jfdctint-avx2.asm [8:9]
-        simd/x86_64/jfdctint-sse2.asm [8:9]
-        simd/x86_64/jidctflt-sse2.asm [9:10]
-        simd/x86_64/jidctfst-sse2.asm [9:10]
+        simd/x86_64/jfdctint-sse2.asm [9:10]
+        simd/x86_64/jidctflt-sse2.asm [10:11]
+        simd/x86_64/jidctfst-sse2.asm [10:11]
         simd/x86_64/jidctint-avx2.asm [9:10]
-        simd/x86_64/jidctint-sse2.asm [9:10]
-        simd/x86_64/jidctred-sse2.asm [9:10]
+        simd/x86_64/jidctint-sse2.asm [10:11]
+        simd/x86_64/jidctred-sse2.asm [10:11]
         simd/x86_64/jquantf-sse2.asm [9:10]
         simd/x86_64/jquanti-avx2.asm [10:11]
         simd/x86_64/jquanti-sse2.asm [9:10]
         simd/x86_64/jsimd.c [9:10]
-        simd/x86_64/jsimdcpu.asm [9:10]
+        simd/x86_64/jsimdcpu.asm [10:11]
+        src/jcdctmgr.c [5:11]
+        src/jsimd.h [10:11]
+        src/jsimddct.h [7:8]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 841a525ae27626ed264dbe00d00a50d9
+KEEP     COPYRIGHT_SERVICE_LABEL 81e5335855f8c69149fe38a96521a6d1
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: wrgif.c at line 9
+FILE_INCLUDE README.ijg found in files: src/jdmarker.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        wrgif.c [5:10]
+        src/jdmarker.c [5:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 8a887c76bccbc11714f8d4f377b95b34
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cmyk.h at line 5, jmemnobs.c at line 6
-    License text:
-         * Copyright (C) 2017-2018, D. R. Commander.
-         * For conditions of distribution and use, see the accompanying README.ijg
-         * file.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        cmyk.h [4:6]
-        jmemnobs.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 8ec1376dfe31abfe479581e655244a78
+KEEP     COPYRIGHT_SERVICE_LABEL 8e155a3d6838b2df24b16bf96ec3e6d6
 BELONGS ya.make
     License text:
-        ; Copyright (C) 2009-2011, 2014-2016, 2019, 2021, D. R. Commander.
-        ; Copyright (C) 2015, Matthieu Darbois.
-        ; Copyright (C) 2018, Matthias Räncker.
+         * Copyright (C) 2014, 2021, 2024, D. R. Commander.
+         * Copyright (C) 2014, Olle Liljenzin.
+         * Copyright (C) 2020, Arm Limited.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        simd/x86_64/jchuff-sse2.asm [4:6]
+        src/jpeg_nbits.h [2:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 8ec859db1c818c3ffcdea4ac4c67cc71
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdcolext.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdcolext.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9355530111ca8edfbad01e55c12ca46b
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cdjpeg.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        cdjpeg.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9493f64c85084bcb6137535faf2ccf64
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 950b3ffbdef23456bf92191ac52dde37
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcsample.c at line 10
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcsample.c [5:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9c0396a7c7f9feca6c67ec7d838f5e6a
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jaricom.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jaricom.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9c62a8ffaa91ca3d9db9dd6ce8d27046
-BELONGS ya.make
-    License text:
-        ; Copyright (C) 2009-2011, 2014-2017, 2019, D. R. Commander.
-        ; Copyright (C) 2015, Matthieu Darbois.
-        ; Copyright (C) 2018, Matthias Räncker.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/i386/jchuff-sse2.asm [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9cdcdd341cb0968b2686cc191166f66d
-BELONGS ya.make
-    License text:
-         * Copyright (C)2021 Alex Richardson.  All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        turbojpeg.c [3:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 9e8576d91d041270c2093c39ed8552e2
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jctrans.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jctrans.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL a20f5da1eab75f941a731e130170bf39
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jccolext.c at line 8, jccolor.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jccolext.c [5:9]
-        jccolor.c [5:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL a445cd203767825e67800b0e187c4dcc
-BELONGS ya.make
-    License text:
-         * Author:  Ragesh Radhakrishnan <ragesh.r@linaro.org>
-         * Copyright (C) 2014-2016, 2020, D. R. Commander.  All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/arm/aarch64/jsimd_neon.S [8:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL a447aefd06b7c3fac740b17f813cc6e9
-BELONGS ya.make
-    License text:
-        This software is copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.
-        All Rights Reserved except as specified below.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        README.ijg [131:132]
-
-KEEP     COPYRIGHT_SERVICE_LABEL a700f333696ed15104933df52cf87650
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: wrbmp.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        wrbmp.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL aa77cee5a8d8195aa2fa1f0fa5c1ebf2
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL aaa3eec797321b0f95bb1e9795f5f34e
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jpegcomp.h at line 5
-    License text:
-         * Copyright (C) 2010, 2020, D. R. Commander.
-         * For conditions of distribution and use, see the accompanying README.ijg
-         * file.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jpegcomp.h [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL aacf1ca190af1314c3f58142073cff60
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdmerge.c at line 10
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdmerge.c [5:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL abf878d43b9b17d0a011b9f80bc0877b
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jctrans.c at line 9, simd/arm/aarch64/jchuff-neon.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jctrans.c [5:10]
-        simd/arm/aarch64/jchuff-neon.c [5:5]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ac3e7a3bb6a2deb63101c7131904439b
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jddctmgr.c at line 11
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jddctmgr.c [5:12]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ada0032ea1af459292f235d45dd781ab
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b03629274bce5be6f0f958bd8b73c07d
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdcoefct.c at line 10
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdcoefct.c [5:11]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b0db1bfcd800910a02844b4274371034
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jmemmgr.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jmemmgr.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b3b7c4fd496ec8e05dd719ced067a03d
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cjpeg.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        cjpeg.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b3e70f7a6097bfd26df9355302310ed6
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b410f4fd6c5f864842fda8c62b52df9d
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdsample.c at line 12
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdsample.c [5:13]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b441984d0e96238fe18b18f11ab30548
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/arm/aarch32/jsimd.c [4:9]
-        simd/arm/aarch64/jsimd.c [4:8]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b4629da5b909ea766e7b89c13fbf25c3
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: wrtarga.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        wrtarga.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b46db839fb63c2710a25a86daad4bb99
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b6850ac833f644f5afb115dc21780dba
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/arm/aarch32/jsimd.c [4:9]
-        simd/i386/jsimd.c [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL badd6e1fefe09e0efd808152660be992
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jstdhuff.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jstdhuff.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL bd72d4f6ff636a488895c66e5498d9e4
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/arm/aarch32/jsimd_neon.S [8:8]
-        simd/jsimd.h [4:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL c045da8003fea9b4c2d930832f2d1afc
-BELONGS ya.make
-    License text:
-        ; Copyright (C) 2009, 2016, D. R. Commander.
-        ; Copyright (C) 2015, Intel Corporation.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        simd/i386/jccolor-avx2.asm [4:5]
-        simd/i386/jccolor-mmx.asm [4:5]
-        simd/i386/jccolor-sse2.asm [4:4]
-        simd/i386/jdcolor-mmx.asm [4:5]
-        simd/i386/jdcolor-sse2.asm [4:5]
-        simd/i386/jdmerge-avx2.asm [4:6]
-        simd/i386/jdmerge-mmx.asm [4:5]
-        simd/i386/jdmerge-sse2.asm [4:5]
-        simd/x86_64/jccolext-avx2.asm [4:6]
-        simd/x86_64/jccolext-sse2.asm [4:5]
-        simd/x86_64/jccolor-avx2.asm [4:5]
-        simd/x86_64/jccolor-sse2.asm [4:4]
-        simd/x86_64/jcsample-avx2.asm [4:7]
-        simd/x86_64/jcsample-sse2.asm [4:6]
-        simd/x86_64/jdcolor-avx2.asm [4:6]
-        simd/x86_64/jdcolor-sse2.asm [4:5]
-        simd/x86_64/jdmerge-avx2.asm [4:6]
-        simd/x86_64/jdmerge-sse2.asm [4:5]
-        simd/x86_64/jdsample-avx2.asm [4:7]
-        simd/x86_64/jdsample-sse2.asm [4:6]
-        simd/x86_64/jfdctflt-sse.asm [4:5]
-        simd/x86_64/jfdctfst-sse2.asm [4:5]
-        simd/x86_64/jidctflt-sse2.asm [4:6]
-        simd/x86_64/jidctfst-sse2.asm [4:6]
-        simd/x86_64/jidctred-sse2.asm [4:6]
-        simd/x86_64/jquantf-sse2.asm [4:6]
-        simd/x86_64/jquanti-sse2.asm [4:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL c9e55c94ede47423b60bd1b0381f63a3
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcicc.c at line 6, jdicc.c at line 6
-    License text:
-         * Copyright (C) 1997-1998, Thomas G. Lane, Todd Newman.
-         * Copyright (C) 2017, D. R. Commander.
-         * For conditions of distribution and use, see the accompanying README.ijg
-         * file.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcicc.c [4:7]
-        jdicc.c [4:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL caa45dec4c6ae6a1395050b3920a6223
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jmorecfg.h at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jmorecfg.h [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cca2e965350198f9e77d99a7186169c6
-BELONGS ya.make
-    License text:
-         * Copyright (C)2011, 2022 D. R. Commander.  All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        tjutil.h [2:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cd2a60027b7103634f7daee878afa300
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cd5311d9588f1f80a8f857322ae710df
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jversion.h [39:51]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cf6108444471809417e1ff2e1ff10c66
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcapimin.c at line 9, jdapimin.c at line 9, jidctflt.c at line 9, jidctfst.c at line 9, jidctred.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcapimin.c [5:10]
-        jdapimin.c [5:9]
-        jidctflt.c [5:10]
-        jidctfst.c [5:9]
-        jidctred.c [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL cf74f8592696addc8b7f018fef34b4a3
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdatadst.c at line 9, jdatasrc.c at line 9
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jdatadst.c [5:10]
-        jdatasrc.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL d0282fea7b77a6dc36ff090a1ac5d3f4
-BELONGS ya.make
-    License text:
-        ** Copyright (C) 1988 by Jef Poskanzer.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        rdcolmap.c [31:31]
-        rdppm.c [33:33]
-
-KEEP     COPYRIGHT_SERVICE_LABEL d0fc83990d55b2f4c8030d020a836049
+KEEP     COPYRIGHT_SERVICE_LABEL 905ed171caae692bb173500a65f42d54
 BELONGS ya.make
     License text:
         ; Copyright (C) 2015, Intel Corporation.
-        ; Copyright (C) 2016, D. R. Commander.
+        ; Copyright (C) 2016, 2024, D. R. Commander.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -1856,33 +1471,834 @@ BELONGS ya.make
         simd/i386/jquant-sse.asm [4:5]
         simd/i386/jquantf-sse2.asm [4:5]
         simd/i386/jquanti-sse2.asm [4:5]
-        simd/i386/jsimdcpu.asm [4:5]
-        simd/x86_64/jsimdcpu.asm [4:5]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d5fdb3ce18ba6b39a74ec7cea4de37ab
+KEEP     COPYRIGHT_SERVICE_LABEL 926e8d779dd919cc9d70763a7492881d
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdsample.c at line 12
+FILE_INCLUDE README.ijg found in files: src/rdbmp.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdsample.c [5:13]
+        src/rdbmp.c [5:11]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d6496c342f8b2770becfe0cd5be87a4e
+KEEP     COPYRIGHT_SERVICE_LABEL 9355530111ca8edfbad01e55c12ca46b
 BELONGS ya.make
-    License text:
-        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2010, 2016, 2018-2019, D. R. Commander.
-        ; Copyright (C) 2018, Matthieu Darbois.
-        ; Copyright (C) 2018, Matthias Räncker.
+FILE_INCLUDE README.ijg found in files: src/cdjpeg.c at line 8
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        simd/nasm/jsimdext.inc [4:7]
+        src/cdjpeg.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 94347e409261be220abcbb43e2ca4b23
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jmorecfg.h at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jmorecfg.h [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9493f64c85084bcb6137535faf2ccf64
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 95e43e8a385db50e61c756ba5ad564b9
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcsample.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcsample.c [5:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 961509f53f19e4c6ae36c651f4a9bbbb
+BELONGS ya.make
+    License text:
+        ; Copyright 2009, 2012 Pierre Ossman <ossman@cendio.se> for Cendio AB
+        ; Copyright (C) 2012, 2016, 2024, D. R. Commander.
+        ; Copyright (C) 2015, Intel Corporation.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jdcolext-avx2.asm [4:6]
+        simd/i386/jdcolext-sse2.asm [4:5]
+        simd/i386/jdmrgext-avx2.asm [4:6]
+        simd/i386/jdmrgext-sse2.asm [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9717f84a69f0db1617cf483debfdf8d7
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jccolext.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jccolext.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 97aa3c52267af7d25b28d8d2dfd978af
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jchuff.c at line 14, src/jcinit.c at line 14, src/jclhuff.c at line 14, src/jdhuff.c at line 14, src/jdhuff.h at line 14, src/jdinput.c at line 14, src/jdlhuff.c at line 14
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jchuff.c [5:15]
+        src/jcinit.c [5:11]
+        src/jclhuff.c [5:11]
+        src/jdhuff.c [5:12]
+        src/jdhuff.h [5:12]
+        src/jdinput.c [5:12]
+        src/jdlhuff.c [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 98e1c25dfeb42557923d39cab5488739
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/nasm/jsimdext.inc [4:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c0396a7c7f9feca6c67ec7d838f5e6a
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jaricom.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jaricom.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9cdcdd341cb0968b2686cc191166f66d
+BELONGS ya.make
+    License text:
+         * Copyright (C)2021 Alex Richardson.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/turbojpeg.c [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9d1bec2ea4cbc32e242553906e581b36
+BELONGS ya.make
+    License text:
+         * Copyright (C) 2024, D. R. Commander.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/aarch32/jchuff-neon.c [5:5]
+        simd/arm/jcgray-neon.c [5:5]
+        simd/arm/jcsample-neon.c [5:5]
+        simd/arm/jdcolor-neon.c [5:5]
+        simd/arm/jdmerge-neon.c [5:5]
+        simd/arm/jfdctfst-neon.c [5:5]
+        simd/arm/jidctfst-neon.c [5:5]
+        simd/arm/jquanti-neon.c [5:5]
+        simd/x86_64/jcphuff-sse2.asm [5:7]
+        src/jcomapi.c [5:9]
+        src/jpeg_nbits.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9e8576d91d041270c2093c39ed8552e2
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jctrans.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jctrans.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a164bdd38e3472de18f8607d7c8f3767
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/wrapper/jcapistd-12.c at line 5, src/wrapper/jcapistd-16.c at line 5, src/wrapper/jcapistd-8.c at line 5, src/wrapper/jccoefct-12.c at line 5, src/wrapper/jccoefct-8.c at line 5, src/wrapper/jccolor-12.c at line 5, src/wrapper/jccolor-16.c at line 5, src/wrapper/jccolor-8.c at line 5, src/wrapper/jcdctmgr-12.c at line 5, src/wrapper/jcdctmgr-8.c at line 5, src/wrapper/jcdiffct-12.c at line 5, src/wrapper/jcdiffct-16.c at line 5, src/wrapper/jcdiffct-8.c at line 5, src/wrapper/jclossls-12.c at line 5, src/wrapper/jclossls-16.c at line 5, src/wrapper/jclossls-8.c at line 5, src/wrapper/jcmainct-12.c at line 5, src/wrapper/jcmainct-16.c at line 5, src/wrapper/jcmainct-8.c at line 5, src/wrapper/jcprepct-12.c at line 5, src/wrapper/jcprepct-16.c at line 5, src/wrapper/jcprepct-8.c at line 5, src/wrapper/jcsample-12.c at line 5, src/wrapper/jcsample-16.c at line 5, src/wrapper/jcsample-8.c at line 5, src/wrapper/jdapistd-12.c at line 5, src/wrapper/jdapistd-16.c at line 5, src/wrapper/jdapistd-8.c at line 5, src/wrapper/jdcoefct-12.c at line 5, src/wrapper/jdcoefct-8.c at line 5, src/wrapper/jdcolor-12.c at line 5, src/wrapper/jdcolor-16.c at line 5, src/wrapper/jdcolor-8.c at line 5, src/wrapper/jddctmgr-12.c at line 5, src/wrapper/jddctmgr-8.c at line 5, src/wrapper/jddiffct-12.c at line 5, src/wrapper/jddiffct-16.c at line 5, src/wrapper/jddiffct-8.c at line 5, src/wrapper/jdlossls-12.c at line 5, src/wrapper/jdlossls-16.c at line 5, src/wrapper/jdlossls-8.c at line 5, src/wrapper/jdmainct-12.c at line 5, src/wrapper/jdmainct-16.c at line 5, src/wrapper/jdmainct-8.c at line 5, src/wrapper/jdmerge-12.c at line 5, src/wrapper/jdmerge-8.c at line 5, src/wrapper/jdpostct-12.c at line 5, src/wrapper/jdpostct-16.c at line 5, src/wrapper/jdpostct-8.c at line 5, src/wrapper/jdsample-12.c at line 5, src/wrapper/jdsample-16.c at line 5, src/wrapper/jdsample-8.c at line 5, src/wrapper/jfdctfst-12.c at line 5, src/wrapper/jfdctfst-8.c at line 5, src/wrapper/jfdctint-12.c at line 5, src/wrapper/jfdctint-8.c at line 5, src/wrapper/jidctflt-12.c at line 5, src/wrapper/jidctflt-8.c at line 5, src/wrapper/jidctfst-12.c at line 5, src/wrapper/jidctfst-8.c at line 5, src/wrapper/jidctint-12.c at line 5, src/wrapper/jidctint-8.c at line 5, src/wrapper/jidctred-12.c at line 5, src/wrapper/jidctred-8.c at line 5, src/wrapper/jquant1-12.c at line 5, src/wrapper/jquant1-8.c at line 5, src/wrapper/jquant2-12.c at line 5, src/wrapper/jquant2-8.c at line 5, src/wrapper/jutils-12.c at line 5, src/wrapper/jutils-16.c at line 5, src/wrapper/jutils-8.c at line 5, src/wrapper/rdcolmap-12.c at line 5, src/wrapper/rdcolmap-8.c at line 5, src/wrapper/rdppm-12.c at line 5, src/wrapper/rdppm-16.c at line 5, src/wrapper/rdppm-8.c at line 5, src/wrapper/wrgif-12.c at line 5, src/wrapper/wrgif-8.c at line 5, src/wrapper/wrppm-12.c at line 5, src/wrapper/wrppm-16.c at line 5, src/wrapper/wrppm-8.c at line 5
+    License text:
+         * Copyright (C) 2025, D. R. Commander.
+         * For conditions of distribution and use, see the accompanying README.ijg
+         * file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/wrapper/jcapistd-12.c [4:6]
+        src/wrapper/jcapistd-16.c [4:6]
+        src/wrapper/jcapistd-8.c [4:6]
+        src/wrapper/jccoefct-12.c [4:6]
+        src/wrapper/jccoefct-8.c [4:6]
+        src/wrapper/jccolor-12.c [4:6]
+        src/wrapper/jccolor-16.c [4:6]
+        src/wrapper/jccolor-8.c [4:6]
+        src/wrapper/jcdctmgr-12.c [4:6]
+        src/wrapper/jcdctmgr-8.c [4:6]
+        src/wrapper/jcdiffct-12.c [4:6]
+        src/wrapper/jcdiffct-16.c [4:6]
+        src/wrapper/jcdiffct-8.c [4:6]
+        src/wrapper/jclossls-12.c [4:6]
+        src/wrapper/jclossls-16.c [4:6]
+        src/wrapper/jclossls-8.c [4:6]
+        src/wrapper/jcmainct-12.c [4:6]
+        src/wrapper/jcmainct-16.c [4:6]
+        src/wrapper/jcmainct-8.c [4:6]
+        src/wrapper/jcprepct-12.c [4:6]
+        src/wrapper/jcprepct-16.c [4:6]
+        src/wrapper/jcprepct-8.c [4:6]
+        src/wrapper/jcsample-12.c [4:6]
+        src/wrapper/jcsample-16.c [4:6]
+        src/wrapper/jcsample-8.c [4:6]
+        src/wrapper/jdapistd-12.c [4:6]
+        src/wrapper/jdapistd-16.c [4:6]
+        src/wrapper/jdapistd-8.c [4:6]
+        src/wrapper/jdcoefct-12.c [4:6]
+        src/wrapper/jdcoefct-8.c [4:6]
+        src/wrapper/jdcolor-12.c [4:6]
+        src/wrapper/jdcolor-16.c [4:6]
+        src/wrapper/jdcolor-8.c [4:6]
+        src/wrapper/jddctmgr-12.c [4:6]
+        src/wrapper/jddctmgr-8.c [4:6]
+        src/wrapper/jddiffct-12.c [4:6]
+        src/wrapper/jddiffct-16.c [4:6]
+        src/wrapper/jddiffct-8.c [4:6]
+        src/wrapper/jdlossls-12.c [4:6]
+        src/wrapper/jdlossls-16.c [4:6]
+        src/wrapper/jdlossls-8.c [4:6]
+        src/wrapper/jdmainct-12.c [4:6]
+        src/wrapper/jdmainct-16.c [4:6]
+        src/wrapper/jdmainct-8.c [4:6]
+        src/wrapper/jdmerge-12.c [4:6]
+        src/wrapper/jdmerge-8.c [4:6]
+        src/wrapper/jdpostct-12.c [4:6]
+        src/wrapper/jdpostct-16.c [4:6]
+        src/wrapper/jdpostct-8.c [4:6]
+        src/wrapper/jdsample-12.c [4:6]
+        src/wrapper/jdsample-16.c [4:6]
+        src/wrapper/jdsample-8.c [4:6]
+        src/wrapper/jfdctfst-12.c [4:6]
+        src/wrapper/jfdctfst-8.c [4:6]
+        src/wrapper/jfdctint-12.c [4:6]
+        src/wrapper/jfdctint-8.c [4:6]
+        src/wrapper/jidctflt-12.c [4:6]
+        src/wrapper/jidctflt-8.c [4:6]
+        src/wrapper/jidctfst-12.c [4:6]
+        src/wrapper/jidctfst-8.c [4:6]
+        src/wrapper/jidctint-12.c [4:6]
+        src/wrapper/jidctint-8.c [4:6]
+        src/wrapper/jidctred-12.c [4:6]
+        src/wrapper/jidctred-8.c [4:6]
+        src/wrapper/jquant1-12.c [4:6]
+        src/wrapper/jquant1-8.c [4:6]
+        src/wrapper/jquant2-12.c [4:6]
+        src/wrapper/jquant2-8.c [4:6]
+        src/wrapper/jutils-12.c [4:6]
+        src/wrapper/jutils-16.c [4:6]
+        src/wrapper/jutils-8.c [4:6]
+        src/wrapper/rdcolmap-12.c [4:6]
+        src/wrapper/rdcolmap-8.c [4:6]
+        src/wrapper/rdppm-12.c [4:6]
+        src/wrapper/rdppm-16.c [4:6]
+        src/wrapper/rdppm-8.c [4:6]
+        src/wrapper/wrgif-12.c [4:6]
+        src/wrapper/wrgif-8.c [4:6]
+        src/wrapper/wrppm-12.c [4:6]
+        src/wrapper/wrppm-16.c [4:6]
+        src/wrapper/wrppm-8.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a2a92102614e26aac0f3cb9d3808f6ff
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdmerge.c at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdmerge.c [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a445cd203767825e67800b0e187c4dcc
+BELONGS ya.make
+    License text:
+         * Author:  Ragesh Radhakrishnan <ragesh.r@linaro.org>
+         * Copyright (C) 2014-2016, 2020, D. R. Commander.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/aarch64/jsimd_neon.S [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a447aefd06b7c3fac740b17f813cc6e9
+BELONGS ya.make
+    License text:
+        This software is copyright (C) 1991-2020, Thomas G. Lane, Guido Vollbeding.
+        All Rights Reserved except as specified below.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.ijg [133:134]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a4f717ab8f5b550d617d70eefba07c8a
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jinclude.h at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jinclude.h [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a6783bc330a3f385399f7aab5b8e2ab1
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdatasrc-tj.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdatasrc-tj.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a94c0b4b578115e7cd9fef04fcb5037d
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/aarch64/jsimd.c [4:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa77cee5a8d8195aa2fa1f0fa5c1ebf2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aaa3eec797321b0f95bb1e9795f5f34e
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jpegapicomp.h at line 5
+    License text:
+         * Copyright (C) 2010, 2020, D. R. Commander.
+         * For conditions of distribution and use, see the accompanying README.ijg
+         * file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jpegapicomp.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL abf878d43b9b17d0a011b9f80bc0877b
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jctrans.c at line 9, src/jdmerge.h at line 9, src/jdtrans.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jctrans.c [5:10]
+        src/jdmerge.h [5:9]
+        src/jdtrans.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac3e7a3bb6a2deb63101c7131904439b
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jddctmgr.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jddctmgr.c [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ada0032ea1af459292f235d45dd781ab
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae01080baf31245770997f76bc0c526b
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jclossls.c at line 10, src/jdlossls.c at line 10, src/jlossls.h at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jclossls.c [5:11]
+        src/jdlossls.c [5:11]
+        src/jlossls.h [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ae8202093f8c1f5cdf79105ccf015454
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/cjpeg.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/cjpeg.c [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b3e70f7a6097bfd26df9355302310ed6
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b441984d0e96238fe18b18f11ab30548
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/aarch32/jsimd.c [4:9]
+        simd/arm/aarch64/jsimd.c [4:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b4629da5b909ea766e7b89c13fbf25c3
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/wrtarga.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/wrtarga.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b46db839fb63c2710a25a86daad4bb99
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b61841aa27d46c243bda65ad0340be8e
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcparam.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcparam.c [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b652794250b3d3004b695e681b62d031
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jmemnobs.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jmemnobs.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b6cca1a621188537cfd4d332efd0e075
+BELONGS ya.make
+    License text:
+        ; Copyright (C) 2011, 2016, 2024, D. R. Commander.
+        ; Copyright (C) 2015, Intel Corporation.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jcgray-avx2.asm [4:5]
+        simd/i386/jcgray-mmx.asm [4:5]
+        simd/i386/jcgray-sse2.asm [4:4]
+        simd/i386/jcgryext-avx2.asm [4:5]
+        simd/i386/jcgryext-mmx.asm [4:5]
+        simd/i386/jcgryext-sse2.asm [4:4]
+        simd/x86_64/jcgray-avx2.asm [4:5]
+        simd/x86_64/jcgray-sse2.asm [4:4]
+        simd/x86_64/jcgryext-avx2.asm [4:7]
+        simd/x86_64/jcgryext-sse2.asm [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b753de319053b6f31eda0d48fd910c57
+BELONGS ya.make
+    License text:
+         * Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+         * Copyright (C) 2009-2011, 2014, 2016, 2018, 2022-2024, D. R. Commander.
+         * Copyright (C) 2015-2016, 2018, 2022, Matthieu Darbois.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/x86_64/jsimd.c [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b75684e7e7c0a25cf7b90b9b1bbdd119
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcmainct.c at line 10, src/jcprepct.c at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcmainct.c [5:11]
+        src/jcprepct.c [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bb722d14e930daed4bb6e12657010f74
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/x86_64/jchuff-sse2.asm [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bc94d516327ec00e9f91f13bfc2bbd3b
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/wrbmp.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/wrbmp.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bd72d4f6ff636a488895c66e5498d9e4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/aarch32/jsimd_neon.S [8:8]
+        simd/jsimd.h [4:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL be881d78ed6a6339dac60bc812dbef48
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jchuff.c at line 14
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jchuff.c [5:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c036f9ccfbc81a9973c4fcff916dbc98
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jfdctint.c at line 8, src/jidctint.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jfdctint.c [5:9]
+        src/jidctint.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c0ce31cb3a33b64d75aec1dccbeafc9f
+BELONGS ya.make
+    License text:
+        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+        ; Copyright (C) 2009, 2016, 2020, 2024, D. R. Commander.
+        ; Copyright (C) 2023, Aliaksiej Kandracienka.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/x86_64/jfdctint-sse2.asm [4:6]
+        simd/x86_64/jidctint-sse2.asm [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c690d1ab8657fc5120b6cf2eb69e4cd9
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdct.h at line 8, src/jidctfst.c at line 8, src/jidctred.c at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdct.h [5:9]
+        src/jidctfst.c [5:9]
+        src/jidctred.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c6d39cf638ecb2446f865e5235e14355
+BELONGS ya.make
+    License text:
+        Copyright (c) 1991-2024 The libjpeg-turbo Project
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [55:56]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9e55c94ede47423b60bd1b0381f63a3
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcicc.c at line 6, src/jdicc.c at line 6
+    License text:
+         * Copyright (C) 1997-1998, Thomas G. Lane, Todd Newman.
+         * Copyright (C) 2017, D. R. Commander.
+         * For conditions of distribution and use, see the accompanying README.ijg
+         * file.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcicc.c [4:7]
+        src/jdicc.c [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cca2e965350198f9e77d99a7186169c6
+BELONGS ya.make
+    License text:
+         * Copyright (C)2011, 2022 D. R. Commander.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/tjutil.h [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ccdbc65b86408d4ef5a8a29f79e87a8c
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/rdppm.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdppm.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd2a60027b7103634f7daee878afa300
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd5311d9588f1f80a8f857322ae710df
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [39:53]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd58c76151af49827a83aae129e5301a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/jsimd.h [4:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf6108444471809417e1ff2e1ff10c66
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcapimin.c at line 9, src/jidctflt.c at line 9, src/jidctfst.c at line 9, src/jidctred.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcapimin.c [5:10]
+        src/jidctflt.c [5:10]
+        src/jidctfst.c [5:9]
+        src/jidctred.c [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cf74f8592696addc8b7f018fef34b4a3
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdatadst.c at line 9, src/jdatasrc.c at line 9
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdatadst.c [5:10]
+        src/jdatasrc.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0282fea7b77a6dc36ff090a1ac5d3f4
+BELONGS ya.make
+    License text:
+        ** Copyright (C) 1988 by Jef Poskanzer.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/rdcolmap.c [35:35]
+        src/rdppm.c [34:34]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d079d655f90d4e64fa49a87a12e294aa
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcmarker.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcmarker.c [5:12]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d0fc83990d55b2f4c8030d020a836049
+BELONGS ya.make
+    License text:
+        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
+        ; Copyright (C) 2016, D. R. Commander.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/i386/jsimdcpu.asm [4:5]
+        simd/x86_64/jsimdcpu.asm [4:6]
+        src/jcmaster.h [5:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d2e7983809ff321e3ff300a2164be196
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/djpeg.c at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/djpeg.c [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d40f7ac101f31f6496e8d66ded901035
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/nasm/jsimdext.inc [4:8]
+        simd/x86_64/jccolext-avx2.asm [4:7]
+        simd/x86_64/jccolext-sse2.asm [4:6]
+        simd/x86_64/jcgryext-avx2.asm [4:7]
+        simd/x86_64/jcgryext-sse2.asm [4:6]
+        simd/x86_64/jchuff-sse2.asm [4:7]
+        simd/x86_64/jcphuff-sse2.asm [5:7]
+        simd/x86_64/jdcolext-avx2.asm [4:8]
+        simd/x86_64/jdcolext-sse2.asm [4:7]
+        simd/x86_64/jdmrgext-avx2.asm [4:8]
+        simd/x86_64/jdmrgext-sse2.asm [4:7]
+        simd/x86_64/jdsample-avx2.asm [4:8]
+        simd/x86_64/jdsample-sse2.asm [4:7]
+        simd/x86_64/jfdctflt-sse.asm [4:6]
+        simd/x86_64/jfdctfst-sse2.asm [4:6]
+        simd/x86_64/jfdctint-sse2.asm [4:6]
+        simd/x86_64/jidctflt-sse2.asm [4:7]
+        simd/x86_64/jidctfst-sse2.asm [4:7]
+        simd/x86_64/jidctint-sse2.asm [4:7]
+        simd/x86_64/jidctred-sse2.asm [4:7]
+        simd/x86_64/jsimdcpu.asm [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d49354f7f4ea663f3e3f447782416f9d
+BELONGS ya.make
+    License text:
+         * Copyright (C)2009-2015, 2017, 2020-2024 D. R. Commander.
+         *                                         All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/turbojpeg.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5c33c4f0ab9a5d6ea83127ef817b04e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/aarch32/jsimd.c [4:9]
+        simd/arm/aarch64/jsimd.c [4:9]
+        simd/i386/jsimd.c [4:6]
+        simd/jsimd.h [4:10]
+        simd/x86_64/jsimd.c [4:6]
+        src/jsimd.h [4:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d5fdb3ce18ba6b39a74ec7cea4de37ab
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdsample.c at line 12
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdsample.c [5:13]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6496c342f8b2770becfe0cd5be87a4e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/nasm/jsimdext.inc [4:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d74e6a7613a45e0d47d696d49409e0de
 BELONGS ya.make
@@ -1898,34 +2314,40 @@ BELONGS ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL d790272c7994ded60847851f8d898fd3
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdcol565.c at line 9, jdcolor.c at line 9, jdmaster.c at line 9, jdmerge.c at line 9, jdmrg565.c at line 9, wrbmp.c at line 9
+FILE_INCLUDE README.ijg found in files: src/jdcol565.c at line 9, src/jdcolor.c at line 9, src/jdmaster.c at line 9, src/jdmerge.c at line 9, src/jdmrg565.c at line 9, src/wrbmp.c at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdcol565.c [5:10]
-        jdcolor.c [5:12]
-        jdmaster.c [5:12]
-        jdmerge.c [5:11]
-        jdmrg565.c [5:10]
-        wrbmp.c [5:10]
+        src/jdcol565.c [5:10]
+        src/jdcolor.c [5:12]
+        src/jdmaster.c [5:14]
+        src/jdmerge.c [5:11]
+        src/jdmrg565.c [5:10]
+        src/wrbmp.c [5:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d7bcb9862eed9e8b3be25e9b9c3c4ee1
+KEEP     COPYRIGHT_SERVICE_LABEL d79b9eac68da91e88b17e45875a123e0
 BELONGS ya.make
     License text:
-        ; Copyright 2009 Pierre Ossman <ossman@cendio.se> for Cendio AB
-        ; Copyright (C) 2016, 2020, D. R. Commander.
+         * Copyright (C) 2022, 2024, D. R. Commander.  All Rights Reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        simd/i386/jfdctint-mmx.asm [4:5]
-        simd/i386/jfdctint-sse2.asm [4:5]
-        simd/i386/jidctint-mmx.asm [4:5]
-        simd/i386/jidctint-sse2.asm [4:5]
+        simd/arm/jcphuff-neon.c [6:6]
+        src/jcapimin.c [5:10]
+        src/jcapistd.c [5:9]
+        src/jccoefct.c [5:9]
+        src/jcdiffct.c [5:11]
+        src/jclossls.c [5:11]
+        src/jcmainct.c [5:11]
+        src/jcprepct.c [5:11]
+        src/jddiffct.c [5:11]
+        src/jdlossls.c [5:11]
+        src/jerror.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d7cbc4888488ae9309e299e88d442551
 BELONGS ya.make
@@ -1935,96 +2357,84 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jversion.h [39:51]
+        jversion.h [39:53]
 
-KEEP     COPYRIGHT_SERVICE_LABEL d8571b0bd95f27ba489c62714ff09a44
+KEEP     COPYRIGHT_SERVICE_LABEL dfae29e3611ad1f497189a07143e6db8
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdatasrc-tj.c at line 9
+FILE_INCLUDE README.ijg found in files: src/jchuff.c at line 14
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdatasrc-tj.c [5:10]
+        src/jchuff.c [5:15]
 
-KEEP     COPYRIGHT_SERVICE_LABEL dd41d14be2162054f1b10aa961d71da7
+KEEP     COPYRIGHT_SERVICE_LABEL e0afbdf76d82e3455ece6a543e9d732e
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jpeglib.h at line 10
+    License text:
+         * Copyright (C) 2022, Matthieu Darbois.  All Rights Reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        simd/arm/jcphuff-neon.c [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e1ad673e72aa36988fcd91d1ac237bc6
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdcolext.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jpeglib.h [5:11]
+        src/jdcolext.c [5:9]
 
-KEEP     COPYRIGHT_SERVICE_LABEL e151cf32655a7d62804025b92dc0da5a
+KEEP     COPYRIGHT_SERVICE_LABEL e3d3ca9031fbfe099bde93ca7031f014
 BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdatadst-tj.c at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jsimd_none.c [4:7]
+        src/jdatadst-tj.c [5:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL e395a64659058a5d7d2f78850dd6d40f
+KEEP     COPYRIGHT_SERVICE_LABEL e8c5e2b9a96446e4397e3b7fd6095da7
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jversion.h at line 8
+FILE_INCLUDE README.ijg found in files: src/jquant2.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jversion.h [5:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL e6ec6317701aca001fa77e6537f8c99d
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: transupp.c at line 8
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        transupp.c [5:9]
+        src/jquant2.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ea6ca264cbf0bd46b9c85409e9a6108b
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: transupp.h at line 8
+FILE_INCLUDE README.ijg found in files: src/transupp.h at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        transupp.h [5:9]
+        src/transupp.h [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL eb22a1dc175d45a0ad730840e22ed3b4
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jccolor.c at line 10, jcdctmgr.c at line 10, jcsample.c at line 10, jdcoefct.c at line 10, jdcoefct.h at line 10, jdcolor.c at line 10, jddctmgr.c at line 10, jdmerge.c at line 10, jdsample.c at line 10, jsimd.h at line 9, jsimd_none.c at line 9, jsimddct.h at line 9, simd/arm/aarch32/jsimd.c at line 9, simd/arm/aarch64/jsimd.c at line 9, simd/i386/jccolext-mmx.asm at line 9, simd/i386/jccolor-mmx.asm at line 9, simd/i386/jcgray-mmx.asm at line 9, simd/i386/jcgryext-mmx.asm at line 9, simd/i386/jcsample-avx2.asm at line 9, simd/i386/jcsample-mmx.asm at line 9, simd/i386/jcsample-sse2.asm at line 9, simd/i386/jdcolext-mmx.asm at line 9, simd/i386/jdcolor-avx2.asm at line 9, simd/i386/jdcolor-mmx.asm at line 9, simd/i386/jdcolor-sse2.asm at line 9, simd/i386/jdmerge-avx2.asm at line 9, simd/i386/jdmerge-mmx.asm at line 9, simd/i386/jdmerge-sse2.asm at line 9, simd/i386/jdmrgext-mmx.asm at line 9, simd/i386/jdsample-avx2.asm at line 9, simd/i386/jdsample-mmx.asm at line 9, simd/i386/jdsample-sse2.asm at line 9, simd/i386/jfdctflt-3dn.asm at line 9, simd/i386/jfdctflt-sse.asm at line 9, simd/i386/jfdctfst-mmx.asm at line 9, simd/i386/jfdctfst-sse2.asm at line 9, simd/i386/jfdctint-avx2.asm at line 9, simd/i386/jfdctint-mmx.asm at line 9, simd/i386/jfdctint-sse2.asm at line 9, simd/i386/jidctflt-3dn.asm at line 9, simd/i386/jidctflt-sse.asm at line 9, simd/i386/jidctflt-sse2.asm at line 9, simd/i386/jidctfst-mmx.asm at line 9, simd/i386/jidctfst-sse2.asm at line 9, simd/i386/jidctint-avx2.asm at line 9, simd/i386/jidctint-mmx.asm at line 9, simd/i386/jidctint-sse2.asm at line 9, simd/i386/jidctred-mmx.asm at line 9, simd/i386/jidctred-sse2.asm at line 9, simd/i386/jquant-3dn.asm at line 9, simd/i386/jquant-mmx.asm at line 9, simd/i386/jquant-sse.asm at line 9, simd/i386/jquantf-sse2.asm at line 9, simd/i386/jquanti-avx2.asm at line 9, simd/i386/jquanti-sse2.asm at line 9, simd/i386/jsimd.c at line 9, simd/i386/jsimdcpu.asm at line 9, simd/jsimd.h at line 9, simd/nasm/jcolsamp.inc at line 9, simd/nasm/jdct.inc at line 9, simd/nasm/jsimdext.inc at line 9, simd/x86_64/jcsample-avx2.asm at line 9, simd/x86_64/jcsample-sse2.asm at line 9, simd/x86_64/jdcolor-avx2.asm at line 9, simd/x86_64/jdcolor-sse2.asm at line 9, simd/x86_64/jdmerge-avx2.asm at line 9, simd/x86_64/jdmerge-sse2.asm at line 9, simd/x86_64/jdsample-avx2.asm at line 9, simd/x86_64/jdsample-sse2.asm at line 9, simd/x86_64/jfdctflt-sse.asm at line 9, simd/x86_64/jfdctfst-sse2.asm at line 9, simd/x86_64/jfdctint-avx2.asm at line 9, simd/x86_64/jfdctint-sse2.asm at line 9, simd/x86_64/jidctflt-sse2.asm at line 9, simd/x86_64/jidctfst-sse2.asm at line 9, simd/x86_64/jidctint-avx2.asm at line 9, simd/x86_64/jidctint-sse2.asm at line 9, simd/x86_64/jidctred-sse2.asm at line 9, simd/x86_64/jquantf-sse2.asm at line 9, simd/x86_64/jquanti-avx2.asm at line 9, simd/x86_64/jquanti-sse2.asm at line 9, simd/x86_64/jsimd.c at line 9, simd/x86_64/jsimdcpu.asm at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jccolor.c [5:11]
-        jcdctmgr.c [5:11]
-        jcsample.c [5:11]
-        jdcoefct.c [5:11]
-        jdcoefct.h [5:10]
-        jdcolor.c [5:12]
-        jddctmgr.c [5:12]
-        jdmerge.c [5:11]
-        jdsample.c [5:13]
-        jsimd.h [4:7]
-        jsimd_none.c [4:7]
-        jsimddct.h [4:4]
         simd/arm/aarch32/jsimd.c [4:9]
-        simd/arm/aarch64/jsimd.c [4:8]
+        simd/arm/aarch64/jsimd.c [4:9]
         simd/i386/jccolext-mmx.asm [4:5]
         simd/i386/jccolor-mmx.asm [4:5]
         simd/i386/jcgray-mmx.asm [4:5]
@@ -2071,35 +2481,46 @@ FILE_INCLUDE README.ijg found in files: jccolor.c at line 10, jcdctmgr.c at line
         simd/jsimd.h [4:10]
         simd/nasm/jcolsamp.inc [4:5]
         simd/nasm/jdct.inc [4:5]
-        simd/nasm/jsimdext.inc [4:7]
+        simd/nasm/jsimdext.inc [4:8]
         simd/x86_64/jcsample-avx2.asm [4:7]
         simd/x86_64/jcsample-sse2.asm [4:6]
         simd/x86_64/jdcolor-avx2.asm [4:6]
         simd/x86_64/jdcolor-sse2.asm [4:5]
         simd/x86_64/jdmerge-avx2.asm [4:6]
         simd/x86_64/jdmerge-sse2.asm [4:5]
-        simd/x86_64/jdsample-avx2.asm [4:7]
-        simd/x86_64/jdsample-sse2.asm [4:6]
-        simd/x86_64/jfdctflt-sse.asm [4:5]
-        simd/x86_64/jfdctfst-sse2.asm [4:5]
+        simd/x86_64/jdsample-avx2.asm [4:8]
+        simd/x86_64/jdsample-sse2.asm [4:7]
+        simd/x86_64/jfdctflt-sse.asm [4:6]
+        simd/x86_64/jfdctfst-sse2.asm [4:6]
         simd/x86_64/jfdctint-avx2.asm [4:5]
-        simd/x86_64/jfdctint-sse2.asm [4:5]
-        simd/x86_64/jidctflt-sse2.asm [4:6]
-        simd/x86_64/jidctfst-sse2.asm [4:6]
+        simd/x86_64/jfdctint-sse2.asm [4:6]
+        simd/x86_64/jidctflt-sse2.asm [4:7]
+        simd/x86_64/jidctfst-sse2.asm [4:7]
         simd/x86_64/jidctint-avx2.asm [4:6]
-        simd/x86_64/jidctint-sse2.asm [4:6]
-        simd/x86_64/jidctred-sse2.asm [4:6]
+        simd/x86_64/jidctint-sse2.asm [4:7]
+        simd/x86_64/jidctred-sse2.asm [4:7]
         simd/x86_64/jquantf-sse2.asm [4:6]
         simd/x86_64/jquanti-avx2.asm [4:7]
         simd/x86_64/jquanti-sse2.asm [4:6]
         simd/x86_64/jsimd.c [4:6]
-        simd/x86_64/jsimdcpu.asm [4:5]
+        simd/x86_64/jsimdcpu.asm [4:6]
+        src/jccolor.c [5:11]
+        src/jcdctmgr.c [5:11]
+        src/jcsample.c [5:13]
+        src/jdcoefct.c [5:11]
+        src/jdcoefct.h [5:11]
+        src/jdcolor.c [5:12]
+        src/jddctmgr.c [5:12]
+        src/jdmerge.c [5:11]
+        src/jdsample.c [5:13]
+        src/jsimd.h [4:7]
+        src/jsimddct.h [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ec0537a229e1880f54c1d10e8cd723c3
 BELONGS ya.make
     License text:
         ; Copyright (C) 2015, Intel Corporation.
-        ; Copyright (C) 2016, D. R. Commander.
+        ; Copyright (C) 2016, 2024, D. R. Commander.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -2116,47 +2537,28 @@ BELONGS ya.make
         simd/i386/jdmrgext-avx2.asm [4:6]
         simd/i386/jdsample-avx2.asm [4:6]
         simd/nasm/jcolsamp.inc [4:5]
-        simd/x86_64/jccolext-avx2.asm [4:6]
+        simd/x86_64/jccolext-avx2.asm [4:7]
         simd/x86_64/jccolor-avx2.asm [4:5]
         simd/x86_64/jcgray-avx2.asm [4:5]
-        simd/x86_64/jcgryext-avx2.asm [4:6]
+        simd/x86_64/jcgryext-avx2.asm [4:7]
         simd/x86_64/jcsample-avx2.asm [4:7]
-        simd/x86_64/jdcolext-avx2.asm [4:7]
+        simd/x86_64/jdcolext-avx2.asm [4:8]
         simd/x86_64/jdcolor-avx2.asm [4:6]
         simd/x86_64/jdmerge-avx2.asm [4:6]
-        simd/x86_64/jdmrgext-avx2.asm [4:7]
-        simd/x86_64/jdsample-avx2.asm [4:7]
+        simd/x86_64/jdmrgext-avx2.asm [4:8]
+        simd/x86_64/jdsample-avx2.asm [4:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ec07749745840029e5c8b2f2f7870201
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jdct.h at line 8, jfdctfst.c at line 8, jidctfst.c at line 8, jidctred.c at line 8, simd/arm/aarch32/jsimd_neon.S at line 12
     License text:
-         * Copyright (C) 1994-1996, Thomas G. Lane.
-         * libjpeg-turbo Modifications:
-         * Copyright (C) 2015, D. R. Commander.
-         * For conditions of distribution and use, see the accompanying README.ijg
-         * file.
+         * Copyright (C) 2015, D. R. Commander.  All Rights Reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jdct.h [5:9]
-        jfdctfst.c [5:9]
-        jidctfst.c [5:9]
-        jidctred.c [5:9]
         simd/arm/aarch32/jsimd_neon.S [9:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ec986a301f4f1cd97fd36cfe73b186b7
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcdctmgr.c at line 10
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcdctmgr.c [5:11]
+        src/jfdctfst.c [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ef292409cf51b45110665ff46607bac2
 BELONGS ya.make
@@ -2166,107 +2568,130 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        wrgif.c [21:30]
+        src/wrgif.c [21:30]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f3ec844f0de8ce7cc9534e740161ff67
+KEEP     COPYRIGHT_SERVICE_LABEL eff640b6de522947d1ceb810123c6138
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcmaster.c at line 9
+FILE_INCLUDE README.ijg found in files: src/jdsample.c at line 12
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jcmaster.c [5:10]
+        src/jdsample.c [5:13]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f45beec025a14f11290ad8d8146e8b44
+KEEP     COPYRIGHT_SERVICE_LABEL f30aa89c2842fa10230d983b361dc93a
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcphuff.c at line 11
+FILE_INCLUDE README.ijg found in files: src/wrgif.c at line 9
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jcphuff.c [5:12]
+        src/wrgif.c [5:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f4d6b1166506be518b06a0d3ff4fb5a3
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: cdjpeg.c at line 8, djpeg.c at line 8, jchuff.c at line 8, jchuff.h at line 8, jcinit.c at line 8, jcmaster.c at line 8, jdcol565.c at line 8, jdcolext.c at line 8, jdcolor.c at line 8, jdhuff.c at line 8, jdhuff.h at line 8, jdinput.c at line 8, jdmaster.c at line 8, jmemmgr.c at line 8, jmorecfg.h at line 8, jpegint.h at line 8, rdgif.c at line 8, rdppm.c at line 8, simd/arm/jchuff.h at line 8, wrgif.c at line 8
+FILE_INCLUDE README.ijg found in files: simd/arm/jchuff.h at line 10, src/cdjpeg.c at line 10, src/djpeg.c at line 10, src/jchuff.h at line 10, src/jcmaster.c at line 10, src/jdcol565.c at line 10, src/jdcolext.c at line 10, src/jdcolor.c at line 10, src/jdmaster.c at line 10, src/jmemmgr.c at line 10, src/jmorecfg.h at line 10, src/jpegint.h at line 10, src/rdgif.c at line 10, src/rdppm.c at line 10, src/wrgif.c at line 10
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        cdjpeg.c [5:9]
-        djpeg.c [5:11]
-        jchuff.c [5:12]
-        jchuff.h [5:8]
-        jcinit.c [5:9]
-        jcmaster.c [5:10]
-        jdcol565.c [5:10]
-        jdcolext.c [5:9]
-        jdcolor.c [5:12]
-        jdhuff.c [5:10]
-        jdhuff.h [5:10]
-        jdinput.c [5:10]
-        jdmaster.c [5:12]
-        jmemmgr.c [5:9]
-        jmorecfg.h [5:10]
-        jpegint.h [5:12]
-        rdgif.c [5:10]
-        rdppm.c [5:10]
         simd/arm/jchuff.h [5:11]
-        wrgif.c [5:10]
+        src/cdjpeg.c [5:9]
+        src/djpeg.c [5:11]
+        src/jchuff.h [5:9]
+        src/jcmaster.c [5:12]
+        src/jdcol565.c [5:10]
+        src/jdcolext.c [5:9]
+        src/jdcolor.c [5:12]
+        src/jdmaster.c [5:14]
+        src/jmemmgr.c [5:9]
+        src/jmorecfg.h [5:12]
+        src/jpegint.h [5:14]
+        src/rdgif.c [5:10]
+        src/rdppm.c [5:10]
+        src/wrgif.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f8611e4db0d0f05eed5f94a6f6894019
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdmarker.c at line 10
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdmarker.c [5:11]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f89ccc45319059eecd21dfa1b88ec195
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: jversion.h at line 8
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        jversion.h [5:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f992ae275ee011ff1e8c9f49c3ce89da
 BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcapistd.c at line 6, jcdctmgr.c at line 7, jcmainct.c at line 7, jcprepct.c at line 7, jdapistd.c at line 7, jdatadst-tj.c at line 7, jdatadst.c at line 7, jdatasrc-tj.c at line 7, jdatasrc.c at line 7, jdct.h at line 7, jddctmgr.c at line 7, jdmainct.c at line 7, jdmainct.h at line 7, jdmerge.c at line 7, jdmerge.h at line 7, jdmrg565.c at line 7, jdmrgext.c at line 7, jdpostct.c at line 7, jfdctflt.c at line 6, jfdctfst.c at line 7, rdbmp.c at line 7, rdcolmap.c at line 6, wrbmp.c at line 7
-    License text:
-         * Copyright (C) 1994-1996, Thomas G. Lane.
-         * This file is part of the Independent JPEG Group's software.
-         * For conditions of distribution and use, see the accompanying README.ijg
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        jcapistd.c [4:6]
-        jcdctmgr.c [5:11]
-        jcmainct.c [5:8]
-        jcprepct.c [5:9]
-        jdapistd.c [5:10]
-        jdatadst-tj.c [5:10]
-        jdatadst.c [5:10]
-        jdatasrc-tj.c [5:10]
-        jdatasrc.c [5:10]
-        jdct.h [5:9]
-        jddctmgr.c [5:12]
-        jdmainct.c [5:9]
-        jdmainct.h [5:7]
-        jdmerge.c [5:11]
-        jdmerge.h [5:9]
-        jdmrg565.c [5:10]
-        jdmrgext.c [5:9]
-        jdpostct.c [5:8]
-        jfdctflt.c [4:6]
-        jfdctfst.c [5:9]
-        rdbmp.c [5:11]
-        rdcolmap.c [4:6]
-        wrbmp.c [5:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL fb1969d8022279f91786a49876542048
-BELONGS ya.make
-FILE_INCLUDE README.ijg found in files: jcphuff.c at line 11, jpegint.h at line 11
+FILE_INCLUDE README.ijg found in files: src/jcapistd.c at line 8, src/jcdctmgr.c at line 8, src/jdapistd.c at line 8, src/jdatadst-tj.c at line 8, src/jdatadst.c at line 8, src/jdatasrc-tj.c at line 8, src/jdatasrc.c at line 8, src/jdct.h at line 8, src/jddctmgr.c at line 8, src/jdmainct.c at line 8, src/jdmainct.h at line 8, src/jdmerge.c at line 8, src/jdmerge.h at line 8, src/jdmrg565.c at line 8, src/jdmrgext.c at line 8, src/jdpostct.c at line 8, src/jfdctflt.c at line 7, src/jfdctfst.c at line 8, src/rdbmp.c at line 8, src/rdcolmap.c at line 8, src/wrbmp.c at line 8
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        jcphuff.c [5:12]
-        jpegint.h [5:12]
+        src/jcapistd.c [5:9]
+        src/jcdctmgr.c [5:11]
+        src/jdapistd.c [5:10]
+        src/jdatadst-tj.c [5:10]
+        src/jdatadst.c [5:10]
+        src/jdatasrc-tj.c [5:10]
+        src/jdatasrc.c [5:10]
+        src/jdct.h [5:9]
+        src/jddctmgr.c [5:12]
+        src/jdmainct.c [5:9]
+        src/jdmainct.h [5:9]
+        src/jdmerge.c [5:11]
+        src/jdmerge.h [5:9]
+        src/jdmrg565.c [5:10]
+        src/jdmrgext.c [5:9]
+        src/jdpostct.c [5:9]
+        src/jfdctflt.c [4:6]
+        src/jfdctfst.c [5:9]
+        src/rdbmp.c [5:11]
+        src/rdcolmap.c [5:9]
+        src/wrbmp.c [5:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fb1969d8022279f91786a49876542048
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jcphuff.c at line 13, src/jpegint.h at line 13
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jcphuff.c [5:14]
+        src/jpegint.h [5:14]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fea5f985eb4c254fa6d7beecabb519ce
+BELONGS ya.make
+FILE_INCLUDE README.ijg found in files: src/jdinput.c at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/jdinput.c [5:12]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ff4f68c38d54f4ee28ddb06f4c22e5e5
 BELONGS ya.make

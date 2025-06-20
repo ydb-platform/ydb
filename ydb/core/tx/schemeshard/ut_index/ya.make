@@ -16,7 +16,6 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/public/lib/deprecated/kicli
 )
 
 SRCS(

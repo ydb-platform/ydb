@@ -78,6 +78,9 @@ def test(case):
     if yql_utils.get_param('TARGET_PLATFORM') and xfail:
         pytest.skip('xfail is not supported on non-default target platform')
     langver = yql_utils.get_langver(cfg)
+    envs = yql_utils.get_envs(cfg)
+    if not langver:
+        langver = "unknown"
     # no default version, because UDFs may have different release cycles
 
     extra_env = dict(os.environ)
@@ -85,6 +88,7 @@ def test(case):
     extra_env["YQL_ARCADIA_BINARY_PATH"] = os.path.expandvars(yatest.common.build_path('.'))
     extra_env["YQL_ARCADIA_SOURCE_PATH"] = os.path.expandvars(yatest.common.source_path('.'))
     extra_env["Y_NO_AVX_IN_DOT_PRODUCT"] = "1"
+    extra_env.update(envs)
 
     # this breaks tests using V0 syntax
     if "YA_TEST_RUNNER" in extra_env:

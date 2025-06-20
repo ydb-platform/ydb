@@ -6,38 +6,40 @@ namespace NActors {
 
 class ISharedPool;
 struct TExecutorThreadStats;
+struct TPoolInfo;
 
 
 struct TPoolSharedThreadCpuConsumption {
     float Elapsed = 0;
     float Cpu = 0;
     float CpuQuota = 0;
+    float ForeignElapsed = 0;
+    float ForeignCpu = 0;
 
     TString ToString() const;
 };
 
 struct TSharedThreadCpuConsumptionByPool {
-    ui64 Elapsed = 0;
-    ui64 Cpu = 0;
-    ui64 Parked = 0;
-    ui64 DiffElapsed = 0;
-    ui64 DiffCpu = 0;
-    ui64 DiffParked = 0;
+    float Elapsed = 0;
+    float Cpu = 0;
 
     TString ToString() const;
 };
 
 struct TSharedInfo {
     i16 PoolCount = 0;
+    i16 ThreadCount = 0;
     std::vector<i16> ForeignThreadsAllowed;
     std::vector<i16> OwnedThreads;
     std::vector<i16> ThreadOwners;
     std::vector<TPoolSharedThreadCpuConsumption> CpuConsumption;
-    std::vector<std::vector<TSharedThreadCpuConsumptionByPool>> CpuConsumptionByPool;
+    std::vector<std::vector<TSharedThreadCpuConsumptionByPool>> CpuConsumptionPerThread;
     TVector<TExecutorThreadStats> ThreadStats; // for pulling only
+    float FreeCpu = 0.0;
+    float FreeCpuLS = 0.0;
 
     void Init(i16 poolCount, const ISharedPool *shared);
-    void Pull(const ISharedPool& shared);
+    void Pull(const std::vector<std::unique_ptr<TPoolInfo>>& pools, const ISharedPool& shared);
 
     TString ToString() const;
 }; // struct TSharedInfo

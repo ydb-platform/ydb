@@ -42,6 +42,7 @@ namespace TEvPrivate {
         EvRetryNodeSubscribe,
         EvRunDataErasure,
         EvRunTenantDataErasure,
+        EvAddNewShardToDataErasure,
         EvEnd
     };
 
@@ -263,6 +264,14 @@ namespace TEvPrivate {
         explicit TEvRetryNodeSubscribe(ui32 nodeId)
             : NodeId(nodeId)
         { }
+    };
+
+    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+        const std::vector<TShardIdx> Shards;
+
+        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+            : Shards(std::move(shards))
+        {}
     };
 }; // TEvPrivate
 

@@ -86,6 +86,8 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
 
                 udfRes->SetSupportsBlocks(funcInfo.SupportsBlocks);
                 udfRes->SetIsStrict(funcInfo.IsStrict);
+                udfRes->SetMinLangVer(funcInfo.MinLangVer);
+                udfRes->SetMaxLangVer(funcInfo.MaxLangVer);
             }
         }
     }

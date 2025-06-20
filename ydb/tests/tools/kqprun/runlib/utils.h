@@ -96,6 +96,21 @@ private:
     const std::unique_ptr<NFq::IPlanStatProcessor> StatProcessor;
 };
 
+class TCachedPrinter {
+public:
+    using TPrinter = std::function<void(const TString& data, IOutputStream& output)>;
+
+    TCachedPrinter(const TString& output, TPrinter printer);
+
+    void Print(const TString& data, bool allowEmpty = false);
+
+private:
+    TString Output;
+    TPrinter Printer;
+    std::unique_ptr<TFileOutput> FileOutput;
+    std::optional<TString> PrintedData;
+};
+
 TString LoadFile(const TString& file);
 
 NKikimrServices::EServiceKikimr GetLogService(const TString& serviceName);

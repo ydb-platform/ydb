@@ -10,7 +10,7 @@
 #include <util/system/info.h>
 #include <util/thread/lfstack.h>
 
-#include <yql/essentials/minikql/asan_utils.h>
+#include <yql/essentials/public/udf/sanitizer_utils.h>
 
 #if defined(_win_)
 #   include <util/system/winint.h>
@@ -78,7 +78,7 @@ public:
         void *page = nullptr;
         if (Pages.Dequeue(&page)) {
             --Count;
-            SanitizerMarkInvalid(page, PageSize);
+            NYql::NUdf::SanitizerMakeRegionInaccessible(page, PageSize);
             return page;
         }
 
@@ -104,14 +104,14 @@ private:
             FreePage(addr);
             return GetPageSize();
         }
-        SanitizerMarkInvalid(addr, PageSize);
+        NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize);
         ++Count;
         Pages.Enqueue(addr);
         return 0;
     }
 
     void FreePage(void* addr) {
-        SanitizerMarkInvalid(addr, PageSize);
+        NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize);
         auto res = T::Munmap(addr, PageSize);
         Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
     }
@@ -146,7 +146,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(!TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed(), "No memory maps allowed while using default allocator");
 
         void* res = T::Mmap(size);
-        SanitizerMarkInvalid(res, size);
+        NYql::NUdf::SanitizerMakeRegionInaccessible(res, size);
         TotalMmappedBytes += size;
         return res;
     }
@@ -464,7 +464,7 @@ void* TAlignedPagePoolImpl<T>::GetPageImpl() {
 template <typename T>
 void* TAlignedPagePoolImpl<T>::GetPage() {
     auto* page = GetPageImpl();
-    SanitizerMarkInvalid(page, POOL_PAGE_SIZE);
+    NYql::NUdf::SanitizerMakeRegionInaccessible(page, POOL_PAGE_SIZE);
     return page;
 };
 
@@ -476,7 +476,7 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
         return;
     }
 
-    SanitizerMarkInvalid(addr, POOL_PAGE_SIZE);
+    NYql::NUdf::SanitizerMakeRegionInaccessible(addr, POOL_PAGE_SIZE);
     Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
     FreePages.emplace(addr);
 }
@@ -495,7 +495,7 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
         return ret;
     }
     auto* block = GetBlockImpl(size);
-    SanitizerMarkInvalid(block, size);
+    NYql::NUdf::SanitizerMakeRegionInaccessible(block, size);
     return block;
 }
 

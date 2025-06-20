@@ -47,13 +47,11 @@ public:
     TDPHypSolverBase(
         TJoinHypergraph<TNodeSet>& graph,
         IProviderContext& ctx,
-        TOrderingsStateMachine& orderingFSM,
         TDerived& derived
     )
         : Graph_(graph)
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
-        , OrderingsFSM(orderingFSM)
         , Derived(derived)
     {}
 
@@ -96,7 +94,6 @@ protected:
     IProviderContext& Pctx_;  // Provider specific contexts?
     // FIXME: This is a temporary structure that needs to be extended to multiple providers, also we need to remove virtual functions, they are really expensive #10578.
 
-    TOrderingsStateMachine& OrderingsFSM;
     TDerived& Derived; // this class owns DPTable and chose best plan in EmitCsgCmp method. It exists for avoiding slow virtual functions
 
     #ifndef NDEBUG
@@ -126,7 +123,8 @@ public:
         IProviderContext& ctx,
         TOrderingsStateMachine& orderingFSM
     )
-        : TDPHypSolverBase<TNodeSet, TDPHypSolverShuffleElimination<TNodeSet>>(graph, ctx, orderingFSM, *this)
+        : TDPHypSolverBase<TNodeSet, TDPHypSolverShuffleElimination<TNodeSet>>(graph, ctx, *this)
+        , OrderingsFSM(orderingFSM)
     {}
 
     std::string Type() const {
@@ -216,6 +214,7 @@ public:
     );
 
     THashMap<TNodeSet, std::vector<std::shared_ptr<IBaseOptimizerNode>>, std::hash<TNodeSet>> DpTable_;
+    TOrderingsStateMachine& OrderingsFSM;
 };
 
 template <typename TNodeSet>
@@ -223,10 +222,9 @@ class TDPHypSolverClassic : public TDPHypSolverBase<TNodeSet, TDPHypSolverClassi
 public:
     TDPHypSolverClassic(
         TJoinHypergraph<TNodeSet>& graph,
-        IProviderContext& ctx,
-        TOrderingsStateMachine& orderingFSM
+        IProviderContext& ctx
     )
-        : TDPHypSolverBase<TNodeSet, TDPHypSolverClassic<TNodeSet>>(graph, ctx, orderingFSM, *this)
+        : TDPHypSolverBase<TNodeSet, TDPHypSolverClassic<TNodeSet>>(graph, ctx, *this)
     {}
 
     std::string Type() const {
@@ -747,12 +745,12 @@ template <typename TNodeSet> std::shared_ptr<IBaseOptimizerNode> TDPHypSolverShu
     auto bestJoin = PickBestJoin(left, right, edge, false, false, maybeCardHint, maybeJoinAlgoHint);
 
     if (!bestJoin.IsReversed) {
-        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, bestJoin.Algo, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | right->LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, bestJoin.Algo, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         return tree;
     } else {
-        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, bestJoin.Algo, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(bestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, bestJoin.Algo, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
         return tree;
     }
 }
@@ -769,8 +767,8 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
 
     if ((this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
         auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
-        auto tree = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | right->LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
     }
 
@@ -783,16 +781,16 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
     auto shuffleLeftSideBestJoin = PickBestJoin(left, right, edge, true, false, maybeCardHint, maybeAlgoHint);
     if (reversedMapJoinStatistics.Cost < shuffleLeftSideBestJoin.Stats.Cost) {
-        tree = MakeJoinInternal(std::move(reversedMapJoinStatistics), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
+        tree = MakeJoinInternal(std::move(reversedMapJoinStatistics), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
     } else {
         if (!shuffleLeftSideBestJoin.IsReversed) {
-            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.LeftAny, edge.RightAny, right->LogicalOrderings);
-            tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.LeftAny, edge.RightAny, right->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         } else {
-            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.RightAny, edge.LeftAny, left->LogicalOrderings);
-            tree->LogicalOrderings.InduceNewOrderings(edge.FDs | right->LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleLeftSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleLeftSideBestJoin.Algo, edge.RightAny, edge.LeftAny, left->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleRightSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         }
     }
@@ -813,8 +811,8 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
 
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (edge.IsCommutative && maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
         auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
-        auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
     }
 
@@ -827,16 +825,16 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 2> 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
     auto shuffleRightSideBestJoin = PickBestJoin(left, right, edge, false, true, maybeCardHint, maybeAlgoHint);
     if (mapJoinStatistics.Cost < shuffleRightSideBestJoin.Stats.Cost) {
-        tree = MakeJoinInternal(std::move(mapJoinStatistics), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
+        tree = MakeJoinInternal(std::move(mapJoinStatistics), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
     } else {
         if (!shuffleRightSideBestJoin.IsReversed) {
-            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
-            tree->LogicalOrderings.InduceNewOrderings(edge.FDs | right->LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleRightSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
         } else {
-            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
-            tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
+            tree = MakeJoinInternal(std::move(shuffleRightSideBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleRightSideBestJoin.Algo, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+            tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
             tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
         }
     }
@@ -857,16 +855,16 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
 
     if ((this->Pctx_.IsJoinApplicable(left, right, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
         auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
-        auto tree = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | right->LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | right->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
     }
 
 
     if ((edge.IsCommutative && this->Pctx_.IsJoinApplicable(right, left, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind) && !maybeAlgoHint) || (edge.IsCommutative && maybeAlgoHint && maybeAlgoHint->Algo == EJoinAlgoType::MapJoin)) {
         auto stats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::MapJoin, edge.JoinKind, maybeCardHint, false, false);
-        auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
-        tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs());
+        auto tree = MakeJoinInternal(std::move(stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
+        tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs());
         trees[treeCount++] = std::move(tree);
     }
 
@@ -907,30 +905,30 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
     // switch (minCostTree) {
         // case EMinCostTree::EShuffleLeftSideAndMapJoin: {
-        //     tree = MakeJoinInternal(std::move(shuffleLeftSideAndMapJoinStats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, this->OrderingsFSM.CreateState());
-        //     tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
-        //     tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
+        //     tree = MakeJoinInternal(std::move(shuffleLeftSideAndMapJoinStats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
+        //     tree->Stats.LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
+        //     tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
         //     tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         //     break;
         // }
         // case EMinCostTree::EShuffleRightSideAndReversedMapJoin: {
-        //     tree = MakeJoinInternal(std::move(shuffleRightSideAndReversedMapJoinStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, this->OrderingsFSM.CreateState());
-        //     tree->LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
-        //     tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
+        //     tree = MakeJoinInternal(std::move(shuffleRightSideAndReversedMapJoinStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, OrderingsFSM.CreateState());
+        //     tree->Stats.LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
+        //     tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
         //     tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
         //     break;
         // }
         // case EMinCostTree::EShuffleBothSides: {
             if (!shuffleBothSidesBestJoin.IsReversed) {
-                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.LeftAny, edge.RightAny, this->OrderingsFSM.CreateState());
-                tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
-                tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
+                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
+                tree->Stats.LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
+                tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
                 tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
                 tree->ShuffleRightSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
             } else {
-                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.RightAny, edge.LeftAny, this->OrderingsFSM.CreateState());
-                tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
-                tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
+                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.RightAny, edge.LeftAny, OrderingsFSM.CreateState());
+                tree->Stats.LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
+                tree->Stats.LogicalOrderings.InduceNewOrderings(edge.FDs | left->Stats.LogicalOrderings.GetFDs() | right->Stats.LogicalOrderings.GetFDs());
                 tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
                 tree->ShuffleRightSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
             }
@@ -952,10 +950,10 @@ template <typename TNodeSet>  std::array<std::shared_ptr<IBaseOptimizerNode>, 2>
     std::array<std::shared_ptr<IBaseOptimizerNode>, 2> trees = { nullptr, nullptr };
 
     auto stats = this->Pctx_.ComputeJoinStatsV1(left->Stats, right->Stats, edge.LeftJoinKeys, edge.RightJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false);
-    trees[0] = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.LeftAny, edge.RightAny, left->LogicalOrderings);
+    trees[0] = MakeJoinInternal(std::move(stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.LeftAny, edge.RightAny, left->Stats.LogicalOrderings);
 
     auto reversedStats = this->Pctx_.ComputeJoinStatsV1(right->Stats, left->Stats, edge.RightJoinKeys, edge.LeftJoinKeys, EJoinAlgoType::Undefined, edge.JoinKind, maybeCardHint, false, false);
-    trees[1] = MakeJoinInternal(std::move(reversedStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.RightAny, edge.LeftAny, right->LogicalOrderings);
+    trees[1] = MakeJoinInternal(std::move(reversedStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::Undefined, edge.RightAny, edge.LeftAny, right->Stats.LogicalOrderings);
 
     return trees;
 }
@@ -967,7 +965,7 @@ inline void AddNodeToDpTableEntries(
     bool wasFound = false;
 
     for (auto& entry: dpTableEntries) {
-        if (entry->LogicalOrderings.IsSubsetOf(node->LogicalOrderings)) {
+        if (entry->Stats.LogicalOrderings.IsSubsetOf(node->Stats.LogicalOrderings)) {
             if (node->Stats.Cost < entry->Stats.Cost) {
                 entry = std::move(node);
                 return;
@@ -1019,16 +1017,16 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
             }
 
             bool lhsShuffled =
-                leftNode->LogicalOrderings.HasState() && // we may not have state for the Node in case there is no info about shuffling (statistics propogation problem)
-                leftNode->LogicalOrderings.ContainsShuffle(csgCmpEdge->LeftJoinKeysShuffleOrderingIdx) &&
-                leftNode->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->LeftJoinKeys.size());
+                leftNode->Stats.LogicalOrderings.HasState() && // we may not have state for the Node in case there is no info about shuffling (statistics propogation problem)
+                leftNode->Stats.LogicalOrderings.ContainsShuffle(csgCmpEdge->LeftJoinKeysShuffleOrderingIdx) &&
+                leftNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->LeftJoinKeys.size());
             bool rhsShuffled =
-                rightNode->LogicalOrderings.HasState() &&
-                rightNode->LogicalOrderings.ContainsShuffle(csgCmpEdge->RightJoinKeysShuffleOrderingIdx) &&
-                rightNode->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->RightJoinKeys.size());
+                rightNode->Stats.LogicalOrderings.HasState() &&
+                rightNode->Stats.LogicalOrderings.ContainsShuffle(csgCmpEdge->RightJoinKeysShuffleOrderingIdx) &&
+                rightNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->RightJoinKeys.size());
             // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle.
 
-            // bool sameHashFuncArgCount = leftNode->LogicalOrderings.GetShuffleHashFuncArgsCount() == rightNode->LogicalOrderings.GetShuffleHashFuncArgsCount();
+            // bool sameHashFuncArgCount = leftNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == rightNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount();
             if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
                 if (leftNode->Stats.Nrows < rightNode->Stats.Nrows) {
                     lhsShuffled = false;

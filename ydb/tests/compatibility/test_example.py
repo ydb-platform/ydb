@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import pytest
-import time
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture, MixedClusterFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -138,8 +137,6 @@ class TestExampleRollingUpdate(RollingUpgradeAndDowngradeFixture):
             # 2. check written data is correct during rolling upgrade
             #
             with ydb.QuerySessionPool(self.driver) as session_pool:
-                time.sleep(5)  # TODO: fix
-
                 query = f"""SELECT id, value FROM `{table_name}` WHERE id = 1;"""
                 result_sets = session_pool.execute_with_retries(query)
 

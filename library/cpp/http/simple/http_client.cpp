@@ -6,15 +6,25 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
+#include <util/system/spinlock.h>
+#include <library/cpp/cache/cache.h>
+
+
+TSpinLock TKeepAliveHttpClient::ConnectionQuarantineMutex;
+TQueue<THolder<NPrivate::THttpConnection>> TKeepAliveHttpClient::ConnectionQuarantine;
 
 TKeepAliveHttpClient::TKeepAliveHttpClient(const TString& host,
                                            ui32 port,
                                            TDuration socketTimeout,
-                                           TDuration connectTimeout)
+                                           TDuration connectTimeout,
+                                           bool useKeepAlive,
+                                           bool useConnectionPool)
     : Host(CutHttpPrefix(host))
     , Port(port)
     , SocketTimeout(socketTimeout)
     , ConnectTimeout(connectTimeout)
+    , UseKeepAlive(useKeepAlive)
+    , UseConnectionPool(useConnectionPool)
     , IsHttps(host.StartsWith("https"))
     , IsClosingRequired(false)
     , HttpsVerification(TVerifyCert{Host})
@@ -159,11 +169,27 @@ bool TKeepAliveHttpClient::CreateNewConnectionIfNeeded() {
                                                            ConnectTimeout,
                                                            IsHttps,
                                                            ClientCertificate,
-                                                           HttpsVerification);
+                                                           HttpsVerification,
+                                                           UseKeepAlive);
         IsClosingRequired = false;
         return true;
     }
     return false;
+}
+
+TKeepAliveHttpClient::~TKeepAliveHttpClient() {
+    if (UseConnectionPool) {
+        THolder<NPrivate::THttpConnection> oldConnection;
+        with_lock(ConnectionQuarantineMutex) {
+            while (ConnectionQuarantine.size() > 100) {
+                oldConnection = std::move(ConnectionQuarantine.front());
+
+                ConnectionQuarantine.pop();
+                oldConnection.Reset();
+            }
+            ConnectionQuarantine.push(std::move(Connection));
+        }
+    }
 }
 
 THttpRequestException::THttpRequestException(int statusCode)
@@ -180,6 +206,8 @@ TSimpleHttpClient::TSimpleHttpClient(const TOptions& options)
     , Port(options.Port())
     , SocketTimeout(options.SocketTimeout())
     , ConnectTimeout(options.ConnectTimeout())
+    , UseKeepAlive(options.UseKeepAlive())
+    , UseConnectionPool(options.UseConnectionPool())
 {
 }
 
@@ -229,7 +257,8 @@ namespace NPrivate {
                                      TDuration connTimeout,
                                      bool isHttps,
                                      const TMaybe<TOpenSslClientIO::TOptions::TClientCert>& clientCert,
-                                     const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert)
+                                     const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert,
+                                     bool keepAlive)
         : Addr(Resolve(host, port))
         , Socket(Connect(Addr, sockTimeout, connTimeout, host, port))
         , SocketIn(Socket)
@@ -249,8 +278,9 @@ namespace NPrivate {
         } else {
             HttpOut = MakeHolder<THttpOutput>(&SocketOut);
         }
-
-        HttpOut->EnableKeepAlive(true);
+        if (keepAlive) {
+            HttpOut->EnableKeepAlive(true);
+        }
     }
 
     TNetworkAddress THttpConnection::Resolve(const TString& host, ui32 port) {
@@ -292,7 +322,7 @@ TSimpleHttpClient::~TSimpleHttpClient() {
 }
 
 TKeepAliveHttpClient TSimpleHttpClient::CreateClient() const {
-    TKeepAliveHttpClient cl(Host, Port, SocketTimeout, ConnectTimeout);
+    TKeepAliveHttpClient cl(Host, Port, SocketTimeout, ConnectTimeout, UseKeepAlive, UseConnectionPool);
 
     if (!HttpsVerification) {
         cl.DisableVerificationForHttps();

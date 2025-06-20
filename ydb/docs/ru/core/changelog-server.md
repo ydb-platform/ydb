@@ -73,7 +73,7 @@
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/15515) зависание при чтении топика, если хотя бы одна партиция не имела входящих данных, но читалась несколькими потребителями.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18614) редкая проблема перезагрузок PQ tablet.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18378) проблема, при которой после обновления версии кластера Hive запускал подписчиков в дата-центрах без работающих узлов баз данных.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/19057) ошибка "Failed to set up listener on port 9092 errno# 98 (Address already in use)", возникающая при обновлении версии. 
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/19057) ошибка "Failed to set up listener on port 9092 errno# 98 (Address already in use)", возникающая при обновлении версии.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/18905) ошибка, приводившая к segmentation fault при одновременном выполнении запроса к healthcheck и отключении узла кластера.
 * [Исправлен](https://github.com/ydb-platform/ydb/pull/18899) сбой в [партиционировании строковой таблицы](./concepts/datamodel/table#partitioning_row_table) при выборе разделенного ключа из образцов доступа, содержащих смешанные операции с полным ключом и префиксом ключа (например, точное чтение или чтение диапазона).
 

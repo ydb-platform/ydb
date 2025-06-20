@@ -20,7 +20,8 @@ public:
     TBridgeRequestGrpc(IRequestOpCtx* request)
         : TBase(request) {}
 
-    void Bootstrap(const TActorContext &ctx) {
+    void Bootstrap() {
+        const auto& ctx = TActivationContext::AsActorContext();
         TBase::Bootstrap(ctx);
         auto *self = Self();
 

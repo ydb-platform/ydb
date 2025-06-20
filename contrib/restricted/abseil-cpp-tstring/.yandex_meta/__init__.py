@@ -1,6 +1,6 @@
 from devtools.yamaker.arcpath import ArcPath
 from devtools.yamaker.fileutil import re_sub_dir, rename
-from devtools.yamaker.modules import Library, Linkable, Switch, Words
+from devtools.yamaker.modules import Linkable, Switch, Words
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
@@ -39,14 +39,6 @@ def post_install(self):
         )
         absl.ADDINCL = [subst(include) for include in absl.ADDINCL]
         absl.SRCS = [subst(src) for src in absl.SRCS]
-
-
-    # Disable debug library form this targets if flag `Y_ABSL_DONT_USE_DEBUG` is set
-    DISABLED_DBG_LIBRARY = [
-        "absl/log",
-        "absl/strings",
-        "absl/synchronization",
-    ]
 
     with self.yamakes["."] as absl:
         absl.after(

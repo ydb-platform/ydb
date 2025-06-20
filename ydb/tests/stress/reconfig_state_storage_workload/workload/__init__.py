@@ -206,7 +206,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
     config_name = "StateStorage"
     loop_cnt = 0
     wait_for = 1
-    
+
     def __init__(self, client, cluster, prefix, stop, config_name):
         super().__init__(client, prefix, "reconfig_statestorage", stop)
         self.ringGroupActorIdOffset = 1

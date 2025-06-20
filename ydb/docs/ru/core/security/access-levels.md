@@ -61,11 +61,9 @@
 
 [//]: # (TODO: добавить ссылку на справку по viewer api и требуемым правам, когда она появится)
 
-Каждый последующий уровень доступа расширяет возможности предыдущего уровня:
+Списки `viewer_allowed_sids`, `monitoring_allowed_sids`, `administration_allowed_sids` последовательно расширяют возможности субъекта доступа. Нахождение субъекта доступа во всех трех списках предоставляет максимальные возможности.
 
-- Субъект, не состоящий ни в одном списке уровня доступа, имеет возможность просмотра публично доступной информации в системе (например, может видеть [список баз на кластере](../reference/embedded-ui/ydb-monitoring.md#tenant_list_page) или [список узлов кластера](../reference/embedded-ui/ydb-monitoring.md#node_list_page)).
-- Списки `viewer_allowed_sids`, `monitoring_allowed_sids`, `administration_allowed_sids` последовательно расширяют возможности субъекта доступа. Нахождение субъекта доступа во всех трех списках предоставляет максимальные возможности.
-- Присутствие в списке `monitoring_allowed_sids` без присутствия во `viewer_allowed_sids`, а также присутствие в списке `administration_allowed_sids` без присутствия во `monitoring_allowed_sids` не имеет смысла.
+Присутствие в списке `monitoring_allowed_sids` без присутствия во `viewer_allowed_sids`, а также присутствие в списке `administration_allowed_sids` без присутствия во `monitoring_allowed_sids` не имеет смысла.
 
 Например:
 

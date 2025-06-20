@@ -80,6 +80,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableLocalDBBtreeIndex, std::nullopt);
         OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
         OPTION(std::optional<bool>, EnableSystemNamesProtection, std::nullopt);
+        OPTION(std::optional<bool>, EnableRealSystemViewPaths, std::nullopt);
 
         #undef OPTION
     };
@@ -98,6 +99,9 @@ namespace NSchemeShardUT_Private {
         ui32 ChannelsCount;
         TActorId MeteringFake;
         THolder<NYdb::TDriver> YdbDriver;
+
+        TTestActorRuntime::TEventObserverHolder SysViewsRosterUpdateObserver;
+        bool SysViewsRosterUpdateFinished;
 
     public:
         static bool ENABLE_SCHEMESHARD_LOG;
@@ -134,6 +138,9 @@ namespace NSchemeShardUT_Private {
         void TestWaitShardDeletion(TTestActorRuntime& runtime, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<ui64> localIds);
         void TestWaitShardDeletion(TTestActorRuntime& runtime, ui64 schemeShard, TSet<TShardIdx> shardIds);
+
+        void AddSysViewsRosterUpdateObserver(TTestActorRuntime& runtime);
+        void WaitForSysViewsRosterUpdate(TTestActorRuntime& runtime);
 
         void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
 

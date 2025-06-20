@@ -378,6 +378,8 @@ public:
     bool TopicPersistStatsPending = false;
     TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats> TopicStatsQueue;
 
+    bool SysViewsRosterUpdateStarted = false;
+
     TSet<TPathId> CleanDroppedPathsCandidates;
     TSet<TPathId> CleanDroppedSubDomainsCandidates;
     bool CleanDroppedPathsInFly = false;
@@ -921,6 +923,8 @@ public:
     };
 
     void SubscribeToTempTableOwners();
+
+    void CollectSysViewUpdates(const TActorContext& ctx);
 
     void ActivateAfterInitialization(const TActorContext& ctx, TActivationOpts&& opts);
 

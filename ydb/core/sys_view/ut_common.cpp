@@ -51,6 +51,9 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableExternalDataSources(true);
     featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
+    if (settings.EnableRealSystemViewPaths) {
+        featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
+    }
 
     Settings->SetFeatureFlags(featureFlags);
 

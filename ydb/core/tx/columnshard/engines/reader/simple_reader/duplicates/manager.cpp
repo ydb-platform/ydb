@@ -4,8 +4,21 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TDuplicateManager::TDuplicateManager(const TSpecialReadContext& /*context*/)
-    : TActor(&TDuplicateManager::StateMain) {
+TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context)
+    : TActor(&TDuplicateManager::StateMain)
+    , Fetcher(context.GetCommonContext(), SelfId()) {
+}
+
+void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr&) {
+    Y_ABORT("unimplemented");
+}
+
+void TDuplicateManager::Handle(const NPrivate::TEvDuplicateFilterDataFetched::TPtr& ev) {
+    Fetcher.OnFetchingResult(ev);
+}
+
+void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr&) {
+    Y_ABORT("unimplemented");
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {

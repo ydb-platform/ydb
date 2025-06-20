@@ -98,7 +98,13 @@ public:
     static const inline TString Name = "Scan";
 };
 
+class TDeduplicationMemoryLimiterPolicy {
+public:
+    static const inline TString Name = "Deduplication";
+};
+
 using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy>;
+using TDeduplicationMemoryLimiterOperator = TServiceOperatorImpl<TDeduplicationMemoryLimiterPolicy>;
 
 class TCompMemoryLimiterPolicy {
 public:

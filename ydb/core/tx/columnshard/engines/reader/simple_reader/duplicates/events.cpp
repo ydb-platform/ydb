@@ -10,7 +10,8 @@ TEvRequestFilter::TEvRequestFilter(const IDataSource& source, const std::shared_
     , SourceId(source.GetSourceId())
     , RecordsCount(source.GetRecordsCount())
     , MaxVersion(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())
-    , Subscriber(subscriber) {
+    , Subscriber(subscriber)
+    , AbortionFlag(source.GetContext()->GetCommonContext()->GetAbortionFlag()) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

@@ -1,3 +1,4 @@
+* Added the "ydb tools infer csv" command to generate a `CREATE TABLE` SQL query from a CSV file with data.
 * Fix inline hints
 * Added named expressions completion in interactive mode, cache schema responses.
 * Added processing of special values `null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.

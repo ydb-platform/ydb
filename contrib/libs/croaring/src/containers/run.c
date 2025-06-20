@@ -157,7 +157,7 @@ void run_container_offset(const run_container_t *c, container_t **loc,
         lo = run_container_create_given_capacity(lo_cap);
         memcpy(lo->runs, c->runs, lo_cap * sizeof(rle16_t));
         lo->n_runs = lo_cap;
-        for (int i = 0; i < lo_cap; ++i) {
+        for (unsigned int i = 0; i < lo_cap; ++i) {
             lo->runs[i].value += offset;
         }
         *loc = (container_t *)lo;
@@ -167,7 +167,7 @@ void run_container_offset(const run_container_t *c, container_t **loc,
         hi = run_container_create_given_capacity(hi_cap);
         memcpy(hi->runs, c->runs + pivot, hi_cap * sizeof(rle16_t));
         hi->n_runs = hi_cap;
-        for (int i = 0; i < hi_cap; ++i) {
+        for (unsigned int i = 0; i < hi_cap; ++i) {
             hi->runs[i].value += offset;
         }
         *hic = (container_t *)hi;

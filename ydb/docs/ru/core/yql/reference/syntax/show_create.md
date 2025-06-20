@@ -1,6 +1,6 @@
 # SHOW CREATE
 
-`SHOW CREATE` возвращает запрос, возможно состоящий из нескольких DDL-выражений, необходимых для воссоздания структуры выбранного объекта: {% if oss == true and backend_name == 'YDB' %}[таблицы](../../../concepts/datamodel/table.md) или [представления](../../../concepts/datamodel/view.md){% else %}таблицы или представления{% endif %}.
+`SHOW CREATE` возвращает запрос, возможно состоящий из нескольких DDL-выражений, необходимых для воссоздания структуры выбранного объекта: {% if oss == true and backend_name == 'YDB' %}[таблицы](../../../concepts/datamodel/table.md){% else %}таблицы{% endif %}{% if feature_view and oss == true and backend_name == 'YDB' %} или [представления](../../../concepts/datamodel/view.md){% endif %}{% if feature_view and backend_name != 'YDB' %} или представления{% endif %}.
 
 ## Синтаксис
 

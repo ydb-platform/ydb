@@ -98,21 +98,20 @@ void TTableAliasMap::AddMapping(const TString& table, const TString& alias) {
     TableByAlias_[alias] = table;
 }
 
-void TTableAliasMap::AddRename(const TString& from, const TString& to) {
+void TTableAliasMap::AddRename(TString from, TString to) {
     if (auto pointIdx = from.find('.'); pointIdx != TString::npos) {
         TString alias = from.substr(0, pointIdx);
         TString baseTable = GetBaseTableByAlias(alias);
         TString columnName = from.substr(pointIdx + 1);
 
-        if (auto it = BaseColumnByRename_.find(columnName); it != BaseColumnByRename_.end()) {
-            auto baseColumn = it->second;
-            BaseColumnByRename_[to] = BaseColumnByRename_[from] = it->second;
-            return;
+        if (pointIdx == 0) {
+            from = from.substr(1);
+        }
+        if (auto pointIdx = to.find('.'); pointIdx == 0) {
+            to = to.substr(1);
         }
 
-        auto fromColumn = TBaseColumn(alias, columnName);
         auto baseColumn = TBaseColumn(baseTable, columnName);
-
         BaseColumnByRename_[to] = BaseColumnByRename_[from] = baseColumn;
         return;
     }
@@ -174,6 +173,9 @@ void TTableAliasMap::Merge(const TTableAliasMap& other) {
         TableByAlias_[alias] = table;
     }
     for (const auto& [from, to] : other.BaseColumnByRename_) {
+        if (BaseColumnByRename_.contains(from)) {
+            continue;
+        }
         BaseColumnByRename_[from] = TBaseColumn(to.Relation, to.Column);
     }
 }
@@ -318,20 +320,18 @@ i64 TFDStorage::FindInterestingOrderingIdx(
 }
 
 std::size_t TFDStorage::FindSorting(
-    const std::vector<TJoinColumn>& interestingOrdering,
-    const std::vector<TOrdering::TItem::EDirection>& directions,
+    const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, TOrdering::ESorting, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::AddSorting(
-    const std::vector<TJoinColumn>& interestingOrdering,
-    std::vector<TOrdering::TItem::EDirection> directions,
+    const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    return AddInterestingOrdering(interestingOrdering, TOrdering::ESorting, directions, tableAliases);
+    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, tableAliases);
 }
 
 std::size_t TFDStorage::AddShuffling(
@@ -393,6 +393,18 @@ TVector<TJoinColumn> TFDStorage::GetInterestingOrderingsColumnNamesByIdx(std::si
     }
 
     return columns;
+}
+
+TSorting TFDStorage::GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const {
+    Y_ENSURE(interestingOrderingIdx < InterestingOrderings.size());
+
+    TVector<TJoinColumn> columns;
+    columns.reserve(InterestingOrderings[interestingOrderingIdx].Items.size());
+    for (std::size_t columnIdx: InterestingOrderings[interestingOrderingIdx].Items) {
+        columns.push_back(ColumnByIdx_[columnIdx]);
+    }
+
+    return {columns, InterestingOrderings[interestingOrderingIdx].Directions};
 }
 
 TString TFDStorage::ToString() const {
@@ -532,6 +544,10 @@ void TOrderingsStateMachine::TLogicalOrderings::RemoveState() {
     *this = TLogicalOrderings(Dfsm_);
 }
 
+i64 TOrderingsStateMachine::TLogicalOrderings::GetInitOrderingIdx() const {
+    return InitOrderingIdx_;
+}
+
 void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
     if (!IsInitialized() || orderingIdx < 0 || orderingIdx >= static_cast<i64>(Dfsm_->InitStateByOrderingIdx_.size())) {
         RemoveState();
@@ -542,6 +558,7 @@ void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
         return;
     }
 
+    InitOrderingIdx_ = orderingIdx;
     auto state = Dfsm_->InitStateByOrderingIdx_[orderingIdx];
     State_ = state.StateIdx;
     ShuffleHashFuncArgsCount_ = state.ShuffleHashFuncArgsCount;
@@ -788,7 +805,13 @@ void TOrderingsStateMachine::TNFSM::PrefixClosure() {
                     AddEdge(i, j, TNFSM::TEdge::EPSILON);
                 }
 
-                if (Nodes_[i].Ordering.Type == TOrdering::ESorting) {
+                Y_ENSURE(Nodes_[i].Ordering.Directions.size() <= Nodes_[j].Ordering.Directions.size());
+                bool areDirsCompatable = std::equal(
+                    Nodes_[i].Ordering.Directions.begin(),
+                    Nodes_[i].Ordering.Directions.end(),
+                    Nodes_[j].Ordering.Directions.begin()
+                );
+                if (Nodes_[i].Ordering.Type == TOrdering::ESorting && areDirsCompatable) {
                     AddEdge(j, i, TNFSM::TEdge::EPSILON);
                 }
             }

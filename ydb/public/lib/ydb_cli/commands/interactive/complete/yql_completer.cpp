@@ -139,7 +139,7 @@ namespace NYdb::NConsoleClient {
     }
 
     NSQLComplete::ISchemaListCache::TPtr MakeSchemaCache() {
-        using TKey = NSQLComplete::TSchemaListCacheKey;
+        using TKey = NSQLComplete::TSchemaDescribeCacheKey;
         using TValue = TVector<NSQLComplete::TFolderEntry>;
 
         return NSQLComplete::MakeLocalCache<TKey, TValue>(

@@ -241,15 +241,18 @@ namespace NSQLComplete {
 
                 if constexpr (std::is_base_of_v<TFolderName, T>) {
                     name.Indentifier.append('/');
-                    if (!context.Object || !context.Object->IsQuoted) {
+                    if (!context.IsQuoted.AtLhs) {
                         name.Indentifier.prepend('`');
                     }
                     return {ECandidateKind::FolderName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TTableName, T>) {
-                    if (!context.Object || !context.Object->IsQuoted) {
+                    if (!context.IsQuoted.AtLhs) {
                         name.Indentifier.prepend('`');
+                    }
+                    if (!context.IsQuoted.AtRhs) {
+                        name.Indentifier.append('`');
                     }
                     return {ECandidateKind::TableName, std::move(name.Indentifier)};
                 }

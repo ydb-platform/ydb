@@ -6,37 +6,48 @@
 
 namespace NKikimr::NSchemeShard {
 
-TBillingStats::TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
+void TMeteringStatsCalculator::TryFixOldFormat(TMeteringStats& value) {
+    // old format: assign upload to read
+    if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
+        value.SetReadRows(value.GetUploadRows());
+        value.SetReadBytes(value.GetUploadBytes());
+    }
 }
 
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ENSURE(UploadRows >= other.UploadRows);
-    Y_ENSURE(UploadBytes >= other.UploadBytes);
-    Y_ENSURE(ReadRows >= other.ReadRows);
-    Y_ENSURE(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
+TMeteringStats TMeteringStatsCalculator::Zero() {
+    // this method the only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
+    TMeteringStats value;
+    value.SetUploadRows(0);
+    value.SetUploadBytes(0);
+    value.SetReadRows(0);
+    value.SetReadBytes(0);
+    return value;
 }
 
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
+bool TMeteringStatsCalculator::IsZero(TMeteringStats& value) {
+    return value.GetUploadRows() == 0
+        && value.GetUploadBytes() == 0
+        && value.GetReadRows() == 0
+        && value.GetReadBytes() == 0;
 }
 
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
+void TMeteringStatsCalculator::AddTo(TMeteringStats& value, const TMeteringStats& other) {
+    value.SetUploadRows(value.GetUploadRows() + other.GetUploadRows());
+    value.SetUploadBytes(value.GetUploadBytes() + other.GetUploadBytes());
+    value.SetReadRows(value.GetReadRows() + other.GetReadRows());
+    value.SetReadBytes(value.GetReadBytes() + other.GetReadBytes());
+}
+
+void TMeteringStatsCalculator::SubFrom(TMeteringStats& value, const TMeteringStats& other) {
+    const auto safeSub = [](ui64 x, ui64 y) {
+        Y_ENSURE(x >= y);
+        return x - y;
+    };
+
+    value.SetUploadRows(safeSub(value.GetUploadRows(), other.GetUploadRows()));
+    value.SetUploadBytes(safeSub(value.GetUploadBytes(), other.GetUploadBytes()));
+    value.SetReadRows(safeSub(value.GetReadRows(), other.GetReadRows()));
+    value.SetReadBytes(safeSub(value.GetReadBytes(), other.GetReadBytes()));
 }
 
 ui64 TRUCalculator::ReadTable(ui64 bytes) {
@@ -56,11 +67,15 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
     return (Max(rows, (bytes + 1_KB - 1) / 1_KB) + 1) / 2;
 }
 
-ui64 TRUCalculator::Calculate(const TBillingStats& stats) {
+ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
-    return TRUCalculator::ReadTable(stats.GetReadBytes())
-         + TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
+    ui64 readTableRU = TRUCalculator::ReadTable(stats.GetReadBytes());
+    ui64 bulkUpsertRU = TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
+    explain = TStringBuilder()
+        << "ReadTable: " << readTableRU
+        << ", BulkUpsert: " << bulkUpsertRU;
+    return readTableRU + bulkUpsertRU;
 }
 
 }

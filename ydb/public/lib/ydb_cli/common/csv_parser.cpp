@@ -548,7 +548,7 @@ TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& f
     }
 
     // Return a TValue that takes ownership via move
-    return TValue(ResultListType.value(), std::move(valueProto));
+    return TValue(ResultListType.value(), std::move(listProtoValue));
 }
 
 TValue TCsvParser::BuildListOnArena(
@@ -566,8 +566,8 @@ TValue TCsvParser::BuildListOnArena(
     }
 
     // allocate Ydb::Value on arena
-    Ydb::Value* value = google::protobuf::Arena::CreateMessage<Ydb::Value>(arena);
-    auto* listItems = value->mutable_items();
+    Ydb::Value* listProtoValue = google::protobuf::Arena::CreateMessage<Ydb::Value>(arena);
+    auto* listItems = listProtoValue->mutable_items();
     listItems->Reserve(lines.size());
 
     for (const auto& line : lines) {
@@ -578,7 +578,7 @@ TValue TCsvParser::BuildListOnArena(
     }
 
     // Return a TValue that references the arena-allocated message
-    return TValue(ResultListType.value(), value);
+    return TValue(ResultListType.value(), listProtoValue);
 }
 
 // Helper method to process a single CSV line

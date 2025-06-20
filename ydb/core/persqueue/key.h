@@ -30,6 +30,14 @@ public:
         MarkSourceId = 's',
         MarkUserDeprecated = 'u'
     };
+    
+    enum EServiceType : char {
+        ServiceTypeInfo = 'M',
+        ServiceTypeData = 'D',
+        ServiceTypeTmpData = 'X',
+        ServiceTypeMeta = 'J',
+        ServiceTypeTxMeta = 'K'
+    };
 
     TKeyPrefix(EType type, const TPartitionId& partition)
         : Partition(partition)
@@ -111,13 +119,6 @@ protected:
     bool HasServiceType() const;
 
 private:
-    enum EServiceType : char {
-        ServiceTypeInfo = 'M',
-        ServiceTypeData = 'D',
-        ServiceTypeTmpData = 'X',
-        ServiceTypeMeta = 'J',
-        ServiceTypeTxMeta = 'K'
-    };
 
     void SetTypeImpl(EType, bool isServicePartition);
 

@@ -33,7 +33,6 @@ struct TImmediateControl {
     bool IsConfigBasedControl = true;
 };
 
-
 struct TImmediateControlsClass {
     TString Name;
     TString ClassName;
@@ -317,41 +316,6 @@ void CodeGenBlobStorageNonConfigControls(TCodeGenContext& context) {
     context.JinjaRootControlClasses.push_back(res);
 }
 
-void CodeGenSchemeShardNonConfigControls(TCodeGenContext& context) {
-    TImmediateControlsClass schemeShardNonConfigControls {
-        .Name = "SchemeShard",
-        .ClassName = "TSchemeShardNonConfigControls",
-    };
-    for (const auto& field: {
-        "AllowConditionalEraseOperations",
-        "AllowDataColumnForIndexTable",
-        "AllowServerlessStorageBilling",
-        "DisablePublicationsOfDropping",
-        "FastSplitSizeThreshold",
-        "FastSplitRowCountThreshold",
-        "FastSplitCpuPercentageThreshold",
-        "FillAllocatePQ",
-        "MergeByLoadMinUptimeSec",
-        "MergeByLoadMinLowLoadDurationSec",
-        "SplitMergePartCountLimit",
-        "SplitByLoadEnabled",
-        "SplitByLoadMaxShardsDefault"
-    }) {
-        TImmediateControl control {
-            .Name = field,
-            .FullPath = TStringBuilder() << schemeShardNonConfigControls.Name << "." << field,
-            .HtmlName = TStringBuilder() << schemeShardNonConfigControls.Name << "_" << field,
-            .IsConfigBasedControl = false
-        };
-        auto emplacedControlPtr = &context.Controls.emplace_back(std::move(control));
-        context.JinjaControls.push_back(emplacedControlPtr);
-        schemeShardNonConfigControls.Controls.push_back(emplacedControlPtr);
-    }
-    auto* res = &context.ControlClasses.emplace_back(std::move(schemeShardNonConfigControls));
-    context.JinjaControlClasses.push_back(res);
-    context.JinjaRootControlClasses.push_back(res);
-}
-
 int main(int argc, char** argv) {
     if (argc < 3) {
         Cerr << "Usage: " << argv[0] << " INPUT OUTPUT ..." << Endl;
@@ -371,7 +335,6 @@ int main(int argc, char** argv) {
     }
     CodeGenBlobCacheControls(codeGenContext);
     CodeGenBlobStorageNonConfigControls(codeGenContext);
-    CodeGenSchemeShardNonConfigControls(codeGenContext);
     CodeGenControlsForTablets(codeGenContext);
 
 

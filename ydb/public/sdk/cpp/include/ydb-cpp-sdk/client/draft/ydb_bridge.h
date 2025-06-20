@@ -25,7 +25,7 @@ enum class EPileState {
 };
 
 struct TPileStateUpdate {
-    ui32 PileId = 0;
+    std::uint32_t PileId = 0;
     EPileState State = EPileState::DISCONNECTED;
 };
 

@@ -22,15 +22,15 @@ namespace NUdf {
 
 inline const char* CurrentAbiVersionStr()
 {
-#define str(s) #s
-#define xstr(s) str(s)
+#define STR(s) #s
+#define XSTR(s) STR(s)
 
-    return xstr(UDF_ABI_VERSION_MAJOR) "."
-            xstr(UDF_ABI_VERSION_MINOR) "."
-            xstr(UDF_ABI_VERSION_PATCH);
+    return XSTR(UDF_ABI_VERSION_MAJOR) "."
+            XSTR(UDF_ABI_VERSION_MINOR) "."
+            XSTR(UDF_ABI_VERSION_PATCH);
 
-#undef str
-#undef xstr
+#undef STR
+#undef XSTR
 }
 
 #define UDF_ABI_COMPATIBILITY_VERSION(MAJOR, MINOR) ((MAJOR) * 100 + (MINOR))

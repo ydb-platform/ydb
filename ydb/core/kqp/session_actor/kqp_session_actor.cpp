@@ -1206,6 +1206,11 @@ public:
         }
 
         if (*QueryState->TxCtx->EnableOltpSink && isBatchQuery) {
+            if (!Settings.TableService.GetEnableBatchUpdates()) {
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                    "BATCH operations are disabled by EnableBatchUpdates flag.");
+            }
+
             if (QueryState->TxCtx->HasOlapTable) {
                 ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                     "BATCH operations are not supported for column tables at the current time.");

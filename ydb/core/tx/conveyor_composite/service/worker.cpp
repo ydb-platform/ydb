@@ -1,5 +1,7 @@
 #include "worker.h"
 
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_schedulable_actor.h>
+
 namespace NKikimr::NConveyorComposite {
 
 TDuration TWorker::GetWakeupDuration() const {
@@ -14,7 +16,14 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
     const TMonotonic startGlobal = TMonotonic::Now();
     for (auto&& t : workerTasks) {
         const TMonotonic start = TMonotonic::Now();
+        auto& schedulableTask = t.GetSchedulableTask();
+        if (schedulableTask) {
+            schedulableTask->IncreaseExtraUsage();
+        }
         t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
+        if (schedulableTask) {
+            schedulableTask->DecreaseUsage(start - TMonotonic::Now());
+        }
         results.emplace_back(t.GetResult(start, TMonotonic::Now()));
     }
     if (CPUSoftLimit < 1) {

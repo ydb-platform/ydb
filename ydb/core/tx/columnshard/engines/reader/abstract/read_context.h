@@ -1,6 +1,7 @@
 #pragma once
 #include "read_metadata.h"
 
+#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
@@ -49,6 +50,7 @@ class TReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
+    YDB_READONLY_DEF(NKqp::NScheduler::TSchedulableTaskPtr, SchedulableTask);
     const NColumnShard::TConcreteScanCounters Counters;
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
@@ -150,7 +152,8 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        NKqp::NScheduler::TSchedulableTaskPtr schedulableTask);
 };
 
 class IDataReader {

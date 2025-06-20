@@ -152,7 +152,7 @@ public:
         if (IsFinishedFlag) {
             return false;
         }
-        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0);
+        NConveyorComposite::TServiceOperator::SendTaskToExecute(std::make_shared<TFetchingExecutor>(selfPtr), ConveyorCategory, 0, {}); // TODO(scheduler)
         return true;
     }
 };

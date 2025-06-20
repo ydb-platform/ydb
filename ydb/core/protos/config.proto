@@ -1940,6 +1940,8 @@ message TColumnShardConfig {
     optional uint32 WritingBufferDurationMs = 8 [default = 0];
     optional uint64 CompactionMemoryLimit = 10 [default = 536870912];
     optional uint64 TieringsMemoryLimit = 11 [default = 536870912];
+    optional bool ProxyWritingEnabled = 12 [default = true];
+
     message TIndexMetadataMemoryLimit {
         oneof Value {
             double TotalRatio = 1 [default = 0.3];

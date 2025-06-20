@@ -21,10 +21,12 @@ SRCS(
     oidc_session_create_yandex.cpp
     oidc_session_create_nebius.cpp
     oidc_session_create.cpp
+    oidc_whoami_extended_nebius.cpp
 )
 
 PEERDIR(
     ydb/mvp/core
+    ydb/public/api/client/nc_private/iam
     ydb/public/api/client/yc_private/oauth
     library/cpp/getopt
 )

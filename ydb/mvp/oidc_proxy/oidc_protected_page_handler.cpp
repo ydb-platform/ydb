@@ -1,6 +1,7 @@
 #include "oidc_protected_page_handler.h"
 #include "oidc_protected_page_nebius.h"
 #include "oidc_protected_page_yandex.h"
+#include "oidc_whoami_extended_nebius.h"
 
 namespace NMVP::NOIDC {
 

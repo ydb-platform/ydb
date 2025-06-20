@@ -8,6 +8,7 @@ SRCS(
     folder_service_mock.h
     iam_token_service_mock.h
     nebius_access_service_mock.h
+    profile_service_mock.h
     service_account_service_mock.h
     user_account_service_mock.h
     session_service_mock.h

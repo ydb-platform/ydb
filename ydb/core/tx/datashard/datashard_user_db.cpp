@@ -79,7 +79,7 @@ void TDataShardUserDb::UpsertIncrease(
 void DeleteSomeOpsByTagIds(TStackVec<NTable::TTag> IdsToDelete, TStackVec<NIceDb::TUpdateOp> &ops)
 {
     std::sort(IdsToDelete.begin(), IdsToDelete.end());
-    std::sort(ops.begin(), ops.end(), [](const NIceDb::TUpdateOp a, const NIceDb::TUpdateOp b){
+    std::sort(ops.begin(), ops.end(), [](const NIceDb::TUpdateOp a, const NIceDb::TUpdateOp b) {
                                                                             return a.Tag < b.Tag;
                                                                     });
 
@@ -87,7 +87,7 @@ void DeleteSomeOpsByTagIds(TStackVec<NTable::TTag> IdsToDelete, TStackVec<NIceDb
     
     int newSize = ops.size();
     int index = (int)IdsToDelete.size() - 1;
-    for (int i = (int)ops.size() - 1; i >= 0; i--) { // order in ops is not important?
+    for (int i = (int)ops.size() - 1; i >= 0; i--) {
         while (index >=0 && ops[i].Tag < IdsToDelete[index]) {
             index--;
         }

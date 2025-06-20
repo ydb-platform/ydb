@@ -186,23 +186,21 @@ namespace NKikimr {
                 // Recipient demanded fullsync restart, kill existing actor
                 TActorId actorId = it1->second;
                 Send(actorId, new TEvents::TEvPoisonPill);
-                auto it2 = UnorderedDataFullSyncSessionLookup.find(actorId);
-                Y_VERIFY(it2 != UnorderedDataFullSyncSessionLookup.end());
                 UnorderedDataFullSyncSessions.erase(it1);
-                UnorderedDataFullSyncSessionLookup.erase(it2);
+                bool erased = UnorderedDataFullSyncSessionLookup.erase(actorId);
+                Y_VERIFY(erased);
                 return actorId;
             }
-            return TActorId{};
+            return std::nullopt;
         }
 
         void Handle(TEvents::TEvGone::TPtr& ev) {
             auto it1 = UnorderedDataFullSyncSessionLookup.find(ev->Sender);
             if (it1 != UnorderedDataFullSyncSessionLookup.end()) {
                 TSessionKey sessionKey = it1->second;
-                auto it2 = UnorderedDataFullSyncSessions.find(sessionKey);
-                Y_VERIFY(it2 != UnorderedDataFullSyncSessions.end());
+                bool erased = UnorderedDataFullSyncSessions.erase(sessionKey);
+                Y_VERIFY(erased);
                 UnorderedDataFullSyncSessionLookup.erase(it1);
-                UnorderedDataFullSyncSessions.erase(it2);
             }
         }
 
@@ -251,8 +249,8 @@ namespace NKikimr {
                     }
                     break;
                 default:
-                    // unknown protocol, report incompatibility and die
-                    RespondWithErroneousStatus(ev, {}, NKikimrProto::BLOCKED);
+                    // unknown protocol, respond with erroneous status
+                    RespondWithErroneousStatus(ev, {}, NKikimrProto::ERROR);
                     
             }
         }

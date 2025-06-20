@@ -1821,8 +1821,10 @@ namespace NKikimr {
         }
 
         void SkeletonIsUpAndRunning(const TActorContext &ctx, bool runRepl = false) {
-            // now, when we obtained DbBirthLsn, we can create full sync handler actor
+            // Now, if we obtained DbBirthLsn, we can create full sync handler actor
             // run handler in the same mailbox
+            // We start Skeleton without DbBirthLsn only in DonorMode,
+            // which makes VDisk unable to sync with at all
             if (DbBirthLsn) {
                 Db->SyncFullHandlerID.Set(ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx,
                     SelfVDiskId, ctx.SelfID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));

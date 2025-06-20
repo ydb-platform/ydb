@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "blobstorage_syncfull.h"
+#include <ydb/core/util/frequently_called_hptimer.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
@@ -28,36 +29,6 @@ namespace NKikimr {
 
         TIntrusivePtr<THullCtx> HullCtx;
         TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
-    };
-
-    class TFrequentlyCalledHPTimer {
-    public:
-        TFrequentlyCalledHPTimer(TDuration threshold, ui32 callsBetweenMeasures = 1024)
-            : Threshold(threshold)
-            , CallsBetweenMeasures(callsBetweenMeasures)
-            , CallCounter(0)
-            , Expired(false)
-        {
-            Y_ABORT_UNLESS(CallsBetweenMeasures > 0);
-        }
-
-        bool Check() {
-            if (++CallCounter == CallsBetweenMeasures) {
-                CallCounter = 0;
-                if (!Expired && TDuration::Seconds(Timer.Passed()) > Threshold) {
-                    Expired = true;
-                }
-                return Expired;
-            }
-            return false;
-        }
-
-    private:
-        THPTimer Timer;
-        const TDuration Threshold;
-        const ui32 CallsBetweenMeasures = 1024;
-        ui32 CallCounter;
-        bool Expired;
     };
 
     ////////////////////////////////////////////////////////////////////////////

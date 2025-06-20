@@ -225,6 +225,7 @@ namespace NKikimr {
 
         void ScheduleCompaction(const TActorContext &ctx) {
             // schedule fresh if required
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule fresh compaction because of scheduling general compaction");
             CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx, FullCompactionState.ForceFreshCompaction(RTCtx),
                 AllowGarbageCollection);
             if (!Config->BaseInfo.ReadOnly && !RunLevelCompactionSelector(ctx)) {
@@ -562,6 +563,7 @@ namespace NKikimr {
                     if (FullCompactionState.Enabled()) {
                         ScheduleCompaction(ctx);
                     } else {
+                        LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule fresh compaction in Handle(THullCommitFinished)");
                         CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx,
                             FullCompactionState.ForceFreshCompaction(RTCtx), AllowGarbageCollection);
                     }
@@ -586,6 +588,7 @@ namespace NKikimr {
             const ui64 freeUpToLsn = ev->Get()->FreeUpToLsn;
             RTCtx->SetFreeUpToLsn(freeUpToLsn);
             // we check if we need to start fresh compaction, FreeUpToLsn influence our decision
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, "Try to schedule fresh compaction in Handle(NPDisk::TEvCutLog)");
             const bool freshCompStarted = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx,
                 FullCompactionState.ForceFreshCompaction(RTCtx), AllowGarbageCollection);
             // just for valid info output to the log

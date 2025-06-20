@@ -85,6 +85,11 @@ namespace NKikimr::NHullComp {
             Y_DEBUG_ABORT_UNLESS(levelOfInterest.has_value() == !compact.TablesToDelete.Empty());
 
             if (levelOfInterest) {
+<<<<<<< HEAD
+=======
+                    LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                            HullCtx->VCtx->VDiskLogPrefix << "TStrategyExplicit decided to compact level" << *levelOfInterest << " task# " << Task->ToString());
+>>>>>>> 8975637cf00 (Remove LastCompactedKey form LevelX compaction + add logs)
                 return ActCompactSsts;
             } else {
                 done = true;

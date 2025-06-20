@@ -2706,15 +2706,8 @@ Y_UNIT_TEST_F(TestRetentionOnLongTxAndBigMessages, TFixture)
     auto bigMessage = []() {
         TStringBuilder sb;
         sb.reserve(10_MB);
-
-        union {
-            size_t i;
-            char b[sizeof(size_t)];
-        } b;
-
-        for (size_t i = 0; i < 10_MB/sizeof(size_t); ++i) {
-            b.i = RandomNumber<size_t>();
-            sb << b.b;
+        for (size_t i = 0; i < sb.capacity(); ++i) {
+            sb << RandomNumber<char>();
         }
 
         return sb;

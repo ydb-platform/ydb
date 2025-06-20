@@ -214,11 +214,10 @@ public:
 
                 return valueBuilder->ImportArrowBlock(a.data(), a.size(), false, *ReturnArrowTypeHandle_);
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception& ex) {
             TStringBuilder sb;
-            sb << Pos_ << " ";
-            sb << CurrentExceptionMessage();
-            sb << Endl << "[" << Name_ << "]";
+            APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)
+            sb << ex.what();
             UdfTerminate(sb.c_str());
         }
     }

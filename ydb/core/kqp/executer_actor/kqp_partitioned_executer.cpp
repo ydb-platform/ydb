@@ -3,8 +3,7 @@
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/batch/params.h>
-#include <ydb/core/kqp/common/batch/batch_operation_settings.h>
+#include <ydb/core/kqp/common/batch/batch_operations_helpers.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
@@ -87,7 +86,7 @@ public:
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
         if (TableServiceConfig.HasBatchOperationSettings()) {
-            BatchOperationSettings = SetBatchOperationSettings(TableServiceConfig.GetBatchOperationSettings());
+            BatchOperationSettings = NBatchOperations::SetBatchOperationSettings(TableServiceConfig.GetBatchOperationSettings());
         }
 
         PE_LOG_I("Created " << ActorName << " with MaxBatchSize = " << BatchOperationSettings.MaxBatchSize
@@ -471,7 +470,7 @@ private:
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
 
-        auto batchSettings = TBatchOperationSettings(partInfo->LimitSize, BatchOperationSettings.MinBatchSize);
+        auto batchSettings = NBatchOperations::TBatchOperationSettings(partInfo->LimitSize, BatchOperationSettings.MinBatchSize);
         auto executerActor = CreateKqpExecuter(std::move(request), Database, UserToken, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, {}, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings));
@@ -643,7 +642,7 @@ private:
         auto newData = newRequest.Transactions.front().Params;
         auto oldData = (UseLiteral) ? LiteralRequest.Transactions.front().Params : PhysicalRequest.Transactions.front().Params;
         for (auto& [name, _] : oldData->GetParams()) {
-            if (!name.StartsWith(NBatchParams::Header)) {
+            if (!name.StartsWith(NBatchOperations::Header)) {
                 TTypedUnboxedValue& typedValue = oldData->GetParameterUnboxedValue(name);
                 newData->AddUVParam(name, typedValue.first, typedValue.second);
             }
@@ -659,9 +658,9 @@ private:
             NOT IsInclusiveLeft AND ((BeginPrefixSize = 0) OR ((BeginPrefixSize = 1) AND (Begin1 < K1)) OR ((BeginPrefixSize = 2) AND ((Begin1, Begin2) < (K1, K2)) OR ...)
         */
 
-        auto isInclusive = (isBegin) ? NBatchParams::IsInclusiveLeft : NBatchParams::IsInclusiveRight;
-        auto rangeName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End);
-        auto prefixRangeName = ((isBegin) ? NBatchParams::BeginPrefixSize : NBatchParams::EndPrefixSize);
+        auto isInclusive = (isBegin) ? NBatchOperations::IsInclusiveLeft : NBatchOperations::IsInclusiveRight;
+        auto rangeName = ((isBegin) ? NBatchOperations::Begin : NBatchOperations::End);
+        auto prefixRangeName = ((isBegin) ? NBatchOperations::BeginPrefixSize : NBatchOperations::EndPrefixSize);
 
         FillRequestParameter(queryData, isInclusive, (!range.Empty()) ? range->IsInclusive : false);
 
@@ -839,20 +838,20 @@ private:
         TStringBuilder builder;
         builder << "Fill request with parameters, PartitionInddx = " << partitionIndex << ": ";
 
-        auto [isInclusiveLeftType, isInclusiveLeftValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsInclusiveLeft);
-        auto [isInclusiveRightType, isInclusiveRightValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsInclusiveRight);
+        auto [isInclusiveLeftType, isInclusiveLeftValue] = queryData->GetParameterUnboxedValue(NBatchOperations::IsInclusiveLeft);
+        auto [isInclusiveRightType, isInclusiveRightValue] = queryData->GetParameterUnboxedValue(NBatchOperations::IsInclusiveRight);
 
-        auto [beginPrefixSizeType, beginPrefixSizeValue] = queryData->GetParameterUnboxedValue(NBatchParams::BeginPrefixSize);
-        auto [endPrefixSizeType, endPrefixSizeValue] = queryData->GetParameterUnboxedValue(NBatchParams::EndPrefixSize);
+        auto [beginPrefixSizeType, beginPrefixSizeValue] = queryData->GetParameterUnboxedValue(NBatchOperations::BeginPrefixSize);
+        auto [endPrefixSizeType, endPrefixSizeValue] = queryData->GetParameterUnboxedValue(NBatchOperations::EndPrefixSize);
 
         builder << "(";
 
         for (size_t i = 0; i < KeyColumnInfo.size(); ++i) {
             auto paramIndex = KeyColumnInfo[i].ParamIndex;
-            auto beginName = NBatchParams::Begin + ToString(paramIndex + 1);
+            auto beginName = NBatchOperations::Begin + ToString(paramIndex + 1);
             auto [beginType, beginValue] = queryData->GetParameterUnboxedValue(beginName);
 
-            auto endName = NBatchParams::End + ToString(paramIndex + 1);
+            auto endName = NBatchOperations::End + ToString(paramIndex + 1);
             auto [endType, endValue] = queryData->GetParameterUnboxedValue(endName);
 
             if (paramIndex >= beginPrefixSizeValue.Get<ui32>()) {
@@ -917,7 +916,7 @@ private:
 
 private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    TBatchOperationSettings BatchOperationSettings;
+    NBatchOperations::TBatchOperationSettings BatchOperationSettings;
 
     // for errors only
     Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;

@@ -7,7 +7,7 @@
 namespace NKikimr::NMemory {
 
 namespace {
-    
+
 ui64 GetPercent(float percent, ui64 value) {
     return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
 }
@@ -80,4 +80,7 @@ GET_MAX_LIMIT(SharedCache)
 
 GET_LIMIT(QueryExecutionLimit)
 
+GET_LIMIT(ColumnTablesReadExecutionLimit)
+GET_LIMIT(ColumnTablesCompactionLimit)
+GET_LIMIT(ColumnTablesCacheLimit)
 }

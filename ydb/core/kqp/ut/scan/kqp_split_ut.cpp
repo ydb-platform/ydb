@@ -76,9 +76,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
     }
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
-        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShardSplitMergePartCountLimit);
-        return prev;
+    void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
+        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShardControls.SplitMergePartCountLimit);
     }
 
     class TReplyPipeStub : public TActor<TReplyPipeStub> {

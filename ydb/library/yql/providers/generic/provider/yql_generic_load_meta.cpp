@@ -131,7 +131,7 @@ namespace NYql {
 
             Y_ENSURE(State_->GenericClient);
 
-            State_->GenericClient->DescribeTable(request).Subscribe(
+            State_->GenericClient->DescribeTable(request, State_->Configuration->DescribeTableTimeout).Subscribe(
                 [desc, tableAddress, promise,
                  client = State_->GenericClient](const NConnector::TDescribeTableAsyncResult& f1) mutable {
                     NConnector::TDescribeTableAsyncResult f2(f1);

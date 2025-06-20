@@ -21,6 +21,10 @@ namespace NYql {
     {
         Dispatch(gatewayConfig.GetDefaultSettings());
 
+        DescribeTableTimeout = gatewayConfig.HasDescribeTableTimeoutSeconds() ? 
+                               TDuration::Seconds(gatewayConfig.GetDescribeTableTimeoutSeconds()) :
+                               TDuration::Seconds(60);
+    
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
             AddCluster(cluster, databaseResolver, databaseAuth, credentials);
         }

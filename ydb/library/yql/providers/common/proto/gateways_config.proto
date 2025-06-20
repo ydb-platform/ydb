@@ -808,7 +808,7 @@ message TGenericGatewayConfig {
 
     //
     // The list of Connectors.
-    // 
+    //
     // When a request is served, firstly this list is checked.
     // If the list has a connector for a request's EGenericDataSourceKind it will
     // be applied to that request; otherwise, the "Default Connector" is used.
@@ -825,6 +825,9 @@ message TGenericGatewayConfig {
     // Expected format:
     // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 7;
+
+    // Defines timeout for calling the Connector API method `DescribeTable`
+    optional uint64 DescribeTableTimeoutSeconds = 9;
 
     repeated TAttr DefaultSettings = 6;
 

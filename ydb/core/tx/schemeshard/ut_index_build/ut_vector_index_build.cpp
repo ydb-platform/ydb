@@ -721,6 +721,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             return true;
         });
 
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto&) {
+            return doRestarts;
+        });
+
         // Build vector index with max_shards_in_flight(1) to guarantee deterministic metering data
         ui64 buildIndexTx = ++txId;
         {
@@ -802,6 +806,13 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         reshuffleBlocker.Stop().Unblock();
+
+        if (doRestarts) {
+            runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+            localKMeansBlocker.Stop().Unblock();
+        }
+
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
 
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });

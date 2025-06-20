@@ -184,7 +184,7 @@ NOperationQueue::EStartStatus TTenantDataErasureManager::StartDataErasure(const 
         break;
     }
     case NKikimr::NSchemeShard::ETabletType::PersQueue: {
-        request.reset(new TEvKeyValue::TEvCleanUpDataRequest(Generation));
+        request.reset(new TEvKeyValue::TEvVacuumRequest(Generation));
         break;
     }
     default:
@@ -599,25 +599,25 @@ private:
         return record.GetTabletId();
     }
 
-    bool IsSuccess(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) {
+    bool IsSuccess(TEvKeyValue::TEvVacuumResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        return record.status() == NKikimrKeyValue::CleanUpDataResponse::STATUS_SUCCESS;
+        return record.status() == NKikimrKeyValue::VacuumResponse::STATUS_SUCCESS;
     }
 
-    void HandleBadStatus(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) const {
+    void HandleBadStatus(TEvKeyValue::TEvVacuumResponse::TPtr& ev, const TActorContext& ctx) const {
         const auto& record = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxCompleteDataErasureShard: data erasure failed at KeyValue#" << record.tablet_id()
-            << " with status: " << NKikimrKeyValue::CleanUpDataResponse::Status_Name(record.status())
+            << " with status: " << NKikimrKeyValue::VacuumResponse::Status_Name(record.status())
             << ", schemestard: " << Self->TabletID());
     }
 
-    ui64 GetCleanupGeneration(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) const {
+    ui64 GetCleanupGeneration(TEvKeyValue::TEvVacuumResponse::TPtr& ev) const {
         const auto& record = ev->Get()->Record;
         return record.actual_generation();
     }
 
-    ui64 GetTabletId(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev) const {
+    ui64 GetTabletId(TEvKeyValue::TEvVacuumResponse::TPtr& ev) const {
         const auto& record = ev->Get()->Record;
         return record.tablet_id();
     }
@@ -629,7 +629,7 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShar
 }
 
 template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard<TEvDataShard::TEvVacuumResult::TPtr>(TEvDataShard::TEvVacuumResult::TPtr& ev);
-template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard<TEvKeyValue::TEvCleanUpDataResponse::TPtr>(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev);
+template NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteDataErasureShard<TEvKeyValue::TEvVacuumResponse::TPtr>(TEvKeyValue::TEvVacuumResponse::TPtr& ev);
 
 struct TSchemeShard::TTxAddNewShardToDataErasure : public TSchemeShard::TRwTxBase {
     TEvPrivate::TEvAddNewShardToDataErasure::TPtr Ev;

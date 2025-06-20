@@ -1355,6 +1355,8 @@ struct Schema : NIceDb::Schema {
 
         struct /*Upload*/ RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
         struct /*Upload*/ BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
+        using UploadRowsBilled = RowsBilled;
+        using UploadBytesBilled = BytesBilled;
 
         struct BuildKind : Column<30, NScheme::NTypeIds::Uint32> {};
 
@@ -1492,6 +1494,8 @@ struct Schema : NIceDb::Schema {
 
         struct /*Upload*/ RowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
         struct /*Upload*/ BytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+        using UploadRowsProcessed = RowsProcessed;
+        using UploadBytesProcessed = BytesProcessed;
 
         struct ReadRowsProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<12, NScheme::NTypeIds::Uint64> {};

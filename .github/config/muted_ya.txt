@@ -25,6 +25,24 @@ ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
+ydb/core/kqp/ut/join KqpJoinOrder.FiveWayJoinStatsOverride-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCDS16-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCDS34-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCDS61-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCDS87-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCDS94-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCDS95-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCH10-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCH11-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCH21-StreamLookupJoin+ColumnStor
+ydb/core/kqp/ut/join KqpJoinOrder.TPCH3-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCH5-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TPCH8-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.TestJoinOrderHintsComplex-StreamLookupJoin+ColumnStore
+ydb/core/kqp/ut/join KqpJoinOrder.ShuffleEliminationManyKeysJoinPredicate
+ydb/core/kqp/ut/join KqpJoinOrder.ShuffleEliminationOneJoin
+ydb/core/kqp/ut/join KqpJoinOrder.ShuffleEliminationReuseShuffleTwoJoins
+ydb/core/kqp/ut/join KqpJoinOrder.TPCHRandomJoinViewJustWorks+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost

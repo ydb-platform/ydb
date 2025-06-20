@@ -63,7 +63,18 @@ WHERE
 
 ## Импорт данных из S3 в таблицу {#import-from-s3}
 
-{{ ydb-short-name }} поддерживает загрузку данных из S3 в колоночную таблицу {{ ydb-short-name }} с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md). В результате будет создана [колоночная таблица](../../datamodel/table.md#column-oriented-tables) со схемой, соответствующей использованной для импорта [внешней таблицы](../../datamodel/external_table.md):
+{{ ydb-short-name }} поддерживает загрузку данных из S3 в таблицу {{ ydb-short-name }} с помощью команды [CREATE TABLE ... AS SELECT](../../../yql/reference/syntax/create_table/index.md).
+
+Если при импорте требуется создать колоночную таблицу, указывается параметр `STORE = COLUMN` в блоке [`WITH`](../../../yql/reference/syntax/create_table/with.md):
+
+```yql
+CREATE TABLE column_table (
+    PRIMARY KEY (key)
+)
+WITH (
+    STORE = COLUMN
+)
+AS SELECT * FROM s3_test_data
 
 ```yql
 CREATE TABLE column_table (

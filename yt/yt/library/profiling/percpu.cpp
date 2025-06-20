@@ -1,5 +1,6 @@
 #include "percpu.h"
-#include "yt/yt/library/profiling/summary.h"
+
+#include "summary.h"
 
 #include <yt/yt/core/profiling/tscp.h>
 

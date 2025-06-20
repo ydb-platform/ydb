@@ -1,7 +1,7 @@
 #pragma once
 
-#include <yt/yt/library/profiling/impl.h>
-#include <yt/yt/library/profiling/summary.h>
+#include "impl.h"
+#include "summary.h"
 
 #include <yt/yt/core/profiling/tscp.h>
 

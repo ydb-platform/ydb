@@ -518,8 +518,9 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
     };
 
     THashSet<std::pair<ui32, ui32>> updatedStages;
-    for (size_t i = 0; i < jsonNode.GetArray().size(); ++i) {
-        const auto& stageOverride = jsonNode.GetArray()[i];
+    const auto& jsonArray = jsonNode.GetArray();
+    for (size_t i = 0; i < jsonArray.size(); ++i) {
+        const auto& stageOverride = jsonArray[i];
         if (!stageOverride.IsMap()) {
             issues.AddIssue(TStringBuilder() << "Expected map json value for stage override " << i);
             continue;

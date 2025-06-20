@@ -954,5 +954,20 @@ public:                                                                         
             COUNTER_DEF(VDiskCount);
         };
 
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TFullSyncGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TFullSyncGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TFullSyncGroup)
+            {
+                COUNTER_INIT(UnorderedDataProtocolActorsCreated, false);
+                COUNTER_INIT(UnorderedDataProtocolActorsTerminated, false);
+            }
+
+            COUNTER_DEF(UnorderedDataProtocolActorsCreated);
+            COUNTER_DEF(UnorderedDataProtocolActorsTerminated);
+        };
+
     } // NMonGroup
 } // NKikimr

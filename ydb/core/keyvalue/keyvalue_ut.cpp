@@ -685,8 +685,8 @@ void ExecuteEvent(TDesiredPair<TRequestEvent> &dp, TTestContext &tc) {
     });
 }
 
-NKikimrKeyValue::CleanUpDataResponse SendCleanUpDataRequest(ui64 generation, TTestContext &tc) {
-    TDesiredPair<TEvKeyValue::TEvCleanUpDataRequest> dp;
+NKikimrKeyValue::VacuumResponse SendVacuumRequest(ui64 generation, TTestContext &tc) {
+    TDesiredPair<TEvKeyValue::TEvVacuumRequest> dp;
     dp.Request.set_generation(generation);
     ExecuteEvent(dp, tc);
     return dp.Response;
@@ -2643,7 +2643,7 @@ Y_UNIT_TEST(TestConcatToLongKey) {
     });
 }
 
-Y_UNIT_TEST(TestCleanUpDataOnEmptyTablet) {
+Y_UNIT_TEST(TestVacuumOnEmptyTablet) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2652,63 +2652,63 @@ Y_UNIT_TEST(TestCleanUpDataOnEmptyTablet) {
         tc.Prepare(dispatchName, setup, activeZone);
         ExecuteObtainLock(tc, 1);
 
-        NKikimrKeyValue::CleanUpDataResponse response = SendCleanUpDataRequest(1, tc);
+        NKikimrKeyValue::VacuumResponse response = SendVacuumRequest(1, tc);
         UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response.generation(), 1);
 
         
-        NKikimrKeyValue::CleanUpDataResponse responseAlreadyCompleted = SendCleanUpDataRequest(1, tc);
+        NKikimrKeyValue::VacuumResponse responseAlreadyCompleted = SendVacuumRequest(1, tc);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.status(), decltype(responseAlreadyCompleted)::STATUS_ALREADY_COMPLETED);
         UNIT_ASSERT_EQUAL(responseAlreadyCompleted.generation(), 1);
 
-        NKikimrKeyValue::CleanUpDataResponse response4 = SendCleanUpDataRequest(4, tc);
+        NKikimrKeyValue::VacuumResponse response4 = SendVacuumRequest(4, tc);
         UNIT_ASSERT_EQUAL(response4.status(), decltype(response4)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response4.generation(), 4);
 
-        NKikimrKeyValue::CleanUpDataResponse response2 = SendCleanUpDataRequest(2, tc);
+        NKikimrKeyValue::VacuumResponse response2 = SendVacuumRequest(2, tc);
         UNIT_ASSERT_EQUAL(response2.status(), decltype(response2)::STATUS_ALREADY_COMPLETED);
         UNIT_ASSERT_EQUAL(response2.generation(), 2);
 
-        NKikimrKeyValue::CleanUpDataResponse response3 = SendCleanUpDataRequest(3, tc);
+        NKikimrKeyValue::VacuumResponse response3 = SendVacuumRequest(3, tc);
         UNIT_ASSERT_EQUAL(response3.status(), decltype(response3)::STATUS_ALREADY_COMPLETED);
         UNIT_ASSERT_EQUAL(response3.generation(), 3);    
     });
 }
 
-Y_UNIT_TEST(TestCleanUpDataOnEmptyTabletResetGeneration) {
+Y_UNIT_TEST(TestVacuumOnEmptyTabletResetGeneration) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone = false;
-    tc.Prepare("TestCleanUpDataOnEmptyTabletInflight3", [&](TTestActorRuntime&) {
+    tc.Prepare("TestVacuumOnEmptyTabletInflight3", [&](TTestActorRuntime&) {
         return tc.InitialEventsFilter.Prepare();
     }, activeZone);
 
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(5), tc);
-    NKikimrKeyValue::CleanUpDataResponse response5 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(5), tc);
+    NKikimrKeyValue::VacuumResponse response5 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response5.status(), decltype(response5)::STATUS_SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(response5.generation(), 5);
     UNIT_ASSERT_VALUES_EQUAL(response5.actual_generation(), 5);
 
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(6), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(6), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(7), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(7), tc);
-    SendRequestEvent(std::make_unique<TEvKeyValue::TEvCleanUpDataRequest>(1, true), tc);
-    NKikimrKeyValue::CleanUpDataResponse response6 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(6), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(6), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(7), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(7), tc);
+    SendRequestEvent(std::make_unique<TEvKeyValue::TEvVacuumRequest>(1, true), tc);
+    NKikimrKeyValue::VacuumResponse response6 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response6.status(), decltype(response6)::STATUS_ABORTED);
     UNIT_ASSERT_VALUES_EQUAL(response6.generation(), 6);
     UNIT_ASSERT_VALUES_EQUAL(response6.actual_generation(), 0);
-    NKikimrKeyValue::CleanUpDataResponse response7 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    NKikimrKeyValue::VacuumResponse response7 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response7.status(), decltype(response7)::STATUS_ABORTED);
     UNIT_ASSERT_VALUES_EQUAL(response7.generation(), 7);
     UNIT_ASSERT_VALUES_EQUAL(response7.actual_generation(), 0);
-    NKikimrKeyValue::CleanUpDataResponse response1 = ReceiveResponse<TEvKeyValue::TEvCleanUpDataResponse>(tc);
+    NKikimrKeyValue::VacuumResponse response1 = ReceiveResponse<TEvKeyValue::TEvVacuumResponse>(tc);
     UNIT_ASSERT_EQUAL(response1.status(), decltype(response1)::STATUS_SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(response1.generation(), 1);
     UNIT_ASSERT_VALUES_EQUAL(response1.actual_generation(), 1);
 }
 
-Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
+Y_UNIT_TEST(TestVacuumWithMockDisk) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2747,7 +2747,7 @@ Y_UNIT_TEST(TestCleanUpDataWithMockDisk) {
         UNIT_ASSERT(found);
 
         ExecuteDeleteRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, 1);
-        NKikimrKeyValue::CleanUpDataResponse response = SendCleanUpDataRequest(1, tc);
+        NKikimrKeyValue::VacuumResponse response = SendVacuumRequest(1, tc);
         UNIT_ASSERT_EQUAL(response.status(), decltype(response)::STATUS_SUCCESS);
         UNIT_ASSERT_EQUAL(response.generation(), 1);
 

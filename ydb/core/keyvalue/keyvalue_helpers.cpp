@@ -90,8 +90,8 @@ void THelpers::DbEraseCollect(ISimpleDb &db) {
     db.Erase(key);
 }
 
-void THelpers::DbUpdateCleanUpGeneration(ui64 generation, ISimpleDb &db) {
-    TString key = THelpers::GenerateKeyFor(EIT_CLEAN_UP_GENERATION, nullptr, 0);
+void THelpers::DbUpdateVacuumGeneration(ui64 generation, ISimpleDb &db) {
+    TString key = THelpers::GenerateKeyFor(EIT_VACUUM_GENERATION, nullptr, 0);
     TString value = TString::Uninitialized(sizeof(generation));
     memcpy(const_cast<char*>(value.data()), &generation, sizeof(generation));
     db.Update(key, value);

@@ -12,7 +12,7 @@ enum EItemType {
     EIT_COLLECT = 4,
     EIT_STATE = 5,
     EIT_KEYVALUE_2 = 6,
-    EIT_CLEAN_UP_GENERATION = 7,
+    EIT_VACUUM_GENERATION = 7,
     EIT_END = 8
 };
 

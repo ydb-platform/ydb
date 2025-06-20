@@ -19,11 +19,11 @@ private:
     }
 
 public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId) {
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskCategory category, const ui64 internalProcessId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId()), new NConveyorComposite::TEvExecution::TEvNewTask(task, category, internalProcessId));
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyorComposite::TEvExecution::TEvNewTask(task, category, internalProcessId, schedulableTask));
             return true;
         } else {
             task->Execute(nullptr, task);
@@ -55,28 +55,28 @@ public:
 class TInsertServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, 0);
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Insert, 0, {});
     }
 };
 
 class TNormalizerServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Normalizer, 0);
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Normalizer, 0, {});
     }
 };
 
 class TCompServiceOperator {
 public:
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, 0);
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Compaction, 0, {});
     }
 };
 
 class TScanServiceOperator {
 public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 internalProcessId) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Scan, internalProcessId);
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 internalProcessId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask) {
+        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Scan, internalProcessId, schedulableTask);
     }
 
     static TProcessGuard StartProcess(const ui64 externalProcessId, const TString& scopeId, const TCPULimitsConfig& cpuLimits) {

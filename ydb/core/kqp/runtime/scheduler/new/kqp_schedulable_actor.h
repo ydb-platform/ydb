@@ -18,6 +18,10 @@ struct TSchedulableTask {
     void IncreaseUsage(const TDuration& burstThrottle);
     void DecreaseUsage(const TDuration& burstUsage);
 
+    // Account extra usage which doesn't affect scheduling
+    void IncreaseExtraUsage();
+    void DecreaseExtraUsage(const TDuration& burstUsage);
+
     void IncreaseThrottle();
     void DecreaseThrottle();
 

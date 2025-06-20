@@ -75,6 +75,9 @@ TPool::TPool(const TString& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters.Usage     = group->GetCounter("Usage",     true);
     Counters.Throttle  = group->GetCounter("Throttle",  true);
     Counters.FairShare = group->GetCounter("FairShare", true);  // snapshot
+
+    Counters.InFlightExtra = group->GetCounter("InFlightExtra",  false);
+    Counters.UsageExtra    = group->GetCounter("UsageExtra",     true);
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() const {

@@ -1213,11 +1213,13 @@ public:
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
-            std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
+            std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0, {}); // TODO(scheduler)
         return true;
     }
+
     void Complete(const TActorContext& /*ctx*/) override {
     }
+
     TTxType GetTxType() const override {
         return TXTYPE_ASK_PORTION_METADATA;
     }

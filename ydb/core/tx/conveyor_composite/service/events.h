@@ -2,6 +2,7 @@
 #include "counters.h"
 #include "scope.h"
 
+#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -18,14 +19,18 @@ private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
     YDB_READONLY_DEF(std::shared_ptr<TProcessScope>, Scope);
     YDB_READONLY(ui64, ProcessId, 0);
+    YDB_READONLY_DEF(NKqp::NScheduler::TSchedulableTaskPtr, SchedulableTask);
 
 public:
     TWorkerTaskContext(
-        const TDuration prediction, const ESpecialTaskCategory category, const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
+        const TDuration prediction, const ESpecialTaskCategory category, const std::shared_ptr<TProcessScope>& scope, const ui64 processId,
+            NKqp::NScheduler::TSchedulableTaskPtr schedulableTask)
         : PredictedDuration(prediction)
         , Category(category)
         , Scope(scope)
-        , ProcessId(processId) {
+        , ProcessId(processId)
+        , SchedulableTask(schedulableTask)
+    {
     }
 };
 
@@ -58,17 +63,20 @@ public:
     }
 
     TWorkerTask(const ITask::TPtr& task, const TDuration prediction, const ESpecialTaskCategory category,
-        const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId)
-        : TBase(prediction, category, scope, processId)
+        const std::shared_ptr<TProcessScope>& scope, const std::shared_ptr<TTaskSignals>& taskSignals, const ui64 processId,
+        NKqp::NScheduler::TSchedulableTaskPtr schedulableTask)
+        : TBase(prediction, category, scope, processId, schedulableTask)
         , Task(task)
-        , TaskSignals(taskSignals) {
+        , TaskSignals(taskSignals)
+    {
         Y_ABORT_UNLESS(task);
     }
 
     TWorkerTask(TWorkerTaskContext&& context, ITask::TPtr&& task, std::shared_ptr<TTaskSignals>&& taskSignals)
         : TBase(std::move(context))
         , Task(std::move(task))
-        , TaskSignals(std::move(taskSignals)) {
+        , TaskSignals(std::move(taskSignals))
+    {
         AFL_VERIFY(Task);
         AFL_VERIFY(TaskSignals);
     }
@@ -85,8 +93,8 @@ public:
     }
 
     TWorkerTaskPrepare(const ITask::TPtr& task, const TDuration prediction, const ESpecialTaskCategory category,
-        const std::shared_ptr<TProcessScope>& scope, const ui64 processId)
-        : TBase(prediction, category, scope, processId)
+        const std::shared_ptr<TProcessScope>& scope, const ui64 processId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask)
+        : TBase(prediction, category, scope, processId, schedulableTask)
         , Task(task) {
         AFL_VERIFY(task);
     }

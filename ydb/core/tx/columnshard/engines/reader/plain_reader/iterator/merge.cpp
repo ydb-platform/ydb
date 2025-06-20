@@ -86,8 +86,9 @@ bool TBaseMergeTask::DoOnAllocated(
         return false;
     }
     AllocationGuard = std::move(guard);
+    const auto& commonContext = *Context->GetCommonContext();
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
-        static_pointer_cast<TBaseMergeTask>(allocation), Context->GetCommonContext()->GetConveyorProcessId());
+        static_pointer_cast<TBaseMergeTask>(allocation), commonContext.GetConveyorProcessId(), commonContext.GetSchedulableTask());
     return true;
 }
 

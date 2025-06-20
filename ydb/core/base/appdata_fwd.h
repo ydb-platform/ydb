@@ -25,6 +25,9 @@ namespace NKikimr {
     namespace NJaegerTracing {
         class TSamplingThrottlingConfigurator;
     }
+    namespace NKqp::NScheduler {
+        class TComputeScheduler;
+    }
 }
 
 namespace NKikimrCms {
@@ -302,6 +305,8 @@ struct TAppData {
 
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
+
+    std::shared_ptr<NKqp::NScheduler::TComputeScheduler> ComputeScheduler;
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,

@@ -60,7 +60,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
     Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
+    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask(), ev->Get()->GetSchedulableTask());
     Y_UNUSED(Manager->DrainTasks());
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }

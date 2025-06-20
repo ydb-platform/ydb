@@ -103,7 +103,9 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
 
     ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
-
+    DefaultFilledColumnsIds = {recordOperation.GetDefaultFilledColumnIds().begin(), recordOperation.GetDefaultFilledColumnIds().end()};
+    // todo проверить что там нет ключевых столбллвы и нет при операциях нет replace upsert
+    
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
     auto tableInfoPtr = tableInfos.FindPtr(tableIdRecord.GetTableId());

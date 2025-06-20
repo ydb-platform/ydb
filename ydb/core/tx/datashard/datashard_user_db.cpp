@@ -88,7 +88,10 @@ void DeleteSomeOpsByTagIds(TStackVec<NTable::TTag> IdsToDelete, TStackVec<NIceDb
     int newSize = ops.size();
     int index = (int)IdsToDelete.size() - 1;
     for (int i = (int)ops.size() - 1; i >= 0; i--) { // order in ops is not important?
-        if (ops[i].Tag == IdsToDelete[index]) {
+        while (index >=0 && ops[i].Tag < IdsToDelete[index]) {
+            index--;
+        }
+        if (index >= 0 && ops[i].Tag == IdsToDelete[index]) {
             std::swap(ops[i], ops[--newSize]);
         }
     }

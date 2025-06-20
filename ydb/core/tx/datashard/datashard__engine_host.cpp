@@ -371,7 +371,7 @@ public:
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
 
         TSmallVec<NTable::TTag> defaultFilledColumnsIds;
-        wedwdwdwedwe(Scheme, tableInfo, commands, ops, nullptr);
+        //wedwdwdwedwe(Scheme, tableInfo, commands, ops, nullptr); // или не здесь? r314
         
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnsIds);
     }

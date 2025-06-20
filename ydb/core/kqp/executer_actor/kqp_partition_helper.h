@@ -48,11 +48,10 @@ TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo
     const NKqpProto::TKqpPhyOpReadRanges& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 
+TMaybe<TTableRange> IntersectRanges(const TTableRange& range1, const TTableRange& range2, TConstArrayRef<NScheme::TTypeInfo> cellTypes);
+
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
-
-THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan);
 
 ui64 ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoItemsLimit,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
@@ -62,6 +61,7 @@ TPhysicalShardReadSettings ExtractReadSettings(
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
 struct TPartitionPrunerConfig {
+    TMaybe<TTableRange> BatchOperationRange;
 };
 
 class TPartitionPruner {

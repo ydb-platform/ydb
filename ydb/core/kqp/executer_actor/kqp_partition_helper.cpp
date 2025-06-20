@@ -538,6 +538,85 @@ TVector<TSerializedPointOrRange> ExtractRanges(const NKqpProto::TKqpReadRangesSo
     return ranges;
 }
 
+TMaybe<TTableRange> IntersectRanges(const TTableRange& first, const TTableRange& second, TConstArrayRef<NScheme::TTypeInfo> cellTypes) {
+    if (first.IsEmptyRange(cellTypes) || second.IsEmptyRange(cellTypes)) {
+        return Nothing();
+    }
+
+    TVector<TCell> intersectionFrom;
+    bool intersectionInclusiveFrom = true;
+
+    auto fromComparison = CompareBorders<true, true>(first.From, second.From, first.InclusiveFrom,
+        second.InclusiveFrom, cellTypes);
+
+    if (fromComparison > 0) {
+        intersectionFrom.assign(first.From.begin(), first.From.end());
+        intersectionInclusiveFrom = first.InclusiveFrom;
+    } else if (fromComparison < 0) {
+        intersectionFrom.assign(second.From.begin(), second.From.end());
+        intersectionInclusiveFrom = second.InclusiveFrom;
+    } else {
+        intersectionFrom.assign(first.From.begin(), first.From.end());
+        intersectionInclusiveFrom = first.InclusiveFrom && second.InclusiveFrom;
+    }
+
+    TVector<TCell> intersectionTo;
+    bool intersectionInclusiveTo = true;
+
+    auto firstTo = first.Point ? first.From : first.To;
+    auto secondTo = second.Point ? second.From : second.To;
+    bool firstToInclusive = first.Point ? true : first.InclusiveTo;
+    bool secondToInclusive = second.Point ? true : second.InclusiveTo;
+
+    if (firstTo.empty() && secondTo.empty()) {
+        intersectionTo.clear();
+        intersectionInclusiveTo = true;
+    } else if (firstTo.empty()) {
+        intersectionTo.assign(secondTo.begin(), secondTo.end());
+        intersectionInclusiveTo = secondToInclusive;
+    } else if (secondTo.empty()) {
+        intersectionTo.assign(firstTo.begin(), firstTo.end());
+        intersectionInclusiveTo = firstToInclusive;
+    } else {
+        auto toComparison = CompareBorders<false, false>(firstTo, secondTo, firstToInclusive,
+            secondToInclusive, cellTypes);
+
+        if (toComparison < 0) {
+            intersectionTo.assign(firstTo.begin(), firstTo.end());
+            intersectionInclusiveTo = firstToInclusive;
+        } else if (toComparison > 0) {
+            intersectionTo.assign(secondTo.begin(), secondTo.end());
+            intersectionInclusiveTo = secondToInclusive;
+        } else {
+            intersectionTo.assign(firstTo.begin(), firstTo.end());
+            intersectionInclusiveTo = firstToInclusive && secondToInclusive;
+        }
+    }
+
+    if (!intersectionTo.empty()) {
+        auto boundsComparison = CompareBorders<true, false>(intersectionFrom, intersectionTo,
+            intersectionInclusiveFrom, intersectionInclusiveTo, cellTypes);
+        if (boundsComparison > 0) {
+            return Nothing();
+        }
+    }
+
+    bool isPoint = false;
+    if (!intersectionTo.empty() && intersectionInclusiveFrom && intersectionInclusiveTo) {
+        auto equalityCheck = CompareBorders<true, false>(intersectionFrom, intersectionTo,
+            intersectionInclusiveFrom, intersectionInclusiveTo, cellTypes);
+
+        isPoint = (equalityCheck == 0);
+    }
+
+    if (isPoint) {
+        return TTableRange(TConstArrayRef<TCell>(intersectionFrom));
+    }
+
+    return TTableRange(TConstArrayRef<TCell>(intersectionFrom), intersectionInclusiveFrom,
+        TConstArrayRef<TCell>(intersectionTo), intersectionInclusiveTo);
+}
+
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
 {

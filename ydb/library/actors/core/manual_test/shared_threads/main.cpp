@@ -114,19 +114,20 @@ public:
 
 class THugeTaskActor : public TSchedulerActor {
 public:
-    THugeTaskActor(std::function<void()> onFinish)
-        : TSchedulerActor(TDuration::MilliSeconds(500), {
-            {0, TDuration::MilliSeconds(100)},
-            {0, TDuration::MilliSeconds(100)},
-            {0, TDuration::MilliSeconds(100)},
-            {0, TDuration::MilliSeconds(100)},
-            {0, TDuration::MilliSeconds(100)},
-            {0, TDuration::MilliSeconds(100)},
-            {1, TDuration::MilliSeconds(100)},
-            {1, TDuration::MilliSeconds(100)},
-            {1, TDuration::MilliSeconds(100)},
-        }, onFinish)
+    THugeTaskActor(std::function<void()> onFinish, i16 firstPoolTaskCount, i16 secondPoolTaskCount)
+        : TSchedulerActor(TDuration::MilliSeconds(500), GetWorkers(firstPoolTaskCount, secondPoolTaskCount), onFinish)
     {}
+
+    std::vector<TSchedulerActor::TWorkerConfig> GetWorkers(i16 firstPoolTaskCount, i16 secondPoolTaskCount) {
+        std::vector<TSchedulerActor::TWorkerConfig> workers;
+        for (i16 i = 0; i < firstPoolTaskCount; ++i) {
+            workers.emplace_back(0, TDuration::MilliSeconds(100));
+        }
+        for (i16 i = 0; i < secondPoolTaskCount; ++i) {
+            workers.emplace_back(1, TDuration::MilliSeconds(100));
+        }
+        return workers;
+    }
 };
 
 THolder<TActorSystemSetup> BuildActorSystemSetup(bool useSharedThread = true) {
@@ -157,24 +158,37 @@ THolder<TActorSystemSetup> BuildActorSystemSetup(bool useSharedThread = true) {
     return setup;
 }
 
-int main(int argc, char **argv) {
-    bool useSharedThread = true;
-    if (argc > 1) {
-        if (argv[1] == std::string("--no-shared-thread")) {
-            useSharedThread = false;
-        } else {
-            Cout << "Usage: " << argv[0] << " [--no-shared-thread]" << Endl;
-            return 1;
-        }
-    }
+THolder<TActorSystemSetup> BuildActorSystemSetupSharedOnlyCore() {
+    auto setup = MakeHolder<TActorSystemSetup>();
 
-#ifdef _unix_
-    signal(SIGPIPE, SIG_IGN);
-#endif
-    signal(SIGINT, &OnTerminate);
-    signal(SIGTERM, &OnTerminate);
+    setup->NodeId = 1;
+    setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
+        .PoolId = 0,
+        .Threads = 0,
+        .SpinThreshold = 0,
+        .MinThreadCount = 0,
+        .MaxThreadCount = 1,
+        .DefaultThreadCount = 1,
+        .HasSharedThread = true,
+        .AdjacentPools = {1},
+    });
+    setup->CpuManager.Basic.emplace_back(TBasicExecutorPoolConfig{
+        .PoolId = 1,
+        .Threads = 0,
+        .SpinThreshold = 0,
+        .MinThreadCount = 0,
+        .MaxThreadCount = 0,
+        .DefaultThreadCount = 0,
+        .HasSharedThread = false,
+        .ForcedForeignSlotCount = 1,
+    });
 
-    THolder<TActorSystemSetup> actorSystemSetup = BuildActorSystemSetup(useSharedThread);
+    setup->Scheduler = new TBasicSchedulerThread(TSchedulerConfig(512, 0));
+
+    return setup;
+}
+
+void TestSpecificCase(THolder<TActorSystemSetup> actorSystemSetup, i16 firstPoolTaskCount, i16 secondPoolTaskCount) {
     TActorSystem actorSystem(actorSystemSetup);
 
     actorSystem.Start();
@@ -196,7 +210,7 @@ int main(int argc, char **argv) {
             }
         }
     }));
-    actorSystem.Register(new THugeTaskActor([]{}));
+    actorSystem.Register(new THugeTaskActor([]{}, firstPoolTaskCount, secondPoolTaskCount));
 
     auto printState = [&](i16 poolId) {
         TExecutorPoolState state;
@@ -214,7 +228,7 @@ int main(int argc, char **argv) {
         if (!flagBuilder.empty()) {
             flagBuilder << " ";
         }
-        Cout << "Pool " << poolId << " state: " << flagBuilder << state.ElapsedCpu << " " << state.CurrentLimit << "/" << state.PossibleMaxLimit << "(" << state.MaxLimit << ") foreign shared elapsed cpu: " << state.SharedCpuQuota - 1 << Endl;
+        Cout << "Pool " << poolId << " state: " << flagBuilder << state.ElapsedCpu << " " << state.CurrentLimit << "/" << state.PossibleMaxLimit << "(" << state.MaxLimit << ") shared cpu quota: " << state.SharedCpuQuota << Endl;
     };
 
     ui64 seconds = 0;
@@ -232,6 +246,41 @@ int main(int argc, char **argv) {
 
     actorSystem.Stop();
     actorSystem.Cleanup();
+}
 
+int main(int argc, char **argv) {
+#ifdef _unix_
+    signal(SIGPIPE, SIG_IGN);
+#endif
+    signal(SIGINT, &OnTerminate);
+    signal(SIGTERM, &OnTerminate);
+
+    THolder<TActorSystemSetup> actorSystemSetup;
+    i16 firstPoolTaskCount = 0;
+    i16 secondPoolTaskCount = 0;
+    if (argc > 1) {
+        if (argv[1] == std::string("specific-case")) {
+            actorSystemSetup = BuildActorSystemSetup(true);
+            firstPoolTaskCount = 6;
+            secondPoolTaskCount = 3;
+        } else if (argv[1] == std::string("specific-case-no-shared-thread")) {
+            actorSystemSetup = BuildActorSystemSetup(false);
+            firstPoolTaskCount = 6;
+            secondPoolTaskCount = 3;
+        } else if (argv[1] == std::string("2-cores")) {
+            actorSystemSetup = BuildActorSystemSetupSharedOnlyCore();
+            firstPoolTaskCount = 2;
+            secondPoolTaskCount = 1;
+        } else {
+            Cout << "Usage: " << argv[0] << " specific-case|specific-case-no-shared-thread|2-cores" << Endl;
+            return 1;
+        }
+    } else {
+        Cout << "Usage: " << argv[0] << " specific-case|specific-case-no-shared-thread|2-cores" << Endl;
+        return 1;
+    }
+
+    Cerr << "First pool task count: " << firstPoolTaskCount << ", second pool task count: " << secondPoolTaskCount << Endl;
+    TestSpecificCase(std::move(actorSystemSetup), firstPoolTaskCount, secondPoolTaskCount);
     return ShouldContinue.GetReturnCode();
 }

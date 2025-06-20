@@ -7,6 +7,7 @@
 #include "schemeshard__operation_change_path_state.h"
 #include "schemeshard__operation_base.h"
 
+#include <ydb/core/base/test_failure_injection.h>
 #include <util/generic/guid.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -141,6 +142,10 @@ public:
 
         const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
 
+        if (!bcPath.IsResolved()) {
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(schemeshardTabletId));
+        }
+
         const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 
         // Create in-flight operation object
@@ -261,6 +266,32 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     TVector<ISubOperation::TPtr> result;
 
     TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
+
+    // Check for injected failures early, before any operations are created to avoid "undo unsafe" operations
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::BackupCollectionNotFound))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Backup collection not found (injected failure)")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::BackupChildrenEmpty))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusSchemeError, "Backup collection children empty (injected failure)")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::PathSplitFailure))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Path split failure (injected failure)")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::IncrementalBackupPathNotResolved))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Incremental backup path not resolved (injected failure)")};
+        return result;
+    }
+
+    if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::CreateChangePathStateFailed))) {
+        result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, "Create change path state failed (injected failure)")};
+        return result;
+    }
 
     const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
     {

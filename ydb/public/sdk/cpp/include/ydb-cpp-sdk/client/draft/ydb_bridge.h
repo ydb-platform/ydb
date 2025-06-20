@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 
-namespace NYdb::NBridge {
+namespace NYdb::inline Dev::NBridge {
 
 struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClusterStateSettings> {};
 

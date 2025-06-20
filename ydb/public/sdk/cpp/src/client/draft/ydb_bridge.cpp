@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/bridge/bridge.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>

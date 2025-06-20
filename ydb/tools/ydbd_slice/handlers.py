@@ -172,7 +172,7 @@ class Slice:
             raise RuntimeError(f"Failed to bootstrap cluster: {e}")
 
     def _dynamic_provision(self):
-        self. __init_blobstorage_kikimr()
+        self.__init_blobstorage_kikimr()
         self.__create_databases()
 
         return

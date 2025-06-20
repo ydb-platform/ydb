@@ -29,12 +29,22 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 ### List of exported items {#items}
 
-`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
+`--destination-prefix PREFIX`: Destination prefix for export into the bucket. Required for encrypted exports.
+
+`--root-path PATH`: Root folder for the objects being exported; defaults to the database root if not provided.
+
+`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times to export multiple items. If no `--item` or `--include` parameters are specified, the entire root path will be exported. `STRING` is specified in the `<property>=<value>,...` format with the following properties:
 
 - `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
-- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items.
+- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items. It can be generated automatically from the name of the exported object. For encrypted exports, specifying an explicit destination path is not recommended to anonymize exported object names.
+
+`--include PATH`: Object paths relative to the root path that are included in the export. Specify this parameter multiple times for different paths, or provide a single comma-separated list of values. If no `--item` or `--include` parameters are specified, the entire root path will be exported.
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
+
+`--encryption-algorithm ALGORITHM`: Encryption algorithm (only for encrypted exports). Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
+
+`--encryption-key-file PATH`: File path containing the encryption key (only for encrypted exports).
 
 ### Additional parameters {#aux}
 
@@ -64,7 +74,7 @@ If successful, the `export s3` command prints summary information about the enqu
    ...
    ```
 
-- In the proto-json-base64 mode, the operation ID is in the "id" attribute:
+- In the `proto-json-base64` mode, the operation ID is in the "id" attribute:
 
    ```json
    {"id":"ydb://export/6?id=281474976788395&kind=s3","ready":true, ... }
@@ -95,7 +105,7 @@ You can track the export progress by changes in the "progress" attribute:
    ...
    ```
 
-- In the proto-json-base64 mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
+- In the `proto-json-base64` mode, the completed export operation is indicated with the `PROGRESS_DONE` value of the `progress` attribute:
 
    ```json
    {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
@@ -130,20 +140,42 @@ The `operation list` format is also set by the `--format` option.
 Exporting all DB objects whose names do not start with a dot and that are not stored in directories whose names start with a dot to the `export1` directory in `mybucket` using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
 
 ```bash
-ydb -p quickstart export s3 \
+{{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --item src=.,dst=export1
+  --destination-prefix export1
 ```
 
 ### Exporting multiple directories {#example-specific-dirs}
 
-Exporting items from DB directories named dir1 and dir2 to the `export1` directory in `mybucket` using the explicitly set S3 authentication parameters:
+Exporting items from DB directories named `dir1` and `dir2` to the `export1` directory in `mybucket` using the explicitly set S3 authentication parameters:
 
 ```bash
-ydb -p quickstart export s3 \
+{{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --access-key VJGSOScgs-5kDGeo2hO9 --secret-key fZ_VB1Wi5-fdKSqH6074a7w0J4X0 \
+  --access-key <access-key> --secret-key <secret-key> \
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+```
+
+Or using the `--destination-prefix` and `--include` parameters:
+
+```bash
+{{ ydb-cli }} -p quickstart export s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key <access-key> --secret-key <secret-key> \
+  --destination-prefix export1 --include dir1,dir2
+```
+
+### Exporting a directory with encryption {#example-encryption}
+
+Exporting the subdirectory `dir1` of the database with encryption, using the secret key stored in the `~/my_secret_key` file, to the `export1` directory in `mybucket`, using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
+
+```bash
+{{ ydb-cli }} -p quickstart export s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --root-path dir1 \
+  --destination-prefix export1 \
+  --encryption-algorithm AES-128-GCM \
+  --encryption-key-file ~/my_secret_key
 ```
 
 ### Getting operation IDs {#example-list-oneline}

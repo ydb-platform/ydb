@@ -98,6 +98,10 @@ void THive::RestartPipeTx(ui64 tabletId) {
 bool THive::TryToDeleteNode(TNodeInfo* node) {
     if (node->CanBeDeleted(TActivationContext::Now())) {
         BLOG_I("TryToDeleteNode(" << node->Id << "): deleting");
+        if (BridgeInfo) {
+            auto& pileInfo = GetPile(node->BridgePileId);
+            pileInfo.Nodes.erase(node->Id);
+        }
         DeleteNode(node->Id);
         return true;
     }
@@ -722,7 +726,7 @@ void THive::Cleanup() {
 }
 
 void THive::MaybeLoadEverything() {
-    if (!NodesInfo.empty() && HaveStorageConfig && CurrentStateFunc() == &TThis::StateInit) {
+    if (!NodesInfo.empty() && HaveStorageConfig) {
         Execute(CreateLoadEverything());
     }
 }
@@ -2949,6 +2953,15 @@ bool THive::IsAllowedPile(TBridgePileId pile) const {
     }
 }
 
+TBridgePileInfo& THive::GetPile(TBridgePileId pileId) {
+    auto it = BridgePiles.emplace(pileId, pileId).first;
+    return it->second;
+}
+
+void THive::UpdatePiles() {
+    Execute(CreateUpdatePiles());
+}
+
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -3156,7 +3169,7 @@ STFUNC(THive::StateInit) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
-        hFunc(TEvNodeWardenStorageConfig, Handle);
+        hFunc(TEvNodeWardenStorageConfig, HandleInit);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, HandleInit);
         // We subscribe to config updates before hive is fully loaded
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
@@ -3596,11 +3609,17 @@ void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
     Execute(CreateProcessUpdateFollowers());
 }
 
-void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
-    BLOG_D("Handle TEvNodeWardenStorageConfig");
+void THive::HandleInit(TEvNodeWardenStorageConfig::TPtr& ev) {
+    BLOG_D("HandleInit TEvNodeWardenStorageConfig");
     BridgeInfo = ev->Get()->BridgeInfo;
     HaveStorageConfig = true;
     MaybeLoadEverything();
+}
+
+void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+    BLOG_D("Handle TEvNodeWardenStorageConfig");
+    BridgeInfo = ev->Get()->BridgeInfo;
+    UpdatePiles();
 }
 
 void THive::MakeScaleRecommendation() {

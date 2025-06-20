@@ -73,9 +73,9 @@ namespace NKikimr {
 
                         // put all found ssts into Vec
                         CompactSsts.PushSstFromLevelX(level, trgtFirstIt, trgtEndIt);
-                        /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                        LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             HullCtx->VCtx->VDiskLogPrefix << " TBalanceBase::FindNeighborhoods decided to compact to level# " << level
-                            << " Task# " << CompactSsts.ToString());*/
+                            << " Task# " << CompactSsts.ToString());
                     } else {
                         // we don't have any ssts at level, it's fine
                     }
@@ -152,8 +152,8 @@ namespace NKikimr {
                 }
                 Y_VERIFY_S(added > 0, HullCtx->VCtx->VDiskLogPrefix);
 
-                /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                        HullCtx->VCtx->VDiskLogPrefix << " TBalanceLevel0 decided to compact, Task# " << CompactSsts.ToString());*/
+                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                        HullCtx->VCtx->VDiskLogPrefix << " TBalanceLevel0 decided to compact, Task# " << CompactSsts.ToString());
             }
 
             // check and run full compaction if required
@@ -317,11 +317,11 @@ namespace NKikimr {
                 }
                 Y_VERIFY_S(added, HullCtx->VCtx->VDiskLogPrefix);
 
-                /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                     HullCtx->VCtx->VDiskLogPrefix << " TBalancePartiallySortedLevels decided to compact, Task# " << CompactSsts.ToString()
                     << " firstKeyToCover# " << (firstKeyToCover ? firstKeyToCover->ToString() : "nullptr")
                     << " lastKeyToCover# " << (lastKeyToCover ? lastKeyToCover->ToString() : "nullptr")
-                );*/
+                );
             }
 
             void Compact() {
@@ -432,10 +432,10 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(srcIt != srcSegs.end());
                 CompactSst(srcLevel, srcIt);
 
-                /*LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                     HullCtx->VCtx->VDiskLogPrefix << " TBalanceLevelX decided to compact, Task# " << CompactSsts.ToString()
                     << " lastCompactedKey# " << lastCompactedKey.ToString()
-                );*/
+                );
             }
 
             void CompactSst(ui32 srcLevel, typename TSegments::const_iterator srcIt) {
@@ -443,6 +443,12 @@ namespace NKikimr {
                 // srcIt points to the sst to compact
                 TKey firstKeyToCover = (*srcIt)->FirstKey();
                 TKey lastKeyToCover = (*srcIt)->LastKey();
+
+
+                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    HullCtx->VCtx->VDiskLogPrefix << " TBalanceLevelX: take sst with firstKeyToCover#" << firstKeyToCover.ToString()
+                    << " lastKeyToCover# " << lastKeyToCover.ToString()
+                );
 
                 // put this sst to the vector
                 CompactSsts.TargetLevel = srcLevel + 1;

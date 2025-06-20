@@ -3611,16 +3611,25 @@ void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
 
 void THive::HandleInit(TEvNodeWardenStorageConfig::TPtr& ev) {
     BLOG_D("HandleInit TEvNodeWardenStorageConfig");
+<<<<<<< HEAD
     BridgeInfo = ev->Get()->BridgeInfo;
     MaybeLoadEverything();
 }
 
 void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
     BLOG_D("Handle TEvNodeWardenStorageConfig");
+=======
+>>>>>>> 2f1313bdd2c (dirty commit)
     BridgeInfo = ev->Get()->BridgeInfo;
     if (BridgeInfo) {
         UpdatePiles();
     }
+}
+
+void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+    BLOG_D("Handle TEvNodeWardenStorageConfig");
+    BridgeInfo = ev->Get()->BridgeInfo;
+    UpdatePiles();
 }
 
 void THive::MakeScaleRecommendation() {

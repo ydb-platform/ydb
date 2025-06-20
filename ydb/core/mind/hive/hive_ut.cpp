@@ -7869,6 +7869,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         AssertTabletStartedOnNode(runtime, tablet6, 1);
     }
 
+<<<<<<< HEAD
     void TestBridgeDisconnect(TTestBasicRuntime& runtime, TDummyBridge& bridge, ui64 numTablets, bool& activeZone) {
         const ui64 hiveTablet = MakeDefaultHiveID();
         const ui64 testerTablet = MakeTabletID(false, 1);

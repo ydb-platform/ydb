@@ -12,32 +12,30 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(local_proxy)
-add_subdirectory(ut)
-
-add_library(tx-replication-ydb_proxy)
+add_library(replication-ydb_proxy-local_proxy)
 
 
-target_compile_options(tx-replication-ydb_proxy PRIVATE
+target_compile_options(replication-ydb_proxy-local_proxy PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(tx-replication-ydb_proxy PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(replication-ydb_proxy-local_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
+  core-grpc_services-base
+  core-persqueue-events
+  core-persqueue-writer
   ydb-core-protos
-  src-client-driver
   src-client-scheme
   src-client-table
   src-client-topic
-  client-types-credentials
-  types-credentials-login
 )
 
-target_sources(tx-replication-ydb_proxy PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/topic_message.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy.cpp
+target_sources(replication-ydb_proxy-local_proxy PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/local_proxy/local_partition_actor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/local_proxy/local_partition_committer.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/local_proxy/local_partition_reader.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.cpp
 )
 

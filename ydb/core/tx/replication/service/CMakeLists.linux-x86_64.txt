@@ -47,6 +47,7 @@ target_link_libraries(tx-replication-service PUBLIC
   ydb-core-tablet_flat
   tx-replication-common
   tx-replication-ydb_proxy
+  replication-ydb_proxy-local_proxy
   ydb-core-wrappers
   library-actors-core
   ydb-library-services

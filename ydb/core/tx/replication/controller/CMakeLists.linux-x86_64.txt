@@ -43,6 +43,7 @@ target_link_libraries(tx-replication-controller PUBLIC
   ydb-core-tablet_flat
   tx-replication-common
   tx-replication-ydb_proxy
+  replication-ydb_proxy-local_proxy
   core-tx-scheme_board
   core-tx-tx_allocator_client
   ydb-core-util

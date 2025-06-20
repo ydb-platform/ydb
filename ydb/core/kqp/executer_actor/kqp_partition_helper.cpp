@@ -962,28 +962,6 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
 
     return readSettings;
 }
-  
-bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions) {
-    for (const auto& [_, shardInfo] : partitions) {
-        if (!shardInfo.KeyReadRanges || shardInfo.KeyWriteRanges) {
-            return false;
-        }
-
-        const TShardKeyRanges& ranges = *shardInfo.KeyReadRanges;
-        if (ranges.FullRange) {
-            return false;
-        }
-
-        for (const TSerializedPointOrRange& range : ranges.Ranges) {
-            if (const auto* tableRange = std::get_if<TSerializedTableRange>(&range);
-                tableRange && !tableRange->Point)
-            {
-                return false;
-            }
-        }
-    }
-
-    return true;
 
 TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPrunerConfig config)
     : HolderFactory(&holderFactory)
@@ -1057,6 +1035,29 @@ THashMap<ui64, TShardInfo> TPartitionPruner::PruneEffect(const NKqpProto::TKqpPh
         default:
             YQL_ENSURE(false, "Unexpected table operation: " << static_cast<ui32>(operation.GetTypeCase()));
     }
+}
+
+bool IsParallelPointReadPossible(const THashMap<ui64, TShardInfo>& partitions) {
+    for (const auto& [_, shardInfo] : partitions) {
+        if (!shardInfo.KeyReadRanges || shardInfo.KeyWriteRanges) {
+            return false;
+        }
+
+        const TShardKeyRanges& ranges = *shardInfo.KeyReadRanges;
+        if (ranges.FullRange) {
+            return false;
+        }
+
+        for (const TSerializedPointOrRange& range : ranges.Ranges) {
+            if (const auto* tableRange = std::get_if<TSerializedTableRange>(&range);
+                tableRange && !tableRange->Point)
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 } // namespace NKikimr::NKqp

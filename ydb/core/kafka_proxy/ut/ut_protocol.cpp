@@ -586,8 +586,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             batch.Magic = 2; // Current supported
             batch.Records.resize(batchParams.RecordCount);
             for (ui64 i = 0; i < batchParams.RecordCount; ++i) {
-                TString key = TStringBuilder() << "key-" << i;
-                batch.Records[i].Key = TKafkaRawBytes(key.data(), key.size());
+                batch.Records[i].Key = TKafkaRawBytes(recordKey.data(), recordKey.size());
                 batch.Records[i].Value = TKafkaRawBytes(recordValue.data(), recordValue.size());
                 batch.Records[i].Headers.resize(1);
                 batch.Records[i].Headers[0].Key = TKafkaRawBytes(headerKey.data(), headerKey.size());

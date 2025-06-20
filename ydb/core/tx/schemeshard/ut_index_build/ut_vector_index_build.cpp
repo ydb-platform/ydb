@@ -742,6 +742,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 130 (ReadTable: 128, BulkUpsert: 2)");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0 }");
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
@@ -763,6 +764,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 130 (ReadTable: 128, BulkUpsert: 2)");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
         }
 
@@ -794,6 +796,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 155 (ReadTable: 128, BulkUpsert: 27)");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ UploadRows: 50 UploadBytes: 850 ReadRows: 50 ReadBytes: 450 }</td>"); // shard 1 stats
         }
@@ -820,6 +823,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 420 UploadBytes: 6220 ReadRows: 1400 ReadBytes: 20600 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 338 (ReadTable: 128, BulkUpsert: 210)");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 420 UploadBytes: 6220 ReadRows: 1400 ReadBytes: 20600 }");
         }
     }
@@ -1231,7 +1235,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: {  } }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0");
         }
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -1245,7 +1249,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             );
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "One of the shards report BUILD_ERROR");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Error: Datashard test fail");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: {  } }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Processed: UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0");
         }
     }
 }

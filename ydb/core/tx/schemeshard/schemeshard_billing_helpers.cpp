@@ -70,12 +70,12 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
 ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
-    ui64 readTableRU = TRUCalculator::ReadTable(stats.GetReadBytes());
-    ui64 bulkUpsertRU = TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
+    ui64 readTable = TRUCalculator::ReadTable(stats.GetReadBytes());
+    ui64 bulkUpsert = TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
     explain = TStringBuilder()
-        << "ReadTable: " << readTableRU
-        << ", BulkUpsert: " << bulkUpsertRU;
-    return readTableRU + bulkUpsertRU;
+        << "ReadTable: " << readTable
+        << ", BulkUpsert: " << bulkUpsert;
+    return readTable + bulkUpsert;
 }
 
 }

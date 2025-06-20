@@ -150,14 +150,19 @@ public:
     bool BuiltInIngress = false;
     std::shared_ptr<TSingleMetric> IngressBytes;
     std::shared_ptr<TSingleMetric> IngressRows;
+    std::shared_ptr<TSingleMetric> EgressBytes;
+    std::shared_ptr<TSingleMetric> EgressRows;
+    std::shared_ptr<TSingleMetric> InputThroughput;
     std::vector<TOperatorInfo> Operators;
     ui64 BaseTime = 0;
     ui32 PlanNodeId = 0;
     ui32 PhysicalStageId = 0;
     ui32 Tasks = 0;
+    ui32 FinishedTasks = 0;
     const NJson::TJsonValue* StatsNode = nullptr;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;
+    ui64 UpdateTime = 0;
     bool External = false;
 };
 
@@ -174,6 +179,9 @@ struct TColorPalette {
     TString InputDark;
     TString InputMedium;
     TString InputLight;
+    TString EgressDark;
+    TString EgressMedium;
+    TString EgressLight;
     TString OutputDark;
     TString OutputMedium;
     TString OutputLight;
@@ -198,16 +206,16 @@ struct TColorPalette {
 
 struct TPlanViewConfig {
     TPlanViewConfig();
-    ui32 HeaderWidth;
     ui32 HeaderLeft;
-    ui32 OperatorWidth;
+    ui32 HeaderWidth;
     ui32 OperatorLeft;
-    ui32 SummaryWidth;
-    ui32 SummaryLeft;
-    ui32 TaskWidth;
+    ui32 OperatorWidth;
     ui32 TaskLeft;
-    ui32 TimelineWidth;
+    ui32 TaskWidth;
+    ui32 SummaryLeft;
+    ui32 SummaryWidth;
     ui32 TimelineLeft;
+    ui32 TimelineWidth;
     ui32 Width;
     TColorPalette Palette;
     bool Simplified = false;
@@ -223,6 +231,8 @@ public:
         WaitInputTime = std::make_shared<TSummaryMetric>();
         WaitOutputTime = std::make_shared<TSummaryMetric>();
         MaxMemoryUsage = std::make_shared<TSummaryMetric>();
+        EgressBytes = std::make_shared<TSummaryMetric>();
+        EgressRows = std::make_shared<TSummaryMetric>();
         OutputBytes = std::make_shared<TSummaryMetric>();
         OutputRows = std::make_shared<TSummaryMetric>();
         InputBytes = std::make_shared<TSummaryMetric>();
@@ -239,6 +249,7 @@ public:
         OperatorOutputRows = std::make_shared<TSummaryMetric>();
         OperatorInputThroughput = std::make_shared<TSummaryMetric>();
         OperatorOutputThroughput = std::make_shared<TSummaryMetric>();
+        StageInputThroughput = std::make_shared<TSummaryMetric>();
     }
 
     void Load(const NJson::TJsonValue& node);
@@ -251,14 +262,16 @@ public:
     void PrintWaitTime(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& fillColor);
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, std::shared_ptr<TSingleMetric> metric, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
-    void PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount);
-    void PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas);
+    void PrintStageSummary(TStringBuilder& background, TStringBuilder&, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric> metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconScale);
+    void PrintSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY, TStringBuilder& background, TStringBuilder& canvas);
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
     std::shared_ptr<TSummaryMetric> CpuTime;
     std::shared_ptr<TSummaryMetric> WaitInputTime;
     std::shared_ptr<TSummaryMetric> WaitOutputTime;
     std::shared_ptr<TSummaryMetric> MaxMemoryUsage;
+    std::shared_ptr<TSummaryMetric> EgressBytes;
+    std::shared_ptr<TSummaryMetric> EgressRows;
     std::shared_ptr<TSummaryMetric> OutputBytes;
     std::shared_ptr<TSummaryMetric> OutputRows;
     std::shared_ptr<TSummaryMetric> InputBytes;
@@ -275,6 +288,7 @@ public:
     std::shared_ptr<TSummaryMetric> OperatorOutputRows;
     std::shared_ptr<TSummaryMetric> OperatorInputThroughput;
     std::shared_ptr<TSummaryMetric> OperatorOutputThroughput;
+    std::shared_ptr<TSummaryMetric> StageInputThroughput;
     std::vector<ui64> TotalCpuTimes;
     std::vector<ui64> TotalCpuValues;
     TMetricHistory TotalCpuTime;
@@ -283,6 +297,7 @@ public:
     ui64 TimeOffset = 0;
     ui32 OffsetY = 0;
     ui32 Tasks = 0;
+    ui64 UpdateTime = 0;
     std::vector<std::pair<std::string, std::shared_ptr<TConnection>>> CteRefs;
     std::vector<std::pair<std::string, std::pair<std::shared_ptr<TStage>, ui32>>> MemberRefs;
     TPlanViewConfig& Config;
@@ -303,6 +318,7 @@ public:
     std::vector<TPlan> Plans;
     ui64 MaxTime = 1000;
     ui64 BaseTime = 0;
+    ui64 UpdateTime = 0;
     TPlanViewConfig Config;
     std::map<std::string, std::shared_ptr<TStage>> CteStages;
     std::map<std::string, std::string> CteSubPlans;

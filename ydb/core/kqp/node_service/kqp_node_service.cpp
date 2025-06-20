@@ -43,7 +43,7 @@ namespace {
 // Min interval between stats send from scan/compute actor to executor
 constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
 // Max interval in case of no activety
-constexpr TDuration MaxStatInterval = TDuration::MilliSeconds(100);
+constexpr TDuration MaxStatInterval = TDuration::Seconds(1);
 
 template <class TTasksCollection>
 TString TasksIdsStr(const TTasksCollection& tasks) {
@@ -314,11 +314,17 @@ private:
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
         }
 
+        TCPULimits cpuLimits;
+        if (msg.GetPoolMaxCpuShare() > 0) {
+            // Share <= 0 means disabled limit
+            cpuLimits.DeserializeFromProto(msg).Validate();
+        }
+
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
-                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
             }
         }
 

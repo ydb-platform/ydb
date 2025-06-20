@@ -62,7 +62,21 @@ protected:
             ColumnsData.Slice(offset, count), OthersData.Slice(offset, count, Settings), GetDataType(), count, Settings);
     }
 
+    std::shared_ptr<arrow::Array> BuildBJsonArray(const TColumnConstructionContext& context) const;
+
+    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const override;
+
 public:
+    virtual void DoVisitValues(const std::function<void(std::shared_ptr<arrow::Array>)>& /*visitor*/) const override {
+        AFL_VERIFY(false);
+    }
+
+    bool HasSubColumn(const TString& subColumnName) const {
+        return ColumnsData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
+               OthersData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
+    }
+
     void StoreSourceString(const TString& sourceDeserializationString) {
         AFL_VERIFY(!SourceDeserializationString);
         SourceDeserializationString = sourceDeserializationString;
@@ -89,12 +103,20 @@ public:
         const ui32 recordsCount, const NSubColumns::TSettings& settings);
 
     static TConclusion<std::shared_ptr<TSubColumnsArray>> Make(const std::shared_ptr<IChunkedArray>& sourceArray,
-        const std::shared_ptr<NSubColumns::IDataAdapter>& adapter, const NSubColumns::TSettings& settings);
+        const NSubColumns::TSettings& settings, const std::shared_ptr<arrow::DataType>& columnType);
 
     TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount, const NSubColumns::TSettings& settings);
 
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         return nullptr;
+    }
+
+    std::shared_ptr<IChunkedArray> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const {
+        auto accResult = ColumnsData.GetPathAccessor(svPath);
+        if (accResult) {
+            return accResult;
+        }
+        return OthersData.GetPathAccessor(svPath, recordsCount);
     }
 };
 

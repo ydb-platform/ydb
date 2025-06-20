@@ -9,8 +9,15 @@
 
 namespace NKikimr::NArrow::NMerger {
 
-void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) {
+void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const  {
     AFL_VERIFY(IsSameFieldsSequence(schema->fields(), Fields));
+}
+
+void TRecordBatchBuilder::AddRecord(const TBatchIterator& cursor) {
+    AddRecord(cursor.GetKeyColumns());
+}
+
+void TRecordBatchBuilder::SkipRecord(const TBatchIterator& /*cursor*/) {
 }
 
 void TRecordBatchBuilder::AddRecord(const TCursor& position) {
@@ -58,6 +65,7 @@ TRecordBatchBuilder::TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow
             NArrow::TStatusValidator::Validate(Builders.back()->Reserve(*rowsCountExpectation));
         }
     }
+    AFL_VERIFY(Fields.size() == Builders.size());
 }
 
 std::shared_ptr<arrow::RecordBatch> TRecordBatchBuilder::Finalize() {

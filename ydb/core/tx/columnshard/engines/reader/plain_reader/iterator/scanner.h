@@ -84,14 +84,7 @@ private:
     void DrainSources();
     [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
 public:
-    void OnSentDataFromInterval(const ui32 intervalIdx) const {
-        if (Context->IsAborted()) {
-            return;
-        }
-        auto it = FetchingIntervals.find(intervalIdx);
-        AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", intervalIdx)("count", FetchingIntervals.size());
-        it->second->OnPartSendingComplete();
-    }
+    void OnSentDataFromInterval(const TPartialSourceAddress& address) const;
 
     bool IsReverse() const;
     void Abort();

@@ -20,11 +20,11 @@
 #include "blobstorage_pdisk_writer.h"
 #include "blobstorage_pdisk_impl_metadata.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/base/resource_profile.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/library/schlab/schine/scheduler.h>
 #include <ydb/library/schlab/schine/job_kind.h>

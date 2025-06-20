@@ -70,27 +70,16 @@ private:
     virtual ui32 PredictRecordsCount(const NAbstract::TGranuleMetaView& granule) const override;
     void AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const TPortionDataAccessor& portion) const;
 
-    class TApplyResult: public IDataTasksProcessor::ITask {
+    class TApplyResult: public IApplyAction {
     private:
         using TBase = IDataTasksProcessor::ITask;
         YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, Accessors);
-        NColumnShard::TCounterGuard WaitingCountersGuard;
+
     public:
-        TString GetTaskClassIdentifier() const override {
-            return "TApplyResult";
+        TApplyResult(const std::vector<TPortionDataAccessor>& accessors)
+            : Accessors(accessors) {
         }
 
-        TApplyResult(const std::vector<TPortionDataAccessor>& accessors, NColumnShard::TCounterGuard&& waitingCountersGuard)
-            : TBase(NActors::TActorId())
-            , Accessors(accessors)
-            , WaitingCountersGuard(std::move(waitingCountersGuard))
-        {
-        }
-
-        virtual TConclusionStatus DoExecuteImpl() override {
-            AFL_VERIFY(false)("event", "not applicable");
-            return TConclusionStatus::Success();
-        }
         virtual bool DoApply(IDataReader& /*indexedDataRead*/) const override {
             AFL_VERIFY(false);
             return false;
@@ -119,12 +108,13 @@ private:
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {
                 NActors::TActivationContext::AsActorContext().Send(
-                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(TConclusionStatus::Fail("cannot fetch accessors")));
+                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
+                                 TConclusionStatus::Fail("cannot fetch accessors"), std::move(WaitingCountersGuard)));
             } else {
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
                     OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector(), std::move(WaitingCountersGuard))));
+                                 std::make_shared<TApplyResult>(result.ExtractPortionsVector()), std::move(WaitingCountersGuard)));
             }
         }
 

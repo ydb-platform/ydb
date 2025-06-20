@@ -689,7 +689,8 @@
             "Children": [
                 {"Index": 0, "Name": "Type", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+                {"Index": 2, "Name": "Parameters", "Type": "TExprList"},
+                {"Index": 3, "Name": "Lambda", "Type": "TCoLambda"}
             ]
         },
         {

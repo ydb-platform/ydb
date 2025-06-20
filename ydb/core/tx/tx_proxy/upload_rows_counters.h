@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>

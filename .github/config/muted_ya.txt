@@ -20,25 +20,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_3_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_3_2_1_clean
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit3_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.ChangeSchemaAndSplit
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.HugeSchemeHistory
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMerge
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsWhenWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSchemaVersions
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplits
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsThenMerges
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsWhenWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
@@ -46,8 +27,6 @@ ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
-ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
-ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
@@ -98,7 +77,6 @@ ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/control_plane_storage [*/*] chunk chunk
 ydb/tests/fq/control_plane_storage [*/*]+chunk+chunk
 ydb/tests/fq/generic/analytics sole chunk chunk
-ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming sole chunk chunk
 ydb/tests/fq/mem_alloc sole chunk chunk
@@ -120,17 +98,6 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_24_4_to_current]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_24_4_to_current_mixed]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-column]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-row]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-column]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current-column]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current_mixed-column]
-ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[current-row]
-ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/functional/serializable sole chunk chunk

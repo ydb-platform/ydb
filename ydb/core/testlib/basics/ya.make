@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/blobstorage/nodewarden
     ydb/core/blobstorage/pdisk
     ydb/core/client/server
+    ydb/core/control
     ydb/core/formats
     ydb/core/mind
     ydb/core/node_whiteboard
@@ -28,7 +29,7 @@ PEERDIR(
     ydb/core/tx/scheme_board
     ydb/core/tx/schemeshard
     ydb/core/util
-    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm16
     yql/essentials/public/udf/service/exception_policy
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery

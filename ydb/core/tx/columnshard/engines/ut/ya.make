@@ -34,6 +34,7 @@ SRCS(
     ut_insert_table.cpp
     ut_logs_engine.cpp
     ut_program.cpp
+    ut_script.cpp
     helper.cpp
 )
 

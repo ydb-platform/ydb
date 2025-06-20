@@ -4,13 +4,14 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/formats/arrow/modifier/subset.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/generic/guid.h>
 
@@ -36,7 +37,7 @@ public:
 class TWriteMeta: public NColumnShard::TMonitoringObjectsCounter<TWriteMeta>, TNonCopyable {
 private:
     YDB_ACCESSOR(ui64, WriteId, 0);
-    YDB_READONLY(ui64, TableId, 0);
+    YDB_READONLY_DEF(NColumnShard::TInternalPathId, TableId);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
     YDB_ACCESSOR_DEF(std::optional<ui32>, GranuleShardingVersion);
     YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
@@ -57,8 +58,8 @@ public:
     void OnStage(const EWriteStage stage) const;
 
     ~TWriteMeta() {
-        if (CurrentStage != EWriteStage::Finished && CurrentStage != EWriteStage::Aborted) {
-            Counters->OnWriteAborted(TMonotonic::Now() - WriteStartInstant);
+        if (CurrentStage != EWriteStage::Replied) {
+            OnStage(EWriteStage::Aborted);
         }
     }
 
@@ -87,7 +88,7 @@ public:
         }
     }
 
-    TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
+    TWriteMeta(const ui64 writeId, const NColumnShard::TInternalPathId tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
         const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
         : WriteId(writeId)
         , TableId(tableId)

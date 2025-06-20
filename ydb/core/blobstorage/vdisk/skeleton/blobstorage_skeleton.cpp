@@ -48,7 +48,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <library/cpp/monlib/service/pages/templates.h>

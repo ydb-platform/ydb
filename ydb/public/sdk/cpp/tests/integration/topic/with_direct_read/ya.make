@@ -25,6 +25,10 @@ YQL_LAST_ABI_VERSION()
 
 ENV(PQ_EXPERIMENTAL_DIRECT_READ="1")
 
+CFLAGS(
+    -DPQ_EXPERIMENTAL_DIRECT_READ=1
+)
+
 SRCS(
     ../basic_usage.cpp
     ../describe_topic.cpp

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "scheme_type_id.h"
 #include "scheme_type_order.h"
 #include "scheme_types_defs.h"
 
@@ -12,7 +11,6 @@
 #include <util/memory/pool.h>
 
 #include <bit>
-#include <deque>
 #include <type_traits>
 
 namespace NKikimr {

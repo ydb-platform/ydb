@@ -81,9 +81,6 @@ protected:
 
     TUploadStatus UploadStatus;
 
-    ui64 UploadRows = 0;
-    ui64 UploadBytes = 0;
-
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvReshuffleKMeansResponse> Response;
 
@@ -203,7 +200,7 @@ public:
         // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         Feed(key, *row);
 

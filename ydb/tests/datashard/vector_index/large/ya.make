@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 SIZE(LARGE)
 TAG(ya:fat)
@@ -18,7 +18,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
 )
 
 END()

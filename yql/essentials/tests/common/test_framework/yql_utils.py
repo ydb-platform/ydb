@@ -57,7 +57,7 @@ def do_custom_error_check(res, sql_query):
         err_string = custom_error.group(1).strip()
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
     log('Custom error: ' + err_string)
-    assert err_string in res.std_err, '"' + err_string + '" is not found'
+    assert err_string in res.std_err, '"' + err_string + '" is not found in "' + res.std_err + "'"
 
 
 def get_gateway_cfg_suffix():

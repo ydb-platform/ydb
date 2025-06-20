@@ -163,7 +163,7 @@ TProgramFactory::TProgramFactory(
 }
 
 void TProgramFactory::UnrepeatableRandom() {
-    UseUnrepeatableRandom = true;
+    UseUnrepeatableRandom_ = true;
 }
 
 void TProgramFactory::EnableRangeComputeFor() {
@@ -245,7 +245,7 @@ TProgramPtr TProgramFactory::Create(
         const TQContext& qContext,
         TMaybe<TString> gatewaysForMerge)
 {
-    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && hiddenMode == EHiddenMode::Disable ?
+    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom_ && hiddenMode == EHiddenMode::Disable ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
         CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
@@ -1989,6 +1989,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
     typeAnnotationContext->LangVer = LangVer_;
+    typeAnnotationContext->UseTypeDiffForConvertToError = true;
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
     typeAnnotationContext->Credentials = Credentials_;
     typeAnnotationContext->Modules = Modules_;

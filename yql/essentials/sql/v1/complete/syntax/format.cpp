@@ -22,23 +22,6 @@ namespace NSQLComplete {
             return keywords;
         }();
 
-        const THashSet<TString> TypeConstructors = {
-            "DECIMAL",
-            "OPTIONAL",
-            "TUPLE",
-            "STRUCT",
-            "VARIANT",
-            "LIST",
-            "STREAM",
-            "FLOW",
-            "DICT",
-            "SET",
-            "ENUM",
-            "RESOURCE",
-            "TAGGED",
-            "CALLABLE",
-        };
-
     } // namespace
 
     TString FormatKeywords(const TVector<TString>& seq) {
@@ -46,25 +29,14 @@ namespace NSQLComplete {
             return "";
         }
 
-        size_t i = 0;
-        TString text = seq[i++];
-
-        if (2 <= seq.size() &&
-            TypeConstructors.contains(text) &&
-            (seq[i] == "<" || seq[i] == "(")) {
-            text.to_title();
-            text.append(seq[i]);
-            i += 1;
-        }
-
-        for (; i < seq.size(); ++i) {
+        TString text = seq[0];
+        for (size_t i = 1; i < seq.size(); ++i) {
             const auto& token = seq[i];
             if (Keywords.contains(token)) {
                 text += " ";
             }
             text += token;
         }
-
         return text;
     }
 

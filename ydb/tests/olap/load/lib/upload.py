@@ -5,17 +5,25 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from time import time
 import yatest.common
 import allure
+import logging
 
 
 class UploadSuiteBase(LoadSuiteBase):
+    query_name = 'Upload'
+
     def init(self):
         pass
 
     def import_data(self):
         pass
 
+    def validate(self, result: YdbCliHelper.WorkloadRunResult):
+        pass
+
+    def save_result_additional_info(self, result: YdbCliHelper.WorkloadRunResult):
+        pass
+
     def test(self):
-        query_name = 'Upload'
         start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
@@ -31,16 +39,19 @@ class UploadSuiteBase(LoadSuiteBase):
             with allure.step("import data"):
                 self.import_data()
         except BaseException as e:
+            logging.error(f'Error: {e}')
             result.add_error(str(e))
             result.traceback = e.__traceback__
         result.iterations[0].time = time() - start_time
-        self.process_query_result(result, query_name, True)
+        self.validate(result)
+        self.save_result_additional_info(result)
+        self.process_query_result(result, self.query_name, True)
 
 
 class UploadTpchBase(UploadSuiteBase):
     @classmethod
     def __get_path(cls):
-        return f'{YdbCluster.tables_path}/upload/tpch/s{cls.scale}'
+        return YdbCluster.get_tables_path(f'upload/tpch/s{cls.scale}')
 
     def init(self):
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', self.__get_path(), 'init', '--store=column'])

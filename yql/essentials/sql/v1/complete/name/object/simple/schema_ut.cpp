@@ -20,8 +20,7 @@ Y_UNIT_TEST_SUITE(StaticSchemaTests) {
                               {"Table", "meta"}}},
                   {"/test/service/", {{"Table", "example"}}}}},
         };
-        return MakeSimpleSchema(
-            MakeStaticSimpleSchema(std::move(fs)));
+        return MakeSimpleSchema(MakeStaticSimpleSchema({.Folders = std::move(fs)}));
     }
 
     Y_UNIT_TEST(ListFolderBasic) {

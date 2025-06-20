@@ -186,8 +186,8 @@ private:
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
 
         response->Record.SetId(ui64(BuildId));
-        response->Record.MutableBillingStats()->SetUploadRows(UploadRows->size());
-        response->Record.MutableBillingStats()->SetUploadBytes(UploadBytes);
+        response->Record.MutableMeteringStats()->SetUploadRows(UploadRows->size());
+        response->Record.MutableMeteringStats()->SetUploadBytes(UploadBytes);
 
         UploadStatusToMessage(response->Record);
 
@@ -1712,9 +1712,9 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        auto billingStats = GetBillingStats();
-        TBillingStatsCalculator::AddTo(shardStatus.Processed, billingStats);
-        TBillingStatsCalculator::AddTo(buildInfo.Processed, billingStats);
+        auto stats = GetMeteringStats();
+        TMeteringStatsCalculator::AddTo(shardStatus.Processed, stats);
+        TMeteringStatsCalculator::AddTo(buildInfo.Processed, stats);
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1779,10 +1779,10 @@ public:
         Y_UNUSED(db, buildInfo);
     }
 
-    virtual TBillingStats GetBillingStats() const {
+    virtual TMeteringStats GetMeteringStats() const {
         auto& record = Response->Get()->Record;
-        if constexpr (requires { record.MutableBillingStats(); }) {
-            return record.GetBillingStats();
+        if constexpr (requires { record.MutableMeteringStats(); }) {
+            return record.GetMeteringStats();
         }
         Y_ENSURE(false, "Should be overwritten");
     }
@@ -1924,7 +1924,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        TBillingStatsCalculator::AddTo(buildInfo.Processed, record.GetBillingStats());
+        TMeteringStatsCalculator::AddTo(buildInfo.Processed, record.GetMeteringStats());
         // As long as we don't try to upload sample in parallel with requests to shards,
         // it's okay to persist Processed not incrementally
         Self->PersistBuildIndexProcessed(db, buildInfo);
@@ -1985,11 +1985,11 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
         }
     }
 
-    TBillingStats GetBillingStats() const override {
+    TMeteringStats GetMeteringStats() const override {
         auto& record = Response->Get()->Record;
         // secondary index reads and writes almost the same amount of data
         // do not count them separately for simplicity
-        TBillingStats result;
+        TMeteringStats result;
         result.SetUploadRows(record.GetRowsDelta());
         result.SetUploadBytes(record.GetBytesDelta());
         result.SetReadRows(record.GetRowsDelta());

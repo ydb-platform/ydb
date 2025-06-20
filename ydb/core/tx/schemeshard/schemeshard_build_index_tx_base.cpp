@@ -96,8 +96,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         auto& billed = buildInfo.Billed;
 
         auto toBill = processed;
-        TBillingStatsCalculator::SubFrom(toBill, billed);
-        if (TBillingStatsCalculator::IsZero(toBill)) {
+        TMeteringStatsCalculator::SubFrom(toBill, billed);
+        if (TMeteringStatsCalculator::IsZero(toBill)) {
             continue;
         }
 
@@ -149,7 +149,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
 
         NIceDb::TNiceDb db(txc.DB);
 
-        TBillingStatsCalculator::AddTo(billed, toBill);
+        TMeteringStatsCalculator::AddTo(billed, toBill);
         Self->PersistBuildIndexBilled(db, buildInfo);
 
         ui64 requestUnits = TRUCalculator::Calculate(toBill);

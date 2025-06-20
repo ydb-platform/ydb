@@ -3354,7 +3354,7 @@ public:
         Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TString DebugMessage;
 
-        TBillingStats Processed;
+        TMeteringStats Processed = TMeteringStatsCalculator::Zero();
 
         TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
@@ -3384,8 +3384,8 @@ public:
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
 
-    TBillingStats Processed;
-    TBillingStats Billed;
+    TMeteringStats Processed = TMeteringStatsCalculator::Zero();
+    TMeteringStats Billed = TMeteringStatsCalculator::Zero();
 
     struct TSample {
         struct TRow {
@@ -3644,7 +3644,7 @@ public:
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
         indexInfo->Billed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0));
         if (indexInfo->IsFillBuildIndex()) {
-            TBillingStatsCalculator::TryFixOldFormat(indexInfo->Billed);
+            TMeteringStatsCalculator::TryFixOldFormat(indexInfo->Billed);
         }
 
         indexInfo->Processed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0));
@@ -3652,7 +3652,7 @@ public:
         indexInfo->Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0));
         indexInfo->Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0));
         if (indexInfo->IsFillBuildIndex()) {
-            TBillingStatsCalculator::TryFixOldFormat(indexInfo->Processed);
+            TMeteringStatsCalculator::TryFixOldFormat(indexInfo->Processed);
         }
 
         // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
@@ -3721,9 +3721,9 @@ public:
         shardStatus.Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0));
         shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0));
         if (IsFillBuildIndex()) {
-            TBillingStatsCalculator::TryFixOldFormat(shardStatus.Processed);
+            TMeteringStatsCalculator::TryFixOldFormat(shardStatus.Processed);
         }
-        TBillingStatsCalculator::AddTo(Processed, shardStatus.Processed);
+        TMeteringStatsCalculator::AddTo(Processed, shardStatus.Processed);
     }
 
     bool IsCancellationRequested() const {
@@ -3913,8 +3913,8 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus>
 }
 
 template <>
-inline void Out<NKikimrIndexBuilder::TBillingStats>
-    (IOutputStream& o, const NKikimrIndexBuilder::TBillingStats& stats)
+inline void Out<NKikimrIndexBuilder::TMeteringStats>
+    (IOutputStream& o, const NKikimrIndexBuilder::TMeteringStats& stats)
 {
     o << stats.ShortDebugString();
 }

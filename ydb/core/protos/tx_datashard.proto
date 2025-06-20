@@ -1523,7 +1523,7 @@ message TEvSampleKResponse {
     repeated bytes Rows = 11;
 
     reserved 6 to 7;
-    optional NKikimrIndexBuilder.TBillingStats BillingStats = 12;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 enum EKMeansState {
@@ -1584,7 +1584,7 @@ message TEvLocalKMeansResponse {
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
     reserved 8 to 11;
-    optional NKikimrIndexBuilder.TBillingStats BillingStats = 12;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1631,7 +1631,7 @@ message TEvReshuffleKMeansResponse {
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
     reserved 8 to 11;
-    optional NKikimrIndexBuilder.TBillingStats BillingStats = 12;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -1723,7 +1723,7 @@ message TEvPrefixKMeansResponse {
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
     reserved 8 to 11;
-    optional NKikimrIndexBuilder.TBillingStats BillingStats = 12;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 message TEvCdcStreamScanRequest {

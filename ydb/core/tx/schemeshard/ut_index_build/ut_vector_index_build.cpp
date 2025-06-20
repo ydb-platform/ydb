@@ -468,14 +468,15 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
         TString previousBillId = "0-0-0-0";
 
-        TBillingStats billingStats, expectedBillingStats;
+        TMeteringStats billingStats = TMeteringStatsCalculator::Zero();
+        TMeteringStats expectedBillingStats = TMeteringStatsCalculator::Zero();
         auto logBillingStats = [&]() {
             Cerr << "BillingStats: " << billingStats << Endl;
         };
 
         TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TBillingStatsCalculator::AddTo(billingStats, response.GetBillingStats());
+            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
             return true;
         });
 
@@ -495,19 +496,19 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadSampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TBillingStatsCalculator::AddTo(billingStats, response.GetBillingStats());
+            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TBillingStatsCalculator::AddTo(billingStats, response.GetBillingStats());
+            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TBillingStatsCalculator::AddTo(billingStats, response.GetBillingStats());
+            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
             return true;
         });
 
@@ -741,7 +742,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: {  }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0 }");
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
@@ -772,13 +773,13 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ upload rows: 50, upload bytes: 1650, read rows: 50, read bytes: 450 }</td>"); // shard 1 stats
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ UploadRows: 50 UploadBytes: 850 ReadRows: 50 ReadBytes: 450 }</td>"); // shard 1 stats
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
             // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
             auto expectedBill = TBillRecord()
-                .Id("109-72075186233409549-2-4-200-84-1800-54-250-1798-2250")
+                .Id("109-72075186233409549-2-4-200-84-1800-54-250-934-2250")
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(153, TInstant::Seconds(10), TInstant::Seconds(20)));
@@ -794,7 +795,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ upload rows: 50, upload bytes: 1650, read rows: 50, read bytes: 450 }</td>"); // shard 1 stats
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ UploadRows: 50 UploadBytes: 850 ReadRows: 50 ReadBytes: 450 }</td>"); // shard 1 stats
         }
 
         reshuffleBlocker.Stop().Unblock();
@@ -807,7 +808,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(311, TInstant::Seconds(20), TInstant::Seconds(20)));
-            expectedBill.Id("109-72075186233409549-2-54-250-1798-2250-420-1400-11740-20600");
+            expectedBill.Id("109-72075186233409549-2-54-250-934-2250-420-1400-6220-20600");
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             meteringBlocker.Stop().Unblock();
@@ -818,8 +819,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { upload rows: 420, upload bytes: 11740, read rows: 1400, read bytes: 20600 }");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { upload rows: 420, upload bytes: 11740, read rows: 1400, read bytes: 20600 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 420 UploadBytes: 6220 ReadRows: 1400 ReadBytes: 20600 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 420 UploadBytes: 6220 ReadRows: 1400 ReadBytes: 20600 }");
         }
     }
 

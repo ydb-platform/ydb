@@ -6,7 +6,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TBillingStatsCalculator::TryFixOldFormat(TBillingStats& value) {
+void TMeteringStatsCalculator::TryFixOldFormat(TMeteringStats& value) {
     // old format: assign upload to read
     if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
         value.SetReadRows(value.GetUploadRows());
@@ -14,21 +14,31 @@ void TBillingStatsCalculator::TryFixOldFormat(TBillingStats& value) {
     }
 }
 
-bool TBillingStatsCalculator::IsZero(TBillingStats& value) {
+TMeteringStats TMeteringStatsCalculator::Zero() {
+    // this method only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
+    TMeteringStats value;
+    value.SetUploadRows(0);
+    value.SetUploadBytes(0);
+    value.SetReadRows(0);
+    value.SetReadBytes(0);
+    return value;
+}
+
+bool TMeteringStatsCalculator::IsZero(TMeteringStats& value) {
     return value.GetUploadRows() == 0
         && value.GetUploadBytes() == 0
         && value.GetReadRows() == 0
         && value.GetReadBytes() == 0;
 }
 
-void TBillingStatsCalculator::AddTo(TBillingStats& value, const TBillingStats& other) {
+void TMeteringStatsCalculator::AddTo(TMeteringStats& value, const TMeteringStats& other) {
     value.SetUploadRows(value.GetUploadRows() + other.GetUploadRows());
     value.SetUploadBytes(value.GetUploadBytes() + other.GetUploadBytes());
     value.SetReadRows(value.GetReadRows() + other.GetReadRows());
     value.SetReadBytes(value.GetReadBytes() + other.GetReadBytes());
 }
 
-void TBillingStatsCalculator::SubFrom(TBillingStats& value, const TBillingStats& other) {
+void TMeteringStatsCalculator::SubFrom(TMeteringStats& value, const TMeteringStats& other) {
     const auto safeSub = [](ui64 x, ui64 y) {
         Y_ENSURE(x >= y);
         return x - y;
@@ -57,7 +67,7 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
     return (Max(rows, (bytes + 1_KB - 1) / 1_KB) + 1) / 2;
 }
 
-ui64 TRUCalculator::Calculate(const TBillingStats& stats) {
+ui64 TRUCalculator::Calculate(const TMeteringStats& stats) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
     return TRUCalculator::ReadTable(stats.GetReadBytes())

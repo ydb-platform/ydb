@@ -141,8 +141,8 @@ public:
             UploaderId = {};
         }
 
-        response.MutableBillingStats()->SetUploadRows(UploadRows);
-        response.MutableBillingStats()->SetUploadBytes(UploadBytes);
+        response.MutableMeteringStats()->SetUploadRows(UploadRows);
+        response.MutableMeteringStats()->SetUploadBytes(UploadBytes);
 
         if (status == NTable::EStatus::Exception) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);

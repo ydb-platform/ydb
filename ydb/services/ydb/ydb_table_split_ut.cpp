@@ -150,10 +150,10 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         // Set low CPU usage threshold for robustness
         auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
-        TControlBoard::SetValue(5, icb.SchemeShardFastSplitCpuPercentageThreshold);
-//        TControlBoard::SetValue(1, icb.SchemeShardSplitByLoadEnabled);
-        TControlBoard::SetValue(1, icb.DataShardControlsCpuUsageReportThreshlodPercent);
-        TControlBoard::SetValue(3, icb.DataShardControlsCpuUsageReportIntervalSeconds);
+        TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
+//        TControlBoard::SetValue(1, icb.SchemeShardControls.SplitByLoadEnabled);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThreshlodPercent);
+        TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         TAtomic enough = 0;
         TAtomic finished = 0;
@@ -371,14 +371,14 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
         // Set min uptime before merge by load to 10h
-        TControlBoard::SetValue(4*3600, icb.SchemeShard.MergeByLoadMinUptimeSec);
-        TControlBoard::SetValue(10*3600, icb.SchemeShard.MergeByLoadMinLowLoadDurationSec);
+        TControlBoard::SetValue(4*3600, icb.SchemeShardControls.MergeByLoadMinUptimeSec);
+        TControlBoard::SetValue(10*3600, icb.SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
 
         Cerr << "Triggering split by load" << Endl;
         DoTestSplitByLoad(server, query);
 
         // Set split threshold very high and run some more load on new shards
-        TControlBoard::SetValue(110, icb.SchemeShard.FastSplitCpuPercentageThreshold);
+        TControlBoard::SetValue(110, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
 
         Cerr << "Loading new shards" << Endl;
         {
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         }
 
         // Set split threshold at 10% so that merge can be trigger after high load goes away
-        TControlBoard::SetValue(10, icb.SchemeShard.FastSplitCpuPercentageThreshold);
+        TControlBoard::SetValue(10, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
 
         // Stop all load an see how many partitions the table has
         NFlatTests::TFlatMsgBusClient oldClient(server.ServerSettings->Port);

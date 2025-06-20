@@ -669,11 +669,11 @@ namespace NKikimr {
     }
 
     void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
-        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShard.SplitMergePartCountLimit);
+        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShardControls.SplitMergePartCountLimit);
     }
 
     void SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
-        TControlBoard::SetValue(isAllow, runtime->GetAppData().Icb->SchemeShard.AllowServerlessStorageBilling);
+        TControlBoard::SetValue(isAllow, runtime->GetAppData().Icb->SchemeShardControls.AllowServerlessStorageBilling);
     }
 
     void SetupChannelProfiles(TAppPrepare &app, ui32 nchannels) {

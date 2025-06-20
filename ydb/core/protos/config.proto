@@ -1460,12 +1460,77 @@ message TImmediateControlsConfig {
             Description: "Forces shards to split when reaching the given data size (2 GiB by default)",
             MinValue: 10485760, // 10 MiB
             MaxValue: 17179869184, // 16 GiB
-            DefaultValue: 2147483648 }];
+            DefaultValue: 2147483648 }]; // 2GiB
         optional uint64 DisableForceShardSplit = 2 [(ControlOptions) = {
             Description: "Disables forced shard splits, for special cases only",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 AllowDataColumnForIndexTable = 3 [(ControlOptions) = {
+            Description: "Allow data column for index table",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 AllowConditionalEraseOperations = 4 [(ControlOptions) = {
+            Description: "Allows conditional erase",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+        optional uint64 AllowServerlessStorageBilling = 5 [(ControlOptions) = {
+            Description: "Allows serverless storage billing",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 DisablePublicationsOfDropping = 6 [(ControlOptions) = {
+            Description: "Disable publications of dropping",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 FillAllocatePQ = 7 [(ControlOptions) = {
+            Description: "Fill allocate persqueue",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 SplitMergePartCountLimit = 8 [(ControlOptions) = {
+            Description: "Max count of SplitMerge actions for part",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 2000 }];
+        optional uint64 FastSplitSizeThreshold = 9 [(ControlOptions) = {
+            Description: "FastSplitSize Threshold",
+            MinValue: 100000,
+            MaxValue: 4000000000,
+            DefaultValue: 4000000 }];
+        optional uint64 FastSplitRowCountThreshold = 10 [(ControlOptions) = {
+            Description: "Disable publications of dropping",
+            MinValue: 1000,
+            MaxValue: 1000000000,
+            DefaultValue: 100000 }];
+        optional uint64 FastSplitCpuPercentageThreshold = 11 [(ControlOptions) = {
+            Description: "Max Fast split cpu usage",
+            MinValue: 1,
+            MaxValue: 50,
+            DefaultValue: 146 }];
+        optional uint64 SplitByLoadEnabled = 12 [(ControlOptions) = {
+            Description: "Enables split by load",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
+        optional uint64 SplitByLoadMaxShardsDefault = 13 [(ControlOptions) = {
+            Description: "Max shards that cant be split by load",
+            MinValue: 0,
+            MaxValue: 50,
+            DefaultValue: 10000 }];
+        optional uint64 MergeByLoadMinUptimeSec = 14 [(ControlOptions) = {
+            Description: "Min uptime to merge by load in seconds",
+            MinValue: 0,
+            MaxValue: 4000000000,
+            DefaultValue: 600 }];
+        optional uint64 MergeByLoadMinLowLoadDurationSec = 15 [(ControlOptions) = {
+            Description: "Min low load duration in sec to merge by load",
+            MinValue: 0,
+            MaxValue: 4000000000,
+            DefaultValue: 3600 }];
     }
 
     message TTCMallocControls {
@@ -1824,13 +1889,13 @@ message TImmediateControlsConfig {
             Description: "Initial memory limit for mkql queries",
             MinValue: 1,
             MaxValue: 9223372036854775807, // 2 ** 63 -1
-            DefaultValue: 2097152 // 2 MB
+            DefaultValue: 2097152 // 2 MiB
         }];
         optional uint64 MkqlMaxMemoryLimit = 2 [(ControlOptions) = {
             Description: "Max memory limit for mkql queries",
             MinValue: 1,
             MaxValue: 9223372036854775807, // 2 ** 63 -1
-            DefaultValue: 1073741824 // 1 GB
+            DefaultValue: 1073741824 // 1 GiB
         }];
     }
 
@@ -1857,14 +1922,14 @@ message TImmediateControlsConfig {
         optional uint64 MinBytesToIndex = 4 [(ControlOptions) = {
             Description: "Min bytes to start indexing",
             MinValue: 1,
-            MaxValue: 33554432, // 32MB
-            DefaultValue: 4194304 // 4 MB
+            MaxValue: 33554432, // 32MiB
+            DefaultValue: 4194304 // 4 MiB
         }];
         optional uint64 MaxBytesToIndex = 5 [(ControlOptions) = {
             Description: "Min bytes to start indexing",
             MinValue: 0,
-            MaxValue: 503316480, // 480MB
-            DefaultValue: 251658240 // 240 MB
+            MaxValue: 503316480, // 480MiB
+            DefaultValue: 251658240 // 240 MiB
         }];
         optional uint64 InsertTableCommittedSize = 6 [(ControlOptions) = {
             Description: "Min small blobs to insert",
@@ -1874,15 +1939,15 @@ message TImmediateControlsConfig {
         }];
         optional uint64 IndexGoodBlobSize = 7 [(ControlOptions) = {
             Description: "Blob size to index",
-            MinValue: 262144, // 256KB
-            MaxValue: 8388608, // 8MB
-            DefaultValue: 262144 // 256KB
+            MinValue: 262144, // 256KiB
+            MaxValue: 8388608, // 8MiB
+            DefaultValue: 262144 // 256KiB
         }];
         optional uint64 GranuleOverloadBytes = 8 [(ControlOptions) = {
             Description: "Min blob size to overload",
-            MinValue: 8388608, // 8MB
-            MaxValue: 838860800, // 800MB
-            DefaultValue: 167772160 // 160MB
+            MinValue: 8388608, // 8MiB
+            MaxValue: 838860800, // 800MiB
+            DefaultValue: 167772160 // 160MiB
         }];
         optional uint64 CompactionDelaySec = 9 [(ControlOptions) = {
             Description: "Compaction delay in seconds",
@@ -1894,7 +1959,7 @@ message TImmediateControlsConfig {
             Description: "Max indexed bytes in granule",
             MinValue: 0,
             MaxValue: 9223372036854775807, // 2 ** 63 - 1
-            DefaultValue: 20971520
+            DefaultValue: 20971520 // 20 MiB
         }];
         optional uint64 GranuleIndexedPortionsCountLimit = 11 [(ControlOptions) = {
             Description: "Max number of Indexed portions in Granule",

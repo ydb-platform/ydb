@@ -75,8 +75,8 @@ public:
     THashMap<ui64, TShardInfo> PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
 
 private:
-    const NMiniKQL::THolderFactory& HolderFactory;
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
+    const NMiniKQL::THolderFactory* HolderFactory;
+    const NMiniKQL::TTypeEnvironment* TypeEnv;
     const TPartitionPrunerConfig Config;
 };
 

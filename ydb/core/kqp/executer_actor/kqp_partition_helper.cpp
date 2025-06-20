@@ -964,8 +964,8 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
 }
 
 TPartitionPruner::TPartitionPruner(const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, TPartitionPrunerConfig config)
-    : HolderFactory(holderFactory)
-    , TypeEnv(typeEnv)
+    : HolderFactory(&holderFactory)
+    , TypeEnv(&typeEnv)
     , Config(std::move(config))
 {
 }
@@ -975,13 +975,13 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpPhyTable
 
     switch (operation.GetTypeCase()) {
         case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-            return PrunePartitionsImpl(operation.GetReadRanges(), stageInfo, HolderFactory, TypeEnv, isFullScan);
+            return PrunePartitionsImpl(operation.GetReadRanges(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
         case NKqpProto::TKqpPhyTableOperation::kReadRange:
-            return PrunePartitionsImpl(operation.GetReadRange(), stageInfo, HolderFactory, TypeEnv, isFullScan);
+            return PrunePartitionsImpl(operation.GetReadRange(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
         case NKqpProto::TKqpPhyTableOperation::kLookup:
-            return PrunePartitionsImpl(operation.GetLookup(), stageInfo, HolderFactory, TypeEnv, isFullScan);
+            return PrunePartitionsImpl(operation.GetLookup(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
         case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
-            return PrunePartitionsImpl(operation.GetReadOlapRange(), stageInfo, HolderFactory, TypeEnv, isFullScan);
+            return PrunePartitionsImpl(operation.GetReadOlapRange(), stageInfo, *HolderFactory, *TypeEnv, isFullScan);
         default:
             YQL_ENSURE(false, "Unexpected table scan operation: " << static_cast<ui32>(operation.GetTypeCase()));
             break;
@@ -989,11 +989,11 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpPhyTable
 }
 
 THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan) {
-    auto guard = TypeEnv.BindAllocator();
+    auto guard = TypeEnv->BindAllocator();
     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
 
     const auto& keyColumnTypes = tableInfo->KeyColumnTypes;
-    auto ranges = ExtractRanges(source, stageInfo, HolderFactory, TypeEnv, guard);
+    auto ranges = ExtractRanges(source, stageInfo, *HolderFactory, *TypeEnv, guard);
     isFullScan = IsFullRange(keyColumnTypes, ranges);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
@@ -1029,9 +1029,9 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRang
 THashMap<ui64, TShardInfo> TPartitionPruner::PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo) {
     switch(operation.GetTypeCase()) {
         case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-            return PruneEffectPartitionsImpl(operation.GetUpsertRows(), stageInfo, HolderFactory, TypeEnv);
+            return PruneEffectPartitionsImpl(operation.GetUpsertRows(), stageInfo, *HolderFactory, *TypeEnv);
         case NKqpProto::TKqpPhyTableOperation::kDeleteRows:
-            return PruneEffectPartitionsImpl(operation.GetDeleteRows(), stageInfo, HolderFactory, TypeEnv);
+            return PruneEffectPartitionsImpl(operation.GetDeleteRows(), stageInfo, *HolderFactory, *TypeEnv);
         default:
             YQL_ENSURE(false, "Unexpected table operation: " << static_cast<ui32>(operation.GetTypeCase()));
     }

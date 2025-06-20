@@ -518,10 +518,10 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
     };
 
     THashSet<std::pair<ui32, ui32>> updatedStages;
-    for (ui64 overrideIdx = 0; const auto& stageOverride : jsonNode.GetArray()) {
-        overrideIdx++;
+    for (size_t i = 0; i < jsonNode.GetArray().size(); ++i) {
+        const auto& stageOverride = jsonNode.GetArray()[i];
         if (!stageOverride.IsMap()) {
-            issues.AddIssue(TStringBuilder() << "Expected map json value for stage override " << overrideIdx);
+            issues.AddIssue(TStringBuilder() << "Expected map json value for stage override " << i);
             continue;
         }
 
@@ -538,35 +538,35 @@ TIssues ApplyOverridePlannerSettings(const TString& overridePlannerJson, NKqpPro
                 tasks = 0;
                 result = &(*tasks);
             } else {
-                issues.AddIssue(TStringBuilder() << "Unknown key '" << key << "' in stage override " << overrideIdx);
+                issues.AddIssue(TStringBuilder() << "Unknown key '" << key << "' in stage override " << i);
                 continue;
             }
 
             if (const auto& error = extractUint(value, result)) {
-                issues.AddIssue(TStringBuilder() << error << " for key '" << key << "' in stage override " << overrideIdx);
+                issues.AddIssue(TStringBuilder() << error << " for key '" << key << "' in stage override " << i);
                 continue;
             }
         }
 
         if (!updatedStages.emplace(txId, stageId).second) {
-            issues.AddIssue(TStringBuilder() << "Duplicate stage override " << overrideIdx << " for tx " << txId << " and stage " << stageId);
+            issues.AddIssue(TStringBuilder() << "Duplicate stage override " << i << " for tx " << txId << " and stage " << stageId);
             continue;
         }
 
         if (!tasks) {
-            issues.AddIssue(TStringBuilder() << "Missing stage settings for tx " << txId << " and stage " << stageId << " in stage override " << overrideIdx);
+            issues.AddIssue(TStringBuilder() << "Missing stage settings for tx " << txId << " and stage " << stageId << " in stage override " << i);
             continue;
         }
 
         auto& txs = *queryProto.MutableTransactions();
         if (txId >= static_cast<ui32>(txs.size())) {
-            issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << overrideIdx << ", number of transactions in query: " << txs.size());
+            issues.AddIssue(TStringBuilder() << "Invalid tx id: " << txId << " in stage override " << i << ", number of transactions in query: " << txs.size());
             continue;
         }
 
         auto& stages = *txs[txId].MutableStages();
         if (stageId >= static_cast<ui32>(stages.size())) {
-            issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << overrideIdx << ", number of stages in transaction " << txId << ": " << stages.size());
+            issues.AddIssue(TStringBuilder() << "Invalid stage id: " << stageId << " in stage override " << i << ", number of stages in transaction " << txId << ": " << stages.size());
             continue;
         }
 

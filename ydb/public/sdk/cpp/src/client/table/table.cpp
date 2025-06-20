@@ -1469,6 +1469,21 @@ TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataF
     return Impl_->BulkUpsert(table, format, data, schema, settings);
 }
 
+TAsyncBulkUpsertResult TTableClient::BulkUpsertUnretryableUnsafe(const std::string& table, TValue&& rows,
+    const TBulkUpsertSettings& settings)
+{
+    return Impl_->BulkUpsertUnretryableUnsafe(table, std::move(rows), settings);
+}
+
+TAsyncBulkUpsertResult TTableClient::BulkUpsertUnretryableArenaAllocatedUnsafe(
+    const std::string& table,
+    TValue&& rows,
+    google::protobuf::Arena* arena,
+    const TBulkUpsertSettings& settings)
+{
+    return Impl_->BulkUpsertUnretryableArenaAllocatedUnsafe(table, std::move(rows), arena, settings);
+}
+
 TAsyncReadRowsResult TTableClient::ReadRows(const std::string& table, TValue&& rows, const std::vector<std::string>& columns,
     const TReadRowsSettings& settings)
 {

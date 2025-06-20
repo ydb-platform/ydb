@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <google/protobuf/arena.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
 
@@ -35,12 +36,30 @@ public:
 
     void BuildParams(TString& data, TParamsBuilder& builder, const TParseMetadata& meta) const;
     void BuildValue(TString& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const;
-    TValue BuildList(std::vector<TString>& lines, const TString& filename,
+    TValue BuildList(const std::vector<TString>& lines, const TString& filename,
                      std::optional<ui64> row = std::nullopt) const;
+
+    TValue BuildListOnArena(
+        const std::vector<TString>& lines,
+        const TString& filename,
+        google::protobuf::Arena* arena,
+        std::optional<ui64> row = std::nullopt
+    ) const;
+
     void BuildLineType();
     const TVector<TString>& GetHeader();
+    const TString& GetHeaderRow() const;
 
 private:
+    // Helper method to process a single line of CSV data
+    void ProcessCsvLine(
+        const TString& line,
+        google::protobuf::RepeatedPtrField<Ydb::Value>* listItems,
+        const std::vector<std::unique_ptr<TTypeParser>>& columnTypeParsers,
+        std::optional<ui64> currentRow,
+        const TString& filename
+    ) const;
+
     TVector<TString> Header;
     TString HeaderRow;
     char Delimeter;

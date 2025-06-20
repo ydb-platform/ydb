@@ -72,6 +72,9 @@ Release date: 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15515) an issue where reading a topic by multiple consumers would hang if at least one partition had no incoming data.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18614) a rare issue with PQ tablet restarts.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/18378) an issue where, after updating the cluster version, Hive started subscribers in data centers without running database nodes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/19057) a bug "Failed to set up listener on port 9092 errno# 98 (Address already in use)" that occurs when updating the version.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18905) an error that led to a segmentation fault when simultaneously executing a request to healthcheck and disabling the cluster node.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18899) crash in [partitioning row-oriented tables](./concepts/datamodel/table#partitioning_row_table) when selecting split key from access samples containing a mix of full key and key prefix operations (e.g. exact/range reads). 
 
 ## Version 24.4 {#24-4}
 

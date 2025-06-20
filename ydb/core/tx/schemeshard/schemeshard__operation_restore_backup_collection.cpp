@@ -208,8 +208,8 @@ public:
             op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
 
-        context.SS->LongIncrementalRestoreOps[OperationId] = op;
         context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, OperationId);
+        context.SS->LongIncrementalRestoreOps[OperationId] = op;
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state
@@ -218,8 +218,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TCreateRestoreOpControlPlane");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TCreateRestoreOpControlPlane AbortPropose"
+            << ", opId: " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

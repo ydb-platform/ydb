@@ -693,7 +693,8 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView)
 void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
 {
     PrivatePageCache->RegisterPageCollection(info);
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection));
+    // TODO: handle different cache modes
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, ECacheMode::Regular));
 
     StickyPagesMemory += info->GetStickySize();
 

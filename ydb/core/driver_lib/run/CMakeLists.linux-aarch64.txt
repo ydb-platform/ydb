@@ -113,7 +113,6 @@ target_link_libraries(run PUBLIC
   core-tx-coordinator
   core-tx-datashard
   limiter-grouped_memory-usage
-  tx-limiter-service
   core-tx-long_tx_service
   tx-long_tx_service-public
   core-tx-mediator
@@ -146,6 +145,7 @@ target_link_libraries(run PUBLIC
   ydb-library-security
   ydb-library-signal_backtrace
   providers-pq-cm_client
+  library-slide_limiter-service
   providers-s3-actors
   public-lib-base
   lib-deprecated-client

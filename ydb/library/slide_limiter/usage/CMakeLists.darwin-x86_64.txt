@@ -12,4 +12,20 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(grouped_memory)
+add_library(library-slide_limiter-usage)
+
+
+target_link_libraries(library-slide_limiter-usage PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-actors-core
+  services-metadata-request
+)
+
+target_sources(library-slide_limiter-usage PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/slide_limiter/usage/events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/slide_limiter/usage/config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/slide_limiter/usage/abstract.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/slide_limiter/usage/service.cpp
+)
+

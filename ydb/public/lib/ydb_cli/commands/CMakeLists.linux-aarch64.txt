@@ -42,6 +42,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-protobuf-json
   cpp-regex-pcre
   cpp-threading-local_executor
+  ydb-library-arrow_inference
   kikimr_backup
   arrow-csv-table
   ydb-library-workload
@@ -104,6 +105,7 @@ target_sources(clicommands PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_sql.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_storage_config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_tools_infer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_tools.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload_import.cpp

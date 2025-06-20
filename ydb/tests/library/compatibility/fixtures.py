@@ -5,7 +5,6 @@ import yatest
 import time
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -24,29 +23,27 @@ def string_version_to_tuple(s):
     return tuple(result)
 
 
-try:
-    current_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target-stable")
-    current_name = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target-stable-name").read().strip()
-    current_binary_version = string_version_to_tuple(current_name)
-except Exception:
-    current_binary_path = kikimr_driver_path()
-    current_name = "current"
-    current_binary_version = (float("+inf"), )
+current_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target")
+current_name = 'current'
+if current_binary_path is not None:
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target-name")) as f:
+        current_name = f.read().strip()
+current_binary_version = string_version_to_tuple(current_name)
 
-inter_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-stable")
-init_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-stable")
+inter_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter")
+init_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init")
 
 inter_stable_version = None
 init_stable_version = None
 
 inter_stable_name = "intermediate"
 if inter_stable_binary_path is not None:  # in import_test yatest.common.binary_path returns None
-    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-stable-name")) as f:
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-inter-name")) as f:
         inter_stable_name = f.read().strip()
         inter_stable_version = string_version_to_tuple(inter_stable_name)
 init_stable_name = "initial"
 if init_stable_binary_path:  # in import_test yatest.common.binary_path returns None
-    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-stable-name")) as f:
+    with open(yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-init-name")) as f:
         init_stable_name = f.read().strip()
         init_stable_version = string_version_to_tuple(init_stable_name)
 

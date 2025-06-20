@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(KqpSecrets) {
             auto queryClient = NYdb::NQuery::TQueryClient(*driver, NYdb::NQuery::TClientSettings().AuthToken("user@" BUILTIN_SYSTEM_DOMAIN));
             auto result = queryClient.ExecuteQuery("CREATE OBJECT `id` (TYPE SECRET) WITH (value=`minio`);", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), result.GetIssues().ToOneLineString(), fmt::format("Secret name id must start with database name {db}", "db"_a = ExtractBase(tenantPath)));
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), fmt::format("Secret name id must start with database name {db}", "db"_a = ExtractBase(tenantPath)), result.GetIssues().ToOneLineString());
         }
     }
 

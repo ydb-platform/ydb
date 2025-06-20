@@ -125,7 +125,7 @@ private:
 
     void SetupDiscovery(const TString& tenantPath) {
         TVector<ui32> tenantNodesIdx = Tenants->List(tenantPath);
-        for (auto nodeIdx: tenantNodesIdx) {
+        for (auto nodeIdx : tenantNodesIdx) {
             Server->EnableGRpc(PortManager.GetPort(), nodeIdx, tenantPath);
         }
     }

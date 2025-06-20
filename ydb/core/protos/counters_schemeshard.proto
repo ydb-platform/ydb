@@ -651,4 +651,6 @@ enum ETxTypes {
 
     TXTYPE_ADD_SHARDS_DATA_ERASURE = 98 [(TxTypeOpts) = {Name: "TxAddShardsDataErasure"}];
     TXTYPE_CANCEL_SHARDS_DATA_ERASURE = 99 [(TxTypeOpts) = {Name: "TxCancelShardsDataErasure"}];
+
+    TXTYPE_LOGIN_FINALIZE = 100 [(TxTypeOpts) = {Name: "TxLoginFinalize"}];
 }

@@ -1055,6 +1055,8 @@ public:
 
     struct TTxLogin;
     NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
+    struct TTxLoginFinalize;
+    NTabletFlatExecutor::ITransaction* CreateTxLoginFinalize(TEvPrivate::TEvLoginFinalize::TPtr &ev);
     struct TTxListUsers;
     NTabletFlatExecutor::ITransaction* CreateTxListUsers(TEvSchemeShard::TEvListUsers::TPtr &ev);
 
@@ -1247,6 +1249,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvLoginFinalize::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
@@ -1567,6 +1570,8 @@ public:
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
+    TActorId LoginHelper;
+
     THolder<TDataErasureManager> DataErasureManager = nullptr;
 
 private:

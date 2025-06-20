@@ -210,7 +210,7 @@ namespace NYql {
         struct TLoggingOptions final {
         public:
             /// Logging level for messages generated during compilation.
-            ELogPriority LogLevel_;  // TODO: rename to LogLevel
+            ELogPriority LogLevel;
 
             /// Where to write log messages.
             IOutputStream* LogDestination;
@@ -238,10 +238,10 @@ namespace NYql {
         struct TProgramFactoryOptions final {
         public:
             /// Path to a directory with compiled UDFs. Leave empty to disable loading external UDFs.
-            TString UdfsDir_;  // TODO: rename to UDFDir
+            TString UdfsDir;
 
             /// List of available external resources, e.g. files, UDFs, libraries.
-            TVector<NUserData::TUserData> UserData_;   // TODO: rename to UserData
+            TVector<NUserData::TUserData> UserData;
 
             /// LLVM settings. Assign "OFF" to disable LLVM, empty string for default settings.
             TString LLVMSettings;

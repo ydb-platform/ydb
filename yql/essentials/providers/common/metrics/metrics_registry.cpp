@@ -249,8 +249,8 @@ private:
                 auto histogram = group->GetNamedHistogram(
                     label.GetName(), label.GetValue(),
                     THolder(collector));
-                Histograms.insert(std::make_pair(histogram, collector));
-                Histograms[histogram]->Collect(*histSnapshot);
+                Histograms_.insert(std::make_pair(histogram, collector));
+                Histograms_[histogram]->Collect(*histSnapshot);
             } else {
                 auto counter = group->GetNamedCounter(
                             label.GetName(), label.GetValue(),
@@ -275,7 +275,7 @@ private:
     TSensorsGroupPtr Sensors_;
     const TMaybe<TString> UserName_;
 
-    THashMap<NMonitoring::THistogramPtr, NMonitoring::IHistogramCollector*> Histograms;
+    THashMap<NMonitoring::THistogramPtr, NMonitoring::IHistogramCollector*> Histograms_;
 };
 
 } // namespace

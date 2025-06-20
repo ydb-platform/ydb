@@ -236,6 +236,19 @@ public:
         }
         return type;
     }
+
+    void AddColumnNameForProjectionKernelId(const std::string &columnName, ui32 id) {
+        KqpColumnNameToProjectionId.emplace(columnName, id);
+    }
+
+    bool GetProjectionKernelIdForColumn(const std::string &columnName, ui32 &id) {
+        if (KqpColumnNameToProjectionId.contains(columnName)) {
+            id = KqpColumnNameToProjectionId[columnName];
+            return true;
+        }
+        return false;
+    }
+
 private:
     const TTypeAnnotationNode* GetColumnTypeByName(const std::string_view &name) const {
         auto *rowItemType = GetSeqItemType(Row.Ptr()->GetTypeAnn());
@@ -256,6 +269,7 @@ private:
     TExprContext& ExprContext;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
+    THashMap<std::string, ui32> KqpColumnNameToProjectionId;
 };
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
@@ -935,6 +949,15 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
     }
 }
 
+void CompileProjections(const TKqpOlapProjections& projectionsNode, TKqpOlapCompileContext& ctx) {
+    auto projections = projectionsNode.Projections();
+    for (const auto& child : projections) {
+        auto projection = child.Cast<TKqpOlapProjection>();
+        auto generatedColumnIdAndType = GetOrCreateColumnIdAndType(projection.OlapOperation(), ctx);
+        ctx.AddColumnNameForProjectionKernelId(std::string(projection.ColumnName()), generatedColumnIdAndType.Id);
+    }
+}
+
 void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
     auto resultColNames = ctx.GetResultColNames();
     if (resultColNames.empty()) {
@@ -943,8 +966,10 @@ void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
 
     auto* projection = ctx.CreateProjection();
     for (auto colName : resultColNames) {
-        auto colId = ctx.GetColumnId(colName);
-
+        ui32 colId;
+        if (!ctx.GetProjectionKernelIdForColumn(colName, colId)) {
+            colId = ctx.GetColumnId(colName);
+        }
         auto* projCol = projection->AddColumns();
         projCol->SetId(colId);
     }
@@ -969,6 +994,8 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
+        } else if (auto maybeProjections = operation.Maybe<TKqpOlapProjections>()) {
+            CompileProjections(maybeProjections.Cast(), ctx);
         }
         return;
     }

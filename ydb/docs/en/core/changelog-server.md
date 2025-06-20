@@ -1,12 +1,12 @@
 # {{ ydb-short-name }} Server changelog
 
-# Version 25.1 {#25-1}
+## Version 25.1 {#25-1}
 
-## Version 25.1.1.18 {#25-1-1-18}
+### Version 25.1.1.18 {#25-1-1-18}
 
 Release date: 2025.
 
-### Functionality
+#### Functionality
 
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
 * Added support for the parameterized Decimal type.
@@ -38,7 +38,7 @@ Release date: 2025.
   * `enable_database_admin` enables database administrator functions.
   * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure that repeatedly overwrites deleted data to minimize the risk of recovering the deleted information when directly accessing block devices via operating system functions.
 
-### Performance
+#### Performance
 
 * [Added](https://github.com/ydb-platform/ydb/pull/6509) support for [constant folding](https://en.wikipedia.org/wiki/Constant_folding) in the query optimizer by default, which improves query performance by evaluating constant expressions at compilation time. This feature reduces runtime overhead, enabling faster and more efficient query execution for complex static expressions.
 * [Added](https://github.com/ydb-platform/ydb/issues/6512) a granular timecast protocol that will reduce the execution time of distributed transactions (slowing down one shard will not cause all shards to slow down).
@@ -50,7 +50,7 @@ Release date: 2025.
 * Improved diagnostics and introspection of memory errors.
 * Reduced memory consumption through allocator page cleaning.
 
-### Bug Fixes
+#### Bug Fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/9707) an error in [Interconnect](../concepts/glossary#actor-system-interconnect) configuration that led to performance degradation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/13993) the out of memory error when deleting very large tables by regulating the number of tablets simultaneously processing this operation.

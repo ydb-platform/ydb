@@ -12663,9 +12663,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Merge"] = &ExtendWrapper;
         Functions["Extract"] = &ExtractWrapper;
         Functions["OrderedExtract"] = &ExtractWrapper;
-        Functions["UnionAll"] = &UnionAllWrapper;
-        Functions["UnionMerge"] = &UnionAllWrapper;
-        Functions["Union"] = &UnionAllWrapper;
+        Functions["UnionAll"] = &SelectOpWrapper;
+        Functions["UnionMerge"] = &SelectOpWrapper;
+        Functions["Union"] = &SelectOpWrapper;
+        Functions["IntersectAll"] = &SelectOpWrapper;
+        Functions["Intersect"] = &SelectOpWrapper;
+        Functions["ExceptAll"] = &SelectOpWrapper;
+        Functions["Except"] = &SelectOpWrapper;
         ExtFunctions["ListExtend"] = &ListExtendWrapper<false>;
         ExtFunctions["ListExtendStrict"] = &ListExtendWrapper<true>;
         Functions["ListUnionAll"] = &ListUnionAllWrapper;

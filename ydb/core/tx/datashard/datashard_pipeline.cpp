@@ -1847,7 +1847,7 @@ EExecutionStatus TPipeline::RunExecutionPlan(TOperation::TPtr op,
 
         NWilson::TSpan unitSpan(TWilsonTablet::TabletDetailed, txc.TransactionExecutionSpan.GetTraceId(), "Datashard.Unit");
         
-        NCpuTime::TCpuTimer timer;//r314
+        NCpuTime::TCpuTimer timer;
         auto status = unit.Execute(op, txc, ctx);
         op->AddExecutionTime(timer.GetTime());
         

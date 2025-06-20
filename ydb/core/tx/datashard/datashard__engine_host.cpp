@@ -369,11 +369,8 @@ public:
 
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
-
-        TSmallVec<NTable::TTag> defaultFilledColumnsIds;
-        //wedwdwdwedwe(Scheme, tableInfo, commands, ops, nullptr); // или не здесь? r314
-        
-        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnsIds);
+          
+        UserDb.UpsertRow(tableId, key, ops, {});
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TStackVec<NTable::TTag>&  defaultFilledColumnsIds) override {

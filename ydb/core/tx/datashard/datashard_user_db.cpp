@@ -135,7 +135,7 @@ void TDataShardUserDb::ChangeOptsDefaultColumnsFilledLogic(
 
     DeleteSomeOpsByTagIds(defaultFilledColumnsIds, newOps);
     
-    UpsertIncrease(op, tableId, localTableId, key, newOps); // todo проверить что другой порядок - это ок
+    UpsertIncrease(op, tableId, localTableId, key, newOps);
 }
 
 void TDataShardUserDb::UpsertRow(

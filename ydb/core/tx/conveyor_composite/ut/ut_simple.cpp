@@ -106,7 +106,7 @@ private:
     }
     virtual void DoAddTask(NActors::TActorSystem& actorSystem, const NActors::TActorId distributorId) override {
         actorSystem.Send(distributorId,
-            new TEvExecution::TEvNewTask(std::make_shared<TSleepTask>(TDuration::MicroSeconds(40), Counter), Category, ProcessId));
+            new TEvExecution::TEvNewTask(std::make_shared<TSleepTask>(TDuration::MicroSeconds(40), Counter), Category, ProcessId, {}));
         CounterTasks.Inc();
     }
     virtual bool DoCheckFinished() override {

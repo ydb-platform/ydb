@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }, 0, Inflight + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
     }
 
-    void SchemaVersionMissmatchWithTest(bool write) {
+    void SchemaVersionMismatchWithTest(bool write) {
         TKikimrRunner kikimr;
 
         auto db = kikimr.GetTableClient();
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    void SchemaVersionMissmatchWithIndexTest(bool write) {
+    void SchemaVersionMismatchWithIndexTest(bool write) {
         //KIKIMR-14282
         //YDBREQUESTS-1324
         //some cases fail
@@ -409,20 +409,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(SchemaVersionMissmatchWithRead) {
-        SchemaVersionMissmatchWithTest(false);
+    Y_UNIT_TEST(SchemaVersionMismatchWithRead) {
+        SchemaVersionMismatchWithTest(false);
     }
 
-    Y_UNIT_TEST(SchemaVersionMissmatchWithWrite) {
-        SchemaVersionMissmatchWithTest(true);
+    Y_UNIT_TEST(SchemaVersionMismatchWithWrite) {
+        SchemaVersionMismatchWithTest(true);
     }
 
-    Y_UNIT_TEST(SchemaVersionMissmatchWithIndexRead) {
-        SchemaVersionMissmatchWithIndexTest(false);
+    Y_UNIT_TEST(SchemaVersionMismatchWithIndexRead) {
+        SchemaVersionMismatchWithIndexTest(false);
     }
 
-    Y_UNIT_TEST(SchemaVersionMissmatchWithIndexWrite) {
-        SchemaVersionMissmatchWithIndexTest(true);
+    Y_UNIT_TEST(SchemaVersionMismatchWithIndexWrite) {
+        SchemaVersionMismatchWithIndexTest(true);
     }
 
     void TouchIndexAfterMoveIndex(bool write, bool replace) {

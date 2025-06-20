@@ -2,7 +2,7 @@
 
 namespace NKikimr::NTabletFlatExecutor {
 
-TDataCleanupLogic::TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic)
+TVacuumLogic::TVacuumLogic(IOps* ops, IExecutor* executor, ITablet* owner, NUtil::ILogger* logger, TExecutorGCLogic* gcLogic)
     : Ops(ops)
     , Executor(executor)
     , Owner(owner)
@@ -10,65 +10,65 @@ TDataCleanupLogic::TDataCleanupLogic(IOps* ops, IExecutor* executor, ITablet* ow
     , GcLogic(gcLogic)
 {}
 
-bool TDataCleanupLogic::TryStartCleanup(ui64 dataCleanupGeneration, const TActorContext& ctx) {
+bool TVacuumLogic::TryStartVacuum(ui64 vacuumGeneration, const TActorContext& ctx) {
     switch (State) {
-        case EDataCleanupState::Idle: {
-            if (CurrentDataCleanupGeneration >= dataCleanupGeneration) {
+        case EVacuumState::Idle: {
+            if (CurrentVacuumGeneration >= vacuumGeneration) {
                 if (auto logl = Logger->Log(ELnLev::Info)) {
-                    logl << "TDataCleanupLogic: DataCleanup for tablet with id " << Owner->TabletID()
-                        << " had already completed for generation " << dataCleanupGeneration
-                        << ", current DataCleanup generation: " << CurrentDataCleanupGeneration;
+                    logl << "TVacuumLogic: Vacuum for tablet with id " << Owner->TabletID()
+                        << " had already completed for generation " << vacuumGeneration
+                        << ", current Vacuum generation: " << CurrentVacuumGeneration;
                 }
-                // repeat DataCleanupComplete callback
-                CompleteDataCleanup(ctx);
+                // repeat VacuumComplete callback
+                CompleteVacuum(ctx);
                 return false;
             } else {
-                CurrentDataCleanupGeneration = dataCleanupGeneration;
+                CurrentVacuumGeneration = vacuumGeneration;
                 if (auto logl = Logger->Log(ELnLev::Info)) {
-                    logl << "TDataCleanupLogic: Starting DataCleanup for tablet with id " << Owner->TabletID()
-                        << ", current DataCleanup generation: " << CurrentDataCleanupGeneration;
+                    logl << "TVacuumLogic: Starting Vacuum for tablet with id " << Owner->TabletID()
+                        << ", current Vacuum generation: " << CurrentVacuumGeneration;
                 }
-                State = EDataCleanupState::PendingCompaction;
+                State = EVacuumState::PendingCompaction;
                 return true;
             }
             break;
         }
-        default: { // DataCleanup in progress
-            if (dataCleanupGeneration > CurrentDataCleanupGeneration) {
-                NextDataCleanupGeneration = Max(dataCleanupGeneration, NextDataCleanupGeneration);
+        default: { // Vacuum in progress
+            if (vacuumGeneration > CurrentVacuumGeneration) {
+                NextVacuumGeneration = Max(vacuumGeneration, NextVacuumGeneration);
                 if (auto logl = Logger->Log(ELnLev::Info)) {
-                    logl << "TDataCleanupLogic: schedule next DataCleanup for tablet with id " << Owner->TabletID()
-                        << ", current DataCleanup generation: " << CurrentDataCleanupGeneration
-                        << ", next DataCleanup generation: " << NextDataCleanupGeneration;
+                    logl << "TVacuumLogic: schedule next Vacuum for tablet with id " << Owner->TabletID()
+                        << ", current Vacuum generation: " << CurrentVacuumGeneration
+                        << ", next Vacuum generation: " << NextVacuumGeneration;
                 }
                 return false;
             } else {
-                // more recent DataCleanup in progress, so just ignore osolete generation
+                // more recent Vacuum in progress, so just ignore osolete generation
                 return false;
             }
         }
     }
 }
 
-void TDataCleanupLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
-    Y_ENSURE(State == EDataCleanupState::PendingCompaction);
+void TVacuumLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
+    Y_ENSURE(State == EVacuumState::PendingCompaction);
     CompactingTables[tableId] = {tableId, compactionId};
 }
 
-void TDataCleanupLogic::WaitCompaction() {
-    Y_ENSURE(State == EDataCleanupState::PendingCompaction);
+void TVacuumLogic::WaitCompaction() {
+    Y_ENSURE(State == EVacuumState::PendingCompaction);
     if (CompactingTables.empty()) {
-        State = EDataCleanupState::PendingFirstSnapshot;
+        State = EVacuumState::PendingFirstSnapshot;
     } else {
-        State = EDataCleanupState::WaitCompaction;
+        State = EVacuumState::WaitCompaction;
     }
 }
 
-void TDataCleanupLogic::OnCompleteCompaction(
+void TVacuumLogic::OnCompleteCompaction(
     ui32 tableId,
     const TFinishedCompactionInfo& finishedCompactionInfo)
 {
-    if (State != EDataCleanupState::WaitCompaction) {
+    if (State != EVacuumState::WaitCompaction) {
         return;
     }
 
@@ -78,30 +78,30 @@ void TDataCleanupLogic::OnCompleteCompaction(
         }
     }
     if (CompactingTables.empty()) {
-        State = EDataCleanupState::PendingFirstSnapshot;
+        State = EVacuumState::PendingFirstSnapshot;
     }
 }
 
-bool TDataCleanupLogic::NeedLogSnaphot() {
+bool TVacuumLogic::NeedLogSnaphot() {
     switch (State) {
-        case EDataCleanupState::PendingFirstSnapshot:
-        case EDataCleanupState::PendingSecondSnapshot:
+        case EVacuumState::PendingFirstSnapshot:
+        case EVacuumState::PendingSecondSnapshot:
             return true;
         default:
             return false;
     }
 }
 
-void TDataCleanupLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
+void TVacuumLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
     switch (State) {
-        case EDataCleanupState::PendingFirstSnapshot: {
+        case EVacuumState::PendingFirstSnapshot: {
             FirstLogSnaphotStep = TGCTime(generation, step);
-            State = EDataCleanupState::WaitFirstSnapshot;
+            State = EVacuumState::WaitFirstSnapshot;
             break;
         }
-        case EDataCleanupState::PendingSecondSnapshot: {
+        case EVacuumState::PendingSecondSnapshot: {
             SecondLogSnaphotStep = TGCTime(generation, step);
-            State = EDataCleanupState::WaitSecondSnapshot;
+            State = EVacuumState::WaitSecondSnapshot;
             break;
         }
         default: {
@@ -110,21 +110,21 @@ void TDataCleanupLogic::OnMakeLogSnapshot(ui32 generation, ui32 step) {
     }
 }
 
-void TDataCleanupLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
+void TVacuumLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
     switch (State) {
-        case EDataCleanupState::WaitFirstSnapshot: {
+        case EVacuumState::WaitFirstSnapshot: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                State = EDataCleanupState::PendingSecondSnapshot;
+                State = EVacuumState::PendingSecondSnapshot;
             }
             break;
         }
-        case EDataCleanupState::WaitSecondSnapshot: {
+        case EVacuumState::WaitSecondSnapshot: {
             if (SecondLogSnaphotStep <= TGCTime(generation, step)) {
                 Ops->Send(Owner->Tablet(), new TEvTablet::TEvGcForStepAckRequest(FirstLogSnaphotStep.Generation, FirstLogSnaphotStep.Step));
                 if (GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                    State = EDataCleanupState::WaitAllGCs;
+                    State = EVacuumState::WaitAllGCs;
                 } else {
-                    State = EDataCleanupState::WaitLogGC;
+                    State = EVacuumState::WaitLogGC;
                 }
             }
             break;
@@ -135,17 +135,17 @@ void TDataCleanupLogic::OnSnapshotCommited(ui32 generation, ui32 step) {
     }
 }
 
-void TDataCleanupLogic::OnCollectedGarbage(const TActorContext& ctx) {
+void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
     switch (State) {
-        case EDataCleanupState::WaitAllGCs: {
+        case EVacuumState::WaitAllGCs: {
             if (!GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                State = EDataCleanupState::WaitLogGC;
+                State = EVacuumState::WaitLogGC;
             }
             break;
         }
-        case EDataCleanupState::WaitTabletGC: {
+        case EVacuumState::WaitTabletGC: {
             if (!GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                CompleteDataCleanup(ctx);
+                CompleteVacuum(ctx);
             }
             break;
         }
@@ -155,17 +155,17 @@ void TDataCleanupLogic::OnCollectedGarbage(const TActorContext& ctx) {
     }
 }
 
-void TDataCleanupLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx) {
+void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TActorContext& ctx) {
     switch (State) {
-        case EDataCleanupState::WaitAllGCs: {
+        case EVacuumState::WaitAllGCs: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                State = EDataCleanupState::WaitTabletGC;
+                State = EVacuumState::WaitTabletGC;
             }
             break;
         }
-        case EDataCleanupState::WaitLogGC: {
+        case EVacuumState::WaitLogGC: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                CompleteDataCleanup(ctx);
+                CompleteVacuum(ctx);
             }
             break;
         }
@@ -175,12 +175,12 @@ void TDataCleanupLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const
     }
 }
 
-bool TDataCleanupLogic::NeedGC() {
+bool TVacuumLogic::NeedGC() {
     switch (State) {
-        case EDataCleanupState::PendingSecondSnapshot:
-        case EDataCleanupState::WaitSecondSnapshot:
-        case EDataCleanupState::WaitAllGCs:
-        case EDataCleanupState::WaitTabletGC: {
+        case EVacuumState::PendingSecondSnapshot:
+        case EVacuumState::WaitSecondSnapshot:
+        case EVacuumState::WaitAllGCs:
+        case EVacuumState::WaitTabletGC: {
             return GcLogic->HasGarbageBefore(FirstLogSnaphotStep);
         }
         default: {
@@ -189,16 +189,16 @@ bool TDataCleanupLogic::NeedGC() {
     }
 }
 
-void TDataCleanupLogic::CompleteDataCleanup(const TActorContext& ctx) {
-    State = EDataCleanupState::Idle;
-    if (NextDataCleanupGeneration) {
-        Executor->CleanupData(std::exchange(NextDataCleanupGeneration, 0));
+void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
+    State = EVacuumState::Idle;
+    if (NextVacuumGeneration) {
+        Executor->StartVacuum(std::exchange(NextVacuumGeneration, 0));
     } else {
         // report complete only if all planned cleanups completed
-        Owner->DataCleanupComplete(CurrentDataCleanupGeneration, ctx);
+        Owner->VacuumComplete(CurrentVacuumGeneration, ctx);
         if (auto logl = Logger->Log(ELnLev::Info)) {
-            logl << "TDataCleanupLogic: DataCleanup finished for tablet with id " << Owner->TabletID()
-                << ", current DataCleanup generation: " << CurrentDataCleanupGeneration;
+            logl << "TVacuumLogic: Vacuum finished for tablet with id " << Owner->TabletID()
+                << ", current Vacuum generation: " << CurrentVacuumGeneration;
         }
     }
 }

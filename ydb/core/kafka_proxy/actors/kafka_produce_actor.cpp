@@ -271,7 +271,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     TBuffer buf;
     buf.Reserve(transactionalId.size() + sizeof(batch->ProducerId));
     buf.Append(transactionalId.data(), transactionalId.size());
-    buf.Append(static_cast<const char*>(static_cast<const void*>(&batch->ProducerId)), sizeof(batch->ProducerId));  // TODO(qyryq) Endianness?
+    buf.Append(static_cast<const char*>(static_cast<const void*>(&batch->ProducerId)), sizeof(batch->ProducerId));
     buf.AsString(sourceId);
     sourceId = Base64Encode(sourceId);
 

@@ -76,6 +76,7 @@ protected:
     TBufferData* UploadBuf = nullptr;
 
     const ui32 Dimensions = 0;
+    const ui32 K = 0;
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
 
@@ -123,6 +124,7 @@ public:
         , BuildId{request.GetId()}
         , Uploader(request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
+        , K(request.GetK())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -365,17 +367,26 @@ protected:
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
-            if (!Clusters->SetClusters(Sampler.Finish().second)) {
+            auto rows = Sampler.Finish().second;
+            if (rows.size() == 0) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
+            if (rows.size() < K) {
+                // if this datashard have less than K valid embeddings for this parent
+                // lets make single centroid for it
+                rows.resize(1);
+            }
+            bool ok = Clusters->SetClusters(std::move(rows));
+            Y_ENSURE(ok);
             Clusters->InitAggregatedClusters();
             return false; // do KMEANS
         }
 
         if (State == EState::KMEANS) {
             if (Clusters->RecomputeClusters()) {
+                Clusters->RemoveEmptyClusters();
                 FormLevelRows();
                 State = UploadState;
                 return false; // do UPLOAD_*

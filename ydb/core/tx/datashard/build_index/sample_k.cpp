@@ -10,7 +10,6 @@
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>

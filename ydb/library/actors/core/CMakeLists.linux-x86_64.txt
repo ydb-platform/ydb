@@ -22,6 +22,7 @@ get_built_tool_path(
 add_subdirectory(harmonizer)
 add_subdirectory(ut)
 add_subdirectory(ut_fat)
+add_subdirectory(manual_test)
 
 add_library(library-actors-core)
 

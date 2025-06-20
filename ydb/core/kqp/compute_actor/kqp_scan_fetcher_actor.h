@@ -189,6 +189,8 @@ private:
     std::set<ui32> TrackingNodes;
     ui32 MaxInFlight = 1024;
     bool IsAggregationRequest = false;
+    bool RegistrationFinished = false;
+    TInstant RegistrationStartTime;
 };
 
 }

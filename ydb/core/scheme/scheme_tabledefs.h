@@ -322,7 +322,7 @@ int ComparePointAndRange(const TConstArrayRef<TCell>& point, const TTableRange& 
 template<bool FirstLeft, bool SecondLeft>
 int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bool inclusiveFirst, bool inclusiveSecond,
     TConstArrayRef<NScheme::TTypeInfo> cellTypes)
-{ 
+{
     const ui32 firstSize = first.size();
     const ui32 secondSize = second.size();
 

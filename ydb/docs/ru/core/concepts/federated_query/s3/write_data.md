@@ -46,6 +46,6 @@ WITH
 )
 SELECT
     *
-FROM column_table
+FROM table
 ```
 

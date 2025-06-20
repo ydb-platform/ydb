@@ -34,7 +34,7 @@ namespace NKikimr {
             ui32 curChunksNum = SortedParts * Level0MaxSstsAtOnce * 2;
             while (curChunksNum * chunkSize < MaxPossibleDiskSize) {
                 BoundaryPerLevel.push_back(curChunksNum);
-                curChunksNum *= 2;
+                curChunksNum *= 4;
             }
         }
 

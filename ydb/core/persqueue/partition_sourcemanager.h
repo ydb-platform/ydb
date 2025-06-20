@@ -29,6 +29,7 @@ public:
         ui64 Offset = 0;
         bool Explicit = false;
         TInstant WriteTimestamp;
+        TMaybe<i16> ProducerEpoch;
     };
 
     class TSourceManager {
@@ -41,12 +42,13 @@ public:
         bool CanProcess() const;
 
         std::optional<ui64> SeqNo() const;
+        std::optional<TMaybe<i16>> ProducerEpoch() const;
         bool Explicit() const;
 
         std::optional<ui64> CommittedSeqNo() const;
         std::optional<ui64> UpdatedSeqNo() const;
 
-        void Update(ui64 seqNo, ui64 offset, TInstant timestamp);
+        void Update(ui64 seqNo, ui64 offset, TInstant timestamp, TMaybe<i16> producerEpoch = Nothing());
         void Update(THeartbeat&& heartbeat);
 
     private:

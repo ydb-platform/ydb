@@ -1,6 +1,6 @@
 # SHOW CREATE
 
-`SHOW CREATE` возвращает запрос, возможно состоящий из нескольких DDL-выражений, необходимых для воссоздания структуры выбранного объекта: [таблицы](../../../concepts/datamodel/table.md) или [представления](../../../concepts/datamodel/view.md).
+`SHOW CREATE` возвращает запрос, возможно состоящий из нескольких DDL-выражений, необходимых для воссоздания структуры выбранного объекта: {% if oss == true and backend_name == 'YDB' %}[таблицы](../../../concepts/datamodel/table.md){% else %}таблицы{% endif %}{% if feature_view and oss == true and backend_name == 'YDB' %} или [представления](../../../concepts/datamodel/view.md){% endif %}{% if feature_view and backend_name != 'YDB' %} или представления{% endif %}.
 
 ## Синтаксис
 
@@ -26,9 +26,15 @@ SHOW CREATE [TABLE|VIEW] <name>;
 - **CreateQuery** — полный набор DDL-выражений, необходимых для создания объекта:
     - Для таблиц: основной оператор [CREATE TABLE](create_table/index.md) (с путем относительно базы), а также дополнительные команды, необходимые для описания текущего состояния и настроек:
         - [ALTER TABLE ... ALTER INDEX](alter_table/secondary_index#alter-index)— для задания настроек партицирования вторичных индексов.
+        {% if feature_changefeed and backend_name == "YDB" %}
         - [ALTER TABLE ... ADD CHANGEFEED](alter_table/changefeed.md)— для добавления потока изменений.
+        {% endif %}
+        {% if feature_serial %}
         - `ALTER SEQUENCE` — для восстановления состояния `Sequence` у колонок типа [Serial](../../../yql/reference/types/serial.md).
+        {% endif %}
+    {% if feature_view %}
     - Для представлений: определение посредством команды [CREATE VIEW](create-view.md), а также, если необходимо, выражения, которые были зафиксированы представлением из контекста создания, например, [PRAGMA TablePathPrefix](pragma#table-path-prefix).
+    {% endif %}
 
 ## Примеры
 

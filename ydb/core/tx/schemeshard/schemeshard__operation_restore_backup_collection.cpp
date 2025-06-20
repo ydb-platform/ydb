@@ -208,6 +208,8 @@ public:
             op.AddIncrementalBackupTrimmedNames(TString(incrBackupName));
         }
 
+        context.SS->LongIncrementalRestoreOps[OperationId] = op;
+        context.MemChanges.GrabNewLongIncrementalRestoreOp(context.SS, OperationId);
         context.DbChanges.PersistLongIncrementalRestoreOp(op);
 
         // Set initial operation state

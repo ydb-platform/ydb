@@ -36,7 +36,6 @@ class Slice:
     ):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
         self.__slice_cfg_path = '/Berkanavt/kikimr/cfg'
-        self.__slice_cfg_dir = '/Berkanavt/kikimr/config-dir'
         self.slice_secrets_path = '/Berkanavt/kikimr/token'
         self.components = components
         self.nodes = nodes
@@ -58,10 +57,6 @@ class Slice:
         return self.__slice_cfg_path
 
     @property
-    def slice_cfg_dir(self) -> str:
-        return self.__slice_cfg_dir
-
-    @property
     def v2(self):
         return self.configurator.v2 if hasattr(self.configurator, 'v2') else False
 
@@ -69,7 +64,7 @@ class Slice:
         self.nodes.execute_async(r"sudo mkdir -p /Berkanavt")
 
     def _clear_config(self):
-        self.nodes.execute_async(r"sudo rm -f {cfg_dir}/config.yaml".format(cfg_dir=self.slice_cfg_dir))
+        self.nodes.execute_async(r"sudo rm -f {cfg_dir}/config.yaml".format(cfg_dir=self.slice_cfg_path))
 
     def _clear_registered_slots(self):
         self.nodes.execute_async(r"sudo find /Berkanavt/ -maxdepth 1 -type d  -name 'kikimr_*' -exec  rm -rf -- {} \;")

@@ -145,8 +145,7 @@ class YamlConfigurator(object):
     @property
     def dynamic_cfg(self):
         if self.v2:
-            brokers = [f"grpc://{h}:2135" for h in self.hosts_names]
-            return dynamic_cfg_new_style_v2(brokers)
+            return dynamic_cfg_new_style_v2()
         return dynamic_cfg_new_style()
 
     def create_static_cfg(self) -> str:

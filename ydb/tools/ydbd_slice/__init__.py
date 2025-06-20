@@ -1512,20 +1512,6 @@ def main(walle_provider=None):
             parser.print_help()
             return
 
-        if not hasattr(args, 'yaml_config') or not args.yaml_config:
-            warnings.warn(
-                '''
-Using cluster.yaml for cluster configuration is deprecated.
-Only the 'domains' section should be filled with database and slot configurations.
-The config.yaml should be passed as a raw file through the --yaml-config-v2 argument.
-
-Example:
-    ydbd_slice install cluster.yaml all --binary /path/to/ydbd --yaml-config-v2 /path/to/config.yaml
-
-''',
-                DeprecationWarning
-            )
-
         args.handler(args)
     except KeyboardInterrupt:
         sys.exit('\nStopped by KeyboardInterrupt.')

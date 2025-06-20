@@ -450,12 +450,9 @@ def dynamic_cfg_new_style(
     )
 
 
-def dynamic_cfg_new_style_v2(
-    brokers: list[str]
-):
+def dynamic_cfg_new_style_v2():
     return "\n".join(
         [
-            "kikimr_brokers=\"{}\"".format(' '.join(brokers)),
             DYNAMIC_CFG_V2,
         ]
     )

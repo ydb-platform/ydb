@@ -15,7 +15,7 @@ void TMeteringStatsCalculator::TryFixOldFormat(TMeteringStats& value) {
 }
 
 TMeteringStats TMeteringStatsCalculator::Zero() {
-    // this method only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
+    // this method the only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
     TMeteringStats value;
     value.SetUploadRows(0);
     value.SetUploadBytes(0);
@@ -67,11 +67,15 @@ ui64 TRUCalculator::BulkUpsert(ui64 bytes, ui64 rows) {
     return (Max(rows, (bytes + 1_KB - 1) / 1_KB) + 1) / 2;
 }
 
-ui64 TRUCalculator::Calculate(const TMeteringStats& stats) {
+ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
     // The cost of building an index is the sum of the cost of ReadTable from the source table and BulkUpsert to the index table.
     // https://yandex.cloud/en-ru/docs/ydb/pricing/ru-special#secondary-index
-    return TRUCalculator::ReadTable(stats.GetReadBytes())
-         + TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
+    ui64 readTableRU = TRUCalculator::ReadTable(stats.GetReadBytes());
+    ui64 bulkUpsertRU = TRUCalculator::BulkUpsert(stats.GetUploadBytes(), stats.GetUploadRows());
+    explain = TStringBuilder()
+        << "ReadTable: " << readTableRU
+        << ", BulkUpsert: " << bulkUpsertRU;
+    return readTableRU + bulkUpsertRU;
 }
 
 }

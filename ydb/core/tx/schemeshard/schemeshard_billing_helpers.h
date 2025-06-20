@@ -18,7 +18,7 @@ struct TMeteringStatsCalculator {
 struct TRUCalculator {
     static ui64 ReadTable(ui64 bytes);
     static ui64 BulkUpsert(ui64 bytes, ui64 rows);
-    static ui64 Calculate(const TMeteringStats& stats);
+    static ui64 Calculate(const TMeteringStats& stats, TString& explain);
 };
 
 }

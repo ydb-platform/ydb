@@ -566,7 +566,7 @@ protected:
     void Handle(TEvKeyValue::TEvForceTabletDataCleanup::TPtr &ev) {
         ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvForceTabletDataCleanup generation# " << ev->Get()->Generation);
-        Executor()->CleanupData(ev->Get()->Generation);
+        Executor()->StartVacuum(ev->Get()->Generation);
     }
 
 public:
@@ -609,8 +609,8 @@ public:
         return false;
     }
 
-    void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override {
-        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "DataCleanupComplete",
+    void VacuumComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override {
+        STLOG(NLog::PRI_DEBUG, NKikimrServices::KEYVALUE_GC, KV271, "VacuumComplete",
             (TabletId, TabletID()));
         Execute(new TTxCompleteCleanupData(this, State.GetCleanupResetGeneration(), dataCleanupGeneration), ctx);
     }

@@ -467,7 +467,7 @@ class TExecutor
     THolder<TExecutorGCLogic> GcLogic;
     THolder<TCompactionLogic> CompactionLogic;
     THolder<TExecutorBorrowLogic> BorrowLogic;
-    THolder<TDataCleanupLogic> DataCleanupLogic;
+    THolder<TVacuumLogic> VacuumLogic;
 
     TLoadBlobQueue PendingBlobQueue;
 
@@ -683,7 +683,7 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
-    void CleanupData(ui64 dataCleanupGeneration) override;
+    void StartVacuum(ui64 vacuumGeneration) override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

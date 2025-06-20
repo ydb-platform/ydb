@@ -61,6 +61,7 @@ target_proto_messages(api-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_common.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_backup.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_bridge.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_logstore.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/draft/ydb_maintenance.proto
@@ -106,6 +107,7 @@ target_sources(api-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_common.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/persqueue_error_codes.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_backup.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_bridge.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_dynamic_config.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_logstore.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/draft/ydb_maintenance.pb.h

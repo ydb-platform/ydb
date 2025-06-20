@@ -35,6 +35,7 @@ target_link_libraries(src-client-draft PUBLIC
 )
 
 target_sources(src-client-draft PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/draft/ydb_bridge.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/draft/ydb_dynamic_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/draft/ydb_replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/draft/ydb_scripting.cpp

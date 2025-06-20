@@ -102,6 +102,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_alter_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_backup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_begin_transaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_bridge.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_cancel_operation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_cms.cpp

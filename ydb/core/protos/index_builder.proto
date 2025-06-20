@@ -28,7 +28,7 @@ message TIndexBuildScanSettings {
     optional uint32 MaxBatchRetries = 3 [ default = 50 ];
 }
 
-message TBillingStats {
+message TMeteringStats {
     optional uint64 UploadRows = 1;
     optional uint64 UploadBytes = 2;
     optional uint64 ReadRows = 3;
@@ -148,5 +148,5 @@ message TEvUploadSampleKResponse {
     repeated Ydb.Issue.IssueMessage Issues = 3;
 
     reserved 4 to 5;
-    optional NKikimrIndexBuilder.TBillingStats BillingStats = 6;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 6;
 }

@@ -30,9 +30,6 @@ private:
     TQueryInfoList Upsert();
     TQueryInfoList Select();
 
-    // Callback that uses the decoupled TVectorRecallEvaluator
-    void RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex);
-    
     // Helper method to get next target index
     size_t GetNextTargetIndex(size_t currentIndex) const;
 

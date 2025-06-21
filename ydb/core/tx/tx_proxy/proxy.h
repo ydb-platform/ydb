@@ -5,7 +5,7 @@
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>

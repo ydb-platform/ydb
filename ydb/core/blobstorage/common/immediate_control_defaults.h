@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 
 namespace NKikimr {
 

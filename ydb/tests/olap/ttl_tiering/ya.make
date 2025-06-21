@@ -6,9 +6,10 @@ ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 TEST_SRCS(
     base.py
     data_correctness.py
-    ttl_delete_s3.py
-    ttl_unavailable_s3.py
     data_migration_when_alter_ttl.py
+    ttl_delete_s3.py
+    ttl_portion_size.py
+    ttl_unavailable_s3.py
     unstable_connection.py
 )
 

@@ -45,8 +45,8 @@ protected:
     }
 
 public:
-    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const override {
-        Scanner->OnSentDataFromInterval(intervalIdx);
+    virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) override {
+        Scanner->OnSentDataFromInterval(address);
     }
 
     template <class T>

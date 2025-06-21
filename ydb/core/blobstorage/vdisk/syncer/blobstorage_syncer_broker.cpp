@@ -1,7 +1,7 @@
 #include "blobstorage_syncer_broker.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 
 namespace NKikimr {
 

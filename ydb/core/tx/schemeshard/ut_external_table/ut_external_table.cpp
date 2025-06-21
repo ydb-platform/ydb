@@ -28,7 +28,7 @@ void CreateExternalDataSource(TTestBasicRuntime& runtime, TTestEnv& env, ui64 tx
 Y_UNIT_TEST_SUITE(TExternalTableTest) {
     Y_UNIT_TEST(CreateExternalTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
         CreateExternalDataSource(runtime, env, txId++);
         TestCreateExternalTable(runtime, txId++, "/MyRoot", R"(
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(DropExternalTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, txId++);
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     void DropTwice(const TString& path, TRuntimeTxFn createFn, TRuntimeTxFn dropFn) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, txId++);
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(ParallelCreateExternalTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         CreateExternalDataSource(runtime, env, txId++);
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         using ESts = NKikimrScheme::EStatus;
 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         TString tableConfig = R"(
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         CreateExternalDataSource(runtime, env, txId++);
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(SchemeErrors) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().RunFakeConfigDispatcher(true));
         ui64 txId = 123;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(ReplaceExternalTableIfNotExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(CreateExternalTableShouldFailIfSuchEntityAlreadyExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(ReplaceExternalTableShouldFailIfEntityOfAnotherTypeWithSameNameExists) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         TestCreateView(runtime, ++txId, "/MyRoot", R"(
@@ -469,7 +469,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(ReplaceExternalTableIfNotExistsShouldFailIfFeatureFlagIsNotSet) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(false).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
 
         CreateExternalDataSource(runtime, env, ++txId);
@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
 
     Y_UNIT_TEST(Decimal) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true).RunFakeConfigDispatcher(true));
         ui64 txId = 100;
         CreateExternalDataSource(runtime, env, txId++);
         TestCreateExternalTable(runtime, txId++, "/MyRoot", R"_(

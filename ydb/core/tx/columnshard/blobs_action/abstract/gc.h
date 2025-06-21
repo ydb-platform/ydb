@@ -16,6 +16,8 @@ class TBlobManagerDb;
 class IBlobsGCAction: public ICommonBlobsAction {
 private:
     using TBase = ICommonBlobsAction;
+    YDB_READONLY(TString, ActionGuid, TGUID::CreateTimebased().AsGuidString());
+
 protected:
     TBlobsCategories BlobsToRemove;
     std::shared_ptr<NBlobOperations::TRemoveGCCounters> Counters;

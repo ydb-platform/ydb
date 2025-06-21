@@ -3,6 +3,7 @@
 #include "inserted.h"
 
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/set.h>
@@ -39,7 +40,7 @@ public:
 
 class TPathInfo: public TMoveOnly {
 private:
-    const ui64 PathId = 0;
+    const TInternalPathId PathId;
     TSet<TCommittedData> Committed;
     YDB_READONLY(i64, CommittedSize, 0);
     YDB_READONLY(i64, InsertedSize, 0);
@@ -60,9 +61,9 @@ public:
 
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);
 
-    explicit TPathInfo(TInsertionSummary& summary, const ui64 pathId);
+    explicit TPathInfo(TInsertionSummary& summary, const TInternalPathId pathId);
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 

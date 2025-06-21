@@ -126,6 +126,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
     }
+    TKikimrSettings& SetColumnShardDoubleOutOfRangeHandling(const NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy value) {
+        AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
+        return *this;
+    }
 };
 
 class TKikimrRunner {
@@ -396,6 +400,7 @@ struct TGetPlanParams {
     bool IncludeFilters = false;
     bool IncludeOptimizerEstimation = false;
     bool IncludeTables = true;
+    bool IncludeShuffles = false;
 };
 
 /* Gets join order with details as: join algo, join type and scan type. */

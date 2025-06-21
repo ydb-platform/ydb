@@ -165,7 +165,7 @@ void TOlapColumnsDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tab
     }
 }
 
-bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapColumnsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
     const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
 
     ui32 lastColumnId = 0;

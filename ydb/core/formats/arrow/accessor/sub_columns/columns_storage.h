@@ -29,7 +29,7 @@ public:
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("stats", Stats.DebugJson());
-        result.InsertValue("records", Records->DebugJson(true));
+        result.InsertValue("records", Records->DebugJson());
         return result;
     }
 
@@ -49,39 +49,12 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        std::shared_ptr<arrow::StringArray> CurrentArrayData;
+        const arrow::StringArray* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
 
-        void InitArrays() {
-            while (CurrentIndex < GlobalChunkedArray->GetRecordsCount()) {
-                if (!FullArrayAddress || !FullArrayAddress->GetAddress().Contains(CurrentIndex)) {
-                    FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
-                    ChunkAddress = std::nullopt;
-                }
-                const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
-                ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-                AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
-                CurrentArrayData = std::static_pointer_cast<arrow::StringArray>(ChunkAddress->GetArray());
-                if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
-                    if (CurrentArrayData->IsNull(localIndex)) {
-                        Next();
-                    }
-                    break;
-                } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
-                    if (CurrentArrayData->IsNull(localIndex) &&
-                        std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
-                        CurrentIndex += ChunkAddress->GetArray()->length();
-                    } else {
-                        break;
-                    }
-                } else {
-                    AFL_VERIFY(false)("type", FullArrayAddress->GetArray()->GetType());
-                }
-            }
-            AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount());
-        }
+        void InitArrays();
 
     public:
         TIterator(const ui32 keyIndex, const std::shared_ptr<IChunkedArray>& chunkedArray)
@@ -111,22 +84,35 @@ public:
             return CurrentIndex < GlobalChunkedArray->GetRecordsCount();
         }
 
+        bool SkipRecordTo(const ui32 recordIndex) {
+            if (recordIndex <= CurrentIndex) {
+                return true;
+            }
+            AFL_VERIFY(IsValid());
+            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
+            CurrentIndex = recordIndex;
+            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
+                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                    continue;
+                }
+                return true;
+            }
+            InitArrays();
+            return IsValid();
+        }
+
         bool Next() {
             AFL_VERIFY(IsValid());
-            while (true) {
-                ++CurrentIndex;
-                if (ChunkAddress->GetAddress().Contains(CurrentIndex)) {
-                    if (CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex))) {
-                        continue;
-                    }
-                    return true;
-                } else if (CurrentIndex == GlobalChunkedArray->GetRecordsCount()) {
-                    return false;
-                } else {
-                    InitArrays();
-                    return IsValid();
+            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
+            ++CurrentIndex;
+            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
+                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                    continue;
                 }
+                return true;
             }
+            InitArrays();
+            return IsValid();
         }
     };
 
@@ -141,7 +127,7 @@ public:
     TColumnsData(const TDictStats& dict, const std::shared_ptr<TGeneralContainer>& data)
         : Stats(dict)
         , Records(data) {
-        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount());
+        AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
         for (auto&& i : Records->GetColumns()) {
             AFL_VERIFY(i->GetDataType()->id() == arrow::utf8()->id());
         }

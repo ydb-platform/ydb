@@ -14,6 +14,7 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
@@ -7250,13 +7251,16 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (appConfig.HasQueryServiceConfig()) {
         const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
+        const auto& availableExternalDataSources = appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources();
         ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
             std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
             nullptr,
             appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit(),
             nullptr,
             appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
-            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles()
+            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles(),
+            appConfig.GetQueryServiceConfig().GetAllExternalDataSourcesAreAvailable(),
+            std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
         );
     }
 

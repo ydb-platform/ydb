@@ -132,9 +132,23 @@ message TTaskOutputRangePartition {
 message TTaskOutputBroadcast {
 }
 
+message THashV1 {
+}
+
+message TColumnShardHashV1 {
+    uint64 ShardCount = 1;
+    repeated uint64 TaskIndexByHash = 2;
+    repeated uint32 KeyColumnTypes = 3;
+}
+
 message TTaskOutputHashPartition {
     repeated string KeyColumns = 1;
     uint32 PartitionsCount = 2;
+
+    oneof THashKind {
+        THashV1 HashV1 = 3;
+        TColumnShardHashV1 ColumnShardHashV1 = 4;
+    }
 }
 
 message TTaskOutputEffects {

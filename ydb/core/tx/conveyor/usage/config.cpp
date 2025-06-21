@@ -59,4 +59,28 @@ double TConfig::GetWorkerCPUUsage(const ui32 workerIdx) const {
     }
 }
 
+TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const TString& cpuGroupName)
+    : CPUGroupThreadsLimit(cpuGroupThreadsLimit)
+    , CPUGroupName(cpuGroupName) {
+}
+
+TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
+    if (config.HasCpuGroupThreadsLimit()) {
+        CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
+        CPUGroupName = config.GetCpuGroupName();
+    }
+    return TConclusionStatus::Success();
+}
+
+TString TCPULimitsConfig::DebugString() const {
+    TStringBuilder sb;
+    if (CPUGroupThreadsLimit) {
+        sb << "CPUGroupThreadsLimit=" << *CPUGroupThreadsLimit << ";";
+        sb << "CPUGroupName=" << CPUGroupName << ";";
+    } else {
+        sb << "Disabled;";
+    }
+    return sb;
+}
+
 }

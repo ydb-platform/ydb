@@ -35,8 +35,11 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
 
     TDataStorageAccessor dataAccessor(insertTable, index);
     AFL_VERIFY(read.PathId);
-    auto readMetadata = std::make_shared<TReadMetadata>(read.PathId, index->CopyVersionedIndexPtr(), read.GetSnapshot(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram(), nullptr);
+    auto readCopy = read;
+    if (readCopy.GetSorting() == ERequestSorting::NONE) {
+        readCopy.SetSorting(ERequestSorting::ASC);
+    }
+    auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), readCopy);
 
     auto initResult = readMetadata->Init(self, read, dataAccessor);
     if (!initResult) {

@@ -235,6 +235,78 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "Stage");
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Stats"]["Tasks"], 1);
     }
+
+    Y_UNIT_TEST(S3Insert) {
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket("test_insert", s3Client);
+        }
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"sql(
+                CREATE EXTERNAL DATA SOURCE insert_data_sink WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{insert_location}",
+                    AUTH_METHOD="NONE"
+                );
+                )sql",
+                "insert_location"_a = GetBucketLocation("test_insert")
+            );
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr->GetQueryClient();
+        {
+            const TString query = R"sql(
+                CREATE TABLE olap_source (
+                    PRIMARY KEY (data)
+                ) WITH (STORE = COLUMN)
+                AS SELECT * FROM AS_TABLE([
+                    <|data: "test_data"|>
+                ]);
+            )sql";
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = R"sql(
+            PRAGMA ydb.OverridePlanner = @@ [
+                { "tx": 0, "stage": 0, "tasks": 42 }
+            ] @@;
+
+            INSERT INTO insert_data_sink.`/test/`
+            WITH (FORMAT = "parquet")
+            SELECT * FROM olap_source
+        )sql";
+
+        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
+            sql,
+            TTxControl::NoTx(),
+            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
+        UNIT_ASSERT(queryResult.GetStats());
+        UNIT_ASSERT(queryResult.GetStats()->GetPlan());
+        Cerr << "Plan: " << *queryResult.GetStats()->GetPlan() << Endl;
+        NJson::TJsonValue plan;
+        UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
+
+        const auto& writeStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage");
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Stats"]["Tasks"], 42);
+
+        const auto& readStagePlan = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Stats"]["Tasks"], 42);
+    }
 }
 
 } // namespace NKikimr::NKqp

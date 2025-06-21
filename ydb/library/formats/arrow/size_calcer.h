@@ -4,10 +4,10 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/result.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
-#include <util/system/types.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <util/generic/string.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NArrow {
 
@@ -33,15 +33,12 @@ private:
     }
 
 public:
-
     ui64 GetApproxSerializeSize(const ui64 dataSize) const {
         return Max<ui64>(dataSize * 1.05, dataSize + Batch->num_columns() * 8);
     }
 
     TRowSizeCalculator(const ui32 alignBitsCount)
-        : AlignBitsCount(alignBitsCount)
-    {
-
+        : AlignBitsCount(alignBitsCount) {
     }
     bool InitBatch(const std::shared_ptr<arrow::RecordBatch>& batch);
     ui32 GetRowBitWidth(const ui32 row) const;
@@ -50,14 +47,17 @@ public:
 
 // Return size in bytes including size of bitmap mask
 ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch);
+ui64 GetBatchDataSize(const std::vector<std::shared_ptr<arrow::Array>>& batch);
 ui64 GetTableDataSize(const std::shared_ptr<arrow::Table>& batch);
 // Return size in bytes including size of bitmap mask
+ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ChunkedArray>& data);
 ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data);
-ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>&batch);
+ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch);
+ui64 GetBatchMemorySize(const std::vector<std::shared_ptr<arrow::Array>>& batch);
 ui64 GetTableMemorySize(const std::shared_ptr<arrow::Table>& batch);
 // Return size in bytes *not* including size of bitmap mask
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column);
 
 ui64 GetDictionarySize(const std::shared_ptr<arrow::DictionaryArray>& data);
 
-}
+}   // namespace NKikimr::NArrow

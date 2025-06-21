@@ -18,7 +18,7 @@ public:
     TString DebugString() const;
 
     explicit operator size_t() const {
-        return GroupId << 32 + ChannelId;
+        return (static_cast<size_t>(GroupId) << 32) | ChannelId;
     }
 
     bool operator==(const TBlobAddress& item) const {

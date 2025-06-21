@@ -14,7 +14,7 @@
                     ],
                     "limit": "1001",
                     "scan_by": [
-                        "HashPassword (\u00ab\u00bb, Non-UTF8 string)"
+                        "HashPassword (null, Non-UTF8 string)"
                     ],
                     "type": "Scan"
                 }

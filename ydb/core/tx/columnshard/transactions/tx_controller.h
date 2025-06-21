@@ -50,7 +50,7 @@ public:
 
 public:
     static TFullTxInfo BuildFake(const NKikimrTxColumnShard::ETransactionKind kind) {
-        return TFullTxInfo(kind, 0, NActors::TActorId(), 0, {});
+        return TFullTxInfo(kind, 0, NActors::TActorId(), 0, 0, {});
     }
 
     bool operator==(const TFullTxInfo& item) const = default;
@@ -86,9 +86,10 @@ public:
         : TBasicTxInfo(txKind, txId) {
     }
 
-    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 cookie,
-        const std::optional<TMessageSeqNo>& seqNo)
+    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep, 
+        const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo)
         : TBasicTxInfo(txKind, txId)
+        , MinStep(minAllowedPlanStep)
         , Source(source)
         , Cookie(cookie)
         , SeqNo(seqNo) {
@@ -414,7 +415,6 @@ private:
 
     THashMap<ui64, ITransactionOperator::TPtr> Operators;
 private:
-    ui64 GetAllowedStep() const;
     bool AbortTx(const TPlanQueueItem planQueueItem, NTabletFlatExecutor::TTransactionContext& txc);
 
     TTxInfo RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
@@ -425,6 +425,8 @@ private:
 
 public:
     TTxController(TColumnShard& owner);
+
+    ui64 GetAllowedStep() const;
 
     ITransactionOperator::TPtr GetTxOperatorOptional(const ui64 txId) const {
         auto it = Operators.find(txId);

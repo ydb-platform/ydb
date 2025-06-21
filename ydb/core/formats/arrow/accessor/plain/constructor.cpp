@@ -18,11 +18,13 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto result = externalInfo.GetDefaultSerializer()->Deserialize(originalData, schema);
     if (!result.ok()) {
         return TConclusionStatus::Fail(result.status().ToString());
-    } else {
-        auto rb = TStatusValidator::GetValid(result);
-        AFL_VERIFY(rb->num_columns() == 1)("count", rb->num_columns())("schema", schema->ToString());
-        return std::make_shared<NArrow::NAccessor::TTrivialArray>(rb->column(0));
     }
+    auto rb = TStatusValidator::GetValid(result);
+    AFL_VERIFY(rb->num_columns() == 1)("count", rb->num_columns())("schema", schema->ToString());
+    if (externalInfo.HasNullRecordsCount()) {
+        rb->column(0)->data()->SetNullCount(externalInfo.GetNullRecordsCountVerified());
+    }
+    return std::make_shared<NArrow::NAccessor::TTrivialArray>(rb->column(0));
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
@@ -54,6 +56,10 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const {
+    if (!originalArray->GetDataType()->Equals(externalInfo.GetColumnType())) {
+        return TConclusionStatus::Fail("plain accessor cannot convert types for transfer: " + originalArray->GetDataType()->ToString() + " to " +
+                                       externalInfo.GetColumnType()->ToString());
+    }
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     auto chunked = originalArray->GetChunkedArray();
     auto table = arrow::Table::Make(schema, { chunked }, originalArray->GetRecordsCount());

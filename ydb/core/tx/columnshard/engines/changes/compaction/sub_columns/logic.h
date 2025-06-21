@@ -29,7 +29,7 @@ private:
     std::vector<NSubColumns::TChunksIterator> OrderedIterators;
 
     virtual void DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& mergeContext) override;
-    virtual std::vector<TColumnPortionResult> DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
+    virtual TColumnPortionResult DoExecute(const TChunkMergeContext& context, TMergingContext& mergeContext) override;
 
 public:
     using TBase::TBase;

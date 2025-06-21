@@ -10,7 +10,7 @@
 #include "resource_profile.h"
 #include "event_filter.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/tablet_flat/shared_cache_pages.h>

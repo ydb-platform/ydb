@@ -9,6 +9,7 @@ class ICompositeChunkedArray: public NArrow::NAccessor::IChunkedArray {
 private:
     using TBase = NArrow::NAccessor::IChunkedArray;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override final;
+    virtual std::shared_ptr<IChunkedArray> DoApplyFilter(const TColumnFilter& filter) const override;
 
 public:
     using TBase::TBase;
@@ -20,6 +21,14 @@ private:
 
 private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IChunkedArray>>, Chunks);
+
+    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const override;
+
+    virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
+        for (auto&& i : Chunks) {
+            i->VisitValues(visitor);
+        }
+    }
 
 protected:
     virtual ui32 DoGetNullsCount() const override {
@@ -54,6 +63,67 @@ public:
         , Chunks(std::move(chunks)) {
     }
 
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
+
+    virtual bool HasSubColumnData(const TString& subColumnName) const override {
+        for (auto&& i : Chunks) {
+            if (!i->HasSubColumnData(subColumnName)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    virtual bool HasWholeDataVolume() const override {
+        for (auto&& i : Chunks) {
+            if (!i->HasWholeDataVolume()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    class TIterator: TNonCopyable {
+    private:
+        const std::shared_ptr<TCompositeChunkedArray> Owner;
+        ui32 RecordIndex = 0;
+        std::optional<TFullChunkedArrayAddress> CurrentChunk;
+
+    public:
+        TIterator(const std::shared_ptr<TCompositeChunkedArray>& owner)
+            : Owner(owner) {
+            if (Owner->GetRecordsCount()) {
+                CurrentChunk = Owner->GetArray(CurrentChunk, RecordIndex, Owner);
+            }
+        }
+
+        const std::shared_ptr<IChunkedArray>& GetArray() const {
+            AFL_VERIFY(CurrentChunk);
+            return CurrentChunk->GetArray();
+        }
+
+        bool IsValid() {
+            return RecordIndex < Owner->GetRecordsCount();
+        }
+
+        bool Next() {
+            AFL_VERIFY(IsValid());
+            AFL_VERIFY(CurrentChunk);
+            RecordIndex += CurrentChunk->GetArray()->GetRecordsCount();
+            AFL_VERIFY(RecordIndex <= Owner->GetRecordsCount());
+            if (IsValid()) {
+                CurrentChunk = Owner->GetArray(CurrentChunk, RecordIndex, Owner);
+                return true;
+            } else {
+                return false;
+            }
+        }
+    };
+
+    static TIterator BuildIterator(std::shared_ptr<TCompositeChunkedArray>& owner) {
+        return TIterator(owner);
+    }
+
     class TBuilder {
     private:
         ui32 RecordsCount = 0;
@@ -74,9 +144,12 @@ public:
             RecordsCount += arr->GetRecordsCount();
         }
 
-        std::shared_ptr<TCompositeChunkedArray> Finish() {
+        std::shared_ptr<IChunkedArray> Finish() {
             AFL_VERIFY(!Finished);
             Finished = true;
+            if (Chunks.size() == 1) {
+                return Chunks.front();
+            }
             return std::shared_ptr<TCompositeChunkedArray>(new TCompositeChunkedArray(std::move(Chunks), RecordsCount, Type));
         }
     };

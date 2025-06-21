@@ -37,7 +37,6 @@ private:
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) = 0;
 
 protected:
-    NIndexes::TIndexCheckerContainer IndexChecker;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
 
 public:

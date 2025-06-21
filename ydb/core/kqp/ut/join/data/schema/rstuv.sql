@@ -18,7 +18,7 @@ CREATE TABLE `/Root/T` (
 );
 
 CREATE TABLE `/Root/U` (
-    id Int32 not null,
+    id Int32 not null, 
     payload4 String,
     PRIMARY KEY (id)
 );

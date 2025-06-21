@@ -309,11 +309,16 @@ private:
 
         ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
+        bool enableFoldUdfs = TableServiceConfig.GetEnableFoldUdfs();
+
+        bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
         bool enableSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
 
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
+
+        bool enableSpillingInHashJoinShuffleConnections = TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -340,12 +345,16 @@ private:
             TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
             TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
             TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
+            TableServiceConfig.GetEnableFoldUdfs() != enableFoldUdfs ||
             TableServiceConfig.GetEnableAstCache() != enableAstCache ||
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
             TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
-            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling) {
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling ||
+            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
+            TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections)
+        {
 
             QueryCache->Clear();
 

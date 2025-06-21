@@ -29,16 +29,13 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         TKqpTasksGraph& tasksGraph)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
-        , Transactions(transactions)
         , TasksGraph(tasksGraph) {}
 
     void Bootstrap() {
-        FillKqpTasksGraphStages(TasksGraph, Transactions);
         ResolveKeys();
     }
 
@@ -484,7 +481,6 @@ private:
     const TActorId Owner;
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     THashMap<TString, TVector<TStageId>> TableRequestPathes;
     THashMap<TTableId, TString> TablePathsById;
@@ -503,9 +499,8 @@ private:
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTasksGraph& tasksGraph) {
-    return new TKqpTableResolver(owner, txId, userToken, transactions, tasksGraph);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph);
 }
 
 } // namespace NKikimr::NKqp

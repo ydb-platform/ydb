@@ -18,7 +18,7 @@ DATA(
     arcadia/ydb/library/yql/tests/sql # python files
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator_grpc/recipe.inc)
 
 PEERDIR(
     ydb/tests/fq/tools

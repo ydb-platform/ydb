@@ -1,8 +1,13 @@
 #pragma once
 #include "position.h"
+
+#include <ydb/core/formats/arrow/reader/merger.h>
+
 #include <ydb/library/accessor/accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <util/system/types.h>
+
 #include <optional>
 
 namespace NKikimr::NArrow::NMerger {
@@ -15,7 +20,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<ui32>, MemoryBufferLimit);
 
     ui64 CurrentBytesUsed = 0;
-    bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2);
+    static bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2);
 
 public:
 
@@ -60,7 +65,8 @@ public:
     }
     void AddRecord(const TCursor& position);
     void AddRecord(const TRWSortableBatchPosition& position);
-    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema);
+    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const;
+    void AddRecord(const TBatchIterator& cursor);
+    void SkipRecord(const TBatchIterator& cursor);
 };
-
 }

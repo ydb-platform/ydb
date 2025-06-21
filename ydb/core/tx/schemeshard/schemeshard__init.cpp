@@ -3,6 +3,7 @@
 #include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>

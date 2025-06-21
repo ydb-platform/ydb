@@ -380,4 +380,11 @@ message TTableServiceConfig {
     }
 
     optional TBatchOperationSettings BatchOperationSettings = 81;
+
+    optional bool EnableFoldUdfs = 82 [ default = false ];
+
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false];
+
+    optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = false];
+
 };

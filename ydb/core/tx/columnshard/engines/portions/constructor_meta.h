@@ -17,7 +17,6 @@ private:
     std::optional<TString> TierName;
     std::optional<TSnapshot> RecordSnapshotMin;
     std::optional<TSnapshot> RecordSnapshotMax;
-    std::optional<NPortion::EProduced> Produced;
     std::optional<ui64> CompactionLevel;
 
     std::optional<ui32> RecordsCount;
@@ -36,6 +35,17 @@ private:
 public:
     TPortionMetaConstructor() = default;
     TPortionMetaConstructor(const TPortionMeta& meta, const bool withBlobs);
+
+    const NArrow::TFirstLastSpecialKeys& GetFirstAndLastPK() const {
+        AFL_VERIFY(FirstAndLastPK);
+        return *FirstAndLastPK;
+    }
+
+    ui64 GetTotalBlobBytes() const {
+        AFL_VERIFY(ColumnBlobBytes);
+        AFL_VERIFY(IndexBlobBytes);
+        return *ColumnBlobBytes + *IndexBlobBytes;
+    }
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
         return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
@@ -62,10 +72,6 @@ public:
     void ResetTierName(const TString& tierName) {
         TierName.reset();
         SetTierName(tierName);
-    }
-
-    void UpdateRecordsMeta(const NPortion::EProduced prod) {
-        Produced = prod;
     }
 
     TPortionMeta Build();

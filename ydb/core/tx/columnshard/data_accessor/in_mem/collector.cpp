@@ -11,7 +11,7 @@ TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) 
     TDataCategorized result;
     for (auto&& c : portions.GetConsumers()) {
         for (auto&& p : c.second.GetPortions()) {
-            auto it = Accessors.find(p->GetPortionId());
+            auto it = Accessors.find(p);
             AFL_VERIFY(it != Accessors.end());
             result.AddFromCache(it->second);
         }

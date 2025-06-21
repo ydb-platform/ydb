@@ -244,7 +244,7 @@ TDqConnection BuildConnection(
             .Done();
     };
 
-    if (!typeCtx || !typeCtx->OrderingsFSM) {
+    if (!enableShuffleElimination || !typeCtx || !typeCtx->OrderingsFSM) {
         return buildShuffle();
     }
     auto inputStats = typeCtx->GetStats(dqUnion.Output().Raw());

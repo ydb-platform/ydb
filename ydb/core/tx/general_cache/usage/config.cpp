@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NGeneralCache::NPublic {
 
 TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TGeneralCacheConfig& config) {

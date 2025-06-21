@@ -1,4 +1,11 @@
 #pragma once
+#include <ydb/core/base/events.h>
+
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NGeneralCache::NSource {
 
@@ -9,7 +16,7 @@ struct TEvents {
     using EConsumer = typename TPolicy::EConsumer;
 
     enum EEv {
-        EvObjectsInfo = EventSpaceBegin(NActors::TEvents::ES_GENERAL_CACHE_SOURCE),
+        EvObjectsInfo = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_SOURCE),
         EvEnd
     };
 
@@ -20,6 +27,9 @@ struct TEvents {
 
         bool ObjectsExtracted = false;
         THashMap<TAddress, TObject> Objects;
+
+        bool ErrorsExtracted = false;
+        THashMap<TAddress, TString> Errors;
 
     public:
         THashMap<TAddress, TObject> ExtractObjects() {
@@ -34,9 +44,17 @@ struct TEvents {
             return std::move(Removed);
         }
 
-        TEvObjectsInfo(THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed)
+        THashMap<TAddress, TString> ExtractErrors() {
+            AFL_VERIFY(!ErrorsExtracted);
+            ErrorsExtracted = true;
+            return std::move(Errors);
+        }
+
+        TEvObjectsInfo(THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& errors)
             : Removed(std::move(removed))
-            , Objects(std::move(objects)) {
+            , Objects(std::move(objects))
+            , Errors(std::move(errors))
+        {
         }
     };
 };

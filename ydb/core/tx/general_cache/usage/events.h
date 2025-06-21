@@ -14,7 +14,7 @@ template <class TPolicy>
 struct TEvents {
     using TAddress = typename TPolicy::TAddress;
     using EConsumer = typename TPolicy::EConsumer;
-    using ICallback = NSource::ICallback<TPolicy>;
+    using ICallback = ICallback<TPolicy>;
 
     enum EEv {
         EvAskData = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_PUBLIC),

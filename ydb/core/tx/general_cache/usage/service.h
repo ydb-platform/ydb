@@ -1,4 +1,5 @@
 #pragma once
+#include "abstract.h"
 #include "config.h"
 
 #include <ydb/core/tx/general_cache/service/service.h>
@@ -10,12 +11,15 @@ class TServiceOperator {
 private:
     using TAddress = typename TPolicy::TAddress;
     using EConsumer = typename TPolicy::EConsumer;
+    using ICallback = NPublic::ICallback<TPolicy>;
 
     using TSelf = TServiceOperator<TPolicy>;
 
 public:
     static void AskObjects(const EConsumer consumer, THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback) {
-        context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents::TEvAskData(std::move(addresses), std::move(callback)));
+        AFL_VERIFY(NActors::TlsActivationContext);
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvAskData(consumer, std::move(addresses), std::move(callback)));
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcCach" + TPolicy::GetServiceCode());
@@ -27,7 +31,7 @@ public:
         return MakeServiceId(selfId.NodeId());
     }
     static NActors::IActor* CreateService(const NPublic::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
-        return new TDistributor(config, conveyorSignals);
+        return new NPrivate::TDistributor<TPolicy>(config, conveyorSignals);
     }
 };
 

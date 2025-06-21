@@ -6,6 +6,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/actors/core
+    ydb/core/protos
 )
 
 END()

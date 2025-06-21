@@ -31,8 +31,6 @@ public:
     void Rewind() override {
     }
 private:
-    virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) = 0;
-
     virtual TStatus HandleWriteTable(NNodes::TKiWriteTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleUpdateTable(NNodes::TKiUpdateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDeleteTable(NNodes::TKiDeleteTable node, TExprContext& ctx) = 0;
@@ -93,7 +91,6 @@ private:
 class TKikimrKey {
 public:
     enum class Type {
-        Database,
         Table,
         TableList,
         TableScheme,
@@ -130,12 +127,6 @@ public:
     TString GetTablePath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Table || KeyType == Type::TableScheme);
-        return Target;
-    }
-
-    TString GetDatabasePath() const {
-        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
-        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Database);
         return Target;
     }
 

@@ -188,32 +188,18 @@ namespace NSchemeShardUT_Private {
     }
 
     void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) {
-        for (const auto& applyIfUnit: applyIf) {
+        for (auto& pathVersion: applyIf) {
             auto condition = transaction.AddApplyIf();
-
-            if (applyIfUnit.PathId != TPathId()) {
-                condition->SetPathId(applyIfUnit.PathId.LocalPathId);
-                condition->SetPathVersion(applyIfUnit.Version);
-            }
-
-            for (auto pathType : applyIfUnit.PathTypes) {
-                condition->AddPathTypes(pathType);
-            }
+            condition->SetPathId(pathVersion.PathId.LocalPathId);
+            condition->SetPathVersion(pathVersion.Version);
         }
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(
-        ui64 txId, ui64 schemeshard,
-        TString parentPath, TString name, 
-        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
-    )
-    {
+    TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(ui64 txId, ui64 schemeshard, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeshard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
-
-        SetApplyIf(*transaction, applyIf);
 
         auto op = transaction->MutableModifyACL();
         op->SetName(name);
@@ -227,47 +213,25 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
-    void AsyncModifyACL(
-        TTestActorRuntime& runtime,
-        ui64 schemeShardId, ui64 txId,
-        TString parentPath, TString name,
-        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
-    )
-    {
-        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner, applyIf));
+    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
+        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner));
     }
 
-    void AsyncModifyACL(
-        TTestActorRuntime& runtime,
-        ui64 txId, TString parentPath, TString name,
-        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
-    )
-    {
-        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, applyIf);
+    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
+        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner);
     }
 
-    void TestModifyACL(
-        TTestActorRuntime& runtime,
-        ui64 schemeShardId, ui64 txId,
-        TString parentPath, TString name,
-        const TString& diffAcl, const TString& newOwner,
-        TEvSchemeShard::EStatus expectedResult,
-        const TApplyIf& applyIf
-    )
-    {
-        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner, applyIf);
+    void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name,
+                       const TString& diffAcl, const TString& newOwner,
+                       TEvSchemeShard::EStatus expectedResult) {
+        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner);
         TestModificationResult(runtime, txId, expectedResult);
     }
 
-    void TestModifyACL(
-        TTestActorRuntime& runtime,
-        ui64 txId, TString parentPath, TString name,
-        const TString& diffAcl, const TString& newOwner,
-        TEvSchemeShard::EStatus expectedResult,
-        const TApplyIf& applyIf
-    )
-    {
-        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult, applyIf);
+    void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name,
+                       const TString& diffAcl, const TString& newOwner,
+                       TEvSchemeShard::EStatus expectedResult) {
+        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult);
     }
 
 

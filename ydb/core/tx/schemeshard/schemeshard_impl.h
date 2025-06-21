@@ -607,7 +607,7 @@ public:
     TTabletId SelectCoordinator(TTxId txId, TPathId pathId) const;
     TTabletId SelectCoordinator(TTxId txId, TPathElement::TPtr pathEl) const;
 
-    bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType = {});
+    bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr);
     bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
     bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
     bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const;

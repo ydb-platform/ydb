@@ -7,6 +7,7 @@
 
 #include <format>
 #include <string>
+#include <unordered_map>
 
 #include <algorithm>
 
@@ -150,7 +151,6 @@ void TVectorRecallEvaluator::SampleExistingVectors() {
         // Create target with the sampled vector
         TSelectTarget target;
         target.EmbeddingBytes = std::move(embeddingBytes);
-        target.NearestNeighbors.push_back(id);  // The vector's own ID is an etalon
         
         // Get prefix value if column was specified
         if (Params.PrefixColumn) {
@@ -256,6 +256,7 @@ void TVectorRecallEvaluator::FillEtalons() {
         }
         
         // Wait for all scan queries in this batch to complete and build ground truth
+        std::unordered_map<size_t, std::vector<ui64>> batchEtalons;
         for (auto& [targetIndex, asyncResult] : asyncScanQueries) {
             auto result = asyncResult.GetValueSync();
             Y_ABORT_UNLESS(result.IsSuccess(), "Scan query failed for target %zu: %s", 
@@ -264,25 +265,27 @@ void TVectorRecallEvaluator::FillEtalons() {
             auto resultSet = result.GetResultSet(0);
             NYdb::TResultSetParser parser(resultSet);
             
-            // Clear and prepare etalons for this target
-            SelectTargets[targetIndex].NearestNeighbors.clear();
-            SelectTargets[targetIndex].NearestNeighbors.reserve(Params.Limit);
+            // Build etalons for this target locally
+            std::vector<ui64> etalons;
+            etalons.reserve(Params.Limit);
             
             // Extract all IDs from the result set
             while (parser.TryNextRow()) {
                 ui64 id = parser.ColumnParser(Params.KeyColumn).GetUint64();
-                SelectTargets[targetIndex].NearestNeighbors.push_back(id);
+                etalons.push_back(id);
             }
-            if (SelectTargets[targetIndex].NearestNeighbors.empty()) {
+            if (etalons.empty()) {
                 Cerr << "Warning: target " << targetIndex << " have empty etalon sets" << Endl;
             }
+            
+            batchEtalons[targetIndex] = std::move(etalons);
         }
         
         // Wait for all index queries in this batch to complete and measure recall
         for (auto& [targetIndex, asyncResult] : asyncIndexQueries) {
             auto result = asyncResult.GetValueSync();
-            // Process the index query result and calculate recall
-            ProcessQueryResult(result, targetIndex, false);
+            // Process the index query result and calculate recall using etalon nearearest neigbours
+            ProcessIndexQueryResult(result, targetIndex, batchEtalons[targetIndex], false);
         }
         
         // Log progress for large datasets
@@ -301,12 +304,8 @@ const std::string& TVectorRecallEvaluator::GetTargetEmbedding(size_t index) cons
     return SelectTargets.at(index).EmbeddingBytes;
 }
 
-const std::vector<ui64>& TVectorRecallEvaluator::GetTargetEtalons(size_t index) const {
-    return SelectTargets.at(index).NearestNeighbors;
-}
 
 void TVectorRecallEvaluator::AddRecall(double recall) {
-    std::lock_guard<std::mutex> lock(Mutex);
     TotalRecall += recall;
     ProcessedTargets++;
 }
@@ -331,8 +330,8 @@ i64 TVectorRecallEvaluator::GetPrefixValue(size_t targetIndex) const {
     return SelectTargets.at(targetIndex).PrefixValue;
 }
 
-// Process query results
-void TVectorRecallEvaluator::ProcessQueryResult(const NYdb::NQuery::TExecuteQueryResult& queryResult, size_t targetIndex, bool verbose) {
+// Process index query results
+void TVectorRecallEvaluator::ProcessIndexQueryResult(const NYdb::NQuery::TExecuteQueryResult& queryResult, size_t targetIndex, const std::vector<ui64>& etalons, bool verbose) {
     if (!queryResult.IsSuccess()) {
         // Ignore the error. It's printed in the verbose mode
         return;
@@ -349,8 +348,7 @@ void TVectorRecallEvaluator::ProcessQueryResult(const NYdb::NQuery::TExecuteQuer
         indexResults.push_back(id);
     }
     
-    // Get the etalons for the specified target
-    const auto& etalons = GetTargetEtalons(targetIndex);
+    // Create etalon set for efficient lookup
     std::unordered_set<ui64> etalonSet(etalons.begin(), etalons.end());
 
     // Check if target ID is first in results

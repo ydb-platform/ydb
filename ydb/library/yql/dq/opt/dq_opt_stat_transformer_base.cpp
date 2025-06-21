@@ -109,13 +109,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoGraceJoinCore::Match(input.Get())) {
         InferStatisticsForGraceJoin(input, TypeCtx, Pctx, CardinalityHints);
     }
-    else if (TDqJoin::Match(input.Get())) {
-        InferStatisticsForDqJoin(input, TypeCtx, Pctx, CardinalityHints);
+    else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
+        InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, CardinalityHints);
     }
-    else if(TDqPhyCrossJoin::Match(input.Get())) {
-        InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
-    }
-
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
         InferStatisticsForEquiJoin(input, TypeCtx);
@@ -139,6 +135,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (auto sortBase = TMaybeNode<TCoSortBase>(input)) {
         InferStatisticsForSortBase(input, TypeCtx);
     }
+    else if (TCoShuffleByKeys::Match(input.Get())) {
+        InferStatisticsForAggregationCallable<TCoShuffleByKeys>(input, TypeCtx);
+    }
     else {
         matched = false;
     }
@@ -152,7 +151,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdasUnmatched(const TExprNode::TPtr&
     if (input->ChildrenSize() >= 1) {
         auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
         if (stats) {
-            TypeCtx->SetStats(input.Get(), RemoveSorting(stats, input));
+            TypeCtx->SetStats(input.Get(), RemoveOrderings(stats, input));
         }
     }
     return true;

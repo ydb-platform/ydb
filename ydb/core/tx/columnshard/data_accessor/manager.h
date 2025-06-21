@@ -123,11 +123,11 @@ private:
     private:
         TPortionInfo::TConstPtr Portion;
         YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
-        YDB_READONLY_DEF(TString, ConsumerId);
+        YDB_READONLY_DEF(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, ConsumerId);
 
     public:
-        TPortionToAsk(
-            const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TString& consumerId)
+        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag,
+            const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumerId)
             : Portion(portion)
             , AbortionFlag(abortionFlag)
             , ConsumerId(consumerId) {

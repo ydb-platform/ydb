@@ -13,8 +13,8 @@ TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) 
     for (auto&& c : portions.GetConsumers()) {
         TConsumerPortions* cPortions = nullptr;
         for (auto&& p : c.second.GetPortions()) {
-            auto it = AccessorsCache.Find(p->GetPortionId());
-            if (it != AccessorsCache.End() && it.Key() == p->GetPortionId()) {
+            auto it = AccessorsCache.Find(p);
+            if (it != AccessorsCache.End() && it.Key() == p) {
                 result.AddFromCache(it.Value());
             } else {
                 if (!cPortions) {

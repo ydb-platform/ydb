@@ -1061,13 +1061,14 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
 
 class TPortionConstructorV2 {
 private:
-    NOlap::TPortionInfo::TConstPtr PortionInfo;
+    YDB_READONLY_DEF(NOlap::TPortionInfo::TConstPtr, PortionInfo);
     std::optional<NOlap::TColumnChunkLoadContextV2> Records;
     std::optional<std::vector<NOlap::TIndexChunkLoadContext>> Indexes;
 
 public:
     TPortionConstructorV2(const NOlap::TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo) {
+        AFL_VERIFY(PortionInfo);
     }
 
     bool IsReady() const {
@@ -1155,35 +1156,37 @@ public:
         bool reask = false;
         NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("event", "TTxAskPortionChunks::Execute");
         for (auto&& i : PortionsByPath) {
+            const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortions().size());
                 for (auto&& p : c.second.GetPortions()) {
-                    auto itPortionConstructor = Constructors.find(p->GetAddress());
+                    const NOlap::TPortionAddress pAddress(i.first, p);
+                    auto itPortionConstructor = Constructors.find(pAddress);
                     if (itPortionConstructor == Constructors.end()) {
-                        TPortionConstructorV2 constructor(p);
-                        itPortionConstructor = Constructors.emplace(p->GetAddress(), std::move(constructor)).first;
+                        TPortionConstructorV2 constructor(granule.GetPortionVerifiedPtr(p));
+                        itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
                     } else if (itPortionConstructor->second.IsReady()) {
                         continue;
                     }
                     if (!itPortionConstructor->second.HasRecords()) {
-                        auto rowset =
-                            db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
+                        auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", p->GetPathId())("portion_id", p->GetPortionId())(
-                                "debug", p->DebugString(true));
+                            auto portion = granule.GetPortionVerifiedPtr(p);
+                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)("debug", portion->DebugString(true));
                             NOlap::TColumnChunkLoadContextV2 info(rowset);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
                     }
                     if (!itPortionConstructor->second.HasIndexes()) {
-                        if (!p->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())->GetIndexesCount()) {
+                        if (!itPortionConstructor->second.GetPortionInfo()
+                                ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
+                                ->GetIndexesCount()) {
                             itPortionConstructor->second.SetIndexes({});
                         } else {
-                            auto rowset =
-                                db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId().GetRawValue(), p->GetPortionId()).Select();
+                            auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(i.first.GetRawValue(), p).Select();
                             if (!rowset.IsReady()) {
                                 reask = true;
                             } else {

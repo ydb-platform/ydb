@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
 
@@ -9,12 +10,32 @@ namespace NKikimr::NOlap::NGeneralCache {
 class TGlobalPortionAddress {
 private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
-    YDB_READONLY_DEF(TPortionAddress, InternalPortionAddress);
+    TPortionAddress InternalPortionAddress;
 
 public:
+    const TPortionAddress& GetInternalPortionAddress() const {
+        return InternalPortionAddress;
+    }
+
+    ui64 GetPortionId() const {
+        return InternalPortionAddress.GetPortionId();
+    }
+
+    TInternalPathId GetPathId() const {
+        return InternalPortionAddress.GetPathId();
+    }
+
     TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress)
         : TabletActorId(actorId)
         , InternalPortionAddress(internalAddress) {
+    }
+
+    bool operator==(const TGlobalPortionAddress& item) const {
+        return TabletActorId == item.TabletActorId && InternalPortionAddress == item.InternalPortionAddress;
+    }
+
+    explicit operator size_t() const {
+        return TabletActorId.Hash() ^ THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress);
     }
 };
 
@@ -22,11 +43,7 @@ class TPortionsMetadataCachePolicy {
 public:
     using TAddress = TGlobalPortionAddress;
     using TObject = TPortionDataAccessor;
-    enum class EConsumer {
-        Compaction,
-        Scan,
-        Normalizer
-    };
+    using EConsumer = NOlap::NBlobOperations::EConsumer;
 
     class TSizeCalcer {
     public:
@@ -43,7 +60,8 @@ public:
         return "PRMT";
     }
 
-    static std::shared_ptr<NGeneralCache::IObjectsProcessor> BuildObjectsProcessor(const NActors::TActorId& serviceActorId);
+    static std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> BuildObjectsProcessor(
+        const NActors::TActorId& serviceActorId);
 };
 
 }   // namespace NKikimr::NOlap::NGeneralCache

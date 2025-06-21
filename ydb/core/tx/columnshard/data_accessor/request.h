@@ -1,9 +1,12 @@
 #pragma once
-#include <ydb/library/signals/object_counter.h>
+#include "cache_policy/policy.h"
+
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NOlap {
 
@@ -194,7 +197,8 @@ private:
     static inline TAtomicCounter Counter = 0;
     ui32 FetchStage = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
-    YDB_READONLY_DEF(TString, Consumer);
+    YDB_READONLY(
+        NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, Consumer, NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::Undefined);
     THashSet<ui64> PortionIds;
     THashMap<TInternalPathId, TPathFetchingState> PathIdStatus;
     THashSet<TInternalPathId> PathIds;
@@ -234,10 +238,8 @@ public:
         return sb;
     }
 
-    TDataAccessorsRequest(const TString& consumer)
-        : Consumer(consumer)
-    {
-
+    TDataAccessorsRequest(const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumer)
+        : Consumer(consumer) {
     }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
@@ -308,7 +310,7 @@ public:
         auto it = PathIdStatus.find(pathId);
         if (it == PathIdStatus.end()) {
             PreparingCount.Inc();
-            it = PathIdStatus.emplace(pathId, TPathFetchingState{pathId}).first;
+            it = PathIdStatus.emplace(pathId, TPathFetchingState{ pathId }).first;
         }
         it->second.AddPortion(portion);
     }

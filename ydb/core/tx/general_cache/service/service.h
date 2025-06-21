@@ -51,7 +51,7 @@ public:
     }
 
     void Bootstrap() {
-        Manager = std::make_unique<TManager>(Config, TPolicy::GetCacheName(), TBase::SelfId(), Counters);
+        Manager = std::make_unique<TManager>(Config, TBase::SelfId(), Counters);
     }
 };
 

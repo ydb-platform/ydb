@@ -1,4 +1,5 @@
 RECURSE(
+    async
     core
     dnsresolver
     examples

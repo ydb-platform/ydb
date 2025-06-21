@@ -198,7 +198,7 @@ private:
     ui32 FetchStage = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
     YDB_READONLY(
-        NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, Consumer, NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::Undefined);
+        NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, Consumer, NGeneralCache::TPortionsMetadataCachePolicy::DefaultConsumer());
     THashSet<ui64> PortionIds;
     THashMap<TInternalPathId, TPathFetchingState> PathIdStatus;
     THashSet<TInternalPathId> PathIds;

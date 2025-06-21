@@ -185,7 +185,7 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> UnorderedOverStageInput(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqUnorderedOverStageInput(node, ctx, optCtx, *Types, *getParents(), IsGlobal);
+        return DqUnorderedOverStageInput(node, ctx, optCtx, *GetTypes(), *getParents(), IsGlobal);
     }
 
 

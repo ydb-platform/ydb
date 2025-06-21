@@ -27,9 +27,9 @@ namespace NActors::NDetail {
         friend TActorRunnableItem::TImpl<TBridgeCoroutine>;
 
     public:
-        TBridgeCoroutine(IActor* actor, TActorRunnableItem* item)
+        TBridgeCoroutine(IActor& actor, TActorRunnableItem& item)
             : Actor(actor)
-            , SelfId(actor->SelfId())
+            , SelfId(actor.SelfId())
             , Item(item)
         {
             TActivationContext* ctx = TlsActivationContext;
@@ -69,29 +69,29 @@ namespace NActors::NDetail {
             // because awaiter must keep waiting until we resume, and actor
             // will not be destroyed. After we resume it'ss awaiter's
             // responsibility to destroy us.
-            Item->Run(Actor);
+            Item.Run(&Actor);
         }
 
     private:
-        IActor* Actor;
+        IActor& Actor;
         TActorId SelfId;
-        TActorRunnableItem* Item;
+        TActorRunnableItem& Item;
         TActorSystem* ActorSystem;
         TMailbox* Mailbox;
     };
 
-    std::coroutine_handle<> MakeBridgeCoroutine(IActor* actor, TActorRunnableItem* item) {
+    std::coroutine_handle<> MakeBridgeCoroutine(IActor& actor, TActorRunnableItem& item) {
         TBridgeCoroutine* c = new TBridgeCoroutine(actor, item);
         return c->ToCoroutineHandle();
     }
 
     class TBridgeCoroutines final {
     public:
-        TBridgeCoroutines(IActor* actor, TActorRunnableItem* item1, TActorRunnableItem* item2)
+        TBridgeCoroutines(IActor& actor, TActorRunnableItem& item1, TActorRunnableItem& item2)
             : Actor(actor)
-            , SelfId(actor->SelfId())
-            , Trampoline1(this, item1)
-            , Trampoline2(this, item2)
+            , SelfId(actor.SelfId())
+            , Trampoline1(*this, item1)
+            , Trampoline2(*this, item2)
         {
             TActivationContext* ctx = TlsActivationContext;
             Y_ABORT_UNLESS(ctx, "Unexpected missing activation context");
@@ -113,7 +113,7 @@ namespace NActors::NDetail {
             friend class TBridgeCoroutines;
 
         public:
-            TBridgeTrampoline(TBridgeCoroutines* self, TActorRunnableItem* item)
+            TBridgeTrampoline(TBridgeCoroutines& self, TActorRunnableItem& item)
                 : Self(self)
                 , Item(item)
             {}
@@ -123,24 +123,24 @@ namespace NActors::NDetail {
         private:
             void OnResume() {
                 TActivationContext* ctx = TlsActivationContext;
-                if (ctx && Self->Mailbox == &ctx->Mailbox) {
+                if (ctx && Self.Mailbox == &ctx->Mailbox) {
                     // We are currently running on the same mailbox
                     TActorRunnableQueue::Schedule(this);
                 } else {
                     // Send an event using the actor system
-                    Self->ActorSystem->Send(Self->SelfId, new TEvents::TEvResumeRunnable(this));
+                    Self.ActorSystem->Send(Self.SelfId, new TEvents::TEvResumeRunnable(this));
                 }
             }
 
             void OnDestroy() {
-                delete Self;
+                Self.Destroy();
             }
 
             void DoRun(IActor* actor) noexcept {
                 if (!actor) {
                     // The event was destroyed before it was delivered
                     // This means we must destroy ourselves
-                    delete Self;
+                    Self.Destroy();
                     return;
                 }
                 // Note: we have an actor argument, but this might be a different
@@ -149,16 +149,20 @@ namespace NActors::NDetail {
                 // because awaiter must keep waiting until we resume, and actor
                 // will not be destroyed. After we resume it'ss awaiter's
                 // responsibility to destroy us.
-                Item->Run(Self->Actor);
+                Item.Run(&Self.Actor);
             }
 
         private:
-            TBridgeCoroutines* Self;
-            TActorRunnableItem* Item;
+            TBridgeCoroutines& Self;
+            TActorRunnableItem& Item;
         };
 
+        void Destroy() noexcept {
+            delete this;
+        }
+
     private:
-        IActor* Actor;
+        IActor& Actor;
         TActorId SelfId;
         TBridgeTrampoline Trampoline1;
         TBridgeTrampoline Trampoline2;
@@ -167,7 +171,7 @@ namespace NActors::NDetail {
     };
 
     std::pair<std::coroutine_handle<>, std::coroutine_handle<>> MakeBridgeCoroutines(
-        IActor* actor, TActorRunnableItem* item1, TActorRunnableItem* item2)
+        IActor& actor, TActorRunnableItem& item1, TActorRunnableItem& item2)
     {
         TBridgeCoroutines* c = new TBridgeCoroutines(actor, item1, item2);
         return c->ToCoroutineHandles();

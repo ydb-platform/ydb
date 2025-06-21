@@ -29,14 +29,11 @@ namespace NActors {
         }
 
         template<class TPromise>
-        void AwaitSuspend(std::coroutine_handle<TPromise> c) {
-            IActor* actor = c.promise().GetActor();
-            if (!actor) [[unlikely]] {
-                throw std::logic_error("coroutine not bound to actor");
-            }
-            actor->RegisterEventAwaiter(Cookie, this);
-            Actor = actor;
-            Continuation = c;
+        void AwaitSuspend(std::coroutine_handle<TPromise> parent) {
+            IActor& actor = parent.promise().GetActor();
+            actor.RegisterEventAwaiter(Cookie, this);
+            Actor = &actor;
+            Continuation = parent;
         }
 
         typename TEvent::TPtr AwaitResume() noexcept {
@@ -54,6 +51,13 @@ namespace NActors {
         }
 
     private:
+        void Detach() {
+            if (Actor) {
+                Actor->UnregisterEventAwaiter(Cookie, this);
+                Actor = nullptr;
+            }
+        }
+
         bool Matches(TAutoPtr<IEventHandle>& ev) {
             if constexpr (std::is_same_v<TEvent, IEventHandle>) {
                 return true;
@@ -63,6 +67,7 @@ namespace NActors {
         }
 
         bool DoHandle(TAutoPtr<IEventHandle>& ev) {
+            Y_ABORT_UNLESS(Actor, "Unexpected Handle call after Detach()");
             if (Matches(ev)) {
                 Result = std::move(reinterpret_cast<typename TEvent::TPtr&>(ev));
                 Detach();
@@ -71,13 +76,6 @@ namespace NActors {
                 return true;
             }
             return false;
-        }
-
-        void Detach() {
-            if (Actor) {
-                Actor->UnregisterEventAwaiter(Cookie, this);
-                Actor = nullptr;
-            }
         }
 
         void DoRun(IActor*) noexcept {

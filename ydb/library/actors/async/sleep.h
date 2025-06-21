@@ -30,13 +30,10 @@ namespace NActors {
             }
 
             template<class TPromise>
-            void AwaitSuspend(std::coroutine_handle<TPromise> c) {
-                IActor* actor = c.promise().GetActor();
-                if (!actor) [[unlikely]] {
-                    throw std::logic_error("coroutine not bound to actor");
-                }
-                Continuation = c;
-                auto selfId = actor->SelfId();
+            void AwaitSuspend(std::coroutine_handle<TPromise> parent) {
+                IActor& actor = parent.promise().GetActor();
+                Continuation = parent;
+                auto selfId = actor.SelfId();
                 if (IsImmediate()) {
                     // Use a simple Send, everything is synchronized to the mailbox
                     bool ok = selfId.Send(selfId, (Event = new TEvents::TEvResumeRunnable(this)));
@@ -189,6 +186,7 @@ namespace NActors {
         class [[nodiscard]] TActorAsyncWithTimeoutAwaiter
             : public TActorAwareAwaiter
             , private TCustomCoroutineCallbacks<TActorAsyncWithTimeoutAwaiter<TWhen, T>>
+            , private TAwaitCancelSource
         {
             friend TCustomCoroutineCallbacks<TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
 
@@ -215,40 +213,31 @@ namespace NActors {
             std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) {
                 auto self = NestedCoroutine.GetHandle();
 
-                // We want async coroutine to resume to caller directly
-                self.promise().SetContinuation(parent);
+                IActor& actor = parent.promise().GetActor();
+                TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
 
-                // When task is already cancelled we bypass everything
-                if (auto cancellation = parent.promise().GetCancellation()) {
-                    self.promise().SetCancellation(cancellation);
+                // When source is cancelled already or the timeout is infite we bypass everything
+                if (source.GetCancellation() || IsInfinite()) {
+                    self.promise().SetContinuation(parent, actor, source);
                     return self;
                 }
 
-                // When timeout is infinite it will never happen, hook cancellation and bypass
-                if (IsInfinite()) [[unlikely]] {
-                    Cleanup = parent.promise().SetAwaiter(&self.promise());
-                    return self;
-                }
-
-                // Otherwise we want to intercept cancellation so we can cancel our timer
-                IActor* actor = parent.promise().GetActor();
-                if (!actor) [[unlikely]] {
-                    throw std::logic_error("coroutine not bound to actor");
-                }
-
-                auto selfId = actor->SelfId();
+                // Otherwise we start a timer
+                auto selfId = actor.SelfId();
                 Bridge.Reset(new TBridge(this));
                 Bridge->Ref(); // extra reference used by the event
                 selfId.Schedule(When, new TEvents::TEvResumeRunnable(Bridge.Get()));
 
-                Cleanup = parent.promise().SetAwaiter(this);
+                // And intercept cancellation so we can cancel the timer
                 Continuation = parent;
+                self.promise().SetContinuation(parent, actor, *this);
+                Cleanup = source.SetAwaiter(*this);
                 return self;
             }
 
             T await_resume() {
-                Detach();
                 Cleanup();
+                Detach();
 
                 if (ThrowException) {
                     throw TActorTimeoutException() << "operation timed out";
@@ -258,12 +247,14 @@ namespace NActors {
             }
 
             void AwaitCancel(std::coroutine_handle<> h) noexcept {
-                Cancellation = h;
+                // Downstream cancellation will propagate cancellation
+                Continuation = h;
                 if (Detach()) {
                     // Timer was still pending and now cancelled, pass upstream
-                    // cancellation directly to coroutine. It will either resume
-                    // normally with the result, or confirm cancellation upstream.
-                    NestedCoroutine.GetHandle().promise().AwaitCancel(h);
+                    // cancellation directly to downstream subscribers. It will
+                    // either resume normally with a result, or confirm
+                    // cancellation upstream.
+                    TAwaitCancelSource::Cancel(h);
                 }
             }
 
@@ -323,20 +314,17 @@ namespace NActors {
                 Y_ABORT_UNLESS(Bridge, "Unexpected bridge timer callback after Detach()");
                 Bridge->Self = nullptr;
                 Bridge.Reset();
-                NestedCoroutine.GetHandle().promise().AwaitCancel(this->ToCoroutineHandle());
+                // We want downstream to resume our proxy on cancellation
+                // We can then resume normally with an exception instead
+                TAwaitCancelSource::Cancel(this->ToCoroutineHandle());
             }
 
             void OnResume() noexcept {
                 // Nested coroutine confirmed cancellation after a timeout
                 Y_ABORT_UNLESS(!Bridge, "Unexpected cancellation confirmation before Detach()");
-                if (Cancellation) {
-                    // Upstream was cancelled as well, short circuit cancellation there
-                    Cancellation.resume();
-                } else {
-                    // Upstream not cancelled yet, resume caller to throw an exception
-                    ThrowException = true;
-                    Continuation.resume();
-                }
+                // Since downstream confirmed cancellation we will throw exception on normal resume
+                ThrowException = true;
+                Continuation.resume();
             }
 
             void OnDestroy() noexcept {
@@ -346,10 +334,9 @@ namespace NActors {
         private:
             const TWhen When;
             async<T> NestedCoroutine;
-            TCleanupCallback Cleanup;
-            std::coroutine_handle<> Continuation;
-            std::coroutine_handle<> Cancellation;
+            TAwaitCancelCleanup Cleanup;
             TIntrusivePtr<TBridge> Bridge;
+            std::coroutine_handle<> Continuation;
             bool ThrowException = false;
         };
     }

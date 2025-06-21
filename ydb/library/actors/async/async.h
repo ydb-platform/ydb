@@ -106,7 +106,7 @@ namespace NActors {
          * runnable item to run on the specified actor when resumed. Used to
          * interface with generic C++ coroutines.
          */
-        std::coroutine_handle<> MakeBridgeCoroutine(IActor* actor, TActorRunnableItem* item);
+        std::coroutine_handle<> MakeBridgeCoroutine(IActor& actor, TActorRunnableItem& item);
 
         /**
          * Returns a pair of coroutine handles, which would arrange for one of
@@ -116,7 +116,7 @@ namespace NActors {
          * Exactly one coroutine must be resumed or destroyed.
          */
         std::pair<std::coroutine_handle<>, std::coroutine_handle<>> MakeBridgeCoroutines(
-            IActor* actor, TActorRunnableItem* item1, TActorRunnableItem* item2);
+            IActor& actor, TActorRunnableItem& item1, TActorRunnableItem& item2);
 
         template<class TAwaiter, class TPromise = void>
         concept IsAwaiter = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
@@ -256,112 +256,122 @@ namespace NActors {
             }
         }
 
-        class TCleanupCallback;
+        // Forward declaration, defined below
+        class TAwaitCancelCleanup;
 
-        template<class TPromise>
-        concept HasGetActor = requires (TPromise& promise) {
-            { promise.GetActor() } -> std::convertible_to<IActor*>;
-        };
+        /**
+         * Handles propagation of AwaitCancel to at most one awaiter at a time
+         */
+        class TAwaitCancelSource {
+            friend TAwaitCancelCleanup;
 
-        template<class TPromise>
-        concept HasGetCancellation = requires (TPromise& promise) {
-            { promise.GetCancellation() } -> std::convertible_to<std::coroutine_handle<>>;
-        };
+        public:
+            TAwaitCancelSource() noexcept = default;
 
-        template<class TPromise, class TAwaiter>
-        concept HasSetAwaiter = requires (TPromise& promise, TAwaiter* awaiter) {
-            { promise.SetAwaiter(awaiter) } -> std::same_as<TCleanupCallback>;
+            TAwaitCancelSource(const TAwaitCancelSource&) = delete;
+            TAwaitCancelSource& operator=(const TAwaitCancelSource&) = delete;
+
+            ~TAwaitCancelSource() noexcept {
+                Y_DEBUG_ABORT_UNLESS(!CancelFn, "TAwaitCancelSource destroyed with an awaiter still subscribed");
+            }
+
+            template<class TAwaiter>
+            TAwaitCancelCleanup SetAwaiter(TAwaiter& awaiter) noexcept;
+
+            std::coroutine_handle<> GetCancellation() const noexcept {
+                return Cancellation;
+            }
+
+        protected:
+            void SetCancellation(std::coroutine_handle<> h) noexcept {
+                Cancellation = h;
+            }
+
+            void Cancel(std::coroutine_handle<> h) noexcept {
+                Cancellation = h;
+                if (CancelFn) {
+                    CancelFn(CancelFnArg, h);
+                }
+            }
+
+        private:
+            std::coroutine_handle<> Cancellation;
+            void (*CancelFn)(void*, std::coroutine_handle<>) noexcept = nullptr;
+            void* CancelFnArg;
         };
 
         /**
-         * A very small RAII class for type erased cleanup
+         * A small RAII cleanup object for subscribed awaiters
          */
-        class TCleanupCallback {
+        class TAwaitCancelCleanup {
+            friend class TAwaitCancelSource;
+
         public:
-            TCleanupCallback() noexcept
-                : Fn_(nullptr)
-            {}
+            TAwaitCancelCleanup() noexcept = default;
 
-            TCleanupCallback(void (*fn)(void*) noexcept, void* arg) noexcept
-                : Fn_(fn)
-                , Arg_(arg)
-            {}
-
-            TCleanupCallback(TCleanupCallback&& rhs) noexcept
-                : Fn_(rhs.Fn_)
-                , Arg_(rhs.Arg_)
+            TAwaitCancelCleanup(TAwaitCancelCleanup&& rhs) noexcept
+                : Source(rhs.Source)
             {
-                rhs.Fn_ = nullptr;
+                rhs.Source = nullptr;
             }
 
-            TCleanupCallback& operator=(TCleanupCallback&& rhs) noexcept {
+            TAwaitCancelCleanup& operator=(TAwaitCancelCleanup&& rhs) noexcept {
                 if (this != &rhs) [[likely]] {
-                    Cleanup();
-                    Fn_ = rhs.Fn_;
-                    Arg_ = rhs.Arg_;
-                    rhs.Fn_ = nullptr;
+                    if (Source) [[unlikely]] {
+                        Source->CancelFn = nullptr;
+                    }
+                    Source = rhs.Source;
+                    rhs.Source = nullptr;
                 }
                 return *this;
             }
 
-            ~TCleanupCallback() noexcept {
+            ~TAwaitCancelCleanup() noexcept {
                 Cleanup();
-            }
-
-            explicit operator bool() const noexcept {
-                return Fn_ != nullptr;
             }
 
             void operator()() noexcept {
                 Cleanup();
             }
 
+            explicit operator bool() const noexcept {
+                return Source != nullptr;
+            }
+
+        private:
+            TAwaitCancelCleanup(TAwaitCancelSource* source) noexcept
+                : Source(source)
+            {}
+
         private:
             void Cleanup() noexcept {
-                if (Fn_) {
-                    (*Fn_)(Arg_);
-                    Fn_ = nullptr;
+                if (Source) {
+                    Source->CancelFn = nullptr;
+                    Source = nullptr;
                 }
             }
 
         private:
-            void (*Fn_)(void*) noexcept;
-            void* Arg_;
+            TAwaitCancelSource* Source = nullptr;
         };
 
         /**
-         * Base class for promises that propagates AwaitCancel to awaiters
+         * Subscribe for awaiter.AwaitCancel(h) to be called on Cancel(h)
          */
-        class TAwaitCancelPropagation {
-        public:
-            template<class TAwaiter>
-            TCleanupCallback SetAwaiter(TAwaiter* awaiter) noexcept {
-                static_assert(HasAwaitCancelVoid<TAwaiter>, "AwaitCancel must return void");
-                static_assert(HasAwaitCancelNoExcept<TAwaiter>, "AwaitCancel must be noexcept");
-                CancelFn_ = +[](void* ptr, std::coroutine_handle<> h) noexcept {
-                    reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h);
-                };
-                CancelFnArg_ = awaiter;
-                return TCleanupCallback(
-                    +[](void* ptr) noexcept {
-                        reinterpret_cast<TAwaitCancelPropagation*>(ptr)->CancelFn_ = nullptr;
-                    },
-                    this);
-            }
-
-            void AwaitCancel(std::coroutine_handle<> h) noexcept {
-                if (CancelFn_) {
-                    CancelFn_(CancelFnArg_, h);
-                }
-            }
-
-        private:
-            void (*CancelFn_)(void*, std::coroutine_handle<>) noexcept = nullptr;
-            void* CancelFnArg_;
-        };
+        template<class TAwaiter>
+        inline TAwaitCancelCleanup TAwaitCancelSource::SetAwaiter(TAwaiter& awaiter) noexcept {
+            static_assert(HasAwaitCancelVoid<TAwaiter>, "AwaitCancel must return void");
+            static_assert(HasAwaitCancelNoExcept<TAwaiter>, "AwaitCancel must be noexcept");
+            Y_DEBUG_ABORT_UNLESS(!CancelFn, "TAwaitCancelSource cannot support more than one awaiter");
+            CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept {
+                reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h);
+            };
+            CancelFnArg = std::addressof(awaiter);
+            return TAwaitCancelCleanup(this);
+        }
 
         /**
-         * Awaiter implementation for async<T> values, should not be used directly.
+         * Awaiter implementation for async<T> values.
          */
         template<class T>
         class TAsyncAwaiter : public TActorAwareAwaiter {
@@ -375,27 +385,342 @@ namespace NActors {
             }
 
             template<class TPromise>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> c) noexcept {
-                Handle.promise().SetContinuation(c);
-                if constexpr (HasGetCancellation<TPromise>) {
-                    Handle.promise().SetCancellation(c.promise().GetCancellation());
-                }
-                if constexpr (HasSetAwaiter<TPromise, TAsyncPromise<T>>) {
-                    if (!Handle.promise().GetCancellation()) {
-                        Cleanup = c.promise().SetAwaiter(&Handle.promise());
-                    }
-                }
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) noexcept {
+                IActor& actor = parent.promise().GetActor();
+                TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
+                Handle.promise().SetContinuation(parent, actor, source);
                 return Handle;
             }
 
             T await_resume() {
-                Cleanup();
                 return Handle.promise().Result.ExtractValue();
             }
 
         private:
             std::coroutine_handle<TAsyncPromise<T>> Handle;
-            TCleanupCallback Cleanup;
+        };
+
+        /**
+         * Transparently handles optional AwaitCancel subscriptions for single-threaded awaiters
+         */
+        template<class TAwaiter>
+        class TAwaiterProxy {
+        public:
+            template<class... TArgs>
+            explicit TAwaiterProxy(TArgs&&... args)
+                : Awaiter{ std::forward<TArgs>(args)... }
+            {}
+
+            TAwaiterProxy(TAwaiterProxy&&) = delete;
+            TAwaiterProxy(const TAwaiterProxy&) = delete;
+            TAwaiterProxy& operator=(TAwaiterProxy&&) = delete;
+            TAwaiterProxy& operator=(const TAwaiterProxy&) = delete;
+
+            bool await_ready() noexcept(HasAwaitReadyNoExcept<TAwaiter>) {
+                return Awaiter.AwaitReady();
+            }
+
+            template<class TPromise>
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) {
+                if constexpr (HasAwaitCancel<TAwaiter>) {
+                    TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
+                    if (auto cancellation = source.GetCancellation()) {
+                        return cancellation;
+                    }
+
+                    Cleanup = source.SetAwaiter(Awaiter);
+                }
+
+                TCallCleanup<HasAwaitCancel<TAwaiter> && !HasAwaitSuspendNoExcept<TAwaiter, TPromise>> callCleanup{ this };
+                std::coroutine_handle<> result = DoSuspend(parent);
+                callCleanup.Cancel();
+                return result;
+            }
+
+            decltype(auto) await_resume() noexcept(HasAwaitResumeNoExcept<TAwaiter>) {
+                if constexpr (HasAwaitCancel<TAwaiter>) {
+                    Cleanup();
+                }
+                return Awaiter.AwaitResume();
+            }
+
+        private:
+            template<class TPromise>
+            std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> parent)
+                noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
+                requires HasAwaitSuspendVoid<TAwaiter, TPromise>
+            {
+                Awaiter.AwaitSuspend(parent);
+                return std::noop_coroutine();
+            }
+
+            template<class TPromise>
+            std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> parent)
+                noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
+                requires HasAwaitSuspendBool<TAwaiter, TPromise>
+            {
+                bool suspended = Awaiter.AwaitSuspend(parent);
+                if (suspended) {
+                    return std::noop_coroutine();
+                } else {
+                    return parent;
+                }
+            }
+
+            template<class TPromise>
+            std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> parent)
+                noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
+                requires HasAwaitSuspendHandle<TAwaiter, TPromise>
+            {
+                return Awaiter.AwaitSuspend(parent);
+            }
+
+        private:
+            template<bool Enabled = true>
+            struct TCallCleanup {
+                TAwaiterProxy* Self;
+
+                ~TCallCleanup() {
+                    if (Self) {
+                        Self->Cleanup();
+                    }
+                }
+
+                void Cancel() noexcept {
+                    Self = nullptr;
+                }
+            };
+
+            template<>
+            struct TCallCleanup<false> {
+                TCallCleanup(TAwaiterProxy*) noexcept {}
+                void Cancel() noexcept {}
+            };
+
+        private:
+            TAwaiter Awaiter;
+            TAwaitCancelCleanup Cleanup;
+        };
+
+        template<class TDerived, bool WithCancellation = true>
+        class TThreadSafeResumeBridge {
+        public:
+            TThreadSafeResumeBridge() = default;
+
+            TThreadSafeResumeBridge(const TThreadSafeResumeBridge&) = delete;
+            TThreadSafeResumeBridge& operator=(const TThreadSafeResumeBridge&) = delete;
+
+        protected:
+            std::coroutine_handle<> CreateResumeBridge(IActor& actor, TActorRunnableItem& resume) {
+                auto pr = MakeBridgeCoroutines(actor, resume, CancelledTrampoline);
+                CancelBridge = pr.second;
+                return pr.first;
+            }
+
+            std::coroutine_handle<> StartCancellation(std::coroutine_handle<> h) noexcept {
+                Cancellation = h;
+                return CancelBridge;
+            }
+
+        private:
+            struct TCancelledTrampoline : public TActorRunnableItem::TImpl<TCancelledTrampoline> {
+                TThreadSafeResumeBridge* const Self;
+
+                TCancelledTrampoline(TThreadSafeResumeBridge* self)
+                    : Self(self)
+                {}
+
+                void DoRun(IActor*) noexcept {
+                    Self->OnCancelled();
+                }
+            };
+
+            void OnCancelled() noexcept {
+                Y_ABORT_UNLESS(Cancellation, "Unexpected cancellation without StartCancellation");
+                static_cast<TDerived&>(*this).OnCancelled(Cancellation);
+            }
+
+        private:
+            TCancelledTrampoline CancelledTrampoline{ this };
+            std::coroutine_handle<> CancelBridge;
+            std::coroutine_handle<> Cancellation;
+        };
+
+        template<class TDerived>
+        class TThreadSafeResumeBridge<TDerived, false> {
+        protected:
+            std::coroutine_handle<> CreateResumeBridge(IActor& actor, TActorRunnableItem& resume) {
+                return MakeBridgeCoroutine(actor, resume);
+            }
+        };
+
+        /**
+         * Transparently handles return path and cancellation for standard C++ awaiters
+         */
+        template<class TAwaiter>
+        class TStdAwaiterProxy final
+            : private TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>
+            , private TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter>>
+        {
+            friend TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>;
+            friend TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter>>;
+
+        public:
+            template<class... TArgs>
+            TStdAwaiterProxy(TArgs&&... args)
+                : Awaiter{ std::forward<TArgs>(args)... }
+            {}
+
+            TStdAwaiterProxy(TStdAwaiterProxy&&) = delete;
+            TStdAwaiterProxy(const TStdAwaiterProxy&) = delete;
+            TStdAwaiterProxy& operator=(TStdAwaiterProxy&&) = delete;
+            TStdAwaiterProxy& operator=(const TStdAwaiterProxy&) = delete;
+
+            bool await_ready() noexcept(HasStdAwaitReadyNoExcept<TAwaiter>) {
+                return Awaiter.await_ready();
+            }
+
+            template<class TPromise>
+            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) {
+                IActor& actor = parent.promise().GetActor();
+
+                if constexpr (HasStdAwaitCancel<TAwaiter>) {
+                    TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
+                    if (auto cancellation = source.GetCancellation()) {
+                        return cancellation;
+                    }
+
+                    Cleanup = source.SetAwaiter(*this);
+                }
+
+                TCallCleanup<HasStdAwaitCancel<TAwaiter>> callCleanup{ this };
+
+                Continuation = parent;
+                Bridge = this->CreateResumeBridge(actor, *this);
+
+                TCallDestroyBridge callDestroyBridge{ this };
+                std::coroutine_handle<> result = DoSuspend(Bridge);
+                callDestroyBridge.Cancel();
+
+                callCleanup.Cancel();
+
+                // Handle awaiter resuming immediately
+                // Redirect back to parent and avoid bridge overhead
+                if (result == Bridge) {
+                    DestroyBridge();
+                    return parent;
+                } else {
+                    return result;
+                }
+            }
+
+            decltype(auto) await_resume() noexcept(HasStdAwaitResumeNoExcept<TAwaiter>) {
+                if constexpr (HasStdAwaitCancel<TAwaiter>) {
+                    Cleanup();
+                }
+                return Awaiter.await_resume();
+            }
+
+            void AwaitCancel(std::coroutine_handle<> c) noexcept
+                requires HasStdAwaitCancel<TAwaiter>
+            {
+                static_assert(HasStdAwaitCancelVoid<TAwaiter>, "await_cancel must return void");
+                static_assert(HasStdAwaitCancelNoExcept<TAwaiter>, "await_cancel must be noexcept");
+                Awaiter.await_cancel(this->StartCancellation(c));
+            }
+
+        private:
+            void OnCancelled(std::coroutine_handle<> c) noexcept
+                requires HasStdAwaitCancel<TAwaiter>
+            {
+                Y_ABORT_UNLESS(Bridge, "Unexpected cancellation without a bridge");
+                DestroyBridge();
+                c.resume();
+            }
+
+        private:
+            std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
+                noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
+                requires HasStdAwaitSuspendVoid<TAwaiter>
+            {
+                Awaiter.await_suspend(target);
+                return std::noop_coroutine();
+            }
+
+            std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
+                noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
+                requires HasStdAwaitSuspendBool<TAwaiter>
+            {
+                bool suspended = Awaiter.await_suspend(target);
+                if (suspended) {
+                    return std::noop_coroutine();
+                } else {
+                    return target;
+                }
+            }
+
+            std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
+                noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
+                requires HasStdAwaitSuspendHandle<TAwaiter>
+            {
+                return Awaiter.await_suspend(target);
+            }
+
+        private:
+            template<bool Enabled = true>
+            struct TCallCleanup {
+                TStdAwaiterProxy* Self;
+
+                ~TCallCleanup() {
+                    if (Self) {
+                        Self->Cleanup();
+                    }
+                }
+
+                void Cancel() noexcept {
+                    Self = nullptr;
+                }
+            };
+
+            template<>
+            struct TCallCleanup<false> {
+                TCallCleanup(TStdAwaiterProxy*) noexcept {}
+                void Cancel() noexcept {}
+            };
+
+        private:
+            struct TCallDestroyBridge {
+                TStdAwaiterProxy* Self;
+
+                ~TCallDestroyBridge() {
+                    if (Self) {
+                        Self->DestroyBridge();
+                    }
+                }
+
+                void Cancel() {
+                    Self = nullptr;
+                }
+            };
+
+            void DestroyBridge() noexcept {
+                Bridge.destroy();
+                Bridge = {};
+            }
+
+        private:
+            void DoRun(IActor*) noexcept {
+                Y_ABORT_UNLESS(Bridge && Continuation, "Unexpected Run without a bridge or continuation");
+                DestroyBridge();
+                // We may resume recursively
+                Continuation.resume();
+            }
+
+        private:
+            TAwaiter Awaiter;
+            TAwaitCancelCleanup Cleanup;
+            std::coroutine_handle<> Bridge;
+            std::coroutine_handle<> Continuation;
         };
 
         /**
@@ -404,324 +729,23 @@ namespace NActors {
         template<class TPromise>
         class TAsyncAwaitTransform {
         public:
-            template<class TAwaiter>
-            class TAwaiterProxy {
-            public:
-                template<class... TArgs>
-                explicit TAwaiterProxy(TArgs&&... args)
-                    : Awaiter{ std::forward<TArgs>(args)... }
-                {}
-
-                TAwaiterProxy(TAwaiterProxy&&) = delete;
-                TAwaiterProxy(const TAwaiterProxy&) = delete;
-                TAwaiterProxy& operator=(TAwaiterProxy&&) = delete;
-                TAwaiterProxy& operator=(const TAwaiterProxy&) = delete;
-
-                bool await_ready() noexcept(HasAwaitReadyNoExcept<TAwaiter>) {
-                    return Awaiter.AwaitReady();
-                }
-
-                std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> self) {
-                    if constexpr (HasAwaitCancel<TAwaiter>) {
-                        if (auto cancellation = self.promise().GetCancellation()) {
-                            return cancellation;
-                        }
-
-                        Cleanup = self.promise().SetAwaiter(&Awaiter);
-                    }
-
-                    TCallCleanup<HasAwaitCancel<TAwaiter> && !HasAwaitSuspendNoExcept<TAwaiter, TPromise>> callCleanup{ this };
-                    std::coroutine_handle<> result = DoSuspend(self);
-                    callCleanup.Cancel();
-                    return result;
-                }
-
-                decltype(auto) await_resume() noexcept(HasAwaitResumeNoExcept<TAwaiter>) {
-                    if constexpr (HasAwaitCancel<TAwaiter>) {
-                        Cleanup();
-                    }
-                    return Awaiter.AwaitResume();
-                }
-
-            private:
-                std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> self)
-                    noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
-                    requires HasAwaitSuspendVoid<TAwaiter, TPromise>
-                {
-                    Awaiter.AwaitSuspend(self);
-                    return std::noop_coroutine();
-                }
-
-                std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> self)
-                    noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
-                    requires HasAwaitSuspendBool<TAwaiter, TPromise>
-                {
-                    bool suspended = Awaiter.AwaitSuspend(self);
-                    if (suspended) {
-                        return std::noop_coroutine();
-                    } else {
-                        return self;
-                    }
-                }
-
-                std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> self)
-                    noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
-                    requires HasAwaitSuspendHandle<TAwaiter, TPromise>
-                {
-                    return Awaiter.AwaitSuspend(self);
-                }
-
-            private:
-                template<bool Enabled = true>
-                struct TCallCleanup {
-                    TAwaiterProxy* Self;
-
-                    ~TCallCleanup() {
-                        if (Self) {
-                            Self->Cleanup();
-                        }
-                    }
-
-                    void Cancel() noexcept {
-                        Self = nullptr;
-                    }
-                };
-
-                template<>
-                struct TCallCleanup<false> {
-                    TCallCleanup(TAwaiterProxy*) noexcept {}
-                    void Cancel() noexcept {}
-                };
-
-            private:
-                TAwaiter Awaiter;
-                TCleanupCallback Cleanup;
-            };
+            /**
+             * Accepts async<T> by value to only allow co_await of the call itself, not a stored variable.
+             *
+             * Taking address of async<T> should be safe here, since it has a destructor, and will be allocated as a
+             * temporary by the caller. Temporaries are not destroyed until the full expression (co_await) completes.
+             */
+            template<class T>
+            decltype(auto) await_transform(async<T> c) {
+                return TAsyncAwaiter<T>{std::move(c)};
+            }
 
             template<class TAwaiter>
-            auto await_transform(TAwaiter&& awaiter) noexcept
+            decltype(auto) await_transform(TAwaiter&& awaiter) noexcept
                 requires (IsAwaiter<TAwaiter, TPromise> && !HasCoAwait<TAwaiter>)
             {
                 return TAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
             }
-
-            template<class TDerived, bool Enabled = true>
-            class TThreadSafeResumeBridge {
-            public:
-                TThreadSafeResumeBridge() = default;
-
-                TThreadSafeResumeBridge(const TThreadSafeResumeBridge&) = delete;
-                TThreadSafeResumeBridge& operator=(const TThreadSafeResumeBridge&) = delete;
-
-            protected:
-                std::coroutine_handle<> CreateResumeBridge(IActor* actor, TActorRunnableItem* resume) {
-                    auto pr = MakeBridgeCoroutines(actor, resume, &CancelledTrampoline);
-                    CancelBridge = pr.second;
-                    return pr.first;
-                }
-
-                std::coroutine_handle<> StartCancellation(std::coroutine_handle<> h) noexcept {
-                    Cancellation = h;
-                    return CancelBridge;
-                }
-
-            private:
-                struct TCancelledTrampoline : public TActorRunnableItem::TImpl<TCancelledTrampoline> {
-                    TThreadSafeResumeBridge* const Self;
-
-                    TCancelledTrampoline(TThreadSafeResumeBridge* self)
-                        : Self(self)
-                    {}
-
-                    void DoRun(IActor*) noexcept {
-                        Self->OnCancelled();
-                    }
-                };
-
-                void OnCancelled() noexcept {
-                    Y_ABORT_UNLESS(Cancellation, "Unexpected cancellation without StartCancellation");
-                    static_cast<TDerived&>(*this).OnCancelled(Cancellation);
-                }
-
-            private:
-                TCancelledTrampoline CancelledTrampoline{ this };
-                std::coroutine_handle<> CancelBridge;
-                std::coroutine_handle<> Cancellation;
-            };
-
-            template<class TDerived>
-            class TThreadSafeResumeBridge<TDerived, false> {
-            protected:
-                std::coroutine_handle<> CreateResumeBridge(IActor* actor, TActorRunnableItem* resume) {
-                    return MakeBridgeCoroutine(actor, resume);
-                }
-            };
-
-            template<class TAwaiter>
-            class TStdAwaiterProxy final
-                : private TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>
-                , private TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter>>
-            {
-                friend TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>;
-                friend TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter>>;
-
-            public:
-                template<class... TArgs>
-                TStdAwaiterProxy(TArgs&&... args)
-                    : Awaiter{ std::forward<TArgs>(args)... }
-                {}
-
-                TStdAwaiterProxy(TStdAwaiterProxy&&) = delete;
-                TStdAwaiterProxy(const TStdAwaiterProxy&) = delete;
-                TStdAwaiterProxy& operator=(TStdAwaiterProxy&&) = delete;
-                TStdAwaiterProxy& operator=(const TStdAwaiterProxy&) = delete;
-
-                bool await_ready() noexcept(HasStdAwaitReadyNoExcept<TAwaiter>) {
-                    return Awaiter.await_ready();
-                }
-
-                std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> self) {
-                    IActor* actor = self.promise().GetActor();
-                    if (!actor) [[unlikely]] {
-                        throw std::logic_error("coroutine not bound to actor");
-                    }
-
-                    if constexpr (HasStdAwaitCancel<TAwaiter>) {
-                        if (auto cancellation = self.promise().GetCancellation()) {
-                            return cancellation;
-                        }
-
-                        Cleanup = self.promise().SetAwaiter(this);
-                    }
-
-                    TCallCleanup<HasStdAwaitCancel<TAwaiter>> callCleanup{ this };
-
-                    Continuation = self;
-                    Bridge = this->CreateResumeBridge(actor, this);
-
-                    TCallDestroyBridge callDestroyBridge{ this };
-                    std::coroutine_handle<> result = DoSuspend(Bridge);
-                    callDestroyBridge.Cancel();
-
-                    callCleanup.Cancel();
-
-                    // Handle awaiter resuming immediately
-                    // Redirect back to self and avoid bridge overhead
-                    if (result == Bridge) {
-                        DestroyBridge();
-                        return self;
-                    } else {
-                        return result;
-                    }
-                }
-
-                decltype(auto) await_resume() noexcept(HasStdAwaitResumeNoExcept<TAwaiter>) {
-                    if constexpr (HasStdAwaitCancel<TAwaiter>) {
-                        Cleanup();
-                    }
-                    return Awaiter.await_resume();
-                }
-
-                void AwaitCancel(std::coroutine_handle<> c) noexcept
-                    requires HasStdAwaitCancel<TAwaiter>
-                {
-                    static_assert(HasStdAwaitCancelVoid<TAwaiter>, "await_cancel must return void");
-                    static_assert(HasStdAwaitCancelNoExcept<TAwaiter>, "await_cancel must be noexcept");
-                    Awaiter.await_cancel(this->StartCancellation(c));
-                }
-
-                void OnCancelled(std::coroutine_handle<> c) noexcept
-                    requires HasStdAwaitCancel<TAwaiter>
-                {
-                    Y_ABORT_UNLESS(Bridge, "Unexpected cancellation without a bridge");
-                    DestroyBridge();
-                    c.resume();
-                }
-
-            private:
-                std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
-                    noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
-                    requires HasStdAwaitSuspendVoid<TAwaiter>
-                {
-                    Awaiter.await_suspend(target);
-                    return std::noop_coroutine();
-                }
-
-                std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
-                    noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
-                    requires HasStdAwaitSuspendBool<TAwaiter>
-                {
-                    bool suspended = Awaiter.await_suspend(target);
-                    if (suspended) {
-                        return std::noop_coroutine();
-                    } else {
-                        return target;
-                    }
-                }
-
-                std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
-                    noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
-                    requires HasStdAwaitSuspendHandle<TAwaiter>
-                {
-                    return Awaiter.await_suspend(target);
-                }
-
-            private:
-                template<bool Enabled = true>
-                struct TCallCleanup {
-                    TStdAwaiterProxy* Self;
-
-                    ~TCallCleanup() {
-                        if (Self) {
-                            Self->Cleanup();
-                        }
-                    }
-
-                    void Cancel() noexcept {
-                        Self = nullptr;
-                    }
-                };
-
-                template<>
-                struct TCallCleanup<false> {
-                    TCallCleanup(TStdAwaiterProxy*) noexcept {}
-                    void Cancel() noexcept {}
-                };
-
-            private:
-                struct TCallDestroyBridge {
-                    TStdAwaiterProxy* Self;
-
-                    ~TCallDestroyBridge() {
-                        if (Self) {
-                            Self->DestroyBridge();
-                        }
-                    }
-
-                    void Cancel() {
-                        Self = nullptr;
-                    }
-                };
-
-                void DestroyBridge() noexcept {
-                    Bridge.destroy();
-                    Bridge = {};
-                }
-
-            private:
-                void DoRun(IActor*) noexcept {
-                    Y_ABORT_UNLESS(Bridge && Continuation, "Unexpected Run without a bridge or continuation");
-                    DestroyBridge();
-                    // We may resume recursively
-                    Continuation.resume();
-                }
-
-            private:
-                TAwaiter Awaiter;
-                TCleanupCallback Cleanup;
-                std::coroutine_handle<> Bridge;
-                std::coroutine_handle<> Continuation;
-            };
 
             /**
              * Transforms standard C++ awaiters into a form that makes sure to resume on the same mailbox
@@ -763,17 +787,6 @@ namespace NActors {
                     return TStdAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
                 }
             }
-
-            /**
-             * Accepts async<T> by value to only allow co_await of the call itself, not a stored variable.
-             *
-             * Taking address of async<T> should be safe here, since it has a destructor, and will be allocated as a
-             * temporary by the caller. Temporaries are not destroyed until the full expression (co_await) completes.
-             */
-            template<class T>
-            auto await_transform(async<T> c) {
-                return TAsyncAwaiter<T>{std::move(c)};
-            }
         };
 
         template<class T>
@@ -813,7 +826,6 @@ namespace NActors {
         class TAsyncPromise
             : public TAsyncPromiseResultHandler<T>
             , public TAsyncAwaitTransform<TAsyncPromise<T>>
-            , public TAwaitCancelPropagation
         {
         public:
             async<T> get_return_object() noexcept {
@@ -832,49 +844,28 @@ namespace NActors {
             constexpr auto initial_suspend() noexcept { return std::suspend_always{}; }
             constexpr auto final_suspend() noexcept { return TFinalSuspend{}; }
 
+            IActor& GetActor() noexcept {
+                return *Actor;
+            }
+
+            TAwaitCancelSource& GetAwaitCancelSource() noexcept {
+                return *Source;
+            }
+
             std::coroutine_handle<> GetContinuation() const noexcept {
                 return Continuation;
             }
 
-            void SetContinuation(std::coroutine_handle<> c) noexcept {
+            void SetContinuation(std::coroutine_handle<> c, IActor& actor, TAwaitCancelSource& source) noexcept {
+                Actor = &actor;
+                Source = &source;
                 Continuation = c;
-            }
-
-            template<class TPromise>
-            void SetContinuation(std::coroutine_handle<TPromise> c) noexcept
-                requires (!std::is_void_v<TPromise>)
-            {
-                Continuation = c;
-                if constexpr (HasGetActor<TPromise>) {
-                    Actor = c.promise().GetActor();
-                }
-            }
-
-            IActor* GetActor() const {
-                return Actor;
-            }
-
-            void SetActor(IActor* actor) {
-                Actor = actor;
-            }
-
-            std::coroutine_handle<> GetCancellation() const {
-                return Cancellation;
-            }
-
-            void SetCancellation(std::coroutine_handle<> h) {
-                Cancellation = h;
-            }
-
-            void AwaitCancel(std::coroutine_handle<> h) noexcept {
-                SetCancellation(h);
-                TAwaitCancelPropagation::AwaitCancel(h);
             }
 
         private:
-            std::coroutine_handle<> Continuation;
             IActor* Actor = nullptr;
-            std::coroutine_handle<> Cancellation;
+            TAwaitCancelSource* Source = nullptr;
+            std::coroutine_handle<> Continuation;
         };
 
         template<class T>
@@ -885,9 +876,9 @@ namespace NActors {
 
         class TActorAsyncHandlerPromise final
             : private TActorTask
-            , public TAsyncAwaitTransform<TActorAsyncHandlerPromise>
-            , public TAwaitCancelPropagation
+            , private TAwaitCancelSource
             , private TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>
+            , public TAsyncAwaitTransform<TActorAsyncHandlerPromise>
         {
             friend TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>;
 
@@ -900,12 +891,12 @@ namespace NActors {
             void unhandled_exception() noexcept;
             void return_void() noexcept {}
 
-            IActor* GetActor() const {
-                return &Actor;
+            IActor& GetActor() noexcept {
+                return Actor;
             }
 
-            std::coroutine_handle<> GetCancellation() const {
-                return Cancellation;
+            TAwaitCancelSource& GetAwaitCancelSource() noexcept {
+                return *this;
             }
 
         public:
@@ -925,9 +916,8 @@ namespace NActors {
 
         private:
             void Cancel() noexcept override {
-                if (!Cancellation) {
-                    Cancellation = this->ToCoroutineHandle();
-                    this->AwaitCancel(Cancellation);
+                if (!GetCancellation()) {
+                    TAwaitCancelSource::Cancel(this->ToCoroutineHandle());
                 }
             }
 
@@ -945,7 +935,6 @@ namespace NActors {
 
         private:
             IActor& Actor;
-            std::coroutine_handle<> Cancellation;
         };
 
     } // namespace NDetail

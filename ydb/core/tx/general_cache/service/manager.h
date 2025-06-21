@@ -69,7 +69,7 @@ private:
     const NPublic::TConfig Config;
     const TString CacheName = TPolicy::GetCacheName();
     const TCounters& Counters;
-    std::shared_ptr<NSource::IObjectsProcessor<TAddress>> ObjectsProcessor;
+    std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> Requests;
     std::deque<std::shared_ptr<TRequest>> RequestsQueue;

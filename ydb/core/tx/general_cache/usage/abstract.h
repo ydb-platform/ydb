@@ -1,4 +1,6 @@
 #pragma once
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
 
 namespace NKikimr::NGeneralCache::NSource {
 
@@ -12,8 +14,8 @@ private:
         THashMap<TAddress, TString>&& errorAddresses) const = 0;
 
 public:
-    void OnResultReady(
-        THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errorAddresses) const {
+    void OnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
+        THashMap<TAddress, TString>&& errorAddresses) const {
         DoOnResultReady(std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses));
     }
 };

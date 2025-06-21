@@ -1,7 +1,11 @@
 #pragma once
 #include "abstract.h"
 
+#include <ydb/core/base/events.h>
+#include <ydb/core/tx/general_cache/source/abstract.h>
+
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGeneralCache::NPublic {
 
@@ -9,7 +13,7 @@ template <class TPolicy>
 struct TEvents {
     using TAddress = typename TPolicy::TAddress;
     using EConsumer = typename TPolicy::EConsumer;
-    using ICallback = ICallback<TPolicy>;
+    using ICallback = NSource::ICallback<TPolicy>;
 
     enum EEv {
         EvAskData = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_PUBLIC),

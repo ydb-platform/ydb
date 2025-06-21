@@ -3,6 +3,7 @@
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>
 #include <util/generic/set.h>
+#include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
 
@@ -102,6 +103,7 @@ private:
     NTabletFlatExecutor::TTransactionContext& Txc;
     bool ProtectDB = false;
     bool DirectAccessGranted = false;
+    NKikimr::NCompat::TSourceLocation FirstGetDbLocation = NKikimr::NCompat::TSourceLocation::current();  // Track where GetDB was first called
 
 public:
     TOperationContext(
@@ -124,11 +126,17 @@ public:
         : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
     {}
 
-    NTable::TDatabase& GetDB() {
+    NTable::TDatabase& GetDB(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
         Y_VERIFY_S(ProtectDB == false,
                  "there is attempt to write to the DB when it is protected,"
                  " in that case all writes should be done over TStorageChanges"
                  " in order to maintain revert the changes");
+        
+        // Store the location of first GetDB call for better error reporting
+        if (!DirectAccessGranted) {
+            FirstGetDbLocation = location;
+        }
+        
         DirectAccessGranted = true;
         return GetTxc().DB;
     }
@@ -139,6 +147,10 @@ public:
 
     bool IsUndoChangesSafe() const {
         return !DirectAccessGranted;
+    }
+
+    NKikimr::NCompat::TSourceLocation GetFirstGetDbLocation() const {
+        return FirstGetDbLocation;
     }
 
     class TDbGuard {

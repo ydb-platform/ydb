@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vector_workload_params.h"
+#include "vector_sampler.h"
 #include "vector_recall_evaluator.h"
 
 #include <ydb/library/workload/abstract/workload_query_generator.h>
@@ -35,7 +36,7 @@ private:
 
     size_t CurrentIndex = 0;
 
-    THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
+    THolder<TVectorSampler> VectorSampler;
 };
 
 } // namespace NYdbWorkload

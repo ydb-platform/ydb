@@ -20,10 +20,12 @@ TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* 
 }
 
 void TVectorWorkloadGenerator::Init() {
-    VectorRecallEvaluator = MakeHolder<TVectorRecallEvaluator>(Params);
-    VectorRecallEvaluator->SampleExistingVectors();
+    VectorSampler = MakeHolder<TVectorSampler>(Params);
+    VectorSampler->SampleExistingVectors();
+    
     if (Params.Recall) {
-        VectorRecallEvaluator->FillEtalons();
+        TVectorRecallEvaluator vectorRecallEvaluator(Params);
+        vectorRecallEvaluator.MeasureRecall(*VectorSampler);
     }
 }
 
@@ -73,7 +75,7 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
 }
 
 TQueryInfoList TVectorWorkloadGenerator::Select() {
-    CurrentIndex = (CurrentIndex + 1) % VectorRecallEvaluator->GetTargetCount();
+    CurrentIndex = (CurrentIndex + 1) % VectorSampler->GetTargetCount();
 
     // Create the query string
     std::string query = MakeSelect(
@@ -87,12 +89,12 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     );
     
     // Get the embedding for the specified target
-    const auto& targetEmbedding = VectorRecallEvaluator->GetTargetEmbedding(CurrentIndex);
+    const auto& targetEmbedding = VectorSampler->GetTargetEmbedding(CurrentIndex);
     
     // Get the prefix value if needed
     std::optional<i64> prefixValue;
     if (Params.PrefixColumn.has_value()) {
-        prefixValue = VectorRecallEvaluator->GetPrefixValue(CurrentIndex);
+        prefixValue = VectorSampler->GetPrefixValue(CurrentIndex);
     }
     
     NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);

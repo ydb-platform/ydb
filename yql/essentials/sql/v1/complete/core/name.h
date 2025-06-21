@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 
 namespace NSQLComplete {
 
@@ -17,3 +18,10 @@ namespace NSQLComplete {
     };
 
 } // namespace NSQLComplete
+
+template <>
+struct THash<NSQLComplete::TTableId> {
+    inline size_t operator()(const NSQLComplete::TTableId& x) const {
+        return THash<std::tuple<TString, TString>>()(std::tie(x.Cluster, x.Path));
+    }
+};

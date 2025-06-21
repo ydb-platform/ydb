@@ -26,33 +26,33 @@ public:
         TNodePtr patternVars,
         TNodePtr subset,
         TVector<TNamedFunction> definitions)
-    : Pos(pos)
-    , PartitionKeySelector(std::move(partitionKeySelector))
-    , PartitionColumns(std::move(partitionColumns))
-    , SortSpecs(std::move(sortSpecs))
-    , Measures(std::move(measures))
-    , RowsPerMatch(std::move(rowsPerMatch))
-    , SkipTo(std::move(skipTo))
-    , Pattern(std::move(pattern))
-    , PatternVars(std::move(patternVars))
-    , Subset(std::move(subset))
-    , Definitions(std::move(definitions))
+    : Pos_(pos)
+    , PartitionKeySelector_(std::move(partitionKeySelector))
+    , PartitionColumns_(std::move(partitionColumns))
+    , SortSpecs_(std::move(sortSpecs))
+    , Measures_(std::move(measures))
+    , RowsPerMatch_(std::move(rowsPerMatch))
+    , SkipTo_(std::move(skipTo))
+    , Pattern_(std::move(pattern))
+    , PatternVars_(std::move(patternVars))
+    , Subset_(std::move(subset))
+    , Definitions_(std::move(definitions))
     {}
 
     TNodePtr Build(TContext& ctx, TString label, ISource* source);
 
 private:
-    TPosition Pos;
-    TNodePtr PartitionKeySelector;
-    TNodePtr PartitionColumns;
-    TVector<TSortSpecificationPtr> SortSpecs;
-    TVector<TNamedFunction> Measures;
-    TNodePtr RowsPerMatch;
-    TNodePtr SkipTo;
-    TNodePtr Pattern;
-    TNodePtr PatternVars;
-    TNodePtr Subset;
-    TVector<TNamedFunction> Definitions;
+    TPosition Pos_;
+    TNodePtr PartitionKeySelector_;
+    TNodePtr PartitionColumns_;
+    TVector<TSortSpecificationPtr> SortSpecs_;
+    TVector<TNamedFunction> Measures_;
+    TNodePtr RowsPerMatch_;
+    TNodePtr SkipTo_;
+    TNodePtr Pattern_;
+    TNodePtr PatternVars_;
+    TNodePtr Subset_;
+    TVector<TNamedFunction> Definitions_;
 };
 
 using TMatchRecognizeBuilderPtr = TIntrusivePtr<TMatchRecognizeBuilder>;

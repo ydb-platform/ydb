@@ -18,8 +18,11 @@ void TJsonFormatConfig::Register(TRegistrar registrar)
     registrar.Parameter("memory_limit", &TThis::MemoryLimit)
         .Default(256_MB);
     registrar.Parameter("nesting_level_limit", &TThis::NestingLevelLimit)
-        .Default(0);
+        .GreaterThan(0)
+        // JSON representation of YSON with attributes involves additional nesting levels.
+        .Default(NYson::DefaultYsonParserNestingLevelLimit * 2);
     registrar.Parameter("string_length_limit", &TThis::StringLengthLimit)
+        .GreaterThan(0)
         .Default();
 
     registrar.Parameter("stringify", &TThis::Stringify)
@@ -33,7 +36,8 @@ void TJsonFormatConfig::Register(TRegistrar registrar)
         .Default(false);
 
     registrar.Parameter("buffer_size", &TThis::BufferSize)
-        .Default(16 * 1024);
+        .GreaterThan(0)
+        .Default(16_KBs);
 
     registrar.Parameter("skip_null_values", &TThis::SkipNullValues)
         .Default(false);

@@ -317,6 +317,7 @@ namespace NKikimr::NStorage {
         bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden(ui64 cookie);
+        void Handle(TEvNodeWardenUpdateConfigFromPeer::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
@@ -584,6 +585,9 @@ namespace NKikimr::NStorage {
         ui64 *mainConfigVersion, TString *mainConfigFetchYaml);
 
     std::optional<TString> UpdateClusterState(NKikimrBlobStorage::TStorageConfig *config);
+
+    TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
+        const TNodeWardenConfig *cfg, ui32 selfNodeId);
 
 } // NKikimr::NStorage
 

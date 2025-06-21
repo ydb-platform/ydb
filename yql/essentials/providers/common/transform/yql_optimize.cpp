@@ -55,8 +55,8 @@ private:
 
 TOptimizeTransformerBase::TOptimizeTransformerBase(TTypeAnnotationContext* types, NLog::EComponent logComponent, const TSet<TString>& disabledOpts)
     : Types(types)
-    , LogComponent(logComponent)
-    , DisabledOpts(disabledOpts)
+    , LogComponent_(logComponent)
+    , DisabledOpts_(disabledOpts)
 {
 }
 
@@ -65,7 +65,7 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
 
     output = input;
-    for (auto& step: Steps) {
+    for (auto& step: Steps_) {
         TParentsMap parentsMap;
         bool parentsMapInit = false;
         TGetParents getParents = [&input, &parentsMap, &parentsMapInit] () {
@@ -89,14 +89,14 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
                                 try {
                                     auto ret = opt.Handler(NNodes::TExprBase(node), ctx, optCtx, getParents);
                                     if (!ret) {
-                                        YQL_CVLOG(NLog::ELevel::ERROR, LogComponent) << "Error applying " << opt.OptName;
+                                        YQL_CVLOG(NLog::ELevel::ERROR, LogComponent_) << "Error applying " << opt.OptName;
                                         optCtx.SetError();
                                     } else if (auto retNode = ret.Cast(); retNode.Ptr() != node) {
-                                        YQL_CVLOG(NLog::ELevel::INFO, LogComponent) << opt.OptName;
+                                        YQL_CVLOG(NLog::ELevel::INFO, LogComponent_) << opt.OptName;
                                         optCtx.RemapNode(*node, retNode.Ptr());
                                     }
                                 } catch (...) {
-                                    YQL_CVLOG(NLog::ELevel::ERROR, LogComponent) << "Error applying " << opt.OptName << ": " << CurrentExceptionMessage();
+                                    YQL_CVLOG(NLog::ELevel::ERROR, LogComponent_) << "Error applying " << opt.OptName << ": " << CurrentExceptionMessage();
                                     throw;
                                 }
                             }
@@ -127,16 +127,16 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
                         try {
                             auto ret = opt.Handler(NNodes::TExprBase(node), ctx, ignoreOptCtx, getParents);
                             if (!ret) {
-                                YQL_CVLOG(NLog::ELevel::ERROR, LogComponent) << "Error applying " << opt.OptName;
+                                YQL_CVLOG(NLog::ELevel::ERROR, LogComponent_) << "Error applying " << opt.OptName;
                                 return {};
                             }
                             auto retNode = ret.Cast();
                             if (retNode.Ptr() != node) {
-                                YQL_CVLOG(NLog::ELevel::INFO, LogComponent) << opt.OptName;
+                                YQL_CVLOG(NLog::ELevel::INFO, LogComponent_) << opt.OptName;
                                 return retNode.Ptr();
                             }
                         } catch (...) {
-                            YQL_CVLOG(NLog::ELevel::ERROR, LogComponent) << "Error applying " << opt.OptName << ": " << CurrentExceptionMessage();
+                            YQL_CVLOG(NLog::ELevel::ERROR, LogComponent_) << "Error applying " << opt.OptName << ": " << CurrentExceptionMessage();
                             throw;
                         }
                     }
@@ -154,7 +154,7 @@ IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr
 }
 
 void TOptimizeTransformerBase::Rewind() {
-    for (auto& step: Steps) {
+    for (auto& step: Steps_) {
         step.ProcessedNodes.clear();
     }
 }
@@ -183,27 +183,31 @@ TOptimizeTransformerBase::TFilter TOptimizeTransformerBase::Or(std::initializer_
     };
 }
 
+TTypeAnnotationContext* TOptimizeTransformerBase::GetTypes() const {
+    return Types;
+}
+
 void TOptimizeTransformerBase::AddHandler(size_t step, TFilter filter, TStringBuf optName, THandler handler) {
-    if (DisabledOpts.contains(optName)) {
+    if (DisabledOpts_.contains(optName)) {
         return;
     }
 
-    if (step >= Steps.size()) {
-        Steps.resize(step + 1);
+    if (step >= Steps_.size()) {
+        Steps_.resize(step + 1);
     }
 
     TOptInfo opt;
     opt.OptName = optName;
     opt.Filter = filter;
     opt.Handler = handler;
-    Steps[step].Optimizers.push_back(std::move(opt));
+    Steps_[step].Optimizers.push_back(std::move(opt));
 }
 
 void TOptimizeTransformerBase::SetGlobal(size_t step) {
-    if (step >= Steps.size()) {
-        Steps.resize(step + 1);
+    if (step >= Steps_.size()) {
+        Steps_.resize(step + 1);
     }
-    Steps[step].Global = true;
+    Steps_[step].Global = true;
 }
 
 }

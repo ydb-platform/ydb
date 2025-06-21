@@ -238,7 +238,9 @@ void TCommandImportFileBase::Config(TConfig& config) {
 
     const TImportFileSettings defaults;
     config.Opts->AddLongOption("batch-bytes",
-            "Use portions of this size in bytes to parse and upload file data")
+            "Use portions of this size in bytes to parse and upload file data."
+            " Remember that in worse case memory consumption will be: \n"
+            "    batch-bytes * (threads * 2 + max-in-flight)")
         .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
     config.Opts->AddLongOption("max-in-flight",
         "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")

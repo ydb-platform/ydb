@@ -85,9 +85,11 @@ struct TDynamicConfig : public TThrRefBase {
                          const TString &resolveHost,
                          ui16 port,
                          const TNodeLocation &location,
-                         TInstant expire)
+                         TInstant expire,
+                         std::optional<TBridgePileId> bridgePileId)
             : TNodeInfo(address, host, resolveHost, port, location)
             , Expire(expire)
+            , BridgePileId(bridgePileId)
         {
         }
 
@@ -97,7 +99,10 @@ struct TDynamicConfig : public TThrRefBase {
                                info.GetResolveHost(),
                                (ui16)info.GetPort(),
                                TNodeLocation(info.GetLocation()),
-                               TInstant::MicroSeconds(info.GetExpire()))
+                               TInstant::MicroSeconds(info.GetExpire()),
+                               info.HasBridgePileId()
+                                   ? std::make_optional(TBridgePileId::FromProto(&info, &NKikimrNodeBroker::TNodeInfo::GetBridgePileId))
+                                   : std::nullopt)
         {
         }
 
@@ -114,6 +119,7 @@ struct TDynamicConfig : public TThrRefBase {
         }
 
         TInstant Expire;
+        std::optional<TBridgePileId> BridgePileId;
     };
 
     THashMap<ui32, TDynamicNodeInfo> DynamicNodes;
@@ -131,13 +137,16 @@ class TListNodesCache : public TSimpleRefCount<TListNodesCache> {
 public:
     TListNodesCache();
 
-    void Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire);
+    void Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire,
+        std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap>&& pileMap);
     void Invalidate();
     bool NeedUpdate(TInstant now) const;
     TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr GetNodes() const;
+    std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap> GetPileMap() const;
 private:
     TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr Nodes;
     TInstant Expire;
+    std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap> PileMap;
 };
 
 template<typename TCacheMiss>
@@ -280,6 +289,7 @@ private:
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
     TVector<TActorId> ListNodesQueue;
     TIntrusivePtr<TListNodesCache> ListNodesCache;
+    TBridgeInfo::TPtr BridgeInfo;
 
     // When ListNodes requests are sent to NodeBroker tablets this
     // bitmap indicates domains which didn't answer yet.

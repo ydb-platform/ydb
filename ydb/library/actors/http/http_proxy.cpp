@@ -454,4 +454,12 @@ TString ToHex(size_t value) {
     return hex.str();
 }
 
+bool IsReadableContent(TStringBuf contentType) {
+    auto type = contentType.Before(';');
+    if (type.StartsWith("text/") || type == "application/json") {
+        return true;
+    }
+    return false;
+}
+
 }

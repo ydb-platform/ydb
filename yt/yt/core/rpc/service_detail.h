@@ -765,9 +765,9 @@ protected:
         NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestCounter;
 
-        std::atomic<NLogging::ELogLevel> LogLevel = {};
-        std::atomic<NLogging::ELogLevel> ErrorLogLevel = {};
-        std::atomic<TDuration> LoggingSuppressionTimeout = {};
+        std::atomic<NLogging::ELogLevel> LogLevel;
+        std::atomic<NLogging::ELogLevel> ErrorLogLevel;
+        std::atomic<TDuration> LoggingSuppressionTimeout;
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
         using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;

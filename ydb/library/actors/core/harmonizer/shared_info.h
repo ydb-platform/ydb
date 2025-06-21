@@ -13,6 +13,8 @@ struct TPoolSharedThreadCpuConsumption {
     float Elapsed = 0;
     float Cpu = 0;
     float CpuQuota = 0;
+    float ForeignElapsed = 0;
+    float ForeignCpu = 0;
 
     TString ToString() const;
 };
@@ -34,6 +36,7 @@ struct TSharedInfo {
     std::vector<std::vector<TSharedThreadCpuConsumptionByPool>> CpuConsumptionPerThread;
     TVector<TExecutorThreadStats> ThreadStats; // for pulling only
     float FreeCpu = 0.0;
+    float FreeCpuLS = 0.0;
 
     void Init(i16 poolCount, const ISharedPool *shared);
     void Pull(const std::vector<std::unique_ptr<TPoolInfo>>& pools, const ISharedPool& shared);

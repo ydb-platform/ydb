@@ -54,9 +54,6 @@ abseil_cpp = CMakeNinjaNixProject(
     },
     put_with={
         "absl_base": [
-            "absl_bad_any_cast_impl",
-            "absl_bad_optional_access",
-            "absl_bad_variant_access",
             "absl_city",
             "absl_civil_time",
             "absl_cord",
@@ -94,7 +91,6 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_int128",
             "absl_kernel_timeout_internal",
             "absl_leak_check",
-            "absl_log_entry",
             "absl_log_flags",
             "absl_log_globals",
             "absl_log_initialize",
@@ -116,8 +112,8 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_poison",
             "absl_random_distributions",
             "absl_random_internal_distribution_test_util",
+            "absl_random_internal_entropy_pool",
             "absl_random_internal_platform",
-            "absl_random_internal_pool_urbg",
             "absl_random_internal_randen",
             "absl_random_internal_randen_hwaes",
             "absl_random_internal_randen_hwaes_impl",

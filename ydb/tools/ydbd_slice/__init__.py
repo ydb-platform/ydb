@@ -7,6 +7,8 @@ import logging
 import argparse
 import subprocess
 import warnings
+from pathlib import Path
+
 
 import library.python.resource as rs
 
@@ -276,8 +278,10 @@ def deduce_components_from_args(args, cluster_details):
     if dynamic_enabled:
         components.append('dynamic_slots')
 
-    result = dict()
+    if not hasattr(args, 'components'):
+        return {item: [] for item in components}
 
+    result = dict()
     for item in args.components:
         name, val = item.rsplit('=') if '=' in item else (item, None)
         assert name == 'all' or name in components, \
@@ -402,9 +406,10 @@ def deduce_kikimr_bin_from_args(args):
         root = arcadia_root()
         path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
     else:
-        sys.exit("unable to deduce ydbd bin")
+        # sys.exit("unable to deduce ydbd bin")
+        path = None
 
-    if 'LD_LIBRARY_PATH' not in os.environ:
+    if 'LD_LIBRARY_PATH' not in os.environ and path is not None:
         os.environ['LD_LIBRARY_PATH'] = os.path.dirname(path)
 
     compressed_path = args.binary_lz4
@@ -641,21 +646,22 @@ def add_explain_mode(modes, walle_provider):
 def dispatch_run(func, args, walle_provider, need_confirmation=False):
     if need_confirmation and not __confirm(args):
         print("Aborting slice installation/formatting")
-        # TODO(shmel1k@): add confirmation message.
         return
 
     logger.debug("run func '%s' with cmd args is '%s'", func.__name__, args)
 
     temp_dir = deduce_temp_dir_from_args(args)
-    kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
     clear_tmp = not args.dry_run and args.temp_dir is None
 
+    # Always get cluster_details
+    cluster_details = None
+    configurator = None
+
+    kikimr_bin, kikimr_compressed_bin = deduce_kikimr_bin_from_args(args)
     if args.yaml_config:
         configurator = yaml_configurator.YamlConfigurator(
             args.cluster,
-            temp_dir,
-            kikimr_bin,
-            kikimr_compressed_bin,
+            Path(temp_dir),
             args.yaml_config
         )
         cluster_details = configurator.cluster_description
@@ -663,13 +669,21 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
         cluster_details = safe_load_cluster_details(args.cluster, walle_provider)
         configurator = cluster_description.Configurator(
             cluster_details,
-            out_dir=temp_dir,
+            out_dir=Path(temp_dir),
             kikimr_bin=kikimr_bin,
             kikimr_compressed_bin=kikimr_compressed_bin,
             walle_provider=walle_provider
         )
 
+    # Always compute components after cluster_details
     components = deduce_components_from_args(args, cluster_details)
+
+    # Call deduce_kikimr_bin_from_args only if needed
+    # Skip binary check for the clear command while keeping it for others
+    if ('kikimr' in components and 'bin' in components['kikimr']) and kikimr_bin is None and func != handlers.Slice.slice_clear:
+        sys.exit(
+            "unable to deduce kikimr binary, please specify it with --binary or --arcadia option"
+        )
 
     v = vars(args)
     clear_logs = v.get('clear_logs')
@@ -689,21 +703,6 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
     )
     func(slice)
 
-    # used only for configurator and will be removed soon
-    save_raw_cfg = v.get('save_raw_cfg')
-    if save_raw_cfg and configurator:
-        logger.debug("save raw cfg to '%s'", save_raw_cfg)
-        for root, dirs, files in os.walk(temp_dir):
-            for dir in dirs:
-                os.makedirs(os.path.join(save_raw_cfg, dir), 0o755, exist_ok=True)
-
-            for file in files:
-                src = os.path.join(root, file)
-                dst = os.path.join(save_raw_cfg, os.path.relpath(src, temp_dir))
-                with open(src, 'r') as src_f:
-                    with open(dst, 'w') as dst_f:
-                        dst_f.write(src_f.read())
-
     if clear_tmp:
         logger.debug("remove temp dirs '%s'", temp_dir)
         # shutil.rmtree(temp_dir)
@@ -714,28 +713,24 @@ def __confirm(args) -> bool:
         return True
 
     confirm = input(
-        "You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.\n"
-        + "Press [y] to continue or [n] to abort installation/formatting: "
+        """You are trying to setup or format slice. Note, that during setup or format all previous data will be erased.
+        Press [y] to continue or [n] to abort installation/formatting: """
     )
-    for i in range(0, 3):
+
+    for _ in range(4):
         lw = confirm.strip().lower()
         if lw == "n":
             return False
         if lw == "y":
             return True
-        confirm = input("Enter [y] or [n]")
-    lw = confirm.strip().lower()
-    if lw == "n":
-        return False
-    if lw == "y":
-        return True
+        confirm = input("Enter [y] or [n]: ")
 
     return False
 
 
 def add_install_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_install, args, walle_provider, True)
+        dispatch_run(handlers.Slice.slice_install, args, walle_provider, need_confirmation=True)
 
     mode = modes.add_parser(
         "install",
@@ -754,13 +749,7 @@ def add_install_mode(modes, walle_provider):
         description="Full installation of the cluster from scratch. "
         "You can use --hosts to specify particular hosts. But it is tricky.",
     )
-    mode.add_argument(
-        "--save-raw-cfg",
-        metavar="DIR",
-        required=False,
-        default="",
-        help="Directory to save all static configuration files generated by configuration.create_static_cfg and configuration.create_dynamic_cfg",
-    )
+
     mode.set_defaults(handler=_run)
 
 
@@ -851,7 +840,7 @@ def add_start_mode(modes, walle_provider):
 
 def add_clear_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_clear, args, walle_provider, True)
+        dispatch_run(handlers.Slice.slice_clear, args, walle_provider, need_confirmation=True)
 
     mode = modes.add_parser(
         "clear",
@@ -873,7 +862,7 @@ def add_clear_mode(modes, walle_provider):
 
 def add_format_mode(modes, walle_provider):
     def _run(args):
-        dispatch_run(handlers.Slice.slice_format, args, walle_provider, True)
+        dispatch_run(handlers.Slice.slice_format, args, walle_provider, need_confirmation=True)
 
     mode = modes.add_parser(
         "format",
@@ -912,7 +901,8 @@ def add_sample_config_mode(modes):
         elif cluster_type == "mirror-3-dc-9-nodes":
             template_path = "/ydbd_slice/baremetal/templates/mirror-3-dc-9-nodes.yaml"
         else:
-            raise "Unreachable code"  # TODO(shmel1k@): improve error
+            raise BaseException(
+                f"Unknown cluster type '{cluster_type}'. ")
 
         f = rs.find(template_path).decode()
         if args.output_file is not None and args.output_file != "":
@@ -935,9 +925,9 @@ def add_dynconfig_generator(modes):
         if args.yaml_config:
             yaml_config = yaml_configurator.YamlConfig(args.yaml_config)
 
-        if args.output_file is not None and args.output_file:
-            with open(args.output_file, "w") as output:
-                output.write(yaml_config.dynamic_simple)
+            if args.output_file is not None and args.output_file:
+                with open(args.output_file, "w") as output:
+                    output.write(yaml_config.dynamic_simple)
 
     mode = modes.add_parser(
         "dynconfig-generator",
@@ -1521,26 +1511,6 @@ def main(walle_provider=None):
         if not hasattr(args, 'handler'):
             parser.print_help()
             return
-
-        if not hasattr(args, 'yaml_config') or not args.yaml_config:
-            warnings.warn(
-                '''
-Using cluster.yaml for cluster configuration is deprecated.
-Only the 'domains' section should be filled with database and slot configurations.
-The config.yaml should be passed as a raw file through the --yaml-config.
-
-Example:
-    ydbd_slice install cluster.yaml all --binary /path/to/ydbd --yaml-config /path/to/config.yaml
-
-To save the resulting configuration files from an old cluster.yaml, use the --save-raw-cfg option.
-
-Example:
-    ydbd_slice install cluster.yaml all --binary /path/to/ydbd --save-raw-cfg /path/to/save
-
-The resulting configuration files will be saved in the /path/to/save directory. You can find config.yaml in the /path/to/save/kikimr-static directory.
-''',
-                DeprecationWarning
-            )
 
         args.handler(args)
     except KeyboardInterrupt:

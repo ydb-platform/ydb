@@ -16,7 +16,7 @@ class ImportFileCsvBase(UploadSuiteBase):
 
     def init(self):
         # Create tables
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'init', '--suite-path', self.get_external_path(), '--clear'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.get_tables_path(), 'init', '--suite-path', self.get_external_path(), '--clear'])
 
         import_dir = os.path.join(self.get_external_path(), "import")
         table_names = sorted([name for name in os.listdir(import_dir) if os.path.isdir(os.path.join(import_dir, name))])
@@ -26,14 +26,14 @@ class ImportFileCsvBase(UploadSuiteBase):
         logging.info(f'Importing table: {self.table_name}')
 
     def import_data(self):
-        self.table_path = f'{YdbCluster.tables_path}/{self.table_name}'
+        self.table_path = YdbCluster.get_tables_path(self.table_name)
         logging.info(f'Table path: {self.table_path}')
         import_dir = os.path.join(self.get_external_path(), 'import', self.table_name)
         csv_files = [f for f in os.listdir(import_dir) if os.path.isfile(os.path.join(import_dir, f)) and f.endswith('.csv')]
         if not csv_files:
             raise RuntimeError(f'No .csv files found in {import_dir}')
         import_path = os.path.join(import_dir, csv_files[0])
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
+        yatest.common.execute(['/usr/bin/time'] + YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
 
     def validate(self, result: YdbCliHelper.WorkloadRunResult):
         select_command = yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', f'SELECT COUNT (*) AS count FROM `{self.table_path}`', '--format', 'json-unicode'])
@@ -63,7 +63,7 @@ class ImportFileCsvBase(UploadSuiteBase):
 
     @classmethod
     def teardown_class(cls) -> None:
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.tables_path, 'clean'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'query', '-p', YdbCluster.get_tables_path(), 'clean'])
         super().teardown_class()
 
 

@@ -49,6 +49,7 @@ SRCS(
     scheduler/proto/spec_patch.proto
 
     misc/proto/workload.proto
+    misc/proto/signature.proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

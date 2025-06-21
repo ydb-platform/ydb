@@ -20,8 +20,7 @@ PEERDIR(
     contrib/libs/protobuf/builtin_proto/protos_from_protobuf
     contrib/libs/protobuf/builtin_proto/protos_from_protoc
     contrib/libs/python
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/log
+    contrib/restricted/abseil-cpp-tstring
 )
 
 NO_LINT()

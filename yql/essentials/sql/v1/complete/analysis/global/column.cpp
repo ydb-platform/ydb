@@ -56,6 +56,26 @@ namespace NSQLComplete {
 
         class TInferenceVisitor: public SQLv1Antlr4BaseVisitor {
         public:
+            std::any visitNamed_single_source(SQLv1::Named_single_sourceContext* ctx) override {
+                SQLv1::Single_sourceContext* singleSource = ctx->single_source();
+                if (singleSource == nullptr) {
+                    return {};
+                }
+
+                std::any any = visit(singleSource);
+                if (!any.has_value()) {
+                    return {};
+                }
+                TColumnContext context = std::move(std::any_cast<TColumnContext>(any));
+
+                TMaybe<TString> alias = GetAlias(ctx);
+                if (alias.Empty()) {
+                    return context;
+                }
+
+                return Renamed(std::move(context), *alias);
+            }
+
             std::any visitTable_ref(SQLv1::Table_refContext* ctx) override {
                 TString cluster = GetId(ctx->cluster_expr()).GetOrElse("");
 
@@ -66,9 +86,26 @@ namespace NSQLComplete {
 
                 return TColumnContext{
                     .Tables = {
-                        {.Cluster = std::move(cluster), .Path = std::move(*path)},
+                        TTableId{std::move(cluster), std::move(*path)},
                     },
                 };
+            }
+
+        private:
+            TMaybe<TString> GetAlias(SQLv1::Named_single_sourceContext* ctx) const {
+                TMaybe<TString> alias = GetId(ctx->an_id());
+                alias = alias.Defined() ? alias : GetId(ctx->an_id_as_compat());
+                return alias;
+            }
+
+            TColumnContext Renamed(TColumnContext context, TString alias) {
+                Y_ENSURE(!alias.empty());
+
+                for (TAliased<TTableId>& table : context.Tables) {
+                    table.Alias = alias;
+                }
+
+                return context;
             }
         };
 

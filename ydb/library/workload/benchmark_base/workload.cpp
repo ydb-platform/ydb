@@ -238,10 +238,14 @@ void TWorkloadBaseParams::Validate(const ECommandType /*commandType*/, int /*wor
 
 TString TWorkloadBaseParams::GetFullTableName(const char* table) const {
     TStringBuilder result;
-    if (!Path.StartsWith('/')) {
-        result << DbPath << "/"; 
+    if (Path.StartsWith('/')) {
+        result << Path;
+    } else {
+        result << DbPath;
+        if (Path) {
+            result << "/" << Path;
+        }
     }
-    result << Path;
     if (TStringBuf(table)){
         result << "/" << table;
     }

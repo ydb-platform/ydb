@@ -18,6 +18,8 @@ public:
 
     virtual const TVector<TString>& GetClusters() const = 0;
 
+    virtual const TVector<ui64>& GetClusterSizes() const = 0;
+
     virtual void Clear() = 0;
 
     virtual bool SetClusters(TVector<TString> && newClusters) = 0;
@@ -25,6 +27,8 @@ public:
     virtual void InitAggregatedClusters() = 0;
 
     virtual bool RecomputeClusters() = 0;
+
+    virtual void RemoveEmptyClusters() = 0;
 
     virtual std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) = 0;
 

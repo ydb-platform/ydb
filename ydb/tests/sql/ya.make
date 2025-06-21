@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 TEST_SRCS(
@@ -12,7 +12,6 @@ SIZE(MEDIUM)
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
     ydb/tests/sql/lib
 )
 

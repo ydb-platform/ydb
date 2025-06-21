@@ -109,7 +109,7 @@ private:
 
     std::queue<TWaiter> Waiters_;
 
-    bool IsOverdraftingAvailable() const;
+    bool CanOverdraft() const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TAsyncSemaphore)

@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/olap_workload/olap_workload")
 
@@ -12,7 +12,6 @@ REQUIREMENTS(ram:32)
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/tests/stress/olap_workload
 )
 

@@ -219,6 +219,7 @@ SRCS(
     build_index/local_kmeans.cpp
     build_index/sample_k.cpp
     build_index/secondary_index.cpp
+    build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
 )
 

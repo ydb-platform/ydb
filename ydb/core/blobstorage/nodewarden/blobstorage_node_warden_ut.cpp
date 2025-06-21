@@ -37,14 +37,14 @@ namespace NBlobStorageNodeWardenTest{
 #define VERBOSE_COUT(str) \
 do { \
     if (IsVerbose) { \
-        Cerr << str << Endl; \
+        Cerr << (TStringBuilder() << str << Endl); \
     } \
 } while(false)
 
 #define LOW_VERBOSE_COUT(str) \
 do { \
     if (IsLowVerbose) { \
-        Cerr << str << Endl; \
+        Cerr << (TStringBuilder() << str << Endl); \
     } \
 } while(false)
 
@@ -738,41 +738,40 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     }
 
     CUSTOM_UNIT_TEST(TestGivenPDiskFormatedWithGuid1AndCreatedWithGuid2WhenYardInitThenError) {
-        TTempDir tempDir;
-        TTestBasicRuntime runtime(2, false);
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32ull << 30ull));
-        Setup(runtime, "SectorMap:new_pdisk", sectorMap);
-        TActorId sender0 = runtime.AllocateEdgeActor(0);
-//        TActorId sender1 = runtime.AllocateEdgeActor(1);
+        TTestBasicRuntime runtime(1, false);
+        TString pdiskPath = "SectorMap:TestGivenPDiskFormatedWithGuid1AndCreatedWithGuid2WhenYardInitThenError";
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32ull << 30));
+        Setup(runtime, pdiskPath, sectorMap);
+        TActorId edge = runtime.AllocateEdgeActor();
 
-        VERBOSE_COUT(" Formatting pdisk");
-        FormatPDiskRandomKeys(tempDir() + "/new_pdisk.dat", sectorMap->DeviceSize, 32 << 20, 1, false, sectorMap, false);
+        ui64 guid1 = 1;
+        ui64 guid2 = 2;
+        SafeEntropyPoolRead(&guid1, sizeof(guid1));
+        SafeEntropyPoolRead(&guid2, sizeof(guid2));
+        UNIT_ASSERT_VALUES_UNEQUAL(guid1, guid2);
 
-        VERBOSE_COUT(" Creating PDisk");
-        ui64 guid = 1;
-        ui64 pDiskCategory = 0;
-        SafeEntropyPoolRead(&guid, sizeof(guid));
-//        TODO: look why doesn't sernder 1 work
-        ui32 pDiskId = CreatePDisk(runtime, 0, tempDir() + "/new_pdisk.dat", guid, 1001, pDiskCategory);
+        VERBOSE_COUT(" Formatting PDisk with guid1 " << guid1);
+        FormatPDiskRandomKeys("", sectorMap->DeviceSize, 32 << 20, guid1, true, sectorMap, false);
+
+        VERBOSE_COUT(" Creating PDisk with guid2 " << guid2);
+        ui32 pdiskId = CreatePDisk(runtime, 0, pdiskPath, guid2, 1001, 0);
+        runtime.SimulateSleep(TDuration::Seconds(1));
 
         VERBOSE_COUT(" Verify that PDisk returns ERROR");
-
-        TVDiskID vDiskId;
-        ui64 guid2 = guid;
-        while (guid2 == guid) {
-            SafeEntropyPoolRead(&guid2, sizeof(guid2));
-        }
         ui32 nodeId = runtime.GetNodeId(0);
-        TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId);
-        for (;;) {
-            runtime.Send(new IEventHandle(pDiskActorId, sender0, new NPDisk::TEvYardInit(1, vDiskId, guid)), 0);
-            TAutoPtr<IEventHandle> handle;
-            if (auto initResult = runtime.GrabEdgeEventRethrow<NPDisk::TEvYardInitResult>(handle, TDuration::Seconds(1))) {
-                UNIT_ASSERT(initResult);
-                UNIT_ASSERT(initResult->Status == NKikimrProto::CORRUPTED);
-                break;
-            }
-        }
+        TActorId pdiskActor = MakeBlobStoragePDiskID(nodeId, pdiskId);
+        TVDiskID vdiskId;
+        runtime.Send(new IEventHandle(pdiskActor, edge, new NPDisk::TEvYardInit(1, vdiskId, guid1)), 0);
+        auto initResult = runtime.GrabEdgeEventRethrow<NPDisk::TEvYardInitResult>(edge, TDuration::Seconds(1));
+        UNIT_ASSERT(initResult && initResult->Get());
+        auto record = initResult->Get();
+        VERBOSE_COUT(" YardInitResult: " << record->ToString());
+
+        UNIT_ASSERT(record->Status == NKikimrProto::CORRUPTED);
+        UNIT_ASSERT(record->ErrorReason.Contains("PDisk is in StateError"));
+        UNIT_ASSERT(record->ErrorReason.Contains("guid error"));
+        UNIT_ASSERT(record->ErrorReason.Contains(TStringBuilder() << guid1));
+        UNIT_ASSERT(record->ErrorReason.Contains(TStringBuilder() << guid2));
     }
 
     void TestHttpMonForPath(const TString& path) {

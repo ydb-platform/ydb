@@ -597,7 +597,7 @@ private:
     std::atomic<i64> QueueSize_ = 0;
     std::atomic<i64> Usage_ = 0;
 
-    std::atomic<bool> Limited_ = {false};
+    std::atomic<bool> Limited_ = false;
 
     std::atomic<TDuration> DistributionPeriod_;
 

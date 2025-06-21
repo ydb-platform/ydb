@@ -1,7 +1,9 @@
 #pragma once
 
+#include <ydb/core/tx/datashard/buffer_data.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/datashard/scan_common.h>
+#include <ydb/core/tx/datashard/upload_stats.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NDataShard {
@@ -53,7 +55,7 @@ public:
         }
         
         UploadRows += Uploading.Buffer.GetRows();
-        UploadBytes += Uploading.Buffer.GetBytes();
+        UploadBytes += Uploading.Buffer.GetRowCellBytes();
         Uploading.Buffer.Clear();
         RetryCount = 0;
 
@@ -68,7 +70,7 @@ public:
     {
         bool hasReachedLimit = false;
         for (auto& [_, dst] : Destinations) {
-            if (HasReachedLimits(dst.Buffer, ScanSettings)) {
+            if (dst.Buffer.HasReachedLimits(ScanSettings)) {
                 hasReachedLimit = true;
                 break;
             }
@@ -88,7 +90,7 @@ public:
 
         hasReachedLimit = false;
         for (auto& [_, dst] : Destinations) {
-            if (HasReachedLimits(dst.Buffer, ScanSettings)) {
+            if (dst.Buffer.HasReachedLimits(ScanSettings)) {
                 hasReachedLimit = true;
                 break;
             }
@@ -173,7 +175,7 @@ public:
         TStringBuilder result;
 
         if (Uploading) {
-            result << "UploadTable: " << Uploading.Table << " UploadBuf size: " << Uploading.Buffer.Size() << " RetryCount: " << RetryCount;
+            result << "UploadTable: " << Uploading.Table << " UploadBuf size: " << Uploading.Buffer.GetBufferBytes() << " RetryCount: " << RetryCount;
         }
 
         return result;
@@ -186,7 +188,7 @@ private:
             return true;
         }
 
-        if (!destination.Buffer.IsEmpty() && (!byLimit || HasReachedLimits(destination.Buffer, ScanSettings))) {
+        if (!destination.Buffer.IsEmpty() && (!byLimit || destination.Buffer.HasReachedLimits(ScanSettings))) {
             Uploading.Table = destination.Table;
             Uploading.Types = destination.Types; 
             destination.Buffer.FlushTo(Uploading.Buffer);

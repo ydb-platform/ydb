@@ -623,7 +623,8 @@ public:
     std::unordered_map<TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo*> VDisksByVSlotId;
     std::unordered_map<TPDiskId, const NKikimrWhiteboard::TPDiskStateInfo*> PDisksByPDiskId;
 
-    TFieldsType FieldsRequired;
+    TFieldsType FieldsRequested; // fields that were requested by user
+    TFieldsType FieldsRequired; // fields that are required to calculate the response
     TFieldsType FieldsAvailable;
     const TFieldsType FieldsAll = TFieldsType().set();
     const TFieldsType FieldsBsGroups = TFieldsType().set(+EGroupFields::GroupId)
@@ -847,6 +848,7 @@ public:
             NeedSort = false;
             NeedLimit = false;
         }
+        FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
                 auto itDependentFields = DependentFields.find(static_cast<EGroupFields>(field));
@@ -2079,69 +2081,71 @@ public:
                 if (group->GroupGeneration) {
                     jsonGroup.SetGroupGeneration(group->GroupGeneration);
                 }
-                if (FieldsAvailable.test(+EGroupFields::PoolName)) {
+                if (FieldsAvailable.test(+EGroupFields::PoolName) && FieldsRequested.test(+EGroupFields::PoolName)) {
                     jsonGroup.SetPoolName(group->PoolName);
                 }
-                std::vector<const TVDisk*> vdisks;
-                vdisks.resize(group->VDisks.size());
-                for (size_t idx = 0; idx < group->VDisks.size(); ++idx) {
-                    vdisks[idx] = &group->VDisks[idx];
+                if (FieldsRequested.test(+EGroupFields::VDisk)) {
+                    std::vector<const TVDisk*> vdisks;
+                    vdisks.resize(group->VDisks.size());
+                    for (size_t idx = 0; idx < group->VDisks.size(); ++idx) {
+                        vdisks[idx] = &group->VDisks[idx];
+                    }
+                    std::sort(vdisks.begin(), vdisks.end(), [](const TVDisk* a, const TVDisk* b) {
+                        return a->VDiskId < b->VDiskId;
+                    });
+                    for (const TVDisk* vdisk : vdisks) {
+                        RenderVDisk(*jsonGroup.AddVDisks(), *vdisk);
+                    }
                 }
-                std::sort(vdisks.begin(), vdisks.end(), [](const TVDisk* a, const TVDisk* b) {
-                    return a->VDiskId < b->VDiskId;
-                });
-                for (const TVDisk* vdisk : vdisks) {
-                    RenderVDisk(*jsonGroup.AddVDisks(), *vdisk);
-                }
-                if (FieldsAvailable.test(+EGroupFields::Encryption)) {
+                if (FieldsAvailable.test(+EGroupFields::Encryption) && FieldsRequested.test(+EGroupFields::Encryption)) {
                     jsonGroup.SetEncryption(group->EncryptionMode);
                 }
                 if (group->Overall != NKikimrViewer::Grey) {
                     jsonGroup.SetOverall(group->Overall);
                 }
-                if (group->DiskSpace != NKikimrViewer::Grey) {
+                if (group->DiskSpace != NKikimrViewer::Grey && FieldsRequested.test(+EGroupFields::Usage)) {
                     jsonGroup.SetDiskSpace(group->DiskSpace);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Kind)) {
+                if (FieldsAvailable.test(+EGroupFields::Kind) && FieldsRequested.test(+EGroupFields::Kind)) {
                     jsonGroup.SetKind(group->Kind);
                 }
-                if (FieldsAvailable.test(+EGroupFields::MediaType)) {
+                if (FieldsAvailable.test(+EGroupFields::MediaType) && FieldsRequested.test(+EGroupFields::MediaType)) {
                     jsonGroup.SetMediaType(group->MediaType);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Erasure)) {
+                if (FieldsAvailable.test(+EGroupFields::Erasure) && FieldsRequested.test(+EGroupFields::Erasure)) {
                     jsonGroup.SetErasureSpecies(group->Erasure);
                 }
-                if (FieldsAvailable.test(+EGroupFields::AllocationUnits)) {
+                if (FieldsAvailable.test(+EGroupFields::AllocationUnits) && FieldsRequested.test(+EGroupFields::AllocationUnits)) {
                     jsonGroup.SetAllocationUnits(group->AllocationUnits);
                 }
-                if (FieldsAvailable.test(+EGroupFields::State)) {
+                if (FieldsAvailable.test(+EGroupFields::State) && FieldsRequested.test(+EGroupFields::State)) {
                     jsonGroup.SetState(group->State);
                 }
-                if (FieldsAvailable.test(+EGroupFields::MissingDisks)) {
+                if (FieldsAvailable.test(+EGroupFields::MissingDisks) && FieldsRequested.test(+EGroupFields::MissingDisks)) {
                     jsonGroup.SetMissingDisks(group->MissingDisks);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Used)) {
+                if (FieldsAvailable.test(+EGroupFields::Used) && FieldsRequested.test(+EGroupFields::Used)) {
                     jsonGroup.SetUsed(group->Used);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Limit)) {
+                if (FieldsAvailable.test(+EGroupFields::Limit) && FieldsRequested.test(+EGroupFields::Limit)) {
                     jsonGroup.SetLimit(group->Limit);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Read)) {
+                if (FieldsAvailable.test(+EGroupFields::Read) && FieldsRequested.test(+EGroupFields::Read)) {
                     jsonGroup.SetRead(group->Read);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Write)) {
+                if (FieldsAvailable.test(+EGroupFields::Write) && FieldsRequested.test(+EGroupFields::Write)) {
                     jsonGroup.SetWrite(group->Write);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Usage)) {
+                if (FieldsAvailable.test(+EGroupFields::Usage) && FieldsRequested.test(+EGroupFields::Usage)) {
                     jsonGroup.SetUsage(group->Usage);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Available)) {
+                if (FieldsAvailable.test(+EGroupFields::Available) && FieldsRequested.test(+EGroupFields::Available)) {
                     jsonGroup.SetAvailable(group->Available);
                 }
-                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage)) {
+                if (FieldsAvailable.test(+EGroupFields::DiskSpaceUsage) && FieldsRequested.test(+EGroupFields::DiskSpaceUsage)) {
                     jsonGroup.SetDiskSpaceUsage(group->DiskSpaceUsage);
                 }
-                if (FieldsAvailable.test(+EGroupFields::Latency)) {
+                if (FieldsAvailable.test(+EGroupFields::Latency) && FieldsRequested.test(+EGroupFields::Latency)) {
                     jsonGroup.SetLatencyPutTabletLog(group->PutTabletLogLatency);
                     jsonGroup.SetLatencyPutUserData(group->PutUserDataLatency);
                     jsonGroup.SetLatencyGetFast(group->GetFastLatency);

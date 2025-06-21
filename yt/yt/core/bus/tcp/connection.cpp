@@ -115,7 +115,7 @@ TTcpConnection::TTcpConnection(
     IPollerPtr poller,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
-    bool needRejectConnectionOnMemoryOvercommit)
+    bool rejectConnectionOnMemoryOvercommit)
     : Config_(std::move(config))
     , ConnectionType_(connectionType)
     , Id_(id)
@@ -140,7 +140,7 @@ TTcpConnection::TTcpConnection(
     , EncryptionMode_(Config_->EncryptionMode)
     , VerificationMode_(Config_->VerificationMode)
     , MemoryUsageTracker_(std::move(memoryUsageTracker))
-    , NeedRejectConnectionOnMemoryOvercommit_(needRejectConnectionOnMemoryOvercommit)
+    , RejectConnectionOnMemoryOvercommit_(rejectConnectionOnMemoryOvercommit)
 { }
 
 TTcpConnection::~TTcpConnection()
@@ -587,11 +587,18 @@ void TTcpConnection::InitBuffers()
         ConnectionType_ == EConnectionType::Server
             ? GetRefCountedTypeCookie<TTcpServerConnectionReadBufferTag>()
             : GetRefCountedTypeCookie<TTcpClientConnectionReadBufferTag>());
-    ReadBuffer_
-        .TryResize(
+
+    if (RejectConnectionOnMemoryOvercommit_) {
+        ReadBuffer_
+            .TryResize(
+                ReadBufferSize,
+                /*initializeStorage*/ false)
+            .ThrowOnError();
+    } else {
+        ReadBuffer_.Resize(
             ReadBufferSize,
-            /*initializeStorage*/ false)
-        .ThrowOnError();
+            /*initializeStorage*/ false);
+    }
 
     auto trackedBlob = TMemoryTrackedBlob::Build(
         MemoryUsageTracker_,
@@ -599,7 +606,7 @@ void TTcpConnection::InitBuffers()
             ? GetRefCountedTypeCookie<TTcpServerConnectionWriteBufferTag>()
             : GetRefCountedTypeCookie<TTcpClientConnectionWriteBufferTag>());
 
-    if (NeedRejectConnectionOnMemoryOvercommit_) {
+    if (RejectConnectionOnMemoryOvercommit_) {
         trackedBlob
             .TryReserve(WriteBufferSize)
             .ThrowOnError();

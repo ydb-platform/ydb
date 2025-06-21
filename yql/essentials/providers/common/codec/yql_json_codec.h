@@ -25,7 +25,7 @@ using TValueConvertPolicy = TEnumBitSet<EValueConvertPolicy, EValueConvertPolicy
 
 class DefaultPolicy {
 public:
-    static DefaultPolicy& getInstance() {
+    static DefaultPolicy& GetInstance() {
         static DefaultPolicy instance;
         return instance;
     }
@@ -38,16 +38,16 @@ public:
     void operator=(const DefaultPolicy &) = delete;
 
     TValueConvertPolicy CloudFunction() const {
-        return CloudFunctionPolicy;
+        return CloudFunctionPolicy_;
     }
 
     TValueConvertPolicy Export() const {
-        return ExportPolicy;
+        return ExportPolicy_;
     }
 
 private:
-    TValueConvertPolicy CloudFunctionPolicy = TValueConvertPolicy{NUMBER_AS_STRING, BOOL_AS_STRING};
-    TValueConvertPolicy ExportPolicy = TValueConvertPolicy{DISALLOW_NaN};
+    TValueConvertPolicy CloudFunctionPolicy_ = TValueConvertPolicy{NUMBER_AS_STRING, BOOL_AS_STRING};
+    TValueConvertPolicy ExportPolicy_ = TValueConvertPolicy{DISALLOW_NaN};
 };
 
 

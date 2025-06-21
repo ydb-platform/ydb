@@ -22,9 +22,9 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
                                      << Options_.BlockEngineSettings;
     }
 
-    NUserData::TUserData::UserDataToLibraries(Options_.UserData_, Modules_);
+    NUserData::TUserData::UserDataToLibraries(Options_.UserData, Modules_);
 
-    UserData_ = GetYqlModuleResolver(ExprContext_, ModuleResolver_, Options_.UserData_, {}, {});
+    UserData_ = GetYqlModuleResolver(ExprContext_, ModuleResolver_, Options_.UserData, {}, {});
 
     if (!ModuleResolver_) {
         auto issues = ExprContext_.IssueManager.GetIssues();
@@ -33,17 +33,17 @@ TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     }
 
     TVector<TString> UDFsPaths;
-    for (const auto& item: Options_.UserData_) {
+    for (const auto& item: Options_.UserData) {
         if (
-            item.Type_ == NUserData::EType::UDF &&
-            item.Disposition_ == NUserData::EDisposition::FILESYSTEM
+            item.Type == NUserData::EType::UDF &&
+            item.Disposition == NUserData::EDisposition::FILESYSTEM
         ) {
-            UDFsPaths.push_back(item.Content_);
+            UDFsPaths.push_back(item.Content);
         }
     }
 
-    if (!Options_.UdfsDir_.empty()) {
-        NKikimr::NMiniKQL::FindUdfsInDir(Options_.UdfsDir_, &UDFsPaths);
+    if (!Options_.UdfsDir.empty()) {
+        NKikimr::NMiniKQL::FindUdfsInDir(Options_.UdfsDir, &UDFsPaths);
     }
 
     FuncRegistry_ = NKikimr::NMiniKQL::CreateFunctionRegistry(

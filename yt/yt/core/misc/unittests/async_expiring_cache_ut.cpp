@@ -48,7 +48,7 @@ private:
     std::random_device RandomDevice_;
     std::mt19937 Generator_;
     std::bernoulli_distribution Bernoulli_;
-    std::atomic<int> Count_ = {0};
+    std::atomic<int> Count_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -83,7 +83,7 @@ protected:
 
 private:
     TDuration Delay_;
-    std::atomic<int> Count_ = {0};
+    std::atomic<int> Count_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -338,9 +338,9 @@ public:
         : TAsyncExpiringCache<int, int>(config)
     { }
 
-    std::atomic<int> InitialFetchCount = {0};
-    std::atomic<int> PeriodicUpdateCount = {0};
-    std::atomic<int> ForcedUpdateCount = {0};
+    std::atomic<int> InitialFetchCount = 0;
+    std::atomic<int> PeriodicUpdateCount = 0;
+    std::atomic<int> ForcedUpdateCount = 0;
 
 private:
     virtual TFuture<int> DoGet(

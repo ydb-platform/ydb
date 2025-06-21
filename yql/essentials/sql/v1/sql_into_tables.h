@@ -22,8 +22,8 @@ private:
 
     bool ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table, ESQLWriteColumnMode mode,
         const TPosition& pos);
-    TString SqlIntoModeStr;
-    TString SqlIntoUserModeStr;
+    TString SqlIntoModeStr_;
+    TString SqlIntoUserModeStr_;
 };
 
 } // namespace NSQLTranslationV1

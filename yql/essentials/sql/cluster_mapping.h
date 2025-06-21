@@ -10,7 +10,7 @@ public:
     TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const;
 
 private:
-    THashMap<TString, TString> CaseSensitiveClusters;
-    THashMap<TString, TString> CaseInsensitiveClusters;
+    THashMap<TString, TString> CaseSensitiveClusters_;
+    THashMap<TString, TString> CaseInsensitiveClusters_;
 };
 }

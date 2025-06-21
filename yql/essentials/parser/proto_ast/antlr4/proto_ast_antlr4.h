@@ -36,44 +36,44 @@ namespace NProtoAST {
 
     public:
         TProtoASTBuilder4(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
-            : QueryName(queryName)
-            , InputStream(data)
-            , Lexer(&InputStream)
-            , TokenStream(&Lexer)
-            , Parser(&TokenStream, arena)
+            : QueryName_(queryName)
+            , InputStream_(data)
+            , Lexer_(&InputStream_)
+            , TokenStream_(&Lexer_)
+            , Parser_(&TokenStream_, arena)
         {
         }
 
         google::protobuf::Message* BuildAST(IErrorCollector& errors) {
             // TODO: find a better way to break on lexer errors
-            typename antlr4::YqlErrorListener listener(&errors, &Parser.error);
-            Parser.removeErrorListeners();
-            Parser.addErrorListener(&listener);
+            typename antlr4::YqlErrorListener listener(&errors, &Parser_.error);
+            Parser_.removeErrorListeners();
+            Parser_.addErrorListener(&listener);
             try {
-                auto result = Parser.Parse(&errors);
-                Parser.removeErrorListener(&listener);
-                Parser.error = false;
+                auto result = Parser_.Parse(&errors);
+                Parser_.removeErrorListener(&listener);
+                Parser_.error = false;
                 return result;
             } catch (const TTooManyErrors&) {
-                Parser.removeErrorListener(&listener);
-                Parser.error = false;
+                Parser_.removeErrorListener(&listener);
+                Parser_.error = false;
                 return nullptr;
             } catch (...) {
                 errors.Error(0, 0, CurrentExceptionMessage());
-                Parser.removeErrorListener(&listener);
-                Parser.error = false;
+                Parser_.removeErrorListener(&listener);
+                Parser_.error = false;
                 return nullptr;
             }
         }
 
     private:
-        TString QueryName;
+        TString QueryName_;
 
-        antlr4::ANTLRInputStream InputStream;
-        TLexer Lexer;
+        antlr4::ANTLRInputStream InputStream_;
+        TLexer Lexer_;
 
-        antlr4::CommonTokenStream TokenStream;
-        TParser Parser;
+        antlr4::CommonTokenStream TokenStream_;
+        TParser Parser_;
     };
 
 } // namespace NProtoAST

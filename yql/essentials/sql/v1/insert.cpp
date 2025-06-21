@@ -23,19 +23,19 @@ class TModifySourceBase: public ISource {
 public:
     TModifySourceBase(TPosition pos, const TVector<TString>& columnsHint)
         : ISource(pos)
-        , ColumnsHint(columnsHint)
+        , ColumnsHint_(columnsHint)
     {
     }
 
     bool AddFilter(TContext& ctx, TNodePtr filter) override {
         Y_UNUSED(filter);
-        ctx.Error(Pos) << "Source does not allow filtering";
+        ctx.Error(Pos_) << "Source does not allow filtering";
         return false;
     }
 
     bool AddGroupKey(TContext& ctx, const TString& column) override {
         Y_UNUSED(column);
-        ctx.Error(Pos) << "Source does not allow grouping";
+        ctx.Error(Pos_) << "Source does not allow grouping";
         return false;
     }
 
@@ -58,24 +58,24 @@ public:
     }
 
 protected:
-    TVector<TString> ColumnsHint;
-    TString OperationHumanName;
+    TVector<TString> ColumnsHint_;
+    TString OperationHumanName_;
 };
 
 class TUpdateByValues: public TModifySourceBase {
 public:
     TUpdateByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName(operationHumanName)
-        , Values(values)
+        , OperationHumanName_(operationHumanName)
+        , Values_(values)
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (ColumnsHint.size() != Values.size()) {
-            ctx.Error(Pos) << "VALUES have " << Values.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
+        if (ColumnsHint_.size() != Values_.size()) {
+            ctx.Error(Pos_) << "VALUES have " << Values_.size() << " columns, " << OperationHumanName_ << " expects: " << ColumnsHint_.size();
             return false;
         }
-        for (auto& value: Values) {
+        for (auto& value: Values_) {
             if (!value->Init(ctx, src)) {
                 return false;
             }
@@ -85,56 +85,56 @@ public:
 
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
-        YQL_ENSURE(Values.size() == ColumnsHint.size());
+        YQL_ENSURE(Values_.size() == ColumnsHint_.size());
 
         auto structObj = Y("AsStruct");
-        for (size_t i = 0; i < Values.size(); ++i) {
-            TString column = ColumnsHint[i];
-            TNodePtr value = Values[i];
+        for (size_t i = 0; i < Values_.size(); ++i) {
+            TString column = ColumnsHint_[i];
+            TNodePtr value = Values_[i];
 
             structObj = L(structObj, Q(Y(Q(column), value)));
         }
 
-        auto updateRow = BuildLambda(Pos, Y("row"), structObj);
+        auto updateRow = BuildLambda(Pos_, Y("row"), structObj);
         return updateRow;
     }
 
     TNodePtr DoClone() const final {
-        return new TUpdateByValues(Pos, OperationHumanName, ColumnsHint, CloneContainer(Values));
+        return new TUpdateByValues(Pos_, OperationHumanName_, ColumnsHint_, CloneContainer(Values_));
     }
 private:
-    TString OperationHumanName;
+    TString OperationHumanName_;
 
 protected:
-    TVector<TNodePtr> Values;
+    TVector<TNodePtr> Values_;
 };
 
 class TModifyByValues: public TModifySourceBase {
 public:
     TModifyByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName(operationHumanName)
-        , Values(values)
+        , OperationHumanName_(operationHumanName)
+        , Values_(values)
     {
-        FakeSource = BuildFakeSource(pos);
+        FakeSource_ = BuildFakeSource(pos);
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
         bool hasError = false;
-        for (const auto& row: Values) {
-            if (ColumnsHint.empty()) {
-                ctx.Error(Pos) << OperationHumanName << " ... VALUES requires specification of table columns";
+        for (const auto& row: Values_) {
+            if (ColumnsHint_.empty()) {
+                ctx.Error(Pos_) << OperationHumanName_ << " ... VALUES requires specification of table columns";
                 hasError = true;
                 continue;
             }
-            if (ColumnsHint.size() != row.size()) {
-                ctx.Error(Pos) << "VALUES have " << row.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
+            if (ColumnsHint_.size() != row.size()) {
+                ctx.Error(Pos_) << "VALUES have " << row.size() << " columns, " << OperationHumanName_ << " expects: " << ColumnsHint_.size();
                 hasError = true;
                 continue;
             }
             for (auto& value: row) {
-                if (!value->Init(ctx, FakeSource.Get())) {
+                if (!value->Init(ctx, FakeSource_.Get())) {
                     hasError = true;
                     continue;
                 }
@@ -146,11 +146,11 @@ public:
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
         auto tuple = Y();
-        for (const auto& row: Values) {
+        for (const auto& row: Values_) {
             auto rowValues = Y("AsStruct"); // ordered struct
-            auto column = ColumnsHint.begin();
+            auto column = ColumnsHint_.begin();
             for (auto value: row) {
-                rowValues = L(rowValues, Q(Y(BuildQuotedAtom(Pos, *column), value)));
+                rowValues = L(rowValues, Q(Y(BuildQuotedAtom(Pos_, *column), value)));
                 ++column;
             }
             tuple = L(tuple, rowValues);
@@ -160,46 +160,46 @@ public:
 
     TNodePtr DoClone() const final {
         TVector<TVector<TNodePtr>> clonedValues;
-        clonedValues.reserve(Values.size());
-        for (auto cur: Values) {
+        clonedValues.reserve(Values_.size());
+        for (auto cur: Values_) {
             clonedValues.push_back(CloneContainer(cur));
         }
-        return new TModifyByValues(Pos, OperationHumanName, ColumnsHint, clonedValues);
+        return new TModifyByValues(Pos_, OperationHumanName_, ColumnsHint_, clonedValues);
     }
 
 private:
-    TString OperationHumanName;
-    TVector<TVector<TNodePtr>> Values;
-    TSourcePtr FakeSource;
+    TString OperationHumanName_;
+    TVector<TVector<TNodePtr>> Values_;
+    TSourcePtr FakeSource_;
 };
 
 class TModifyBySource: public TModifySourceBase {
 public:
     TModifyBySource(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source)
         : TModifySourceBase(pos, columnsHint)
-        , OperationHumanName(operationHumanName)
-        , Source(std::move(source))
+        , OperationHumanName_(operationHumanName)
+        , Source_(std::move(source))
     {}
 
     void GetInputTables(TTableList& tableList) const override {
-        if (Source) {
-            return Source->GetInputTables(tableList);
+        if (Source_) {
+            return Source_->GetInputTables(tableList);
         }
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!Source->Init(ctx, src)) {
+        if (!Source_->Init(ctx, src)) {
             return false;
         }
-        const size_t numColumns = ColumnsHint.size();
+        const size_t numColumns = ColumnsHint_.size();
         if (numColumns) {
-            const auto sourceColumns = Source->GetColumns();
+            const auto sourceColumns = Source_->GetColumns();
             if (!sourceColumns || sourceColumns->All || sourceColumns->QualifiedAll) {
                 return true;
             }
 
             if (numColumns != sourceColumns->List.size()) {
-                ctx.Error(Pos) << "SELECT have " << numColumns << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
+                ctx.Error(Pos_) << "SELECT have " << numColumns << " columns, " << OperationHumanName_ << " expects: " << ColumnsHint_.size();
                 return false;
             }
 
@@ -208,7 +208,7 @@ public:
             for (size_t i = 0; i < numColumns; ++i) {
                 bool hasName = sourceColumns->NamedColumns[i];
                 if (hasName) {
-                    const auto& hintColumn = ColumnsHint[i];
+                    const auto& hintColumn = ColumnsHint_[i];
                     const auto& sourceColumn = sourceColumns->List[i];
                     if (hintColumn != sourceColumn) {
                         if (!mismatchFound) {
@@ -220,50 +220,50 @@ public:
                 }
             }
             if (mismatchFound) {
-                ctx.Warning(Pos, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH) << str.Str();
+                ctx.Warning(Pos_, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH) << str.Str();
             }
         }
         return true;
     }
 
     TNodePtr Build(TContext& ctx) override {
-        auto input = Source->Build(ctx);
-        if (ColumnsHint.empty()) {
+        auto input = Source_->Build(ctx);
+        if (ColumnsHint_.empty()) {
             return input;
         }
         auto columns = Y();
-        for (auto column: ColumnsHint) {
-            columns = L(columns, BuildQuotedAtom(Pos, column));
+        for (auto column: ColumnsHint_) {
+            columns = L(columns, BuildQuotedAtom(Pos_, column));
         }
-        const auto sourceColumns = Source->GetColumns();
+        const auto sourceColumns = Source_->GetColumns();
         if (!sourceColumns || sourceColumns->All || sourceColumns->QualifiedAll || sourceColumns->HasUnnamed) {
             // will try to resolve column mapping on type annotation stage
             return Y("OrderedSqlRename", input, Q(columns));
         }
 
-        YQL_ENSURE(sourceColumns->List.size() == ColumnsHint.size());
-        auto srcColumn = Source->GetColumns()->List.begin();
-        auto structObj = Y("AsStruct"); // ordered struct		
-        for (auto column: ColumnsHint) {
-            structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos, column),
-                Y("Member", "row", BuildQuotedAtom(Pos, *srcColumn))
+        YQL_ENSURE(sourceColumns->List.size() == ColumnsHint_.size());
+        auto srcColumn = Source_->GetColumns()->List.begin();
+        auto structObj = Y("AsStruct"); // ordered struct
+        for (auto column: ColumnsHint_) {
+            structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos_, column),
+                Y("Member", "row", BuildQuotedAtom(Pos_, *srcColumn))
             )));
             ++srcColumn;
         }
-        return Y("AssumeColumnOrder", Y("OrderedMap", input, BuildLambda(Pos, Y("row"), structObj)), Q(columns));
+        return Y("AssumeColumnOrder", Y("OrderedMap", input, BuildLambda(Pos_, Y("row"), structObj)), Q(columns));
     }
 
     TNodePtr DoClone() const final {
-        return new TModifyBySource(Pos, OperationHumanName, ColumnsHint, Source->CloneSource());
+        return new TModifyBySource(Pos_, OperationHumanName_, ColumnsHint_, Source_->CloneSource());
     }
 
     EOrderKind GetOrderKind() const final {
-        return Source->GetOrderKind();
+        return Source_->GetOrderKind();
     }
 
 private:
-    TString OperationHumanName;
-    TSourcePtr Source;
+    TString OperationHumanName_;
+    TSourcePtr Source_;
 };
 
 TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values) {
@@ -283,85 +283,85 @@ public:
     TWriteColumnsNode(TPosition pos, TScopedStatePtr scoped,
         const TTableRef& table, EWriteColumnMode mode, TSourcePtr values = nullptr, TNodePtr options = nullptr)
         : TAstListNode(pos)
-        , Scoped(scoped)
-        , Table(table)
-        , Mode(mode)
-        , Values(std::move(values))
-        , Options(std::move(options))
+        , Scoped_(scoped)
+        , Table_(table)
+        , Mode_(mode)
+        , Values_(std::move(values))
+        , Options_(std::move(options))
     {
-        FakeSource = BuildFakeSource(pos);
+        FakeSource_ = BuildFakeSource(pos);
     }
 
     void ResetSource(TSourcePtr source) {
-        TableSource = std::move(source);
+        TableSource_ = std::move(source);
     }
 
     void ResetUpdate(TSourcePtr update) {
-        Update = std::move(update);
+        Update_ = std::move(update);
     }
 
     void ResetIsBatch(bool isBatch) {
-        IsBatch = isBatch;
+        IsBatch_ = isBatch;
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         TTableList tableList;
         TNodePtr values;
         auto options = Y();
-        if (Options) {
-            if (!Options->Init(ctx, src)) {
+        if (Options_) {
+            if (!Options_->Init(ctx, src)) {
                 return false;
             }
-            options = L(Options);
+            options = L(Options_);
         }
 
         ISource* underlyingSrc = src;
 
-        if (TableSource) {
-            if (!TableSource->Init(ctx, src) || !TableSource->InitFilters(ctx)) {
+        if (TableSource_) {
+            if (!TableSource_->Init(ctx, src) || !TableSource_->InitFilters(ctx)) {
                 return false;
             }
-            options = L(options, Q(Y(Q("filter"), TableSource->BuildFilterLambda())));
+            options = L(options, Q(Y(Q("filter"), TableSource_->BuildFilterLambda())));
         }
 
         bool unordered = false;
-        if (Values) {
-            if (!Values->Init(ctx, TableSource.Get())) {
+        if (Values_) {
+            if (!Values_->Init(ctx, TableSource_.Get())) {
                 return false;
             }
 
-            Values->GetInputTables(tableList);
-            underlyingSrc = Values.Get();
-            values = Values->Build(ctx);
+            Values_->GetInputTables(tableList);
+            underlyingSrc = Values_.Get();
+            values = Values_->Build(ctx);
             if (!values) {
                 return false;
             }
-            unordered = (EOrderKind::None == Values->GetOrderKind());
+            unordered = (EOrderKind::None == Values_->GetOrderKind());
         }
 
-        TNodePtr node(BuildInputTables(Pos, tableList, false, Scoped));
+        TNodePtr node(BuildInputTables(Pos_, tableList, false, Scoped_));
         if (!node->Init(ctx, underlyingSrc)) {
             return false;
         }
 
-        if (Update) {
-            if (!Update->Init(ctx, TableSource.Get()) || !Update->InitFilters(ctx)) {
+        if (Update_) {
+            if (!Update_->Init(ctx, TableSource_.Get()) || !Update_->InitFilters(ctx)) {
                 return false;
             }
-            options = L(options, Q(Y(Q("update"), Update->Build(ctx))));
+            options = L(options, Q(Y(Q("update"), Update_->Build(ctx))));
         }
 
-        if (IsBatch) {
+        if (IsBatch_) {
             options = L(options, Q(Y(Q("is_batch"), Q("true"))));
         }
 
-        auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options), Scoped);
-        if (!write->Init(ctx, FakeSource.Get())) {
+        auto write = BuildWriteTable(Pos_, "values", Table_, Mode_, std::move(options), Scoped_);
+        if (!write->Init(ctx, FakeSource_.Get())) {
             return false;
         }
         if (values) {
             node = L(node, Y("let", "values", values));
-            if (unordered && ctx.UseUnordered(Table)) {
+            if (unordered && ctx.UseUnordered(Table_)) {
                 node = L(node, Y("let", "values", Y("Unordered", "values")));
             }
         } else {
@@ -379,15 +379,15 @@ public:
     }
 
 protected:
-    TScopedStatePtr Scoped;
-    TTableRef Table;
-    TSourcePtr TableSource;
-    EWriteColumnMode Mode;
-    TSourcePtr Values;
-    TSourcePtr Update;
-    TSourcePtr FakeSource;
-    TNodePtr Options;
-    bool IsBatch = false;
+    TScopedStatePtr Scoped_;
+    TTableRef Table_;
+    TSourcePtr TableSource_;
+    EWriteColumnMode Mode_;
+    TSourcePtr Values_;
+    TSourcePtr Update_;
+    TSourcePtr FakeSource_;
+    TNodePtr Options_;
+    bool IsBatch_ = false;
 };
 
 EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode) {
@@ -434,7 +434,7 @@ class TEraseColumnsNode: public TAstListNode {
 public:
     TEraseColumnsNode(TPosition pos, const TVector<TString>& columns)
         : TAstListNode(pos)
-        , Columns(columns)
+        , Columns_(columns)
     {
     }
 
@@ -443,7 +443,7 @@ public:
         Y_UNUSED(src);
 
         TNodePtr columnList = Y();
-        for (const auto& column: Columns) {
+        for (const auto& column: Columns_) {
             columnList->Add(Q(column));
         }
 
@@ -453,11 +453,11 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TEraseColumnsNode(GetPos(), Columns);
+        return new TEraseColumnsNode(GetPos(), Columns_);
     }
 
 private:
-    TVector<TString> Columns;
+    TVector<TString> Columns_;
 };
 
 

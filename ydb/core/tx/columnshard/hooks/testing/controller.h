@@ -49,6 +49,8 @@ private:
 
     TMutex ActiveTabletsMutex;
 
+    bool ForcedGenerateInternalPathId = true;
+
     using TInternalPathId = NKikimr::NColumnShard::TInternalPathId;
     using TSchemeShardLocalPathId = NKikimr::NColumnShard::TSchemeShardLocalPathId;
     using TUnifiedPathId =  NKikimr::NColumnShard::TUnifiedPathId;
@@ -398,6 +400,14 @@ public:
         auto* tablet = ActiveTablets.FindPtr(tabletId);
         AFL_VERIFY(tablet);
         (*tablet)->DeletePathId(pathId);
+    }
+
+    virtual bool IsForcedGenerateInternalPathId() const override {
+        return ForcedGenerateInternalPathId;
+    }
+
+    void SetForcedGenerateInternalPathId(const bool value) {
+        ForcedGenerateInternalPathId = value;
     }
 
 };

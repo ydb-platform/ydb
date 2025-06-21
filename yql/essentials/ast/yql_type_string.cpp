@@ -15,7 +15,7 @@
 
 #define EXPECT_AND_SKIP_TOKEN_IMPL(token, message, result) \
     do { \
-        if (Y_LIKELY(Token == token)) { \
+        if (Y_LIKELY(Token_ == token)) { \
             GetNextToken(); \
         } else { \
             AddError(message); \
@@ -186,11 +186,11 @@ public:
     TTypeParser(
             TStringBuf str, TIssues& issues,
             TPosition position, TMemoryPool& pool)
-        : Str(str)
-        , Issues(issues)
-        , Position(position)
-        , Index(0)
-        , Pool(pool)
+        : Str_(str)
+        , Issues_(issues)
+        , Position_(position)
+        , Index_(0)
+        , Pool_(pool)
     {
         GetNextToken();
     }
@@ -208,7 +208,7 @@ private:
     TAstNode* ParseType() {
         TAstNode* type = nullptr;
 
-        switch (Token) {
+        switch (Token_) {
         case '(': return ParseCallableType();
 
         case TOKEN_STRING:
@@ -243,7 +243,7 @@ private:
         case TOKEN_TZDATE32:
         case TOKEN_TZDATETIME64:
         case TOKEN_TZTIMESTAMP64:
-            type = MakeDataType(Identifier);
+            type = MakeDataType(Identifier_);
             GetNextToken();
             break;
 
@@ -350,11 +350,11 @@ private:
             break;
 
         default:
-            if (Identifier.empty()) {
+            if (Identifier_.empty()) {
                 return AddError("Expected type");
             }
 
-            auto id = Identifier;
+            auto id = Identifier_;
             if (id.SkipPrefix("pg")) {
                 if (NPg::HasType(TString(id))) {
                     type = MakePgType(id);
@@ -368,12 +368,12 @@ private:
             }
 
             if (!type) {
-                return AddError(TString("Unknown type: '") + Identifier + "\'");
+                return AddError(TString("Unknown type: '") + Identifier_ + "\'");
             }
         }
 
         if (type) {
-            while (Token == '?') {
+            while (Token_ == '?') {
                 type = MakeOptionalType(type);
                 GetNextToken();
             }
@@ -382,15 +382,15 @@ private:
     }
 
     char LookaheadNonSpaceChar() {
-        size_t i = Index;
-        while (i < Str.size() && isspace(Str[i])) {
+        size_t i = Index_;
+        while (i < Str_.size() && isspace(Str_[i])) {
             i++;
         }
-        return (i < Str.size()) ? Str[i] : -1;
+        return (i < Str_.size()) ? Str_[i] : -1;
     }
 
     int GetNextToken() {
-        return Token = ReadNextToken();
+        return Token_ = ReadNextToken();
     }
 
     int ReadNextToken() {
@@ -399,32 +399,32 @@ private:
             Move();
         }
 
-        TokenBegin = Position;
+        TokenBegin_ = Position_;
         if (AtEnd()) {
             return TOKEN_EOF;
         }
 
         // clear last readed indentifier
-        Identifier = {};
+        Identifier_ = {};
 
         char lastChar = Get();
         if (lastChar == '_' || isalnum(lastChar)) { // identifier
-            size_t start = Index;
+            size_t start = Index_;
             while (!AtEnd()) {
                 lastChar = Get();
                 if (lastChar == '_' || isalnum(lastChar)) Move();
                 else break;
             }
 
-            Identifier = Str.SubString(start, Index - start);
-            return TokenTypeFromStr(Identifier);
+            Identifier_ = Str_.SubString(start, Index_ - start);
+            return TokenTypeFromStr(Identifier_);
         } else if (lastChar == '\'') {  // escaped identifier
             Move(); // skip '\''
             if (AtEnd()) return TOKEN_EOF;
 
-            UnescapedIdentifier.clear();
-            TStringOutput sout(UnescapedIdentifier);
-            TStringBuf atom = Str.SubStr(Index);
+            UnescapedIdentifier_.clear();
+            TStringOutput sout(UnescapedIdentifier_);
+            TStringBuf atom = Str_.SubStr(Index_);
             size_t readBytes = 0;
             EUnescapeResult unescapeResunt =
                     UnescapeArbitraryAtom(atom, '\'', &sout, &readBytes);
@@ -438,7 +438,7 @@ private:
 
             if (AtEnd()) return TOKEN_EOF;
 
-            Identifier = UnescapedIdentifier;
+            Identifier_ = UnescapedIdentifier_;
             return TOKEN_ESCAPED_IDENTIFIER;
         } else {
             Move(); // skip last char
@@ -465,14 +465,14 @@ private:
 
         // (1) parse argements
         for (;;) {
-            if (Token == TOKEN_EOF) {
+            if (Token_ == TOKEN_EOF) {
                 if (optArgsStarted) {
                     return AddError("Expected ']'");
                 }
                 return AddError("Expected ')'");
             }
 
-            if (Token == ']' || Token == ')') {
+            if (Token_ == ']' || Token_ == ')') {
                 break;
             }
 
@@ -481,30 +481,30 @@ private:
                 lastWasTypeStatement = false;
             }
 
-            if (Token == '[') {
+            if (Token_ == '[') {
                 optArgsStarted = true;
                 GetNextToken(); // eat '['
-            } else if (Token == ':') {
+            } else if (Token_ == ':') {
                 return AddError("Expected non empty argument name");
-            } else if (IsTypeKeyword(Token) || Token == '(' || // '(' - begin of callable type
-                       Token == TOKEN_IDENTIFIER ||
-                       Token == TOKEN_ESCAPED_IDENTIFIER)
+            } else if (IsTypeKeyword(Token_) || Token_ == '(' || // '(' - begin of callable type
+                       Token_ == TOKEN_IDENTIFIER ||
+                       Token_ == TOKEN_ESCAPED_IDENTIFIER)
             {
                 TStringBuf argName;
                 ui32 argNameFlags = TNodeFlags::Default;
 
                 if (LookaheadNonSpaceChar() == ':') {
                     namedArgsStarted = true;
-                    argName = Identifier;
+                    argName = Identifier_;
 
-                    if (Token == TOKEN_ESCAPED_IDENTIFIER) {
+                    if (Token_ == TOKEN_ESCAPED_IDENTIFIER) {
                         argNameFlags = TNodeFlags::ArbitraryContent;
                     }
 
                     GetNextToken(); // eat name
                     EXPECT_AND_SKIP_TOKEN(':', nullptr);
 
-                    if (Token == TOKEN_EOF) {
+                    if (Token_ == TOKEN_EOF) {
                         return AddError("Expected type of named argument");
                     }
                 } else {
@@ -531,7 +531,7 @@ private:
                 }
 
                 ui32 argFlags = 0;
-                if (Token == '{') {
+                if (Token_ == '{') {
                     if (!ParseCallableArgFlags(argFlags)) return nullptr;
                 }
 
@@ -572,7 +572,7 @@ private:
 
         // (4) parse payload
         TStringBuf payload;
-        if (Token == '{') {
+        if (Token_ == '{') {
             if (!ParseCallablePayload(payload)) return nullptr;
         }
 
@@ -583,7 +583,7 @@ private:
     bool ParseCallableArgFlags(ui32& argFlags) {
         GetNextToken(); // eat '{'
 
-        if (Token != TOKEN_IDENTIFIER || Identifier != TStringBuf("Flags")) {
+        if (Token_ != TOKEN_IDENTIFIER || Identifier_ != TStringBuf("Flags")) {
             AddError("Expected Flags field");
             return false;
         }
@@ -592,13 +592,13 @@ private:
         EXPECT_AND_SKIP_TOKEN(':', false);
 
         for (;;) {
-            if (Token == TOKEN_IDENTIFIER) {
-                if (Identifier == TStringBuf("AutoMap")) {
+            if (Token_ == TOKEN_IDENTIFIER) {
+                if (Identifier_ == TStringBuf("AutoMap")) {
                     argFlags |= NUdf::ICallablePayload::TArgumentFlags::AutoMap;
-                } else if (Identifier == TStringBuf("NoYield")) {
+                } else if (Identifier_ == TStringBuf("NoYield")) {
                     argFlags |= NUdf::ICallablePayload::TArgumentFlags::NoYield;
                 } else {
-                    AddError(TString("Unknown flag name: ") + Identifier);
+                    AddError(TString("Unknown flag name: ") + Identifier_);
                     return false;
                 }
                 GetNextToken(); // eat flag name
@@ -607,9 +607,9 @@ private:
                 return false;
             }
 
-            if (Token == '}') {
+            if (Token_ == '}') {
                 break;
-            } else if (Token == '|') {
+            } else if (Token_ == '|') {
                 GetNextToken(); // eat '|'
             } else {
                 AddError("Expected '}' or '|'");
@@ -623,7 +623,7 @@ private:
     bool ParseCallablePayload(TStringBuf& payload) {
         GetNextToken(); // eat '{'
 
-        if (Token != TOKEN_IDENTIFIER && Identifier != TStringBuf("Payload")) {
+        if (Token_ != TOKEN_IDENTIFIER && Identifier_ != TStringBuf("Payload")) {
             AddError("Expected Payload field");
             return false;
         }
@@ -631,8 +631,8 @@ private:
         GetNextToken(); // eat 'Payload'
         EXPECT_AND_SKIP_TOKEN(':', false);
 
-        if (Token == TOKEN_IDENTIFIER || Token == TOKEN_ESCAPED_IDENTIFIER) {
-            payload = Identifier;
+        if (Token_ == TOKEN_IDENTIFIER || Token_ == TOKEN_ESCAPED_IDENTIFIER) {
+            payload = Identifier_;
             GetNextToken(); // eat payload data
         } else {
             AddError("Expected payload data");
@@ -714,10 +714,10 @@ private:
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
 
         TString file;
-        if (Token == TOKEN_IDENTIFIER ||
-            Token == TOKEN_ESCAPED_IDENTIFIER)
+        if (Token_ == TOKEN_IDENTIFIER ||
+            Token_ == TOKEN_ESCAPED_IDENTIFIER)
         {
-            file = Identifier;
+            file = Identifier_;
         } else {
             return AddError("Expected file name");
         }
@@ -725,26 +725,26 @@ private:
         GetNextToken(); // eat file name
         EXPECT_AND_SKIP_TOKEN(':', nullptr);
         ui32 line;
-        if (!(Token == TOKEN_IDENTIFIER ||
-            Token == TOKEN_ESCAPED_IDENTIFIER) || !TryFromString(Identifier, line)) {
+        if (!(Token_ == TOKEN_IDENTIFIER ||
+            Token_ == TOKEN_ESCAPED_IDENTIFIER) || !TryFromString(Identifier_, line)) {
             return AddError("Expected line");
         }
 
         GetNextToken();
         EXPECT_AND_SKIP_TOKEN(':', nullptr);
         ui32 column;
-        if (!(Token == TOKEN_IDENTIFIER ||
-            Token == TOKEN_ESCAPED_IDENTIFIER) || !TryFromString(Identifier, column)) {
+        if (!(Token_ == TOKEN_IDENTIFIER ||
+            Token_ == TOKEN_ESCAPED_IDENTIFIER) || !TryFromString(Identifier_, column)) {
             return AddError("Expected column");
         }
 
         GetNextToken();
         EXPECT_AND_SKIP_TOKEN(':', nullptr);
         TString message;
-        if (Token == TOKEN_IDENTIFIER ||
-            Token == TOKEN_ESCAPED_IDENTIFIER)
+        if (Token_ == TOKEN_IDENTIFIER ||
+            Token_ == TOKEN_ESCAPED_IDENTIFIER)
         {
-            message = Identifier;
+            message = Identifier_;
         } else {
             return AddError("Expected message");
         }
@@ -758,12 +758,12 @@ private:
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('(', nullptr);
 
-        const auto precision = Identifier;
+        const auto precision = Identifier_;
         GetNextToken(); // eat keyword
 
         EXPECT_AND_SKIP_TOKEN(',', nullptr);
 
-        const auto scale = Identifier;
+        const auto scale = Identifier_;
         GetNextToken(); // eat keyword
 
         EXPECT_AND_SKIP_TOKEN(')', nullptr);
@@ -813,16 +813,16 @@ private:
         TSmallVec<TAstNode*> items;
         items.push_back(nullptr);  // reserve for type callable
 
-        if (Token != '>') {
+        if (Token_ != '>') {
             for (;;) {
                 auto itemType = ParseType();
                 if (!itemType) return nullptr;
 
                 items.push_back(itemType);
 
-                if (Token == '>') {
+                if (Token_ == '>') {
                     break;
-                } else if (Token == ',') {
+                } else if (Token_ == ',') {
                     GetNextToken();
                 } else {
                     return AddError("Expected '>' or ','");
@@ -845,13 +845,13 @@ private:
 
     TAstNode* ParseStructTypeImpl() {
         TMap<TString, TAstNode*> members;
-        if (Token != '>') {
+        if (Token_ != '>') {
             for (;;) {
                 TString name;
-                if (Token == TOKEN_IDENTIFIER ||
-                    Token == TOKEN_ESCAPED_IDENTIFIER)
+                if (Token_ == TOKEN_IDENTIFIER ||
+                    Token_ == TOKEN_ESCAPED_IDENTIFIER)
                 {
-                    name = Identifier;
+                    name = Identifier_;
                 } else {
                     return AddError("Expected struct member name");
                 }
@@ -870,9 +870,9 @@ private:
 
                 members.emplace(std::move(name), type);
 
-                if (Token == '>') {
+                if (Token_ == '>') {
                     break;
-                } else if (Token == ',') {
+                } else if (Token_ == ',') {
                     GetNextToken();
                 } else {
                     return AddError("Expected '>' or ','");
@@ -908,9 +908,9 @@ private:
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
 
         TAstNode* underlyingType = nullptr;
-        if (Token == TOKEN_IDENTIFIER || Token == TOKEN_ESCAPED_IDENTIFIER) {
+        if (Token_ == TOKEN_IDENTIFIER || Token_ == TOKEN_ESCAPED_IDENTIFIER) {
             underlyingType = ParseStructTypeImpl();
-        } else if (IsTypeKeyword(Token) || Token == '(') {
+        } else if (IsTypeKeyword(Token_) || Token_ == '(') {
             underlyingType = ParseTupleTypeImpl(&TTypeParser::MakeTupleType);
         } else {
             return AddError("Expected type");
@@ -929,10 +929,10 @@ private:
         TMap<TString, TAstNode*> members;
         for (;;) {
             TString name;
-            if (Token == TOKEN_IDENTIFIER ||
-                Token == TOKEN_ESCAPED_IDENTIFIER)
+            if (Token_ == TOKEN_IDENTIFIER ||
+                Token_ == TOKEN_ESCAPED_IDENTIFIER)
             {
-                name = Identifier;
+                name = Identifier_;
             } else {
                 return AddError("Expected name");
             }
@@ -946,9 +946,9 @@ private:
             GetNextToken(); // eat member name
             members.emplace(std::move(name), MakeVoidType());
 
-            if (Token == '>') {
+            if (Token_ == '>') {
                 break;
-            } else if (Token == ',') {
+            } else if (Token_ == ',') {
                 GetNextToken();
             } else {
                 return AddError("Expected '>' or ','");
@@ -1082,11 +1082,11 @@ private:
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
 
-        if (Token != TOKEN_IDENTIFIER && Token != TOKEN_ESCAPED_IDENTIFIER) {
+        if (Token_ != TOKEN_IDENTIFIER && Token_ != TOKEN_ESCAPED_IDENTIFIER) {
             return AddError("Expected resource tag");
         }
 
-        TStringBuf tag = Identifier;
+        TStringBuf tag = Identifier_;
         if (tag.empty()) {
             return AddError("Expected non empty resource tag");
         }
@@ -1105,11 +1105,11 @@ private:
 
         EXPECT_AND_SKIP_TOKEN(',', nullptr);
 
-        if (Token != TOKEN_IDENTIFIER && Token != TOKEN_ESCAPED_IDENTIFIER) {
+        if (Token_ != TOKEN_IDENTIFIER && Token_ != TOKEN_ESCAPED_IDENTIFIER) {
             return AddError("Expected tag of type");
         }
 
-        TStringBuf tag = Identifier;
+        TStringBuf tag = Identifier_;
         if (tag.empty()) {
             return AddError("Expected non empty tag of type");
         }
@@ -1214,11 +1214,11 @@ private:
     }
 
     TAstNode* MakeAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
-        return TAstNode::NewAtom(Position, content, Pool, flags);
+        return TAstNode::NewAtom(Position_, content, Pool_, flags);
     }
 
     TAstNode* MakeLiteralAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
-        return TAstNode::NewLiteralAtom(Position, content, Pool, flags);
+        return TAstNode::NewLiteralAtom(Position_, content, Pool_, flags);
     }
 
     TAstNode* MakeQuote(TAstNode* node) {
@@ -1238,43 +1238,43 @@ private:
     }
 
     TAstNode* MakeList(TAstNode** children, ui32 count) {
-        return TAstNode::NewList(Position, children, count, Pool);
+        return TAstNode::NewList(Position_, children, count, Pool_);
     }
 
     char Get() const {
-        return Str[Index];
+        return Str_[Index_];
     }
 
     bool AtEnd() const {
-        return Index >= Str.size();
+        return Index_ >= Str_.size();
     }
 
     void Move() {
         if (AtEnd()) return;
 
-        ++Index;
-        ++Position.Column;
+        ++Index_;
+        ++Position_.Column;
 
-        if (!AtEnd() && Str[Index] == '\n') {
-            Position.Row++;
-            Position.Column = 1;
+        if (!AtEnd() && Str_[Index_] == '\n') {
+            Position_.Row++;
+            Position_.Column = 1;
         }
     }
 
     TAstNode* AddError(const TString& message) {
-        Issues.AddIssue(TIssue(TokenBegin, message));
+        Issues_.AddIssue(TIssue(TokenBegin_, message));
         return nullptr;
     }
 
 private:
-    TStringBuf Str;
-    TIssues& Issues;
-    TPosition TokenBegin, Position;
-    size_t Index;
-    int Token;
-    TString UnescapedIdentifier;
-    TStringBuf Identifier;
-    TMemoryPool& Pool;
+    TStringBuf Str_;
+    TIssues& Issues_;
+    TPosition TokenBegin_, Position_;
+    size_t Index_;
+    int Token_;
+    TString UnescapedIdentifier_;
+    TStringBuf Identifier_;
+    TMemoryPool& Pool_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1290,13 +1290,13 @@ public:
 
 private:
     void Visit(const TUnitExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Y_UNUSED(type);
         Out_ << TStringBuf("Unit");
     }
 
     void Visit(const TMultiExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Multi<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
@@ -1309,7 +1309,7 @@ private:
     }
 
     void Visit(const TTupleExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Tuple<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
@@ -1322,7 +1322,7 @@ private:
     }
 
     void Visit(const TStructExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Struct<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
@@ -1335,49 +1335,49 @@ private:
     }
 
     void Visit(const TItemExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         EscapeArbitraryAtom(type.GetName(), '\'', &Out_);
         Out_ << ':';
         type.GetItemType()->Accept(*this);
     }
 
     void Visit(const TListExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("List<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TStreamExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Stream<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TFlowExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Flow<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TBlockExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Block<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TScalarExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Scalar<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TDataExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << type.GetName();
         if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(&type)) {
             Out_ << '(' << dataExprParamsType->GetParamOne() << ',' << dataExprParamsType->GetParamTwo() << ')';
@@ -1385,7 +1385,7 @@ private:
     }
 
     void Visit(const TPgExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         TStringBuf name = type.GetName();
         if (!name.SkipPrefix("_")) {
             Out_ << "pg" << name;
@@ -1396,26 +1396,26 @@ private:
 
     void Visit(const TWorldExprType& type) final {
         Y_UNUSED(type);
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("World");
     }
 
     void Visit(const TOptionalExprType& type) final {
         const TTypeAnnotationNode* itemType = type.GetItemType();
-        if (TopLevel || itemType->GetKind() == ETypeAnnotationKind::Callable) {
-            TopLevel = false;
+        if (TopLevel_ || itemType->GetKind() == ETypeAnnotationKind::Callable) {
+            TopLevel_ = false;
             Out_ << TStringBuf("Optional<");
             itemType->Accept(*this);
             Out_ << '>';
         } else {
-            TopLevel = false;
+            TopLevel_ = false;
             itemType->Accept(*this);
             Out_ << '?';
         }
     }
 
     void Visit(const TCallableExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         const auto& args = type.GetArguments();
         ui32 argsCount = type.GetArgumentsSize();
         ui32 optArgsCount =
@@ -1471,21 +1471,21 @@ private:
     }
 
     void Visit(const TResourceExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Resource<");
         EscapeArbitraryAtom(type.GetTag(), '\'', &Out_);
         Out_ << '>';
     }
 
     void Visit(const TTypeExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Type<");
         type.GetType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TDictExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         if (type.GetPayloadType()->GetKind() == ETypeAnnotationKind::Void) {
             Out_ << TStringBuf("Set<");
             type.GetKeyType()->Accept(*this);
@@ -1501,36 +1501,36 @@ private:
 
     void Visit(const TVoidExprType& type) final {
         Y_UNUSED(type);
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Void");
     }
 
     void Visit(const TNullExprType& type) final {
         Y_UNUSED(type);
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Null");
     }
 
     void Visit(const TEmptyListExprType& type) final {
         Y_UNUSED(type);
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("EmptyList");
     }
 
     void Visit(const TEmptyDictExprType& type) final {
         Y_UNUSED(type);
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("EmptyDict");
     }
 
     void Visit(const TGenericExprType& type) final {
         Y_UNUSED(type);
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Generic");
     }
 
     void Visit(const TTaggedExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Tagged<");
         type.GetBaseType()->Accept(*this);
         Out_ << ',';
@@ -1539,7 +1539,7 @@ private:
     }
 
     void Visit(const TErrorExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         Out_ << TStringBuf("Error<");
         auto pos = type.GetError().Position;
         EscapeArbitraryAtom(pos.File.empty() ? "<main>" : pos.File, '\'', &Out_);
@@ -1553,7 +1553,7 @@ private:
     }
 
     void Visit(const TVariantExprType& type) final {
-        TopLevel = false;
+        TopLevel_ = false;
         auto underlyingType = type.GetUnderlyingType();
         if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
             Out_ << TStringBuf("Variant<");
@@ -1592,7 +1592,7 @@ private:
 
 private:
     IOutputStream& Out_;
-    bool TopLevel = true;
+    bool TopLevel_ = true;
 };
 
 } // namespace

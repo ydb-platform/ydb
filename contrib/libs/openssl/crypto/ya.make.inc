@@ -67,12 +67,17 @@ NO_RUNTIME()
 
 SUPPRESSIONS(ubsan.supp)
 
+IF (NOT OS_EMSCRIPTEN)
+  CFLAGS(
+      -DOPENSSL_BN_ASM_MONT
+      -DOPENSSL_CPUID_OBJ
+      -DSHA1_ASM
+      -DSHA256_ASM
+      -DSHA512_ASM
+  )
+ENDIF()
+
 CFLAGS(
-    -DOPENSSL_BN_ASM_MONT
-    -DOPENSSL_CPUID_OBJ
-    -DSHA1_ASM
-    -DSHA256_ASM
-    -DSHA512_ASM
     -DZLIB
 )
 
@@ -83,7 +88,7 @@ IF (NOT OS_IOS AND NOT DARWIN_ARM64)
     )
 ENDIF()
 
-IF (NOT WINDOWS_I686)
+IF (NOT WINDOWS_I686 AND NOT OS_EMSCRIPTEN)
     CFLAGS(
         -DECP_NISTZ256_ASM
         -DPOLY1305_ASM
@@ -837,9 +842,22 @@ IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64)
     )
 ENDIF()
 
-IF (OS_LINUX AND ARCH_AARCH64 OR OS_WINDOWS AND ARCH_X86_64 OR OS_LINUX AND ARCH_PPC64LE)
+IF (OS_LINUX AND ARCH_AARCH64 OR OS_WINDOWS AND ARCH_X86_64 OR OS_LINUX AND ARCH_PPC64LE OR OS_EMSCRIPTEN)
     SRCS(
         bn/bn_asm.c
+    )
+ENDIF()
+
+IF (OS_EMSCRIPTEN)
+    SRCS(
+        camellia/camellia.c
+        camellia/cmll_cbc.c
+        crypto/chacha/chacha_enc.c
+        mem_clr.c
+        rc4/rc4_enc.c
+        rc4/rc4_skey.c
+        sha/keccak1600.c
+        whrlpool/wp_block.c
     )
 ENDIF()
 

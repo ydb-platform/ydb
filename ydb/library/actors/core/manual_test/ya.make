@@ -1,0 +1,3 @@
+RECURSE(
+    shared_threads
+)

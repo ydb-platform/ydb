@@ -171,6 +171,7 @@ namespace NSchemeShardUT_Private {
 
     public:
         TVector<ui64> TabletIds;
+        TSet<ui32> NoRebootEventTypes;
         THolder<TTestActorRuntime> Runtime;
         TTestEnvOptions EnvOpts;
         THolder<TTestEnv> TestEnv;
@@ -204,7 +205,7 @@ namespace NSchemeShardUT_Private {
     private:
         virtual TTestEnv* CreateTestEnv();
         // Make sure that user requests are not dropped
-        static bool PassUserRequests(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
+        bool PassUserRequests(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
 
     private:
         struct TFinalizer;

@@ -558,6 +558,20 @@
             "uri": "https://{canondata_backend}/1775059/8f98a745728bc42ccc40bc5c65b23d499853793a/resource.tar.gz#test.test_distinct-distinct_star_inmem-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[except-except_distinct_empty-default.txt-Debug]": [
+        {
+            "checksum": "e46b9bf056a427b8de96acf38e6fdc56",
+            "size": 348,
+            "uri": "https://{canondata_backend}/1942278/fc503167a0e9dd2e6465bc29c2b2299043a83a6c/resource.tar.gz#test.test_except-except_distinct_empty-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[except-except_distinct_empty-default.txt-Results]": [
+        {
+            "checksum": "d2e2d092c3bb9360e458b8d8e66baa1d",
+            "size": 1474,
+            "uri": "https://{canondata_backend}/1942278/fc503167a0e9dd2e6465bc29c2b2299043a83a6c/resource.tar.gz#test.test_except-except_distinct_empty-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-as_table-default.txt-Debug]": [
         {
             "checksum": "8799d51aa9290bc664b44e0945b559da",
@@ -822,6 +836,20 @@
             "checksum": "56de73c873cafff267843da0d2621330",
             "size": 889,
             "uri": "https://{canondata_backend}/1031349/7264f379f5ed6029cd16e136c979509c14985388/resource.tar.gz#test.test_in-large_in_YQL-19183-ansi-Results_/results.txt"
+        }
+    ],
+    "test.test[intersect-intersect_distinct-default.txt-Debug]": [
+        {
+            "checksum": "1528f6b2213ece6a1f4a8f32465e8dea",
+            "size": 2226,
+            "uri": "https://{canondata_backend}/1937424/51d6348179b23fc8977fc8de7b08323f6c5603f5/resource.tar.gz#test.test_intersect-intersect_distinct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[intersect-intersect_distinct-default.txt-Results]": [
+        {
+            "checksum": "3f4b92b2d6a3a7a9f18273430118c7b2",
+            "size": 2617,
+            "uri": "https://{canondata_backend}/1937424/51d6348179b23fc8977fc8de7b08323f6c5603f5/resource.tar.gz#test.test_intersect-intersect_distinct-default.txt-Results_/results.txt"
         }
     ],
     "test.test[json-combination/nested-default.txt-Debug]": [

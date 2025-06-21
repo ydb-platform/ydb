@@ -639,6 +639,20 @@
             "uri": "https://{canondata_backend}/1903885/a240e9eb95f33f5b5688d6770bbb18aa5d19778a/resource.tar.gz#test.test_datetime-date_tz_scale-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[except-except_distinct-default.txt-Debug]": [
+        {
+            "checksum": "f0505afaff2f21cf0f9bdab5842fd369",
+            "size": 2112,
+            "uri": "https://{canondata_backend}/1942278/3c1745dc69d236a46dcb2ea6952e67da86aa3e9d/resource.tar.gz#test.test_except-except_distinct-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[except-except_distinct-default.txt-Results]": [
+        {
+            "checksum": "35ad547f6b9d1506b0e4a5ec10f52154",
+            "size": 2929,
+            "uri": "https://{canondata_backend}/1942278/3c1745dc69d236a46dcb2ea6952e67da86aa3e9d/resource.tar.gz#test.test_except-except_distinct-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[expr-cast_longint-default.txt-Debug]": [
         {
             "checksum": "852e514a4bf927cd6c59acf27e3cc716",
@@ -962,6 +976,20 @@
             "checksum": "cd3fe11c994d6fd2fd90ed01fed17699",
             "size": 1198,
             "uri": "https://{canondata_backend}/1871182/8488be1009a783ec149801679b1d381d33cbeb2f/resource.tar.gz#test.test_in-YQL-18950-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[intersect-intersect_all-default.txt-Debug]": [
+        {
+            "checksum": "4d081baeeaa6382eb5b8cde859c96164",
+            "size": 2068,
+            "uri": "https://{canondata_backend}/1775059/2b5e7aa24664d04b90cf055001d40e858a3f4532/resource.tar.gz#test.test_intersect-intersect_all-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[intersect-intersect_all-default.txt-Results]": [
+        {
+            "checksum": "cbcec9c2bbeaa07a3789ddff3f12ad54",
+            "size": 3125,
+            "uri": "https://{canondata_backend}/1775059/2b5e7aa24664d04b90cf055001d40e858a3f4532/resource.tar.gz#test.test_intersect-intersect_all-default.txt-Results_/results.txt"
         }
     ],
     "test.test[join-left_join_predicate_push_parent_cross_join-default.txt-Debug]": [

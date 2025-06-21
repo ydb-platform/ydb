@@ -25,4 +25,6 @@ TExprNode::TPtr ExpandPgGrouping(const TExprNode::TPtr& node, TExprContext& ctx,
 
 TExprNode::TPtr ExpandPgIterate(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 
+TExprNode::TPtr CombineSetItems(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right, const TStringBuf& op, TExprContext& ctx);
+
 } // namespace NYql

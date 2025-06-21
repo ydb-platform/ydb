@@ -1058,6 +1058,20 @@
             "uri": "https://{canondata_backend}/1936273/19f08c34eba9366d29ee0ffb8eb99e637c34fd97/resource.tar.gz#test.test_join-convert_check_key_mem2-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[join-drop_any_over_equijoin_inputs-default.txt-Debug]": [
+        {
+            "checksum": "018d991b8cde6299fc54a7673eb65176",
+            "size": 4428,
+            "uri": "https://{canondata_backend}/1937001/b9555f73d9c505989cd42fe96f383ab8023f1de7/resource.tar.gz#test.test_join-drop_any_over_equijoin_inputs-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[join-drop_any_over_equijoin_inputs-default.txt-Results]": [
+        {
+            "checksum": "907b50ee1f786ca4585c0b0e6d702516",
+            "size": 52704,
+            "uri": "https://{canondata_backend}/1937001/b9555f73d9c505989cd42fe96f383ab8023f1de7/resource.tar.gz#test.test_join-drop_any_over_equijoin_inputs-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[join-prune_keys-default.txt-Debug]": [
         {
             "checksum": "a706e6bd4285c96ad5120d701109fc82",

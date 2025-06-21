@@ -2236,6 +2236,7 @@ message TExportMetadata {
 message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
+    optional NKikimrProto.TPathID SourceObject = 3;
 }
 
 message TLongIncrementalRestoreOp {

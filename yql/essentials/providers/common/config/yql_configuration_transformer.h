@@ -27,10 +27,13 @@ protected:
     virtual bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx);
 
 protected:
-    TSettingDispatcher::TPtr Dispatcher;
-    const TTypeAnnotationContext& Types;
-    TString Provider;
-    THashSet<TStringBuf> ConfigureCallables;
+    // FIXME switch to an accessor
+    TSettingDispatcher::TPtr GetDispatcher() const;
+
+    TSettingDispatcher::TPtr Dispatcher; // NOLINT(readability-identifier-naming)
+    const TTypeAnnotationContext& Types_;
+    TString Provider_;
+    THashSet<TStringBuf> ConfigureCallables_;
 };
 
 THolder<IGraphTransformer> CreateProviderConfigurationTransformer(

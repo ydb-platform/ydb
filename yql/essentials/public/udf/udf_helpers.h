@@ -43,6 +43,12 @@ namespace NUdf {
 }
 }
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 17)
+    #define APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_) sb << valueBuilder->WithCalleePosition(Pos_) << " ";
+#else
+    #define APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_) sb << Pos_ << " ";
+#endif
+
 #define UDF_IMPL_EX(udfName, typeBody, members, init, irResourceId, irFunctionName, blockType, create_impl) \
     class udfName: public ::NYql::NUdf::TBoxedValue {                                    \
     public:                                                                              \
@@ -63,16 +69,15 @@ namespace NUdf {
             const ::NYql::NUdf::IValueBuilder* valueBuilder,                             \
             const ::NYql::NUdf::TUnboxedValuePod* args) const override {                 \
             try {                                                                           \
-                return RunImpl(valueBuilder, args);                                         \
-            } catch (const std::exception&) {                                               \
-                    TStringBuilder sb;                                                      \
-                    sb << Pos_ << " ";                                                      \
-                    sb << CurrentExceptionMessage();                                        \
-                    sb << Endl << "[" << TStringBuf(Name()) << "]" ;                        \
-                    UdfTerminate(sb.c_str());                                               \
-            }                                                                               \
-        }                                                                                   \
-        static bool DeclareSignature(                                                       \
+                return RunImpl(valueBuilder, args);                                                  \
+            } catch (const std::exception& ex) {                                                     \
+                    TStringBuilder sb;                                                               \
+                    APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)                                   \
+                    sb << ex.what();                                                                 \
+                    UdfTerminate(sb.c_str());                                                        \
+            }                                                                                        \
+        }                                                                                            \
+        static bool DeclareSignature(                                                    \
             const ::NYql::NUdf::TStringRef& name,                                        \
             ::NYql::NUdf::TType* userType,                                               \
             ::NYql::NUdf::IFunctionTypeInfoBuilder& builder,                             \
@@ -132,16 +137,15 @@ namespace NUdf {
             ::NYql::NUdf::TUnboxedValue Run(                                             \
                 const ::NYql::NUdf::IValueBuilder* valueBuilder,                         \
                 const ::NYql::NUdf::TUnboxedValuePod* args) const override {             \
-                try {                                                                       \
-                    return RunImpl(valueBuilder, args);                                     \
-                } catch (const std::exception&) {                                           \
-                    TStringBuilder sb;                                                      \
-                    sb << Pos_ << " ";                                                      \
-                    sb << CurrentExceptionMessage();                                        \
-                    sb << Endl << "[" << TStringBuf(Name()) << "]" ;                        \
-                    UdfTerminate(sb.c_str());                                               \
-                }                                                                           \
-            }                                                                               \
+                try {                                                                                \
+                    return RunImpl(valueBuilder, args);                                              \
+                } catch (const std::exception& ex) {                                                 \
+                    TStringBuilder sb;                                                               \
+                    APPEND_SOURCE_LOCATION(sb, valueBuilder, Pos_)                                   \
+                    sb << ex.what();                                                                 \
+                    UdfTerminate(sb.c_str());                                                        \
+                }                                                                                    \
+            }                                                                                        \
                                                                                             \
         private:                                                                            \
             ::NYql::NUdf::TUnboxedValue RunConfig;                                       \

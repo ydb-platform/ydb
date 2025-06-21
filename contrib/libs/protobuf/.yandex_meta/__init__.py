@@ -148,16 +148,6 @@ ENDIF()
 
         libprotobuf.PEERDIR.add("library/cpp/sanitizer/include")
 
-        # Dont use full y_absl library
-        # fmt: off
-        libprotobuf.PEERDIR = set([
-            lib for lib in libprotobuf.PEERDIR
-            if 'abseil-cpp-tstring' not in lib
-        ])
-        # fmt: on
-        libprotobuf.PEERDIR.add("contrib/restricted/abseil-cpp-tstring/y_absl/status")
-        libprotobuf.PEERDIR.add("contrib/restricted/abseil-cpp-tstring/y_absl/log")
-
     del self.yamakes["src/google/protobuf/compiler"]
     # merging src/google/protobuf/compiler/protoc library and
     # src/google/protobuf/compiler binary into top-level binary
@@ -168,25 +158,26 @@ ENDIF()
         libprotoc.after("LICENSE", "LICENSE_TEXTS(.yandex_meta/licenses.list.txt)\n")
         libprotoc.after(
             "ORIGINAL_SOURCE",
-            """IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
+            """
+            IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
 
-    OPENSOURCE_EXPORT_REPLACEMENT(
-        CMAKE Protobuf
-        CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
-        CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-        CONAN_ADDITIONAL_SEMS
-            "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-            "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
-    )
+            OPENSOURCE_EXPORT_REPLACEMENT(
+                CMAKE Protobuf
+                CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
+                CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                CONAN_ADDITIONAL_SEMS
+                    "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                    "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
+            )
 
-ELSE()
+            ELSE()
 
-    ADDINCL(
-        GLOBAL contrib/libs/protoc/src
-    )
+                ADDINCL(
+                    GLOBAL contrib/libs/protoc/src
+                )
 
-ENDIF()
-""",
+            ENDIF()
+            """,
         )
 
         libprotoc.ADDINCL = ["contrib/libs/protobuf/third_party/utf8_range"]
@@ -244,7 +235,9 @@ protobuf = CMakeNinjaNixProject(
         # Specifying protoc will install both libprotoc and protoc executable
         "protoc",
     ],
-    unbundle_from={"abseil-cpp": "third_party/abseil-cpp"},
+    unbundle_from={
+        "abseil-cpp-tstring": "third_party/abseil-cpp",
+    },
     put={"protobuf": "."},
     disable_includes=[
         "sys/isa_defs.h",

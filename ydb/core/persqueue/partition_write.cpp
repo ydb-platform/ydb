@@ -1005,11 +1005,15 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
+                             ui64 creationUnixTime,
                              const TActorContext& ctx)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
     write->SetValue(newWrite->Value);
+    if (creationUnixTime) {
+        write->SetCreationUnixTime(creationUnixTime);
+    }
     //Y_ABORT_UNLESS(newWrite->Key.IsFastWrite());
     auto channel = GetChannel(NextChannel(newWrite->Key.HasSuffix(), newWrite->Value.size()));
     write->SetStorageChannel(channel);
@@ -1018,6 +1022,13 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
     TKey resKey = newWrite->Key;
     resKey.SetType(TKeyPrefix::TypeData);
     WriteCycleSize += newWrite->Value.size();
+}
+
+void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                             TEvKeyValue::TEvRequest* request,
+                             const TActorContext& ctx)
+{
+    AddCmdWrite(newWrite, request, 0, ctx);
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,

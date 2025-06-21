@@ -44,18 +44,6 @@ def post_install(self):
             m.SRCS.add("src/core/lib/security/security_connector/add_arcadia_root_certs.cpp")
             m.PEERDIR |= {"certs", "library/cpp/resource"}
 
-    # in the name of selective checkout
-    # https://st.yandex-team.ru/DTCC-615
-    def fix_selective_checkout():
-        self.yamakes["."].PEERDIR |= {
-            "contrib/restricted/abseil-cpp-tstring/y_absl/algorithm",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/functional",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/memory",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/meta",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/hash",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/utility",
-        }
-
     for name, m in self.yamakes.items():
         with m:
             fix_protos(m)
@@ -78,7 +66,6 @@ def post_install(self):
                 m.NO_UTIL = False
 
     fix_ssl_certificates()
-    fix_selective_checkout()
 
     # remove unnecessary folder with protos duplicates
     shutil.rmtree(f"{self.dstdir}/protos")

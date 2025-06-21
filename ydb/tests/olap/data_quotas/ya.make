@@ -1,7 +1,7 @@
 PY3TEST()
 FORK_SUBTESTS()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
@@ -18,7 +18,6 @@ ENDIF()
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
 )
 
 PEERDIR(

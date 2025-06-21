@@ -101,7 +101,6 @@ namespace {
                                                    args[2] ? TMaybe<ui64>(args[2].Get<ui64>()) : Nothing());
             return ProcessResult(builder, std::move(executeResult), args);
         }
-
     private:
         static TUnboxedValue ProcessResult(const IValueBuilder* builder, const TString& newString, const TUnboxedValuePod*) {
             return builder->NewString(newString);
@@ -359,7 +358,7 @@ namespace {
             try {
                 unicodeSet.Parse(customCategory);
             } catch (...) {
-                UdfTerminate((TStringBuilder() << "Failed to parse unicode set: " << CurrentExceptionMessage()).c_str());
+                throw yexception() << "Failed to parse unicode set: " << CurrentExceptionMessage();
             }
             wchar32 rune;
             const unsigned char* cur = reinterpret_cast<const unsigned char*>(input.begin());
@@ -494,7 +493,7 @@ namespace {
             if constexpr (strict) {
                 return Nothing();
             } else {
-                UdfTerminate(message);
+                throw yexception() << message;
             }
         };
 

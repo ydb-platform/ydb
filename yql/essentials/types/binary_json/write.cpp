@@ -185,7 +185,7 @@ struct TPODWriter {
 class TBinaryJsonSerializer {
 public:
     TBinaryJsonSerializer(TJsonIndex&& json)
-        : Json(std::move(json))
+        : Json_(std::move(json))
     {
     }
 
@@ -208,20 +208,20 @@ public:
         // Header consists only of THeader
         const ui32 headerSize = sizeof(THeader);
         // Each container consists of 1 TMeta and multiple TEntry. Objects also have multiple TKeyEntry
-        const ui32 keysSize = Json.TotalKeysCount * sizeof(TKeyEntry);
-        const ui32 entriesSize = (Json.TotalEntriesCount - Json.TotalKeysCount) * sizeof(TEntry);
-        const ui32 treeSize = Json.Containers.size() * sizeof(TMeta) + entriesSize + keysSize;
+        const ui32 keysSize = Json_.TotalKeysCount * sizeof(TKeyEntry);
+        const ui32 entriesSize = (Json_.TotalEntriesCount - Json_.TotalKeysCount) * sizeof(TEntry);
+        const ui32 treeSize = Json_.Containers.size() * sizeof(TMeta) + entriesSize + keysSize;
 
         // String index consists of Count and TSEntry/string body pair for each string
-        const ui32 stringIndexSize = sizeof(ui32) + (Json.Strings.size() + Json.Keys.size()) * sizeof(TSEntry) + (Json.TotalStringLength + Json.TotalKeyLength);
+        const ui32 stringIndexSize = sizeof(ui32) + (Json_.Strings.size() + Json_.Keys.size()) * sizeof(TSEntry) + (Json_.TotalStringLength + Json_.TotalKeyLength);
         // Number index consists of multiple doubles
-        const ui32 numberIndexSize = Json.Numbers.size() * sizeof(double);
+        const ui32 numberIndexSize = Json_.Numbers.size() * sizeof(double);
 
         // Allocate space for all sections
         const ui32 totalSize = headerSize + treeSize + stringIndexSize + numberIndexSize;
-        Buffer.Advance(totalSize);
+        Buffer_.Advance(totalSize);
 
-        TPODWriter writer(Buffer, 0);
+        TPODWriter writer(Buffer_, 0);
 
         // Write Header
         const ui32 stringIndexStart = headerSize + treeSize;
@@ -241,7 +241,7 @@ public:
         // Write Tree
         WriteContainer(treeWriter, 0);
 
-        return std::move(Buffer);
+        return std::move(Buffer_);
     }
 
 private:
@@ -249,8 +249,8 @@ private:
      * @brief Writes container and all its children recursively
      */
     void WriteContainer(TPODWriter& valueWriter, ui32 index) {
-        Y_DEBUG_ABORT_UNLESS(index < Json.Containers.size());
-        const auto& container = Json.Containers[index];
+        Y_DEBUG_ABORT_UNLESS(index < Json_.Containers.size());
+        const auto& container = Json_.Containers[index];
 
         switch (container.Type) {
             case EContainerType::Array:
@@ -301,7 +301,7 @@ private:
         keyValuePairs.reserve(size);
         for (ui32 i = 0; i < entriesCount; i += 2) {
             const auto keyIndex = container.Header[i].Value;
-            const auto keyOffset = StringOffsets[keyIndex];
+            const auto keyOffset = StringOffsets_[keyIndex];
             const auto& value = container.Header[i + 1];
             keyValuePairs.emplace_back(TKeyEntry(keyOffset), value);
         }
@@ -332,10 +332,10 @@ private:
             WriteContainer(valueWriter, childIndex);
         } else if (entry.Type == EEntryType::String) {
             const ui32 stringIndex = entry.Value;
-            result.Value = StringOffsets[stringIndex];
+            result.Value = StringOffsets_[stringIndex];
         } else if (entry.Type == EEntryType::Number) {
             const ui32 numberIndex = entry.Value;
-            result.Value = NumberOffsets[numberIndex];
+            result.Value = NumberOffsets_[numberIndex];
         }
 
         entryWriter.Write(result);
@@ -350,20 +350,20 @@ private:
      *  +----------------+----------+-----+--------------+---------+-----+-------------+
      */
     void WriteStringIndex(TPODWriter& writer) {
-        const ui32 stringCount = Json.Keys.size() + Json.Strings.size();
+        const ui32 stringCount = Json_.Keys.size() + Json_.Strings.size();
         writer.Write(stringCount);
 
         TPODWriter entryWriter(writer);
         writer.Skip<TSEntry>(stringCount);
 
         // Write SData and SEntry for each string
-        StringOffsets.resize(stringCount);
+        StringOffsets_.resize(stringCount);
 
-        for (const auto& it : Json.Keys) {
+        for (const auto& it : Json_.Keys) {
             const auto& currentString = it.first;
             const auto currentIndex = it.second;
 
-            StringOffsets[currentIndex] = entryWriter.Offset;
+            StringOffsets_[currentIndex] = entryWriter.Offset;
 
             // Append SData to the end of the buffer
             writer.Write(currentString.data(), currentString.length());
@@ -373,11 +373,11 @@ private:
             entryWriter.Write(TSEntry(EStringType::RawNullTerminated, writer.Offset));
         }
 
-        for (const auto& it : Json.Strings) {
+        for (const auto& it : Json_.Strings) {
             const auto& currentString = it.first;
             const auto currentIndex = it.second;
 
-            StringOffsets[currentIndex] = entryWriter.Offset;
+            StringOffsets_[currentIndex] = entryWriter.Offset;
 
             // Append SData to the end of the buffer
             writer.Write(currentString.data(), currentString.length());
@@ -397,19 +397,19 @@ private:
      *  +----------+-----+----------+
      */
     void WriteNumberIndex(TPODWriter& writer) {
-        const ui32 numberCount = Json.Numbers.size();
+        const ui32 numberCount = Json_.Numbers.size();
 
-        NumberOffsets.resize(numberCount);
-        for (const auto it : Json.Numbers) {
-            NumberOffsets[it.second] = writer.Offset;
+        NumberOffsets_.resize(numberCount);
+        for (const auto it : Json_.Numbers) {
+            NumberOffsets_[it.second] = writer.Offset;
             writer.Write(it.first);
         }
     }
 
-    TJsonIndex Json;
-    TBinaryJson Buffer;
-    TVector<ui32> StringOffsets;
-    TVector<ui32> NumberOffsets;
+    TJsonIndex Json_;
+    TBinaryJson Buffer_;
+    TVector<ui32> StringOffsets_;
+    TVector<ui32> NumberOffsets_;
 };
 
 /**
@@ -418,11 +418,11 @@ private:
 class TBinaryJsonCallbacks : public TJsonCallbacks {
 public:
     TBinaryJsonCallbacks(bool throwException, bool allowInf)
-        : TJsonCallbacks(/* throwException */ throwException), AllowInf(allowInf) {
+        : TJsonCallbacks(/* throwException */ throwException), AllowInf_(allowInf) {
     }
 
     bool OnNull() override {
-        Json.AddEntry(TEntry(EEntryType::Null), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Null), /* createTopLevel */ true);
         return true;
     }
 
@@ -431,69 +431,69 @@ public:
         if (value) {
             type = EEntryType::BoolTrue;
         }
-        Json.AddEntry(TEntry(type), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(type), /* createTopLevel */ true);
         return true;
     }
 
     bool OnInteger(long long value) override {
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Number, Json_.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
         return true;
     }
 
     bool OnUInteger(unsigned long long value) override {
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Number, Json_.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
         return true;
     }
 
     bool OnDouble(double value) override {
-        if (Y_UNLIKELY(std::isinf(value) && !AllowInf)) {
+        if (Y_UNLIKELY(std::isinf(value) && !AllowInf_)) {
             if (ThrowException) {
                 ythrow yexception() << "JSON number is infinite";
             } else {
                 return false;
             }
         }
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(value)), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Number, Json_.InternNumber(value)), /* createTopLevel */ true);
         return true;
     }
 
     bool OnString(const TStringBuf& value) override {
-        Json.AddEntry(TEntry(EEntryType::String, Json.InternString(value)), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::String, Json_.InternString(value)), /* createTopLevel */ true);
         return true;
     }
 
     bool OnOpenMap() override {
-        Json.AddContainer(EContainerType::Object);
+        Json_.AddContainer(EContainerType::Object);
         return true;
     }
 
     bool OnMapKey(const TStringBuf& value) override {
-        Json.AddEntry(TEntry(EEntryType::String, Json.InternKey(value)));
+        Json_.AddEntry(TEntry(EEntryType::String, Json_.InternKey(value)));
         return true;
     }
 
     bool OnCloseMap() override {
-        Json.RemoveContainer();
+        Json_.RemoveContainer();
         return true;
     }
 
     bool OnOpenArray() override {
-        Json.AddContainer(EContainerType::Array);
+        Json_.AddContainer(EContainerType::Array);
         return true;
     }
 
     bool OnCloseArray() override {
-        Json.RemoveContainer();
+        Json_.RemoveContainer();
         return true;
     }
 
     TJsonIndex GetResult() && {
-        return std::move(Json);
+        return std::move(Json_);
     }
 
 private:
-    TJsonIndex Json;
-    bool AllowInf;
+    TJsonIndex Json_;
+    bool AllowInf_;
 };
 
 void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {

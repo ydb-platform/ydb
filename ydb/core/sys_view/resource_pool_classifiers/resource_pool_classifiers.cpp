@@ -32,10 +32,11 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, 
+    TResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
         , Database(database)
         , Reverse(reverse)
@@ -114,7 +115,7 @@ private:
         };
         static TExtractorsMap extractors;
 
-        const auto& snapshot = ev->Get()->GetSnapshotAs<NKqp::TResourcePoolClassifierSnapshot>();        
+        const auto& snapshot = ev->Get()->GetSnapshotAs<NKqp::TResourcePoolClassifierSnapshot>();
         const auto& config = snapshot->GetResourcePoolClassifierConfigs();
         auto resourcePoolsIt = config.find(Database);
         if (resourcePoolsIt == config.end()) {
@@ -153,11 +154,13 @@ private:
     const bool Reverse;
 };
 
-THolder<NActors::IActor> CreateResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateResourcePoolClassifiersScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
 {
-    return MakeHolder<TResourcePoolClassifiersScan>(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), database, reverse);
+    return MakeHolder<TResourcePoolClassifiersScan>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        std::move(userToken), database, reverse);
 }
 
 } // NSysView

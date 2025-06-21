@@ -49,7 +49,7 @@ ui32 GetSettedLevel(const T& value) {
     }
 }
 
-template<typename T>
+template <typename T>
 struct TUnpackedMaybe {
     ui32 SettedLevel;
     ui32 MaybeLevel;
@@ -57,30 +57,48 @@ struct TUnpackedMaybe {
 };
 
 template <typename T>
-TRuntimeNode ConvertMaybeToNode(TUnpackedMaybe<T> maybe, TSetup<false>& setup) {
-    auto data = setup.PgmBuilder->NewDataLiteral<T>(maybe.Value);
+TRuntimeNode ConvertNode(T node, TSetup<false>& setup) = delete;
 
-    for (ui32 i = maybe.SettedLevel; i < maybe.MaybeLevel; i++) {
+template <typename T>
+TRuntimeNode ConvertNode(T simpleNode, TSetup<false>& setup)
+    requires(NYql::NUdf::TPrimitiveDataType<T>::Result)
+{
+    return setup.PgmBuilder->NewDataLiteral<T>(simpleNode);
+}
+
+template <typename T>
+TRuntimeNode ConvertNode(TMaybe<T> maybeNode, TSetup<false>& setup) {
+    TUnpackedMaybe unpacked{.SettedLevel = GetSettedLevel(maybeNode), .MaybeLevel = TMaybeTraits<TMaybe<T>>::value, .Value = GetInnerValue(maybeNode)};
+    auto data = ConvertNode(unpacked.Value, setup);
+
+    for (ui32 i = unpacked.SettedLevel; i < unpacked.MaybeLevel; i++) {
         data = setup.PgmBuilder->NewEmptyOptional(setup.PgmBuilder->NewOptionalType(data.GetStaticType()));
     }
 
-    for (ui32 i = 0; i < maybe.SettedLevel; i++) {
+    for (ui32 i = 0; i < unpacked.SettedLevel; i++) {
         data = setup.PgmBuilder->NewOptional(data);
     }
 
-    data = setup.PgmBuilder->AsScalar(data);
     return data;
+}
+
+template <typename... TArgs, std::size_t... Is>
+TRuntimeNode ConvertTupleNode(std::tuple<TArgs...> maybeNode, std::index_sequence<Is...>, TSetup<false>& setup) {
+    auto data = std::vector<TRuntimeNode>{ConvertNode(std::get<Is>(maybeNode), setup)...};
+    return setup.PgmBuilder->NewTuple(data);
+}
+
+template <typename... TArgs>
+TRuntimeNode ConvertNode(std::tuple<TArgs...> node, TSetup<false>& setup) {
+    return ConvertTupleNode(node, std::index_sequence_for<TArgs...>{}, setup);
 }
 
 template <typename T, typename U, typename V>
 void TestScalarKernel(T left, U right, V expected, TSetup<false>& setup, std::function<TRuntimeNode(TRuntimeNode, TRuntimeNode)> binaryOp) {
     NYql::TExprContext exprCtx;
-    TUnpackedMaybe leftUnpacked{.SettedLevel = GetSettedLevel(left), .MaybeLevel = TMaybeTraits<T>::value, .Value = GetInnerValue(left)};
-    TUnpackedMaybe rightUnpacked{.SettedLevel = GetSettedLevel(right), .MaybeLevel = TMaybeTraits<U>::value, .Value = GetInnerValue(right)};
-    TUnpackedMaybe expectedUnpacked{.SettedLevel = GetSettedLevel(expected), .MaybeLevel = TMaybeTraits<V>::value, .Value = GetInnerValue(expected)};
-    auto leftNode = ConvertMaybeToNode(leftUnpacked, setup);
-    auto rightNode = ConvertMaybeToNode(rightUnpacked, setup);
-    auto expectedNode = ConvertMaybeToNode(expectedUnpacked, setup);
+    auto leftNode = setup.PgmBuilder->AsScalar(ConvertNode(left, setup));
+    auto rightNode = setup.PgmBuilder->AsScalar(ConvertNode(right, setup));
+    auto expectedNode = setup.PgmBuilder->AsScalar(ConvertNode(expected, setup));
 
     auto resultValue = setup.BuildGraph(binaryOp(leftNode, rightNode))->GetValue();
     auto expectedValue = setup.BuildGraph(expectedNode)->GetValue();
@@ -92,12 +110,10 @@ void TestScalarKernel(T left, U right, V expected, TSetup<false>& setup, std::fu
 }
 
 template <typename T, typename V>
-void TestScalarKernel(T left, V expected, TSetup<false>& setup, std::function<TRuntimeNode(TRuntimeNode)> unaryOp) {
+void TestScalarKernel(T operand, V expected, TSetup<false>& setup, std::function<TRuntimeNode(TRuntimeNode)> unaryOp) {
     NYql::TExprContext exprCtx;
-    TUnpackedMaybe unpacked{.SettedLevel = GetSettedLevel(left), .MaybeLevel = TMaybeTraits<T>::value, .Value = GetInnerValue(left)};
-    TUnpackedMaybe expectedUnpacked{.SettedLevel = GetSettedLevel(expected), .MaybeLevel = TMaybeTraits<V>::value, .Value = GetInnerValue(expected)};
-    auto node = ConvertMaybeToNode(unpacked, setup);
-    auto expectedNode = ConvertMaybeToNode(expectedUnpacked, setup);
+    auto node = setup.PgmBuilder->AsScalar(ConvertNode(operand, setup));
+    auto expectedNode = setup.PgmBuilder->AsScalar(ConvertNode(expected, setup));
 
     auto resultValue = setup.BuildGraph(unaryOp(node))->GetValue();
     auto expectedValue = setup.BuildGraph(expectedNode)->GetValue();

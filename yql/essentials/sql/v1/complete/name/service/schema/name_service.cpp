@@ -18,7 +18,7 @@ namespace NSQLComplete {
                         .Apply(ToListNameResponse);
                 }
 
-                if (request.Constraints.Column) {
+                if (request.Constraints.Column && !request.Constraints.Column->Tables.empty()) {
                     Y_ENSURE(request.Constraints.Column->Tables.size() == 1, "Not Implemented");
                     TTableId table = request.Constraints.Column->Tables[0];
                     return Schema_
@@ -28,7 +28,9 @@ namespace NSQLComplete {
                             .ColumnPrefix = request.Prefix,
                             .ColumnsLimit = request.Limit,
                         })
-                        .Apply(ToDescribeNameResponse);
+                        .Apply([table = std::move(table)](auto f) {
+                            return ToDescribeNameResponse(std::move(f), std::move(table));
+                        });
                 }
 
                 return NThreading::MakeFuture<TNameResponse>({});
@@ -96,13 +98,16 @@ namespace NSQLComplete {
                 return name;
             }
 
-            static TNameResponse ToDescribeNameResponse(NThreading::TFuture<TDescribeTableResponse> f) {
-                TDescribeTableResponse table = f.ExtractValue();
+            static TNameResponse ToDescribeNameResponse(
+                NThreading::TFuture<TDescribeTableResponse> f,
+                TTableId table) {
+                TDescribeTableResponse info = f.ExtractValue();
 
                 TNameResponse response;
-                for (TString& column : table.Columns) {
+                for (TString& column : info.Columns) {
                     TColumnName name;
                     name.Indentifier = std::move(column);
+                    name.Table = table;
                     response.RankedNames.emplace_back(std::move(name));
                 }
                 return response;

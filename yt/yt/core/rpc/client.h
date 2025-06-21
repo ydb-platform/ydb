@@ -360,7 +360,7 @@ protected:
     const TClientContextPtr ClientContext_;
 
     using EState = EClientResponseState;
-    std::atomic<EState> State_ = {EState::Sent};
+    std::atomic<EState> State_ = EState::Sent;
 
 
     explicit TClientResponse(TClientContextPtr clientContext);

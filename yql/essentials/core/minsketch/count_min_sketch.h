@@ -7,9 +7,9 @@ namespace NKikimr {
 
 class TCountMinSketch {
 private:
-    ui64 Width;
-    ui64 Depth;
-    ui64 ElementCount;
+    ui64 Width_;
+    ui64 Depth_;
+    ui64 ElementCount_;
 
 private:
     static ui64 Hash(const char* data, size_t size, size_t hashIndex);
@@ -36,19 +36,19 @@ public:
     TCountMinSketch(const TCountMinSketch&) = delete;
 
     size_t GetSize() const {
-        return StaticSize(Width, Depth);
+        return StaticSize(Width_, Depth_);
     }
 
     size_t GetWidth() const {
-        return Width;
+        return Width_;
     }
 
     size_t GetDepth() const {
-        return Depth;
+        return Depth_;
     }
 
     size_t GetElementCount() const {
-        return ElementCount;
+        return ElementCount_;
     }
 
     TStringBuf AsStringBuf() const {

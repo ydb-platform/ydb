@@ -989,11 +989,16 @@ void TTableClient::TImpl::SetStatCollector(const NSdkStats::TStatCollector::TCli
     SessionRemovedDueBalancing.Set(collector.SessionRemovedDueBalancing);
 }
 
-TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings) {
+TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings, bool canMove) {
     auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
     request.set_table(TStringType{table});
-    *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
-    *request.mutable_rows()->mutable_value() = rows.GetProto();
+    if (canMove) {
+        request.mutable_rows()->mutable_type()->Swap(&rows.GetType().GetProto());
+        request.mutable_rows()->mutable_value()->Swap(&rows.GetProto());
+    } else {
+        *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
+        *request.mutable_rows()->mutable_value() = rows.GetProto();
+    }
 
     auto promise = NewPromise<TBulkUpsertResult>();
 

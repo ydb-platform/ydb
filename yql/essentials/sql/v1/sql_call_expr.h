@@ -14,22 +14,22 @@ public:
     }
 
     TSqlCallExpr(const TSqlCallExpr& call, const TVector<TNodePtr>& args)
-        : TSqlTranslation(call.Ctx, call.Mode)
-        , Pos(call.Pos)
-        , Func(call.Func)
-        , Module(call.Module)
-        , Node(call.Node)
-        , Args(args)
-        , AggMode(call.AggMode)
-        , DistinctAllowed(call.DistinctAllowed)
-        , UsingCallExpr(call.UsingCallExpr)
-        , IsExternalCall(call.IsExternalCall)
-        , CallConfig(call.CallConfig)
+        : TSqlTranslation(call.Ctx_, call.Mode_)
+        , Pos_(call.Pos_)
+        , Func_(call.Func_)
+        , Module_(call.Module_)
+        , Node_(call.Node_)
+        , Args_(args)
+        , AggMode_(call.AggMode_)
+        , DistinctAllowed_(call.DistinctAllowed_)
+        , UsingCallExpr_(call.UsingCallExpr_)
+        , IsExternalCall_(call.IsExternalCall_)
+        , CallConfig_(call.CallConfig_)
     {
     }
 
     void AllowDistinct() {
-        DistinctAllowed = true;
+        DistinctAllowed_ = true;
     }
 
     void InitName(const TString& name);
@@ -46,29 +46,29 @@ public:
     TNodePtr BuildCall();
 
     TPosition GetPos() const {
-        return Pos;
+        return Pos_;
     }
 
     const TVector<TNodePtr>& GetArgs() const {
-        return Args;
+        return Args_;
     }
 
     void SetOverWindow() {
-        YQL_ENSURE(AggMode == EAggregateMode::Normal);
-        AggMode = EAggregateMode::OverWindow;
+        YQL_ENSURE(AggMode_ == EAggregateMode::Normal);
+        AggMode_ = EAggregateMode::OverWindow;
     }
 
     void SetOverWindowDistinct() {
-        YQL_ENSURE(AggMode == EAggregateMode::Distinct);
-        AggMode = EAggregateMode::OverWindowDistinct;
+        YQL_ENSURE(AggMode_ == EAggregateMode::Distinct);
+        AggMode_ = EAggregateMode::OverWindowDistinct;
     }
 
     void SetIgnoreNulls() {
-        Func += "_IgnoreNulls";
+        Func_ += "_IgnoreNulls";
     }
 
     bool IsExternal() {
-        return IsExternalCall;
+        return IsExternalCall_;
     }
 
 private:
@@ -77,19 +77,19 @@ private:
     bool FillArgs(const TRule_named_expr_list& node);
 
 private:
-    TPosition Pos;
-    TString Func;
-    TString Module;
-    TNodePtr Node;
-    TVector<TNodePtr> Args;
-    TVector<TNodePtr> PositionalArgs;
-    TVector<TNodePtr> NamedArgs;
-    EAggregateMode AggMode = EAggregateMode::Normal;
-    TString WindowName;
-    bool DistinctAllowed = false;
-    bool UsingCallExpr = false;
-    bool IsExternalCall = false;
-    TFunctionConfig CallConfig;
+    TPosition Pos_;
+    TString Func_;
+    TString Module_;
+    TNodePtr Node_;
+    TVector<TNodePtr> Args_;
+    TVector<TNodePtr> PositionalArgs_;
+    TVector<TNodePtr> NamedArgs_;
+    EAggregateMode AggMode_ = EAggregateMode::Normal;
+    TString WindowName_;
+    bool DistinctAllowed_ = false;
+    bool UsingCallExpr_ = false;
+    bool IsExternalCall_ = false;
+    TFunctionConfig CallConfig_;
 };
 
 } // namespace NSQLTranslationV1

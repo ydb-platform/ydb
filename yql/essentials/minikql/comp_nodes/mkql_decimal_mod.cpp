@@ -111,8 +111,8 @@ private:
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
 class TDecimalModIntegralWrapper : public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
-    using NYql::NDecimal::TDecimalRemainder<TRight>::Divider;
-    using NYql::NDecimal::TDecimalRemainder<TRight>::Bound;
+    using NYql::NDecimal::TDecimalRemainder<TRight>::Divider_;
+    using NYql::NDecimal::TDecimalRemainder<TRight>::Bound_;
 public:
     TDecimalModIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
@@ -139,7 +139,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
-        const auto divider = NDecimal::GenConstant(Divider, context);
+        const auto divider = NDecimal::GenConstant(Divider_, context);
 
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
@@ -166,8 +166,8 @@ public:
                 static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
 
             const auto out = std::is_signed<TRight>() ?
-                NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block):
-                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound, context), "out", block);
+                NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block):
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound_, context), "out", block);
 
             const auto nul = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, cast, zero, "check", block);
 
@@ -192,8 +192,8 @@ public:
                 static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
 
             const auto out = std::is_signed<TRight>() ?
-                NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block):
-                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound, context), "out", block);
+                NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block):
+                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound_, context), "out", block);
 
             const auto nul = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, cast, zero, "check", block);
 

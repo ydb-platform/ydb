@@ -24,6 +24,8 @@ struct TCommandFlags {
 };
 
 class TClientCommand {
+protected:
+    TClientCommand() = default;
 public:
     static bool TIME_REQUESTS; // measure time of requests
     static bool PROGRESS_REQUESTS; // display progress of long requests

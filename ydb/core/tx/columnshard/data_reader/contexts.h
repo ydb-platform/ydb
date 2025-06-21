@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -68,7 +69,7 @@ public:
     TCurrentContext() {
         static std::shared_ptr<NGroupedMemoryManager::TStageFeatures> stageFeatures =
             NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("DEFAULT", 1000000000);
-        
+
         MemoryProcessGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard(MemoryProcessId, { stageFeatures });
         MemoryProcessScopeGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildScopeGuard(MemoryProcessId, 1);
         MemoryProcessGroupGuard = NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildGroupGuard(MemoryProcessId, 1);
@@ -105,6 +106,19 @@ private:
 public:
     virtual ~IFetchCallback() = default;
 
+    virtual ui64 GetNecessaryDataMemory(
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds, const std::vector<TPortionDataAccessor>& acc) const {
+        ui64 memory = 0;
+        for (auto&& a : acc) {
+            if (columnIds) {
+                memory += a.GetColumnBlobBytes(columnIds->GetColumnIds());
+            } else {
+                memory += a.GetPortionInfo().GetTotalBlobBytes();
+            }
+        }
+        return memory;
+    }
+
     virtual std::optional<ui64> GetMemoryForUsage() const {
         return std::nullopt;
     }
@@ -113,7 +127,6 @@ public:
     virtual TString GetClassName() const = 0;
 
     virtual void OnStageStarting(const EFetchingStage /*stage*/) {
-    
     }
 
     void OnFinished(TCurrentContext&& context) {

@@ -47,11 +47,11 @@ public:
     TMaybe<ui32> GetLocks(const TString& name) const;
     // Total size of all objects in the cache
     ui64 GetOccupiedSize() const {
-        return CurrentSize;
+        return CurrentSize_;
     }
     // Total count of objects in the cache
     size_t GetCount() const {
-        return Cache.Size();
+        return Cache_.Size();
     }
 private:
     struct TEntry {
@@ -63,11 +63,11 @@ private:
     void Remove(TCache::TIterator it);
 
 private:
-    TCache Cache;
-    size_t MaxEntries = 0;
-    ui64 MaxSize = 0;
-    ui64 CurrentSize = 0;
-    TAdaptiveLock Lock;
+    TCache Cache_;
+    size_t MaxEntries_ = 0;
+    ui64 MaxSize_ = 0;
+    ui64 CurrentSize_ = 0;
+    TAdaptiveLock Lock_;
 };
 
 } // NYql

@@ -28,6 +28,10 @@ bool IsPassthroughLambda(const NNodes::TCoLambda& lambda, TMaybe<THashSet<TStrin
 bool IsTablePropsDependent(const TExprNode& node);
 bool IsNoPush(const TExprNode& node);
 
+bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns);
+bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns);
+TExprNode::TPtr MakePruneKeysExtractorLambda(const TExprNode& node, const THashSet<TString>& columns, TExprContext& ctx);
+
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType);
 
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx);

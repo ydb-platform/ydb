@@ -70,6 +70,8 @@ namespace NSQLComplete {
         struct TConstraints {
             TVector<TTableId> Tables;
         };
+
+        TTableId Table;
     };
 
     struct TBindingName: TIndentifier {

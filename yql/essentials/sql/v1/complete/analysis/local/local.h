@@ -41,11 +41,19 @@ namespace NSQLComplete {
             TString Cluster;
             TString Path;
             THashSet<EObjectKind> Kinds;
-            bool IsQuoted = false;
 
             bool HasCluster() const {
                 return !Cluster.empty();
             }
+        };
+
+        struct TColumn {
+            TString Table;
+        };
+
+        struct TQuotation {
+            bool AtLhs = false;
+            bool AtRhs = false;
         };
 
         TKeywords Keywords;
@@ -55,8 +63,10 @@ namespace NSQLComplete {
         TMaybe<THint> Hint;
         TMaybe<TObject> Object;
         TMaybe<TCluster> Cluster;
-        bool Column = false;
+        TMaybe<TColumn> Column;
         bool Binding = false;
+
+        TQuotation IsQuoted;
         TEditRange EditRange;
     };
 

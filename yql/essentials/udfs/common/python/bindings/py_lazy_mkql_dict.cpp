@@ -508,35 +508,35 @@ private:
     class TKeyIterator: public NUdf::TBoxedValue {
     public:
         TKeyIterator(Py_ssize_t size)
-            : Size(size), Index(0)
+            : Size_(size), Index_(0)
         {}
 
     private:
         bool Skip() override {
-            if (Index >= Size)
+            if (Index_ >= Size_)
                 return false;
 
-            ++Index;
+            ++Index_;
             return true;
         }
 
         bool Next(NUdf::TUnboxedValue& value) override {
-            if (Index >= Size)
+            if (Index_ >= Size_)
                 return false;
 
-            value = NUdf::TUnboxedValuePod(KeyType(Index++));
+            value = NUdf::TUnboxedValuePod(KeyType(Index_++));
             return true;
         }
 
     private:
-        const Py_ssize_t Size;
-        Py_ssize_t Index;
+        const Py_ssize_t Size_;
+        Py_ssize_t Index_;
     };
 
     class TIterator: public NUdf::TBoxedValue {
     public:
         TIterator(const TPyCastContext::TPtr& ctx, const NUdf::TType* itemType, Py_ssize_t size, const TPyObjectPtr& pySeq)
-            : CastCtx_(ctx),  ItemType_(itemType), PySeq_(pySeq), Size(size), Index(0)
+            : CastCtx_(ctx),  ItemType_(itemType), PySeq_(pySeq), Size_(size), Index_(0)
         {}
 
         ~TIterator() {
@@ -546,31 +546,31 @@ private:
 
     private:
         bool Skip() override {
-            if (Index >= Size)
+            if (Index_ >= Size_)
                 return false;
 
-            ++Index;
+            ++Index_;
             return true;
         }
 
         bool Next(NUdf::TUnboxedValue& value) override try {
-            if (Index >= Size)
+            if (Index_ >= Size_)
                 return false;
 
             const TPyGilLocker lock;
-            value = FromPyObject(CastCtx_, ItemType_, PySequence_Fast_GET_ITEM(PySeq_.Get(), Index++));
+            value = FromPyObject(CastCtx_, ItemType_, PySequence_Fast_GET_ITEM(PySeq_.Get(), Index_++));
             return true;
         } catch (const yexception& e) {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& pay) override try {
-            if (Index >= Size)
+            if (Index_ >= Size_)
                 return false;
 
             const TPyGilLocker lock;
-            key = NUdf::TUnboxedValuePod(KeyType(Index));
-            pay = FromPyObject(CastCtx_, ItemType_, PySequence_Fast_GET_ITEM(PySeq_.Get(), Index++));
+            key = NUdf::TUnboxedValuePod(KeyType(Index_));
+            pay = FromPyObject(CastCtx_, ItemType_, PySequence_Fast_GET_ITEM(PySeq_.Get(), Index_++));
             return true;
         } catch (const yexception& e) {
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
@@ -580,13 +580,13 @@ private:
         const TPyCastContext::TPtr CastCtx_;
         const NUdf::TType* ItemType_;
         TPyObjectPtr PySeq_;
-        const Py_ssize_t Size;
-        Py_ssize_t Index;
+        const Py_ssize_t Size_;
+        Py_ssize_t Index_;
     };
 
 public:
     TLazySequenceAsDict(const TPyCastContext::TPtr& ctx, const NUdf::TType* itemType, TPyObjectPtr&& sequence, Py_ssize_t size)
-        : CastCtx_(ctx), ItemType_(itemType), Size(size), PySeq_(std::move(sequence))
+        : CastCtx_(ctx), ItemType_(itemType), Size_(size), PySeq_(std::move(sequence))
     {}
 
     ~TLazySequenceAsDict()
@@ -599,18 +599,18 @@ private:
     bool IsSortedDict() const override { return true; }
 
     bool HasDictItems() const override {
-        return Size > 0;
+        return Size_ > 0;
     }
 
     ui64 GetDictLength() const override {
-        return Size;
+        return Size_;
     }
 
     NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
         const Py_ssize_t index = key.Get<KeyType>();
-        if (index >= -Size && index < Size) try {
+        if (index >= -Size_ && index < Size_) try {
             const TPyGilLocker lock;
-            if (const auto item = PySequence_Fast_GET_ITEM(PySeq_.Get(), index >= 0 ? index : Size + index)) {
+            if (const auto item = PySequence_Fast_GET_ITEM(PySeq_.Get(), index >= 0 ? index : Size_ + index)) {
                 return FromPyObject(CastCtx_, ItemType_, item).Release().MakeOptional();
             } else if (PyErr_Occurred()) {
                 UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
@@ -623,24 +623,24 @@ private:
 
     bool Contains(const NUdf::TUnboxedValuePod& key) const override {
         const Py_ssize_t index = key.Get<KeyType>();
-        return index >= -Size && index < Size;
+        return index >= -Size_ && index < Size_;
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override {
-        return NUdf::TUnboxedValuePod(new TKeyIterator(Size));
+        return NUdf::TUnboxedValuePod(new TKeyIterator(Size_));
     }
 
     NUdf::TUnboxedValue GetPayloadsIterator() const override {
-        return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, Size, PySeq_));
+        return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, Size_, PySeq_));
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override {
-        return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, Size, PySeq_));
+        return NUdf::TUnboxedValuePod(new TIterator(CastCtx_, ItemType_, Size_, PySeq_));
     }
 
     const TPyCastContext::TPtr CastCtx_;
     const NUdf::TType* ItemType_;
-    const Py_ssize_t Size;
+    const Py_ssize_t Size_;
     TPyObjectPtr PySeq_;
 };
 

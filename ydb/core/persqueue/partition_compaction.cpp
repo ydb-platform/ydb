@@ -85,7 +85,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     auto newWrite = CompactionBlobEncoder.PartitionedBlob.Add(std::move(blob));
 
     if (newWrite && !newWrite->Value.empty()) {
-        AddCmdWrite(newWrite, request, ctx);
+        AddCmdWrite(newWrite, request, LastRequestedBlobCreationUnixTime, ctx);
 
         PQ_LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<
@@ -266,6 +266,8 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     for (const auto& requestedBlob : blobs) {
         TMaybe<ui64> firstBlobOffset = requestedBlob.Offset;
 
+        LastRequestedBlobCreationUnixTime = requestedBlob.CreationUnixTime;
+
         for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
             TBatch batch = it.GetBatch();
             batch.Unpack();
@@ -305,6 +307,9 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     CompactionBlobEncoder.HeadCleared = parameters.HeadCleared;
 
     EndProcessWritesForCompaction(compactionRequest.Get(), ctx);
+
+    // for debugging purposes
+    //DumpKeyValueRequest(compactionRequest->Record);
 
     ctx.Send(BlobCache, compactionRequest.Release(), 0, 0);
 }
@@ -468,6 +473,7 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
     write->SetValue(valueD);
+    write->SetCreationUnixTime(LastRequestedBlobCreationUnixTime);
 
     bool isInline = key.IsHead() && valueD.size() < MAX_INLINE_SIZE;
 

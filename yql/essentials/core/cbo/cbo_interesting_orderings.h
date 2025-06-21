@@ -140,19 +140,32 @@ public:
     TTableAliasMap() = default;
 
     void AddMapping(const TString& table, const TString& alias);
-    void AddRename(const TString& from, const TString& to);
+    void AddRename(TString from, TString to);
     TBaseColumn GetBaseColumnByRename(const TString& renamedColumn);
     TBaseColumn GetBaseColumnByRename(const NDq::TJoinColumn& renamedColumn);
     TString ToString() const;
     void Merge(const TTableAliasMap& other);
-    bool Empty() const { return TableByAlias.empty() && BaseColumnByRename.empty(); }
+    bool Empty() const { return TableByAlias_.empty() && BaseColumnByRename_.empty(); }
 
 private:
     TString GetBaseTableByAlias(const TString& alias);
 
 private:
-    THashMap<TString, TString> TableByAlias;
-    THashMap<TString, TBaseColumn> BaseColumnByRename;
+    THashMap<TString, TString> TableByAlias_;
+    THashMap<TString, TBaseColumn> BaseColumnByRename_;
+};
+
+struct TSorting {
+    TSorting(
+        std::vector<TJoinColumn> ordering,
+        std::vector<TOrdering::TItem::EDirection> directions
+    )
+        : Ordering(std::move(ordering))
+        , Directions(std::move(directions))
+    {}
+
+    std::vector<TJoinColumn> Ordering;
+    std::vector<TOrdering::TItem::EDirection> Directions;
 };
 
 /*
@@ -215,14 +228,12 @@ public: // deprecated section, use the section below instead of this
 
 public:
     std::size_t FindSorting(
-        const std::vector<TJoinColumn>& interestingOrdering,
-        const std::vector<TOrdering::TItem::EDirection>& directions,
+        const TSorting& sorting,
         TTableAliasMap* tableAliases = nullptr
     );
 
     std::size_t AddSorting(
-        const std::vector<TJoinColumn>& interestingOrdering,
-        std::vector<TOrdering::TItem::EDirection> directions,
+        const TSorting& sortings,
         TTableAliasMap* tableAliases = nullptr
     );
 
@@ -238,6 +249,8 @@ public:
 
 public:
     TVector<TJoinColumn> GetInterestingOrderingsColumnNamesByIdx(std::size_t interestingOrderingIdx) const;
+
+    TSorting GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const;
     TString ToString() const;
 
 public:
@@ -273,9 +286,9 @@ private:
     );
 
 private:
-    THashMap<TString, std::size_t> IdxByColumn;
-    std::vector<TJoinColumn> ColumnByIdx;
-    std::size_t IdCounter = 0;
+    THashMap<TString, std::size_t> IdxByColumn_;
+    std::vector<TJoinColumn> ColumnByIdx_;
+    std::size_t IdCounter_ = 0;
 };
 
 /*
@@ -314,7 +327,7 @@ public:
         TLogicalOrderings& operator= (const TLogicalOrderings&) = default;
 
         TLogicalOrderings(TDFSM* dfsm)
-            : DFSM(dfsm)
+            : Dfsm_(dfsm)
         {}
 
     public: // API
@@ -328,6 +341,7 @@ public:
         TFDSet GetFDs();
         bool IsSubsetOf(const TLogicalOrderings& logicalOrderings);
         i64 GetState() const;
+        i64 GetInitOrderingIdx() const;
 
     public:
         bool HasState();
@@ -339,11 +353,15 @@ public:
         bool IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs);
 
     private:
-        TDFSM* DFSM = nullptr;
+        TDFSM* Dfsm_ = nullptr;
         /* we can have different args in hash shuffle function, so shuffles can be incompitable in this case */
-        i64 ShuffleHashFuncArgsCount = -1;
-        i64 State = -1;
-        TFDSet AppliedFDs{};
+        i64 ShuffleHashFuncArgsCount_ = -1;
+
+        i64 State_ = -1;
+
+        /* Index of the state which was set in SetOrdering */
+        i64 InitOrderingIdx_ = -1;
+        TFDSet AppliedFDs_{};
     };
 
     TLogicalOrderings CreateState();
@@ -409,9 +427,9 @@ private:
         };
 
         struct TEdge {
-            std::size_t srcNodeIdx;
-            std::size_t dstNodeIdx;
-            i64 fdIdx;
+            std::size_t SrcNodeIdx;
+            std::size_t DstNodeIdx;
+            i64 FdIdx;
 
             enum _ : i64 {
                 EPSILON = -1 // eps edges with give us nodes without applying any FDs.
@@ -441,8 +459,8 @@ private:
         );
 
     private:
-        std::vector<TNode> Nodes;
-        std::vector<TEdge> Edges;
+        std::vector<TNode> Nodes_;
+        std::vector<TEdge> Edges_;
     };
 
     class TDFSM {
@@ -460,9 +478,9 @@ private:
         };
 
         struct TEdge {
-            std::size_t srcNodeIdx;
-            std::size_t dstNodeIdx;
-            i64 fdIdx;
+            std::size_t SrcNodeIdx;
+            std::size_t DstNodeIdx;
+            i64 FdIdx;
 
             TString ToString() const;
         };
@@ -490,17 +508,17 @@ private:
         );
 
     private:
-        std::vector<TNode> Nodes;
-        std::vector<TEdge> Edges;
+        std::vector<TNode> Nodes_;
+        std::vector<TEdge> Edges_;
 
-        std::vector<std::vector<i64>> TransitionMatrix;
-        std::vector<std::vector<bool>> ContainsMatrix;
+        std::vector<std::vector<i64>> TransitionMatrix_;
+        std::vector<std::vector<bool>> ContainsMatrix_;
 
         struct TInitState {
             std::size_t StateIdx;
             std::size_t ShuffleHashFuncArgsCount;
         };
-        std::vector<TInitState> InitStateByOrderingIdx;
+        std::vector<TInitState> InitStateByOrderingIdx_;
     };
 
     /*
@@ -518,12 +536,12 @@ private:
     );
 
 private:
-    TNFSM NFSM;
-    TSimpleSharedPtr<TDFSM> DFSM; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
+    TNFSM Nfsm_;
+    TSimpleSharedPtr<TDFSM> Dfsm_; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
 
-    std::vector<i64> FdMapping; // We to remap FD idxes after the pruning
-    std::vector<TItemInfo> ItemInfo;
-    bool Built = false;
+    std::vector<i64> FdMapping_; // We to remap FD idxes after the pruning
+    std::vector<TItemInfo> ItemInfo_;
+    bool Built_ = false;
 };
 
 }

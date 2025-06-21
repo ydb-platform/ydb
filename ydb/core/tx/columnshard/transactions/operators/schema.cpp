@@ -1,46 +1,88 @@
 #include "schema.h"
 #include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
+#include <ydb/core/tx/columnshard/subscriber/events/tx_completed/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <util/string/join.h>
+#include <util/stream/output.h>
 
 namespace NKikimr::NColumnShard {
 
-class TWaitEraseTablesTxSubscriber: public NSubscriber::ISubscriber {
+class TWaitOnProposeTxSubscriberBase : public NSubscriber::ISubscriber {
+    const ui64 TxId;
+protected:
+    TWaitOnProposeTxSubscriberBase(const ui64 txId)
+        : TxId(txId) {    }
+
+    void OnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) {
+        const NActors::TLogContextGuard g = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "on_subscriber_event")("tx_id", TxId)("event", ev->DebugString());
+        AFL_VERIFY(!IsFinished());
+        DoOnEvent(ev);
+        if (IsFinished()) {
+            shard.Execute(new TTxFinishAsyncTransaction(shard, TxId));
+        }
+    }
+
+protected:
+    virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) = 0;
+};
+
+
+class TWaitEraseTablesTxSubscriber: public TWaitOnProposeTxSubscriberBase {
 private:
     THashSet<TInternalPathId> WaitTables;
-    const ui64 TxId;
 public:
+    TWaitEraseTablesTxSubscriber(const ui64 txId, THashSet<TInternalPathId>&& waitTables)
+        : TWaitOnProposeTxSubscriberBase(txId)
+        , WaitTables(std::move(waitTables)) {
+    }
+
     virtual std::set<NSubscriber::EEventType> GetEventTypes() const override {
         return { NSubscriber::EEventType::TablesErased };
     }
 
-    virtual bool DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev, TColumnShard& shard) override {
+    virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) override {
         AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TablesErased);
         auto* evErased = static_cast<const NSubscriber::TEventTablesErased*>(ev.get());
-        bool result = false;
         for (auto&& i : evErased->GetPathIds()) {
-            result |= WaitTables.erase(i);
+            WaitTables.erase(i);
         }
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "on_event")("remained", JoinSeq(",", WaitTables));
-        if (WaitTables.empty()) {
-            shard.Execute(new TTxFinishAsyncTransaction(shard, TxId));
-        }
-        return result;
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("remained", JoinSeq(",", WaitTables));
     }
 
     virtual bool IsFinished() const override {
         return WaitTables.empty();
     }
+};
 
-    TWaitEraseTablesTxSubscriber(const THashSet<TInternalPathId>& waitTables, const ui64 txId)
-        : WaitTables(waitTables)
-        , TxId(txId) {
+class TWaitTxs: public TWaitOnProposeTxSubscriberBase {
+    THashSet<ui64> TxIdsToWait;
+public:
+    TWaitTxs(const ui64 txId, const THashSet<ui64>&& txIdsToWait)
+        : TWaitOnProposeTxSubscriberBase(txId)
+        , TxIdsToWait(std::move(txIdsToWait)) {
+    }
+    std::set<NSubscriber::EEventType> GetEventTypes() const override {
+        return { NSubscriber::EEventType::TxCompleted };
+    }
 
+    bool IsFinished() const override {
+        return TxIdsToWait.empty();
+    }
+
+    virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) override {
+        AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
+        const auto* evCompleted = static_cast<const NSubscriber::TEventTxCompleted*>(ev.get());
+        AFL_VERIFY(TxIdsToWait.erase(evCompleted->GetTxId()));
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("completed", evCompleted->GetTxId())("remained", JoinSeq(",", TxIdsToWait));
     }
 };
 
+
+
 TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
+    AFL_VERIFY(!WaitOnPropose);
     auto seqNo = SeqNoFromProto(SchemaTxBody.GetSeqNo());
     auto lastSeqNo = owner.LastSchemaSeqNo;
 
@@ -62,23 +104,54 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables());
+            auto pathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetInitShard().GetTables());
+            if (!pathIdsToErase.empty()) {
+                WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetTxId(), std::move(pathIdsToErase));
+            }
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
-            auto validationStatus = ValidateTables(SchemaTxBody.GetEnsureTables().GetTables());
+            const auto& tables = SchemaTxBody.GetEnsureTables().GetTables();
+            auto validationStatus = ValidateTables(tables);
             if (validationStatus.IsFail()) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Invalid schema: " + validationStatus.GetErrorMessage());
             }
-            WaitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables());
+            auto waitPathIdsToErase = GetNotErasedTableIds(owner, SchemaTxBody.GetEnsureTables().GetTables());
+            if (!waitPathIdsToErase.empty()) {
+                WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetTxId(), std::move(waitPathIdsToErase));
+            }
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+        {
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
+            const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("propose_execute", "move_table")("src", srcSchemeShardLocalPathId)("dst", dstSchemeShardLocalPathId);
+            if (!owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
+            }
+            if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
+            }
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();  //TODO #8650 Get transaction for moving pathId only
+            if (!txIdsToWait.empty()) {
+                //TODO persist txIdsToWait to recover on table init
+                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
+            owner.TablesManager.MoveTablePropose(srcSchemeShardLocalPathId);
+            break;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
+    }
+    if (WaitOnPropose) {
+        owner.Subscribers->RegisterSubscriber(WaitOnPropose);
     }
 
     owner.UpdateSchemaSeqNo(seqNo, txc);
@@ -164,40 +237,53 @@ NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTables(::google::
 }
 
 void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
-    AFL_VERIFY(WaitPathIdsToErase.empty());
+   AFL_VERIFY(!WaitOnPropose);
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
+            THashSet<TInternalPathId> waitPathIdsToErase;
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
                 const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i);
                 if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId)) {
                     if (owner.TablesManager.HasTable(*internalPathId, true)) {
-                        WaitPathIdsToErase.emplace(*internalPathId);
+                        waitPathIdsToErase.emplace(*internalPathId);
                     }
                 }
+            }
+            if (!waitPathIdsToErase.empty()) {
+                WaitOnPropose = std::make_shared<TWaitEraseTablesTxSubscriber>(GetTxId(), std::move(waitPathIdsToErase));
             }
         }
         break;
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterTable:
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
+            break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+        {
+            const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
+            const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
+
+            AFL_VERIFY(owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId));
+            AFL_VERIFY(!owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId));
+            //TODO recover txIdsToWait
+            //WaitOnPropose = std::make_shared<TWaitTransactions>(GetTxId(), txIds);
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
-    if (WaitPathIdsToErase.size()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_remove_path_id")("pathes", JoinSeq(",", WaitPathIdsToErase))("tx_id", GetTxId());
-        owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+    if (WaitOnPropose) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "wait_on_propose")("tx_id", GetTxId());
+        owner.Subscribers->RegisterSubscriber(WaitOnPropose);
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_pathes_cleaned")("tx_id", GetTxId());
         owner.Execute(new TTxFinishAsyncTransaction(owner, GetTxId()));
     }
 }
 
-void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) {
-    AFL_VERIFY(WaitPathIdsToErase.size());
-    owner.Subscribers->RegisterSubscriber(std::make_shared<TWaitEraseTablesTxSubscriber>(WaitPathIdsToErase, GetTxId()));
+void TSchemaTransactionOperator::DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
 }
 
-}
+} //namespace NKikimr::NColumnShard

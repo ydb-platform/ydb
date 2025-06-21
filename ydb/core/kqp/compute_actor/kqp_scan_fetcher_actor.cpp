@@ -21,6 +21,9 @@ static constexpr ui64 MAX_SHARD_RETRIES = 5;   // retry after: 0, 250, 500, 1000
 static constexpr ui64 MAX_TOTAL_SHARD_RETRIES = 20;
 static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 
+constexpr TDuration REGISTRATION_TIMEOUT = TDuration::Seconds(60);
+constexpr TDuration PING_PERIOD = TDuration::Seconds(30);
+
 }   // anonymous namespace
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TComputeRuntimeSettings& settings,
@@ -79,16 +82,18 @@ void TKqpScanFetcherActor::Bootstrap() {
         auto& state = PendingShards.emplace_back(TShardState(read.GetShardId()));
         state.Ranges = BuildSerializedTableRanges(read);
     }
+    RegistrationStartTime = Now();
     for (auto&& c : ComputeActorIds) {
         Sender<TEvScanExchange::TEvRegisterFetcher>().SendTo(c);
     }
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size());
     StartTableScan();
     Become(&TKqpScanFetcherActor::StateFunc);
-    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
+    Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
+    RegistrationFinished = true;
     AFL_ENSURE(ev->Get()->GetFreeSpace());
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "AckDataFromCompute")("self_id", SelfId())("scan_id", ScanId)(
         "packs_to_send", InFlightComputes.GetPacksToSendCount())("from", ev->Sender)("shards remain", PendingShards.size())(
@@ -697,8 +702,18 @@ void TKqpScanFetcherActor::CheckFinish() {
 }
 
 void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {
-    InFlightShards.PingAllScanners();
-    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
+    if (RegistrationFinished) {
+        InFlightShards.PingAllScanners();
+    } else if (Now() - RegistrationStartTime > REGISTRATION_TIMEOUT) {
+        AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "TEvWakeup")("info", "Abort fetcher due to Registration timeout");
+        InFlightShards.AbortAllScanners("Abort fetcher due to Registration timeout");
+        TIssues issues;
+        issues.AddIssue(TIssue("Abort fetcher due to Registration timeout"));
+        SendGlobalFail(NDqProto::COMPUTE_STATE_FAILURE, NYql::NDqProto::StatusIds::INTERNAL_ERROR, issues);
+        PassAway();
+        return;
+    }
+    Schedule(PING_PERIOD, new NActors::TEvents::TEvWakeup());
 }
 
 }   // namespace NKikimr::NKqp::NScanPrivate

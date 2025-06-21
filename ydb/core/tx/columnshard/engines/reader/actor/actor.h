@@ -115,6 +115,7 @@ private:
     TMonotonic GetScanDeadline() const;
 
     TMonotonic GetComputeDeadline() const;
+    std::optional<TMonotonic> GetComputeDeadlineOptional() const;
 
 private:
     const TActorId ColumnShardActorId;

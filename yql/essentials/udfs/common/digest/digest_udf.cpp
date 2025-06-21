@@ -410,7 +410,7 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    class TXXH3_128: public TBoxedValue {
+    class TXXH3_128: public TBoxedValue { // NOLINT(readability-identifier-naming)
     public:
         static TStringRef Name() {
             static auto name = TStringRef::Of("XXH3_128");

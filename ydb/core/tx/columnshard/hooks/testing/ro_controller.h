@@ -179,6 +179,10 @@ public:
         }
     }
 
+    virtual bool IsForcedGenerateInternalPathId() const override {
+        return true;
+    }
+
 };
 
 }

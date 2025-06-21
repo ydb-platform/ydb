@@ -20,6 +20,7 @@ message TEvRegisterNode {
     optional NActorsInterconnect.TNodeLocation SystemLocation = 3;
     repeated TTabletAvailability TabletAvailability = 4;
     optional string Name = 5;
+    optional uint32 BridgePileId = 6;
 }
 
 message TEvRegisterNodeResult {

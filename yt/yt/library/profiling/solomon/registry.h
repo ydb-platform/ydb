@@ -5,6 +5,11 @@
 #include "producer.h"
 #include "tag_registry.h"
 
+#include <yt/yt/library/profiling/sensor.h>
+#include <yt/yt/library/profiling/impl.h>
+
+#include <yt/yt/library/profiling/solomon/sensor_dump.pb.h>
+
 #include <yt/yt/core/actions/invoker_util.h>
 
 #include <yt/yt/core/misc/mpsc_stack.h>
@@ -12,11 +17,6 @@
 #include <yt/yt/core/profiling/public.h>
 
 #include <yt/yt/core/ytree/fluent.h>
-
-#include <yt/yt/library/profiling/sensor.h>
-#include <yt/yt/library/profiling/impl.h>
-
-#include <yt/yt/library/profiling/solomon/sensor_dump.pb.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 

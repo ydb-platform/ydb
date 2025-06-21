@@ -25,6 +25,10 @@
 #   include "opensslconf-linux-arm.h"
 #elif defined(__linux__) && (defined(__aarch64__) || defined(_M_ARM64))
 #   include "opensslconf-linux-aarch64.h"
+#elif defined(__wasm__) && !defined(__wasm64__)
+#   include "opensslconf-wasm32.h"
+#elif defined(__wasm64__)
+#   include "opensslconf-wasm64.h"
 #else
 #   include "opensslconf-linux.h"
 #endif

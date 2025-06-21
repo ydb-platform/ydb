@@ -29,6 +29,10 @@ void TSharedInfo::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, con
             parked -= CpuConsumptionPerThread[poolId][threadId].Elapsed;
             CpuConsumption[poolId].Elapsed += CpuConsumptionPerThread[poolId][threadId].Elapsed;
             CpuConsumption[poolId].Cpu += CpuConsumptionPerThread[poolId][threadId].Cpu;
+            if (poolId != ThreadOwners[threadId]) {
+                CpuConsumption[poolId].ForeignElapsed += CpuConsumptionPerThread[poolId][threadId].Elapsed;
+                CpuConsumption[poolId].ForeignCpu += CpuConsumptionPerThread[poolId][threadId].Cpu;
+            }
         }
         CpuConsumption[ThreadOwners[threadId]].CpuQuota += parked;
         FreeCpu += parked;
@@ -95,6 +99,8 @@ TString TPoolSharedThreadCpuConsumption::ToString() const {
     builder << " Elapsed: " << Elapsed << "; ";
     builder << " Cpu: " << Cpu << "; ";
     builder << " CpuQuota: " << CpuQuota << "; ";
+    builder << " ForeignElapsed: " << ForeignElapsed << "; ";
+    builder << " ForeignCpu: " << ForeignCpu << "; ";
     builder << "}";
     return builder;
 }

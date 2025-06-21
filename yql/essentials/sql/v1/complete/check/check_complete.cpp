@@ -49,7 +49,7 @@ namespace NSQLComplete {
                 }
             }
 
-            return MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(fs))));
+            return MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema({.Folders = std::move(fs)})));
         }
 
     } // namespace

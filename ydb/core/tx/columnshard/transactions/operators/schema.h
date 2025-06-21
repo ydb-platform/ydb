@@ -17,7 +17,7 @@ private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
-    THashSet<TInternalPathId> WaitPathIdsToErase;
+    std::shared_ptr<NSubscriber::ISubscriber> WaitOnPropose;
 
     virtual void DoOnTabletInit(TColumnShard& owner) override;
 
@@ -58,12 +58,14 @@ private:
                 return "Scheme:AlterStore";
             case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
                 return "Scheme:DropTable";
+            case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+                return "Scheme:MoveTable";
             case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
                 return "Scheme:TXBODY_NOT_SET";
         }
     }
     virtual bool DoIsAsync() const override {
-        return WaitPathIdsToErase.size();
+        return !!WaitOnPropose;
     }
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {

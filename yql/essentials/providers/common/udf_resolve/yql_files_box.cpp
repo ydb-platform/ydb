@@ -12,8 +12,8 @@ namespace NYql {
 namespace NCommon {
 
 TFilesBox::TFilesBox(TFsPath dir, TRandGuid randGuid)
-    : Dir(std::move(dir))
-    , RandGuid(std::move(randGuid))
+    : Dir_(std::move(dir))
+    , RandGuid_(std::move(randGuid))
 {
 }
 
@@ -27,7 +27,7 @@ TFilesBox::~TFilesBox() {
 
 TString TFilesBox::MakeLinkFrom(const TString& source, const TString& filename) {
     if (!filename) {
-        if (auto* existingPath = Mapping.FindPtr(source)) {
+        if (auto* existingPath = Mapping_.FindPtr(source)) {
             return *existingPath;
         }
     }
@@ -36,31 +36,31 @@ TString TFilesBox::MakeLinkFrom(const TString& source, const TString& filename) 
     TString sourceAbsolutePath = sourcePath.IsAbsolute() ? source : (TFsPath::Cwd() / sourcePath).GetPath();
     TString path;
     if (filename) {
-        path = Dir / filename;
+        path = Dir_ / filename;
         if (!NFs::SymLink(sourceAbsolutePath, path)) {
             ythrow TSystemError() << "Failed to create symlink for file " << sourceAbsolutePath.Quote() << " to file " << path.Quote();
         }
     } else {
         while (true) {
-            path = Dir / RandGuid.GenGuid();
+            path = Dir_ / RandGuid_.GenGuid();
             if (NFs::SymLink(sourceAbsolutePath, path)) {
                 break;
             } else if (LastSystemError() != EEXIST) {
                 ythrow TSystemError() << "Failed to create symlink for file " << sourceAbsolutePath.Quote() << " to file " << path.Quote();
             }
         }
-        Mapping.emplace(source, path);
+        Mapping_.emplace(source, path);
     }
     return path;
 }
 
 TString TFilesBox::GetDir() const {
-    return Dir;
+    return Dir_;
 }
 
 void TFilesBox::Destroy() {
-    Mapping.clear();
-    Dir.ForceDelete();
+    Mapping_.clear();
+    Dir_.ForceDelete();
 }
 
 THolder<TFilesBox> CreateFilesBox(const TFsPath& baseDir) {

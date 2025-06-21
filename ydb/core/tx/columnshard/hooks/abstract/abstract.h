@@ -357,6 +357,10 @@ public:
         return {};
     }
 
+    virtual bool IsForcedGenerateInternalPathId() const {
+        return false;
+    }
+
     virtual void OnAddPathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {
     }
     virtual void OnDeletePathId(const ui64 /* tabletId */, const NColumnShard::TUnifiedPathId& /* pathId */) {

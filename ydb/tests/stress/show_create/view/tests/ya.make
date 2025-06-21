@@ -1,7 +1,7 @@
 IF (NOT WITH_VALGRIND)
 
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(STRESS_TEST_UTILITY="ydb/tests/stress/show_create/view/show_create_view")
@@ -17,7 +17,6 @@ ENDIF()
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/apps/ydb
     ydb/tests/stress/show_create/view
 )

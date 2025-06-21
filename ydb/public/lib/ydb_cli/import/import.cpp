@@ -55,8 +55,6 @@ namespace NYdb {
 namespace NConsoleClient {
 namespace {
 
-constexpr ui64 rowsToAnalyze = 100000;
-
 std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input, bool verbose) {
     char bom[3];
     size_t read = input->Read(bom, 3);
@@ -565,12 +563,6 @@ private:
     std::map<std::string, TType> GetColumnTypes();
     void ValidateTValueUpsertTable();
     std::shared_ptr<TProgressFile> LoadOrStartImportProgress(const TString& filePath);
-    TStatus GenerateCreateTableFromCsv(IInputStream& input,
-                    const TString& relativeTablePath,
-                    const TString& filePath,
-                    TString& suggestion);
-    TStatus SuggestCreateTableRequest(const TVector<TString>& filePaths, const TString& relativeTablePath,
-                                      TString& suggestion);
 
     std::shared_ptr<NTable::TTableClient> TableClient;
     std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
@@ -648,14 +640,12 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
             auto describePathResult = NDump::DescribePath(*SchemeClient, dbPath);
             if (describePathResult.GetStatus() != EStatus::SUCCESS) {
                 TStringBuilder errorMessage;
-                errorMessage << describePathResult.GetIssues().ToString() << dbPath << Endl;
-                TString suggestMessage;
-                auto suggestStatus = SuggestCreateTableRequest(filePaths, dbPath, suggestMessage);
-                if (suggestStatus.IsSuccess()) {
-                    errorMessage << suggestMessage << Endl;
-                } else {
-                    errorMessage << "Error while trying to generate CREATE TABLE request suggestion: " << suggestStatus << Endl;
-                }
+                errorMessage << "Couldn't find a table by specified path" << Endl
+                    << describePathResult.GetIssues().ToString() << dbPath << Endl << Endl
+                    << "To generate a CREATE TABLE request text based on data in file " << filePaths[0] << ", run:" << Endl
+                    << "ydb tools infer csv " << filePaths[0] << " --path " << dbPath << Endl << Endl
+                    << "To both generate and execute a CREATE TABLE request, run:" << Endl
+                    << "ydb tools infer csv " << filePaths[0] << " --path " << dbPath << " --execute";
                 return MakeStatus(EStatus::SCHEME_ERROR, errorMessage);
             }
         }
@@ -875,74 +865,6 @@ std::shared_ptr<TProgressFile> TImportFileClient::TImpl::LoadOrStartImportProgre
         ProgressFiles.push_back(progressFile);
     }
     return progressFile;
-}
-
-TStatus TImportFileClient::TImpl::SuggestCreateTableRequest(const TVector<TString>& filePaths,
-        const TString& relativeTablePath, TString& suggestion) {
-    // All files should have the same scheme so probably no need to analyze more than one file
-    CurrentFileCount = 1;
-    size_t filePathsSize = 1;
-    const auto& filePath = filePaths[0];
-
-    if (Settings.Format_ == EDataFormat::Tsv && Settings.Delimiter_ != "\t") {
-        return MakeStatus(EStatus::BAD_REQUEST,
-            TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
-    }
-
-    UpsertSettings
-        .OperationTimeout(Settings.OperationTimeout_)
-        .ClientTimeout(Settings.ClientTimeout_);
-
-    auto pool = CreateThreadPool(filePathsSize);
-    TVector<NThreading::TFuture<TStatus>> asyncResults;
-
-    std::unique_ptr<TFileInput> fileInput;
-    std::optional<ui64> fileSizeHint;
-
-    if (!filePath.empty()) {
-        const TFsPath dataFile(filePath);
-
-        if (!dataFile.Exists()) {
-            return MakeStatus(EStatus::BAD_REQUEST,
-                TStringBuilder() << "File does not exist: " << filePath);
-        }
-
-        if (!dataFile.IsFile()) {
-            return MakeStatus(EStatus::BAD_REQUEST,
-                TStringBuilder() << "Not a file: " << filePath);
-        }
-
-        TFile file(filePath, OpenExisting | RdOnly | Seq);
-        i64 fileLength = file.GetLength();
-        if (fileLength && fileLength >= 0) {
-            fileSizeHint = fileLength;
-        }
-
-        fileInput = std::make_unique<TFileInput>(file, Settings.FileBufferSize_);
-    }
-
-    IInputStream& input = fileInput ? *fileInput : Cin;
-
-    try {
-        switch (Settings.Format_) {
-            case EDataFormat::Default:
-            case EDataFormat::Csv:
-            case EDataFormat::Tsv:
-                return GenerateCreateTableFromCsv(input, relativeTablePath, filePath, suggestion);
-            case EDataFormat::Json:
-            case EDataFormat::JsonUnicode:
-            case EDataFormat::JsonBase64:
-            case EDataFormat::Parquet:
-            default:
-                break;
-        }
-
-        return MakeStatus(EStatus::BAD_REQUEST,
-                    TStringBuilder() << "Unsupported file format #" << (int) Settings.Format_);
-    } catch (const std::exception& e) {
-        return MakeStatus(EStatus::INTERNAL_ERROR,
-                TStringBuilder() << "Error: " << e.what());
-    }
 }
 
 inline
@@ -1315,157 +1237,6 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
     NThreading::Async([progressFile]() { progressFile->SetCompleted(); }, *FileProgressPool)
         .GetValueSync();
     return MakeStatus();
-}
-
-TStatus TImportFileClient::TImpl::GenerateCreateTableFromCsv(IInputStream& input,
-                    const TString& relativeTablePath,
-                    const TString& filePath,
-                    TString& suggestion) {
-    TCountingInput countInput(&input);
-    NCsvFormat::TLinesSplitter splitter(countInput);
-
-    size_t maxJobInflight = Settings.Threads_;
-    std::counting_semaphore<> jobsSemaphore(maxJobInflight);
-
-    TCsvParser parser;
-    bool removeLastDelimiter = false;
-
-    if (!Settings.Header_ && !Settings.HeaderRow_) {
-        TString firstRow = splitter.ConsumeLine();
-        NCsvFormat::CsvSplitter csvSplitter(firstRow, Settings.Delimiter_[0]);
-        size_t columnSize = 0;
-        do {
-            csvSplitter.Consume();
-            ++columnSize;
-        } while (csvSplitter.Step());
-        TStringBuilder columns;
-        for (size_t i = 0; i < columnSize; ++i) {
-            if (i > 0) {
-                columns << Settings.Delimiter_;
-            }
-            columns << "column" << i;
-        }
-        InitCsvParser(parser, removeLastDelimiter, splitter, Settings, columns);
-    } else {
-        InitCsvParser(parser, removeLastDelimiter, splitter, Settings, Settings.HeaderRow_);
-    }
-
-    const auto& header = parser.GetHeader();
-
-    TPossibleTypes columnTypes(header.size());
-
-    for (ui32 i = 0; i < Settings.SkipRows_; ++i) {
-        splitter.ConsumeLine();
-    }
-
-    ui64 row = Settings.SkipRows_ + Settings.Header_;
-    ui64 batchBytes = 0;
-
-    TString line;
-    std::vector<TAsyncStatus> inFlightRequests;
-    std::vector<TString> buffer;
-
-    auto checkCsvFunc = [&](std::vector<TString>&& buffer, ui64 row) {
-        TPossibleTypes typesCopy = columnTypes.GetCopy();
-        try {
-            for (auto& line : buffer) {
-                parser.ParseLineTypes(line, typesCopy, TCsvParser::TParseMetadata{row, filePath});
-            }
-        } catch (const std::exception& e) {
-            if (!Failed.exchange(true)) {
-                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
-            }
-            jobsSemaphore.release();
-            throw;
-        }
-        columnTypes.MergeWith(typesCopy);
-        jobsSemaphore.release();
-    };
-
-    while (TString line = splitter.ConsumeLine()) {
-        ++row;
-        if (row > rowsToAnalyze) {
-            break;
-        }
-        if (line.empty()) {
-            continue;
-        }
-        batchBytes += line.size();
-
-        if (removeLastDelimiter) {
-            if (!line.EndsWith(Settings.Delimiter_)) {
-                return MakeStatus(EStatus::BAD_REQUEST,
-                        "According to the header, lines should end with a delimiter");
-            }
-            line.erase(line.size() - Settings.Delimiter_.size());
-        }
-
-        buffer.push_back(line);
-
-        if (batchBytes < Settings.BytesPerRequest_) {
-            continue;
-        }
-
-        auto workerFunc = [&checkCsvFunc, row, buffer = std::move(buffer)]() mutable {
-            checkCsvFunc(std::move(buffer), row);
-        };
-        batchBytes = 0;
-        buffer.clear();
-
-        jobsSemaphore.acquire();
-
-        if (!ProcessingPool->AddFunc(workerFunc)) {
-            return MakeStatus(EStatus::INTERNAL_ERROR, "Couldn't add worker func");
-        }
-
-        if (Failed) {
-            break;
-        }
-    }
-
-    // Check the rest if buffer is not empty
-    if (!buffer.empty() && countInput.Counter() > 0 && !Failed) {
-        jobsSemaphore.acquire();
-        checkCsvFunc(std::move(buffer), row);
-    }
-
-    for (size_t i = 0; i < maxJobInflight; ++i) {
-        jobsSemaphore.acquire();
-    }
-
-    TStringBuilder res;
-    res << "Example CreateTable request text generated based on data in file " << filePath << ":" << Endl << Endl;
-    res << "CREATE TABLE " << (relativeTablePath.empty() ? "`new_table`" : "`" + relativeTablePath + "`")<< " (" << Endl;
-    auto& possibleTypes = columnTypes.GetColumnPossibleTypes();
-    for (size_t i = 0; i < header.size(); ++i) {
-        auto& possibleType = possibleTypes[i];
-        auto& possibleTypeIt = possibleType.GetIterator();
-        TString typeText = possibleTypeIt != possibleType.GetAvailableTypesEnd()
-            && possibleType.GetHasNonNulls() ? possibleTypeIt->ToString() : "Text";
-        res << "    `" << header[i] << "` " << typeText << ",";
-        if (!possibleType.GetHasNonNulls()) {
-            res << " -- No data in this column to infer type";
-        }
-        res << Endl;
-    }
-    res << "    PRIMARY KEY (`" << header[0] << "`) -- First column is chosen. Probably need to change this" << Endl;
-    res <<
-R"()
-WITH (
-    STORE = ROW -- or COLUMN
-    -- Other useful table options:
-    --, AUTO_PARTITIONING_BY_SIZE = ENABLED
-    --, AUTO_PARTITIONING_BY_LOAD = ENABLED
-    --, UNIFORM_PARTITIONS = 100
-    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
-    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
-);)";
-    suggestion = res;
-    if (Failed) {
-        return *ErrorStatus;
-    } else {
-        return MakeStatus();
-    }
 }
 
 TStatus TImportFileClient::TImpl::UpsertJson(IInputStream& input, const TString& dbPath, std::optional<ui64> inputSizeHint,

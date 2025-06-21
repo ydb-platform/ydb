@@ -42,6 +42,7 @@ namespace NYql {
         TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
 
     public:
+        TDuration DescribeTableTimeout; 
         THashMap<TString, TString> Tokens;
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
         THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name

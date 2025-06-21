@@ -3,12 +3,13 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 
 SRCS(
-    sensor.cpp
-    producer.cpp
+    histogram_snapshot.cpp
     impl.cpp
+    percpu.cpp
+    producer.cpp
+    sensor.cpp
     tag.cpp
     testing.cpp
-    histogram_snapshot.cpp
 )
 
 PEERDIR(

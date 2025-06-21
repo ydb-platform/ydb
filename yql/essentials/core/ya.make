@@ -6,6 +6,8 @@ SRCS(
     yql_callable_transform.h
     yql_cost_function.cpp
     yql_data_provider.h
+    yql_default_valid_value.cpp
+    yql_default_valid_value.h
     yql_execution.cpp
     yql_execution.h
     yql_expr_constraint.cpp

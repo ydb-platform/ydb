@@ -25,12 +25,12 @@ namespace NYql {
             TString LLVMSettings;
             EBlockEngineMode BlockEngineMode;
             IOutputStream* ExprOutputStream;
-            NKikimr::NUdf::ICountersProvider* CountersProvider_;
-            ETranslationMode TranslationMode_;
-            ui16 SyntaxVersion_;
-            TLangVersion LangVer_;
-            ui64 NativeYtTypeFlags_;
-            TMaybe<ui64> DeterministicTimeProviderSeed_;
+            NKikimr::NUdf::ICountersProvider* CountersProvider;
+            ETranslationMode TranslationMode;
+            ui16 SyntaxVersion;
+            TLangVersion LangVer;
+            ui64 NativeYtTypeFlags;
+            TMaybe<ui64> DeterministicTimeProviderSeed;
             bool UseSystemColumns;
             bool UseWorkerPool;
             bool UseAntlr4;
@@ -68,12 +68,12 @@ namespace NYql {
                 , LLVMSettings(std::move(LLVMSettings))
                 , BlockEngineMode(BlockEngineMode)
                 , ExprOutputStream(ExprOutputStream)
-                , CountersProvider_(CountersProvider)
-                , TranslationMode_(translationMode)
-                , SyntaxVersion_(syntaxVersion)
-                , LangVer_(langver)
-                , NativeYtTypeFlags_(nativeYtTypeFlags)
-                , DeterministicTimeProviderSeed_(deterministicTimeProviderSeed)
+                , CountersProvider(CountersProvider)
+                , TranslationMode(translationMode)
+                , SyntaxVersion(syntaxVersion)
+                , LangVer(langver)
+                , NativeYtTypeFlags(nativeYtTypeFlags)
+                , DeterministicTimeProviderSeed(deterministicTimeProviderSeed)
                 , UseSystemColumns(useSystemColumns)
                 , UseWorkerPool(useWorkerPool)
                 , UseAntlr4(useAntlr4)

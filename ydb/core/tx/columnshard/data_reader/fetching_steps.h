@@ -131,14 +131,7 @@ private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskDataResources);
         const std::vector<TPortionDataAccessor>& accessors = fetchingContext->GetCurrentContext().GetPortionAccessors();
-        ui64 memory = 0;
-        for (auto&& i : accessors) {
-            if (ColumnIds) {
-                memory += i.GetColumnBlobBytes(ColumnIds->GetColumnIds());
-            } else {
-                memory += i.GetPortionInfo().GetTotalBlobBytes();
-            }
-        }
+        const ui64 memory = fetchingContext->GetNecessaryDataMemory(ColumnIds, accessors);
         if (!memory) {
             return IFetchingStep::EStepResult::Continue;
         }

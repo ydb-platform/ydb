@@ -105,10 +105,14 @@ protected:
         TVector<TOptInfo> Optimizers;
         bool Global = false;
     };
-    TTypeAnnotationContext* Types;
-    const NLog::EComponent LogComponent;
-    TSet<TString> DisabledOpts;
-    TVector<TStep> Steps;
+
+    TTypeAnnotationContext* GetTypes() const;
+
+    // FIXME switch to an accessor
+    TTypeAnnotationContext* Types; // NOLINT(readability-identifier-naming)
+    const NLog::EComponent LogComponent_;
+    TSet<TString> DisabledOpts_;
+    TVector<TStep> Steps_;
 };
 
 } // NYql

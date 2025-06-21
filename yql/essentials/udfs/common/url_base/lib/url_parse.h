@@ -28,8 +28,8 @@ namespace NUrlUdf {
     class TParse: public TBoxedValue {
     public:
         TParse(const TUrlParseIndexes& UrlParseIndexes)
-            : UrlParseIndexes(UrlParseIndexes)
-            , ParseFlags(TUri::FeaturesRecommended)
+            : UrlParseIndexes_(UrlParseIndexes)
+            , ParseFlags_(TUri::FeaturesRecommended)
         {
         }
 
@@ -51,8 +51,8 @@ namespace NUrlUdf {
             bool typesOnly);
 
     private:
-        const TUrlParseIndexes UrlParseIndexes;
-        const NUri::TParseFlags ParseFlags;
+        const TUrlParseIndexes UrlParseIndexes_;
+        const NUri::TParseFlags ParseFlags_;
 
         static constexpr ui32 FieldsCount = sizeof(TUrlParseIndexes) / sizeof(ui32);
     };

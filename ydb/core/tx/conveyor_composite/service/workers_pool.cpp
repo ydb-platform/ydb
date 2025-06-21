@@ -89,8 +89,10 @@ bool TWorkersPool::DrainTasks() {
             RunTask(std::move(tasks));
         }
     }
-    if (!Processes.front().GetCategory()->HasTasks()) {
-        Counters->NoTasks->Add(1);
+    for (auto&& i : Processes) {
+        if (!i.GetCategory()->HasTasks()) {
+            i.GetCounters()->NoTasks->Add(1);
+        }
     }
     return newTask;
 }

@@ -29,7 +29,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
     @classmethod
     def _get_path(cls, full: bool = True) -> str:
         if full:
-            tpcds_path = get_external_param('table-path-tpcds', f'{YdbCluster.tables_path}/tpcds')
+            tpcds_path = get_external_param('table-path-tpcds', YdbCluster.get_tables_path('tpcds'))
         else:
             tpcds_path = 'tpcds'
         return get_external_param(f'table-path-{cls.suite()}', f'{tpcds_path}/s{cls.scale}')

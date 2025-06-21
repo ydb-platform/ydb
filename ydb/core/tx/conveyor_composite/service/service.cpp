@@ -23,13 +23,6 @@ void TDistributor::Bootstrap() {
     TBase::Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(1));
 }
 
-void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& evExt) {
-    if (evExt->Get()->Tag == 1) {
-        Manager->DoQuant(TMonotonic::Now());
-        TBase::Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(1));
-    }
-}
-
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
     auto& ev = *evExt->Get();
     const TDuration backSendDuration = (TMonotonic::Now() - ev.GetConstructInstant());

@@ -9,6 +9,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -331,6 +332,8 @@ struct TNodeFilter {
     TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
 
     bool IsAllowedDataCenter(TDataCenterId dc) const;
+
+    bool IsAllowedPile(TBridgePileId pile) const;
 };
 
 struct TFollowerUpdates {

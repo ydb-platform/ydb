@@ -171,9 +171,9 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
         test.BoardLookup(replicas[1], 0, 1);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
         test.ChangeReplicaConfig(replicas[1], 3, 4, true);
-        auto &result = test.BoardLookup(replicas[1], 0, 0)->Get()->Record;
-        UNIT_ASSERT_EQUAL(result.GetClusterStateGeneration(), 3);
-        UNIT_ASSERT_EQUAL(result.GetClusterStateGuid(), 4);
+        auto result = test.BoardLookup(replicas[1], 0, 0);
+        UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGeneration(), 3);
+        UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGuid(), 4);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
     }
 }

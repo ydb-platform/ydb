@@ -6,7 +6,6 @@
 #include <ydb/library/actors/protos/interconnect.pb.h>
 #include <util/string/cast.h>
 #include <util/string/builder.h>
-#include <util/generic/overloaded.h>
 
 namespace NActors {
     class TNodeLocation {
@@ -227,12 +226,16 @@ namespace NActors {
         };
 
         struct TEvNodesInfo: public TEventLocal<TEvNodesInfo, EvNodesInfo> {
+            using TPileMap = std::vector<std::vector<ui32>>; // a vector of sorted node ids among each pile (when bridge mode is on)
+
             TIntrusiveVector<TNodeInfo>::TConstPtr NodesPtr;
             const TVector<TNodeInfo>& Nodes;
+            std::shared_ptr<const TPileMap> PileMap;
 
-            TEvNodesInfo(TIntrusiveVector<TNodeInfo>::TConstPtr nodesPtr)
+            TEvNodesInfo(TIntrusiveVector<TNodeInfo>::TConstPtr nodesPtr, std::shared_ptr<const TPileMap>&& pileMap = nullptr)
                 : NodesPtr(nodesPtr)
                 , Nodes(*nodesPtr)
+                , PileMap(std::move(pileMap))
             {}
 
             const TNodeInfo* GetNodeInfo(ui32 nodeId) const {
@@ -301,10 +304,10 @@ namespace NActors {
         };
 
         struct TEvPrepareOutgoingConnectionResult : TEventLocal<TEvPrepareOutgoingConnectionResult, EvPrepareOutgoingConnectionResult> {
-            THashMap<TString, TString> ParamsToSend;
+            std::variant<TString, THashMap<TString, TString>> Conclusion;
 
-            TEvPrepareOutgoingConnectionResult(THashMap<TString, TString>&& paramsToSend)
-                : ParamsToSend(std::move(paramsToSend))
+            TEvPrepareOutgoingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion)
+                : Conclusion(std::move(conclusion))
             {}
         };
 
@@ -319,26 +322,20 @@ namespace NActors {
         };
 
         struct TEvCheckIncomingConnectionResult : TEventLocal<TEvCheckIncomingConnectionResult, EvCheckIncomingConnectionResult> {
-            std::optional<TString> ErrorReason;
-            THashMap<TString, TString> ParamsToSend; // parameters to send in case of success
+            std::variant<TString, THashMap<TString, TString>> Conclusion;
 
-            TEvCheckIncomingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion) {
-                std::visit(TOverloaded{
-                    [&](TString&& errorReason) {
-                        ErrorReason.emplace(std::move(errorReason));
-                    },
-                    [&](THashMap<TString, TString>&& paramsToSend) {
-                        ParamsToSend = std::move(paramsToSend);
-                    }
-                }, std::move(conclusion));
-            }
+            TEvCheckIncomingConnectionResult(std::variant<TString, THashMap<TString, TString>>&& conclusion)
+                : Conclusion(std::move(conclusion))
+             {}
         };
 
         struct TEvNotifyOutgoingConnectionEstablished : TEventLocal<TEvNotifyOutgoingConnectionEstablished, EvNotifyOutgoingConnectionEstablished> {
+            const ui32 PeerNodeId;
             THashMap<TString, TString> Params; // parameters received upon successful handshake
 
-            TEvNotifyOutgoingConnectionEstablished(THashMap<TString, TString>&& params)
-                : Params(std::move(params))
+            TEvNotifyOutgoingConnectionEstablished(ui32 peerNodeId, THashMap<TString, TString>&& params)
+                : PeerNodeId(peerNodeId)
+                , Params(std::move(params))
             {}
         };
     };

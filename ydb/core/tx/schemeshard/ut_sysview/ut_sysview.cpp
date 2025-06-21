@@ -11,13 +11,14 @@ namespace {
     using NKikimrSysView::ESysViewType;
 
     void ExpectEqualSysViewDescription(const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
-                                       const TString& sysViewName,
-                                       const ESysViewType sysViewType) {
+        const TString& sysViewName, const ESysViewType sysViewType, const TPathId& sourceObjectPathId)
+    {
         UNIT_ASSERT(describeResult.HasPathDescription());
         UNIT_ASSERT(describeResult.GetPathDescription().HasSysViewDescription());
         const auto& sysViewDescription = describeResult.GetPathDescription().GetSysViewDescription();
         UNIT_ASSERT_VALUES_EQUAL(sysViewDescription.GetName(), sysViewName);
         UNIT_ASSERT(sysViewDescription.GetType() == sysViewType);
+        UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(sysViewDescription.GetSourceObject()), sourceObjectPathId);
     }
 
     class TSysDirCreateGuard : public TNonCopyable {
@@ -51,8 +52,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
         }
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -60,8 +63,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+            ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
         }
     }
 
@@ -115,8 +120,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
                           {EStatus::StatusSchemeError, EStatus::StatusAlreadyExists});
         env.TestWaitNotification(runtime, txId);
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+        const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
     }
 
     Y_UNIT_TEST(AsyncCreateDifferentSysViews) {
@@ -145,13 +152,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/sys_view_1");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "sys_view_1", ESysViewType::EPartitionStats);
+            ExpectEqualSysViewDescription(describeResult, "sys_view_1", ESysViewType::EPartitionStats, domainPathId);
         }
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/sys_view_2");
+            const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+            const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "sys_view_2", ESysViewType::ENodes);
+            ExpectEqualSysViewDescription(describeResult, "sys_view_2", ESysViewType::ENodes, domainPathId);
         }
     }
 
@@ -175,8 +186,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.sys"), {NLs::Finished});
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+        const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
     }
 
     Y_UNIT_TEST(AsyncCreateSameSysView) {
@@ -206,8 +219,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         env.TestWaitNotification(runtime, {txId - 1, txId});
 
         const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
+        const auto& sysViewPath = describeResult.GetPathDescription().GetSelf();
+        const auto domainPathId = TPathId(sysViewPath.GetSchemeshardId(), 1);
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats);
+        ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EPartitionStats, domainPathId);
     }
 
     Y_UNIT_TEST(AsyncDropSameSysView) {

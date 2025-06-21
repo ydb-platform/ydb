@@ -118,7 +118,7 @@ void TCommandTPCCImport::Config(TConfig& config) {
             .RequiredArgument("INT").StoreResult(&RunConfig->LoadThreadCount).DefaultValue(RunConfig->LoadThreadCount);
 
     config.Opts->AddLongOption(
-        "no-tui", TStringBuilder() << "Disable TUI (by default autodected)")
+        "no-tui", TStringBuilder() << "Disable TUI, which is enabled by default in interactive mode")
             .Optional().StoreTrue(&RunConfig->NoTui);
 
     // advanced hidden options (mainly for developers)
@@ -199,7 +199,7 @@ void TCommandTPCCRun::Config(TConfig& config) {
             .OptionalArgument("STRING").StoreResult(&RunConfig->Format).DefaultValue(RunConfig->Format);
 
     config.Opts->AddLongOption(
-        "no-tui", TStringBuilder() << "Disable TUI (by default autodected)")
+        "no-tui", TStringBuilder() << "Disable TUI, which is enabled by default in interactive mode")
             .Optional().StoreTrue(&RunConfig->NoTui);
 
     // advanced hidden options (mainly for developers)

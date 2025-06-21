@@ -10,7 +10,6 @@
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -125,7 +124,7 @@ public:
         // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         Sampler.Add([&row](){
             return TSerializedCellVec::Serialize(*row);

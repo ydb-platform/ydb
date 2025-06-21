@@ -1459,7 +1459,7 @@ NThreading::TFuture<void> TTableClient::Stop() {
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {
-    return Impl_->BulkUpsert(table, std::move(rows), settings);
+    return Impl_->BulkUpsert(table, std::move(rows), settings, rows.Impl_.use_count() == 1);
 }
 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataFormat format,

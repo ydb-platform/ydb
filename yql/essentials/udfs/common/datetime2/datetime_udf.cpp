@@ -3100,13 +3100,13 @@ private:
         std::vector<std::function<bool(std::string_view::const_iterator& it, size_t, TUnboxedValuePod&, const IDateBuilder&)>> Scanners_;
 
         struct TDataScanner {
-            const std::string_view Data_;
+            const std::string_view Data;
 
             bool operator()(std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) const {
-                if (limit < Data_.size() || !std::equal(Data_.begin(), Data_.end(), it)) {
+                if (limit < Data.size() || !std::equal(Data.begin(), Data.end(), it)) {
                     return false;
                 }
-                std::advance(it, Data_.size());
+                std::advance(it, Data.size());
                 return true;
             }
         };

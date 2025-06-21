@@ -98,8 +98,8 @@ private:
     TGrpcServerPtr Native_;
     std::vector<TGrpcServerCredentialsPtr> Credentials_;
 
-    std::atomic<int> CallHandlerCount_ = {0};
-    std::atomic<bool> ShutdownStarted_ = {false};
+    std::atomic<int> CallHandlerCount_ = 0;
+    std::atomic<bool> ShutdownStarted_ = false;
     TPromise<void> ShutdownPromise_ = NewPromise<void>();
 
 

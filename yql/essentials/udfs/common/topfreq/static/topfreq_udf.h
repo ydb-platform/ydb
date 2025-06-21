@@ -42,7 +42,7 @@ namespace {
 
 
     template <EDataSlot Slot>
-    class TTopFreq_CreateData: public TBoxedValue {
+    class TTopFreqCreateData: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             ui32 minSize = args[1].Get<ui32>();
@@ -50,7 +50,7 @@ namespace {
         }
     };
 
-    class TTopFreq_Create: public TBoxedValue {
+    class TTopFreqCreate: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             ui32 minSize = args[1].Get<ui32>();
@@ -58,7 +58,7 @@ namespace {
         }
 
     public:
-        TTopFreq_Create(IHash::TPtr hash, IEquate::TPtr equate)
+        TTopFreqCreate(IHash::TPtr hash, IEquate::TPtr equate)
             : Hash_(hash)
             , Equate_(equate)
         {}
@@ -69,7 +69,7 @@ namespace {
     };
 
     template <EDataSlot Slot>
-    class TTopFreq_AddValueData: public TBoxedValue {
+    class TTopFreqAddValueData: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq = GetTopFreqResourceData<Slot>(args[0]);
@@ -78,7 +78,7 @@ namespace {
         }
     };
 
-    class TTopFreq_AddValue: public TBoxedValue {
+    class TTopFreqAddValue: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq = GetTopFreqResource(args[0]);
@@ -88,14 +88,14 @@ namespace {
     };
 
     template <EDataSlot Slot>
-    class TTopFreq_SerializeData: public TBoxedValue {
+    class TTopFreqSerializeData: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResourceData<Slot>(args[0])->Get()->Serialize(valueBuilder);
         }
     };
 
-    class TTopFreq_Serialize: public TBoxedValue {
+    class TTopFreqSerialize: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResource(args[0])->Get()->Serialize(valueBuilder);
@@ -103,21 +103,21 @@ namespace {
     };
 
     template <EDataSlot Slot>
-    class TTopFreq_DeserializeData: public TBoxedValue {
+    class TTopFreqDeserializeData: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             return TUnboxedValuePod(new TTopFreqResourceData<Slot>(args[0]));
         }
     };
 
-    class TTopFreq_Deserialize: public TBoxedValue {
+    class TTopFreqDeserialize: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             return TUnboxedValuePod(new TTopFreqResource(args[0], Hash_, Equate_));
         }
 
     public:
-        TTopFreq_Deserialize(IHash::TPtr hash, IEquate::TPtr equate)
+        TTopFreqDeserialize(IHash::TPtr hash, IEquate::TPtr equate)
             : Hash_(hash)
             , Equate_(equate)
         {}
@@ -128,7 +128,7 @@ namespace {
     };
 
     template <EDataSlot Slot>
-    class TTopFreq_MergeData: public TBoxedValue {
+    class TTopFreqMergeData: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq0 = GetTopFreqResourceData<Slot>(args[0]);
@@ -137,7 +137,7 @@ namespace {
         }
     };
 
-    class TTopFreq_Merge: public TBoxedValue {
+    class TTopFreqMerge: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const {
             const auto topFreq0 = GetTopFreqResource(args[0]);
@@ -146,7 +146,7 @@ namespace {
         }
 
     public:
-        TTopFreq_Merge(IHash::TPtr hash, IEquate::TPtr equate)
+        TTopFreqMerge(IHash::TPtr hash, IEquate::TPtr equate)
             : Hash_(hash)
             , Equate_(equate)
         {}
@@ -157,14 +157,14 @@ namespace {
     };
 
     template <EDataSlot Slot>
-    class TTopFreq_GetData: public TBoxedValue {
+    class TTopFreqGetData: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResourceData<Slot>(args[0])->Get()->Get(valueBuilder, args[1].Get<ui32>());
         }
     };
 
-    class TTopFreq_Get: public TBoxedValue {
+    class TTopFreqGet: public TBoxedValue {
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const {
             return GetTopFreqResource(args[0])->Get()->Get(valueBuilder, args[1].Get<ui32>());
@@ -192,12 +192,12 @@ namespace {
         builder.Implementation(new operation<EDataSlot::slot>); \
         break;
 
-#define MAKE_CREATE(slot, ...) MAKE_IMPL(TTopFreq_CreateData, slot)
-#define MAKE_ADD_VALUE(slot, ...) MAKE_IMPL(TTopFreq_AddValueData, slot)
-#define MAKE_SERIALIZE(slot, ...) MAKE_IMPL(TTopFreq_SerializeData, slot)
-#define MAKE_DESERIALIZE(slot, ...) MAKE_IMPL(TTopFreq_DeserializeData, slot)
-#define MAKE_MERGE(slot, ...) MAKE_IMPL(TTopFreq_MergeData, slot)
-#define MAKE_GET(slot, ...) MAKE_IMPL(TTopFreq_GetData, slot)
+#define MAKE_CREATE(slot, ...) MAKE_IMPL(TTopFreqCreateData, slot)
+#define MAKE_ADD_VALUE(slot, ...) MAKE_IMPL(TTopFreqAddValueData, slot)
+#define MAKE_SERIALIZE(slot, ...) MAKE_IMPL(TTopFreqSerializeData, slot)
+#define MAKE_DESERIALIZE(slot, ...) MAKE_IMPL(TTopFreqDeserializeData, slot)
+#define MAKE_MERGE(slot, ...) MAKE_IMPL(TTopFreqMergeData, slot)
+#define MAKE_GET(slot, ...) MAKE_IMPL(TTopFreqGetData, slot)
 
 #define MAKE_TYPE(slot, ...)                                       \
     case EDataSlot::slot:                                          \
@@ -296,7 +296,7 @@ namespace {
 
                     if (!typesOnly) {
                         if (isGeneric) {
-                            builder.Implementation(new TTopFreq_Create(hash, equate));
+                            builder.Implementation(new TTopFreqCreate(hash, equate));
                         } else {
                             switch (*slot) {
                             UDF_TYPE_ID_MAP(MAKE_CREATE)
@@ -311,7 +311,7 @@ namespace {
 
                     if (!typesOnly) {
                         if (isGeneric) {
-                            builder.Implementation(new TTopFreq_AddValue);
+                            builder.Implementation(new TTopFreqAddValue);
                         } else {
                             switch (*slot) {
                             UDF_TYPE_ID_MAP(MAKE_ADD_VALUE)
@@ -326,7 +326,7 @@ namespace {
 
                     if (!typesOnly) {
                         if (isGeneric) {
-                            builder.Implementation(new TTopFreq_Merge(hash, equate));
+                            builder.Implementation(new TTopFreqMerge(hash, equate));
                         } else {
                             switch (*slot) {
                             UDF_TYPE_ID_MAP(MAKE_MERGE)
@@ -341,7 +341,7 @@ namespace {
 
                     if (!typesOnly) {
                         if (isGeneric) {
-                            builder.Implementation(new TTopFreq_Serialize);
+                            builder.Implementation(new TTopFreqSerialize);
                         } else {
                             switch (*slot) {
                             UDF_TYPE_ID_MAP(MAKE_SERIALIZE)
@@ -356,7 +356,7 @@ namespace {
 
                     if (!typesOnly) {
                         if (isGeneric) {
-                            builder.Implementation(new TTopFreq_Deserialize(hash, equate));
+                            builder.Implementation(new TTopFreqDeserialize(hash, equate));
                         } else {
                             switch (*slot) {
                             UDF_TYPE_ID_MAP(MAKE_DESERIALIZE)
@@ -374,7 +374,7 @@ namespace {
 
                     if (!typesOnly) {
                         if (isGeneric) {
-                            builder.Implementation(new TTopFreq_Get);
+                            builder.Implementation(new TTopFreqGet);
                         } else {
                             switch (*slot) {
                             UDF_TYPE_ID_MAP(MAKE_GET)

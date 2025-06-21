@@ -10,11 +10,7 @@ void TPortionsDataFetcher::StartColumnsFetching(TRequestInput&& input, std::shar
         std::vector<std::shared_ptr<IFetchingStep>> steps;
         steps.emplace_back(std::make_shared<TAskAccessorResourcesStep>());
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
-        if (auto mem = callback->GetMemoryForUsage()) {
-            steps.emplace_back(std::make_shared<TAskGeneralResourceStep>(entityIds, *mem));
-        } else {
-            steps.emplace_back(std::make_shared<TAskDataResourceStep>(entityIds));
-        }
+        steps.emplace_back(std::make_shared<TAskDataResourceStep>(entityIds));
         steps.emplace_back(std::make_shared<TAskDataStep>(entityIds));
         return std::make_shared<TScript>(std::move(steps), "PARTIAL_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();
@@ -28,11 +24,7 @@ void TPortionsDataFetcher::StartFullPortionsFetching(TRequestInput&& input, std:
         std::vector<std::shared_ptr<IFetchingStep>> steps;
         steps.emplace_back(std::make_shared<TAskAccessorResourcesStep>());
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
-        if (auto mem = callback->GetMemoryForUsage()) {
-            steps.emplace_back(std::make_shared<TAskGeneralResourceStep>(nullptr, *mem));
-        } else {
-            steps.emplace_back(std::make_shared<TAskDataResourceStep>(nullptr));
-        }
+        steps.emplace_back(std::make_shared<TAskDataResourceStep>(nullptr));
         steps.emplace_back(std::make_shared<TAskDataStep>(nullptr));
         return std::make_shared<TScript>(std::move(steps), "FULL_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();

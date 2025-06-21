@@ -156,7 +156,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 
     REGISTER_SETTING(*this, DefaultCluster)
         .Validator([this] (const TString&, TString value) {
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
@@ -544,14 +544,14 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             if (cluster != "$all") {
                 throw yexception() << "Per-cluster setting is not supported for RuntimeCluster";
             }
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
     REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
     REGISTER_SETTING(*this, DefaultRuntimeCluster)
         .Validator([this] (const TString&, TString value) {
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });

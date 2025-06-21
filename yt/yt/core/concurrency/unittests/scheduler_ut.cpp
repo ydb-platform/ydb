@@ -1207,8 +1207,8 @@ TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)
 
     const int totalActionCount = 100000;
 
-    std::atomic<int> actionIndex = {0};
-    std::atomic<int> reorderingCount = {0};
+    std::atomic<int> actionIndex = 0;
+    std::atomic<int> reorderingCount = 0;
 
     for (int i = 0; i < totalActionCount / 2; ++i) {
         BIND([&actionIndex, &reorderingCount, i] {

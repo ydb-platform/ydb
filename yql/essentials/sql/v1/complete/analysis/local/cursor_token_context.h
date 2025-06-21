@@ -25,6 +25,7 @@ namespace NSQLComplete {
         size_t Position = 0;
 
         bool IsLiteral() const;
+        size_t End() const;
     };
 
     struct TCursorTokenContext {

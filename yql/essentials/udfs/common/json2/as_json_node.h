@@ -49,7 +49,7 @@ namespace NJson2Udf {
         }
 
     private:
-        const size_t MaxParseErrors = 10;
+        const size_t MaxParseErrors_ = 10;
 
         static TUnboxedValue Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder);
 

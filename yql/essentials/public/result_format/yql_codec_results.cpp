@@ -12,12 +12,12 @@ constexpr TStringBuf TYsonResultWriter::VoidString;
 void TYsonResultWriter::OnStringScalar(TStringBuf value) {
     if (!IsUtf8(value)) {
         TString encoded = Base64Encode(value);
-        Writer.OnBeginList();
-        Writer.OnListItem();
-        Writer.OnStringScalar(TStringBuf(encoded));
-        Writer.OnEndList();
+        Writer_.OnBeginList();
+        Writer_.OnListItem();
+        Writer_.OnStringScalar(TStringBuf(encoded));
+        Writer_.OnEndList();
     } else {
-        Writer.OnStringScalar(value);
+        Writer_.OnStringScalar(value);
     }
 }
 

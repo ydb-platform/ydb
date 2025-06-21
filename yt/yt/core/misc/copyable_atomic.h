@@ -8,7 +8,7 @@ namespace NYT {
 
 template <class T>
 struct TCopyableAtomic
-{   
+{
 public:
     T Load() const
     {
@@ -47,7 +47,7 @@ public:
     }
 
 private:
-    std::atomic<T> T_ = {};
+    std::atomic<T> T_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

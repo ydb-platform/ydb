@@ -211,8 +211,8 @@ private:
     void Pop();
 
 private:
-    NYT::TNode Root;
-    TVector<NYT::TNode*> Stack;
+    NYT::TNode Root_;
+    TVector<NYT::TNode*> Stack_;
 };
 
 }

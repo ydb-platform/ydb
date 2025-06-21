@@ -95,36 +95,35 @@ TString TFunctionalDependency::ToString() const {
 }
 
 void TTableAliasMap::AddMapping(const TString& table, const TString& alias) {
-    TableByAlias[alias] = table;
+    TableByAlias_[alias] = table;
 }
 
-void TTableAliasMap::AddRename(const TString& from, const TString& to) {
+void TTableAliasMap::AddRename(TString from, TString to) {
     if (auto pointIdx = from.find('.'); pointIdx != TString::npos) {
         TString alias = from.substr(0, pointIdx);
         TString baseTable = GetBaseTableByAlias(alias);
         TString columnName = from.substr(pointIdx + 1);
 
-        if (auto it = BaseColumnByRename.find(columnName); it != BaseColumnByRename.end()) {
-            auto baseColumn = it->second;
-            BaseColumnByRename[to] = BaseColumnByRename[from] = it->second;
-            return;
+        if (pointIdx == 0) {
+            from = from.substr(1);
+        }
+        if (auto pointIdx = to.find('.'); pointIdx == 0) {
+            to = to.substr(1);
         }
 
-        auto fromColumn = TBaseColumn(alias, columnName);
         auto baseColumn = TBaseColumn(baseTable, columnName);
-
-        BaseColumnByRename[to] = BaseColumnByRename[from] = baseColumn;
+        BaseColumnByRename_[to] = BaseColumnByRename_[from] = baseColumn;
         return;
     }
 
-    if (BaseColumnByRename.contains(from)) {
-        BaseColumnByRename[to] = BaseColumnByRename[from];
+    if (BaseColumnByRename_.contains(from)) {
+        BaseColumnByRename_[to] = BaseColumnByRename_[from];
     }
 }
 
 TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const TString& renamedColumn) {
-    if (BaseColumnByRename.contains(renamedColumn)) {
-        return BaseColumnByRename[renamedColumn];
+    if (BaseColumnByRename_.contains(renamedColumn)) {
+        return BaseColumnByRename_[renamedColumn];
     }
 
     if (auto pointIdx = renamedColumn.find('.'); pointIdx != TString::npos) {
@@ -134,8 +133,8 @@ TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const TString&
             return TBaseColumn(std::move(baseTable), std::move(column));
         }
 
-        if (alias.empty() && BaseColumnByRename.contains(column)) {
-            return BaseColumnByRename[column];
+        if (alias.empty() && BaseColumnByRename_.contains(column)) {
+            return BaseColumnByRename_[column];
         }
 
         return TBaseColumn(std::move(alias), std::move(column));
@@ -151,9 +150,9 @@ TTableAliasMap::TBaseColumn TTableAliasMap::GetBaseColumnByRename(const NDq::TJo
 TString TTableAliasMap::ToString() const {
     TString result;
 
-    if (!BaseColumnByRename.empty()) {
+    if (!BaseColumnByRename_.empty()) {
         result += "Renames: ";
-        for (const auto& [from, to] : BaseColumnByRename) {
+        for (const auto& [from, to] : BaseColumnByRename_) {
             result += from + " -> " + to.Relation + "." + to.Column + " ";
         }
         result.pop_back();
@@ -161,7 +160,7 @@ TString TTableAliasMap::ToString() const {
     }
 
     result += "TableAliases: ";
-    for (const auto& [alias, table] : TableByAlias) {
+    for (const auto& [alias, table] : TableByAlias_) {
         result += alias + " -> " + table + ", ";
     }
     result.pop_back();
@@ -170,19 +169,22 @@ TString TTableAliasMap::ToString() const {
 }
 
 void TTableAliasMap::Merge(const TTableAliasMap& other) {
-    for (const auto& [alias, table] : other.TableByAlias) {
-        TableByAlias[alias] = table;
+    for (const auto& [alias, table] : other.TableByAlias_) {
+        TableByAlias_[alias] = table;
     }
-    for (const auto& [from, to] : other.BaseColumnByRename) {
-        BaseColumnByRename[from] = TBaseColumn(to.Relation, to.Column);
+    for (const auto& [from, to] : other.BaseColumnByRename_) {
+        if (BaseColumnByRename_.contains(from)) {
+            continue;
+        }
+        BaseColumnByRename_[from] = TBaseColumn(to.Relation, to.Column);
     }
 }
 
 TString TTableAliasMap::GetBaseTableByAlias(const TString& alias) {
-    if (!TableByAlias.contains(alias)) {
+    if (!TableByAlias_.contains(alias)) {
         return alias;
     }
-    return TableByAlias[alias];
+    return TableByAlias_[alias];
 }
 
 i64 TFDStorage::FindFDIdx(
@@ -318,20 +320,18 @@ i64 TFDStorage::FindInterestingOrderingIdx(
 }
 
 std::size_t TFDStorage::FindSorting(
-    const std::vector<TJoinColumn>& interestingOrdering,
-    const std::vector<TOrdering::TItem::EDirection>& directions,
+    const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, directions, TOrdering::ESorting, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::AddSorting(
-    const std::vector<TJoinColumn>& interestingOrdering,
-    std::vector<TOrdering::TItem::EDirection> directions,
+    const TSorting& sorting,
     TTableAliasMap* tableAliases
 ) {
-    return AddInterestingOrdering(interestingOrdering, TOrdering::ESorting, directions, tableAliases);
+    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, tableAliases);
 }
 
 std::size_t TFDStorage::AddShuffling(
@@ -389,10 +389,22 @@ TVector<TJoinColumn> TFDStorage::GetInterestingOrderingsColumnNamesByIdx(std::si
     TVector<TJoinColumn> columns;
     columns.reserve(InterestingOrderings[interestingOrderingIdx].Items.size());
     for (std::size_t columnIdx: InterestingOrderings[interestingOrderingIdx].Items) {
-        columns.push_back(ColumnByIdx[columnIdx]);
+        columns.push_back(ColumnByIdx_[columnIdx]);
     }
 
     return columns;
+}
+
+TSorting TFDStorage::GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const {
+    Y_ENSURE(interestingOrderingIdx < InterestingOrderings.size());
+
+    TVector<TJoinColumn> columns;
+    columns.reserve(InterestingOrderings[interestingOrderingIdx].Items.size());
+    for (std::size_t columnIdx: InterestingOrderings[interestingOrderingIdx].Items) {
+        columns.push_back(ColumnByIdx_[columnIdx]);
+    }
+
+    return {columns, InterestingOrderings[interestingOrderingIdx].Directions};
 }
 
 TString TFDStorage::ToString() const {
@@ -408,8 +420,8 @@ TString TFDStorage::ToString() const {
     TStringBuilder ss;
 
     ss << "Columns mapping: ";
-    TVector<TString> columnsMapping(IdCounter);
-    for (const auto& [column, idx]: IdxByColumn) {
+    TVector<TString> columnsMapping(IdCounter_);
+    for (const auto& [column, idx]: IdxByColumn_) {
         TStringBuilder columnSs;
         columnSs << "{" << idx << ": " << column << "}";
         columnsMapping[idx] = columnSs;
@@ -488,8 +500,8 @@ std::size_t TFDStorage::GetIdxByColumn(
 
     const TString fullPath = baseColumn.RelName + "." + baseColumn.AttributeName;
 
-    if (IdxByColumn.contains(fullPath)) {
-        return IdxByColumn[fullPath];
+    if (IdxByColumn_.contains(fullPath)) {
+        return IdxByColumn_[fullPath];
     }
 
     Y_ENSURE(!baseColumn.AttributeName.empty());
@@ -497,43 +509,47 @@ std::size_t TFDStorage::GetIdxByColumn(
         return Max<size_t>();
     }
 
-    ColumnByIdx.push_back(baseColumn);
-    IdxByColumn[fullPath] = IdCounter++;
-    return IdxByColumn[fullPath];
+    ColumnByIdx_.push_back(baseColumn);
+    IdxByColumn_[fullPath] = IdCounter_++;
+    return IdxByColumn_[fullPath];
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::ContainsShuffle(i64 orderingIdx) {
-    return IsInitialized() && HasState() && (orderingIdx >= 0) && DFSM->Nodes[State].InterestingOrderings[orderingIdx];
+    return IsInitialized() && HasState() && (orderingIdx >= 0) && Dfsm_->Nodes_[State_].InterestingOrderings[orderingIdx];
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::ContainsSorting(i64 orderingIdx) {
-    return IsInitialized() && HasState() && (orderingIdx >= 0) && DFSM->Nodes[State].InterestingOrderings[orderingIdx];
+    return IsInitialized() && HasState() && (orderingIdx >= 0) && Dfsm_->Nodes_[State_].InterestingOrderings[orderingIdx];
 }
 
 void TOrderingsStateMachine::TLogicalOrderings::InduceNewOrderings(const TFDSet& fds) {
-    AppliedFDs |= fds;
+    AppliedFDs_ |= fds;
 
     if (!(HasState() && IsInitialized())) {
         return;
     }
 
     for (;;) {
-        auto availableTransitions = DFSM->Nodes[State].OutgoingFDs & AppliedFDs;
+        auto availableTransitions = Dfsm_->Nodes_[State_].OutgoingFDs & AppliedFDs_;
         if (availableTransitions.none()) {
             return;
         }
 
         std::size_t fdIdx = std::countr_zero(availableTransitions.to_ullong()); // take any edge
-        State = DFSM->TransitionMatrix[State][fdIdx];
+        State_ = Dfsm_->TransitionMatrix_[State_][fdIdx];
     }
 }
 
 void TOrderingsStateMachine::TLogicalOrderings::RemoveState() {
-    *this = TLogicalOrderings(DFSM);
+    *this = TLogicalOrderings(Dfsm_);
+}
+
+i64 TOrderingsStateMachine::TLogicalOrderings::GetInitOrderingIdx() const {
+    return InitOrderingIdx_;
 }
 
 void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
-    if (!IsInitialized() || orderingIdx < 0 || orderingIdx >= static_cast<i64>(DFSM->InitStateByOrderingIdx.size())) {
+    if (!IsInitialized() || orderingIdx < 0 || orderingIdx >= static_cast<i64>(Dfsm_->InitStateByOrderingIdx_.size())) {
         RemoveState();
         return;
     }
@@ -542,49 +558,50 @@ void TOrderingsStateMachine::TLogicalOrderings::SetOrdering(i64 orderingIdx) {
         return;
     }
 
-    auto state = DFSM->InitStateByOrderingIdx[orderingIdx];
-    State = state.StateIdx;
-    ShuffleHashFuncArgsCount = state.ShuffleHashFuncArgsCount;
+    InitOrderingIdx_ = orderingIdx;
+    auto state = Dfsm_->InitStateByOrderingIdx_[orderingIdx];
+    State_ = state.StateIdx;
+    ShuffleHashFuncArgsCount_ = state.ShuffleHashFuncArgsCount;
 }
 
 i64 TOrderingsStateMachine::TLogicalOrderings::GetShuffleHashFuncArgsCount() {
-    return ShuffleHashFuncArgsCount;
+    return ShuffleHashFuncArgsCount_;
 }
 
 void TOrderingsStateMachine::TLogicalOrderings::SetShuffleHashFuncArgsCount(std::size_t value) {
-    ShuffleHashFuncArgsCount = value;
+    ShuffleHashFuncArgsCount_ = value;
 }
 
 TOrderingsStateMachine::TFDSet TOrderingsStateMachine::TLogicalOrderings::GetFDs() {
-    return AppliedFDs;
+    return AppliedFDs_;
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::HasState() {
-    return State != -1;
+    return State_ != -1;
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::HasState() const {
-    return State != -1;
+    return State_ != -1;
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::IsInitialized() {
-    return DFSM != nullptr;
+    return Dfsm_ != nullptr;
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::IsInitialized() const {
-    return DFSM != nullptr;
+    return Dfsm_ != nullptr;
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::IsSubsetOf(const TLogicalOrderings& logicalOrderings) {
     return
         HasState() && logicalOrderings.HasState() &&
         IsInitialized() && logicalOrderings.IsInitialized() &&
-        DFSM == logicalOrderings.DFSM &&
-        IsSubset(DFSM->Nodes[State].NFSMNodesBitset, logicalOrderings.DFSM->Nodes[logicalOrderings.State].NFSMNodesBitset);
+        Dfsm_ == logicalOrderings.Dfsm_ &&
+        IsSubset(Dfsm_->Nodes_[State_].NFSMNodesBitset, logicalOrderings.Dfsm_->Nodes_[logicalOrderings.State_].NFSMNodesBitset);
 }
 
 i64 TOrderingsStateMachine::TLogicalOrderings::GetState() const {
-    return State;
+    return State_;
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs) {
@@ -592,17 +609,17 @@ bool TOrderingsStateMachine::TLogicalOrderings::IsSubset(const std::bitset<EMaxN
 }
 
 TOrderingsStateMachine::TLogicalOrderings TOrderingsStateMachine::CreateState() {
-    return TLogicalOrderings(DFSM.Get());
+    return TLogicalOrderings(Dfsm_.Get());
 }
 
 TOrderingsStateMachine::TLogicalOrderings TOrderingsStateMachine::CreateState(i64 orderingIdx) {
-    auto state = TLogicalOrderings(DFSM.Get());
+    auto state = TLogicalOrderings(Dfsm_.Get());
     state.SetOrdering(orderingIdx);
     return state;
 }
 
 bool TOrderingsStateMachine::IsBuilt() const {
-    return Built;
+    return Built_;
 }
 
 TOrderingsStateMachine::TFDSet TOrderingsStateMachine::GetFDSet(i64 fdIdx) {
@@ -614,8 +631,8 @@ TOrderingsStateMachine::TFDSet TOrderingsStateMachine::GetFDSet(const std::vecto
     TFDSet fdSet;
 
     for (std::size_t fdIdx: fdIdxes) {
-        if (FdMapping[fdIdx] != -1) {
-            fdSet[FdMapping[fdIdx]] = 1;
+        if (FdMapping_[fdIdx] != -1) {
+            fdSet[FdMapping_[fdIdx]] = 1;
         }
     }
 
@@ -625,11 +642,11 @@ TOrderingsStateMachine::TFDSet TOrderingsStateMachine::GetFDSet(const std::vecto
 TString TOrderingsStateMachine::ToString() const {
     TStringBuilder ss;
     ss << "TOrderingsStateMachine:\n";
-    ss << "Built: " << (Built ? "true" : "false") << "\n";
-    ss << "FdMapping: [" << JoinSeq(", ", FdMapping) << "]\n";
+    ss << "Built: " << (Built_ ? "true" : "false") << "\n";
+    ss << "FdMapping: [" << JoinSeq(", ", FdMapping_) << "]\n";
     ss << "FDStorage:\n" << FDStorage.ToString() << "\n";
-    ss << NFSM.ToString();
-    ss << DFSM->ToString(NFSM);
+    ss << Nfsm_.ToString();
+    ss << Dfsm_->ToString(Nfsm_);
     return ss;
 }
 
@@ -657,7 +674,7 @@ void TOrderingsStateMachine::CollectItemInfo(
         maxItem = std::max({maxItem, fd.ConsequentItem, maxAntecedentItems});
     }
 
-    ItemInfo.resize(maxItem + 1);
+    ItemInfo_.resize(maxItem + 1);
 
     for (const auto& ordering: interestingOrderings) {
         Y_ENSURE(ordering.Items.size() == ordering.Directions.size() || ordering.Directions.empty());
@@ -665,11 +682,11 @@ void TOrderingsStateMachine::CollectItemInfo(
         for (const auto& [item, direction]: Zip(ordering.Items, ordering.Directions)) {
             switch (direction) {
                 case TOrdering::TItem::EDirection::EAscending: {
-                    ItemInfo[item].UsedInAscOrdering = true;
+                    ItemInfo_[item].UsedInAscOrdering = true;
                     break;
                 }
                 case TOrdering::TItem::EDirection::EDescending: {
-                    ItemInfo[item].UsedInDescOrdering = true;
+                    ItemInfo_[item].UsedInDescOrdering = true;
                     break;
                 }
                 default: {}
@@ -685,10 +702,10 @@ void TOrderingsStateMachine::Build(
 ) {
     CollectItemInfo(fds, interestingOrderings);
     std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
-    NFSM.Build(processedFDs, interestingOrderings, ItemInfo);
-    DFSM = MakeSimpleShared<TDFSM>();
-    DFSM->Build(NFSM, processedFDs, interestingOrderings);
-    Built = true;
+    Nfsm_.Build(processedFDs, interestingOrderings, ItemInfo_);
+    Dfsm_ = MakeSimpleShared<TDFSM>();
+    Dfsm_->Build(Nfsm_, processedFDs, interestingOrderings);
+    Built_ = true;
 }
 
 TString TOrderingsStateMachine::TNFSM::TNode::ToString() const {
@@ -702,27 +719,27 @@ TString TOrderingsStateMachine::TNFSM::TNode::ToString() const {
 
 TString TOrderingsStateMachine::TNFSM::TEdge::ToString() const {
     TStringBuilder ss;
-    ss << "Edge{src=" << srcNodeIdx
-       << ", dst=" << dstNodeIdx
-       << ", fdIdx=" << (fdIdx == EPSILON ? "EPSILON" : std::to_string(fdIdx))
+    ss << "Edge{src=" << SrcNodeIdx
+       << ", dst=" << DstNodeIdx
+       << ", fdIdx=" << (FdIdx == EPSILON ? "EPSILON" : std::to_string(FdIdx))
        << "}";
     return ss;
 }
 
 std::size_t TOrderingsStateMachine::TNFSM::Size() {
-    return Nodes.size();
+    return Nodes_.size();
 }
 
 TString TOrderingsStateMachine::TNFSM::ToString() const {
     TStringBuilder ss;
     ss << "NFSM:\n";
-    ss << "Nodes (" << Nodes.size() << "):\n";
-    for (std::size_t i = 0; i < Nodes.size(); ++i) {
-        ss << "  " << i << ": " << Nodes[i].ToString() << "\n";
+    ss << "Nodes (" << Nodes_.size() << "):\n";
+    for (std::size_t i = 0; i < Nodes_.size(); ++i) {
+        ss << "  " << i << ": " << Nodes_[i].ToString() << "\n";
     }
-    ss << "Edges (" << Edges.size() << "):\n";
-    for (std::size_t i = 0; i < Edges.size(); ++i) {
-        ss << "  " << i << ": " << Edges[i].ToString() << "\n";
+    ss << "Edges (" << Edges_.size() << "):\n";
+    for (std::size_t i = 0; i < Edges_.size(); ++i) {
+        ss << "  " << i << ": " << Edges_[i].ToString() << "\n";
     }
     return ss;
 }
@@ -739,42 +756,42 @@ void TOrderingsStateMachine::TNFSM::Build(
     ApplyFDs(fds, interesting, itemInfo);
     PrefixClosure();
 
-    for (std::size_t idx = 0; idx < Edges.size(); ++idx) {
-        Nodes[Edges[idx].srcNodeIdx].OutgoingEdges.push_back(idx);
+    for (std::size_t idx = 0; idx < Edges_.size(); ++idx) {
+        Nodes_[Edges_[idx].SrcNodeIdx].OutgoingEdges.push_back(idx);
     }
 }
 
 std::size_t TOrderingsStateMachine::TNFSM::AddNode(const TOrdering& ordering, TNode::EType type, i64 interestingOrderingIdx) {
-    for (std::size_t i = 0; i < Nodes.size(); ++i) {
-        if (Nodes[i].Ordering == ordering) {
+    for (std::size_t i = 0; i < Nodes_.size(); ++i) {
+        if (Nodes_[i].Ordering == ordering) {
             return i;
         }
     }
 
-    Nodes.emplace_back(ordering, type, interestingOrderingIdx);
-    return Nodes.size() - 1;
+    Nodes_.emplace_back(ordering, type, interestingOrderingIdx);
+    return Nodes_.size() - 1;
 }
 
 bool TOrderingsStateMachine::TNFSM::TEdge::operator==(const TEdge& other) const {
-    return std::tie(srcNodeIdx, dstNodeIdx, fdIdx) == std::tie(other.srcNodeIdx, other.dstNodeIdx, other.fdIdx);
+    return std::tie(SrcNodeIdx, DstNodeIdx, FdIdx) == std::tie(other.SrcNodeIdx, other.DstNodeIdx, other.FdIdx);
 }
 
 void TOrderingsStateMachine::TNFSM::AddEdge(std::size_t srcNodeIdx, std::size_t dstNodeIdx, i64 fdIdx) {
     auto newEdge = TNFSM::TEdge(srcNodeIdx, dstNodeIdx, fdIdx);
-    for (std::size_t i = 0; i < Edges.size(); ++i) {
-        if (Edges[i] == newEdge) {
+    for (std::size_t i = 0; i < Edges_.size(); ++i) {
+        if (Edges_[i] == newEdge) {
             return;
         }
     }
-    Edges.emplace_back(newEdge);
+    Edges_.emplace_back(newEdge);
 }
 
 void TOrderingsStateMachine::TNFSM::PrefixClosure() {
-    for (std::size_t i = 0; i < Nodes.size(); ++i) {
-        const auto& iItems = Nodes[i].Ordering.Items;
+    for (std::size_t i = 0; i < Nodes_.size(); ++i) {
+        const auto& iItems = Nodes_[i].Ordering.Items;
 
-        for (std::size_t j = 0; j < Nodes.size(); ++j) {
-            const auto& jItems = Nodes[j].Ordering.Items;
+        for (std::size_t j = 0; j < Nodes_.size(); ++j) {
+            const auto& jItems = Nodes_[j].Ordering.Items;
             if (i == j || iItems.size() >= jItems.size()) {
                 continue;
             }
@@ -784,11 +801,17 @@ void TOrderingsStateMachine::TNFSM::PrefixClosure() {
             }
 
             if (k == iItems.size()) {
-                if (Nodes[i].Ordering.Type == TOrdering::EShuffle) {
+                if (Nodes_[i].Ordering.Type == TOrdering::EShuffle) {
                     AddEdge(i, j, TNFSM::TEdge::EPSILON);
                 }
 
-                if (Nodes[i].Ordering.Type == TOrdering::ESorting) {
+                Y_ENSURE(Nodes_[i].Ordering.Directions.size() <= Nodes_[j].Ordering.Directions.size());
+                bool areDirsCompatable = std::equal(
+                    Nodes_[i].Ordering.Directions.begin(),
+                    Nodes_[i].Ordering.Directions.end(),
+                    Nodes_[j].Ordering.Directions.begin()
+                );
+                if (Nodes_[i].Ordering.Type == TOrdering::ESorting && areDirsCompatable) {
                     AddEdge(j, i, TNFSM::TEdge::EPSILON);
                 }
             }
@@ -811,40 +834,40 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
             )->Items.size();
     }
 
-    for (std::size_t nodeIdx = 0; nodeIdx < Nodes.size() && Nodes.size() < EMaxNFSMStates; ++nodeIdx) {
-        for (std::size_t fdIdx = 0; fdIdx < fds.size() && Nodes.size() < EMaxNFSMStates; ++fdIdx) {
-            if (Nodes[nodeIdx].Ordering.Items.empty()) {
+    for (std::size_t nodeIdx = 0; nodeIdx < Nodes_.size() && Nodes_.size() < EMaxNFSMStates; ++nodeIdx) {
+        for (std::size_t fdIdx = 0; fdIdx < fds.size() && Nodes_.size() < EMaxNFSMStates; ++fdIdx) {
+            if (Nodes_[nodeIdx].Ordering.Items.empty()) {
                 continue;
             }
 
             TFunctionalDependency fd = fds[fdIdx];
 
             auto applyFD = [this, &itemInfo, nodeIdx, maxInterestingOrderingSize](const TFunctionalDependency& fd, std::size_t fdIdx) {
-                if (Nodes.size() >= EMaxNFSMStates) {
+                if (Nodes_.size() >= EMaxNFSMStates) {
                     return;
                 }
 
-                if (fd.IsConstant() && Nodes[nodeIdx].Ordering.Items.size() > 1) {
-                    std::vector<std::size_t> newOrdering = Nodes[nodeIdx].Ordering.Items;
+                if (fd.IsConstant() && Nodes_[nodeIdx].Ordering.Items.size() > 1) {
+                    std::vector<std::size_t> newOrdering = Nodes_[nodeIdx].Ordering.Items;
                     auto it = std::find(newOrdering.begin(), newOrdering.end(), fd.ConsequentItem);
                     if (it == newOrdering.end()) {
                         return;
                     }
                     bool isNewOrderingPrefixOfOld = (it == (newOrdering.end() - 1));
 
-                    auto newDirections = Nodes[nodeIdx].Ordering.Directions;
+                    auto newDirections = Nodes_[nodeIdx].Ordering.Directions;
                     if (!newDirections.empty()) {
                         newDirections.erase(newDirections.begin() + std::distance(newOrdering.begin(), it));
                         newOrdering.erase(it);
                     }
 
-                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), std::move(newDirections), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), std::move(newDirections), Nodes_[nodeIdx].Ordering.Type), TNode::EArtificial);
 
-                    if (!isNewOrderingPrefixOfOld || Nodes[nodeIdx].Ordering.Type == TOrdering::EShuffle) {
+                    if (!isNewOrderingPrefixOfOld || Nodes_[nodeIdx].Ordering.Type == TOrdering::EShuffle) {
                         AddEdge(nodeIdx, dstIdx, fdIdx);
                     }
 
-                    if (!isNewOrderingPrefixOfOld || Nodes[nodeIdx].Ordering.Type == TOrdering::ESorting) {
+                    if (!isNewOrderingPrefixOfOld || Nodes_[nodeIdx].Ordering.Type == TOrdering::ESorting) {
                         AddEdge(dstIdx, nodeIdx, fdIdx);
                     }
                 }
@@ -853,21 +876,21 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                     return;
                 }
 
-                auto maybeAntecedentItemIdx = fd.MatchesAntecedentItems(Nodes[nodeIdx].Ordering);
+                auto maybeAntecedentItemIdx = fd.MatchesAntecedentItems(Nodes_[nodeIdx].Ordering);
                 if (!maybeAntecedentItemIdx) {
                     return;
                 }
 
                 std::size_t antecedentItemIdx = maybeAntecedentItemIdx.GetRef();
                 if (
-                    auto it = std::find(Nodes[nodeIdx].Ordering.Items.begin(), Nodes[nodeIdx].Ordering.Items.end(), fd.ConsequentItem);
-                    it != Nodes[nodeIdx].Ordering.Items.end()
+                    auto it = std::find(Nodes_[nodeIdx].Ordering.Items.begin(), Nodes_[nodeIdx].Ordering.Items.end(), fd.ConsequentItem);
+                    it != Nodes_[nodeIdx].Ordering.Items.end()
                 ) {
                     if (fd.IsEquivalence()) { // swap (a, b) -> (b, a)
-                        std::size_t consequentItemIdx = std::distance(Nodes[nodeIdx].Ordering.Items.begin(), it);
-                        auto newOrdering = Nodes[nodeIdx].Ordering.Items;
+                        std::size_t consequentItemIdx = std::distance(Nodes_[nodeIdx].Ordering.Items.begin(), it);
+                        auto newOrdering = Nodes_[nodeIdx].Ordering.Items;
                         std::swap(newOrdering[antecedentItemIdx], newOrdering[consequentItemIdx]);
-                        std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Directions, Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                        std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes_[nodeIdx].Ordering.Directions, Nodes_[nodeIdx].Ordering.Type), TNode::EArtificial);
                         AddEdge(nodeIdx, dstIdx, fdIdx);
                         AddEdge(dstIdx, nodeIdx, fdIdx);
                     }
@@ -875,30 +898,30 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                     return;
                 }
 
-                Y_ENSURE(antecedentItemIdx < Nodes[nodeIdx].Ordering.Items.size());
+                Y_ENSURE(antecedentItemIdx < Nodes_[nodeIdx].Ordering.Items.size());
                 if (fd.IsEquivalence()) {
                     Y_ENSURE(fd.AntecedentItems.size() == 1);
-                    std::vector<std::size_t> newOrdering = Nodes[nodeIdx].Ordering.Items;
+                    std::vector<std::size_t> newOrdering = Nodes_[nodeIdx].Ordering.Items;
                     newOrdering[antecedentItemIdx] = fd.ConsequentItem;
 
-                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes[nodeIdx].Ordering.Directions, Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                    std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), Nodes_[nodeIdx].Ordering.Directions, Nodes_[nodeIdx].Ordering.Type), TNode::EArtificial);
                     AddEdge(nodeIdx, dstIdx, fdIdx);
                     AddEdge(dstIdx, nodeIdx, fdIdx);
                 }
 
                 if (
-                    Nodes[nodeIdx].Ordering.Type == TOrdering::EShuffle ||
-                    Nodes[nodeIdx].Ordering.Items.size() == maxInterestingOrderingSize
+                    Nodes_[nodeIdx].Ordering.Type == TOrdering::EShuffle ||
+                    Nodes_[nodeIdx].Ordering.Items.size() == maxInterestingOrderingSize
                 ) {
                     return;
                 }
 
                 if (fd.IsImplication() || fd.IsEquivalence()) {
-                    for (std::size_t i = antecedentItemIdx + fd.AntecedentItems.size(); i <= Nodes[nodeIdx].Ordering.Items.size() && Nodes.size() < EMaxNFSMStates; ++i) {
-                        std::vector<std::size_t> newOrdering = Nodes[nodeIdx].Ordering.Items;
+                    for (std::size_t i = antecedentItemIdx + fd.AntecedentItems.size(); i <= Nodes_[nodeIdx].Ordering.Items.size() && Nodes_.size() < EMaxNFSMStates; ++i) {
+                        std::vector<std::size_t> newOrdering = Nodes_[nodeIdx].Ordering.Items;
                         newOrdering.insert(newOrdering.begin() + i, fd.ConsequentItem);
 
-                        auto newDirections = Nodes[nodeIdx].Ordering.Directions;
+                        auto newDirections = Nodes_[nodeIdx].Ordering.Directions;
                         if (newDirections.empty()) { // smthing went wrong during ordering adding stage
                             return;
                         }
@@ -908,13 +931,13 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
 
                         if (itemInfo[fd.ConsequentItem].UsedInAscOrdering) {
                             newDirections[i] = TOrdering::TItem::EDirection::EAscending;
-                            std::size_t dstIdx = AddNode(TOrdering(newOrdering, newDirections, Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                            std::size_t dstIdx = AddNode(TOrdering(newOrdering, newDirections, Nodes_[nodeIdx].Ordering.Type), TNode::EArtificial);
                             AddEdge(nodeIdx, dstIdx, fdIdx); // Epsilon edge will be added during PrefixClosure
                         }
 
                         if (itemInfo[fd.ConsequentItem].UsedInDescOrdering) {
                             newDirections[i] = TOrdering::TItem::EDirection::EDescending;
-                            std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), std::move(newDirections), Nodes[nodeIdx].Ordering.Type), TNode::EArtificial);
+                            std::size_t dstIdx = AddNode(TOrdering(std::move(newOrdering), std::move(newDirections), Nodes_[nodeIdx].Ordering.Type), TNode::EArtificial);
                             AddEdge(nodeIdx, dstIdx, fdIdx); // Epsilon edge will be added during PrefixClosure
                         }
                     }
@@ -941,44 +964,44 @@ TString TOrderingsStateMachine::TDFSM::TNode::ToString() const {
 
 TString TOrderingsStateMachine::TDFSM::TEdge::ToString() const {
     TStringBuilder ss;
-    ss << "Edge{src=" << srcNodeIdx
-       << ", dst=" << dstNodeIdx
-       << ", fdIdx=" << fdIdx
+    ss << "Edge{src=" << SrcNodeIdx
+       << ", dst=" << DstNodeIdx
+       << ", fdIdx=" << FdIdx
        << "}";
     return ss;
 }
 
 std::size_t TOrderingsStateMachine::TDFSM::Size() {
-    return Nodes.size();
+    return Nodes_.size();
 }
 
 TString TOrderingsStateMachine::TDFSM::ToString(const TNFSM& nfsm) const {
     TStringBuilder ss;
     ss << "DFSM:\n";
-    ss << "Nodes (" << Nodes.size() << "):\n";
-    for (std::size_t i = 0; i < Nodes.size(); ++i) {
-        ss << "  " << i << ": " << Nodes[i].ToString() << "\n";
+    ss << "Nodes (" << Nodes_.size() << "):\n";
+    for (std::size_t i = 0; i < Nodes_.size(); ++i) {
+        ss << "  " << i << ": " << Nodes_[i].ToString() << "\n";
         ss << "    NFSMNodes: [";
-        for (std::size_t j = 0; j < Nodes[i].NFSMNodes.size(); ++j) {
-            std::size_t nfsmNodeIdx = Nodes[i].NFSMNodes[j];
+        for (std::size_t j = 0; j < Nodes_[i].NFSMNodes.size(); ++j) {
+            std::size_t nfsmNodeIdx = Nodes_[i].NFSMNodes[j];
             if (j > 0) {
                 ss << ", ";
             }
             ss << nfsmNodeIdx;
-            if (nfsmNodeIdx < nfsm.Nodes.size()) {
-                ss << "(" << nfsm.Nodes[nfsmNodeIdx].Ordering.ToString() << ")";
+            if (nfsmNodeIdx < nfsm.Nodes_.size()) {
+                ss << "(" << nfsm.Nodes_[nfsmNodeIdx].Ordering.ToString() << ")";
             }
         }
         ss << "]\n";
     }
-    ss << "Edges (" << Edges.size() << "):\n";
-    for (std::size_t i = 0; i < Edges.size(); ++i) {
-        ss << "  " << i << ": " << Edges[i].ToString() << "\n";
+    ss << "Edges (" << Edges_.size() << "):\n";
+    for (std::size_t i = 0; i < Edges_.size(); ++i) {
+        ss << "  " << i << ": " << Edges_[i].ToString() << "\n";
     }
-    ss << "InitStateByOrderingIdx (" << InitStateByOrderingIdx.size() << "):\n";
-    for (std::size_t i = 0; i < InitStateByOrderingIdx.size(); ++i) {
-        ss << "  " << i << ": StateIdx=" << InitStateByOrderingIdx[i].StateIdx
-           << ", ShuffleHashFuncArgsCount=" << InitStateByOrderingIdx[i].ShuffleHashFuncArgsCount << "\n";
+    ss << "InitStateByOrderingIdx (" << InitStateByOrderingIdx_.size() << "):\n";
+    for (std::size_t i = 0; i < InitStateByOrderingIdx_.size(); ++i) {
+        ss << "  " << i << ": StateIdx=" << InitStateByOrderingIdx_[i].StateIdx
+           << ", ShuffleHashFuncArgsCount=" << InitStateByOrderingIdx_[i].ShuffleHashFuncArgsCount << "\n";
     }
     return ss;
 }
@@ -988,22 +1011,22 @@ void TOrderingsStateMachine::TDFSM::Build(
     const std::vector<TFunctionalDependency>& fds,
     const std::vector<TOrdering>& interestingOrderings
 ) {
-    InitStateByOrderingIdx.resize(interestingOrderings.size());
+    InitStateByOrderingIdx_.resize(interestingOrderings.size());
 
     for (std::size_t i = 0; i < interestingOrderings.size(); ++i) {
-        for (std::size_t nfsmNodeIdx = 0; nfsmNodeIdx < nfsm.Nodes.size(); ++nfsmNodeIdx) {
-            if (nfsm.Nodes[nfsmNodeIdx].Ordering == interestingOrderings[i]) {
+        for (std::size_t nfsmNodeIdx = 0; nfsmNodeIdx < nfsm.Nodes_.size(); ++nfsmNodeIdx) {
+            if (nfsm.Nodes_[nfsmNodeIdx].Ordering == interestingOrderings[i]) {
                 auto nfsmNodes = CollectNodesWithEpsOrFdEdge(nfsm, {i}, fds);
-                InitStateByOrderingIdx[i] = TInitState{AddNode(std::move(nfsmNodes)), interestingOrderings[i].Items.size()};
+                InitStateByOrderingIdx_[i] = TInitState{AddNode(std::move(nfsmNodes)), interestingOrderings[i].Items.size()};
             }
         }
     }
 
-    for (std::size_t nodeIdx = 0; nodeIdx < Nodes.size() && Nodes.size() < EMaxDFSMStates; ++nodeIdx) {
+    for (std::size_t nodeIdx = 0; nodeIdx < Nodes_.size() && Nodes_.size() < EMaxDFSMStates; ++nodeIdx) {
         std::unordered_set<i64> outgoingDFSMNodeFDs;
-        for (std::size_t nfsmNodeIdx: Nodes[nodeIdx].NFSMNodes) {
-            for (std::size_t nfsmEdgeIdx: nfsm.Nodes[nfsmNodeIdx].OutgoingEdges) {
-                outgoingDFSMNodeFDs.insert(nfsm.Edges[nfsmEdgeIdx].fdIdx);
+        for (std::size_t nfsmNodeIdx: Nodes_[nodeIdx].NFSMNodes) {
+            for (std::size_t nfsmEdgeIdx: nfsm.Nodes_[nfsmNodeIdx].OutgoingEdges) {
+                outgoingDFSMNodeFDs.insert(nfsm.Edges_[nfsmEdgeIdx].FdIdx);
             }
         }
 
@@ -1012,13 +1035,13 @@ void TOrderingsStateMachine::TDFSM::Build(
                 continue;
             }
 
-            std::size_t dstNodeIdx = AddNode(CollectNodesWithEpsOrFdEdge(nfsm, Nodes[nodeIdx].NFSMNodes, fds, fdIdx));
+            std::size_t dstNodeIdx = AddNode(CollectNodesWithEpsOrFdEdge(nfsm, Nodes_[nodeIdx].NFSMNodes, fds, fdIdx));
             if (nodeIdx == dstNodeIdx) {
                 continue;
             }
             AddEdge(nodeIdx, dstNodeIdx, fdIdx);
 
-            Nodes[nodeIdx].OutgoingFDs[fdIdx] = 1;
+            Nodes_[nodeIdx].OutgoingFDs[fdIdx] = 1;
         }
     }
 
@@ -1026,18 +1049,18 @@ void TOrderingsStateMachine::TDFSM::Build(
 }
 
 std::size_t TOrderingsStateMachine::TDFSM::AddNode(const std::vector<std::size_t>& nfsmNodes) {
-    for (std::size_t i = 0; i < Nodes.size(); ++i) {
-        if (Nodes[i].NFSMNodes == nfsmNodes) {
+    for (std::size_t i = 0; i < Nodes_.size(); ++i) {
+        if (Nodes_[i].NFSMNodes == nfsmNodes) {
             return i;
         }
     }
 
-    Nodes.emplace_back(nfsmNodes);
-    return Nodes.size() - 1;
+    Nodes_.emplace_back(nfsmNodes);
+    return Nodes_.size() - 1;
 }
 
 void TOrderingsStateMachine::TDFSM::AddEdge(std::size_t srcNodeIdx, std::size_t dstNodeIdx, i64 fdIdx) {
-    Edges.emplace_back(srcNodeIdx, dstNodeIdx, fdIdx);
+    Edges_.emplace_back(srcNodeIdx, dstNodeIdx, fdIdx);
 }
 
 std::vector<std::size_t> TOrderingsStateMachine::TDFSM::CollectNodesWithEpsOrFdEdge(
@@ -1056,10 +1079,10 @@ std::vector<std::size_t> TOrderingsStateMachine::TDFSM::CollectNodesWithEpsOrFdE
 
         visited.insert(nodeIdx);
 
-        for (std::size_t edgeIdx: nfsm.Nodes[nodeIdx].OutgoingEdges) {
-            const TNFSM::TEdge& edge = nfsm.Edges[edgeIdx];
-            if (edge.fdIdx == fdIdx || edge.fdIdx == TNFSM::TEdge::EPSILON || fds[edge.fdIdx].AlwaysActive) {
-                DFS(edge.dstNodeIdx);
+        for (std::size_t edgeIdx: nfsm.Nodes_[nodeIdx].OutgoingEdges) {
+            const TNFSM::TEdge& edge = nfsm.Edges_[edgeIdx];
+            if (edge.FdIdx == fdIdx || edge.FdIdx == TNFSM::TEdge::EPSILON || fds[edge.FdIdx].AlwaysActive) {
+                DFS(edge.DstNodeIdx);
             }
         }
     };
@@ -1075,21 +1098,21 @@ void TOrderingsStateMachine::TDFSM::Precompute(
     const TNFSM& nfsm,
     const std::vector<TFunctionalDependency>& fds
 ) {
-    TransitionMatrix = std::vector<std::vector<i64>>(Nodes.size(), std::vector<i64>(fds.size(), -1));
-    for (const auto& edge: Edges) {
-        TransitionMatrix[edge.srcNodeIdx][edge.fdIdx] = edge.dstNodeIdx;
+    TransitionMatrix_ = std::vector<std::vector<i64>>(Nodes_.size(), std::vector<i64>(fds.size(), -1));
+    for (const auto& edge: Edges_) {
+        TransitionMatrix_[edge.SrcNodeIdx][edge.FdIdx] = edge.DstNodeIdx;
     }
 
-    for (std::size_t dfsmNodeIdx = 0; dfsmNodeIdx < Nodes.size(); ++dfsmNodeIdx) {
-        for (std::size_t nfsmNodeIdx : Nodes[dfsmNodeIdx].NFSMNodes) {
-            auto interestingOrderIdx = nfsm.Nodes[nfsmNodeIdx].InterestingOrderingIdx;
+    for (std::size_t dfsmNodeIdx = 0; dfsmNodeIdx < Nodes_.size(); ++dfsmNodeIdx) {
+        for (std::size_t nfsmNodeIdx : Nodes_[dfsmNodeIdx].NFSMNodes) {
+            auto interestingOrderIdx = nfsm.Nodes_[nfsmNodeIdx].InterestingOrderingIdx;
             if (interestingOrderIdx == -1) { continue; }
 
-            Nodes[dfsmNodeIdx].InterestingOrderings[interestingOrderIdx] = 1;
+            Nodes_[dfsmNodeIdx].InterestingOrderings[interestingOrderIdx] = 1;
         }
     }
 
-    for (auto& node: Nodes) {
+    for (auto& node: Nodes_) {
         for (auto& nfsmNodeIdx: node.NFSMNodes) {
             node.NFSMNodesBitset[nfsmNodeIdx] = 1;
         }
@@ -1102,7 +1125,7 @@ std::vector<TFunctionalDependency> TOrderingsStateMachine::PruneFDs(
 ) {
     std::vector<TFunctionalDependency> filteredFds;
     filteredFds.reserve(fds.size());
-    FdMapping.resize(fds.size());
+    FdMapping_.resize(fds.size());
     for (std::size_t i = 0; i < fds.size(); ++i) {
         bool canLeadToInteresting = false;
 
@@ -1123,9 +1146,9 @@ std::vector<TFunctionalDependency> TOrderingsStateMachine::PruneFDs(
 
         if (canLeadToInteresting && filteredFds.size() < EMaxFDCount) {
             filteredFds.push_back(std::move(fds[i]));
-            FdMapping[i] = filteredFds.size() - 1;
+            FdMapping_[i] = filteredFds.size() - 1;
         } else {
-            FdMapping[i] = -1;
+            FdMapping_[i] = -1;
         }
     }
 

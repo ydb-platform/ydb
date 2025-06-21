@@ -13,6 +13,7 @@ SRCS(
     draft/persqueue_common.proto
     draft/persqueue_error_codes.proto
     draft/ydb_backup.proto
+    draft/ydb_bridge.proto
     draft/ydb_dynamic_config.proto
     draft/ydb_logstore.proto
     draft/ydb_maintenance.proto

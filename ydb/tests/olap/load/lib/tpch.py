@@ -31,7 +31,7 @@ class TpchSuiteBase(LoadSuiteBase):
     @classmethod
     def _get_path(cls, full: bool = True) -> str:
         if full:
-            tpch_path = get_external_param('table-path-tpch', f'{YdbCluster.tables_path}/tpch')
+            tpch_path = get_external_param('table-path-tpch', YdbCluster.get_tables_path('tpch'))
         else:
             tpch_path = 'tpch'
         return get_external_param(f'table-path-{cls.suite()}', f'{tpch_path}/s{cls.scale}')

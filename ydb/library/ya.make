@@ -36,6 +36,7 @@ RECURSE(
     shop
     signal_backtrace
     signals
+    slide_limiter
     table_creator
     testlib
     time_series_vec

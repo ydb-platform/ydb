@@ -67,6 +67,10 @@ namespace NSQLComplete {
                Base->Name == "REAL";
     }
 
+    size_t TRichParsedToken::End() const {
+        return Position + Base->Content.size();
+    }
+
     TRichParsedToken TokenAt(const TCursorTokenContext& context, size_t index) {
         return {
             .Base = &context.Tokens.at(index),

@@ -15,115 +15,115 @@ using namespace NYql::NDom;
 using namespace NJson;
 
 TEntryCursor::TEntryCursor(const TBinaryJsonReaderPtr reader, TEntry entry)
-    : Reader(reader)
-    , Entry(entry)
+    : Reader_(reader)
+    , Entry_(entry)
 {
 }
 
 EEntryType TEntryCursor::GetType() const {
-    return Entry.Type;
+    return Entry_.Type;
 }
 
 TContainerCursor TEntryCursor::GetContainer() const {
-    Y_DEBUG_ABORT_UNLESS(Entry.Type == EEntryType::Container, "Expected container type");
-    return TContainerCursor(Reader, Entry.Value);
+    Y_DEBUG_ABORT_UNLESS(Entry_.Type == EEntryType::Container, "Expected container type");
+    return TContainerCursor(Reader_, Entry_.Value);
 }
 
 TStringBuf TEntryCursor::GetString() const {
-    Y_DEBUG_ABORT_UNLESS(Entry.Type == EEntryType::String, "Expected string type");
-    return Reader->ReadString(Entry.Value);
+    Y_DEBUG_ABORT_UNLESS(Entry_.Type == EEntryType::String, "Expected string type");
+    return Reader_->ReadString(Entry_.Value);
 }
 
 double TEntryCursor::GetNumber() const {
-    Y_DEBUG_ABORT_UNLESS(Entry.Type == EEntryType::Number, "Expected number type");
-    return Reader->ReadNumber(Entry.Value);
+    Y_DEBUG_ABORT_UNLESS(Entry_.Type == EEntryType::Number, "Expected number type");
+    return Reader_->ReadNumber(Entry_.Value);
 }
 
 TArrayIterator::TArrayIterator(const TBinaryJsonReaderPtr reader, ui32 startOffset, ui32 count)
-    : Reader(reader)
-    , Offset(startOffset)
+    : Reader_(reader)
+    , Offset_(startOffset)
 {
-    EndOffset = Offset + count * sizeof(TEntry);
+    EndOffset_ = Offset_ + count * sizeof(TEntry);
 }
 
 TEntryCursor TArrayIterator::Next() {
     Y_DEBUG_ABORT_UNLESS(HasNext());
-    TEntryCursor element(Reader, Reader->ReadEntry(Offset));
-    Offset += sizeof(TEntry);
+    TEntryCursor element(Reader_, Reader_->ReadEntry(Offset_));
+    Offset_ += sizeof(TEntry);
     return element;
 }
 
 bool TArrayIterator::HasNext() const {
-    return Offset < EndOffset;
+    return Offset_ < EndOffset_;
 }
 
 TObjectIterator::TObjectIterator(const TBinaryJsonReaderPtr reader, ui32 startOffset, ui32 count)
-    : Reader(reader)
+    : Reader_(reader)
 {
-    KeyOffset = startOffset;
-    ValueOffset = KeyOffset + count * sizeof(TKeyEntry);
-    ValueEndOffset = ValueOffset + count * sizeof(TEntry);
+    KeyOffset_ = startOffset;
+    ValueOffset_ = KeyOffset_ + count * sizeof(TKeyEntry);
+    ValueEndOffset_ = ValueOffset_ + count * sizeof(TEntry);
 }
 
 std::pair<TEntryCursor, TEntryCursor> TObjectIterator::Next() {
     Y_DEBUG_ABORT_UNLESS(HasNext());
     // Here we create fake Entry to return Entry cursor
-    const auto stringOffset = static_cast<ui32>(Reader->ReadKeyEntry(KeyOffset));
-    TEntryCursor key(Reader, TEntry(EEntryType::String, stringOffset));
-    TEntryCursor value(Reader, Reader->ReadEntry(ValueOffset));
-    KeyOffset += sizeof(TKeyEntry);
-    ValueOffset += sizeof(TEntry);
+    const auto stringOffset = static_cast<ui32>(Reader_->ReadKeyEntry(KeyOffset_));
+    TEntryCursor key(Reader_, TEntry(EEntryType::String, stringOffset));
+    TEntryCursor value(Reader_, Reader_->ReadEntry(ValueOffset_));
+    KeyOffset_ += sizeof(TKeyEntry);
+    ValueOffset_ += sizeof(TEntry);
     return std::make_pair(std::move(key), std::move(value));
 }
 
 bool TObjectIterator::HasNext() const {
-    return ValueOffset < ValueEndOffset;
+    return ValueOffset_ < ValueEndOffset_;
 }
 
 TContainerCursor::TContainerCursor(const TBinaryJsonReaderPtr reader, ui32 startOffset)
-    : Reader(reader)
-    , StartOffset(startOffset)
+    : Reader_(reader)
+    , StartOffset_(startOffset)
 {
-    Meta = Reader->ReadMeta(StartOffset);
-    StartOffset += sizeof(Meta);
+    Meta_ = Reader_->ReadMeta(StartOffset_);
+    StartOffset_ += sizeof(Meta_);
 }
 
 EContainerType TContainerCursor::GetType() const {
-    return Meta.Type;
+    return Meta_.Type;
 }
 
 ui32 TContainerCursor::GetSize() const {
-    return Meta.Size;
+    return Meta_.Size;
 }
 
 TEntryCursor TContainerCursor::GetElement(ui32 index) const {
-    Y_DEBUG_ABORT_UNLESS(Meta.Type == EContainerType::Array || Meta.Type == EContainerType::TopLevelScalar, "Expected array");
+    Y_DEBUG_ABORT_UNLESS(Meta_.Type == EContainerType::Array || Meta_.Type == EContainerType::TopLevelScalar, "Expected array");
     Y_DEBUG_ABORT_UNLESS(index < GetSize(), "Invalid index");
-    const ui32 offset = StartOffset + index * sizeof(TEntry);
-    return TEntryCursor(Reader, Reader->ReadEntry(offset));
+    const ui32 offset = StartOffset_ + index * sizeof(TEntry);
+    return TEntryCursor(Reader_, Reader_->ReadEntry(offset));
 }
 
 TArrayIterator TContainerCursor::GetArrayIterator() const {
-    Y_DEBUG_ABORT_UNLESS(Meta.Type == EContainerType::Array || Meta.Type == EContainerType::TopLevelScalar, "Expected array");
-    return TArrayIterator(Reader, StartOffset, Meta.Size);
+    Y_DEBUG_ABORT_UNLESS(Meta_.Type == EContainerType::Array || Meta_.Type == EContainerType::TopLevelScalar, "Expected array");
+    return TArrayIterator(Reader_, StartOffset_, Meta_.Size);
 }
 
 TMaybe<TEntryCursor> TContainerCursor::Lookup(const TStringBuf key) const {
-    if (Meta.Size == 0) {
+    if (Meta_.Size == 0) {
         return Nothing();
     }
 
     i32 left = 0;
-    i32 right = Meta.Size - 1;
+    i32 right = Meta_.Size - 1;
     while (left <= right) {
         const i32 middle = (left + right) / 2;
-        const ui32 keyEntryOffset = StartOffset + middle * sizeof(TKeyEntry);
-        const auto keyStringOffset = Reader->ReadKeyEntry(keyEntryOffset);
+        const ui32 keyEntryOffset = StartOffset_ + middle * sizeof(TKeyEntry);
+        const auto keyStringOffset = Reader_->ReadKeyEntry(keyEntryOffset);
 
-        const int compare = Reader->ReadString(keyStringOffset).compare(key);
+        const int compare = Reader_->ReadString(keyStringOffset).compare(key);
         if (compare == 0) {
-            const ui32 entryOffset = StartOffset + Meta.Size * sizeof(TKeyEntry) + middle * sizeof(TEntry);
-            return TEntryCursor(Reader, Reader->ReadEntry(entryOffset));
+            const ui32 entryOffset = StartOffset_ + Meta_.Size * sizeof(TKeyEntry) + middle * sizeof(TEntry);
+            return TEntryCursor(Reader_, Reader_->ReadEntry(entryOffset));
         } else if (compare < 0) {
             left = middle + 1;
         } else {
@@ -134,8 +134,8 @@ TMaybe<TEntryCursor> TContainerCursor::Lookup(const TStringBuf key) const {
 }
 
 TObjectIterator TContainerCursor::GetObjectIterator() const {
-    Y_DEBUG_ABORT_UNLESS(Meta.Type == EContainerType::Object, "Expected object");
-    return TObjectIterator(Reader, StartOffset, Meta.Size);
+    Y_DEBUG_ABORT_UNLESS(Meta_.Type == EContainerType::Object, "Expected object");
+    return TObjectIterator(Reader_, StartOffset_, Meta_.Size);
 }
 
 TBinaryJsonReader::TBinaryJsonReader(const TBinaryJson& buffer)
@@ -144,54 +144,54 @@ TBinaryJsonReader::TBinaryJsonReader(const TBinaryJson& buffer)
 }
 
 TBinaryJsonReader::TBinaryJsonReader(TStringBuf buffer)
-    : Buffer(buffer)
+    : Buffer_(buffer)
 {
     // Header is stored at the beginning of BinaryJson
-    Header = ReadPOD<THeader>(0);
+    Header_ = ReadPOD<THeader>(0);
 
     Y_ENSURE(
-        Header.Version == CURRENT_VERSION,
-        TStringBuilder() << "Version in BinaryJson `" << static_cast<ui64>(Header.Version) << "` "
+        Header_.Version == CURRENT_VERSION,
+        TStringBuilder() << "Version in BinaryJson `" << static_cast<ui64>(Header_.Version) << "` "
         << "does not match current version `" << static_cast<ui64>(CURRENT_VERSION) << "`"
     );
 
     Y_ENSURE(
-        Header.StringOffset < Buffer.size(),
+        Header_.StringOffset < Buffer_.size(),
         "StringOffset must be inside buffer"
     );
 
     // Tree starts right after Header
-    TreeStart = sizeof(Header);
+    TreeStart_ = sizeof(Header_);
 
     // SEntry sequence starts right after count of strings
-    StringCount = ReadPOD<ui32>(Header.StringOffset);
-    StringSEntryStart = Header.StringOffset + sizeof(ui32);
+    StringCount_ = ReadPOD<ui32>(Header_.StringOffset);
+    StringSEntryStart_ = Header_.StringOffset + sizeof(ui32);
 }
 
 TContainerCursor TBinaryJsonReader::GetRootCursor() {
-    return TContainerCursor(TIntrusivePtr(this), TreeStart);
+    return TContainerCursor(TIntrusivePtr(this), TreeStart_);
 }
 
 TMeta TBinaryJsonReader::ReadMeta(ui32 offset) const {
-    Y_DEBUG_ABORT_UNLESS(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
+    Y_DEBUG_ABORT_UNLESS(TreeStart_ <= offset && offset < Header_.StringOffset, "Offset is not inside Tree section");
     return ReadPOD<TMeta>(offset);
 }
 
 TEntry TBinaryJsonReader::ReadEntry(ui32 offset) const {
-    Y_DEBUG_ABORT_UNLESS(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
+    Y_DEBUG_ABORT_UNLESS(TreeStart_ <= offset && offset < Header_.StringOffset, "Offset is not inside Tree section");
     return ReadPOD<TEntry>(offset);
 }
 
 TKeyEntry TBinaryJsonReader::ReadKeyEntry(ui32 offset) const {
-    Y_DEBUG_ABORT_UNLESS(TreeStart <= offset && offset < Header.StringOffset, "Offset is not inside Tree section");
+    Y_DEBUG_ABORT_UNLESS(TreeStart_ <= offset && offset < Header_.StringOffset, "Offset is not inside Tree section");
     return ReadPOD<TKeyEntry>(offset);
 }
 
 const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
-    Y_DEBUG_ABORT_UNLESS(StringSEntryStart <= offset && offset < StringSEntryStart + StringCount * sizeof(TSEntry), "Offset is not inside string index");
+    Y_DEBUG_ABORT_UNLESS(StringSEntryStart_ <= offset && offset < StringSEntryStart_ + StringCount_ * sizeof(TSEntry), "Offset is not inside string index");
     ui32 startOffset = 0;
-    if (offset == StringSEntryStart) {
-        startOffset = StringSEntryStart + StringCount * sizeof(TSEntry);
+    if (offset == StringSEntryStart_) {
+        startOffset = StringSEntryStart_ + StringCount_ * sizeof(TSEntry);
     } else {
         ui32 previousOffset = offset - sizeof(TSEntry);
         const auto previousEntry = ReadPOD<TSEntry>(previousOffset);
@@ -199,14 +199,14 @@ const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
     }
     const auto entry = ReadPOD<TSEntry>(offset);
     const ui32 endOffset = entry.Value - 1;
-    Y_ENSURE(startOffset <= endOffset && startOffset <= Buffer.size() && endOffset <= Buffer.size(), "Incorrect string bounds");
-    return TStringBuf(Buffer.data() + startOffset, endOffset - startOffset);
+    Y_ENSURE(startOffset <= endOffset && startOffset <= Buffer_.size() && endOffset <= Buffer_.size(), "Incorrect string bounds");
+    return TStringBuf(Buffer_.data() + startOffset, endOffset - startOffset);
 }
 
 double TBinaryJsonReader::ReadNumber(ui32 offset) const {
     double result;
-    Y_ENSURE(offset <= Buffer.size() && offset + sizeof(result) <= Buffer.size(), "Incorrect number bounds");
-    MemCopy(reinterpret_cast<char*>(&result), Buffer.data() + offset, sizeof(result));
+    Y_ENSURE(offset <= Buffer_.size() && offset + sizeof(result) <= Buffer_.size(), "Incorrect number bounds");
+    MemCopy(reinterpret_cast<char*>(&result), Buffer_.data() + offset, sizeof(result));
     return result;
 }
 
@@ -388,13 +388,13 @@ struct TPODReader {
 
 struct TBinaryJsonValidator {
     TBinaryJsonValidator(TStringBuf buffer)
-        : Buffer(buffer)
+        : Buffer_(buffer)
     {
     }
 
     TMaybe<TStringBuf> ValidateWithError() && {
         // Validate Header
-        TPODReader reader(Buffer);
+        TPODReader reader(Buffer_);
         const auto header = reader.Read<THeader>();
         if (!header.Defined()) {
             return "Missing header"sv;
@@ -405,22 +405,22 @@ struct TBinaryJsonValidator {
         if (header->Version > EVersion::MaxVersion) {
             return "Invalid version"sv;
         }
-        if (header->StringOffset >= Buffer.size()) {
+        if (header->StringOffset >= Buffer_.size()) {
             return "String index offset points outside of buffer"sv;
         }
-        StringIndexStart = header->StringOffset;
+        StringIndexStart_ = header->StringOffset;
 
         // Validate String index
-        TPODReader stringReader(Buffer, /* start */ StringIndexStart, /* end */ Buffer.size());
+        TPODReader stringReader(Buffer_, /* start */ StringIndexStart_, /* end */ Buffer_.size());
         const auto stringCount = stringReader.Read<ui32>();
         if (!stringCount.Defined()) {
             return "Missing string index size"sv;
         }
-        StringEntryStart = StringIndexStart + sizeof(ui32);
-        StringDataStart = StringEntryStart + (*stringCount) * sizeof(TSEntry);
+        StringEntryStart_ = StringIndexStart_ + sizeof(ui32);
+        StringDataStart_ = StringEntryStart_ + (*stringCount) * sizeof(TSEntry);
 
         ui32 totalLength = 0;
-        ui32 lastStringOffset = StringDataStart;
+        ui32 lastStringOffset = StringDataStart_;
         for (ui32 i = 0; i < *stringCount; i++) {
             const auto entry = stringReader.Read<TSEntry>();
             if (!entry.Defined()) {
@@ -436,17 +436,17 @@ struct TBinaryJsonValidator {
             lastStringOffset = entry->Value;
         }
 
-        NumberIndexStart = StringDataStart + totalLength;
-        if (NumberIndexStart > Buffer.size()) {
+        NumberIndexStart_ = StringDataStart_ + totalLength;
+        if (NumberIndexStart_ > Buffer_.size()) {
             return "Total length of strings in String index exceeds Buffer size"sv;
         }
 
         // Validate Number index
-        if ((Buffer.size() - NumberIndexStart) % sizeof(double) != 0) {
+        if ((Buffer_.size() - NumberIndexStart_) % sizeof(double) != 0) {
             return "Number index cannot be split into doubles"sv;
         }
 
-        TPODReader numberReader(Buffer, /* start */ NumberIndexStart, /* end */ Buffer.size());
+        TPODReader numberReader(Buffer_, /* start */ NumberIndexStart_, /* end */ Buffer_.size());
         TMaybe<double> current;
         while (current = numberReader.Read<double>()) {
             if (std::isnan(*current)) {
@@ -463,10 +463,10 @@ struct TBinaryJsonValidator {
 
 private:
     TMaybe<TStringBuf> IsValidStringOffset(ui32 offset) {
-        if (offset < StringEntryStart || offset >= StringDataStart) {
+        if (offset < StringEntryStart_ || offset >= StringDataStart_) {
             return "String offset is out of String index entries section"sv;
         }
-        if ((offset - StringEntryStart) % sizeof(TSEntry) != 0) {
+        if ((offset - StringEntryStart_) % sizeof(TSEntry) != 0) {
             return "String offset does not point to the start of entry"sv;
         }
         return Nothing();
@@ -488,10 +488,10 @@ private:
                 return IsValidStringOffset(entry->Value);
             case EEntryType::Number: {
                 const auto numberOffset = entry->Value;
-                if (numberOffset < NumberIndexStart || numberOffset >= Buffer.size()) {
+                if (numberOffset < NumberIndexStart_ || numberOffset >= Buffer_.size()) {
                     return "Number offset cannot point outside of Number index"sv;
                 }
-                if ((numberOffset - NumberIndexStart) % sizeof(double) != 0) {
+                if ((numberOffset - NumberIndexStart_) % sizeof(double) != 0) {
                     return "Number offset does not point to the start of number"sv;
                 }
                 break;
@@ -504,10 +504,10 @@ private:
                 if (metaOffset < reader.Pos) {
                     return "Offset to container cannot point before element"sv;
                 }
-                if (metaOffset >= StringIndexStart) {
+                if (metaOffset >= StringIndexStart_) {
                     return "Offset to container cannot point outside of Tree section"sv;
                 }
-                TPODReader containerReader(reader.Buffer, metaOffset, StringIndexStart);
+                TPODReader containerReader(reader.Buffer, metaOffset, StringIndexStart_);
                 return IsValidContainer(containerReader, depth + 1);
             }
             default:
@@ -568,11 +568,11 @@ private:
         return Nothing();
     }
 
-    ui32 StringIndexStart = 0;
-    ui32 StringEntryStart = 0;
-    ui32 StringDataStart = 0;
-    ui32 NumberIndexStart = 0;
-    TStringBuf Buffer;
+    ui32 StringIndexStart_ = 0;
+    ui32 StringEntryStart_ = 0;
+    ui32 StringDataStart_ = 0;
+    ui32 NumberIndexStart_ = 0;
+    TStringBuf Buffer_;
 };
 
 }

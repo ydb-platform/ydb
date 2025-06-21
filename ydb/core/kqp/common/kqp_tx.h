@@ -360,6 +360,10 @@ public:
     bool HasTableWrite = false;
     bool HasTableRead = false;
 
+    std::optional<bool> EnableOltpSink;
+    std::optional<bool> EnableOlapSink;
+    std::optional<bool> EnableHtapTx;
+
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
 

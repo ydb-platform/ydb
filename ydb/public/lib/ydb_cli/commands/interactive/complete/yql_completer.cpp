@@ -138,16 +138,22 @@ namespace NYdb::NConsoleClient {
         };
     }
 
-    NSQLComplete::ISchemaListCache::TPtr MakeSchemaCache() {
+    NSQLComplete::TSchemaCaches MakeSchemaCaches() {
         using TKey = NSQLComplete::TSchemaDescribeCacheKey;
-        using TValue = TVector<NSQLComplete::TFolderEntry>;
 
-        return NSQLComplete::MakeLocalCache<TKey, TValue>(
-            NMonotonic::CreateDefaultMonotonicTimeProvider(),
-            {
-                .ByteCapacity = 1 * 1024 * 1024,
-                .TTL = TDuration::Seconds(8),
-            });
+        auto time = NMonotonic::CreateDefaultMonotonicTimeProvider();
+
+        NSQLComplete::TLocalCacheConfig config = {
+            .ByteCapacity = 1 * 1024 * 1024,
+            .TTL = TDuration::Seconds(8),
+        };
+
+        return {
+            .List = NSQLComplete::MakeLocalCache<
+                TKey, TVector<NSQLComplete::TFolderEntry>>(time, config),
+            .DescribeTable = NSQLComplete::MakeLocalCache<
+                TKey, TMaybe<NSQLComplete::TTableDetails>>(time, config),
+        };
     }
 
     IYQLCompleter::TPtr MakeYQLCompleter(
@@ -163,7 +169,7 @@ namespace NYdb::NConsoleClient {
             NSQLComplete::MakeSchemaNameService(
                 NSQLComplete::MakeSimpleSchema(
                     NSQLComplete::MakeCachedSimpleSchema(
-                        MakeSchemaCache(),
+                        MakeSchemaCaches(),
                         /* zone = */ "",
                         MakeYDBSchema(std::move(driver), std::move(database), isVerbose)))),
         };

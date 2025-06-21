@@ -45,6 +45,10 @@ public:
     using TObject = TPortionDataAccessor;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
 
+    static EConsumer DefaultConsumer() {
+        return EConsumer::UNDEFINED;
+    }
+
     class TSizeCalcer {
     public:
         size_t operator()(const TObject& data) {

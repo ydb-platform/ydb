@@ -134,21 +134,55 @@ namespace NActors {
 
             void Start() noexcept override {
                 // Schedule ourselves to run in background
+                Y_ABORT_UNLESS(State == EState::Starting);
                 TActorRunnableQueue::Schedule(this);
             }
 
             void Cancel() noexcept override {
+                if (State == EState::Starting) {
+                    TAwaitCancelSource::SetCancellation(this->ToCoroutineHandle());
+                    return;
+                }
+                Y_ABORT_UNLESS(State == EState::Running, "Unexpected state when Cancel() is called");
+                State = EState::InCancel;
                 // Note: we use the same coroutine handle for cancellation!
                 // Task is cancelled when the group is also cancelled, and result will be ignored anyway
-                TAwaitCancelSource::Cancel(this->ToCoroutineHandle());
+                if (auto next = TAwaitCancelSource::Cancel(this->ToCoroutineHandle())) {
+                    Pending = next;
+                    Y_ABORT_UNLESS(State == EState::InCancel || State == EState::InCancelFinish);
+                    State = (State == EState::InCancel) ? EState::Scheduled : EState::ScheduledFinish;
+                    TActorRunnableQueue::Schedule(this);
+                    return;
+                }
+                Y_ABORT_UNLESS(State == EState::InCancel || State == EState::InCancelFinish);
+                if (State == EState::InCancel) {
+                    State = EState::Running;
+                } else {
+                    State = EState::ScheduledFinish;
+                    TActorRunnableQueue::Schedule(this);
+                }
             }
 
         private:
             void DoRun(IActor*) noexcept {
+                switch (State) {
+                    case EState::Starting:
+                        OnStarting();
+                        break;
+                    case EState::Scheduled:
+                    case EState::ScheduledFinish:
+                        OnScheduled();
+                        break;
+                    default:
+                        Y_ABORT("BUG: unexpected state");
+                }
+            }
+
+            void OnStarting() noexcept {
                 if (GetCancellation()) {
                     // Task was cancelled before it could start
                     // We don't even run the callback in this case
-                    Sink.TaskFinished(Index, this).resume();
+                    Finish().resume();
                     return;
                 }
                 // Callback might throw an exception and we need to handle it
@@ -167,17 +201,56 @@ namespace NActors {
                 }
                 if (!Coroutine) {
                     // Notify sink outside the catch body
-                    Sink.TaskFinished(Index, this).resume();
+                    Finish().resume();
                     return;
                 }
+                State = EState::Running;
                 Coroutine->GetHandle().promise().SetContinuation(this->ToCoroutineHandle(), Sink.GetActor(), *this);
                 Coroutine->GetHandle().resume();
             }
 
+            void OnScheduled() noexcept {
+                if (Pending) {
+                    Pending.resume();
+                    Pending = {};
+                }
+                if (State == EState::ScheduledFinish) {
+                    Finish().resume();
+                }
+            }
+
         private:
-            std::coroutine_handle<> OnResume() noexcept {
+            [[nodiscard]] std::coroutine_handle<> OnResume() noexcept {
+                switch (State) {
+                    case EState::Running:
+                        return Finish();
+                    case EState::InCancel:
+                        State = EState::InCancelFinish;
+                        break;
+                    case EState::Scheduled:
+                        State = EState::ScheduledFinish;
+                        break;
+                    default:
+                        Y_ABORT("BUG: unexpected state");
+                }
+                return std::noop_coroutine();
+            }
+
+            [[nodiscard]] std::coroutine_handle<> Finish() noexcept {
+                State = EState::Finished;
                 return Sink.TaskFinished(Index, this);
             }
+
+        private:
+            enum class EState {
+                Starting,
+                Running,
+                InCancel,
+                InCancelFinish,
+                Scheduled,
+                ScheduledFinish,
+                Finished,
+            };
 
         private:
             TTaskGroupSink<T>& Sink;
@@ -185,6 +258,8 @@ namespace NActors {
             std::decay_t<TCallback> Callback;
             std::optional<async<T>> Coroutine;
             std::exception_ptr CallbackException;
+            std::coroutine_handle<> Pending;
+            EState State = EState::Starting;
         };
 
         template<class T>
@@ -373,9 +448,9 @@ namespace NActors {
                 return Coroutine->GetHandle().promise().ExtractValue();
             }
 
-            void AwaitCancel(std::coroutine_handle<> h) noexcept {
+            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
                 UpstreamCancellation = h;
-                TAwaitCancelSource::Cancel(CancelTrampoline.ToCoroutineHandle());
+                return TAwaitCancelSource::Cancel(CancelTrampoline.ToCoroutineHandle());
             }
 
         private:
@@ -423,11 +498,7 @@ namespace NActors {
     } // namespace NDetail
 
     template<class T>
-    class TTaskGroup<T>::TWhenReadyAwaiter
-        : private TActorRunnableItem::TImpl<TWhenReadyAwaiter>
-    {
-        friend TActorRunnableItem::TImpl<TWhenReadyAwaiter>;
-
+    class TTaskGroup<T>::TWhenReadyAwaiter {
     public:
         TWhenReadyAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
@@ -441,31 +512,19 @@ namespace NActors {
             Sink.SetAwaiter(h);
         }
 
-        void AwaitCancel(std::coroutine_handle<> h) noexcept {
+        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
             Sink.RemoveAwaiter();
-            // FIXME: all this scheduling is very tiresome
-            Cancellation = h;
-            TActorRunnableQueue::Schedule(this);
+            return h;
         }
 
         void AwaitResume() noexcept {}
 
     private:
-        void DoRun(IActor*) noexcept {
-            Cancellation.resume();
-        }
-
-    private:
         NDetail::TTaskGroupSink<T>& Sink;
-        std::coroutine_handle<> Cancellation;
     };
 
     template<class T>
-    class TTaskGroup<T>::TNextValueAwaiter
-        : private TActorRunnableItem::TImpl<TNextValueAwaiter>
-    {
-        friend TActorRunnableItem::TImpl<TNextValueAwaiter>;
-
+    class TTaskGroup<T>::TNextValueAwaiter {
     public:
         TNextValueAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
@@ -479,11 +538,9 @@ namespace NActors {
             Sink.SetAwaiter(h);
         }
 
-        void AwaitCancel(std::coroutine_handle<> h) noexcept {
+        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
             Sink.RemoveAwaiter();
-            // FIXME: all this scheduling is very tiresome
-            Cancellation = h;
-            TActorRunnableQueue::Schedule(this);
+            return h;
         }
 
         T AwaitResume() {
@@ -491,21 +548,11 @@ namespace NActors {
         }
 
     private:
-        void DoRun(IActor*) noexcept {
-            Cancellation.resume();
-        }
-
-    private:
         NDetail::TTaskGroupSink<T>& Sink;
-        std::coroutine_handle<> Cancellation;
     };
 
     template<class T>
-    class TTaskGroup<T>::TNextResultAwaiter
-        : private TActorRunnableItem::TImpl<TNextResultAwaiter>
-    {
-        friend TActorRunnableItem::TImpl<TNextResultAwaiter>;
-
+    class TTaskGroup<T>::TNextResultAwaiter {
     public:
         TNextResultAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
@@ -519,11 +566,9 @@ namespace NActors {
             Sink.SetAwaiter(h);
         }
 
-        void AwaitCancel(std::coroutine_handle<> h) noexcept {
+        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
             Sink.RemoveAwaiter();
-            // FIXME: all this scheduling is very tiresome
-            Cancellation = h;
-            TActorRunnableQueue::Schedule(this);
+            return h;
         }
 
         TTaskGroupResult<T> AwaitResume() {
@@ -531,13 +576,7 @@ namespace NActors {
         }
 
     private:
-        void DoRun(IActor*) noexcept {
-            Cancellation.resume();
-        }
-
-    private:
         NDetail::TTaskGroupSink<T>& Sink;
-        std::coroutine_handle<> Cancellation;
     };
 
     template<class T>

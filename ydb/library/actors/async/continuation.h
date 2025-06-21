@@ -117,28 +117,21 @@ namespace NActors {
             TAsyncContinuationAwaiter& operator=(const TAsyncContinuationAwaiter&) = delete;
 
             ~TAsyncContinuationAwaiter() {
-                if (Link) {
-                    Link->Awaiter = nullptr;
-                    Link = nullptr;
-                }
-            }
-
-            T AwaitResume() {
-                return Result.ExtractValue();
-            }
-
-            void AwaitCancel(std::coroutine_handle<> cancellation) noexcept {
-                if (Link) {
-                    Link->Awaiter = nullptr;
-                    Link = nullptr;
-                    Continuation = cancellation;
-                    TActorRunnableQueue::Schedule(this);
-                }
+                Detach();
             }
 
         protected:
             TAsyncContinuation<T> CreateContinuation() {
                 return TAsyncContinuation<T>(this);
+            }
+
+            bool Detach() {
+                if (Link) {
+                    Link->Awaiter = nullptr;
+                    Link = nullptr;
+                    return true;
+                }
+                return false;
             }
 
         private:
@@ -183,6 +176,17 @@ namespace NActors {
                 }
                 this->Continuation = continuation;
                 return true;
+            }
+
+            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> cancellation) noexcept {
+                if (this->Detach()) {
+                    return cancellation;
+                }
+                return {};
+            }
+
+            T AwaitResume() {
+                return this->Result.ExtractValue();
             }
 
         private:

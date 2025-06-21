@@ -6,10 +6,8 @@ namespace NActors {
     template<class TEvent>
     class [[nodiscard]] TActorSpecificEventAwaiter
         : private TActorEventAwaiter::TImpl<TActorSpecificEventAwaiter<TEvent>>
-        , private TActorRunnableItem::TImpl<TActorSpecificEventAwaiter<TEvent>>
     {
         friend TActorEventAwaiter::TImpl<TActorSpecificEventAwaiter<TEvent>>;
-        friend TActorRunnableItem::TImpl<TActorSpecificEventAwaiter<TEvent>>;
 
     public:
         TActorSpecificEventAwaiter(ui64 cookie)
@@ -40,22 +38,22 @@ namespace NActors {
             return std::move(Result);
         }
 
-        void AwaitCancel(std::coroutine_handle<> c) noexcept {
-            if (Actor) {
-                // Perform cancellation only when still attached (not resuming)
-                Detach();
-                // Schedule cancellation
-                Continuation = c;
-                TActorRunnableQueue::Schedule(this);
+        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> c) noexcept {
+            // Perform cancellation only when still attached (not resuming)
+            if (Detach()) {
+                return c;
             }
+            return {};
         }
 
     private:
-        void Detach() {
+        bool Detach() {
             if (Actor) {
                 Actor->UnregisterEventAwaiter(Cookie, this);
                 Actor = nullptr;
+                return true;
             }
+            return false;
         }
 
         bool Matches(TAutoPtr<IEventHandle>& ev) {
@@ -76,10 +74,6 @@ namespace NActors {
                 return true;
             }
             return false;
-        }
-
-        void DoRun(IActor*) noexcept {
-            Continuation.resume();
         }
 
     private:

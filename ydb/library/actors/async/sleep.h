@@ -1,5 +1,6 @@
 #pragma once
 #include "async.h"
+#include "symmetric_proxy.h"
 #include <ydb/library/actors/core/events.h>
 
 namespace NActors {
@@ -54,12 +55,12 @@ namespace NActors {
                 // nothing
             }
 
-            void AwaitCancel(std::coroutine_handle<> c) noexcept {
+            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> c) noexcept {
                 if (Detach()) {
                     // Not resumed yet, schedule cancellation instead
-                    Continuation = c;
-                    TActorRunnableQueue::Schedule(this);
+                    return c;
                 }
+                return {};
             }
 
         private:
@@ -114,8 +115,7 @@ namespace NActors {
                 // - Send failed unexpectedly (actor == nullptr)
                 // - Event destroyed due to mailbox cleanup (actor == nullptr)
                 // - Event is delivered before cancellation (actor != nullptr)
-                // - Cancellation was scheduled (actor != nullptr)
-                // In the first three cases Event will be a dangling pointer soon
+                // In all cases Event will be a dangling pointer soon
                 Event = nullptr;
                 // When actor != nullptr we are in an event handler
                 if (actor) {
@@ -185,10 +185,10 @@ namespace NActors {
         template<class TWhen, class T>
         class [[nodiscard]] TActorAsyncWithTimeoutAwaiter
             : public TActorAwareAwaiter
-            , private TCustomCoroutineCallbacks<TActorAsyncWithTimeoutAwaiter<TWhen, T>>
             , private TAwaitCancelSource
+            , private TSymmetricTransferCallback<TActorAsyncWithTimeoutAwaiter<TWhen, T>>
         {
-            friend TCustomCoroutineCallbacks<TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
+            friend TSymmetricTransferCallback<TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
 
         public:
             template<class TCallback>
@@ -229,7 +229,7 @@ namespace NActors {
                 selfId.Schedule(When, new TEvents::TEvResumeRunnable(Bridge.Get()));
 
                 // And intercept cancellation so we can cancel the timer
-                Continuation = parent;
+                TimeoutContinuation = parent;
                 self.promise().SetContinuation(parent, actor, *this);
                 Cleanup = source.SetAwaiter(*this);
                 return self;
@@ -246,16 +246,17 @@ namespace NActors {
                 return NestedCoroutine.GetHandle().promise().ExtractValue();
             }
 
-            void AwaitCancel(std::coroutine_handle<> h) noexcept {
+            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
                 // Downstream cancellation will propagate cancellation
-                Continuation = h;
+                TimeoutContinuation = h;
                 if (Detach()) {
                     // Timer was still pending and now cancelled, pass upstream
                     // cancellation directly to downstream subscribers. It will
                     // either resume normally with a result, or confirm
                     // cancellation upstream.
-                    TAwaitCancelSource::Cancel(h);
+                    return TAwaitCancelSource::Cancel(h);
                 }
+                return {};
             }
 
         private:
@@ -316,19 +317,17 @@ namespace NActors {
                 Bridge.Reset();
                 // We want downstream to resume our proxy on cancellation
                 // We can then resume normally with an exception instead
-                TAwaitCancelSource::Cancel(this->ToCoroutineHandle());
+                if (auto next = TAwaitCancelSource::Cancel(this->ToCoroutineHandle())) {
+                    next.resume();
+                }
             }
 
-            void OnResume() noexcept {
+            std::coroutine_handle<> OnResume() noexcept {
                 // Nested coroutine confirmed cancellation after a timeout
                 Y_ABORT_UNLESS(!Bridge, "Unexpected cancellation confirmation before Detach()");
-                // Since downstream confirmed cancellation we will throw exception on normal resume
+                // We will throw exception on normal resume
                 ThrowException = true;
-                Continuation.resume();
-            }
-
-            void OnDestroy() noexcept {
-                Y_ABORT("Unexpected destroy on cancellation proxy");
+                return TimeoutContinuation;
             }
 
         private:
@@ -336,7 +335,7 @@ namespace NActors {
             async<T> NestedCoroutine;
             TAwaitCancelCleanup Cleanup;
             TIntrusivePtr<TBridge> Bridge;
-            std::coroutine_handle<> Continuation;
+            std::coroutine_handle<> TimeoutContinuation;
             bool ThrowException = false;
         };
     }

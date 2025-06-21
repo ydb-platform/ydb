@@ -174,6 +174,16 @@ namespace NActors {
         };
 
         template<class TAwaiter>
+        concept HasAwaitCancelBool = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+            { awaiter.AwaitCancel(h) } -> std::same_as<bool>;
+        };
+
+        template<class TAwaiter>
+        concept HasAwaitCancelHandle = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+            { awaiter.AwaitCancel(h) } -> std::convertible_to<std::coroutine_handle<>>;
+        };
+
+        template<class TAwaiter>
         concept HasAwaitCancelNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
             { awaiter.AwaitCancel(h) } noexcept;
         };
@@ -246,6 +256,16 @@ namespace NActors {
         };
 
         template<class TAwaiter>
+        concept HasStdAwaitCancelBool = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+            { awaiter.await_cancel(h) } -> std::same_as<bool>;
+        };
+
+        template<class TAwaiter>
+        concept HasStdAwaitCancelHandle = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+            { awaiter.await_cancel(h) } -> std::convertible_to<std::coroutine_handle<>>;
+        };
+
+        template<class TAwaiter>
         concept HasStdAwaitCancelNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
             { awaiter.await_cancel(h) } noexcept;
         };
@@ -284,17 +304,19 @@ namespace NActors {
             }
 
             template<class TAwaiter>
-            TAwaitCancelCleanup SetAwaiter(TAwaiter& awaiter) noexcept;
+            [[nodiscard]] TAwaitCancelCleanup SetAwaiter(TAwaiter& awaiter) noexcept;
 
             std::coroutine_handle<> GetCancellation() const noexcept {
                 return Cancellation;
             }
 
         protected:
-            void Cancel(std::coroutine_handle<> h) noexcept {
+            [[nodiscard]] std::coroutine_handle<> Cancel(std::coroutine_handle<> h) noexcept {
                 Cancellation = h;
                 if (CancelFn) {
-                    CancelFn(CancelFnArg, h);
+                    return CancelFn(CancelFnArg, h);
+                } else {
+                    return {};
                 }
             }
 
@@ -304,7 +326,7 @@ namespace NActors {
 
         private:
             std::coroutine_handle<> Cancellation;
-            void (*CancelFn)(void*, std::coroutine_handle<>) noexcept = nullptr;
+            std::coroutine_handle<> (*CancelFn)(void*, std::coroutine_handle<>) noexcept = nullptr;
             void* CancelFnArg;
         };
 
@@ -368,12 +390,27 @@ namespace NActors {
          */
         template<class TAwaiter>
         inline TAwaitCancelCleanup TAwaitCancelSource::SetAwaiter(TAwaiter& awaiter) noexcept {
-            static_assert(HasAwaitCancelVoid<TAwaiter>, "AwaitCancel must return void");
             static_assert(HasAwaitCancelNoExcept<TAwaiter>, "AwaitCancel must be noexcept");
             Y_DEBUG_ABORT_UNLESS(!CancelFn, "TAwaitCancelSource cannot support more than one awaiter");
-            CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept {
-                reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h);
-            };
+            if constexpr (HasAwaitCancelVoid<TAwaiter>) {
+                CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
+                    reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h);
+                    return {};
+                };
+            } else if constexpr (HasAwaitCancelBool<TAwaiter>) {
+                CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
+                    if (reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h)) {
+                        return h;
+                    } else {
+                        return {};
+                    }
+                };
+            } else {
+                static_assert(HasAwaitCancelHandle<TAwaiter>, "AwaitCancel must return void/bool/std::coroutine_handle<>");
+                CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
+                    return reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h);
+                };
+            }
             CancelFnArg = std::addressof(awaiter);
             return TAwaitCancelCleanup(this);
         }
@@ -629,12 +666,11 @@ namespace NActors {
                 return Awaiter.await_resume();
             }
 
-            void AwaitCancel(std::coroutine_handle<> c) noexcept
+            decltype(auto) AwaitCancel(std::coroutine_handle<> c) noexcept
                 requires HasStdAwaitCancel<TAwaiter>
             {
-                static_assert(HasStdAwaitCancelVoid<TAwaiter>, "await_cancel must return void");
                 static_assert(HasStdAwaitCancelNoExcept<TAwaiter>, "await_cancel must be noexcept");
-                Awaiter.await_cancel(this->StartCancellation(c));
+                return Awaiter.await_cancel(this->StartCancellation(c));
             }
 
         private:
@@ -879,16 +915,29 @@ namespace NActors {
         class TActorAsyncHandlerPromise final
             : private TActorTask
             , private TAwaitCancelSource
+            , private TActorRunnableItem::TImpl<TActorAsyncHandlerPromise>
             , private TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>
             , public TAsyncAwaitTransform<TActorAsyncHandlerPromise>
         {
+            friend TActorRunnableItem::TImpl<TActorAsyncHandlerPromise>;
             friend TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>;
 
         public:
             constexpr void get_return_object() noexcept {}
 
             constexpr auto initial_suspend() noexcept { return std::suspend_never{}; }
-            constexpr auto final_suspend() noexcept { return std::suspend_never{}; }
+
+            struct TFinalSuspend {
+                const bool Ready;
+
+                bool await_ready() const noexcept { return Ready; }
+                constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
+                constexpr void await_resume() const noexcept {}
+            };
+
+            auto final_suspend() noexcept {
+                return TFinalSuspend{ Finish() };
+            }
 
             void unhandled_exception() noexcept;
             void return_void() noexcept {}
@@ -917,9 +966,84 @@ namespace NActors {
             }
 
         private:
+            bool Finish() noexcept {
+                switch (State) {
+                    case EState::Running: [[likely]]
+                        return true;
+                    case EState::InCancel: [[unlikely]]
+                        // Coroutine resumed recursively(!) in Cancel() and finished
+                        // Mark as finished so Cancel() calls Destroy() later
+                        State = EState::InCancelFinished;
+                        return false;
+                    case EState::InCancelFinished: [[unlikely]]
+                        // Coroutine already finished, definitely a bug
+                        Y_ABORT("BUG: task resumed twice");
+                    case EState::InCancelDestroyed: [[unlikely]]
+                        // Coroutine resumed cancellation handle from Cancel(), but
+                        // now it's trying to also finish normally, definitely a bug
+                        Y_ABORT("BUG: task confirmed cancel then resumed");
+                    case EState::Scheduled:
+                        // We have used this promise to schedule next coroutine,
+                        // but now it's finishing normally, so we need to make
+                        // sure coroutine is destroyed as well
+                        State = EState::ScheduledDestroy;
+                        return false;
+                    case EState::ScheduledDestroy: [[unlikely]]
+                        // Coroutine was already scheduled for destruction and
+                        // now it has somehow finished normally, definitely a bug
+                        Y_ABORT("BUG: task resumed/cancelled multiple times");
+                }
+            }
+
             void Cancel() noexcept override {
-                if (!GetCancellation()) {
-                    TAwaitCancelSource::Cancel(this->ToCoroutineHandle());
+                // Protect against Cancel() called multiple times
+                if (GetCancellation()) [[unlikely]] {
+                    return;
+                }
+
+                Y_ABORT_UNLESS(State == EState::Running);
+
+                // Protect against coroutine resuming recursively and destroying itself
+                State = EState::InCancel;
+
+                if (auto next = TAwaitCancelSource::Cancel(this->ToCoroutineHandle())) {
+                    if (next == this->ToCoroutineHandle()) {
+                        // Subscriber wants us to unwind the stack
+                        Y_ABORT_UNLESS(State == EState::InCancel, "BUG: task resumed/cancelled multiple times");
+                        State = EState::ScheduledDestroy;
+                    } else {
+                        // Subscriber wants us to resume something else
+                        // Remember whether we also had a pending destroy
+                        if (State == EState::InCancel) {
+                            State = EState::Scheduled;
+                        } else {
+                            State = EState::ScheduledDestroy;
+                        }
+                        Pending = next;
+                    }
+                    TActorRunnableQueue::Schedule(this);
+                } else {
+                    switch (State) {
+                        case EState::InCancel:
+                            // Nothing changed, get back to running
+                            State = EState::Running;
+                            break;
+                        case EState::InCancelFinished:
+                            // Task finished recursively for some reason. We can
+                            // call destroy directly, since there are no code
+                            // left to run anyway.
+                            Destroy();
+                            break;
+                        case EState::InCancelDestroyed:
+                            // Task cancelled recursively for some reason. We
+                            // need to schedule destruction, so it doesn't
+                            // happen recursively.
+                            State = EState::ScheduledDestroy;
+                            TActorRunnableQueue::Schedule(this);
+                            break;
+                        default: [[unlikely]]
+                            Y_ABORT("BUG: unexpected state");
+                    }
                 }
             }
 
@@ -928,15 +1052,66 @@ namespace NActors {
             }
 
             void OnResume() noexcept {
-                Destroy();
+                switch (State) {
+                    case EState::Running:
+                        Destroy();
+                        break;
+                    case EState::InCancel:
+                        State = EState::InCancelDestroyed;
+                        break;
+                    case EState::InCancelFinished:
+                        Y_ABORT("BUG: task resumed then confirmed cancel");
+                    case EState::InCancelDestroyed:
+                        Y_ABORT("BUG: task confirmed cancel twice");
+                    case EState::Scheduled:
+                        State = EState::ScheduledDestroy;
+                        break;
+                    case EState::ScheduledDestroy:
+                        Y_ABORT("BUG: task resumed/cancelled multiple times");
+                }
             }
 
             void OnDestroy() noexcept {
                 Y_ABORT("Unexpected destroy on cancellation proxy");
             }
 
+            void DoRun(IActor*) noexcept {
+                if (Pending) {
+                    // Note: even when current state is EState::Scheduled our
+                    // cancellation handle may resume and transition to the
+                    // destroy state.
+                    Pending.resume();
+                    Pending = {};
+                }
+
+                switch (State) {
+                    case EState::Scheduled:
+                        // We performed some scheduled work, but now we keep running
+                        State = EState::Running;
+                        break;
+                    case EState::ScheduledDestroy:
+                        // We may finally destroy this coroutine
+                        Destroy();
+                        break;
+                    default:
+                        Y_ABORT("BUG: unexpected state");
+                }
+            }
+
+        private:
+            enum class EState {
+                Running,
+                InCancel,
+                InCancelFinished,
+                InCancelDestroyed,
+                Scheduled,
+                ScheduledDestroy,
+            };
+
         private:
             IActor& Actor;
+            EState State = EState::Running;
+            std::coroutine_handle<> Pending;
         };
 
     } // namespace NDetail

@@ -149,6 +149,14 @@ public:
         co_await ActorWaitForEvent<TEvents::TEvPong>(cookie);
     }
 
+    async<void> StepWithContinuation() {
+        ui64 cookie = ++LastCookie;
+        Send(Target, new TEvents::TEvPing(), 0, cookie);
+        co_await WithAsyncContinuation<void>([this](auto c) {
+            Continuation = std::move(c);
+        });
+    }
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPong, Handle);

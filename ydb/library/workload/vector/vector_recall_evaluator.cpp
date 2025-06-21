@@ -232,7 +232,7 @@ void TVectorRecallEvaluator::FillEtalons() {
                 prefixValue = GetPrefixValue(i);
             }
 
-            NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.TopK);
+            NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);
             
             auto asyncResult = Params.QueryClient->RetryQuery([queryTemplate, params](NYdb::NQuery::TSession session) {
                 return session.ExecuteQuery(
@@ -255,7 +255,7 @@ void TVectorRecallEvaluator::FillEtalons() {
             
             // Clear and prepare etalons for this target
             SelectTargets[targetIndex].NearestNeighbors.clear();
-            SelectTargets[targetIndex].NearestNeighbors.reserve(Params.TopK);
+            SelectTargets[targetIndex].NearestNeighbors.reserve(Params.Limit);
             
             // Extract all IDs from the result set
             while (parser.TryNextRow()) {

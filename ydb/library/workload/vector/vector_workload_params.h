@@ -37,7 +37,7 @@ public:
     size_t Targets = 0;
     size_t VectorInitCount = 0;
     size_t KmeansTreeSearchClusters = 0;
-    size_t TopK = 0;
+    size_t Limit = 0;
     bool Recall;
 };
 

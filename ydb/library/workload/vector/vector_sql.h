@@ -23,6 +23,6 @@ std::string MakeSelect(const TString& tableName, const TString& indexName,
 
 
 // Utility function to create parameters for select query
-NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 topK);
+NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 limit);
 
 } // namespace NYdbWorkload

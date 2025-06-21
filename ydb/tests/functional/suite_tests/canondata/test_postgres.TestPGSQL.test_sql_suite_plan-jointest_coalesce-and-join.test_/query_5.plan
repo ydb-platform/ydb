@@ -29,18 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                        "Node Type": "LeftJoin (MapJoin)",
                                         "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.xx.pkxx"
-                                            },
                                             {
                                                 "Condition": "xx.pkxx = Q._equijoin_column_0",
                                                 "Inputs": [

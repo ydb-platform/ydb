@@ -389,6 +389,8 @@ class BaseSuiteRunner(object):
     def assert_statement_query(self, statement):
         query_id = next(self.query_id)
         query_name = "query_%d" % query_id
+        print('query_name: {query_name}')
+        print('statement: {statement}')
         if self.plan:
             json_deser = self.explain(statement.text)
             json_deser = re.sub(r'precompute_\d+_\d+', 'precompute', json_deser)

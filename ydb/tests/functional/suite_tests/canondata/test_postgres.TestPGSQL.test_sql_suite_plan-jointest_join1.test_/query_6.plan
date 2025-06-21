@@ -29,23 +29,13 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-InnerJoin (MapJoin)-Filter",
+                                        "Node Type": "InnerJoin (MapJoin)-Filter",
                                         "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": "argument.J1_TBL.i"
-                                            },
                                             {
                                                 "Condition": "J1_TBL.i = J2_TBL.k",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 2
+                                                        "InternalOperatorId": 1
                                                     },
                                                     {
                                                         "ExternalPlanNodeId": 3

@@ -162,19 +162,19 @@ namespace NActors {
 
     } // namespace NDetail
 
-    NDetail::TActorSleepAwaiter<TDuration> ActorYield() {
+    inline NDetail::TActorSleepAwaiter<TDuration> ActorYield() {
         return NDetail::TActorSleepAwaiter<TDuration>(TDuration::Zero());
     }
 
-    NDetail::TActorSleepAwaiter<TDuration> ActorSleepFor(TDuration duration) {
+    inline NDetail::TActorSleepAwaiter<TDuration> ActorSleepFor(TDuration duration) {
         return NDetail::TActorSleepAwaiter<TDuration>(duration);
     }
 
-    NDetail::TActorSleepAwaiter<TMonotonic> ActorSleepUntil(TMonotonic deadline) {
+    inline NDetail::TActorSleepAwaiter<TMonotonic> ActorSleepUntil(TMonotonic deadline) {
         return NDetail::TActorSleepAwaiter<TMonotonic>(deadline);
     }
 
-    NDetail::TActorSleepAwaiter<TInstant> ActorSleepUntil(TInstant deadline) {
+    inline NDetail::TActorSleepAwaiter<TInstant> ActorSleepUntil(TInstant deadline) {
         return NDetail::TActorSleepAwaiter<TInstant>(deadline);
     }
 
@@ -341,21 +341,21 @@ namespace NActors {
     }
 
     template<IsAsyncCoroutineCallback TCallback>
-    auto ActorWithTimeout(TDuration duration, TCallback&& callback) {
+    inline auto ActorWithTimeout(TDuration duration, TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)());
         using T = TAsyncCoroutineResult<TCallbackResult>;
         return NDetail::TActorAsyncWithTimeoutAwaiter<TDuration, T>(duration, std::forward<TCallback>(callback));
     }
 
     template<IsAsyncCoroutineCallback TCallback>
-    auto ActorWithDeadline(TMonotonic deadline, TCallback&& callback) {
+    inline auto ActorWithDeadline(TMonotonic deadline, TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)());
         using T = TAsyncCoroutineResult<TCallbackResult>;
         return NDetail::TActorAsyncWithTimeoutAwaiter<TMonotonic, T>(deadline, std::forward<TCallback>(callback));
     }
 
     template<IsAsyncCoroutineCallback TCallback>
-    auto ActorWithDeadline(TInstant deadline, TCallback&& callback) {
+    inline auto ActorWithDeadline(TInstant deadline, TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)());
         using T = TAsyncCoroutineResult<TCallbackResult>;
         return NDetail::TActorAsyncWithTimeoutAwaiter<TInstant, T>(deadline, std::forward<TCallback>(callback));

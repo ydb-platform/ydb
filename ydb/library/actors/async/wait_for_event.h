@@ -84,7 +84,7 @@ namespace NActors {
     };
 
     template<class TEvent>
-    TActorSpecificEventAwaiter<TEvent> ActorWaitForEvent(ui64 cookie) {
+    inline TActorSpecificEventAwaiter<TEvent> ActorWaitForEvent(ui64 cookie) {
         return TActorSpecificEventAwaiter<TEvent>{ cookie };
     }
 

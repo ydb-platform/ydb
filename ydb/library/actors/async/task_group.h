@@ -595,14 +595,14 @@ namespace NActors {
     }
 
     template<class T, IsAsyncCoroutineCallback<TTaskGroup<T>&> TCallback>
-    auto WithTaskGroup(TCallback&& callback) {
+    inline auto WithTaskGroup(TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::declval<TTaskGroup<T>&>));
         using R = TAsyncCoroutineResult<TCallbackResult>;
         return NDetail::TWithTaskGroupAwaiter<T, R>(std::forward<TCallback>(callback));
     }
 
     template<IsAsyncCoroutineCallback<TTaskGroup<void>&> TCallback>
-    auto WithTaskGroup(TCallback&& callback) {
+    inline auto WithTaskGroup(TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::declval<TTaskGroup<void>&>));
         using R = TAsyncCoroutineResult<TCallbackResult>;
         return NDetail::TWithTaskGroupAwaiter<void, R>(std::forward<TCallback>(callback));

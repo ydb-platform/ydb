@@ -1,5 +1,6 @@
 #include "common.h"
 #include <ydb/library/actors/async/task_group.h>
+#include <ydb/library/actors/async/sleep.h>
 
 namespace NAsyncTest {
 
@@ -215,6 +216,56 @@ namespace NAsyncTest {
             Y_UNUSED(actor);
 
             UNIT_ASSERT(finishedInnerNormally);
+            UNIT_ASSERT(finishedNormally);
+            UNIT_ASSERT(finished);
+        }
+
+        Y_UNIT_TEST(TaskAwaitedBeforeReturn) {
+            bool finished = false;
+            bool finishedNormally = false;
+            bool groupFinishedNormally = false;
+            bool taskFinishedNormally = false;
+            std::coroutine_handle<> resume, cancel;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { finished = true; };
+
+                int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
+                    g.Add([&]() -> async<void> {
+                        co_await TSuspendAwaiter{ &resume, &cancel };
+                        taskFinishedNormally = true;
+                    });
+                    UNIT_ASSERT(!resume);
+                    co_await ActorYield();
+                    UNIT_ASSERT(resume);
+                    UNIT_ASSERT(!cancel);
+                    groupFinishedNormally = true;
+                    co_return 42;
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+
+                finishedNormally = true;
+            });
+
+            // Note: ActorYield pending on the mailbox, but task must have started
+            UNIT_ASSERT(!groupFinishedNormally);
+            UNIT_ASSERT(resume);
+            UNIT_ASSERT(!cancel);
+            runtime.Step(actor);
+
+            UNIT_ASSERT(resume);
+            UNIT_ASSERT(cancel);
+            UNIT_ASSERT(groupFinishedNormally);
+            UNIT_ASSERT(!taskFinishedNormally);
+            UNIT_ASSERT(!finishedNormally);
+            UNIT_ASSERT(!finished);
+
+            runtime.ResumeCoroutine(actor, resume);
+
+            UNIT_ASSERT(taskFinishedNormally);
             UNIT_ASSERT(finishedNormally);
             UNIT_ASSERT(finished);
         }

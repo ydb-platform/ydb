@@ -147,11 +147,15 @@ namespace NAsyncTest {
             auto actorId = Register(new TAsyncTestActor(state, std::move(callback)));
             EnableScheduleForActor(actorId);
             // Run bootstrap for this actor
+            Step(actorId);
+            return actorId;
+        }
+
+        void Step(const TActorId& actorId) {
             TDispatchOptions options;
             options.OnlyMailboxes.push_back(actorId);
             options.CustomFinalCondition = []() { return true; };
             DispatchEvents(options);
-            return actorId;
         }
 
         void Poison(const TActorId& actor) {

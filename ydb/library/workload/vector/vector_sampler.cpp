@@ -26,8 +26,8 @@ void TVectorSampler::SampleExistingVectors() {
        
     // First query to get min and max ID range
     std::string minMaxQuery = std::format(R"_(--!syntax_v1
-        SELECT Unwrap(MIN(id)) as min_id, Unwrap(MAX(id)) as max_id FROM {0};
-    )_", Params.TableName.c_str());
+        SELECT Unwrap(MIN({1})) as min_id, Unwrap(MAX({1})) as max_id FROM {0};
+    )_", Params.TableName.c_str(), Params.KeyColumn.c_str());
     
     // Execute the range query
     std::optional<NYdb::TResultSet> rangeResultSet;
@@ -109,13 +109,13 @@ void TVectorSampler::SampleExistingVectors() {
             vectorQuery = std::format(R"_(--!syntax_v1
                 SELECT {0}, Unwrap({1}) as embedding, Unwrap({2}) as prefix_value 
                 FROM {3} 
-                WHERE id = {4};
+                WHERE {0} = {4};
             )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.PrefixColumn->c_str(), Params.TableName.c_str(), randomId);
         } else {
             vectorQuery = std::format(R"_(--!syntax_v1
                 SELECT {0}, Unwrap({1}) as embedding 
                 FROM {2} 
-                WHERE id = {3};
+                WHERE {0} = {3};
             )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.TableName.c_str(), randomId);
         }
         

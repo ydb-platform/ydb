@@ -1,12 +1,15 @@
 #pragma once
 #include <ydb/core/protos/config.pb.h>
 
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/result.h>
+
 namespace NKikimr::NGeneralCache::NPublic {
 
 class TConfig {
 private:
-    YDB_READONLY_DEF(ui32, MemoryLimit, ((ui64)1 << 30));
-    YDB_READONLY_DEF(ui32, DirectInflightLimit, 1000);
+    YDB_READONLY(ui32, MemoryLimit, ((ui64)1 << 30));
+    YDB_READONLY(ui32, DirectInflightLimit, 1000);
 
     TConfig() = default;
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TGeneralCacheConfig& config);

@@ -216,8 +216,7 @@ private:
     NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
-    static constexpr ui64 MaxInternalPathIdDefault = 1'000'000'000; //Use a value presumably greater than any really used
-    TInternalPathId MaxInternalPathId = TInternalPathId::FromRawValue(MaxInternalPathIdDefault); //Max internal path id ever used in this tablet
+    TInternalPathId MaxInternalPathId;
 
     friend class TTxInit;
 

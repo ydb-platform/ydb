@@ -12,7 +12,7 @@ namespace NSQLComplete {
                 return [name = std::move(name)](auto f) {
                     TVector<TFolderEntry> entries = f.ExtractValue();
                     EraseIf(entries, [prefix = ToLowerUTF8(name)](const TFolderEntry& entry) {
-                        return !entry.Name.StartsWith(prefix);
+                        return !ToLowerUTF8(entry.Name).StartsWith(prefix);
                     });
                     return entries;
                 };
@@ -50,7 +50,7 @@ namespace NSQLComplete {
                 return [name = std::move(name)](auto f) {
                     return f.ExtractValue().Transform([&](auto&& table) {
                         EraseIf(table.Columns, [prefix = ToLowerUTF8(name)](const TString& name) {
-                            return !name.StartsWith(prefix);
+                            return !ToLowerUTF8(name).StartsWith(prefix);
                         });
                         return table;
                     });

@@ -241,9 +241,11 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/local_channel.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/local_server.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/message.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/message_format.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/message.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/null_channel.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/overload_controller.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/overload_controlling_service_base.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/peer_discovery.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/per_key_request_queue_provider.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/protocol_version.cpp
@@ -254,8 +256,8 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/roaming_channel.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/serialized_channel.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/server_detail.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/service.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/service_detail.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/service.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/static_channel_factory.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/stream.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/throttling_channel.cpp

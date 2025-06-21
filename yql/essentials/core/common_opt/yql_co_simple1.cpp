@@ -5374,6 +5374,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return ctx.NewCallable(node->Pos(), "SqlAggregateAll", { ctx.NewCallable(node->Pos(), "UnionAll", node->ChildrenList()) });
     };
 
+    map["IntersectAll"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "intersect_all", ctx);
+    };
+    map["Intersect"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "intersect", ctx);
+    };
+
+    map["ExceptAll"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "except_all", ctx);
+    };
+    map["Except"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "except", ctx);
+    };
+
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoAggregate self(node);
         if (self.Keys().Size() == 0 && !HasPayload(self)) {

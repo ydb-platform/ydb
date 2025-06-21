@@ -1,0 +1,7 @@
+diff --git a/y_absl/base/options.h b/y_absl/base/options.h
+index cebda24..977203a 100644
+--- a/y_absl/base/options.h
++++ b/y_absl/base/options.h
+@@ -206,1 +206,1 @@
+-#define Y_ABSL_OPTION_INLINE_NAMESPACE_NAME lts_20240722
++#define Y_ABSL_OPTION_INLINE_NAMESPACE_NAME lts_y_20240722

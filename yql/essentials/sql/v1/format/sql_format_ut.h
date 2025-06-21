@@ -1548,6 +1548,34 @@ Y_UNIT_TEST(Union) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(Intersect) {
+    TCases cases = {
+        {"select 1 intersect all select 2 intersect select 3 intersect all select 4 intersect select 5",
+            "SELECT\n\t1\nINTERSECT ALL\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nINTERSECT ALL\nSELECT\n\t4\nINTERSECT\nSELECT\n\t5\n;\n"},
+        {"select 1 intersect all (select 2)",
+            "SELECT\n\t1\nINTERSECT ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+        {"select 1 intersect distinct select 2 intersect select 3 intersect distinct select 4 intersect select 5",
+            "SELECT\n\t1\nINTERSECT DISTINCT\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nINTERSECT DISTINCT\nSELECT\n\t4\nINTERSECT\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Except) {
+    TCases cases = {
+        {"select 1 except all select 2 except select 3 except all select 4 except select 5",
+            "SELECT\n\t1\nEXCEPT ALL\nSELECT\n\t2\nEXCEPT\nSELECT\n\t3\nEXCEPT ALL\nSELECT\n\t4\nEXCEPT\nSELECT\n\t5\n;\n"},
+        {"select 1 except all (select 2)",
+            "SELECT\n\t1\nEXCEPT ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+        {"select 1 except distinct select 2 except select 3 except distinct select 4 except select 5",
+            "SELECT\n\t1\nEXCEPT DISTINCT\nSELECT\n\t2\nEXCEPT\nSELECT\n\t3\nEXCEPT DISTINCT\nSELECT\n\t4\nEXCEPT\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Comment) {
     TCases cases = {
         {"/*\nmulti\nline\ncomment\n*/\npragma foo = \"true\";\npragma bar = \"1\"",

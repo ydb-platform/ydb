@@ -342,6 +342,7 @@ bool CheckColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::v
 void TestWrite(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(true);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
@@ -565,6 +566,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     csControllerGuard->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData().FeatureFlags.SetEnableWritePortionsOnInsert(true);
 
     runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);

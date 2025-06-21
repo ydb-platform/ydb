@@ -20,11 +20,16 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
+ydb/core/kqp/ut/olap KqpOlapAggregations.BlockGenericWithDistinct
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
+ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
+ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
+ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
+ydb/core/kqp/ut/join KqpJoinOrder.CanonizedJoinOrderLookupBug
 ydb/core/kqp/ut/join KqpJoinOrder.FiveWayJoinStatsOverride-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCDS16-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCDS34-StreamLookupJoin+ColumnStore
@@ -34,7 +39,7 @@ ydb/core/kqp/ut/join KqpJoinOrder.TPCDS94-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCDS95-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCH10-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCH11-StreamLookupJoin+ColumnStore
-ydb/core/kqp/ut/join KqpJoinOrder.TPCH21-StreamLookupJoin+ColumnStor
+ydb/core/kqp/ut/join KqpJoinOrder.TPCH21-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCH3-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCH5-StreamLookupJoin+ColumnStore
 ydb/core/kqp/ut/join KqpJoinOrder.TPCH8-StreamLookupJoin+ColumnStore
@@ -135,6 +140,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
+ydb/tests/functional/tpc/medium test_tpch.py.TestTpchS1.test_tpch[13]
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

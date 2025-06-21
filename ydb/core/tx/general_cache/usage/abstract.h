@@ -1,0 +1,21 @@
+#pragma once
+
+namespace NKikimr::NGeneralCache::NSource {
+
+template <class TPolicy>
+class ICallback {
+private:
+    using TAddress = typename TPolicy::TAddress;
+    using TObject = typename TPolicy::TObject;
+
+    virtual void DoOnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
+        THashMap<TAddress, TString>&& errorAddresses) const = 0;
+
+public:
+    void OnResultReady(
+        THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errorAddresses) const {
+        DoOnResultReady(std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses));
+    }
+};
+
+}   // namespace NKikimr::NGeneralCache::NSource

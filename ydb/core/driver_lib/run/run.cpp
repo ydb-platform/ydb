@@ -1731,6 +1731,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
     }
 
+    if (serviceMask.EnableGeneralCachePortionsMetadata) {
+        sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
+    }
+
     if (serviceMask.EnableCms) {
         sil->AddServiceInitializer(new TCmsServiceInitializer(runConfig));
     }

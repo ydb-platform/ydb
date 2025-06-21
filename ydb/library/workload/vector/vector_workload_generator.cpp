@@ -14,8 +14,6 @@
 
 namespace NYdbWorkload {
 
-thread_local std::atomic<size_t> TVectorWorkloadGenerator::ThreadLocalTargetIndex{0};
-
 TVectorWorkloadGenerator::TVectorWorkloadGenerator(const TVectorWorkloadParams* params)
     : TBase(params)
 {
@@ -74,21 +72,8 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
     return {};
 }
 
-size_t TVectorWorkloadGenerator::GetNextTargetIndex(size_t currentIndex) const {
-    return (currentIndex + 1) % VectorRecallEvaluator->GetTargetCount();
-}
-
 TQueryInfoList TVectorWorkloadGenerator::Select() {
-    // Initialize thread-local target index if needed
-    if (ThreadLocalTargetIndex.load() == 0) {
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<size_t> dist(0, VectorRecallEvaluator->GetTargetCount() - 1);
-        ThreadLocalTargetIndex.store(dist(gen));
-    }
-    
-    // Get current target index
-    size_t targetIndex = ThreadLocalTargetIndex.load();
+    CurrentIndex = (CurrentIndex + 1) % VectorRecallEvaluator->GetTargetCount();
 
     // Create the query string
     std::string query = MakeSelect(
@@ -102,21 +87,18 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     );
     
     // Get the embedding for the specified target
-    const auto& targetEmbedding = VectorRecallEvaluator->GetTargetEmbedding(targetIndex);
+    const auto& targetEmbedding = VectorRecallEvaluator->GetTargetEmbedding(CurrentIndex);
     
     // Get the prefix value if needed
     std::optional<i64> prefixValue;
     if (Params.PrefixColumn.has_value()) {
-        prefixValue = VectorRecallEvaluator->GetPrefixValue(targetIndex);
+        prefixValue = VectorRecallEvaluator->GetPrefixValue(CurrentIndex);
     }
     
     NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);
     
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
-    
-    // Update the thread-local index for the next query
-    ThreadLocalTargetIndex.store(GetNextTargetIndex(targetIndex));
     
     return TQueryInfoList(1, queryInfo);
 }

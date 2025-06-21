@@ -49,29 +49,44 @@ void TTreeElementBase::UpdateTopDown() {
     }
 
     // At this moment we know own fair-share. Need to calibrate children.
-    ui64 totalWeightedDemand = 0;
-    std::vector<ui64> weightedDemand;
 
-    weightedDemand.resize(Children.size());
-    for (size_t i = 0, s = Children.size(); i < s; ++i) {
-        const auto& child = Children.at(i);
-        weightedDemand.at(i) = child->GetWeight() * child->Demand;
-        totalWeightedDemand += weightedDemand.at(i);
-    }
+    // Fair-share variant (for pools and databases)
+    if (!IsLeaf() && !Children.at(0)->IsLeaf()) {
+        ui64 totalWeightedDemand = 0;
+        std::vector<ui64> weightedDemand;
 
-    for (size_t i = 0, s = Children.size(); i < s; ++i) {
-        const auto& child = Children.at(i);
-        if (totalWeightedDemand > 0) {
-            child->FairShare = weightedDemand.at(i) * FairShare / totalWeightedDemand;
-        } else {
-            child->FairShare = 0;
+        weightedDemand.resize(Children.size());
+        for (size_t i = 0, s = Children.size(); i < s; ++i) {
+            const auto& child = Children.at(i);
+            weightedDemand.at(i) = child->GetWeight() * child->Demand;
+            totalWeightedDemand += weightedDemand.at(i);
         }
-        child->UpdateTopDown();
 
-        // TODO: looks a little bit hacky.
-        if (auto query = std::dynamic_pointer_cast<TQuery>(child); query && query->Origin) {
-            query->Origin->SetSnapshot(query);
-            query->Origin = nullptr;
+        for (size_t i = 0, s = Children.size(); i < s; ++i) {
+            const auto& child = Children.at(i);
+            if (totalWeightedDemand > 0) {
+                child->FairShare = weightedDemand.at(i) * FairShare / totalWeightedDemand;
+            } else {
+                child->FairShare = 0;
+            }
+            child->UpdateTopDown();
+        }
+    }
+    // FIFO variant (for queries)
+    else {
+        auto leftFairShare = FairShare;
+
+        // TODO: stable sort children by weight beforehand
+        for (size_t i = 0, s = Children.size(); i < s; ++i) {
+            const auto& child = Children.at(i);
+            child->FairShare = Min(leftFairShare, child->Demand);
+            leftFairShare = leftFairShare <= child->Demand ? 0 : leftFairShare - child->Demand;
+
+            // TODO: looks a little bit hacky.
+            if (auto query = std::dynamic_pointer_cast<TQuery>(child); query && query->Origin) {
+                query->Origin->SetSnapshot(query);
+                query->Origin = nullptr;
+            }
         }
     }
 

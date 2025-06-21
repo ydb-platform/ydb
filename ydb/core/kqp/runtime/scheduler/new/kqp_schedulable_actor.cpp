@@ -26,7 +26,7 @@ bool TSchedulableTask::TryIncreaseUsage(const TDuration& burstThrottle) {
     ui64 newUsage = Query->Usage.load();
     bool increased = false;
 
-    while (!increased && newUsage < snapshot->Parent->Demand) {
+    while (!increased && newUsage < snapshot->FairShare) {
         increased = Query->Usage.compare_exchange_weak(newUsage, newUsage + 1);
     }
 

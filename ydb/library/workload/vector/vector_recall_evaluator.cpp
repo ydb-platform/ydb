@@ -108,10 +108,8 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
         }
     }
     
-    Cout << "Recall measurement completed for " << sampler.GetTargetCount() << " targets." << Endl;
-    if (ProcessedTargets > 0) {
-        Cout << "Average recall: " << GetAverageRecall() << " (processed " << ProcessedTargets << " targets)" << Endl;
-    }
+    Cout << "Recall measurement completed for " << sampler.GetTargetCount() << " targets." 
+        << "\nAverage recall: " << GetAverageRecall() << Endl;
 }
 
 void TVectorRecallEvaluator::AddRecall(double recall) {

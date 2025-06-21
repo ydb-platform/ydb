@@ -154,7 +154,7 @@ void TVectorRecallEvaluator::SampleExistingVectors() {
         // Create target with the sampled vector
         TSelectTarget target;
         target.EmbeddingBytes = std::move(embeddingBytes);
-        target.Etalons.push_back(id);  // The vector's own ID is an etalon
+        target.NearestNeighbors.push_back(id);  // The vector's own ID is an etalon
         
         // Get prefix value if column was specified
         if (Params.PrefixColumn) {
@@ -254,15 +254,15 @@ void TVectorRecallEvaluator::FillEtalons() {
             NYdb::TResultSetParser parser(resultSet);
             
             // Clear and prepare etalons for this target
-            SelectTargets[targetIndex].Etalons.clear();
-            SelectTargets[targetIndex].Etalons.reserve(Params.TopK);
+            SelectTargets[targetIndex].NearestNeighbors.clear();
+            SelectTargets[targetIndex].NearestNeighbors.reserve(Params.TopK);
             
             // Extract all IDs from the result set
             while (parser.TryNextRow()) {
                 ui64 id = parser.ColumnParser(Params.KeyColumn).GetUint64();
-                SelectTargets[targetIndex].Etalons.push_back(id);
+                SelectTargets[targetIndex].NearestNeighbors.push_back(id);
             }
-            if (SelectTargets[targetIndex].Etalons.empty()) {
+            if (SelectTargets[targetIndex].NearestNeighbors.empty()) {
                 Cerr << "Warning: target " << targetIndex << " have empty etalon sets" << Endl;
             }
         }
@@ -281,7 +281,7 @@ const std::string& TVectorRecallEvaluator::GetTargetEmbedding(size_t index) cons
 }
 
 const std::vector<ui64>& TVectorRecallEvaluator::GetTargetEtalons(size_t index) const {
-    return SelectTargets.at(index).Etalons;
+    return SelectTargets.at(index).NearestNeighbors;
 }
 
 void TVectorRecallEvaluator::AddRecall(double recall) {

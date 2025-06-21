@@ -41,7 +41,7 @@ private:
 
     struct TSelectTarget {
         std::string EmbeddingBytes;             // Sample targets to use in select workload
-        std::vector<ui64> Etalons;              // Etalon vector Ids for recall measurement
+        std::vector<ui64> NearestNeighbors;     // Nearest neighbors vector Ids for recall measurement
         i64 PrefixValue = 0;                    // Sample prefix value
     };
     std::vector<TSelectTarget> SelectTargets;

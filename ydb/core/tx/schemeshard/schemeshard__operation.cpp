@@ -44,6 +44,14 @@ std::tuple<TMaybe<NACLib::TUserToken>, bool> ParseUserToken(const TString& token
     return std::make_tuple(result, parseError);
 }
 
+TString FormatSourceLocationInfo(const NKikimr::NCompat::TSourceLocation& location) {
+    TString locationInfo = "";
+    if (const char* fileName = location.file_name(); fileName && *fileName && location.line() > 0) {
+        locationInfo = TStringBuilder() << " (GetDB first called at " << fileName << ":" << location.line() << ")";
+    }
+    return locationInfo;
+}
+
 struct TSchemeShard::TTxOperationProposeCancelTx: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvSchemeShard::TEvCancelTx::TPtr Ev;
 
@@ -152,6 +160,9 @@ bool TSchemeShard::ProcessOperationParts(
                                 << ", tx message: " << SecureDebugString(record));
             }
 
+            auto firstGetDbLocation = context.GetFirstGetDbLocation();
+            TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
+
             Y_VERIFY_S(context.IsUndoChangesSafe(),
                         "Operation is aborted and all changes should be reverted"
                             << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
@@ -160,6 +171,7 @@ bool TSchemeShard::ProcessOperationParts(
                             << ", already accepted parts: " << operation->Parts.size()
                             << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                             << ", with reason: " << response->Record.GetReason()
+                            << ", first GetDB called at: " << locationInfo
                             << ", tx message: " << SecureDebugString(record));
 
             AbortOperationPropose(txId, context);
@@ -172,10 +184,7 @@ bool TSchemeShard::ProcessOperationParts(
             prevProposeUndoSafe = false;
 
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
-            TString locationInfo = "";
-            if (const char* fileName = firstGetDbLocation.file_name(); fileName && *fileName && firstGetDbLocation.line() > 0) {
-                locationInfo = TStringBuilder() << " (GetDB first called at " << fileName << ":" << firstGetDbLocation.line() << ")";
-            }
+            TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
 
             LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Operation part proposed ok, but propose itself is undo unsafe"

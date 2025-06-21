@@ -71,13 +71,15 @@ public:
         Y_VERIFY_S(!context.SS->FindTx(OperationId), 
             "TChangePathStateOp Propose: operation already exists"
             << ", opId: " << OperationId);
+        
+        // Grab memory state before modifications for potential rollback
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabPath(context.SS, path.Base()->PathId);
+        
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
         
         // Set the target path that will have its state changed
         txState.TargetPathId = path.Base()->PathId;
-        
-        // Set TargetPathTargetState instead of changing path state immediately
-        NIceDb::TNiceDb db(context.GetDB());
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
         
         // Set the path state directly to allow the operation to proceed
@@ -94,8 +96,9 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TChangePathStateOp");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_N("TChangePathStateOp AbortPropose"
+            << ", opId: " << OperationId);
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

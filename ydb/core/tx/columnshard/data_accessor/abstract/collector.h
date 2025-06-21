@@ -1,5 +1,5 @@
 #pragma once
-
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <library/cpp/cache/cache.h>
@@ -43,22 +43,17 @@ public:
 
 class TConsumerPortions {
 private:
-    YDB_READONLY_DEF(TString, ConsumerId);
-    YDB_READONLY_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
+    YDB_READONLY_DEF(std::vector<ui64>, Portions);
 
 public:
-    void AddPortion(const TPortionInfo::TConstPtr& p) {
+    void AddPortion(const ui64 p) {
         Portions.emplace_back(p);
-    }
-
-    TConsumerPortions(const TString& consumerId)
-        : ConsumerId(consumerId) {
     }
 };
 
 class TPortionsByConsumer {
 private:
-    THashMap<TString, TConsumerPortions> Consumers;
+    THashMap<NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, TConsumerPortions> Consumers;
 
 public:
     ui64 GetPortionsCount() const {
@@ -73,15 +68,15 @@ public:
         return Consumers.empty();
     }
 
-    TConsumerPortions& UpsertConsumer(const TString& consumerId) {
-        auto it = Consumers.find(consumerId);
+    TConsumerPortions& UpsertConsumer(const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumer) {
+        auto it = Consumers.find(consumer);
         if (it == Consumers.end()) {
-            it = Consumers.emplace(consumerId, consumerId).first;
+            it = Consumers.emplace(consumer, TConsumerPortions()).first;
         }
         return it->second;
     }
 
-    const THashMap<TString, TConsumerPortions>& GetConsumers() const {
+    const THashMap<NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, TConsumerPortions>& GetConsumers() const {
         return Consumers;
     }
 };

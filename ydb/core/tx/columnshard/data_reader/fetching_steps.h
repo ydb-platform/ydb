@@ -40,7 +40,7 @@ private:
 
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         fetchingContext->SetStage(EFetchingStage::AskAccessorResources);
-        auto request = std::make_shared<TDataAccessorsRequest>(::ToString(fetchingContext->GetInput().GetConsumer()));
+        auto request = std::make_shared<TDataAccessorsRequest>(fetchingContext->GetInput().GetConsumer());
         for (auto&& i : fetchingContext->GetInput().GetPortions()) {
             request->AddPortion(i->GetPortionInfo());
         }

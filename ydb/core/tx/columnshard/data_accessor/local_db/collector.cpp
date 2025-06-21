@@ -13,9 +13,8 @@ TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) 
     for (auto&& c : portions.GetConsumers()) {
         TConsumerPortions* cPortions = nullptr;
         for (auto&& p : c.second.GetPortions()) {
-            auto key = std::tuple{Owner, p->GetPathId(), p->GetPortionId()};
-            if (auto it = AccessorsCache->Find(key); it != AccessorsCache->End()) {
-                AFL_VERIFY(it.Key() == key);
+            auto it = AccessorsCache.Find(p);
+            if (it != AccessorsCache.End() && it.Key() == p) {
                 result.AddFromCache(it.Value());
             } else {
                 if (!cPortions) {

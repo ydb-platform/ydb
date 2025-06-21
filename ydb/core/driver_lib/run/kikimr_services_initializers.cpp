@@ -193,7 +193,7 @@
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
-#include <ydb/core/tx/columnshard/data_accessor/operator/policy.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
 #include <ydb/core/tx/priorities/usage/service.h>
@@ -2298,11 +2298,10 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
 
-    auto service =
-        NGeneralCache::NPublic::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::CreateService(*serviceConfig, conveyorGroup);
+    auto service = NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::CreateService(*serviceConfig, conveyorGroup);
 
     setup->LocalServices.push_back(
-        std::make_pair(NGeneralCache::NPublic::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
+        std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
             TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 

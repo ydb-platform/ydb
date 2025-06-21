@@ -68,7 +68,7 @@ private:
 
     const NPublic::TConfig Config;
     const TString CacheName = TPolicy::GetCacheName();
-    TCounters Counters;
+    const TCounters& Counters;
     std::shared_ptr<NSource::IObjectsProcessor<TAddress>> ObjectsProcessor;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> Requests;
@@ -95,9 +95,9 @@ private:
 
 public:
     TManager(const NPublic::TConfig& config, const NActors::TActorId& ownerActorId,
-        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& baseCounters)
+        const TCounters& counters)
         : Config(config)
-        , Counters(CacheName, baseCounters)
+        , Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
         , Cache(Config.GetMemoryLimit()) {
     }

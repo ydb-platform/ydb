@@ -285,7 +285,8 @@ protected:
         return DoBuildDataLock();
     }
 
-    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess = std::make_shared<TDataAccessorsRequest>(TaskIdentifier);
+    std::shared_ptr<TDataAccessorsRequest> PortionsToAccess =
+        std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::GENERAL_COMPACTION);
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:

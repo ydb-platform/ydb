@@ -17,7 +17,7 @@ void TLocalManager::DrainQueue() {
         while (PortionsAskInFlight + countToFlight < inFlightLimit && packPortionsCount < std::min<ui32>(inFlightLimit, 1000) &&
                PortionsAsk.size()) {
             auto p = PortionsAsk.front().ExtractPortion();
-            const TString consumerId = PortionsAsk.front().GetConsumerId();
+            const auto consumerId = PortionsAsk.front().GetConsumerId();
             PortionsAsk.pop_front();
             if (!lastPathId || *lastPathId != p->GetPathId()) {
                 lastPathId = p->GetPathId();
@@ -49,7 +49,7 @@ void TLocalManager::DrainQueue() {
                 if (!toAsk) {
                     RequestsByPortion.erase(it);
                 } else {
-                    portionsToAsk[p->GetPathId()].UpsertConsumer(consumerId).AddPortion(p);
+                    portionsToAsk[p->GetPathId()].UpsertConsumer(consumerId).AddPortion(p->GetPortionId());
                     ++packPortionsCount;
                     ++countToFlight;
                 }

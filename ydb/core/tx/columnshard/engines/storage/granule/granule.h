@@ -310,7 +310,7 @@ public:
             OnAfterChangePortion(i.second, &g, true);
         }
         if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
-            auto request = std::make_shared<TDataAccessorsRequest>("PREFETCH_GRANULE::" + ::ToString(PathId));
+            auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
             for (auto&& p : Portions) {
                 request->AddPortion(p.second);
             }
@@ -381,6 +381,12 @@ public:
         auto it = Portions.find(portion);
         AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
         return *it->second;
+    }
+
+    const TPortionInfo::TPtr& GetPortionVerifiedPtr(const ui64 portion) const {
+        auto it = Portions.find(portion);
+        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
+        return it->second;
     }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {

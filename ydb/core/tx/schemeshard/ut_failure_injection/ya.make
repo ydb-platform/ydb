@@ -19,7 +19,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut_incremental_restore.cpp
+    ut_failure_injection.cpp
 )
 
 YQL_LAST_ABI_VERSION()

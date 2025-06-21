@@ -15,6 +15,7 @@ enum class EInjectedFailureType : ui64 {
     PathSplitFailure = 3,
     IncrementalBackupPathNotResolved = 4,
     CreateChangePathStateFailed = 5,
+    LateBackupCollectionNotFound = 6,
 };
 
 // Helper functions for easier test failure injection

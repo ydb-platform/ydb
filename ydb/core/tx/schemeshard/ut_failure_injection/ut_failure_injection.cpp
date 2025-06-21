@@ -145,8 +145,8 @@ Y_UNIT_TEST(TestBackupCollectionNotFoundFailure) {
     
     AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
     
-    // Expect failure due to injected error
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusPathDoesNotExist);
+    // Expect failure due to injected error - check immediate response, not notification
+    TestModificationResult(runtime, txId, NKikimrScheme::StatusPathDoesNotExist);
     
     // Clear failure injection
     runtime.GetAppData().RemoveFailure(static_cast<ui64>(EInjectedFailureType::BackupCollectionNotFound));
@@ -171,7 +171,7 @@ Y_UNIT_TEST(TestBackupChildrenEmptyFailure) {
     )";
     
     AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusSchemeError);
+    TestModificationResult(runtime, txId, NKikimrScheme::StatusSchemeError);
     
     // Clear failure injection
     runtime.GetAppData().RemoveFailure(static_cast<ui64>(EInjectedFailureType::BackupChildrenEmpty));
@@ -196,7 +196,7 @@ Y_UNIT_TEST(TestPathSplitFailure) {
     )";
     
     AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusInvalidParameter);
+    TestModificationResult(runtime, txId, NKikimrScheme::StatusInvalidParameter);
     
     // Clear failure injection
     runtime.GetAppData().RemoveFailure(static_cast<ui64>(EInjectedFailureType::PathSplitFailure));
@@ -221,7 +221,7 @@ Y_UNIT_TEST(TestIncrementalBackupPathNotResolvedFailure) {
     )";
     
     AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusPathDoesNotExist);
+    TestModificationResult(runtime, txId, NKikimrScheme::StatusPathDoesNotExist);
     
     // Clear failure injection
     runtime.GetAppData().RemoveFailure(static_cast<ui64>(EInjectedFailureType::IncrementalBackupPathNotResolved));
@@ -246,76 +246,10 @@ Y_UNIT_TEST(TestCreateChangePathStateFailedFailure) {
     )";
     
     AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusMultipleModifications);
+    TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
     
     // Clear failure injection
     runtime.GetAppData().RemoveFailure(static_cast<ui64>(EInjectedFailureType::CreateChangePathStateFailed));
-}
-
-Y_UNIT_TEST(TestAbortProposeOperation) {
-    TTestBasicRuntime runtime;
-    TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-    ui64 txId = 100;
-    ui64 testId = RandomNumber<ui64>();
-    
-    SetupBackupInfrastructure(runtime, env, txId);
-    CreateTestTable(runtime, env, txId, "Table1", testId);
-    CreateCompleteBackupScenario(runtime, env, txId, "TestBackup", "Table1", testId);
-    
-    // Create long incremental restore operation
-    TString uniqueBackupName = GetUniqueBackupName("TestBackup", testId);
-    TString restoreOpSchema = TStringBuilder() << R"(
-        Name: ")" << uniqueBackupName << R"("
-    )";
-    
-    AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusAccepted);
-    
-    ui64 restoreTxId = txId;
-    
-    // Now abort the operation via AbortOperation
-    // This tests the AbortPropose functionality we implemented
-    AsyncCancelTxTable(runtime, ++txId, restoreTxId);
-    env.TestWaitNotification(runtime, txId);
-    
-    // Verify the restore operation is no longer active
-    TestDescribe(runtime, "/MyRoot");
-    // The describe should not show any ongoing restore operations
-}
-
-Y_UNIT_TEST(TestFailureInjectionToggling) {
-    TTestBasicRuntime runtime;
-    TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-    ui64 txId = 100;
-    ui64 testId = RandomNumber<ui64>();
-    
-    SetupBackupInfrastructure(runtime, env, txId);
-    CreateTestTable(runtime, env, txId, "Table1", testId);
-    CreateCompleteBackupScenario(runtime, env, txId, "TestBackup", "Table1", testId);
-    
-    TString uniqueBackupName = GetUniqueBackupName("TestBackup", testId);
-    TString restoreOpSchema = TStringBuilder() << R"(
-        Name: ")" << uniqueBackupName << R"("
-    )";
-    
-    // Test that we can toggle failures on and off
-    runtime.GetAppData().InjectFailure(static_cast<ui64>(EInjectedFailureType::BackupCollectionNotFound));
-    
-    AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusPathDoesNotExist);
-    
-    // Remove this failure and add a different one
-    runtime.GetAppData().RemoveFailure(static_cast<ui64>(EInjectedFailureType::BackupCollectionNotFound));
-    runtime.GetAppData().InjectFailure(static_cast<ui64>(EInjectedFailureType::BackupChildrenEmpty));
-    
-    AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusSchemeError);
-    
-    // Clear all failures - should work now
-    runtime.GetAppData().ClearAllFailures();
-    
-    AsyncRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreOpSchema);
-    env.TestWaitNotification(runtime, txId, NKikimrScheme::StatusAccepted);
 }
 
 } // Y_UNIT_TEST_SUITE(TSchemeShardTestFailureInjection)

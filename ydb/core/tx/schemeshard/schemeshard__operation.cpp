@@ -1,4 +1,5 @@
 #include <util/generic/algorithm.h>
+#include <util/string/builder.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
 
@@ -170,11 +171,18 @@ bool TSchemeShard::ProcessOperationParts(
         if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
             prevProposeUndoSafe = false;
 
+            auto firstGetDbLocation = context.GetFirstGetDbLocation();
+            TString locationInfo = "";
+            if (const char* fileName = firstGetDbLocation.file_name(); fileName && *fileName && firstGetDbLocation.line() > 0) {
+                locationInfo = TStringBuilder() << " (GetDB first called at " << fileName << ":" << firstGetDbLocation.line() << ")";
+            }
+
             LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Operation part proposed ok, but propose itself is undo unsafe"
                     << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
                     << ", opId: " << part->GetOperationId()
                     << ", at schemeshard:  " << selfId
+                    << ", first GetDB called at: " << locationInfo
             );
         }
     }

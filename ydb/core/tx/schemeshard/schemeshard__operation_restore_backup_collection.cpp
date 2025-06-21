@@ -132,6 +132,10 @@ public:
     using TSubOperationWithContext::SelectStateFunc;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {
+            return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
+        }
+
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         LOG_I("TCreateRestoreOpControlPlane Propose"
@@ -267,7 +271,6 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 
     TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
 
-    // Check for injected failures early, before any operations are created to avoid "undo unsafe" operations
     if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::BackupCollectionNotFound))) {
         result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Backup collection not found (injected failure)")};
         return result;

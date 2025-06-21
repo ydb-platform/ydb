@@ -310,7 +310,8 @@ void TCommandImportFromCsv::Config(TConfig& config) {
         << "\n    " << "Apache Arrow format";
     description << "\nDefault: " << colors.CyanColor() << "\"" << "tvalue" << "\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("send-format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&SendFormat);
+        .RequiredArgument("STRING").StoreResult(&SendFormat)
+        .Hidden();
     if (InputFormat == EDataFormat::Csv) {
         config.Opts->AddLongOption("delimiter", "Field delimiter in rows")
             .RequiredArgument("STRING").StoreResult(&Delimiter).DefaultValue(Delimiter);

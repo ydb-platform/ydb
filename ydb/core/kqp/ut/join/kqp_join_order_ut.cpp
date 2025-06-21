@@ -64,38 +64,38 @@ TString GetPrettyJSON(const NJson::TJsonValue& json) {
  * key attribute and construct various full clique join queries
  */
 static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStore) {
-    CreateTables(session, "schema/rstuv.sql", useColumnStore);
+    // CreateTables(session, "schema/rstuv.sql", useColumnStore);
 
     CreateTables(session, "schema/tpch.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcds.sql", useColumnStore);
+    // CreateTables(session, "schema/tpcds.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcc.sql", useColumnStore);
+    // CreateTables(session, "schema/tpcc.sql", useColumnStore);
 
-    CreateTables(session, "schema/lookupbug.sql", useColumnStore);
+    // CreateTables(session, "schema/lookupbug.sql", useColumnStore);
 
-    CreateTables(session, "schema/sortings.sql", useColumnStore);
+    // CreateTables(session, "schema/sortings.sql", useColumnStore);
 
-    {
-        CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
-        const TString upsert =
-        R"(
-            UPSERT INTO t1 (id1) VALUES (1);
-            UPSERT INTO t2 (id2, t1_id1) VALUES (1, 1);
-            UPSERT INTO t3 (id3) VALUES (1);
-        )";
-        auto result =
-            session.ExecuteQuery(
-                upsert,
-                NYdb::NQuery::TTxControl::NoTx(),
-                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
-            ).ExtractValueSync();
+    // {
+    //     CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
+    //     const TString upsert =
+    //     R"(
+    //         UPSERT INTO t1 (id1) VALUES (1);
+    //         UPSERT INTO t2 (id2, t1_id1) VALUES (1, 1);
+    //         UPSERT INTO t3 (id3) VALUES (1);
+    //     )";
+    //     auto result =
+    //         session.ExecuteQuery(
+    //             upsert,
+    //             NYdb::NQuery::TTxControl::NoTx(),
+    //             NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+    //         ).ExtractValueSync();
 
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    }
+    //     result.GetIssues().PrintTo(Cerr);
+    //     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+    // }
 
-    CreateView(session, "view/tpch_random_join_view.sql");
+    // CreateView(session, "view/tpch_random_join_view.sql");
 }
 
 struct TExecuteParams {

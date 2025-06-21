@@ -200,9 +200,11 @@ SRCS(
     rpc/helpers.cpp
     rpc/local_channel.cpp
     rpc/local_server.cpp
-    rpc/message.cpp
     rpc/message_format.cpp
+    rpc/message.cpp
     rpc/null_channel.cpp
+    rpc/overload_controller.cpp
+    rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
@@ -213,8 +215,8 @@ SRCS(
     rpc/roaming_channel.cpp
     rpc/serialized_channel.cpp
     rpc/server_detail.cpp
-    rpc/service.cpp
     rpc/service_detail.cpp
+    rpc/service.cpp
     rpc/static_channel_factory.cpp
     rpc/stream.cpp
     rpc/throttling_channel.cpp

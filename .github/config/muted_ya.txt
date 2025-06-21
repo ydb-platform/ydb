@@ -69,6 +69,7 @@ ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.ClockPro
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
+ydb/core/tablet_flat/ut TSharedPageCache.Compaction_FlatIndex
 ydb/core/tablet_flat/ut TSharedPageCache.ThreeLeveledLRU
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning

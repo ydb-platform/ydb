@@ -39,7 +39,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
         TFetchingScriptCursor cursor(FetchingPlan, 0);
         const auto& commonContext = *GetContext()->GetCommonContext();
         auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId(), commonContext.GetSchedulableTask());
     }
 }
 
@@ -175,7 +175,7 @@ private:
         AFL_VERIFY(Step.Next());
         const auto& commonContext = *Source->GetContext()->GetCommonContext();
         auto task = std::make_shared<TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId(), commonContext.GetSchedulableTask());
     }
 
 public:

@@ -3,6 +3,7 @@
 #include "config.h"
 
 #include <ydb/core/base/events.h>
+#include <ydb/core/kqp/runtime/scheduler/new/fwd.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -26,11 +27,12 @@ struct TEvExecution {
         YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
         YDB_READONLY(ui64, InternalProcessId, 0);
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
+        YDB_READONLY_DEF(NKqp::NScheduler::TSchedulableTaskPtr, SchedulableTask);
 
     public:
         TEvNewTask() = default;
 
-        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId);
+        explicit TEvNewTask(ITask::TPtr task, const ESpecialTaskCategory category, const ui64 processId, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask);
     };
 
     class TEvRegisterProcess: public NActors::TEventLocal<TEvRegisterProcess, EvRegisterProcess> {

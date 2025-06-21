@@ -103,7 +103,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
     const auto& commonContext = *source->GetContext()->GetCommonContext();
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId(), commonContext.GetSchedulableTask());
     return false;
 }
 
@@ -186,7 +186,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
         TFetchingScriptCursor cursor(plan, 0);
         const auto& commonContext = *context->GetCommonContext();
         auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId(), commonContext.GetSchedulableTask());
         return false;
     } else {
         return true;
@@ -204,8 +204,9 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         }
         source->MutableStageData().AddFilter(std::move(filter));
         Step.Next();
-        auto task = std::make_shared<TStepAction>(source, std::move(Step), source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+        const auto& commonContext = *source->GetContext()->GetCommonContext();
+        auto task = std::make_shared<TStepAction>(source, std::move(Step), commonContext.GetScanActorId(), false);
+        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId(), commonContext.GetSchedulableTask());
     }
 }
 

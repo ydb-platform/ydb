@@ -38,7 +38,7 @@ public:
         UnregisterProcess(0);
     }
 
-    void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task) {
+    void RegisterTask(const ui64 internalProcessId, std::shared_ptr<ITask>&& task, NKqp::NScheduler::TSchedulableTaskPtr schedulableTask) {
         auto it = Processes.find(internalProcessId);
         AFL_VERIFY(it != Processes.end())("process_id", internalProcessId);
         if (!it->second->GetTasks().size()) {
@@ -47,7 +47,7 @@ public:
             }
             WeightedProcesses[it->second->GetWeightedUsage()].emplace_back(it->second);
         }
-        it->second->RegisterTask(std::move(task), Category);
+        it->second->RegisterTask(std::move(task), Category, schedulableTask);
     }
 
     void PutTaskResult(TWorkerTaskResult&& result, THashSet<TString>& scopeIds);

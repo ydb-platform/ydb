@@ -707,36 +707,38 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    bool CheckQuorum(TVector<ui32> &replicaRepliesCounter, TActorId foundReplica) const {
-        ui32 quorumCnt = 0;
-        for (const auto& ringGroup : GroupInfo->RingGroups) {
-            if (!ringGroup.WriteOnly) {
-                ++quorumCnt;
-            }
-        }
-        TVector<bool> quorum(GroupInfo->RingGroups.size());
+    static bool Ignore(const TStateStorageInfo::TRingGroup& ringGroup) {
+        return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+    }
 
+    static bool CheckQuorum(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
+        return ringGroupAcks > ringGroup.NToSelect / 2;
+    }
+
+    void ProcessReplicaAck(TVector<ui32>& ringGroupAcks, TActorId ackedReplica, TVector<bool>& ringGroupQuorums) const {
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
-            if (ringGroup.WriteOnly) {
-                continue;
-            }
             for (const auto& ring : ringGroup.Rings) {
                 for (const auto& replica : ring.Replicas) {
-                    if (replica == foundReplica 
-                        && ++replicaRepliesCounter[ringGroupIndex] > (ringGroup.NToSelect / 2) 
-                        && !quorum[ringGroupIndex])
-                    {
-                        quorum[ringGroupIndex] = true;
-                        --quorumCnt;
-                        if (quorumCnt == 0) {
-                            return true;
+                    if (replica == ackedReplica) {
+                        ++ringGroupAcks[ringGroupIndex];
+                        if (CheckQuorum(ringGroup, ringGroupAcks[ringGroupIndex])) {
+                            ringGroupQuorums[ringGroupIndex] = true;
                         }
                     }
                 }
             }
         }
-        return quorumCnt == 0;
+    }
+
+    bool CheckQuorum(TVector<ui32>& ringGroupAcks, TActorId ackedReplica) const {
+        TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
+        for (size_t i = 0; i < GroupInfo->RingGroups.size(); ++i) {
+            const auto& ringGroup = GroupInfo->RingGroups[i];
+            ringGroupQuorums[i] = Ignore(ringGroup) || CheckQuorum(ringGroup, ringGroupAcks[i]);
+        }
+        ProcessReplicaAck(ringGroupAcks, ackedReplica, ringGroupQuorums);
+        return Count(ringGroupQuorums, false) == 0;
     }
 
     void Handle(NSchemeshardEvents::TEvUpdateAck::TPtr& ev) {
@@ -761,9 +763,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            TActorId* foundReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
-            Y_ABORT_UNLESS(foundReplica != nullptr);
-            if (CheckQuorum(pathIt->second, *foundReplica)) {
+            TActorId* ackedReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
+            Y_ABORT_UNLESS(ackedReplica != nullptr);
+            if (CheckQuorum(pathIt->second, *ackedReplica)) {
                 SBP_LOG_N("Ack update"
                     << ": ack to# " << it->second.AckTo
                     << ", cookie# " << ev->Cookie

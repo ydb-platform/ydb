@@ -30,12 +30,9 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
     // Create the query for index search
     std::string queryIndex = MakeSelect(Params.TableName, Params.IndexName, Params.KeyColumn, Params.EmbeddingColumn, Params.PrefixColumn, Params.KmeansTreeSearchClusters, Params.Metric);
 
-    // Maximum number of concurrent queries to execute
-    const size_t MAX_CONCURRENT_QUERIES = 20;
-    
     // Process targets in batches
-    for (size_t batchStart = 0; batchStart < sampler.GetTargetCount(); batchStart += MAX_CONCURRENT_QUERIES) {
-        size_t batchEnd = std::min(batchStart + MAX_CONCURRENT_QUERIES, sampler.GetTargetCount());
+    for (size_t batchStart = 0; batchStart < sampler.GetTargetCount(); batchStart += Params.RecallThreads) {
+        size_t batchEnd = std::min(batchStart + Params.RecallThreads, sampler.GetTargetCount());
         
         // Start async queries for this batch - both scan and index queries
         std::vector<std::pair<size_t, NYdb::NQuery::TAsyncExecuteQueryResult>> asyncScanQueries;

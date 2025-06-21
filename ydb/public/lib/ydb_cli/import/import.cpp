@@ -992,8 +992,10 @@ inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferOnArena(
             TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc(arena.get());
             prebuiltValue = std::nullopt;
 
-            return tableClient.BulkUpsertUnretryableArenaAllocatedUnsafe(
-                dbPath, std::move(builtValue), arena.get(), UpsertSettings)
+            auto settings = UpsertSettings;
+            settings.Arena(arena.get());
+            return tableClient.BulkUpsert(
+                dbPath, std::move(builtValue), settings)
                 .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                     NYdb::TStatus status = bulkUpsertResult.GetValueSync();
                     return NThreading::MakeFuture(status);

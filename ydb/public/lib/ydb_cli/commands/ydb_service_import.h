@@ -7,6 +7,7 @@
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
+#include <ydb/public/lib/ydb_cli/import/import.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -86,6 +87,7 @@ protected:
     ui32 SkipRows = 0;
     bool Header = false;
     bool NewlineDelimited = true;
+    NConsoleClient::ESendFormat SendFormat = NConsoleClient::ESendFormat::Default;
 };
 
 class TCommandImportFromTsv : public TCommandImportFromCsv {

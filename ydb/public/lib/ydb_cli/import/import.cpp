@@ -28,6 +28,7 @@
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/yaml/as/tstring.h>
 
+#include <util/draft/enum.h>
 #include <util/folder/path.h>
 #include <util/generic/vector.h>
 #include <util/stream/file.h>
@@ -1106,93 +1107,89 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     constexpr auto codecType = arrow::Compression::type::ZSTD;
     writeOptions.codec = *arrow::util::Codec::Create(codecType);
 
-    // determines if we should fallback to YDB Types (TValue with Protobuf arena) when Apache Arrow failed.
-    // Apache Arrow tends to be faster but doesn't support all YDB types (e.g. TzDatetime). On the other hand,
-    // YDB Types are slower but support all YDB types.
-    std::atomic_bool fallbackToYDBTypes = false;
-
     auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row, std::shared_ptr<TImportBatchStatus> batchStatus) {
-        // by default, we attempt to send data via Apache Arrow, if it fails, we fallback to YDB Types (TValue with Protobuf arena)
-        if (!fallbackToYDBTypes.load()) {
-            const i64 estimatedCsvLineLength = (!buffer.empty() ? 2 * buffer.front().size() : 10'000);
-            TStringBuilder data;
-            data.reserve((buffer.size() + (Settings.Header_ ? 1 : 0)) * estimatedCsvLineLength);
-            // insert header if it is present in the given csv file
-            if (Settings.Header_) {
-                data << parser.GetHeaderRow() << Endl;
-            }
-            data << JoinSeq("\n", buffer) << Endl;
+        switch (Settings.SendFormat_) {
+            case ESendFormat::Default:
+            case ESendFormat::TValue:
+                {
+                    auto buildOnArenaFunc = [&, buffer = std::move(buffer), row, this] (google::protobuf::Arena* arena) mutable {
+                        try {
+                            return parser.BuildListOnArena(buffer, filePath, arena, row);
+                        } catch (const std::exception& e) {
+                            if (!Failed.exchange(true)) {
+                                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                            }
+                            jobInflightManager->ReleaseJob();
+                            throw;
+                        }
+                    };
 
-            // I: attempt to send data via Apache Arrow
-            // if header is present, it is expected to be the first line of the data
-            TString error;
-            auto arrowCsv = NKikimr::NFormats::TArrowCSVTable::Create(columns, Settings.Header_);
-            if (arrowCsv.ok()) {
-                if (auto batch = arrowCsv->ReadSingleBatch(data, csvSettings, error)) {
-                    if (!error) {
-                        // batch was read successfully, sending data via Apache Arrow
-                        UpsertTValueBufferParquet(dbPath, std::move(batch), writeOptions)
-                            .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
-                                jobInflightManager->ReleaseJob();
-                                if (asyncStatus.GetValueSync().IsSuccess()) {
-                                    batchStatus->Completed = true;
-                                    if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
-                                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
-                                            "Couldn't add worker func to save progress"));
-                                    }
+                    UpsertTValueBufferOnArena(dbPath, std::move(buildOnArenaFunc))
+                        .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
+                            jobInflightManager->ReleaseJob();
+                            if (asyncStatus.GetValueSync().IsSuccess()) {
+                                batchStatus->Completed = true;
+                                if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
+                                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                                        "Couldn't add worker func to save progress"));
                                 }
-                                return asyncStatus;
-                            });
-                    }
-                    else {
-                        error = "Error while reading a batch from Apache Arrow: " + error;
-                        fallbackToYDBTypes.store(true);
-                    }
+                            }
+                            return asyncStatus;
+                        });
                 }
-                else {
-                    error = "Could not read a batch from Apache Arrow";
-                    fallbackToYDBTypes.store(true);
-                }
-            }
-            else {
-                error = arrowCsv.status().ToString();
-                fallbackToYDBTypes.store(true);
-            }
-
-            // print the error if fallback requested
-            if (fallbackToYDBTypes.load()) {
-                std::cerr << "Error when trying to import via Apache Arrow: '" << error << "'.\n"
-                          << "Falling back to import via YDB Types (no action needed from your side)." << std::endl;
-            }
-        }
-
-        // check if fallback requested (after first Apache Arrow failure, we will always fallback to YDB Types)
-        if (fallbackToYDBTypes.load()) {
-            // II: fallback to TValue with Protobuf arena because Apache Arrow failed
-            auto buildOnArenaFunc = [&, buffer = std::move(buffer), row, this] (google::protobuf::Arena* arena) mutable {
-                try {
-                    return parser.BuildListOnArena(buffer, filePath, arena, row);
-                } catch (const std::exception& e) {
-                    if (!Failed.exchange(true)) {
-                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                break;
+            case ESendFormat::ApacheArrow:
+                {
+                    const i64 estimatedCsvLineLength = (!buffer.empty() ? 2 * buffer.front().size() : 10'000);
+                    TStringBuilder data;
+                    data.reserve((buffer.size() + (Settings.Header_ ? 1 : 0)) * estimatedCsvLineLength);
+                    // insert header if it is present in the given csv file
+                    if (Settings.Header_) {
+                        data << parser.GetHeaderRow() << Endl;
                     }
-                    jobInflightManager->ReleaseJob();
-                    throw;
-                }
-            };
+                    data << JoinSeq("\n", buffer) << Endl;
 
-            UpsertTValueBufferOnArena(dbPath, std::move(buildOnArenaFunc))
-                .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
-                    jobInflightManager->ReleaseJob();
-                    if (asyncStatus.GetValueSync().IsSuccess()) {
-                        batchStatus->Completed = true;
-                        if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
-                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
-                                "Couldn't add worker func to save progress"));
+                    // if header is present, it is expected to be the first line of the data
+                    TString error;
+                    auto arrowCsv = NKikimr::NFormats::TArrowCSVTable::Create(columns, Settings.Header_);
+                    if (arrowCsv.ok()) {
+                        if (auto batch = arrowCsv->ReadSingleBatch(data, csvSettings, error)) {
+                            if (!error) {
+                                // batch was read successfully, sending data via Apache Arrow
+                                UpsertTValueBufferParquet(dbPath, std::move(batch), writeOptions)
+                                    .Apply([&, batchStatus](const TAsyncStatus& asyncStatus) {
+                                        jobInflightManager->ReleaseJob();
+                                        if (asyncStatus.GetValueSync().IsSuccess()) {
+                                            batchStatus->Completed = true;
+                                            if (!FileProgressPool->AddFunc(saveProgressIfAny) && !Failed.exchange(true)) {
+                                                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                                                    "Couldn't add worker func to save progress"));
+                                            }
+                                        }
+                                        return asyncStatus;
+                                    });
+                            } else {
+                                error = "Error while reading a batch from Apache Arrow: " + error;
+                            }
+                        } else {
+                            error = "Could not read a batch from Apache Arrow";
+                        }
+                    } else {
+                        error = arrowCsv.status().ToString();
+                    }
+
+                    if (!error.empty()) {
+                        if (!Failed.exchange(true)) {
+                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, error));
                         }
                     }
-                    return asyncStatus;
-                });
+                }
+                break;
+            default:
+                if (!Failed.exchange(true)) {
+                    ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR,
+                        (TStringBuilder() << "Unknown send format: " << Settings.SendFormat_).c_str()));
+                }
         }
     };
 
@@ -1656,4 +1653,30 @@ void TImportFileClient::TImpl::ValidateTValueUpsertTable() {
 }
 
 }
+}
+
+static const std::pair<const char*, NYdb::NConsoleClient::ESendFormat> SEND_FORMATS[] = {
+    {"default", NYdb::NConsoleClient::ESendFormat::Default},
+    {"tvalue", NYdb::NConsoleClient::ESendFormat::TValue},
+    {"arrow", NYdb::NConsoleClient::ESendFormat::ApacheArrow},
+};
+
+template<>
+NYdb::NConsoleClient::ESendFormat FromStringImpl<NYdb::NConsoleClient::ESendFormat, char>(const char* s, size_t len) {
+    TString str(s, len);
+    if (const auto* val = FindEnumFromStringImpl(str, SEND_FORMATS, Y_ARRAY_SIZE(SEND_FORMATS))) {
+        return *val;
+    }
+    ythrow yexception() << "Unknown send format: " << str;
+}
+
+template<>
+void Out<NYdb::NConsoleClient::ESendFormat>(IOutputStream& o, NYdb::NConsoleClient::ESendFormat value) {
+    for (const auto& p : SEND_FORMATS) {
+        if (p.second == value) {
+            o << p.first;
+            return;
+        }
+    }
+    o << "<unknown send format>";
 }

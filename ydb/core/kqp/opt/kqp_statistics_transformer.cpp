@@ -182,10 +182,15 @@ void InferStatisticsForKqpTable(
     }
     stats->StorageType = storageType;
 
+    TString alias;
+    if (aliases && aliases->size() == 1) {
+        alias = *aliases->begin();;
+    }
+
     if (!tableData.Metadata->PartitionedByColumns.empty()) {
         TVector<TJoinColumn> shuffledByColumns;
         for (const auto& columnName: tableData.Metadata->PartitionedByColumns) {
-            shuffledByColumns.emplace_back(path.StringValue(), columnName);
+            shuffledByColumns.emplace_back(alias, columnName);
         }
 
         stats->ShuffledByColumns = TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
@@ -200,28 +205,21 @@ void InferStatisticsForKqpTable(
     auto& orderingsFSM = typeCtx->OrderingsFSM;
     if (orderingsFSM && stats && stats->ShuffledByColumns) {
         auto shuffledBy = stats->ShuffledByColumns->Data;
-        if (aliases && aliases->size() == 1) {
-            for (auto& column: shuffledBy) {
-                column.RelName = *aliases->begin();
-            }
+        for (auto& column: shuffledBy) {
+            column.RelName = alias;
         }
-        std::int64_t orderingIdx = orderingsFSM->FDStorage.FindInterestingOrderingIdx(shuffledBy, TOrdering::EShuffle, nullptr);
+        auto shuffling = TShuffling(shuffledBy).SetNatural();
+        std::int64_t orderingIdx = orderingsFSM->FDStorage.FindShuffling(shuffling, nullptr);
         stats->LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
     }
-
-    stats->Aliases = std::move(aliases);
 
     auto& sortingsFSM = typeCtx->SortingsFSM;
     if (sortingsFSM && stats && stats->KeyColumns && stats->StorageType == EStorageType::RowStorage) {
         const TVector<TString>& keyColumns = stats->KeyColumns->Data;
 
         TVector<TJoinColumn> sortedBy(keyColumns.size());
-        TString relName;
-        if (stats->Aliases && stats->Aliases->size() == 1) {
-            relName = *stats->Aliases->begin();
-        }
         for (std::size_t i = 0; i < sortedBy.size(); ++i) {
-            sortedBy[i].RelName = relName;
+            sortedBy[i].RelName = alias;
             sortedBy[i].AttributeName = keyColumns[i];
         }
 
@@ -233,6 +231,8 @@ void InferStatisticsForKqpTable(
         std::int64_t reversedOrderingIdx = sortingsFSM->FDStorage.FindSorting(reversedSorting, nullptr);
         stats->ReversedSortingOrderings = sortingsFSM->CreateState(reversedOrderingIdx);
     }
+
+    stats->Aliases = std::move(aliases);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
@@ -935,8 +935,9 @@ public:
         );
 
         auto shufflingsFsm = MakeSimpleShared<TOrderingsStateMachine>(InterestingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
-        auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
+        // auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
 
+        TSimpleSharedPtr<TOrderingsStateMachine> sortingsFsm;
         LogReport(shufflingsFsm, sortingsFsm);
 
         return std::make_tuple(std::move(shufflingsFsm), std::move(sortingsFsm));
@@ -1005,11 +1006,6 @@ private:
             }
 
             TVector<TString> shufflingOrderingIdxes;
-            if (stats->ShuffledByColumns) {
-                TString idx = ToString(FDStorage.AddInterestingOrdering(stats->ShuffledByColumns->Data, TOrdering::EShuffle, nullptr));
-                shufflingOrderingIdxes.push_back(std::move(idx));
-            }
-
             TVector<TString> sortingsOrderingIdxes;
             if (stats->Aliases && stats->Aliases->size() == 1) {
                 if (stats->ShuffledByColumns) {
@@ -1017,7 +1013,8 @@ private:
                     for (auto& column: shuffledBy) {
                         column.RelName = *stats->Aliases->begin();
                     }
-                    TString idx = ToString(FDStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle, nullptr));
+                    auto shuffling = TShuffling(shuffledBy).SetNatural();
+                    TString idx = ToString(FDStorage.AddShuffling(shuffling, nullptr));
                     shufflingOrderingIdxes.push_back(std::move(idx));
                 }
 
@@ -1027,11 +1024,19 @@ private:
                     TString idx = ToString(FDStorage.AddSorting(sorting, nullptr));
                     sortingsOrderingIdxes.push_back(std::move(idx));
                 }
-            } else if (stats->KeyColumns) {
-                auto sortedBy = stats->KeyColumns->ToJoinColumns("");
-                auto sorting = TSorting(sortedBy, GetDirs(sortedBy.size()));
-                TString idx = ToString(FDStorage.AddSorting(sorting, nullptr));
-                sortingsOrderingIdxes.push_back(std::move(idx));
+            } else {
+                if (stats->KeyColumns) {
+                    auto sortedBy = stats->KeyColumns->ToJoinColumns("");
+                    auto sorting = TSorting(sortedBy, GetDirs(sortedBy.size()));
+                    TString idx = ToString(FDStorage.AddSorting(sorting, nullptr));
+                    sortingsOrderingIdxes.push_back(std::move(idx));
+                }
+
+                if (stats->ShuffledByColumns) {
+                    auto shuffling = TShuffling(stats->ShuffledByColumns->Data).SetNatural();
+                    TString idx = ToString(FDStorage.AddShuffling(shuffling, nullptr));
+                    shufflingOrderingIdxes.push_back(std::move(idx));
+                }
             }
 
             TKqpTable table =
@@ -1063,8 +1068,14 @@ private:
             }
 
             auto orderingInfo = GetAggregationBaseShuffleOrderingInfo(aggregationBase, nullptr, tableAliases);
-            std::size_t shuffleOrderingIdx = FDStorage.AddInterestingOrdering(orderingInfo.Ordering, TOrdering::EShuffle, tableAliases);
-            YQL_CLOG(TRACE, CoreDq) << "Collected AggregateBase interesting ordering idx: " << shuffleOrderingIdx;
+            auto shuffling = TShuffling(orderingInfo.Ordering);
+            std::size_t shuffleOrderingIdx = FDStorage.AddShuffling(shuffling, tableAliases);
+
+            TString aliasesStr;
+            if (tableAliases) {
+                aliasesStr = tableAliases->ToString();
+            }
+            YQL_CLOG(TRACE, CoreDq) << "Collected AggregateBase interesting ordering idx: " << shuffleOrderingIdx << ", TableAliases: " << aliasesStr;
         }
 
     private:

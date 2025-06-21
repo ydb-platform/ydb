@@ -33,8 +33,7 @@ private:
     // Helper method to get next target index
     size_t GetNextTargetIndex(size_t currentIndex) const;
 
-    // Using atomic for thread safety
-    static thread_local std::atomic<size_t> ThreadLocalTargetIndex;
+    size_t CurrentIndex = 0;
 
     THolder<TVectorRecallEvaluator> VectorRecallEvaluator;
 };

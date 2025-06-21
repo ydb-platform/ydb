@@ -1164,7 +1164,11 @@ public:
                     const NOlap::TPortionAddress pAddress(i.first, p);
                     auto itPortionConstructor = Constructors.find(pAddress);
                     if (itPortionConstructor == Constructors.end()) {
-                        TPortionConstructorV2 constructor(granule.GetPortionVerifiedPtr(p));
+                        auto portion = granule.GetPortionOptional(p);
+                        if (!portion) {
+                            continue;
+                        }
+                        TPortionConstructorV2 constructor(portion);
                         itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
                     } else if (itPortionConstructor->second.IsReady()) {
                         continue;
@@ -1174,8 +1178,9 @@ public:
                         if (!rowset.IsReady()) {
                             reask = true;
                         } else {
-                            auto portion = granule.GetPortionVerifiedPtr(p);
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)("debug", portion->DebugString(true));
+                            auto portion = granule.GetPortionOptional(p);
+                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
+                                "debug", portion ? portion->DebugString(true) : TString("undefined"));
                             NOlap::TColumnChunkLoadContextV2 info(rowset);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }

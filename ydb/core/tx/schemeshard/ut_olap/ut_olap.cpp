@@ -852,6 +852,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(StoreStats) {
         TTestBasicRuntime runtime;
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            NKikimr::NTxUT::SetupSharedMetadataAccessorCacheService(runtime, node);
+        }
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
@@ -1006,6 +1009,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(StoreStatsQuota) {
         TTestBasicRuntime runtime;
+        for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
+            NKikimr::NTxUT::SetupSharedMetadataAccessorCacheService(runtime, node);
+        }
 
         TTestEnvOptions opts;
         opts.DisableStatsBatching(true);
@@ -1205,9 +1211,9 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-        
+
         TVector<TString> notAllowedNames = {"mess age", "~!@#$%^&*()+=asdfa"};
-        
+
         for (const auto& colName: notAllowedNames) {
             TString tableSchema = Sprintf(tableSchemaFormat.c_str(), colName.c_str());
 

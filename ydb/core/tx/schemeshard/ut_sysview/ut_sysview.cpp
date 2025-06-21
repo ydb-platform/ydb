@@ -1,9 +1,6 @@
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-namespace NKikimr::NSchemeShard {
-    extern bool isSysDirCreateAllowed;
-}
 namespace {
 
     using namespace NSchemeShardUT_Private;
@@ -20,26 +17,14 @@ namespace {
         UNIT_ASSERT(sysViewDescription.GetType() == sysViewType);
         UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(sysViewDescription.GetSourceObject()), sourceObjectPathId);
     }
-
-    class TSysDirCreateGuard : public TNonCopyable {
-    public:
-        TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = true;
-        }
-
-        ~TSysDirCreateGuard() {
-            NKikimr::NSchemeShard::isSysDirCreateAllowed = false;
-        }
-    };
 }
 
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
     Y_UNIT_TEST(CreateSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -72,10 +57,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(DropSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -97,10 +81,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(CreateExistingSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -128,10 +111,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateDifferentSysViews) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -168,10 +150,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateDirWithSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         AsyncMkDir(runtime, ++txId, "/MyRoot", ".sys");
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                            R"(
@@ -194,10 +175,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 
@@ -227,10 +207,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncDropSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -255,10 +234,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
         SetSchemeshardReadOnlyMode(runtime, true);
@@ -289,10 +267,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(EmptyName) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
 
-        TSysDirCreateGuard sysDirCreateGuard;
         TestMkDir(runtime, ++txId, "/MyRoot", ".sys");
         env.TestWaitNotification(runtime, txId);
 

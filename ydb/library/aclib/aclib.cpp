@@ -135,7 +135,7 @@ void TUserToken::AddGroupSID(const TSID& groupSID) {
 }
 
 bool TUserToken::IsSystemUser() const {
-    return GetUserSID().EndsWith("@" BUILTIN_SYSTEM_DOMAIN);
+    return GetUserSID().EndsWith("@" AUTH_DOMAIN_SYSTEM);
 }
 
 TSecurityObject::TSecurityObject(const NACLibProto::TSecurityObject& protoSecObj, bool isContainer)

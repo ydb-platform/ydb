@@ -46,6 +46,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .DefaultValue(5).StoreResult(&Limit);
         opts.AddLongOption( "kmeans-tree-clusters", "Number of top clusters during search.")
             .DefaultValue(1).StoreResult(&KmeansTreeSearchClusters);
+        opts.AddLongOption( "recall-threads", "Number of threads for concurrent queries during recall measurement.")
+            .DefaultValue(10).StoreResult(&RecallThreads);
         opts.AddLongOption( "recall", "Measure recall metrics. It trains on 'targets' vector by bruce-force search.")
             .StoreTrue(&Recall); 
     };

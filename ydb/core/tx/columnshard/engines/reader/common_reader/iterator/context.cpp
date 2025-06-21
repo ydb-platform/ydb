@@ -46,7 +46,6 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
 
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
-    IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {
         auto predicateColumns = ReadMetadata->GetPKRangesFilter().GetColumnIds(ReadMetadata->GetIndexInfo());
         if (predicateColumns.size()) {

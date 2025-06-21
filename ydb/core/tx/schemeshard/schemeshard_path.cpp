@@ -578,6 +578,19 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
+const TPath::TChecker& TPath::TChecker::IsRtmrVolume(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Base()->IsRtmrVolume()) {
+        return *this;
+    }
+
+    return Fail(status, TStringBuilder() << "path is not a run time map-reduce volume"
+        << " (" << BasicPathInfo(Path.Base()) << ")");
+}
+
 const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath& another, EStatus status) const {
     if (Failed) {
         return *this;

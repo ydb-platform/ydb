@@ -49,20 +49,23 @@ message TDownsampling {
 
 message TDqSolomonSource {
     ESolomonClusterType ClusterType = 1;
-    string Endpoint = 2;
+    string Endpoint = 2; // deprecated
     bool UseSsl = 3;
     string ServiceAccount = 4;
     TToken Token = 5;
 
     string Project = 6;
-    oneof p {
-        string Selectors = 7;
-        string Program = 8;
-    }
+    map<string, string> Selectors = 7;
+    optional string Program = 8;
     // seconds since Epoch
     int64 From = 9;
     int64 To = 10;
     TDownsampling Downsampling = 11;
     repeated string SystemColumns = 12;
     repeated string LabelNames = 13;
+    map<string, string> Settings = 14;
+    repeated string RequiredLabelNames = 15;
+    string HttpEndpoint = 16;
+    string GrpcEndpoint = 17;
+    optional string Cluster = 18;
 }

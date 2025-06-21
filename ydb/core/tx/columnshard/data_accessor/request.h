@@ -1,8 +1,9 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -10,7 +11,7 @@ class TDataAccessorsRequest;
 
 class TDataAccessorsResult: private NNonCopyable::TMoveOnly {
 private:
-    THashMap<ui64, TString> ErrorsByPathId;
+    THashMap<TInternalPathId, TString> ErrorsByPathId;
     THashMap<ui64, TPortionDataAccessor> PortionsById;
 
 public:
@@ -49,7 +50,7 @@ public:
         }
     }
 
-    void AddError(const ui64 pathId, const TString& errorMessage) {
+    void AddError(const TInternalPathId pathId, const TString& errorMessage) {
         ErrorsByPathId.emplace(pathId, errorMessage);
     }
 
@@ -112,7 +113,7 @@ public:
     };
 
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
 
     YDB_READONLY(EFetchStage, Stage, EFetchStage::Preparing);
     YDB_READONLY_DEF(TString, ErrorMessage);
@@ -126,7 +127,7 @@ public:
         return sb;
     }
 
-    TPathFetchingState(const ui64 pathId)
+    explicit TPathFetchingState(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
@@ -178,8 +179,8 @@ private:
     YDB_READONLY(ui64, RequestId, Counter.Inc());
     YDB_READONLY_DEF(TString, Consumer);
     THashSet<ui64> PortionIds;
-    THashMap<ui64, TPathFetchingState> PathIdStatus;
-    THashSet<ui64> PathIds;
+    THashMap<TInternalPathId, TPathFetchingState> PathIdStatus;
+    THashSet<TInternalPathId> PathIds;
     TDataAccessorsResult AccessorsByPathId;
     YDB_READONLY_DEF(std::optional<std::set<ui32>>, ColumnIds);
     std::optional<std::set<ui32>> IndexIds;
@@ -251,7 +252,7 @@ public:
         return PortionIds.size();
     }
 
-    const THashSet<ui64>& GetPathIds() const {
+    const THashSet<TInternalPathId>& GetPathIds() const {
         return PathIds;
     }
 
@@ -266,7 +267,7 @@ public:
         Subscriber->RegisterRequestId(*this);
     }
 
-    const THashMap<ui64, TPortionInfo::TConstPtr>& StartFetching(const ui64 pathId) {
+    const THashMap<ui64, TPortionInfo::TConstPtr>& StartFetching(const TInternalPathId pathId) {
         AFL_VERIFY(!!Subscriber);
         AFL_VERIFY(FetchStage <= 1);
         FetchStage = 1;
@@ -285,11 +286,12 @@ public:
         AFL_VERIFY(portion);
         AFL_VERIFY(FetchStage <= 1);
         AFL_VERIFY(PortionIds.emplace(portion->GetPortionId()).second);
-        PathIds.emplace(portion->GetPathId());
-        auto it = PathIdStatus.find(portion->GetPathId());
+        const auto& pathId = portion->GetPathId();
+        PathIds.emplace(pathId);
+        auto it = PathIdStatus.find(pathId);
         if (it == PathIdStatus.end()) {
             PreparingCount.Inc();
-            it = PathIdStatus.emplace(portion->GetPathId(), portion->GetPathId()).first;
+            it = PathIdStatus.emplace(pathId, TPathFetchingState{pathId}).first;
         }
         it->second.AddPortion(portion);
     }
@@ -298,7 +300,7 @@ public:
         return FetchStage == 2;
     }
 
-    void AddError(const ui64 pathId, const TString& errorMessage) {
+    void AddError(const TInternalPathId pathId, const TString& errorMessage) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", errorMessage)("event", "ErrorOnFetching")("path_id", pathId);
         AFL_VERIFY(FetchStage <= 1);
         auto itStatus = PathIdStatus.find(pathId);

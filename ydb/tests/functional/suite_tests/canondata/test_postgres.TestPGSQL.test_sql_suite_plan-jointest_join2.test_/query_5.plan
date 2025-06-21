@@ -60,6 +60,7 @@
                                                             "x2 (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
+                                                        "Reverse": false,
                                                         "Scan": "Sequential",
                                                         "Table": "postgres_jointest/join2.test_plan/x"
                                                     }

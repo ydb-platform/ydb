@@ -1984,7 +1984,7 @@ private:
         {
             auto solomonConfig = gatewaysConfig.GetSolomon();
             auto solomonGateway = NYql::CreateSolomonGateway(solomonConfig);
-            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, false));
+            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, Params.CredentialsFactory, false));
         }
 
         SessionId = TStringBuilder()

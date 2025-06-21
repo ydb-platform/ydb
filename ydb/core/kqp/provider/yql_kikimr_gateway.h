@@ -512,6 +512,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TExternalSource ExternalSource;
     TViewPersistedData ViewPersistedData;
 
+    TVector<TString> PartitionedByColumns;
+
     TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
         , Name(table)
@@ -666,6 +668,11 @@ struct TKikimrTableMetadata : public TThrRefBase {
     bool IsOlap() const {
         return Kind == EKikimrTableKind::Olap;
     }
+};
+
+struct TAlterDatabaseSettings {
+    TString DatabasePath;
+    std::optional<TString> Owner;
 };
 
 struct TCreateUserSettings {
@@ -1141,6 +1148,8 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 

@@ -249,14 +249,11 @@ public:
 
 class TColumnEngineChanges: public TMoveOnly {
 private:
-    NChanges::EStage Stage = NChanges::EStage::Created;
     std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
     TString AbortedReason;
     const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
     std::shared_ptr<const TAtomicCounter> ActivityFlag;
-    std::shared_ptr<NChanges::TChangesCounters::TStageCounters> Counters;
-
-    void SetStage(const NChanges::EStage stage);
+    std::shared_ptr<NChanges::TChangesCounters::TStageCountersGuard> Counters;
 
 protected:
     std::optional<TDataAccessorsResult> FetchedDataAccessors;
@@ -290,6 +287,8 @@ protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
+    void SetStage(const NChanges::EStage stage);
+
     bool IsActive() const {
         return !ActivityFlag || ActivityFlag->Val();
     }
@@ -299,7 +298,7 @@ public:
         ActivityFlag = flag;
     }
 
-    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() const {
+    std::shared_ptr<TDataAccessorsRequest> ExtractDataAccessorsRequest() {
         AFL_VERIFY(!!PortionsToAccess);
         return std::move(PortionsToAccess);
     }
@@ -355,14 +354,13 @@ public:
     TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : Counters(NChanges::TChangesCounters::GetStageCounters(consumerId))
         , BlobsAction(storagesManager, consumerId) {
-        Counters->OnStageChanged(Stage, 0);
     }
 
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
-        return Stage == NChanges::EStage::Aborted;
+        return Counters->GetCurrentStage() == NChanges::EStage::Aborted;
     }
 
     void StartEmergency();

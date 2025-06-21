@@ -8,12 +8,15 @@ namespace NKikimr::Tests::NCS {
 class THelperSchemaless : public NCommon::THelper {
 private:
     using TBase = NCommon::THelper;
+protected:
+    void ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme);
+
 public:
     static constexpr const char * ROOT_PATH = "/Root";
 
     using TBase::TBase;
-    void CreateTestOlapStore(TActorId sender, TString scheme);
-    void CreateTestOlapTable(TActorId sender, TString storeOrDirName, TString scheme);
+    void CreateTestOlapStore(TString scheme);
+    void CreateTestOlapTable(TString storeOrDirName, TString scheme);
     void SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs = 1) const;
     void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& expectedStatus = Ydb::StatusIds::SUCCESS) const;
 
@@ -50,6 +53,8 @@ public:
         ShardingMethod = value;
         return *this;
     }
+
+    void SetForcedCompaction(const TString& storeName = "olapStore");
 
     static constexpr const char * PROTO_SCHEMA = R"(
         Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }

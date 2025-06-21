@@ -106,6 +106,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
 {
+    Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
         SerializedGUCSettings = GUCSettings->SerializeToString();
     }

@@ -15,12 +15,6 @@ bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& cur
     return true;
 }
 
-bool TOptimizerPlannerConstructor::DoIsEqualTo(const IOptimizerPlannerConstructor& item) const {
-    const auto* itemClass = dynamic_cast<const TOptimizerPlannerConstructor*>(&item);
-    AFL_VERIFY(itemClass);
-    return true;
-}
-
 void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
     *proto.MutableLBuckets() = NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 }

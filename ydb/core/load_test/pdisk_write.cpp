@@ -7,7 +7,7 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/random/fast.h>
 #include <util/generic/queue.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 namespace NKikimr {
 

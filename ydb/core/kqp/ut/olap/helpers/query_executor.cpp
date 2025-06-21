@@ -1,7 +1,7 @@
 #include "query_executor.h"
 #include "get_value.h"
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr::NKqp {
 

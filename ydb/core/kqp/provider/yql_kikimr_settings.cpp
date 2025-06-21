@@ -85,6 +85,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
     REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
+    REGISTER_SETTING(*this, OptShuffleElimination);
+    REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
@@ -93,6 +95,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
+    REGISTER_SETTING(*this, UseBlockReader);
 
     REGISTER_SETTING(*this, MaxDPHypDPTableSize);
 

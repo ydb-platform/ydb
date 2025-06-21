@@ -1,4 +1,4 @@
-import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/s3_settings.proto";
 
 package NKikimrColumnShardExportProto;
 

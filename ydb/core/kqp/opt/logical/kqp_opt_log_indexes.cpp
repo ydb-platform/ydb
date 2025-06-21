@@ -414,7 +414,7 @@ auto NewLambdaFrom(TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& 
 }
 
 auto LevelLambdaFrom(
-    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces, 
+    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces,
     const TExprNode& fromArgs, const TExprBase& fromBody)
 {
     auto newLambda = NewLambdaFrom(ctx, pos, replaces, fromArgs, fromBody);

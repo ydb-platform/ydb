@@ -1,6 +1,8 @@
 #include "abstract.h"
 #include "collection.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NSSA {
@@ -8,23 +10,21 @@ namespace NKikimr::NArrow::NSSA {
 NJson::TJsonValue IResourceProcessor::DebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
     if (Input.size()) {
-        result.InsertValue("input", JoinSeq(",", Input));
+        result.InsertValue("i", JoinSeq(",", Input));
     }
     if (Output.size()) {
-        result.InsertValue("output", JoinSeq(",", Output));
+        result.InsertValue("o", JoinSeq(",", Output));
     }
-    result.InsertValue("type", ::ToString(ProcessorType));
-    result.InsertValue("internal", DoDebugJson());
+    result.InsertValue("t", ::ToString(ProcessorType));
+    auto internalJson = DoDebugJson();
+    if (!internalJson.IsMap() || internalJson.GetMapSafe().size()) {
+        result.InsertValue("p", std::move(internalJson));
+    }
     return result;
 }
 
-TConclusionStatus IResourceProcessor::Execute(const std::shared_ptr<TAccessorsCollection>& resources) const {
-    for (auto&& i : Output) {
-        if (resources->HasColumn(i.GetColumnId())) {
-            return TConclusionStatus::Fail("column " + ::ToString(i.GetColumnId()) + " has already");
-        }
-    }
-    return DoExecute(resources);
+TConclusion<IResourceProcessor::EExecutionResult> IResourceProcessor::Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const {
+    return DoExecute(context, nodeContext);
 }
 
 NJson::TJsonValue TResourceProcessorStep::DebugJson() const {

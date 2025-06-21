@@ -5,13 +5,7 @@
 namespace NKikimr::NColumnShard {
 
 TPortionIndexStats::TPortionClass::TPortionClass(const NOlap::TPortionInfo& portion) {
-    if (portion.HasRemoveSnapshot()) {
-        Produced = NOlap::NPortion::EProduced::INACTIVE;
-    } else if (portion.GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId) != NOlap::NBlobOperations::TGlobal::DefaultStorageId) {
-        Produced = NOlap::NPortion::EProduced::EVICTED;
-    } else {
-        Produced = portion.GetMeta().GetProduced();
-    }
+    Produced = portion.GetProduced();
 }
 
 void TPortionIndexStats::AddPortion(const NOlap::TPortionInfo& portion) {
@@ -25,7 +19,7 @@ void TPortionIndexStats::RemovePortion(const NOlap::TPortionInfo& portion) {
 
     {
         auto findClass = TotalStats.find(portionClass);
-        AFL_VERIFY(!findClass.IsEnd())("path_id", portion.GetPathId());
+        AFL_VERIFY(findClass != TotalStats.end())("path_id", portion.GetPathId());
         findClass->second.RemovePortion(portion);
         if (findClass->second.IsEmpty()) {
             TotalStats.erase(findClass);
@@ -34,9 +28,9 @@ void TPortionIndexStats::RemovePortion(const NOlap::TPortionInfo& portion) {
 
     {
         auto findPathId = StatsByPathId.find(portion.GetPathId());
-        AFL_VERIFY(!findPathId.IsEnd())("path_id", portion.GetPathId());
+        AFL_VERIFY(findPathId != StatsByPathId.end())("path_id", portion.GetPathId());
         auto findClass = findPathId->second.find(portionClass);
-        AFL_VERIFY(!findClass.IsEnd())("path_id", portion.GetPathId());
+        AFL_VERIFY(findClass != findPathId->second.end())("path_id", portion.GetPathId());
         findClass->second.RemovePortion(portion);
         if (findClass->second.IsEmpty()) {
             findPathId->second.erase(findClass);

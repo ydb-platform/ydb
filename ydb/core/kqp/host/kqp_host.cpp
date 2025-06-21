@@ -1164,12 +1164,16 @@ public:
         }
 
         if (FederatedQuerySetup) {
-            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({},
+            const auto& hostnamePatterns = QueryServiceConfig.GetHostnamePatterns();
+            const auto& availableExternalDataSources = QueryServiceConfig.GetAvailableExternalDataSources();
+            ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
                                                                                  ActorSystem,
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetGeneratorPathsLimit(),
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
-                                                                                 FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles());
+                                                                                 FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
+                                                                                 QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
+                                                                                 std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
         }
     }
 
@@ -1899,6 +1903,7 @@ private:
         solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
+        solomonState->ExecutorPoolId = AppData()->UserPoolId;
 
         TypesCtx->AddDataSource(NYql::SolomonProviderName, NYql::CreateSolomonDataSource(solomonState));
         TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
@@ -1931,6 +1936,9 @@ private:
 
         TypesCtx->AddDataSource(providerNames, kikimrDataSource);
         TypesCtx->AddDataSink(providerNames, kikimrDataSink);
+        TypesCtx->FilterPushdownOverJoinOptionalSide = SessionCtx->ConfigPtr()->FilterPushdownOverJoinOptionalSide;
+        const auto &yqlCoreOptFlags = SessionCtx->ConfigPtr()->YqlCoreOptimizerFlags;
+        TypesCtx->OptimizerFlags.insert(yqlCoreOptFlags.begin(), yqlCoreOptFlags.end());
 
         bool addExternalDataSources = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
             || (queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
@@ -1978,6 +1986,9 @@ private:
                 || settingName == "TimeOrderRecoverAhead"
                 || settingName == "TimeOrderRecoverRowLimit"
                 || settingName == "MatchRecognizeStream"
+                || settingName == "OptimizerFlags"
+                || settingName == "FuseEquiJoinsInputMultiLabels"
+                || settingName == "PullUpFlatMapOverJoinMultipleLabels"
                 ;
         };
         auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);

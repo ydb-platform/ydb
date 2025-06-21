@@ -87,7 +87,7 @@ void TOlapColumnFamiliesDescription::Serialize(NKikimrSchemeOp::TColumnTableSche
     }
 }
 
-bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
+bool TOlapColumnFamiliesDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const {
     ui32 lastColumnFamilyId = 0;
     THashSet<ui32> usedColumnFamilies;
     for (const auto& familyProto : opSchema.GetColumnFamilies()) {

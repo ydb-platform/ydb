@@ -174,7 +174,7 @@ public:
 
 class TPathesData {
 private:
-    THashMap<ui64, TPathData> Data;
+    THashMap<TInternalPathId, TPathData> Data;
     const ISnapshotSchema::TPtr ResultSchema;
 
 public:
@@ -188,7 +188,7 @@ public:
         }
     }
 
-    const THashMap<ui64, TPathData>& GetData() const {
+    const THashMap<TInternalPathId, TPathData>& GetData() const {
         return Data;
     }
 
@@ -208,7 +208,7 @@ public:
         it->second.AddBatch(inserted, batch);
     }
 
-    const TPathFieldsInfo& GetPathInfo(const ui64 pathId) const {
+    const TPathFieldsInfo& GetPathInfo(const TInternalPathId pathId) const {
         auto it = Data.find(pathId);
         AFL_VERIFY(it != Data.end());
         return it->second.GetColumnsInfo();
@@ -285,7 +285,6 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         merger.SetOptimizationWritingPackMode(true);
         auto localAppended = merger.Execute(stats, itGranule->second, filteredSnapshot, pathId, shardingVersion);
         for (auto&& i : localAppended) {
-            i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().UpdateRecordsMeta(NPortion::EProduced::INSERTED);
             AppendedPortions.emplace_back(std::move(i));
         }
     }

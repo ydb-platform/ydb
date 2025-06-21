@@ -584,6 +584,7 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
                         .Stage(newStage)
                     .Build()
                     .KeyColumns(builder.Build().Value())
+                    .UseSpilling(shuffle.UseSpilling())
                     .Done().Ptr());
             } else if (conn.Maybe<TDqCnMerge>()) {
                 auto merge = conn.Maybe<TDqCnMerge>().Cast();

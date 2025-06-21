@@ -16,7 +16,7 @@
                     "limit": "1000",
                     "lookup_by": [
                         "hashOrderDate (9983033094796217818)",
-                        "orderDate (\u00ab2023-03-01\u00bb)"
+                        "orderDate (2023-03-01)"
                     ],
                     "scan_by": [
                         "orderId (-\u221e, +\u221e)"

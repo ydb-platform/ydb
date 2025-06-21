@@ -1910,7 +1910,13 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+
+            // Phase reading rows to delete
+            UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 

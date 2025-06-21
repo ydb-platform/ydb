@@ -27,6 +27,12 @@ message TIndexPortionMeta {
     optional uint32 IndexBlobBytes = 15;
     optional uint64 IndexRawBytes = 16;
     repeated string BlobIds = 17;
+
+    message TPKBordersV1 {
+        optional bytes First = 1;
+        optional bytes Last = 2;
+    }
+    optional TPKBordersV1 PrimaryKeyBordersV1 = 18;
 }
 
 message TIndexColumnMeta {

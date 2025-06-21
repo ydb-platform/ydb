@@ -9,11 +9,13 @@ SRCS(
     GLOBAL broken_blobs.cpp
     GLOBAL special_cleaner.cpp
     GLOBAL chunks_actualization.cpp
-    GLOBAL restore_portion_from_chunks.cpp
     GLOBAL restore_v1_chunks.cpp
     GLOBAL restore_v2_chunks.cpp
-    GLOBAL snapshot_from_chunks.cpp
     GLOBAL leaked_blobs.cpp
+    GLOBAL clean_deprecated_snapshot.cpp
+    GLOBAL chunks_v0_meta.cpp
+    GLOBAL clean_unused_tables.cpp
+    clean_unused_tables_template.cpp
 )
 
 PEERDIR(

@@ -1,12 +1,16 @@
 #pragma once
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-#include "common/owner.h"
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NColumnShard {
 
 class TSplitterCaseCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr SmallDataSerializationBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr SmallDataSerialization;
+    NMonitoring::THistogramPtr SmallDataSerializationHistogramBytes;
+
     NMonitoring::TDynamicCounters::TCounterPtr TrashDataSerializationBytes;
     NMonitoring::TDynamicCounters::TCounterPtr TrashDataSerialization;
     NMonitoring::THistogramPtr TrashDataSerializationHistogramBytes;
@@ -20,12 +24,23 @@ public:
     {
         DeepSubGroup("splitter_type", splitterType);
 
+        SmallDataSerializationBytes = TBase::GetDeriviative("SmallDataSerialization/Bytes");
+        SmallDataSerialization = TBase::GetDeriviative("SmallDataSerialization/Count");
+        SmallDataSerializationHistogramBytes =
+            TBase::GetHistogram("SmallDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 512));
         TrashDataSerializationBytes = TBase::GetDeriviative("TrashDataSerialization/Bytes");
         TrashDataSerialization = TBase::GetDeriviative("TrashDataSerialization/Count");
-        TrashDataSerializationHistogramBytes = TBase::GetHistogram("TrashDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
+        TrashDataSerializationHistogramBytes =
+            TBase::GetHistogram("TrashDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
         CorrectDataSerializationBytes = TBase::GetDeriviative("CorrectDataSerialization/Bytes");
         CorrectDataSerialization = TBase::GetDeriviative("CorrectDataSerialization/Count");
         CorrectDataSerializationHistogramBytes = TBase::GetHistogram("CorrectDataSerialization/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024));
+    }
+
+    void OnSmallSerialized(const ui64 bytes) const {
+        SmallDataSerializationHistogramBytes->Collect(bytes);
+        SmallDataSerialization->Add(1);
+        SmallDataSerializationBytes->Add(bytes);
     }
 
     void OnTrashSerialized(const ui64 bytes) const {

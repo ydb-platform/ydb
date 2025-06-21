@@ -93,29 +93,10 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
         os << "[" << tmp << "]";
     }
     os << ", LogicalOrderings (Shufflings) state: " << s.LogicalOrderings.GetState();
-<<<<<<< HEAD
-<<<<<<< HEAD
-    os << ", Init Shuffling: " << s.LogicalOrderings.GetInitOrderingIdx();
-    os << ", SortingOrderings (Sortings) state: "   << s.SortingOrderings.GetState();
-<<<<<<< HEAD
-    os << ", Init Sorting: " << s.SortingOrderings.GetInitOrderingIdx();
-
-    if (s.ReversedSortingOrderings.HasState()) {
-        os << ", ReversedSortingOrderings (Sortings) state: "   << s.ReversedSortingOrderings.GetState();
-    }
-=======
-    os << ", SortingOrderings (Sortings) state: "   << s.SortingOrderings.GetState();
->>>>>>> 6370ac2adec ([] ...)
-
-=======
-    os << ", GetInitOrderingIdx: " << s.SortingOrderings.GetInitOrderingIdx();
->>>>>>> 1b3d9ced0e0 ([] ...)
-=======
     os << ", Init Shuffling: " << s.LogicalOrderings.GetInitOrderingIdx();
     os << ", SortingOrderings (Sortings) state: "   << s.SortingOrderings.GetState();
     os << ", Init Sorting: " << s.SortingOrderings.GetInitOrderingIdx();
 
->>>>>>> 31161e33148 (revert)
     if (s.ReversedSortingOrderings.HasState()) {
         os << ", ReversedSortingOrderings (Sortings) state: "   << s.ReversedSortingOrderings.GetState();
     }

@@ -623,7 +623,7 @@ namespace {
 
         void ShouldCheckQuotas(const TSchemeLimits& limits, Ydb::StatusIds::StatusCode expectedFailStatus) {
             const TString userSID = "user@builtin";
-            EnvOptions().SystemBackupSIDs({userSID});
+            EnvOptions().SystemBackupSIDs({userSID}).EnableRealSystemViewPaths(false);
             Env(); // Init test env
 
             SetSchemeshardSchemaLimits(Runtime(), limits);

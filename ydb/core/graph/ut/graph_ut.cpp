@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(Graph) {
             Ctest << "Received result: " << response->Record.ShortDebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 10 * 60);
         }
-        runtime.AdvanceCurrentTime(TDuration::Seconds(10 * 60));
+        runtime.UpdateCurrentTime(TInstant::MilliSeconds(1084) + TDuration::Seconds(10 * 60));
 
         Ctest << "Triggering aggregation..." << Endl;
         for (int seconds = 0; seconds < 20; ++seconds) {
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(Graph) {
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
             UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 2 * 60);
         }
-        runtime.AdvanceCurrentTime(TDuration::Seconds(2 * 60));
+        runtime.UpdateCurrentTime(TInstant::Seconds(1) + TDuration::Seconds(2 * 60));
 
         Ctest << "Triggering aggregation..." << Endl;
         for (int seconds = 0; seconds < 20; ++seconds) {

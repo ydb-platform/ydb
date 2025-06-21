@@ -237,16 +237,33 @@ protected:
         return TTestContext::DefaultObserverFunc;
     }
 
+    void WaitForSysViewsRosterUpdate() {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(NSysView::TEvSysView::EvRosterUpdateFinished);
+        Context->DispatchEvents(options, TDuration::Seconds(3));
+    }
+
 public:
-    void SetUp() override {
+    void PrepareContext() {
         Context = MakeHolder<TTestContext>();
         Context->SetObserverFunc(ObserverFunc());
 
         SetupRuntime(*Context);
+    }
+
+    void BootActors() {
         BootSchemeShard(*Context, TTestTxConfig::SchemeShard);
         BootTxAllocator(*Context, TTestTxConfig::TxAllocator);
         BootCoordinator(*Context, TTestTxConfig::Coordinator);
         BootHive(*Context, TTestTxConfig::Hive);
+        if (Context->GetAppData().FeatureFlags.GetEnableRealSystemViewPaths()) {
+            WaitForSysViewsRosterUpdate();
+        }
+    }
+
+    void SetUp() override {
+        PrepareContext();
+        BootActors();
     }
 
     void TurnOnTabletsScheduling() {

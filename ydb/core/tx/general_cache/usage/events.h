@@ -4,6 +4,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -24,7 +25,7 @@ struct TEvents {
 
     class TEvAskData: public NActors::TEventLocal<TEvAskData, EvAskData> {
     private:
-        YDB_READONLY_DEF(EConsumer, Consumer);
+        YDB_READONLY(EConsumer, Consumer, EConsumer::Undefined);
 
         bool AddressesExtracted = false;
         THashSet<TAddress> Addresses;

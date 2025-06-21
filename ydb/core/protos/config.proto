@@ -2340,6 +2340,7 @@ message TLabel {
 
 message TGeneralCacheConfig {
     optional uint64 MemoryLimit = 1;
+    optional uint64 DirectInflightLimit = 2;
 }
 
 message TAppConfig {

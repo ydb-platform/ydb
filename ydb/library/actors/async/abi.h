@@ -41,6 +41,10 @@ namespace NActors::NDetail {
             };
         }
 
+        TCustomCoroutineCallbacks(const TCustomCoroutineCallbacks&) = delete;
+        TCustomCoroutineCallbacks& operator=(const TCustomCoroutineCallbacks&) = delete;
+
+    public:
         std::coroutine_handle<> ToCoroutineHandle() {
             return std::coroutine_handle<>::from_address(ToAddress());
         }

@@ -20,7 +20,7 @@ namespace NActors::NDetail {
     }
 
     class TBridgeCoroutine final
-        : private TCustomCoroutineCallbacks<TBridgeCoroutine>
+        : public TCustomCoroutineCallbacks<TBridgeCoroutine>
         , private TActorRunnableItem::TImpl<TBridgeCoroutine>
     {
         friend TCustomCoroutineCallbacks<TBridgeCoroutine>;
@@ -37,8 +37,6 @@ namespace NActors::NDetail {
             ActorSystem = ctx->ExecutorThread.ActorSystem;
             Mailbox = &ctx->Mailbox;
         }
-
-        using TCustomCoroutineCallbacks<TBridgeCoroutine>::ToCoroutineHandle;
 
     private:
         void OnResume() {
@@ -105,7 +103,7 @@ namespace NActors::NDetail {
 
     private:
         class TBridgeTrampoline final
-            : private TCustomCoroutineCallbacks<TBridgeTrampoline>
+            : public TCustomCoroutineCallbacks<TBridgeTrampoline>
             , private TActorRunnableItem::TImpl<TBridgeTrampoline>
         {
             friend TCustomCoroutineCallbacks<TBridgeTrampoline>;
@@ -117,8 +115,6 @@ namespace NActors::NDetail {
                 : Self(self)
                 , Item(item)
             {}
-
-            using TCustomCoroutineCallbacks<TBridgeTrampoline>::ToCoroutineHandle;
 
         private:
             void OnResume() {

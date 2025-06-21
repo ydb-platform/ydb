@@ -8,6 +8,8 @@ namespace NAsyncTest {
 
     using namespace NActors;
 
+    class TTestException : public yexception {};
+
     struct TSuspendAwaiter {
         std::coroutine_handle<>* const ResumePtr;
         std::coroutine_handle<>* const CancelPtr;

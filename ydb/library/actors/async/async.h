@@ -75,11 +75,19 @@ namespace NActors {
     concept IsAsyncCoroutine = NDetail::TIsAsyncCoroutineHelper<T>::value;
 
     /**
-     * Concept matches all callbacks returning async<T>
+     * Concept matches all callbacks returning any async<T>
      */
     template<class TCallback, class... TArgs>
     concept IsAsyncCoroutineCallback = requires (TCallback&& callback, TArgs&&... args) {
         { std::forward<TCallback>(callback)(std::forward<TArgs>(args)...) } -> IsAsyncCoroutine;
+    };
+
+    /**
+     * Concept matches all callbacks returning a specific async<T>
+     */
+    template<class TCallback, class T, class... TArgs>
+    concept IsSpecificAsyncCoroutineCallback = requires (TCallback&& callback, TArgs&&... args) {
+        { std::forward<TCallback>(callback)(std::forward<TArgs>(args)...) } -> std::same_as<async<T>>;
     };
 
     /**
@@ -283,15 +291,15 @@ namespace NActors {
             }
 
         protected:
-            void SetCancellation(std::coroutine_handle<> h) noexcept {
-                Cancellation = h;
-            }
-
             void Cancel(std::coroutine_handle<> h) noexcept {
                 Cancellation = h;
                 if (CancelFn) {
                     CancelFn(CancelFnArg, h);
                 }
+            }
+
+            void SetCancellation(std::coroutine_handle<> h) noexcept {
+                Cancellation = h;
             }
 
         private:
@@ -393,7 +401,7 @@ namespace NActors {
             }
 
             T await_resume() {
-                return Handle.promise().Result.ExtractValue();
+                return Handle.promise().ExtractValue();
             }
 
         private:
@@ -780,7 +788,7 @@ namespace NActors {
                     // We use an implicit conversion to support awaiters that cannot be moved
                     struct TImplicitConverter {
                         TAwaitable&& Awaitable;
-                        operator TAwaiter() {
+                        operator TAwaiter() const {
                             return GetAwaiter(std::forward<TAwaitable>(Awaitable));
                         }
                     };
@@ -789,37 +797,31 @@ namespace NActors {
             }
         };
 
-        template<class T>
-        class TAsyncPromiseResultHandler {
+        template<class T, template<class> class TAsyncResultType = TAsyncResult>
+        class TAsyncPromiseResultHandler : public TAsyncResultType<T> {
         public:
             template<class U>
             void return_value(U&& value)
                 requires (std::is_convertible_v<U&&, T>)
             {
-                this->Result.SetValue(std::forward<U>(value));
+                this->SetValue(std::forward<U>(value));
             }
 
             void unhandled_exception() noexcept {
-                this->Result.SetException(std::current_exception());
+                this->SetException(std::current_exception());
             }
-
-        public:
-            TAsyncResult<T> Result;
         };
 
-        template<>
-        class TAsyncPromiseResultHandler<void> {
+        template<template<class> class TAsyncResultType>
+        class TAsyncPromiseResultHandler<void, TAsyncResultType> : public TAsyncResultType<void> {
         public:
             void return_void() {
-                this->Result.SetValue();
+                this->SetValue();
             }
 
             void unhandled_exception() noexcept {
-                this->Result.SetException(std::current_exception());
+                this->SetException(std::current_exception());
             }
-
-        public:
-            TAsyncResult<void> Result;
         };
 
         template<class T>
@@ -930,7 +932,7 @@ namespace NActors {
             }
 
             void OnDestroy() noexcept {
-                Y_ABORT("Unexpected destroy for cancellation coroutine proxy");
+                Y_ABORT("Unexpected destroy on cancellation proxy");
             }
 
         private:

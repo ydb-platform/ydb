@@ -243,7 +243,7 @@ namespace NActors {
                     throw TActorTimeoutException() << "operation timed out";
                 }
 
-                return NestedCoroutine.GetHandle().promise().Result.ExtractValue();
+                return NestedCoroutine.GetHandle().promise().ExtractValue();
             }
 
             void AwaitCancel(std::coroutine_handle<> h) noexcept {

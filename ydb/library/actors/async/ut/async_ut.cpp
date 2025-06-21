@@ -28,8 +28,6 @@ namespace NAsyncTest {
         }
     };
 
-    class TTestException : public yexception {};
-
     struct TThrowAwaiter {
         enum EWhen {
             Ready,

@@ -42,8 +42,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     auto addSelectParam = [&]() {
         opts.AddLongOption( "targets", "Number of vectors to search as targets.")
             .DefaultValue(100).StoreResult(&Targets);
-        opts.AddLongOption( "top-k", "Number of top vector to return.")
-            .DefaultValue(5).StoreResult(&TopK);
+        opts.AddLongOption( "limit", "Number of top vector to return.")
+            .DefaultValue(5).StoreResult(&Limit);
         opts.AddLongOption( "kmeans-tree-clusters", "Number of top clusters during search.")
             .DefaultValue(1).StoreResult(&KmeansTreeSearchClusters);
         opts.AddLongOption( "recall", "Measure recall metrics. It trains on 'targets' vector by bruce-force search.")

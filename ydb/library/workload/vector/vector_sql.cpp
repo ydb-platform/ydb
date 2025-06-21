@@ -55,17 +55,17 @@ std::string MakeSelect(const TString& tableName, const TString& indexName,
     if (prefixColumn)
         ret << "WHERE " << prefixColumn << " = $PrefixValue" << "\n";
     ret << "ORDER BY Knn::" << functionName << "(" << embeddingColumn << ", $Embedding) " << (isAscending ? "ASC" : "DESC") << "\n";
-    ret << "LIMIT $TopK" << "\n";
+    ret << "LIMIT $Limit" << "\n";
     return ret;
 }
 
 
 // Utility function to create parameters for select query
-NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 topK) {
+NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 limit) {
     NYdb::TParamsBuilder paramsBuilder;
     
     paramsBuilder.AddParam("$Embedding").String(embeddingBytes).Build();
-    paramsBuilder.AddParam("$TopK").Uint64(topK).Build();
+    paramsBuilder.AddParam("$Limit").Uint64(limit).Build();
 
     if (prefixValue.has_value()) {
         paramsBuilder.AddParam("$PrefixValue").Int64(*prefixValue).Build();

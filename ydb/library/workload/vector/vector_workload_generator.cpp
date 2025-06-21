@@ -110,7 +110,7 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
         prefixValue = VectorRecallEvaluator->GetPrefixValue(targetIndex);
     }
     
-    NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.TopK);
+    NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);
     
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));

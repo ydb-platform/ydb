@@ -114,26 +114,11 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     
     // Create the query info with a callback that captures the target index
     TQueryInfo queryInfo(query, std::move(params));
-    if (Params.Recall) {
-        queryInfo.GenericQueryResultCallback = std::bind(
-            &TVectorWorkloadGenerator::RecallCallback, 
-            this, 
-            std::placeholders::_1, 
-            targetIndex
-        );
-    }
     
     // Update the thread-local index for the next query
     ThreadLocalTargetIndex.store(GetNextTargetIndex(targetIndex));
     
     return TQueryInfoList(1, queryInfo);
 }
-
-
-void TVectorWorkloadGenerator::RecallCallback(NYdb::NQuery::TExecuteQueryResult queryResult, size_t targetIndex) {
-    // Use the evaluator to process the result and calculate recall
-    VectorRecallEvaluator->ProcessQueryResult(queryResult, targetIndex, Params.Verbose);
-}
-
 
 } // namespace NYdbWorkload

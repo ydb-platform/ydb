@@ -18,10 +18,6 @@ TVectorRecallEvaluator::TVectorRecallEvaluator(const TVectorWorkloadParams& para
 {
 }
 
-TVectorRecallEvaluator::~TVectorRecallEvaluator() {
-    if (ProcessedTargets)
-        Cout << "Average recall: " << GetAverageRecall() << Endl;
-}
 
 void TVectorRecallEvaluator::SampleExistingVectors() {
     Cout << "Sampling " << Params.Targets << " vectors from dataset..." << Endl;
@@ -211,9 +207,12 @@ void TVectorRecallEvaluator::SampleExistingVectors() {
 void TVectorRecallEvaluator::FillEtalons() {
     Cout << "Recall initialization..." << Endl;
     
-    // Prepare the query template
-    std::string queryTemplate = MakeSelect(Params.TableName, {}, Params.KeyColumn, Params.EmbeddingColumn, Params.PrefixColumn, 0, Params.Metric);
+    // Prepare the query for scan
+    std::string queryScan = MakeSelect(Params.TableName, {}, Params.KeyColumn, Params.EmbeddingColumn, Params.PrefixColumn, 0, Params.Metric);
     
+    // Create the query for index search
+    std::string queryIndex = MakeSelect(Params.TableName, Params.IndexName, Params.KeyColumn, Params.EmbeddingColumn, Params.PrefixColumn, Params.KmeansTreeSearchClusters, Params.Metric);
+
     // Maximum number of concurrent queries to execute
     const size_t MAX_CONCURRENT_QUERIES = 20;
     
@@ -221,9 +220,11 @@ void TVectorRecallEvaluator::FillEtalons() {
     for (size_t batchStart = 0; batchStart < SelectTargets.size(); batchStart += MAX_CONCURRENT_QUERIES) {
         size_t batchEnd = std::min(batchStart + MAX_CONCURRENT_QUERIES, SelectTargets.size());
         
-        // Start async queries for this batch
-        std::vector<std::pair<size_t, NYdb::NQuery::TAsyncExecuteQueryResult>> asyncQueries;
-        asyncQueries.reserve(batchEnd - batchStart);
+        // Start async queries for this batch - both scan and index queries
+        std::vector<std::pair<size_t, NYdb::NQuery::TAsyncExecuteQueryResult>> asyncScanQueries;
+        std::vector<std::pair<size_t, NYdb::NQuery::TAsyncExecuteQueryResult>> asyncIndexQueries;
+        asyncScanQueries.reserve(batchEnd - batchStart);
+        asyncIndexQueries.reserve(batchEnd - batchStart);
         
         for (size_t i = batchStart; i < batchEnd; i++) {
             const auto& targetEmbedding = GetTargetEmbedding(i);
@@ -234,20 +235,30 @@ void TVectorRecallEvaluator::FillEtalons() {
 
             NYdb::TParams params = MakeSelectParams(targetEmbedding, prefixValue, Params.Limit);
             
-            auto asyncResult = Params.QueryClient->RetryQuery([queryTemplate, params](NYdb::NQuery::TSession session) {
+            // Execute scan query for ground truth
+            auto asyncScanResult = Params.QueryClient->RetryQuery([queryScan, params](NYdb::NQuery::TSession session) {
                 return session.ExecuteQuery(
-                    queryTemplate,
+                    queryScan,
                     NYdb::NQuery::TTxControl::NoTx(),
                     params);
             });
             
-            asyncQueries.emplace_back(i, std::move(asyncResult));
+            // Execute index query for recall measurement
+            auto asyncIndexResult = Params.QueryClient->RetryQuery([queryIndex, params](NYdb::NQuery::TSession session) {
+                return session.ExecuteQuery(
+                    queryIndex,
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    params);
+            });
+            
+            asyncScanQueries.emplace_back(i, std::move(asyncScanResult));
+            asyncIndexQueries.emplace_back(i, std::move(asyncIndexResult));
         }
         
-        // Wait for all queries in this batch to complete
-        for (auto& [targetIndex, asyncResult] : asyncQueries) {
+        // Wait for all scan queries in this batch to complete and build ground truth
+        for (auto& [targetIndex, asyncResult] : asyncScanQueries) {
             auto result = asyncResult.GetValueSync();
-            Y_ABORT_UNLESS(result.IsSuccess(), "Query failed for target %zu: %s", 
+            Y_ABORT_UNLESS(result.IsSuccess(), "Scan query failed for target %zu: %s", 
                           targetIndex, result.GetIssues().ToString().c_str());
             
             auto resultSet = result.GetResultSet(0);
@@ -267,6 +278,13 @@ void TVectorRecallEvaluator::FillEtalons() {
             }
         }
         
+        // Wait for all index queries in this batch to complete and measure recall
+        for (auto& [targetIndex, asyncResult] : asyncIndexQueries) {
+            auto result = asyncResult.GetValueSync();
+            // Process the index query result and calculate recall
+            ProcessQueryResult(result, targetIndex, false);
+        }
+        
         // Log progress for large datasets
         if (SelectTargets.size() > 100 && (batchEnd % 100 == 0 || batchEnd == SelectTargets.size())) {
             Cout << "Processed " << batchEnd << " of " << SelectTargets.size() << " targets..." << Endl;
@@ -274,6 +292,9 @@ void TVectorRecallEvaluator::FillEtalons() {
     }
     
     Cout << "Recall initialization completed for " << SelectTargets.size() << " targets." << Endl;
+    if (ProcessedTargets > 0) {
+        Cout << "Average recall: " << GetAverageRecall() << " (processed " << ProcessedTargets << " targets)" << Endl;
+    }
 }
 
 const std::string& TVectorRecallEvaluator::GetTargetEmbedding(size_t index) const {

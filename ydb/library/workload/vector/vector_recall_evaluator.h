@@ -15,7 +15,6 @@ class TVectorWorkloadParams;
 class TVectorRecallEvaluator {
 public:
     TVectorRecallEvaluator(const TVectorWorkloadParams& params);
-    ~TVectorRecallEvaluator();
     
     // Core functionality for vector sampling and etalon generation
     void SampleExistingVectors();

@@ -28,6 +28,7 @@ public:
 
     const Ydb::Type& GetProto() const;
     Ydb::Type& GetProto();
+    Ydb::Type&& ExtractProto() &&;
 
 private:
     class TImpl;
@@ -276,12 +277,14 @@ class TValue {
 public:
     TValue(const TType& type, const Ydb::Value& valueProto);
     TValue(const TType& type, Ydb::Value&& valueProto);
+    TValue(const TType& type, Ydb::Value* arenaAllocatedValueProto);
 
     const TType& GetType() const;
-    TType & GetType();
+    TType& GetType();
 
     const Ydb::Value& GetProto() const;
     Ydb::Value& GetProto();
+    Ydb::Value&& ExtractProto() &&;
 
 private:
     class TImpl;

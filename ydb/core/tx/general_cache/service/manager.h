@@ -1,6 +1,11 @@
 #pragma once
-#include <ydb/core/tx/general_cache/source/abstract.h>
+#include "counters.h"
 
+#include <ydb/core/tx/general_cache/source/abstract.h>
+#include <ydb/core/tx/general_cache/usage/abstract.h>
+#include <ydb/core/tx/general_cache/usage/config.h>
+
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/signals/object_counter.h>
 
 #include <library/cpp/cache/cache.h>
@@ -13,6 +18,7 @@ private:
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
     using EConsumer = typename TPolicy::EConsumer;
+    using ICallback = NPublic::ICallback<TPolicy>;
     YDB_READONLY_DEF(THashSet<TAddress>, Wait);
     THashMap<TAddress, TObject> Result;
     THashSet<TAddress> Removed;
@@ -58,11 +64,12 @@ class TManager {
 private:
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
+    using TRequest = TRequest<TPolicy>;
 
     const NPublic::TConfig Config;
     const TString CacheName = TPolicy::GetCacheName();
     TCounters Counters;
-    std::shared_ptr<IObjectsProcessor<TAddress>> ObjectsProcessor;
+    std::shared_ptr<NSource::IObjectsProcessor<TAddress>> ObjectsProcessor;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> Requests;
     std::deque<std::shared_ptr<TRequest>> RequestsQueue;

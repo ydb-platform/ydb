@@ -9,6 +9,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/tx/general_cache/service
+    ydb/core/tx/general_cache/source
 )
 
 END()

@@ -2,7 +2,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 
-namespace NKikimr::NGeneralCache::NSource {
+namespace NKikimr::NGeneralCache::NPublic {
 
 template <class TPolicy>
 class ICallback {
@@ -20,4 +20,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NGeneralCache::NSource
+}   // namespace NKikimr::NGeneralCache::NPublic

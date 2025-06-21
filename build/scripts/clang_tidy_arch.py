@@ -15,7 +15,7 @@ def main():
     inputs = unknown_args
     result_json = {}
     for inp in inputs:
-        if os.path.exists(inp) and inp.endswith(".tidyjson"):
+        if inp.endswith(".tidyjson") and not inp.endswith(".global.tidyjson") and os.path.exists(inp):
             with open(inp, 'r') as afile:
                 file_content = afile.read().strip()
                 if not file_content:

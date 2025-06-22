@@ -224,6 +224,7 @@ int TProxy::ImportDatabase() {
 insert into `history` select * from `current` where startswith(`key`,$Prefix);
 insert into `revision` (`stub`,`revision`,`timestamp`) values (true,0L,CurrentUtcTimestamp());
 insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcTimestamp(max(`modified`)) as `timestamp` from `history`;
+insert into `commited` select `revision`, `timestamp` from `revision` where not `stub`;
     )", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;

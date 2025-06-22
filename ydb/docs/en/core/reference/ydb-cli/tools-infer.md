@@ -1,6 +1,6 @@
 # Table schema inference from data files
 
-You can use the subcommand `{{ ydb-cli }} tools infer csv` to generate a `CREATE TABLE` statement from a CSV data file. This can be very helpful when you want to [import](./export-import/import-file.md) data into a database and the table has not been created yet.
+You can use the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TABLE` statement from a CSV data file. This can be very helpful when you want to [import](./export-import/import-file.md) data into a database and the table has not been created yet.
 
 Command syntax:
 

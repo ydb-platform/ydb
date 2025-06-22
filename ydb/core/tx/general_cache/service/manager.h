@@ -153,6 +153,7 @@ public:
 
     void OnAdditionalObjectsInfo(THashMap<TAddress, TObject>&& objects) {
         AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
+        const TMonotonic now = TMonotonic::Now();
         for (auto&& i : objects) {
             auto it = RequestedObjects.find(i.first);
             if (it != RequestedObjects.end()) {

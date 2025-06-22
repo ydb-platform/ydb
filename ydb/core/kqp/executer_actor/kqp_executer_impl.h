@@ -169,8 +169,8 @@ public:
             ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         }
 
-        if (tableServiceConfig.HasBufferPageAllocSize()) {
-            BufferPageAllocSize = tableServiceConfig.GetBufferPageAllocSize();
+        if (executerConfig.TableServiceConfig.HasBufferPageAllocSize()) {
+            BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
         }
 
         EnableReadsMerge = *MergeDatashardReadsControl() == 1;

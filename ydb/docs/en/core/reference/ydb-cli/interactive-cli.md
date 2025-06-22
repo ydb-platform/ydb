@@ -1,6 +1,6 @@
 # Interactive query execution mode
 
-After executing `ydb` command without subcommands, the interactive query execution mode will be launched. The console or terminal will be switched to interactive mode. After that, you can enter queries directly into the console or terminal, and when you enter a newline character, the query is considered complete and it starts to execute. The query text can be either a YQL query or a [special command](#spec-commands). Also, query history is saved between runs, command autocomplete is available, and there is a search function for query history.
+After executing `{{ ydb-cli }}` command without subcommands, the interactive query execution mode will be launched. The console or terminal will be switched to interactive mode. After that, you can enter queries directly into the console or terminal, and when you enter a newline character, the query is considered completed and it starts to execute. The query text can be either a YQL query or a [special command](#spec-commands).
 
 General format of the command:
 
@@ -9,6 +9,23 @@ General format of the command:
 ```
 
 * `global options` — [global parameters](commands/global-options.md).
+
+## Features {#features}
+* [Query history](#query-history).
+* Syntax highlighting based on YQL grammar.
+* [Hotkeys](#hotkeys).
+* [Special commands](#spec-commands).
+* [Auto completion](#auto-completion).
+
+### Query history {#query-history}
+
+Using up and down arrow keys you can navigate through the query history:
+
+![History](_assets/history.gif)
+
+History is stored locally, as though persists between CLI launches.
+
+A query search function (`CTRL + R`) is also supported.
 
 ## Hotkeys {#hotkeys}
 
@@ -38,7 +55,7 @@ Internal variables determine the behavior of commands and are set using the [spe
 |----------|---|
 | `stats`  | The statistics collection mode for subsequent queries.<br/>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
 
-## Examples {#examples}
+### Examples {#examples}
 
 Executing a query in the `full` statistics collection mode:
 
@@ -93,3 +110,21 @@ ResultSet
          TotalDurationMs: 0
          TotalOutputRows: 1
 ```
+
+## Auto completion {#auto-completion}
+
+While in interactive mode, auto completion helps with creating a query text showing suggestions of completion of current word based on the YQL syntax.
+
+There are two types of suggestions: auto completion by pressing `TAB` key and interactive hints.
+
+### Auto completion by pressing `TAB` key {#auto-completion-tab}
+
+While in interactive mode, pressing `TAB` key will show a list of suggestions of completion of current word according to the YQL syntax.
+
+If there is only one suggestion available, pressing TAB will complete current word to it.
+
+### Interactive Hints {#interactive-hints}
+
+While typing in interactive mode, a list of hints will appear under the cursor, showing first 4 suggestions of completion of current word according to the YQL grammar.
+
+When there is only one suggestion left, it appears in-line.

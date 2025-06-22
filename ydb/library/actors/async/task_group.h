@@ -1,5 +1,6 @@
 #pragma once
 #include "async.h"
+#include "decorator.h"
 #include "symmetric_proxy.h"
 
 namespace NActors {
@@ -140,14 +141,14 @@ namespace NActors {
 
             void Cancel() noexcept override {
                 if (State == EState::Starting) {
-                    TAwaitCancelSource::SetCancellation(this->ToCoroutineHandle());
+                    TAwaitCancelSource::SetCancellation(this->GetCoroutineHandle());
                     return;
                 }
                 Y_ABORT_UNLESS(State == EState::Running, "Unexpected state when Cancel() is called");
                 State = EState::InCancel;
                 // Note: we use the same coroutine handle for cancellation!
                 // Task is cancelled when the group is also cancelled, and result will be ignored anyway
-                if (auto next = TAwaitCancelSource::Cancel(this->ToCoroutineHandle())) {
+                if (auto next = TAwaitCancelSource::Cancel(this->GetCoroutineHandle())) {
                     Pending = next;
                     Y_ABORT_UNLESS(State == EState::InCancel || State == EState::InCancelFinish);
                     State = (State == EState::InCancel) ? EState::Scheduled : EState::ScheduledFinish;
@@ -205,7 +206,7 @@ namespace NActors {
                     return;
                 }
                 State = EState::Running;
-                Coroutine->GetHandle().promise().SetContinuation(this->ToCoroutineHandle(), Sink.GetActor(), *this);
+                Coroutine->GetHandle().promise().SetContinuation(this->GetCoroutineHandle(), Sink.GetActor(), *this);
                 Coroutine->GetHandle().resume();
             }
 
@@ -220,7 +221,7 @@ namespace NActors {
             }
 
         private:
-            [[nodiscard]] std::coroutine_handle<> OnResume() noexcept {
+            [[nodiscard]] std::coroutine_handle<> OnCoroutineHandleResume() noexcept {
                 switch (State) {
                     case EState::Running:
                         return Finish();
@@ -392,29 +393,30 @@ namespace NActors {
             std::coroutine_handle<> Awaiter;
         };
 
+        template<class T>
+        class TTaskGroupSinkWithGroup {
+        public:
+            TTaskGroupSinkWithGroup()
+                : Group(Sink)
+            {}
+
+        protected:
+            TTaskGroupSink<T> Sink;
+            TTaskGroup<T> Group;
+        };
+
         template<class T, class R>
         class TWithTaskGroupAwaiter
-            : public TActorAwareAwaiter
-            , private TAwaitCancelSource
-            , private TSymmetricTransferCallback<TWithTaskGroupAwaiter<T, R>>
+            : private TTaskGroupSinkWithGroup<T> // must be above decorator
+            , public TAsyncDecoratorAwaiter<R, TWithTaskGroupAwaiter<T, R>>
         {
-            friend TSymmetricTransferCallback<TWithTaskGroupAwaiter<T, R>>;
-
-            template<class TCallback>
-            struct TImplicitConverter {
-                TCallback&& Callback;
-                TTaskGroup<T>& Group;
-                operator async<R>() const {
-                    return std::forward<TCallback>(Callback)(Group);
-                }
-            };
+            friend TAsyncDecoratorAwaiter<R, TWithTaskGroupAwaiter<T, R>>;
+            using TBase = TAsyncDecoratorAwaiter<R, TWithTaskGroupAwaiter<T, R>>;
 
         public:
             template<class TCallback>
             TWithTaskGroupAwaiter(TCallback&& callback)
-                : Group(Sink)
-                , Coroutine(std::in_place, TImplicitConverter<TCallback>{ std::forward<TCallback>(callback), Group })
-                , CancelTrampoline(*this)
+                : TBase([&]() -> async<R> { return std::forward<TCallback>(callback)(this->Group); })
             {}
 
             TWithTaskGroupAwaiter(TWithTaskGroupAwaiter&&) = delete;
@@ -422,83 +424,27 @@ namespace NActors {
             TWithTaskGroupAwaiter& operator=(TWithTaskGroupAwaiter&&) = delete;
             TWithTaskGroupAwaiter& operator=(const TWithTaskGroupAwaiter&) = delete;
 
-            bool await_ready() noexcept {
-                return false;
-            }
-
-            template<class TPromise>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) noexcept {
-                IActor& actor = parent.promise().GetActor();
-                Sink.SetActor(actor);
-                TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
-                if (auto cancellation = source.GetCancellation()) {
-                    // Make sure we propagate cancellation downstream
-                    AwaitCancel(cancellation);
-                } else {
-                    // When upstream cancels we will cancel downstream
-                    Cleanup = source.SetAwaiter(*this);
-                }
-                Continuation = parent;
-                Coroutine->GetHandle().promise().SetContinuation(this->ToCoroutineHandle(), actor, *this);
-                return Coroutine->GetHandle();
-            }
-
-            R await_resume() {
-                Cleanup();
-                return Coroutine->GetHandle().promise().ExtractValue();
-            }
-
-            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
-                UpstreamCancellation = h;
-                return TAwaitCancelSource::Cancel(CancelTrampoline.ToCoroutineHandle());
-            }
-
         private:
-            std::coroutine_handle<> OnResume() noexcept {
-                // Downstream coroutine wants to return some result
-                Y_ABORT_UNLESS(Coroutine, "Unexpected OnResume without a coroutine");
-                // We want to cancel all running tasks and then resume upstream
-                return Sink.Cancel(Continuation);
+            std::coroutine_handle<> Start() noexcept {
+                this->Sink.SetActor(this->GetActor());
+                return TBase::Start();
             }
 
-            std::coroutine_handle<> OnCancel() noexcept {
-                // Downstream coroutine confirmed cancellation
-                Y_ABORT_UNLESS(UpstreamCancellation, "Unexpected OnCancel without upstream cancellation");
-                // We destroy coroutine and unwind its stack immediately
-                Coroutine.reset();
-                // We want to cancel all running tasks and then cancel upstream
-                return Sink.Cancel(UpstreamCancellation);
+            std::coroutine_handle<> OnResume(std::coroutine_handle<> h) noexcept {
+                // Cancel all tasks and delay resume until they finish
+                return this->Sink.Cancel(h);
             }
 
-        private:
-            class TCancelTrampoline : public TSymmetricTransferCallback<TCancelTrampoline> {
-            public:
-                TCancelTrampoline(TWithTaskGroupAwaiter& self)
-                    : Self(self)
-                {}
-
-                std::coroutine_handle<> OnResume() noexcept {
-                    return Self.OnCancel();
-                }
-
-            private:
-                TWithTaskGroupAwaiter& Self;
-            };
-
-        private:
-            TTaskGroupSink<T> Sink;
-            TTaskGroup<T> Group;
-            std::optional<async<R>> Coroutine;
-            TAwaitCancelCleanup Cleanup;
-            std::coroutine_handle<> Continuation;
-            std::coroutine_handle<> UpstreamCancellation;
-            TCancelTrampoline CancelTrampoline;
+            std::coroutine_handle<> OnUnwind(std::coroutine_handle<> h) noexcept {
+                // Cancel all tasks and delay unwind until they finish
+                return this->Sink.Cancel(h);
+            }
         };
 
     } // namespace NDetail
 
     template<class T>
-    class TTaskGroup<T>::TWhenReadyAwaiter {
+    class [[nodiscard]] TTaskGroup<T>::TWhenReadyAwaiter {
     public:
         TWhenReadyAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
@@ -524,7 +470,7 @@ namespace NActors {
     };
 
     template<class T>
-    class TTaskGroup<T>::TNextValueAwaiter {
+    class [[nodiscard]] TTaskGroup<T>::TNextValueAwaiter {
     public:
         TNextValueAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
@@ -552,7 +498,7 @@ namespace NActors {
     };
 
     template<class T>
-    class TTaskGroup<T>::TNextResultAwaiter {
+    class [[nodiscard]] TTaskGroup<T>::TNextResultAwaiter {
     public:
         TNextResultAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)

@@ -7,8 +7,12 @@ SRCS(
     async.h
     callback_coroutine.cpp
     callback_coroutine.h
+    cancellation.cpp
+    cancellation.h
     continuation.cpp
     continuation.h
+    decorator.cpp
+    decorator.h
     result.cpp
     result.h
     sleep.cpp

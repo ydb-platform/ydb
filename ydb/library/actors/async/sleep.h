@@ -1,6 +1,6 @@
 #pragma once
 #include "async.h"
-#include "symmetric_proxy.h"
+#include "decorator.h"
 #include <ydb/library/actors/core/events.h>
 
 namespace NActors {
@@ -184,79 +184,84 @@ namespace NActors {
 
         template<class TWhen, class T>
         class [[nodiscard]] TActorAsyncWithTimeoutAwaiter
-            : public TActorAwareAwaiter
-            , private TAwaitCancelSource
-            , private TSymmetricTransferCallback<TActorAsyncWithTimeoutAwaiter<TWhen, T>>
+            : public TAsyncDecoratorAwaiter<T, TActorAsyncWithTimeoutAwaiter<TWhen, T>>
         {
-            friend TSymmetricTransferCallback<TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
+            friend TAsyncDecoratorAwaiter<T, TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
+            using TBase = TAsyncDecoratorAwaiter<T, TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
 
         public:
             template<class TCallback>
             TActorAsyncWithTimeoutAwaiter(TWhen when, TCallback&& callback)
-                : When{ when }
-                , NestedCoroutine{ std::forward<TCallback>(callback)() }
+                : TBase(std::forward<TCallback>(callback))
+                , When{ when }
             {}
-
-            TActorAsyncWithTimeoutAwaiter(const TActorAsyncWithTimeoutAwaiter&) = delete;
-            TActorAsyncWithTimeoutAwaiter& operator=(const TActorAsyncWithTimeoutAwaiter&) = delete;
 
             ~TActorAsyncWithTimeoutAwaiter() {
                 // Handle emergency cancellation (actor system shutdown)
                 Detach();
             }
 
-            bool await_ready() const noexcept {
-                return false;
+        private:
+            std::coroutine_handle<> Bypass() noexcept {
+                // When source is cancelled already or the timeout is infinite we bypass everything
+                if (this->GetCancellation() || IsInfinite()) {
+                    return this->GetAsyncBody();
+                }
+                return nullptr;
             }
 
-            template<class TPromise>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) {
-                auto self = NestedCoroutine.GetHandle();
-
-                IActor& actor = parent.promise().GetActor();
-                TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
-
-                // When source is cancelled already or the timeout is infite we bypass everything
-                if (source.GetCancellation() || IsInfinite()) {
-                    self.promise().SetContinuation(parent, actor, source);
-                    return self;
-                }
-
-                // Otherwise we start a timer
-                auto selfId = actor.SelfId();
+            std::coroutine_handle<> Start() {
+                // Start a timer
+                auto selfId = this->GetActor().SelfId();
                 Bridge.Reset(new TBridge(this));
                 Bridge->Ref(); // extra reference used by the event
                 selfId.Schedule(When, new TEvents::TEvResumeRunnable(Bridge.Get()));
 
-                // And intercept cancellation so we can cancel the timer
-                TimeoutContinuation = parent;
-                self.promise().SetContinuation(parent, actor, *this);
-                Cleanup = source.SetAwaiter(*this);
-                return self;
+                return this->GetAsyncBody();
             }
 
-            T await_resume() {
-                Cleanup();
+            std::coroutine_handle<> Cancel() noexcept {
+                if (Detach()) {
+                    // Propagate cancellation, since timer was still active,
+                    // which means async body was not cancelled yet. We also
+                    // don't need to intercept unwind in that case.
+                    return TBase::CancelWithBypass();
+                }
+
+                return nullptr;
+            }
+
+            void OnTimeout() noexcept {
+                Y_ABORT_UNLESS(Bridge, "Unexpected bridge timer callback after Detach()");
+                Bridge->Self = nullptr;
+                Bridge.Reset();
+                // Cancel async body, since we're in an event handler resume inline
+                if (auto h = TBase::Cancel()) {
+                    h.resume();
+                }
+            }
+
+            std::coroutine_handle<> OnUnwind(std::coroutine_handle<>) noexcept {
+                // Nested coroutine confirmed cancellation after a timeout
+                Y_ABORT_UNLESS(!Bridge, "Unexpected cancellation confirmation before Detach()");
+
+                if (this->GetCancellation()) {
+                    // Unwind caller since it is cancelled
+                    return this->GetCancellation();
+                } else {
+                    // We resume normally but need to throw an exception
+                    ThrowException = true;
+                    return this->GetContinuation();
+                }
+            }
+
+            void OnReturn() {
+                // Make sure timer is cancelled
                 Detach();
 
                 if (ThrowException) {
                     throw TActorTimeoutException() << "operation timed out";
                 }
-
-                return NestedCoroutine.GetHandle().promise().ExtractValue();
-            }
-
-            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
-                // Downstream cancellation will propagate cancellation
-                TimeoutContinuation = h;
-                if (Detach()) {
-                    // Timer was still pending and now cancelled, pass upstream
-                    // cancellation directly to downstream subscribers. It will
-                    // either resume normally with a result, or confirm
-                    // cancellation upstream.
-                    return TAwaitCancelSource::Cancel(h);
-                }
-                return {};
             }
 
         private:
@@ -311,31 +316,9 @@ namespace NActors {
                 TActorAsyncWithTimeoutAwaiter* Self;
             };
 
-            void OnTimeout() noexcept {
-                Y_ABORT_UNLESS(Bridge, "Unexpected bridge timer callback after Detach()");
-                Bridge->Self = nullptr;
-                Bridge.Reset();
-                // We want downstream to resume our proxy on cancellation
-                // We can then resume normally with an exception instead
-                if (auto next = TAwaitCancelSource::Cancel(this->ToCoroutineHandle())) {
-                    next.resume();
-                }
-            }
-
-            std::coroutine_handle<> OnResume() noexcept {
-                // Nested coroutine confirmed cancellation after a timeout
-                Y_ABORT_UNLESS(!Bridge, "Unexpected cancellation confirmation before Detach()");
-                // We will throw exception on normal resume
-                ThrowException = true;
-                return TimeoutContinuation;
-            }
-
         private:
             const TWhen When;
-            async<T> NestedCoroutine;
-            TAwaitCancelCleanup Cleanup;
             TIntrusivePtr<TBridge> Bridge;
-            std::coroutine_handle<> TimeoutContinuation;
             bool ThrowException = false;
         };
     }

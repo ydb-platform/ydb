@@ -38,23 +38,34 @@ namespace NActors {
         using promise_type = NDetail::TAsyncPromise<T>;
 
         ~async() {
-            Handle_.destroy();
+            Destroy();
         }
 
-        std::coroutine_handle<NDetail::TAsyncPromise<T>> GetHandle() const noexcept {
-            return Handle_;
+        constexpr explicit operator bool() const noexcept {
+            return bool(Handle);
+        }
+
+        constexpr std::coroutine_handle<NDetail::TAsyncPromise<T>> GetHandle() const noexcept {
+            return Handle;
+        }
+
+        void Destroy() noexcept {
+            if (Handle) {
+                Handle.destroy();
+                Handle = nullptr;
+            }
         }
 
     private:
-        explicit async(std::coroutine_handle<NDetail::TAsyncPromise<T>> handle)
-            : Handle_(handle)
+        constexpr explicit async(std::coroutine_handle<NDetail::TAsyncPromise<T>> handle)
+            : Handle(handle)
         {}
 
         async(const async&) = delete;
         async& operator=(const async&) = delete;
 
     private:
-        std::coroutine_handle<NDetail::TAsyncPromise<T>> Handle_;
+        std::coroutine_handle<NDetail::TAsyncPromise<T>> Handle;
     };
 
     namespace NDetail {
@@ -312,6 +323,27 @@ namespace NActors {
                 return Cancellation;
             }
 
+            /**
+             * Calls the awaiter.AwaitCancel(h) method and transforms various
+             * result types into an optional continuation.
+             */
+            template<class TAwaiter>
+            [[nodiscard]] static std::coroutine_handle<> Notify(TAwaiter& awaiter, std::coroutine_handle<> h) noexcept {
+                if constexpr (HasAwaitCancelVoid<TAwaiter>) {
+                    awaiter.AwaitCancel(h);
+                    return nullptr;
+                } else if constexpr (HasAwaitCancelBool<TAwaiter>) {
+                    if (awaiter.AwaitCancel(h)) {
+                        return h;
+                    } else {
+                        return nullptr;
+                    }
+                } else {
+                    static_assert(HasAwaitCancelHandle<TAwaiter>, "AwaitCancel must return void/bool/std::coroutine_handle<>");
+                    return awaiter.AwaitCancel(h);
+                }
+            }
+
         protected:
             [[nodiscard]] std::coroutine_handle<> Cancel(std::coroutine_handle<> h) noexcept {
                 Cancellation = h;
@@ -339,15 +371,15 @@ namespace NActors {
             friend class TAwaitCancelSource;
 
         public:
-            TAwaitCancelCleanup() noexcept = default;
+            constexpr TAwaitCancelCleanup() noexcept = default;
 
-            TAwaitCancelCleanup(TAwaitCancelCleanup&& rhs) noexcept
+            constexpr TAwaitCancelCleanup(TAwaitCancelCleanup&& rhs) noexcept
                 : Source(rhs.Source)
             {
                 rhs.Source = nullptr;
             }
 
-            TAwaitCancelCleanup& operator=(TAwaitCancelCleanup&& rhs) noexcept {
+            constexpr TAwaitCancelCleanup& operator=(TAwaitCancelCleanup&& rhs) noexcept {
                 if (this != &rhs) [[likely]] {
                     if (Source) [[unlikely]] {
                         Source->CancelFn = nullptr;
@@ -358,25 +390,25 @@ namespace NActors {
                 return *this;
             }
 
-            ~TAwaitCancelCleanup() noexcept {
+            constexpr ~TAwaitCancelCleanup() noexcept {
                 Cleanup();
             }
 
-            void operator()() noexcept {
+            constexpr void operator()() noexcept {
                 Cleanup();
             }
 
-            explicit operator bool() const noexcept {
+            constexpr explicit operator bool() const noexcept {
                 return Source != nullptr;
             }
 
         private:
-            TAwaitCancelCleanup(TAwaitCancelSource* source) noexcept
+            constexpr TAwaitCancelCleanup(TAwaitCancelSource* source) noexcept
                 : Source(source)
             {}
 
         private:
-            void Cleanup() noexcept {
+            constexpr void Cleanup() noexcept {
                 if (Source) {
                     Source->CancelFn = nullptr;
                     Source = nullptr;
@@ -394,25 +426,9 @@ namespace NActors {
         inline TAwaitCancelCleanup TAwaitCancelSource::SetAwaiter(TAwaiter& awaiter) noexcept {
             static_assert(HasAwaitCancelNoExcept<TAwaiter>, "AwaitCancel must be noexcept");
             Y_DEBUG_ABORT_UNLESS(!CancelFn, "TAwaitCancelSource cannot support more than one awaiter");
-            if constexpr (HasAwaitCancelVoid<TAwaiter>) {
-                CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
-                    reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h);
-                    return {};
-                };
-            } else if constexpr (HasAwaitCancelBool<TAwaiter>) {
-                CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
-                    if (reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h)) {
-                        return h;
-                    } else {
-                        return {};
-                    }
-                };
-            } else {
-                static_assert(HasAwaitCancelHandle<TAwaiter>, "AwaitCancel must return void/bool/std::coroutine_handle<>");
-                CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
-                    return reinterpret_cast<TAwaiter*>(ptr)->AwaitCancel(h);
-                };
-            }
+            CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept {
+                return TAwaitCancelSource::Notify(*reinterpret_cast<TAwaiter*>(ptr), h);
+            };
             CancelFnArg = std::addressof(awaiter);
             return TAwaitCancelCleanup(this);
         }
@@ -423,11 +439,11 @@ namespace NActors {
         template<class T>
         class TAsyncAwaiter : public TActorAwareAwaiter {
         public:
-            explicit TAsyncAwaiter(async<T>&& owner)
+            constexpr explicit TAsyncAwaiter(async<T>&& owner)
                 : Handle(owner.GetHandle())
             {}
 
-            bool await_ready() noexcept {
+            constexpr bool await_ready() noexcept {
                 return false;
             }
 
@@ -478,7 +494,10 @@ namespace NActors {
                     Cleanup = source.SetAwaiter(Awaiter);
                 }
 
-                TCallCleanup<HasAwaitCancel<TAwaiter> && !HasAwaitSuspendNoExcept<TAwaiter, TPromise>> callCleanup{ this };
+                // We need cleanup on exceptions only when we subscribe and suspend may throw
+                constexpr bool needCleanup = HasAwaitCancel<TAwaiter> && !HasAwaitSuspendNoExcept<TAwaiter, TPromise>;
+
+                TCallCleanup<needCleanup> callCleanup{ this };
                 std::coroutine_handle<> result = DoSuspend(parent);
                 callCleanup.Cancel();
                 return result;
@@ -527,21 +546,21 @@ namespace NActors {
             struct TCallCleanup {
                 TAwaiterProxy* Self;
 
-                ~TCallCleanup() {
+                constexpr ~TCallCleanup() {
                     if (Self) {
                         Self->Cleanup();
                     }
                 }
 
-                void Cancel() noexcept {
+                constexpr void Cancel() noexcept {
                     Self = nullptr;
                 }
             };
 
             template<>
             struct TCallCleanup<false> {
-                TCallCleanup(TAwaiterProxy*) noexcept {}
-                void Cancel() noexcept {}
+                constexpr TCallCleanup(TAwaiterProxy*) noexcept {}
+                constexpr void Cancel() noexcept {}
             };
 
         private:
@@ -876,8 +895,8 @@ namespace NActors {
             }
 
             struct TFinalSuspend {
-                bool await_ready() noexcept { return false; }
-                void await_resume() noexcept {}
+                constexpr bool await_ready() noexcept { return false; }
+                constexpr void await_resume() noexcept {}
 
                 std::coroutine_handle<> await_suspend(std::coroutine_handle<TAsyncPromise<T>> self) noexcept {
                     return self.promise().Continuation;
@@ -887,19 +906,19 @@ namespace NActors {
             constexpr auto initial_suspend() noexcept { return std::suspend_always{}; }
             constexpr auto final_suspend() noexcept { return TFinalSuspend{}; }
 
-            IActor& GetActor() noexcept {
+            constexpr IActor& GetActor() noexcept {
                 return *Actor;
             }
 
-            TAwaitCancelSource& GetAwaitCancelSource() noexcept {
+            constexpr TAwaitCancelSource& GetAwaitCancelSource() noexcept {
                 return *Source;
             }
 
-            std::coroutine_handle<> GetContinuation() const noexcept {
+            constexpr std::coroutine_handle<> GetContinuation() const noexcept {
                 return Continuation;
             }
 
-            void SetContinuation(std::coroutine_handle<> c, IActor& actor, TAwaitCancelSource& source) noexcept {
+            constexpr void SetContinuation(std::coroutine_handle<> c, IActor& actor, TAwaitCancelSource& source) noexcept {
                 Actor = &actor;
                 Source = &source;
                 Continuation = c;
@@ -935,7 +954,7 @@ namespace NActors {
             struct TFinalSuspend {
                 const bool Ready;
 
-                bool await_ready() const noexcept { return Ready; }
+                constexpr bool await_ready() const noexcept { return Ready; }
                 constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
                 constexpr void await_resume() const noexcept {}
             };
@@ -945,13 +964,13 @@ namespace NActors {
             }
 
             void unhandled_exception() noexcept;
-            void return_void() noexcept {}
+            constexpr void return_void() noexcept {}
 
-            IActor& GetActor() noexcept {
+            constexpr IActor& GetActor() noexcept {
                 return Actor;
             }
 
-            TAwaitCancelSource& GetAwaitCancelSource() noexcept {
+            constexpr TAwaitCancelSource& GetAwaitCancelSource() noexcept {
                 return *this;
             }
 

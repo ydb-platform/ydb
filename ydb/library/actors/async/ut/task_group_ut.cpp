@@ -270,6 +270,231 @@ namespace NAsyncTest {
             UNIT_ASSERT(finished);
         }
 
+        Y_UNIT_TEST(TaskNotCancelledUntilGroupReturns) {
+            bool finished = false;
+            bool finishedNormally = false;
+            bool groupFinishedNormally = false;
+            bool taskFinishedNormally = false;
+            std::coroutine_handle<> tresume, tcancel;
+            std::coroutine_handle<> gresume, gcancel;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { finished = true; };
+
+                int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
+                    g.Add([&]() -> async<void> {
+                        co_await TSuspendAwaiter{ &tresume, &tcancel };
+                        taskFinishedNormally = true;
+                    });
+                    co_await TSuspendAwaiter{ &gresume, &gcancel };
+                    groupFinishedNormally = true;
+                    co_return 42;
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+
+                finishedNormally = true;
+            });
+
+            UNIT_ASSERT(tresume);
+            UNIT_ASSERT(!tcancel);
+            UNIT_ASSERT(gresume);
+            UNIT_ASSERT(!gcancel);
+
+            runtime.Poison(actor);
+            UNIT_ASSERT(gcancel);
+            UNIT_ASSERT(!tcancel);
+
+            runtime.ResumeCoroutine(actor, gresume);
+            UNIT_ASSERT(groupFinishedNormally);
+            UNIT_ASSERT(!finished);
+
+            runtime.ResumeCoroutine(actor, tresume);
+            UNIT_ASSERT(taskFinishedNormally);
+            UNIT_ASSERT(finishedNormally);
+            UNIT_ASSERT(finished);
+            UNIT_ASSERT(state.Destroyed);
+        }
+
+        Y_UNIT_TEST(TaskCancelAfterGroupCancel) {
+            bool finished = false;
+            bool finishedNormally = false;
+            bool groupFinished = false;
+            bool groupFinishedNormally = false;
+            bool taskFinished = false;
+            bool taskFinishedNormally = false;
+            std::coroutine_handle<> tresume, tcancel;
+            std::coroutine_handle<> gresume, gcancel;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { finished = true; };
+
+                int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
+                    Y_DEFER { groupFinished = true; };
+                    g.Add([&]() -> async<void> {
+                        Y_DEFER { taskFinished = true; };
+                        co_await TSuspendAwaiter{ &tresume, &tcancel };
+                        taskFinishedNormally = true;
+                    });
+                    co_await TSuspendAwaiter{ &gresume, &gcancel };
+                    groupFinishedNormally = true;
+                    co_return 42;
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+
+                finishedNormally = true;
+            });
+
+            UNIT_ASSERT(tresume);
+            UNIT_ASSERT(!tcancel);
+            UNIT_ASSERT(gresume);
+            UNIT_ASSERT(!gcancel);
+
+            runtime.Poison(actor);
+            UNIT_ASSERT(gcancel);
+            UNIT_ASSERT(!tcancel);
+
+            runtime.ResumeCoroutine(actor, gcancel);
+            UNIT_ASSERT(groupFinished);
+            UNIT_ASSERT(!groupFinishedNormally);
+            UNIT_ASSERT(!finished);
+
+            runtime.ResumeCoroutine(actor, tcancel);
+            UNIT_ASSERT(taskFinished);
+            UNIT_ASSERT(!taskFinishedNormally);
+            UNIT_ASSERT(finished);
+            UNIT_ASSERT(!finishedNormally);
+            UNIT_ASSERT(state.Destroyed);
+        }
+
+        Y_UNIT_TEST(TaskAwaitCancelThenRetry) {
+            bool finished = false;
+            bool finishedNormally = false;
+            bool groupFinished = false;
+            bool groupFinishedNormally = false;
+            bool taskFinished = false;
+            bool taskFinishedNormally = false;
+            int groupValue = 0;
+            int groupState = 0;
+            std::coroutine_handle<> tresume, tcancel;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { finished = true; };
+
+                int value = co_await WithTaskGroup<int>([&](auto& g) -> async<int> {
+                    Y_DEFER { groupFinished = true; };
+                    g.Add([&]() -> async<int> {
+                        Y_DEFER { taskFinished = true; };
+                        co_await TSuspendAwaiter{ &tresume, &tcancel };
+                        taskFinishedNormally = true;
+                        co_return 42;
+                    });
+                    groupState = 1;
+                    try {
+                        co_await ActorWithTimeout(TDuration::MilliSeconds(1), [&]() -> async<void> {
+                            groupValue = co_await g.Next();
+                        });
+                    } catch(TActorTimeoutException&) {}
+                    groupState = 2;
+                    int value = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                        groupValue = co_await g.Next();
+                        co_return groupValue;
+                    });
+                    groupState = 3;
+                    groupFinishedNormally = true;
+                    co_return value;
+                });
+
+                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+
+                finishedNormally = true;
+            });
+
+            UNIT_ASSERT(tresume);
+            UNIT_ASSERT(!tcancel);
+            UNIT_ASSERT_VALUES_EQUAL(groupState, 1);
+
+            runtime.SimulateSleep(TDuration::MilliSeconds(2));
+            UNIT_ASSERT_VALUES_EQUAL(groupState, 2);
+
+            runtime.ResumeCoroutine(actor, tresume);
+            UNIT_ASSERT(taskFinishedNormally);
+            UNIT_ASSERT(groupFinishedNormally);
+            UNIT_ASSERT(finishedNormally);
+        }
+
+        /**
+         * This is a testing infra test
+         *
+         * It validates we can actually step one event at a time with runtime.Step()
+         */
+        Y_UNIT_TEST(TestSingleStepTesting) {
+            bool finished = false;
+            bool finishedNormally = false;
+            bool groupFinished = false;
+            bool groupFinishedNormally = false;
+            bool startedTask1 = false;
+            bool startedTask2 = false;
+            int finishedTasks = 0;
+            std::coroutine_handle<> resume1, cancel1;
+            std::coroutine_handle<> resume2, cancel2;
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { finished = true; };
+
+                co_await WithTaskGroup([&](auto& g) -> async<void> {
+                    Y_DEFER { groupFinished = true; };
+                    g.Add([&]() -> async<void> {
+                        startedTask1 = true;
+                        co_await ActorYield();
+                        co_await TSuspendAwaiter{ &resume1, &cancel1 };
+                    });
+                    g.Add([&]() -> async<void> {
+                        startedTask2 = true;
+                        co_await ActorYield();
+                        co_await TSuspendAwaiter{ &resume2, &cancel2 };
+                    });
+                    while (g) {
+                        co_await g.Next();
+                        finishedTasks++;
+                    }
+                    groupFinishedNormally = true;
+                });
+
+                finishedNormally = true;
+            });
+
+            UNIT_ASSERT(startedTask1);
+            UNIT_ASSERT(startedTask2);
+            UNIT_ASSERT(!resume1);
+            UNIT_ASSERT(!resume2);
+
+            runtime.Step(actor);
+            UNIT_ASSERT(resume1);
+            UNIT_ASSERT(!resume2);
+
+            runtime.Step(actor);
+            UNIT_ASSERT(resume2);
+
+            runtime.ResumeCoroutine(actor, resume1);
+            UNIT_ASSERT_VALUES_EQUAL(finishedTasks, 1);
+
+            runtime.ResumeCoroutine(actor, resume2);
+            UNIT_ASSERT_VALUES_EQUAL(finishedTasks, 2);
+
+            UNIT_ASSERT(groupFinishedNormally);
+            UNIT_ASSERT(finishedNormally);
+        }
+
     } // Y_UNIT_TEST_SUITE(TaskGroup)
 
 } // namespace NAsyncTest

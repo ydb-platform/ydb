@@ -60,14 +60,25 @@ namespace NActors {
         };
 
     public:
-        explicit TCallbackCoroutine(std::coroutine_handle<promise_type> handle) noexcept
+        constexpr TCallbackCoroutine() noexcept = default;
+        constexpr TCallbackCoroutine(std::nullptr_t) noexcept {}
+
+        constexpr explicit TCallbackCoroutine(std::coroutine_handle<promise_type> handle) noexcept
             : Handle(handle)
         {}
 
         TCallbackCoroutine(TCallbackCoroutine&& rhs) noexcept
             : Handle(rhs.Handle)
         {
-            rhs.Handle = {};
+            rhs.Handle = nullptr;
+        }
+
+        TCallbackCoroutine& operator=(std::nullptr_t) noexcept {
+            if (Handle) {
+                Handle.destroy();
+                Handle = nullptr;
+            }
+            return *this;
         }
 
         TCallbackCoroutine& operator=(TCallbackCoroutine&& rhs) noexcept {
@@ -76,7 +87,7 @@ namespace NActors {
                     Handle.destroy();
                 }
                 Handle = rhs.Handle;
-                rhs.Handle = {};
+                rhs.Handle = nullptr;
             }
             return *this;
         }
@@ -87,12 +98,18 @@ namespace NActors {
             }
         }
 
-        explicit operator bool() const noexcept {
+        constexpr explicit operator bool() const noexcept {
             return bool(Handle);
         }
 
-        operator std::coroutine_handle<>() const noexcept {
+        constexpr operator std::coroutine_handle<>() const noexcept {
             return Handle;
+        }
+
+        constexpr std::coroutine_handle<promise_type> Release() noexcept {
+            auto h = Handle;
+            Handle = nullptr;
+            return h;
         }
 
         TCallback& operator*() const noexcept {
@@ -101,12 +118,6 @@ namespace NActors {
 
         TCallback* operator->() const noexcept {
             return &Handle.promise();
-        }
-
-        std::coroutine_handle<promise_type> Release() noexcept {
-            auto h = Handle;
-            Handle = {};
-            return h;
         }
 
         static std::coroutine_handle<> FromCallback(TCallback& callback) noexcept {

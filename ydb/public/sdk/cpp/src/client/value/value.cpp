@@ -111,10 +111,6 @@ Ydb::Type& TType::GetProto()
     return Impl_->ProtoType_;
 }
 
-Ydb::Type&& TType::ExtractProto() && {
-    return std::move(Impl_->ProtoType_);
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTypeParser::TImpl {
@@ -1071,10 +1067,6 @@ public:
         return ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_;
     }
 
-    Ydb::Value&& ExtractProto() && {
-        return std::move(ArenaAllocatedValueProto_ ? *ArenaAllocatedValueProto_ : ProtoValue_);
-    }
-
     TType Type_;
 private:
     Ydb::Value ProtoValue_;
@@ -1106,10 +1098,6 @@ const Ydb::Value& TValue::GetProto() const {
 
 Ydb::Value& TValue::GetProto() {
     return Impl_->GetProto();
-}
-
-Ydb::Value&& TValue::ExtractProto() && {
-    return std::move(std::move(*Impl_).ExtractProto());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

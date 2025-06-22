@@ -28,7 +28,6 @@ public:
 
     const Ydb::Type& GetProto() const;
     Ydb::Type& GetProto();
-    Ydb::Type&& ExtractProto() &&;
 
 private:
     class TImpl;
@@ -290,7 +289,6 @@ public:
 
     const Ydb::Value& GetProto() const;
     Ydb::Value& GetProto();
-    Ydb::Value&& ExtractProto() &&;
 
 private:
     class TImpl;

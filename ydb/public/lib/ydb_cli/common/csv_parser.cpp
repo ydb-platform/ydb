@@ -606,8 +606,7 @@ void TCsvParser::ProcessCsvLine(
         TStringBuf nextField = Consume(splitter, meta, *headerIt);
         if (!*skipIt) {
             TValue builtValue = FieldToValue(*typeParserIt->get(), nextField, NullValue, meta, *headerIt);
-            *structItems->Add() = std::move(builtValue).ExtractProto();
-
+            *structItems->Add() = std::move(builtValue.GetProto());
             ++typeParserIt;
         }
         ++headerIt;

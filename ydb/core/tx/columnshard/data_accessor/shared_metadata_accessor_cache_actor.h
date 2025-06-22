@@ -2,8 +2,7 @@
 #include "events.h"
 #include "manager.h"
 
-#include "abstract/collector.h"
-
+#include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 

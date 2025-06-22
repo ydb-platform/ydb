@@ -110,6 +110,8 @@ private:
         Counters->ObjectsQueueSize->Set(QueueObjectsCount.Val());
         Counters->ObjectsInFlight->Set(RequestedObjects.size());
         Counters->RequestsInFlight->Set(RequestsInProgress.size());
+        Counters->CacheSizeCount->Set(Cache.Size());
+        Counters->CacheSizeBytes->Set(Cache.TotalSize());
     }
 
 public:
@@ -167,8 +169,6 @@ public:
                 RequestedObjects.erase(it);
             }
         }
-        Counters->CacheSizeCount->Set(Cache.Size());
-        Counters->CacheSizeBytes->Set(Cache.TotalSize());
         DrainQueue();
     }
 

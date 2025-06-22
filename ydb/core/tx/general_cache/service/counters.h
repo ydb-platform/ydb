@@ -28,7 +28,7 @@ public:
 
     TManagerCounters(NColumnShard::TCommonCountersOwner& base)
         : TBase(base, "signals_owner", "manager")
-        , RequestDuration(TBase::GetHistogram("Requests/Duration/Us", NMonitoring::ExponentialHistogram(20, 16, 2)))
+        , RequestDuration(TBase::GetHistogram("Requests/Duration/Us", NMonitoring::ExponentialHistogram(15, 2, 16)))
         , RequestCacheMiss(TBase::GetDeriviative("Cache/Request/Miss/Count"))
         , RequestCacheHit(TBase::GetDeriviative("Cache/Request/Hit/Count"))
         , ObjectCacheMiss(TBase::GetDeriviative("Cache/Object/Miss/Count"))

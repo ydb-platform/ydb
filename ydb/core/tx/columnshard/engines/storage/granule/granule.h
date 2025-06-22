@@ -383,10 +383,19 @@ public:
         return *it->second;
     }
 
-    const TPortionInfo::TPtr& GetPortionVerifiedPtr(const ui64 portion) const {
-        auto it = Portions.find(portion);
-        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
-        return it->second;
+    const TPortionInfo::TPtr& GetPortionVerifiedPtr(const ui64 portion, const bool committedOnly = true) const {
+        {
+            auto it = Portions.find(portion);
+            if (it != Portions.end()) {
+                return it->second;
+            }
+        }
+        AFL_VERIFY(!committedOnly)("portion_id", portion)("count", Portions.size());
+        {
+            auto it = InsertedPortions.find(portion);
+            AFL_VERIFY(it != InsertedPortions.end())("portion_id", portion)("count", InsertedPortions.size());
+            return it->second;
+        }
     }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {

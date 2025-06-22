@@ -1164,7 +1164,7 @@ public:
                     const NOlap::TPortionAddress pAddress(i.first, p);
                     auto itPortionConstructor = Constructors.find(pAddress);
                     if (itPortionConstructor == Constructors.end()) {
-                        auto portion = granule.GetPortionVerifiedPtr(p);
+                        auto portion = granule.GetPortionVerifiedPtr(p, false);
                         TPortionConstructorV2 constructor(portion);
                         itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
                     } else if (itPortionConstructor->second.IsReady()) {

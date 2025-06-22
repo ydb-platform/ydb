@@ -112,13 +112,17 @@ public:
     void AddRequest(const std::shared_ptr<TRequest>& request) {
         AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "add_request");
         std::vector<TAddress> addressesToAsk;
+        THashMap<TAddress, TObject> objectsResult;
         for (auto&& i : request->GetWait()) {
             auto it = Cache.Find(i);
             if (it == Cache.End()) {
                 addressesToAsk.emplace_back(i);
             } else {
-                request->AddResult(i, it.Value());
+                AFL_VERIFY(objectsResult.emplace(i, it.Value()).second);
             }
+        }
+        for (auto&& i : objectsResult) {
+            request->AddResult(i.first, std::move(i.second));
         }
         if (request->GetWait().empty()) {
             return;

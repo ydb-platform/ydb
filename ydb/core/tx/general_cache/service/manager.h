@@ -121,11 +121,11 @@ public:
         , Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
         , Cache(Config.GetMemoryLimit()) {
-        AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "general_cache_manager")("owner_actor_id", ownerActorId)("config", config.DebugString());
+        AFL_NOTICE(NKikimrServices::GENERAL_CACHE)("event", "general_cache_manager")("owner_actor_id", ownerActorId)("config", config.DebugString());
     }
 
     void AddRequest(const std::shared_ptr<TRequest>& request) {
-        AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "add_request");
+        AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "add_request");
         std::vector<TAddress> addressesToAsk;
         THashMap<TAddress, TObject> objectsResult;
         Counters->IncomingRequestsCount->Inc();
@@ -154,7 +154,7 @@ public:
     }
 
     void OnAdditionalObjectsInfo(THashMap<TAddress, TObject>&& objects) {
-        AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
+        AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
         const TMonotonic now = TMonotonic::Now();
         for (auto&& i : objects) {
             auto it = RequestedObjects.find(i.first);
@@ -174,7 +174,7 @@ public:
     }
 
     void OnRequestResult(THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
-        AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "on_result");
+        AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "on_result");
         const TMonotonic now = TMonotonic::Now();
         for (auto&& i : objects) {
             auto it = RequestedObjects.find(i.first);

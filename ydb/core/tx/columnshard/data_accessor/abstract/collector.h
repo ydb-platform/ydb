@@ -51,10 +51,10 @@ public:
         std::vector<TPortionInfo::TConstPtr> result;
         result.reserve(CommittedPortions.size() + InsertedPortions.size());
         for (auto&& i : CommittedPortions) {
-            result.emplace_back(granule.GetPortionVerifiedPtr());
+            result.emplace_back(granule.GetPortionVerifiedPtr(i));
         }
         for (auto&& i : InsertedPortions) {
-            result.emplace_back(granule.GetInsertedPortionVerifiedPtr());
+            result.emplace_back(granule.GetInsertedPortionVerifiedPtr(i));
         }
         return result;
     }

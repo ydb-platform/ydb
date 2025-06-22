@@ -12,11 +12,11 @@
 
 Создание пустой таблицы с векторным индексом в настоящее время не имеет практического смысла, так как модификация данных в таблицах с векторными индексами пока не поддерживается.
 
-Следует использовать [команду](../alter_table/indexes.md) `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.
+Следует использовать {% if feature_secondary_index %}[команду](../alter_table/indexes.md){% else %}команду{% endif %} `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.
 
 {% endnote %}
 
-Конструкция INDEX используется для определения [векторного индекса](../../../../concepts/glossary.md#vector-index) в [строчно-ориентированных](../../../../concepts/datamodel/table.md#row-oriented-tables) таблицах:
+Конструкция `INDEX` используется для определения {% if backend_name == 'YDB' %}[векторного индекса](../../../../concepts/glossary.md#vector-index){% else %}векторного индекса{% endif %} в {% if backend_name == 'YDB' %}[строчно-ориентированных](../../../../concepts/datamodel/table.md#row-oriented-tables){% else %}строчно-ориентированных{% endif %} таблицах:
 
 ```yql
 CREATE TABLE table_name (

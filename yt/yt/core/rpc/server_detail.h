@@ -18,6 +18,14 @@ namespace NYT::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DEFINE_ENUM(ERequestInfoState,
+    (Missing)
+    (Set)
+    (Flushed)
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
 // Magic constant! This is lower limit of memory allocated for request.
 constexpr i64 TypicalRequestSize = 4_KB;
 
@@ -148,7 +156,7 @@ protected:
     TSharedRef ResponseBody_;
     std::vector<TSharedRef> ResponseAttachments_;
 
-    bool RequestInfoSet_ = false;
+    ERequestInfoState RequestInfoState_ = ERequestInfoState::Missing;
     TCompactVector<std::string, 4> RequestInfos_;
     TCompactVector<std::string, 4> ResponseInfos_;
 
@@ -177,7 +185,7 @@ protected:
     virtual void DoReply() = 0;
     virtual void DoFlush();
 
-    virtual void LogRequest() = 0;
+    virtual void LogRequest();
     virtual void LogResponse() = 0;
 
 private:

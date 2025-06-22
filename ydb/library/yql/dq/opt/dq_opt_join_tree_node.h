@@ -88,9 +88,14 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     const bool LeftAny;
     const bool RightAny;
 
+    enum {
+        NoOrdering = -1,
+        DontShuffle = -2
+    };
+
     // for interesting orderings framework
-    std::int64_t ShuffleLeftSideByOrderingIdx  = -1;
-    std::int64_t ShuffleRightSideByOrderingIdx = -1;
+    std::int64_t ShuffleLeftSideByOrderingIdx  = DontShuffle;
+    std::int64_t ShuffleRightSideByOrderingIdx = DontShuffle;
 };
 
 /**

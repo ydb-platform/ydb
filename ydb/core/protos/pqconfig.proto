@@ -210,6 +210,15 @@ message TPQConfig {
     optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];
 
     optional uint64 MaxWriteSessionBytesInflight = 57 [default = 1000000];
+
+    message TCompactionConfig {
+        optional uint32 BlobsCount = 1 [default = 300];
+        optional uint32 BlobsSize = 2 [default = 8388608]; // 8mb
+        optional uint32 MaxBlobsCount = 3 [default = 1000];
+        optional uint64 MaxWTimeLagSec = 4 [default = 300]; // 5min
+    }
+
+    optional TCompactionConfig CompactionConfig = 58;
 }
 
 message TChannelProfile {
@@ -911,6 +920,7 @@ message TUserInfo {
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
     optional bool AnyCommits = 8;
+    optional string CommittedMetadata = 9;
 }
 
 message TPartitionClientInfo {
@@ -956,6 +966,11 @@ message TYdsShardIterator {
     optional ETopicKind Kind = 7;
 }
 
+message TKafkaProducerInstanceId {
+    optional int64 Id = 1;
+    optional int32 Epoch = 2;
+};
+
 message TPartitionOperation {
     optional uint32 PartitionId = 1;
     optional uint64 CommitOffsetsBegin = 2;
@@ -967,11 +982,15 @@ message TPartitionOperation {
     optional bool KillReadSession = 8;
     optional bool OnlyCheckCommitedToFinish = 9;
     optional string ReadSessionId = 10;
+    optional bool KafkaTransaction = 11 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
 };
 
 message TWriteId {
     optional uint64 NodeId = 1;
     optional fixed64 KeyId = 2;
+    optional bool KafkaTransaction = 3 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
 };
 
 message TDataTransaction {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/client/chaos_client/public.h>
+
 #include <yt/yt/client/object_client/public.h>
 
 #include <yt/yt/client/table_client/public.h>
@@ -198,6 +200,7 @@ DECLARE_REFCOUNTED_STRUCT(TTableBackupManifest)
 DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
+DECLARE_REFCOUNTED_STRUCT(TListOperationsContext)
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 

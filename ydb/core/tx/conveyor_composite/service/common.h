@@ -15,11 +15,14 @@ private:
     YDB_READONLY_DEF(TDuration, Duration);
 
 public:
-    void Cut(const TMonotonic start) {
-        AFL_VERIFY(start < Finish);
+    [[nodiscard]] bool Cut(const TMonotonic start) {
+        if (Finish <= start) {
+            return false;
+        }
         if (Start <= start) {
             Start = start;
         }
+        return true;
     }
 
     TTaskCPUUsage(const TMonotonic start, const TMonotonic finish)
@@ -61,10 +64,18 @@ private:
     YDB_READONLY_DEF(TDuration, Duration);
     YDB_READONLY_DEF(TDuration, PredictedDuration);
     std::shared_ptr<TCPUUsage> Parent;
+    TMonotonic StartInstant = TMonotonic::Zero();
 
 public:
     TCPUUsage(const std::shared_ptr<TCPUUsage>& parent)
         : Parent(parent) {
+    }
+
+    void Clear() {
+        Usage.clear();
+        Duration = TDuration::Zero();
+        PredictedDuration = TDuration::Zero();
+        StartInstant = TMonotonic::Zero();
     }
 
     TDuration CalcWeight(const double w) const {
@@ -82,11 +93,14 @@ public:
         }
     }
 
-    void AddUsage(const TTaskCPUUsage& usage) {
-        Usage.emplace_back(usage);
-        Duration += usage.GetDuration();
+    void AddUsage(const TTaskCPUUsage& extUsage) {
+        TTaskCPUUsage usage = extUsage;
+        if (usage.Cut(StartInstant)) {
+            Usage.emplace_back(usage);
+            Duration += usage.GetDuration();
+        }
         if (Parent) {
-            Parent->AddUsage(usage);
+            Parent->AddUsage(extUsage);
         }
     }
 
@@ -97,7 +111,6 @@ public:
 class TCPUGroup {
     YDB_ACCESSOR_DEF(double, CPUThreadsLimit);
     YDB_ACCESSOR(double, Weight, 1);
-    TPositiveControlInteger ProcessesCount;
 
 public:
     using TPtr = std::shared_ptr<TCPUGroup>;
@@ -108,20 +121,6 @@ public:
     {
     }
 
-    ~TCPUGroup();
-
-    ui32 GetProcessesCount() const {
-        return ProcessesCount.Val();
-    }
-
-    bool DecProcesses() {
-        --ProcessesCount;
-        return ProcessesCount == 0;
-    }
-
-    void IncProcesses() {
-        ++ProcessesCount;
-    }
 };
 
 }   // namespace NKikimr::NConveyorComposite

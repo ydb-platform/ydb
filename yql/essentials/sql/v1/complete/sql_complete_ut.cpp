@@ -6,6 +6,7 @@
 #include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/static/schema_json.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/complete/name/service/cluster/name_service.h>
@@ -20,6 +21,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/iterator/iterate_keys.h>
 #include <library/cpp/iterator/functools.h>
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <util/charset/utf8.h>
 
@@ -43,6 +46,7 @@ public:
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     using ECandidateKind::BindingName;
     using ECandidateKind::ClusterName;
+    using ECandidateKind::ColumnName;
     using ECandidateKind::FolderName;
     using ECandidateKind::FunctionName;
     using ECandidateKind::HintName;
@@ -83,35 +87,51 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             },
         };
 
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs = {
-            {"", {{"/", {{"Folder", "local"},
-                         {"Folder", "test"},
-                         {"Folder", "prod"},
-                         {"Folder", ".sys"}}},
-                  {"/local/", {{"Table", "example"},
-                               {"Table", "account"},
-                               {"Table", "abacaba"}}},
-                  {"/test/", {{"Folder", "service"},
-                              {"Table", "meta"}}},
-                  {"/test/service/", {{"Table", "example"}}},
-                  {"/.sys/", {{"Table", "status"}}}}},
-            {"example",
-             {{"/", {{"Table", "people"},
-                     {"Folder", "yql"}}},
-              {"/yql/", {{"Table", "tutorial"}}}}},
-            {"saurus",
-             {{"/", {{"Table", "maxim"}}}}},
-        };
+        TString clustersText = R"({
+            "": { "type": "Folder", "entries": {
+                "local": { "type": "Folder", "entries": {
+                    "example": { "type": "Table", "columns": {} },
+                    "account": { "type": "Table", "columns": {} },
+                    "abacaba": { "type": "Table", "columns": {} }
+                }},
+                "test": { "type": "Folder", "entries": {
+                    "service": { "type": "Folder", "entries": {
+                        "example": { "type": "Table", "columns": {} }
+                    }},
+                    "meta": { "type": "Table", "columns": {} }
+                }},
+                "prod": { "type": "Folder", "entries": {
+                }},
+                ".sys": { "type": "Folder", "entries": {
+                    "status": { "type": "Table", "columns": {} }
+                }}
+            }},
+            "example": { "type": "Folder", "entries": {
+                "people": { "type": "Table", "columns": {
+                    "name": {},
+                    "age": {}
+                }},
+                "yql": { "type": "Folder", "entries": {
+                    "tutorial": { "type": "Table", "columns": {} }
+                }}
+            }},
+            "saurus": { "type": "Folder", "entries": {
+                "maxim": { "type": "Table", "columns": {} }
+            }}
+        })";
+
+        NJson::TJsonMap clustersJson;
+        Y_ENSURE(NJson::ReadJsonTree(clustersText, &clustersJson));
 
         auto clustersIt = NFuncTools::Filter(
-            [](const auto& x) { return !x.empty(); }, IterateKeys(fs));
+            [](const auto& x) { return !x.empty(); }, IterateKeys(clustersJson.GetMapSafe()));
         TVector<TString> clusters(begin(clustersIt), end(clustersIt));
 
         TFrequencyData frequency;
 
         TVector<INameService::TPtr> children = {
             MakeStaticNameService(std::move(names), frequency),
-            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(std::move(fs)))),
+            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(clustersJson))),
             MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
         };
         INameService::TPtr service = MakeUnionNameService(
@@ -125,7 +145,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     }
 
     TVector<TCandidate> CompleteTop(size_t limit, ISqlCompletionEngine::TPtr& engine, TString sharped) {
-        auto candidates = Complete(engine, sharped);
+        auto candidates = Complete(engine, std::move(sharped));
         candidates.crop(limit);
         return candidates;
     }
@@ -193,7 +213,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -475,37 +495,40 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         TVector<TCandidate> expected = {
             {Keyword, "ALL"},
             {Keyword, "BITCAST("},
-            {Keyword, "CALLABLE"},
             {Keyword, "CASE"},
             {Keyword, "CAST("},
             {Keyword, "CURRENT_DATE"},
             {Keyword, "CURRENT_TIME"},
             {Keyword, "CURRENT_TIMESTAMP"},
-            {Keyword, "Dict<"},
+            {TypeName, "Callable<"},
             {Keyword, "DISTINCT"},
             {FunctionName, "DateTime::Split("},
+            {TypeName, "Decimal("},
+            {TypeName, "Dict<"},
             {Keyword, "EMPTY_ACTION"},
-            {Keyword, "ENUM"},
             {Keyword, "EXISTS("},
+            {TypeName, "Enum<"},
             {Keyword, "FALSE"},
-            {Keyword, "Flow<"},
+            {TypeName, "Flow<"},
             {Keyword, "JSON_EXISTS("},
             {Keyword, "JSON_QUERY("},
             {Keyword, "JSON_VALUE("},
-            {Keyword, "List<"},
+            {TypeName, "List<"},
             {Keyword, "NOT"},
             {Keyword, "NULL"},
-            {Keyword, "Optional<"},
+            {TypeName, "Optional<"},
             {FunctionName, "Python::__private("},
-            {Keyword, "Resource<"},
-            {Keyword, "Set<"},
+            {TypeName, "Resource<"},
             {Keyword, "STREAM"},
-            {Keyword, "STRUCT"},
+            {TypeName, "Set<"},
             {FunctionName, "StartsWith("},
-            {Keyword, "Tagged<"},
+            {TypeName, "Stream<"},
+            {TypeName, "Struct<"},
             {Keyword, "TRUE"},
-            {Keyword, "TUPLE"},
-            {Keyword, "VARIANT"},
+            {TypeName, "Tagged<"},
+            {TypeName, "Tuple<"},
+            {TypeName, "Uint64"},
+            {TypeName, "Variant<"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -611,7 +634,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "meta"},
+                {TableName, "meta`"},
                 {FolderName, "service/"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `test/"), expected);
@@ -635,13 +658,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:saurus."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people"},
+                {TableName, "`people`"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example."), expected);
         }
@@ -657,7 +680,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -666,14 +689,14 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`people"},
+                {TableName, "`people`"},
                 {FolderName, "`yql/"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "USE yt:saurus; SELECT * FROM example."), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
@@ -683,14 +706,14 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {BindingName, "$hello"},
-                {TableName, "`maxim"},
+                {TableName, "`maxim`"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
                 {Keyword, "ANY"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, R"(
-                USE example; 
-                DEFINE ACTION $hello() AS 
+                USE example;
+                DEFINE ACTION $hello() AS
                     USE yt:saurus;
                     SELECT * FROM #;
                 END DEFINE;
@@ -699,7 +722,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {BindingName, "$action"},
-                {TableName, "`people"},
+                {TableName, "`people`"},
                 {FolderName, "`yql/"},
                 {ClusterName, "example"},
                 {ClusterName, "saurus"},
@@ -721,36 +744,38 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(SelectWhere) {
         TVector<TCandidate> expected = {
             {Keyword, "BITCAST("},
-            {Keyword, "CALLABLE"},
             {Keyword, "CASE"},
             {Keyword, "CAST("},
             {Keyword, "CURRENT_DATE"},
             {Keyword, "CURRENT_TIME"},
             {Keyword, "CURRENT_TIMESTAMP"},
-            {Keyword, "Dict<"},
+            {TypeName, "Callable<"},
             {FunctionName, "DateTime::Split("},
+            {TypeName, "Decimal("},
+            {TypeName, "Dict<"},
             {Keyword, "EMPTY_ACTION"},
-            {Keyword, "ENUM"},
             {Keyword, "EXISTS("},
+            {TypeName, "Enum<"},
             {Keyword, "FALSE"},
-            {Keyword, "Flow<"},
+            {TypeName, "Flow<"},
             {Keyword, "JSON_EXISTS("},
             {Keyword, "JSON_QUERY("},
             {Keyword, "JSON_VALUE("},
-            {Keyword, "List<"},
+            {TypeName, "List<"},
             {Keyword, "NOT"},
             {Keyword, "NULL"},
-            {Keyword, "Optional<"},
+            {TypeName, "Optional<"},
             {FunctionName, "Python::__private("},
-            {Keyword, "Resource<"},
-            {Keyword, "Set<"},
-            {Keyword, "Stream<"},
-            {Keyword, "STRUCT"},
+            {TypeName, "Resource<"},
+            {TypeName, "Set<"},
             {FunctionName, "StartsWith("},
-            {Keyword, "Tagged<"},
+            {TypeName, "Stream<"},
+            {TypeName, "Struct<"},
             {Keyword, "TRUE"},
-            {Keyword, "TUPLE"},
-            {Keyword, "VARIANT"},
+            {TypeName, "Tagged<"},
+            {TypeName, "Tuple<"},
+            {TypeName, "Uint64"},
+            {TypeName, "Variant<"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -791,21 +816,21 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(TypeName) {
         TVector<TCandidate> expected = {
-            {Keyword, "Callable<("},
-            {Keyword, "Decimal("},
-            {Keyword, "Dict<"},
-            {Keyword, "Enum<"},
-            {Keyword, "Flow<"},
-            {Keyword, "List<"},
-            {Keyword, "Optional<"},
-            {Keyword, "Resource<"},
-            {Keyword, "Set<"},
-            {Keyword, "Stream<"},
-            {Keyword, "STRUCT"},
-            {Keyword, "Tagged<"},
-            {Keyword, "TUPLE"},
+            {TypeName, "Callable<"},
+            {TypeName, "Decimal("},
+            {TypeName, "Dict<"},
+            {TypeName, "Enum<"},
+            {TypeName, "Flow<"},
+            {TypeName, "List<"},
+            {TypeName, "Optional<"},
+            {TypeName, "Resource<"},
+            {TypeName, "Set<"},
+            {TypeName, "Stream<"},
+            {TypeName, "Struct<"},
+            {TypeName, "Tagged<"},
+            {TypeName, "Tuple<"},
             {TypeName, "Uint64"},
-            {Keyword, "Variant<"},
+            {TypeName, "Variant<"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -825,7 +850,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {Keyword, "Optional<"},
+                {TypeName, "Optional<"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Nothing(Option"), expected);
         }
@@ -995,7 +1020,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             $=0;
             $a=0;
             $abac=0;
-            SELECT 
+            SELECT
         )";
 
         {
@@ -1026,6 +1051,66 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
+    Y_UNIT_TEST(TableAsFunctionArgument) {
+        auto engine = MakeSqlCompletionEngineUT();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompleteTop(1, engine, "SELECT * FROM Concat(#)").at(0).Kind, FolderName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompleteTop(1, engine, "SELECT * FROM CONCAT(#)").at(0).Kind, FolderName);
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompleteTop(1, engine, "SELECT * FROM CONCAT(a, #)").at(0).Kind, FolderName);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            CompleteTop(1, engine, "SELECT Max(#)").at(0).Kind, FolderName);
+    }
+
+    Y_UNIT_TEST(ColumnsAtSimpleSelect) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {ColumnName, "name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT a# FROM example.`/people`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+                {ColumnName, "name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE example; SELECT # FROM `/people`"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "x.age"},
+                {ColumnName, "x.name"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people` AS x"), expected);
+        }
+        { // It is parsed into ``` SELECT x.FROM example.`/people` AS x ```
+            TVector<TCandidate> expected = {};
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.# FROM example.`/people` AS x"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {ColumnName, "age"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.a# FROM example.`/people` AS x"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {};
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT y.a# FROM example.`/people` AS x"), expected);
+        }
+    }
+
     Y_UNIT_TEST(Typing) {
         const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"
@@ -1051,7 +1136,7 @@ SELECT
     123467, \"Hello, {name}! 编码\"},
     (1 + (5 * 1 / 0)), MIN(identifier),
     Bool(field), Math::Sin(var)
-FROM `local/test/space/table` 
+FROM `local/test/space/table`
 JOIN yt:$cluster_name.test;
 )";
 
@@ -1271,39 +1356,81 @@ JOIN yt:$cluster_name.test;
         UNIT_ASSERT_UNEQUAL(Complete(engine, {"SELE"}).size(), 0);
     }
 
+    Y_UNIT_TEST(IgnoredTokens) {
+        auto lexer = MakePureLexerSupplier();
+
+        TNameSet names;
+        TFrequencyData frequency;
+        auto service = MakeStaticNameService(names, MakeDefaultRanking(frequency));
+
+        auto config = MakeYQLConfiguration();
+        auto engine = MakeSqlCompletionEngine(lexer, std::move(service), config);
+
+        UNIT_ASSERT(!FindPtr(Complete(engine, {""}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(!FindPtr(Complete(engine, {""}), TCandidate{Keyword, "PARALLEL"}));
+
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE "}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE  "}), TCandidate{Keyword, "FOR"}));
+        UNIT_ASSERT(FindPtr(Complete(engine, {"EVALUATE /**/"}), TCandidate{Keyword, "FOR"}));
+    }
+
     Y_UNIT_TEST(CachedSchema) {
         TLexerSupplier lexer = MakePureLexerSupplier();
 
-        auto cache = MakeLocalCache<
-            TSchemaListCacheKey, TVector<TFolderEntry>>(
-            NMonotonic::CreateDefaultMonotonicTimeProvider(), {});
+        auto time = NMonotonic::CreateDefaultMonotonicTimeProvider();
+        TSchemaCaches caches = {
+            .List = MakeLocalCache<
+                TSchemaDescribeCacheKey, TVector<TFolderEntry>>(time, {}),
+            .DescribeTable = MakeLocalCache<
+                TSchemaDescribeCacheKey, TMaybe<TTableDetails>>(time, {}),
+        };
 
         auto aliceService = MakeSchemaNameService(
             MakeSimpleSchema(
                 MakeCachedSimpleSchema(
-                    cache, "alice",
-                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "alice"}}}}}}))));
+                    caches, "alice",
+                    MakeStaticSimpleSchema(TSchemaData{
+                        .Folders = {{"", {{"/", {{"Table", "alice"}}}}}},
+                        .Tables = {{"", {{"/alice", {{"alice"}}}}}},
+                    }))));
 
         auto petyaService = MakeSchemaNameService(
             MakeSimpleSchema(
                 MakeCachedSimpleSchema(
-                    cache, "petya",
-                    MakeStaticSimpleSchema({{"", {{"/", {{"Table", "petya"}}}}}}))));
+                    caches, "petya",
+                    MakeStaticSimpleSchema(TSchemaData{
+                        .Folders = {{"", {{"/", {{"Table", "petya"}}}}}},
+                        .Tables = {{"", {{"/petya", {{"petya"}}}}}},
+                    }))));
 
         auto aliceEngine = MakeSqlCompletionEngine(lexer, std::move(aliceService));
         auto petyaEngine = MakeSqlCompletionEngine(lexer, std::move(petyaService));
 
         TVector<TCandidate> empty;
-        TVector<TCandidate> aliceExpected = {{TableName, "`alice"}};
-        TVector<TCandidate> petyaExpected = {{TableName, "`petya"}};
+        {
+            TVector<TCandidate> aliceExpected = {{TableName, "`alice`"}};
+            TVector<TCandidate> petyaExpected = {{TableName, "`petya`"}};
 
-        // Cache is empty
-        UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), empty);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), empty);
+            // Cache is empty
+            UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), empty);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), empty);
 
-        // Updates in backround
-        UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), aliceExpected);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), petyaExpected);
+            // Updates in backround
+            UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), aliceExpected);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), petyaExpected);
+        }
+        {
+            TVector<TCandidate> aliceExpected = {{ColumnName, "alice"}};
+            TVector<TCandidate> petyaExpected = {{ColumnName, "petya"}};
+
+            // Cache is empty
+            UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT a# FROM alice"), empty);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT p# FROM petya"), empty);
+
+            // Updates in backround
+            UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT a# FROM alice"), aliceExpected);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT p# FROM petya"), petyaExpected);
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

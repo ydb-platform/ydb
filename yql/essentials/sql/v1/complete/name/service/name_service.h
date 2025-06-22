@@ -30,6 +30,14 @@ namespace NSQLComplete {
 
     struct TTypeName: TIndentifier {
         struct TConstraints {};
+
+        enum class EKind {
+            Simple,
+            Container,
+            Parameterized,
+        };
+
+        EKind Kind = EKind::Simple;
     };
 
     struct TFunctionName: TIndentifier {
@@ -58,6 +66,14 @@ namespace NSQLComplete {
         struct TConstraints: TNamespaced {};
     };
 
+    struct TColumnName: TIndentifier {
+        struct TConstraints {
+            TVector<TTableId> Tables;
+        };
+
+        TTableId Table;
+    };
+
     struct TBindingName: TIndentifier {
     };
 
@@ -75,6 +91,7 @@ namespace NSQLComplete {
         TFolderName,
         TTableName,
         TClusterName,
+        TColumnName,
         TBindingName,
         TUnkownName>;
 
@@ -85,6 +102,7 @@ namespace NSQLComplete {
         TMaybe<THintName::TConstraints> Hint;
         TMaybe<TObjectNameConstraints> Object;
         TMaybe<TClusterName::TConstraints> Cluster;
+        TMaybe<TColumnName::TConstraints> Column;
 
         bool IsEmpty() const {
             return !Pragma &&
@@ -92,7 +110,8 @@ namespace NSQLComplete {
                    !Function &&
                    !Hint &&
                    !Object &&
-                   !Cluster;
+                   !Cluster &&
+                   !Column;
         }
 
         TGenericName Qualified(TGenericName unqualified) const;
@@ -125,8 +144,8 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<INameService>;
 
+        ~INameService() override = default;
         virtual NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const = 0;
-        virtual ~INameService() = default;
     };
 
     TString NormalizeName(TStringBuf name);

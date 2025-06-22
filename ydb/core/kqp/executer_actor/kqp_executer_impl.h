@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
+#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -84,6 +85,8 @@ struct TShardRangesWithShardId {
     const TShardKeyRanges* Ranges;
 };
 
+
+
 struct TStageScheduleInfo {
     double StageCost = 0.0;
     ui32 TaskCount = 0;
@@ -135,7 +138,7 @@ public:
         const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         TKqpRequestCounters::TPtr counters,
-        const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const TExecuterConfig& executerConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
@@ -153,31 +156,32 @@ public:
         , Counters(counters)
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
-        , ExecuterRetriesConfig(tableServiceConfig.GetExecuterRetriesConfig())
-        , AggregationSettings(tableServiceConfig.GetAggregationConfig())
+        , ExecuterRetriesConfig(executerConfig.TableServiceConfig.GetExecuterRetriesConfig())
+        , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
         , HasOlapTable(false)
         , StreamResult(streamResult)
         , StatementResultIndex(statementResultIndex)
-        , BlockTrackingMode(tableServiceConfig.GetBlockTrackingMode())
-        , VerboseMemoryLimitException(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException())
+        , BlockTrackingMode(executerConfig.TableServiceConfig.GetBlockTrackingMode())
+        , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
     {
-        if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
-            ArrayBufferMinFillPercentage = tableServiceConfig.GetArrayBufferMinFillPercentage();
+        if (executerConfig.TableServiceConfig.HasArrayBufferMinFillPercentage()) {
+            ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         }
 
         EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         TasksGraph.GetMeta().Database = Database;
-        TasksGraph.GetMeta().ChannelTransportVersion = tableServiceConfig.GetChannelTransportVersion();
+        TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
 
-        CheckDuplicateRows = tableServiceConfig.GetEnableRowsDuplicationCheck();
+        CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
+        EnableParallelPointReadConsolidation = executerConfig.MutableConfig->EnableParallelPointReadConsolidation.load();
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -517,6 +521,11 @@ protected:
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
+        ParticipantNodes.emplace(computeActor.NodeId());
+        if (TxManager) {
+            TxManager->AddParticipantNode(computeActor.NodeId());
+        }
+
         bool populateChannels = HandleComputeStats(ev);
 
         switch (state.GetState()) {
@@ -561,6 +570,16 @@ protected:
     void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr& ev) {
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
+
+#if defined(USE_HDRF_SCHEDULER)
+        const auto& poolId = GetUserRequestContext()->PoolId;
+
+        auto addQueryEvent = MakeHolder<NScheduler::TEvAddQuery>();
+        addQueryEvent->DatabaseId = Database;
+        addQueryEvent->PoolId = poolId.empty() ? NResourcePool::DEFAULT_POOL_ID : poolId;
+        addQueryEvent->QueryId = TxId;
+        this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addQueryEvent.Release());
+#endif
 
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
@@ -1170,10 +1189,13 @@ protected:
             task.Meta.ExecuterId = this->SelfId();
             if (nodeId) {
                 task.Meta.NodeId = *nodeId;
-            } else {
+            }
+
+            if (!nodeId || !ShardsResolved) {
                 YQL_ENSURE(!ShardsResolved);
                 task.Meta.ShardId = taskLocation;
             }
+
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
 
             const auto& stageSource = stage.GetSources(0);
@@ -1280,16 +1302,17 @@ protected:
 
         auto addPartiton = [&](
             ui64 taskLocation,
+            TMaybe<ui64> nodeId,
             TMaybe<ui64> shardId,
             const TShardInfo& shardInfo,
             TMaybe<ui64> maxInFlightShards = Nothing())
         {
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
-            const auto nodeIdPtr = ShardIdToNodeId.FindPtr(taskLocation);
-            const auto nodeId = nodeIdPtr
-                ? TMaybe<ui64>{*nodeIdPtr}
-                : Nothing();
+            if (!nodeId) {
+                const auto nodeIdPtr = ShardIdToNodeId.FindPtr(taskLocation);
+                nodeId = nodeIdPtr ? TMaybe<ui64>{*nodeIdPtr} : Nothing();
+            }
 
             YQL_ENSURE(!ShardsResolved || nodeId);
             YQL_ENSURE(Stats);
@@ -1364,7 +1387,10 @@ protected:
             Counters->Counters->FullScansExecuted->Inc();
         }
 
-        if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
+        bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+        bool isParallelPointRead = EnableParallelPointReadConsolidation && !isSequentialInFlight && !source.GetSorted() && IsParallelPointReadPossible(partitions);
+
+        if (partitions.size() > 0 && (isSequentialInFlight || isParallelPointRead)) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
 
             YQL_ENSURE(Stats);
@@ -1373,17 +1399,23 @@ protected:
                 Stats->AffectedShards.insert(shardId);
             }
 
+            TMaybe<ui64> inFlightShards = Nothing();
+            if (isSequentialInFlight) {
+                inFlightShards = source.GetSequentialInFlightShards();
+            }
+
             if (shardInfo.KeyReadRanges) {
-                addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
+                const TMaybe<ui64> nodeId = (isParallelPointRead) ? TMaybe<ui64>{SelfId().NodeId()} : Nothing();
+                addPartiton(startShard, nodeId, {}, shardInfo, inFlightShards);
                 fillRangesForTasks();
                 buildSinks();
-                return Nothing();
+                return (isParallelPointRead) ? TMaybe<size_t>(partitions.size()) : Nothing();
             } else {
                 return 0;
             }
         } else {
             for (auto& [shardId, shardInfo] : partitions) {
-                addPartiton(shardId, shardId, shardInfo, {});
+                addPartiton(shardId, {}, shardId, shardInfo, {});
             }
             fillRangesForTasks();
             buildSinks();
@@ -2286,6 +2318,8 @@ protected:
     ui64 StatFinishInflightBytes = 0;
 
     TMaybe<TBatchOperationSettings> BatchOperationSettings;
+
+    bool EnableParallelPointReadConsolidation = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
@@ -2294,7 +2328,7 @@ private:
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
@@ -2303,7 +2337,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,

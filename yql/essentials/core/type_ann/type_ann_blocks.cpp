@@ -968,7 +968,7 @@ IGraphTransformer::TStatus ListFromBlocksWrapper(const TExprNode::TPtr& input, T
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -980,7 +980,7 @@ IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& inpu
 
     output = input;
     const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Can not convert argument to Uint64"));
         return IGraphTransformer::TStatus::Error;
@@ -994,7 +994,7 @@ IGraphTransformer::TStatus WideSkipTakeBlocksWrapper(const TExprNode::TPtr& inpu
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus WideTopBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus WideTopBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -1006,7 +1006,7 @@ IGraphTransformer::TStatus WideTopBlocksWrapper(const TExprNode::TPtr& input, TE
 
     output = input;
     const TTypeAnnotationNode* expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
-    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr);
+    auto convertStatus = TryConvertTo(input->ChildRef(1), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), "Can not convert argument to Uint64"));
         return IGraphTransformer::TStatus::Error;

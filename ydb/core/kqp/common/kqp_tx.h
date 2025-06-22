@@ -165,11 +165,7 @@ private:
 };
 using TShardIdToTableInfoPtr = std::shared_ptr<TShardIdToTableInfo>;
 
-bool HasUncommittedChangesRead(
-    THashSet<NKikimr::TTableId>& modifiedTables,
-    const NKqpProto::TKqpPhyQuery& physicalQuery,
-    const bool canUseVolatileTx,
-    const bool commit);
+bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, const NKqpProto::TKqpPhyQuery& physicalQuery, const bool commit);
 
 class TKqpTransactionContext : public NYql::TKikimrTransactionContextBase  {
 public:
@@ -325,9 +321,9 @@ public:
         return true;
     }
 
-    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool canUseVolatileTx, const bool commit) {
+    void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
         NeedUncommittedChangesFlush = (DeferredEffects.Size() > kMaxDeferredEffects)
-            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, canUseVolatileTx, commit);
+            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();   
         }
@@ -531,7 +527,5 @@ bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage);
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
 bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery);
-
-bool HasSinkInsert(const TKqpPhyTxHolder::TConstPtr& tx);
 
 }  // namespace NKikimr::NKqp

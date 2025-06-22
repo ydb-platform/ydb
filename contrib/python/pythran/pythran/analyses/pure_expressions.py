@@ -12,13 +12,10 @@ from pythran.intrinsic import Intrinsic
 import gast as ast
 
 
-class PureExpressions(ModuleAnalysis):
+class PureExpressions(ModuleAnalysis[ArgumentEffects, GlobalEffects, Aliases, PureFunctions]):
     '''Yields the set of pure expressions'''
 
-    def __init__(self):
-        self.result = set()
-        super(PureExpressions, self).__init__(ArgumentEffects, GlobalEffects,
-                                              Aliases, PureFunctions)
+    ResultType = set
 
     def visit_FunctionDef(self, node):
         if node in self.pure_functions:

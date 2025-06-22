@@ -492,6 +492,35 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         );
     }
 
+    Y_UNIT_TEST(RequestReplaceDeviceTwiceWithNoVDisks)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::ALLOW
+        );
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::DISALLOW_TEMP
+        );
+    }
+
     Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)
     {
         auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();

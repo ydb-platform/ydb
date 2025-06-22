@@ -94,6 +94,7 @@ message TEvWrite {
             OPERATION_UPDATE = 3;
             OPERATION_UPSERT = 4;
             OPERATION_REPLACE = 5;
+            OPERATION_INCREMENT = 6;
         }
 
         optional EOperationType Type = 1;

@@ -352,7 +352,7 @@ public:
             Issues = std::make_shared<NYql::TIssues>();
 
             NTxProxy::DoLongTxWriteSameMailbox(TActivationContext::AsActorContext(), SelfId /* replyTo */, { /* longTxId */ }, { /* dedupId */ },
-                NavigateResult->DatabaseName, Path, NavigateResult, Data, Issues, true /* noTxWrite */);
+                NavigateResult->DatabaseName, Path, NavigateResult, Data, Issues);
         };
 
         if (Data) {

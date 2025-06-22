@@ -347,36 +347,36 @@ TString TModuleResolver::NormalizeModuleName(const TString& path) {
 }
 
 void TModuleResolver::RegisterPackage(const TString& package) {
-    KnownPackages.insert(package);
+    KnownPackages_.insert(package);
 }
 
 bool TModuleResolver::SetPackageDefaultVersion(const TString& package, ui32 version) {
-    if (!KnownPackages.contains(package)) {
+    if (!KnownPackages_.contains(package)) {
         return false;
     }
-    PackageVersions[package] = version;
+    PackageVersions_[package] = version;
     return true;
 }
 
 const TExportTable* TModuleResolver::GetModule(const TString& module) const {
     // ParentModules and Modules should not have common keys
     const TString normalizedModuleName = NormalizeModuleName(module);
-    if (ParentModules) {
-        if (auto table = ParentModules->FindPtr(normalizedModuleName)) {
+    if (ParentModules_) {
+        if (auto table = ParentModules_->FindPtr(normalizedModuleName)) {
             return table;
         }
     }
 
-    return Modules.FindPtr(normalizedModuleName);
+    return Modules_.FindPtr(normalizedModuleName);
 }
 
 void TModuleResolver::WriteStatistics(NYson::TYsonWriter& writer) {
     writer.OnKeyedItem("UsedSuffixes");
-    writer.OnStringScalar(JoinRange(",", UsedSuffixes.begin(), UsedSuffixes.end()));
+    writer.OnStringScalar(JoinRange(",", UsedSuffixes_.begin(), UsedSuffixes_.end()));
 }
 
 bool TModuleResolver::AddFromUrl(const std::string_view& file, const std::string_view& url, const std::string_view& tokenName, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
-    if (!UserData) {
+    if (!UserData_) {
         ctx.AddError(TIssue(pos, "Loading libraries is prohibited"));
         return false;
     }
@@ -386,11 +386,11 @@ bool TModuleResolver::AddFromUrl(const std::string_view& file, const std::string
     block.Data = url;
     block.Data = SubstParameters(block.Data);
     if (!tokenName.empty()) {
-        if (!Credentials) {
+        if (!Credentials_) {
             ctx.AddError(TIssue(pos, "Missing credentials"));
             return false;
         }
-        auto cred = Credentials->FindCredential(tokenName);
+        auto cred = Credentials_->FindCredential(tokenName);
         if (!cred) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown token name: " << tokenName));
             return false;
@@ -398,13 +398,13 @@ bool TModuleResolver::AddFromUrl(const std::string_view& file, const std::string
         block.UrlToken = cred->Content;
     }
 
-    UserData->AddUserDataBlock(file, block);
+    UserData_->AddUserDataBlock(file, block);
 
     return AddFromFile(file, ctx, syntaxVersion, packageVersion, pos);
 }
 
 bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
-    if (!UserData) {
+    if (!UserData_) {
         ctx.AddError(TIssue(pos, "Loading libraries is prohibited"));
         return false;
     }
@@ -418,8 +418,8 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
         return false;
     }
 
-    UsedSuffixes.insert(TString(file.substr(1 + file.rfind('.'))));
-    const TUserDataBlock* block = UserData->FindUserDataBlock(fullName);
+    UsedSuffixes_.insert(TString(file.substr(1 + file.rfind('.'))));
+    const TUserDataBlock* block = UserData_->FindUserDataBlock(fullName);
 
     if (!block) {
         ctx.AddError(TIssue(pos, TStringBuilder() << "File not found: " << file));
@@ -427,9 +427,9 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
     }
 
     auto moduleName = TModuleResolver::NormalizeModuleName(TString(file));
-    if (GetModule(moduleName) || Libs.contains(moduleName)) {
-        auto it = Libs.find(moduleName);
-        if (it != Libs.end() && it->second.contains(packageVersion)) {
+    if (GetModule(moduleName) || Libs_.contains(moduleName)) {
+        auto it = Libs_.find(moduleName);
+        if (it != Libs_.end() && it->second.contains(packageVersion)) {
             // TODO (YQL-7170): find better fix
             // ctx.AddError(TIssue({0,0,TString(fullName)}, TStringBuilder() << "File is already loaded as library"));
             return true;  // false
@@ -437,7 +437,7 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
     }
 
     TString body;
-    if (!QContext.CanRead()) {
+    if (!QContext_.CanRead()) {
         switch (block->Type) {
         case EUserDataType::RAW_INLINE_DATA:
             body = block->Data;
@@ -446,13 +446,13 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
             body = TFileInput(block->Data).ReadAll();
             break;
         case EUserDataType::URL:
-            if (!UrlLoader) {
+            if (!UrlLoader_) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unable to load file \"" << file
                     << "\" from url, because url loader is not available"));
                 return false;
             }
 
-            body = UrlLoader->Load(block->Data, block->UrlToken);
+            body = UrlLoader_->Load(block->Data, block->UrlToken);
             break;
         default:
             throw yexception() << "Unknown block type " << block->Type;
@@ -477,11 +477,11 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
         return false;
     }
 
-    UsedSuffixes.insert(TString(file.substr(1 + file.rfind('.'))));
+    UsedSuffixes_.insert(TString(file.substr(1 + file.rfind('.'))));
     moduleName = TModuleResolver::NormalizeModuleName(TString(file));
-    if (GetModule(moduleName) || Libs.contains(moduleName)) {
-        auto it = Libs.find(moduleName);
-        if (it != Libs.end() && it->second.contains(packageVersion)) {
+    if (GetModule(moduleName) || Libs_.contains(moduleName)) {
+        auto it = Libs_.find(moduleName);
+        if (it != Libs_.end() && it->second.contains(packageVersion)) {
             // TODO (YQL-7170): find better fix
             // ctx.AddError(TIssue({0,0,TString(fullName)}, TStringBuilder() << "File is already loaded as library"));
             return true;  // false
@@ -493,15 +493,15 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
 
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool sExpr, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {
     auto query = body;
-    if (QContext.CanRead()) {
-        auto item = QContext.GetReader()->Get({ModuleResolverComponent, fullName}).GetValueSync();
+    if (QContext_.CanRead()) {
+        auto item = QContext_.GetReader()->Get({ModuleResolverComponent, fullName}).GetValueSync();
         if (!item) {
             throw yexception() << "Missing replay data";
         }
 
         query = item->Value;
-    } else if (QContext.CanWrite()) {
-        QContext.GetWriter()->Put({ModuleResolverComponent, fullName}, query).GetValueSync();
+    } else if (QContext_.CanWrite()) {
+        QContext_.GetWriter()->Put({ModuleResolverComponent, fullName}, query).GetValueSync();
     }
 
     const auto addSubIssues = [](TIssue&& issue, const TIssues& issues) {
@@ -518,12 +518,12 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         NSQLTranslation::TTranslationSettings settings;
         settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         settings.File = fullName;
-        settings.ClusterMapping = ClusterMapping;
-        settings.Flags = SqlFlags;
+        settings.ClusterMapping = ClusterMapping_;
+        settings.Flags = SqlFlags_;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
-        settings.FileAliasPrefix = FileAliasPrefix;
-        astRes = SqlToYql(Translators, query, settings);
+        settings.FileAliasPrefix = FileAliasPrefix_;
+        astRes = SqlToYql(Translators_, query, settings);
     }
 
     if (!astRes.IsOk()) {
@@ -537,21 +537,21 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         ctx.IssueManager.RaiseIssue(addSubIssues(std::move(issue), astRes.Issues));
     }
 
-    if (!sExpr && ModuleChecker) {
-        if (!ModuleChecker(query, fullName, ctx)) {
+    if (!sExpr && ModuleChecker_) {
+        if (!ModuleChecker_(query, fullName, ctx)) {
             return false;
         }
     }
 
     TLibraryCohesion cohesion;
-    if (!CompileExpr(*astRes.Root, cohesion, LibsContext)) {
-        ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to compile: " << fullName), LibsContext.IssueManager.GetIssues()));
+    if (!CompileExpr(*astRes.Root, cohesion, LibsContext_)) {
+        ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to compile: " << fullName), LibsContext_.IssueManager.GetIssues()));
         return false;
     }
 
-    if (OptimizeLibraries) {
-        if (!OptimizeLibrary(cohesion, LibsContext)) {
-            ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to optimize: " << fullName), LibsContext.IssueManager.GetIssues()));
+    if (OptimizeLibraries_) {
+        if (!OptimizeLibrary(cohesion, LibsContext_)) {
+            ctx.AddError(addSubIssues(TIssue(pos, TStringBuilder() << "Failed to optimize: " << fullName), LibsContext_.IssueManager.GetIssues()));
             return false;
         }
     }
@@ -570,7 +570,7 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         }
     }
 
-    Libs[moduleName][packageVersion] = std::move(cohesion);
+    Libs_[moduleName][packageVersion] = std::move(cohesion);
     return true;
 }
 
@@ -580,22 +580,22 @@ bool TModuleResolver::Link(TExprContext& ctx) {
     };
 
     THashMap<TString, TLibraryCohesion> libs = FilterLibsByVersion();
-    if (!LinkLibraries(libs, ctx, LibsContext, f)) {
+    if (!LinkLibraries(libs, ctx, LibsContext_, f)) {
         return false;
     }
 
     for (auto& x : libs) {
-        Modules.emplace(x.first, std::move(x.second.Exports));
+        Modules_.emplace(x.first, std::move(x.second.Exports));
     }
 
-    Libs.clear();
-    PackageVersions.clear();
+    Libs_.clear();
+    PackageVersions_.clear();
     return true;
 }
 
 THashMap<TString, TLibraryCohesion> TModuleResolver::FilterLibsByVersion() const {
     THashMap<TString, TLibraryCohesion> result;
-    for (auto p : Libs) {
+    for (auto p : Libs_) {
         YQL_ENSURE(!p.second.empty());
 
         auto packageName = ExtractPackageNameFromModule(p.first);
@@ -605,12 +605,12 @@ THashMap<TString, TLibraryCohesion> TModuleResolver::FilterLibsByVersion() const
             continue;
         }
 
-        if (!KnownPackages.contains(packageName)) {
+        if (!KnownPackages_.contains(packageName)) {
             ythrow yexception() << "Unknown package " << packageName << " is used in module " << p.first;
         }
 
-        auto it = PackageVersions.find(packageName);
-        const ui32 version = (it != PackageVersions.end()) ? it->second : 0;
+        auto it = PackageVersions_.find(packageName);
+        const ui32 version = (it != PackageVersions_.end()) ? it->second : 0;
         auto cohesionIt = p.second.find(version);
         if (cohesionIt == p.second.end()) {
             ythrow yexception() << "Unable to find library version " << version << " for package " << packageName << " and module " << p.first;
@@ -639,37 +639,37 @@ TString TModuleResolver::ExtractPackageNameFromModule(TStringBuf moduleName) {
 }
 
 void TModuleResolver::UpdateNextUniqueId(TExprContext& ctx) const {
-    if (UserData && ctx.NextUniqueId < LibsContext.NextUniqueId) {
-        ctx.NextUniqueId = LibsContext.NextUniqueId;
+    if (UserData_ && ctx.NextUniqueId < LibsContext_.NextUniqueId) {
+        ctx.NextUniqueId = LibsContext_.NextUniqueId;
     }
 }
 
 ui64 TModuleResolver::GetNextUniqueId() const {
-    return LibsContext.NextUniqueId;
+    return LibsContext_.NextUniqueId;
 }
 
 IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
-    if (UserData || UrlLoader) {
+    if (UserData_ || UrlLoader_) {
         throw yexception() << "Module resolver should not contain user data and URL loader";
     }
 
-    return std::make_shared<TModuleResolver>(Translators, &Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs, FileAliasPrefix, ModuleChecker);
+    return std::make_shared<TModuleResolver>(Translators_, &Modules_, LibsContext_.NextUniqueId, ClusterMapping_, SqlFlags_, OptimizeLibraries_, KnownPackages_, Libs_, FileAliasPrefix_, ModuleChecker_);
 }
 
 void TModuleResolver::SetFileAliasPrefix(TString&& prefix) {
-    FileAliasPrefix = std::move(prefix);
+    FileAliasPrefix_ = std::move(prefix);
 }
 
 TString TModuleResolver::GetFileAliasPrefix() const {
-    return FileAliasPrefix;
+    return FileAliasPrefix_;
 }
 
 TString TModuleResolver::SubstParameters(const TString& str) {
-    if (!Parameters) {
+    if (!Parameters_) {
         return str;
     }
 
-    return ::NYql::SubstParameters(str, Parameters, nullptr);
+    return ::NYql::SubstParameters(str, Parameters_, nullptr);
 }
 
 } // namespace NYql

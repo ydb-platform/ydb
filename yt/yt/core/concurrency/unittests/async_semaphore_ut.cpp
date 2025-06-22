@@ -31,13 +31,14 @@ TEST(TAsyncSemaphoreTest, OverdraftSlots)
 {
     constexpr static int ThreadCount = 4;
     constexpr static int RequestCount = 10;
-    constexpr static int SemaphoreTotalSlots = 1;
     constexpr static int RequestWeight = 100;
 
     auto threadPool = CreateThreadPool(ThreadCount, "SemaphoreAcqusition");
-    auto semaphore = New<TAsyncSemaphore>(SemaphoreTotalSlots, /*enableOverdraft*/ true);
+    auto semaphore = New<TAsyncSemaphore>(0, /*enableOverdraft*/ true);
 
     {
+        // Set total slots in semaphore to be less than all "fat" requests weight.
+        semaphore->SetTotal(RequestWeight / 3);
         std::vector<TFuture<void>> futures;
         auto barrierPromise = NewPromise<void>();
         for (int i = 0; i < RequestCount; ++i) {
@@ -62,6 +63,7 @@ TEST(TAsyncSemaphoreTest, OverdraftSlots)
     }
 
     {
+        // Set total slots to be equal to "fat" request weight.
         semaphore->SetTotal(RequestWeight);
         std::vector<TFuture<void>> futures;
         auto barrierPromise = NewPromise<void>();
@@ -80,6 +82,7 @@ TEST(TAsyncSemaphoreTest, OverdraftSlots)
                 .Run());
         }
 
+        // Concurrently with "fat" requests above decrease total slot count in semaphore.
         futures.push_back(BIND([
             &semaphore,
             barrierFuture = barrierPromise.ToFuture()
@@ -87,7 +90,7 @@ TEST(TAsyncSemaphoreTest, OverdraftSlots)
             WaitForFast(barrierFuture)
                 .ThrowOnError();
 
-            semaphore->SetTotal(SemaphoreTotalSlots);
+            semaphore->SetTotal(RequestWeight / 3);
         })
             .AsyncVia(threadPool->GetInvoker())
             .Run());

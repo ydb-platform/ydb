@@ -663,9 +663,9 @@ public:
     }
 
 private:
-    std::atomic<bool> Suspended_ = {false};
-    std::atomic<bool> SchedulingMore_ = {false};
-    std::atomic<int> ActiveInvocationCount_ = {0};
+    std::atomic<bool> Suspended_ = false;
+    std::atomic<bool> SchedulingMore_ = false;
+    std::atomic<int> ActiveInvocationCount_ = 0;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
 

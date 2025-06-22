@@ -763,6 +763,7 @@ struct TEvBlobStorage {
         EvSyncToken,
         EvReleaseSyncToken,
         EvBSQueueResetConnection, // for test purposes
+        EvYardResize,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -816,6 +817,7 @@ struct TEvBlobStorage {
         EvShredPDiskResult,
         EvPreShredCompactVDiskResult,
         EvShredVDiskResult,
+        EvYardResizeResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -920,6 +922,12 @@ struct TEvBlobStorage {
         EvNodeWardenReadMetadataResult,
         EvNodeWardenWriteMetadata,
         EvNodeWardenWriteMetadataResult,
+        EvNodeWardenUpdateCache,
+        EvNodeWardenQueryCache,
+        EvNodeWardenQueryCacheResult,
+        EvNodeWardenUnsubscribeFromCache,
+        EvNodeWardenNotifyConfigMismatch,
+        EvNodeWardenUpdateConfigFromPeer,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1362,6 +1370,13 @@ struct TEvBlobStorage {
             , ResponseSz(sz)
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
             , GroupId(groupId)
+        {}
+
+        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TArrayHolder<TResponse> responses, TGroupId groupId)
+            : Status(status)
+            , ResponseSz(sz)
+            , Responses(std::move(responses))
+            , GroupId(groupId.GetRawId())
         {}
 
         TString Print(bool isFull) const {
@@ -2457,6 +2472,12 @@ struct TEvBlobStorage {
         TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags)
             : Status(status)
             , StatusFlags(statusFlags)
+        {}
+
+        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags, float approximateFreeSpaceShare)
+            : Status(status)
+            , StatusFlags(statusFlags)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
         {}
 
         TString Print(bool isFull) const {

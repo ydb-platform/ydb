@@ -64,9 +64,9 @@ class TSslTest
 {
 public:
     NTesting::TPortHolder Port;
-    TString AddressWithHostName;
-    TString AddressWithIpV4;
-    TString AddressWithIpV6;
+    std::string AddressWithHostName;
+    std::string AddressWithIpV4;
+    std::string AddressWithIpV6;
 
     TPemBlobConfigPtr CACert;
     TPemBlobConfigPtr PrivateKey;

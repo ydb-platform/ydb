@@ -42,6 +42,7 @@ std::string_view StatsModeToString(const EStatsMode statsMode);
 enum class EExecStatus {
     Unspecified = 0,
     Starting = 10,
+    Running = 15,
     Aborted = 20,
     Canceled = 30,
     Completed = 40,

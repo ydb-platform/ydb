@@ -3,6 +3,7 @@
 #include "mkql_node_builder.h"
 #include "mkql_alloc.h"
 
+#include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/arrow/block_item_comparator.h>
 #include <yql/essentials/public/udf/arrow/block_item_hasher.h>
@@ -1555,17 +1556,7 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
     }
 }
 
-inline bool IsSingularType(const TType* type) {
-    return type->IsNull() ||
-           type->IsVoid() ||
-           type->IsEmptyDict() ||
-           type->IsEmptyList();
-}
-
-inline bool NeedWrapWithExternalOptional(const TType* type) {
-    return type->IsPg() || IsSingularType(type);
-}
-
+// TODO(YQL): This must be rewrited via traits dispatcher.
 bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
     bool isOptional;
     auto unpacked = UnpackOptional(itemType, isOptional);
@@ -1578,7 +1569,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return false;
     }
 
-    if (unpacked->IsOptional() || isOptional && NeedWrapWithExternalOptional(unpacked)) {
+    if (NeedWrapWithExternalOptional(itemType)) {
         ui32 nestLevel = 0;
         auto currentType = itemType;
         auto previousType = itemType;
@@ -1588,7 +1579,7 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
             currentType = AS_TYPE(TOptionalType, currentType)->GetItemType();
         } while (currentType->IsOptional());
 
-        if (NeedWrapWithExternalOptional(currentType)) {
+        if (NeedWrapWithExternalOptional(previousType)) {
             previousType = currentType;
             ++nestLevel;
         }

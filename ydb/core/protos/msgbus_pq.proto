@@ -421,6 +421,9 @@ message TCmdReadResult {
     optional uint64 StartOffset = 17;
     optional uint64 EndOffset = 15;
     optional bool ReadingFinished = 16;
+    optional bool CommittedToEnd = 18;
+    repeated uint32 AdjacentPartitionIds = 19;
+    repeated uint32 ChildPartitionIds = 20;
 }
 
 
@@ -474,6 +477,7 @@ message TPersQueuePartitionResponse {
         optional uint64 SizeLag = 7;
         optional uint64 WriteTimestampEstimateMS = 8;
         optional bool ClientHasAnyCommits = 9;
+        optional string CommittedMetadata = 10;
     }
 
     message TCmdGetOwnershipResult {

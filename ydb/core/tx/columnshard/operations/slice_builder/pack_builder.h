@@ -20,7 +20,6 @@ public:
         : Data(data)
         , Batch(batch) {
         Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);
-        AFL_VERIFY(Data->GetWritePortions());
         AFL_VERIFY(Batch.HasContainer());
     }
 };

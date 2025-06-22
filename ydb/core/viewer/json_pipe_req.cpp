@@ -376,6 +376,14 @@ TString TViewerPipeClient::GetError(const TEvTxUserProxy::TEvProposeTransactionS
     return TStringBuilder() << ev.Record.GetStatus();
 }
 
+bool TViewerPipeClient::IsSuccess(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return ev.Status == Ydb::StatusIds::SUCCESS;
+}
+
+TString TViewerPipeClient::GetError(const NKqp::TEvGetScriptExecutionOperationResponse& ev) {
+    return Ydb::StatusIds_StatusCode_Name(ev.Status);
+}
+
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     THolder<TEvHive::TEvRequestHiveDomainStats> request = MakeHolder<TEvHive::TEvRequestHiveDomainStats>();
@@ -881,6 +889,7 @@ void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikim
     if (HttpEvent && !HttpEvent->Get()->UserToken.empty()) {
         request->Record.SetUserToken(HttpEvent->Get()->UserToken);
     }
+    request->Record.MutableDescribePath()->MutableOptions()->CopyFrom(options);
     SendRequest(MakeTxProxyID(), request.Release());
 }
 

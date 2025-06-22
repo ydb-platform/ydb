@@ -35,6 +35,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
         }
     }
 
+// Disable test since it produces too much memory for msan.
+#if !defined(_msan_enabled_)
     Y_UNIT_TEST(MakeLargeString) {
         TScopedAlloc alloc(__LOCATION__);
 
@@ -65,7 +67,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
             UNIT_ASSERT_VALUES_EQUAL(value.Capacity(), 0xFFFFFFF0ULL);
         }
     }
+#endif
 
+// Disable test since it produces too much memory for msan.
+#if !defined(_msan_enabled_)
     Y_UNIT_TEST(ConcatLargeString) {
         TScopedAlloc alloc(__LOCATION__);
 
@@ -85,5 +90,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLStringUtils) {
             UNIT_FAIL("No exception!");
         } catch (const yexception&) {}
     }
+#endif
+
 }
 

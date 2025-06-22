@@ -208,7 +208,11 @@ def wrap_execute_query_response(
             session._last_query_stats = response_pb.exec_stats
 
     if response_pb.HasField("result_set"):
-        return convert.ResultSet.from_message(response_pb.result_set, settings)
+        return convert.ResultSet.from_message(
+            response_pb.result_set,
+            settings,
+            index=response_pb.result_set_index,
+        )
 
     return None
 

@@ -309,6 +309,10 @@ public:
             return TxInfo.TxId;
         }
 
+        ui64 GetStep() const {
+            return TxInfo.PlanStep;
+        }
+
         OpType GetOpType() const {
             return DoGetOpType();
         }
@@ -422,6 +426,7 @@ private:
     TTxInfo RegisterTxWithDeadline(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
         NTabletFlatExecutor::TTransactionContext& txc);
     bool StartedFlag = false;
+    void OnTxCompleted(const ui64 txId);
 
 public:
     TTxController(TColumnShard& owner);
@@ -484,6 +489,7 @@ public:
     std::optional<TTxInfo> PopFirstPlannedTx();
     void ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void ProgressOnComplete(const TPlanQueueItem& tx);
+    THashSet<ui64> GetTxs() const; //TODO #8650 GetTxsByPathId
 
     std::optional<TPlanQueueItem> GetPlannedTx() const;
     TPlanQueueItem GetFrontTx() const;

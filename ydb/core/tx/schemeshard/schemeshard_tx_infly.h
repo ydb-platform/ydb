@@ -149,6 +149,8 @@ struct TTxState {
         item(TxDropTransferCascade, 102) \
         item(TxCreateSysView, 103) \
         item(TxDropSysView, 104) \
+        item(TxCreateLongIncrementalRestoreOp, 105) \
+        item(TxChangePathState, 106) \
 
     // TX_STATE_TYPE_ENUM
 
@@ -282,7 +284,6 @@ struct TTxState {
 
     // TxCopy: Stores path for cdc stream to create in case of ContinuousBackup; uses ExtraData through proto
     TPathId CdcPathId = InvalidPathId;
-    ui64 LoopStep = 0;
     TMaybe<NKikimrSchemeOp::EPathState> TargetPathTargetState;
 
     // persist - TxShards:
@@ -375,6 +376,7 @@ struct TTxState {
         case TxCreateResourcePool:
         case TxCreateBackupCollection:
         case TxCreateSysView:
+        case TxCreateLongIncrementalRestoreOp:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -451,6 +453,7 @@ struct TTxState {
         case TxAlterResourcePool:
         case TxRestoreIncrementalBackupAtTable:
         case TxAlterBackupCollection:
+        case TxChangePathState:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -532,6 +535,7 @@ struct TTxState {
         case TxRestoreIncrementalBackupAtTable:
         case TxCreateBackupCollection:
         case TxCreateSysView:
+        case TxCreateLongIncrementalRestoreOp:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -567,6 +571,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
+        case TxChangePathState:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -612,6 +617,7 @@ struct TTxState {
         case TxDropView:
         case TxDropResourcePool:
         case TxDropSysView:
+        case TxCreateLongIncrementalRestoreOp:
             return false;
         case TxMkDir:
         case TxCreateTable:
@@ -687,6 +693,7 @@ struct TTxState {
         case TxAlterContinuousBackup:
         case TxAlterResourcePool:
         case TxAlterBackupCollection:
+        case TxChangePathState:
             return false;
         case TxInvalid:
         case TxAllocatePQ:
@@ -806,6 +813,7 @@ struct TTxState {
             case NKikimrSchemeOp::ESchemeOpDropBackupCollection: return TxDropBackupCollection;
             case NKikimrSchemeOp::ESchemeOpCreateSysView: return TxCreateSysView;
             case NKikimrSchemeOp::ESchemeOpDropSysView: return TxDropSysView;
+            case NKikimrSchemeOp::ESchemeOpChangePathState: return TxChangePathState;
             default: return TxInvalid;
         }
     }

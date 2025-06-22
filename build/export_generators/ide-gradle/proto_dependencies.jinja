@@ -1,9 +1,9 @@
 {#- empty string #}
 dependencies {
-{%- for library in target.consumer if library.classpath -%}
-{%-     if library.prebuilt and library.jar and (library.type != "contrib" or target.handler.build_contribs) %}
+{%- for library in target.consumer -%}
+{%-     if (library.prebuilt and library.jar and (library.type != "contrib" or build_contribs)) or (library.type == "ejlibrary") %}
     implementation(files("$output_root/{{ library.jar }}"))
-{%-     else -%}
+{%-     elif library.classpath -%}
 {%-         set classpath = library.classpath -%}
 {%-         if classpath|replace('"','') == classpath -%}
 {%-             set classpath = '"' + classpath + '"' -%}

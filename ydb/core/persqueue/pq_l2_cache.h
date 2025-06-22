@@ -47,6 +47,7 @@ public:
         ui16 PartNo;
         ui32 Count;
         ui16 InternalPartsCount;
+        char Suffix;
 
         TKey(ui64 tabletId, const TCacheBlobL2& blob)
             : TabletId(tabletId)
@@ -55,11 +56,13 @@ public:
             , PartNo(blob.PartNo)
             , Count(blob.Count)
             , InternalPartsCount(blob.InternalPartsCount)
+            , Suffix(blob.Suffix ? *blob.Suffix : '\0')
         {
             KeyHash = Hash128to32(TabletId, (static_cast<ui64>(Partition.InternalPartitionId) << 17) + PartNo + (Partition.IsSupportivePartition() ? 0 : (1 << 16)));
             KeyHash = Hash128to32(KeyHash, Offset);
             KeyHash = Hash128to32(KeyHash, Count);
             KeyHash = Hash128to32(KeyHash, InternalPartsCount);
+            KeyHash = Hash128to32(KeyHash, Suffix);
         }
 
         bool operator ==(const TKey& key) const {
@@ -68,7 +71,8 @@ public:
                 Offset == key.Offset &&
                 PartNo == key.PartNo &&
                 Count == key.Count &&
-                InternalPartsCount == key.InternalPartsCount;
+                InternalPartsCount == key.InternalPartsCount &&
+                Suffix == key.Suffix;
         }
 
         ui64 Hash() const noexcept {
@@ -83,6 +87,7 @@ public:
             s += " partno "; s += ::ToString(PartNo);
             s += " count "; s += ::ToString(Count);
             s += " parts "; s += ::ToString(InternalPartsCount);
+            s += " suffix '"; s += ::ToString(Suffix); s += "'";
             return s;
         }
 

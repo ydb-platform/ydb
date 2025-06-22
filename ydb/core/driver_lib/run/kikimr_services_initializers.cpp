@@ -1142,10 +1142,10 @@ TSharedMetadataAccessorCacheInitializer::TSharedMetadataAccessorCacheInitializer
     : IKikimrServicesInitializer(runConfig)
 {}
 
-void TSharedMetadataAccessorCacheInitializer::InitializeServices( NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
+void TSharedMetadataAccessorCacheInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const TAppData *appData) {
     if (appData->FeatureFlags.GetEnableSharedMetadataAccessorCache()) {
-        auto* actor = NKikimr::NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
-        setup->LocalServices.emplace_back(NKikimr::NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(NodeId),
+        auto* actor = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
+        setup->LocalServices.emplace_back(NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(NodeId),
             TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
     }
 }

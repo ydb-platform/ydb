@@ -1186,14 +1186,12 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
-        {
-            if (Settings->FeatureFlags.GetEnableSharedMetadataAccessorCache()) {
-                auto* actor = NKikimr::NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
+        if (Settings->FeatureFlags.GetEnableSharedMetadataAccessorCache()) {
+            auto* actor = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
 
-                const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::HTSwap, 0);
-                const auto serviceId = NKikimr::NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(Runtime->GetNodeId(nodeIdx));
-                Runtime->RegisterService(serviceId, aid, nodeIdx);
-            }
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::HTSwap, 0);
+            const auto serviceId = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(Runtime->GetNodeId(nodeIdx));
+            Runtime->RegisterService(serviceId, aid, nodeIdx);
         }
 
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);

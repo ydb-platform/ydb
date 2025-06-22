@@ -4211,10 +4211,12 @@ void TPersQueue::PushTxInQueue(TDistributedTransaction& tx, TDistributedTransact
 void TPersQueue::ChangeTxState(TDistributedTransaction& tx,
                                TDistributedTransaction::EState newState)
 {
-    tx.State = newState;
+    PQ_LOG_TX_I("TxId " << tx.TxId << " moved from " <<
+             NKikimrPQ::TTransaction_EState_Name(tx.State) <<
+             " to " <<
+             NKikimrPQ::TTransaction_EState_Name(newState));
 
-    PQ_LOG_TX_I("TxId " << tx.TxId <<
-             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+    tx.State = newState;
 }
 
 bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
@@ -4245,11 +4247,6 @@ bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
     if (TxsOrder.contains(newState)) {
         PushTxInQueue(tx, newState);
     }
-
-    PQ_LOG_TX_I("TxId " << tx.TxId << " moved from " <<
-             NKikimrPQ::TTransaction_EState_Name(oldState) <<
-             " to " <<
-             NKikimrPQ::TTransaction_EState_Name(newState));
 
     return true;
 }
@@ -4332,6 +4329,12 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         PQ_LOG_TX_D("Wait for TxId " << tx.TxId);
         return;
     }
+    if (tx.WriteInProgress) {
+        if (tx.State == NKikimrPQ::TTransaction::EXECUTED) {
+            PQ_LOG_TX_I("You cannot send TEvReadSetAck for TxId: " << tx.TxId << " until the EXECUTED state is saved");
+        }
+        return;
+    }
 
     switch (tx.State) {
     case NKikimrPQ::TTransaction::UNKNOWN:
@@ -4347,11 +4350,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PREPARING:
-        Y_ABORT_UNLESS(tx.WriteInProgress,
+        Y_ABORT_UNLESS(!tx.WriteInProgress,
                        "PQ %" PRIu64 ", TxId %" PRIu64,
                        TabletID(), tx.TxId);
-
-        tx.WriteInProgress = false;
 
         // scheduled events will be sent to EndWriteTxs
 
@@ -4371,11 +4372,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         break;
 
     case NKikimrPQ::TTransaction::PLANNING:
-        Y_ABORT_UNLESS(tx.WriteInProgress,
+        Y_ABORT_UNLESS(!tx.WriteInProgress,
                        "PQ %" PRIu64 ", TxId %" PRIu64,
                        TabletID(), tx.TxId);
-
-        tx.WriteInProgress = false;
 
         // scheduled events will be sent to EndWriteTxs
 
@@ -4514,6 +4513,10 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         Y_ABORT_UNLESS(tx.TxId == TxQueue.front().second,
                        "PQ %" PRIu64 ", TxId %" PRIu64 ", FrontTxId %" PRIu64,
                        TabletID(), tx.TxId, TxQueue.front().second);
+        Y_ABORT_UNLESS(!tx.WriteInProgress,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
+
         TxQueue.pop_front();
         SetTxCompleteLagCounter();
 
@@ -4611,6 +4614,8 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
         Y_ABORT_UNLESS(tx,
                        "PQ %" PRIu64 ", TxId %" PRIu64,
                        TabletID(), txId);
+
+        tx->WriteInProgress = false;
 
         TryExecuteTxs(ctx, *tx);
     }

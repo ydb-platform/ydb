@@ -1,6 +1,6 @@
 #include "shared_metadata_accessor_cache_actor.h"
 
-#include "ydb/core/protos/config.pb.h"
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 

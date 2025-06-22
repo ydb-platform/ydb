@@ -582,7 +582,7 @@ message TKqpPhyQuery {
 
     repeated TKqpTableInfo ViewInfos = 11;
 
-    bool EnableOltpSink = 12;
-    bool EnableOlapSink = 13;
-    bool EnableHtapTx = 14;
+    optional bool EnableOltpSink = 12;
+    optional bool EnableOlapSink = 13;
+    optional bool EnableHtapTx = 14;
 }

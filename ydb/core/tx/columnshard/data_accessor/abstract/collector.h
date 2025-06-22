@@ -43,11 +43,28 @@ public:
 
 class TConsumerPortions {
 private:
-    YDB_READONLY_DEF(std::vector<ui64>, Portions);
+    YDB_READONLY_DEF(std::vector<ui64>, CommittedPortions);
+    YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertedPortions);
 
 public:
-    void AddPortion(const ui64 p) {
-        Portions.emplace_back(p);
+    std::vector<TPortionInfo::TConstPtr> GetPortions(const TGranuleMeta& granule) const {
+        std::vector<TPortionInfo::TConstPtr> result;
+        result.reserve(CommittedPortions.size() + InsertedPortions.size());
+        for (auto&& i : CommittedPortions) {
+            result.emplace_back(granule.GetPortionVerifiedPtr());
+        }
+        for (auto&& i : InsertedPortions) {
+            result.emplace_back(granule.GetInsertedPortionVerifiedPtr());
+        }
+        return result;
+    }
+
+    void AddCommittedPortion(const ui64 p) {
+        CommittedPortions.emplace_back(p);
+    }
+
+    void AddInsertedPortion(const TInsertWriteId p) {
+        InsertedPortions.emplace_back(p);
     }
 };
 

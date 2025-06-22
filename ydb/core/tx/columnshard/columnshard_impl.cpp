@@ -1160,11 +1160,10 @@ public:
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
                 AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortions().size());
-                for (auto&& p : c.second.GetPortions()) {
+                for (auto&& portion : c.second.GetPortions(granule)) {
                     const NOlap::TPortionAddress pAddress(i.first, p);
                     auto itPortionConstructor = Constructors.find(pAddress);
                     if (itPortionConstructor == Constructors.end()) {
-                        auto portion = granule.GetPortionVerifiedPtr(p, false);
                         TPortionConstructorV2 constructor(portion);
                         itPortionConstructor = Constructors.emplace(pAddress, std::move(constructor)).first;
                     } else if (itPortionConstructor->second.IsReady()) {

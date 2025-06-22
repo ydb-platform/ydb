@@ -365,6 +365,12 @@ public:
         return InsertedPortions;
     }
 
+    const std::shared_ptr<TWrittenPortionInfo>& GetInsertedPortionVerifiedPtr(const TInsertWriteId portionId) const {
+        auto it = InsertedPortions.find(portionId);
+        AFL_VERIFY(it != InsertedPortions.end());
+        return it->second;
+    }
+
     std::vector<std::shared_ptr<TPortionInfo>> GetPortionsVector() const {
         std::vector<std::shared_ptr<TPortionInfo>> result;
         for (auto&& i : Portions) {
@@ -384,18 +390,9 @@ public:
     }
 
     const TPortionInfo::TPtr& GetPortionVerifiedPtr(const ui64 portion, const bool committedOnly = true) const {
-        {
-            auto it = Portions.find(portion);
-            if (it != Portions.end()) {
-                return it->second;
-            }
-        }
-        AFL_VERIFY(!committedOnly)("portion_id", portion)("count", Portions.size());
-        {
-            auto it = InsertedPortions.find(portion);
-            AFL_VERIFY(it != InsertedPortions.end())("portion_id", portion)("count", InsertedPortions.size());
-            return it->second;
-        }
+        auto it = Portions.find(portion);
+        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
+        return it->second;
     }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {

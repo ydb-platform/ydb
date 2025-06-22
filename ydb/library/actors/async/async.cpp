@@ -55,19 +55,16 @@ namespace NActors::NDetail {
         }
 
         void DoRun(IActor* actor) noexcept {
-            if (!actor) {
-                // The event was destroyed before it was delivered
-                // This means we must destroy ourselves
-                delete this;
-                return;
+            if (actor) {
+                // Note: we have an actor argument, but this might be a different
+                // actor on the same mailbox (due to recursion). We know however
+                // that as long as mailbox is valid actor must be valid as well,
+                // because awaiter must keep waiting until we resume, and actor
+                // will not be destroyed until all tasks finish.
+                Item.Run(&Actor);
             }
-            // Note: we have an actor argument, but this might be a different
-            // actor on the same mailbox (due to recursion). We know however
-            // that as long as mailbox is valid actor must be valid as well,
-            // because awaiter must keep waiting until we resume, and actor
-            // will not be destroyed. After we resume it'ss awaiter's
-            // responsibility to destroy us.
-            Item.Run(&Actor);
+            // Coroutine must auto destroy itself on resume
+            delete this;
         }
 
     private:
@@ -133,19 +130,15 @@ namespace NActors::NDetail {
             }
 
             void DoRun(IActor* actor) noexcept {
-                if (!actor) {
-                    // The event was destroyed before it was delivered
-                    // This means we must destroy ourselves
-                    Self.Destroy();
-                    return;
+                if (actor) {
+                    // Note: we have an actor argument, but this might be a different
+                    // actor on the same mailbox (due to recursion). We know however
+                    // that as long as mailbox is valid actor must be valid as well,
+                    // because awaiter must keep waiting until we resume, and actor
+                    // will not be destroyed until all tasks finish.
+                    Item.Run(&Self.Actor);
                 }
-                // Note: we have an actor argument, but this might be a different
-                // actor on the same mailbox (due to recursion). We know however
-                // that as long as mailbox is valid actor must be valid as well,
-                // because awaiter must keep waiting until we resume, and actor
-                // will not be destroyed. After we resume it'ss awaiter's
-                // responsibility to destroy us.
-                Item.Run(&Self.Actor);
+                Self.Destroy();
             }
 
         private:

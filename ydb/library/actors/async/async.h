@@ -113,6 +113,8 @@ namespace NActors {
          * Returns a coroutine handle, which would arrange for the specified
          * runnable item to run on the specified actor when resumed. Used to
          * interface with generic C++ coroutines.
+         *
+         * Exactly one call to either resume or destroy is allowed.
          */
         std::coroutine_handle<> MakeBridgeCoroutine(IActor& actor, TActorRunnableItem& item);
 
@@ -121,7 +123,7 @@ namespace NActors {
          * runnable items to run on the specified actor when resumed. Used to
          * interface with generic C++ coroutines.
          *
-         * Exactly one coroutine must be resumed or destroyed.
+         * Exactly one coroutine must be either resumed or destroyed.
          */
         std::pair<std::coroutine_handle<>, std::coroutine_handle<>> MakeBridgeCoroutines(
             IActor& actor, TActorRunnableItem& item1, TActorRunnableItem& item2);
@@ -581,6 +583,7 @@ namespace NActors {
             };
 
             void OnCancelled() noexcept {
+                // Note: bridge no longer valid after this call returns
                 Y_ABORT_UNLESS(Cancellation, "Unexpected cancellation without StartCancellation");
                 static_cast<TDerived&>(*this).OnCancelled(Cancellation);
             }
@@ -677,8 +680,9 @@ namespace NActors {
             void OnCancelled(std::coroutine_handle<> c) noexcept
                 requires HasStdAwaitCancel<TAwaiter>
             {
+                // Note: bridge no longer valid after this call returns
                 Y_ABORT_UNLESS(Bridge, "Unexpected cancellation without a bridge");
-                DestroyBridge();
+                Bridge = {};
                 c.resume();
             }
 
@@ -754,8 +758,9 @@ namespace NActors {
 
         private:
             void DoRun(IActor*) noexcept {
+                // Note: bridge no longer valid after this call returns
                 Y_ABORT_UNLESS(Bridge && Continuation, "Unexpected Run without a bridge or continuation");
-                DestroyBridge();
+                Bridge = {};
                 // We may resume recursively
                 Continuation.resume();
             }

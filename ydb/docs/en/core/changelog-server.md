@@ -37,6 +37,10 @@ Release date: 2025.
   * `enable_strict_user_management` enables strict checks for local users.
   * `enable_database_admin` enables database administrator functions.
   * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure that repeatedly overwrites deleted data to minimize the risk of recovering the deleted information when directly accessing block devices via operating system functions.
+ 
+#### Backward incompatible changes
+
+*  If you are using [Temporary over DB](https://github.com/yandex/temporal-over-ydb ), update its version before updating YDB to avoid errors in query execution.
 
 #### Performance
 

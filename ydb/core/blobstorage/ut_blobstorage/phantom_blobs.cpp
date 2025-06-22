@@ -3,7 +3,7 @@
 
 using namespace NKikimr;
 
-#define Ctest Cerr
+#define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                         auto record = res->Get()->Record;
                         UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrProto::OK, record.GetErrorReason());
                         UNIT_ASSERT_C(record.ResultSize() == 1, res->ToString());
-                        // UNIT_ASSERT_C(record.GetResult(0).GetStatus() == NKikimrProto::NODATA, res->ToString());
+                        UNIT_ASSERT_C(record.GetResult(0).GetStatus() == NKikimrProto::NODATA, res->ToString());
                     }
                     TLogoBlobID from(tabletId, 0, 0, channel, 0, 0, 1);
                     TLogoBlobID to(tabletId, generation + 100, 9000, channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId);

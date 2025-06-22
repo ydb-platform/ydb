@@ -1058,12 +1058,6 @@ public:
         , ProtoValue_(std::move(valueProto))
         , ArenaAllocatedValueProto_(nullptr) {}
 
-    /**
-    * Lifetime of the arena, and hence the `Ydb::Value`, is expected to be managed by the caller.
-    * The `Ydb::Value` is expected to be arena-allocated.
-    *
-    * See: https://protobuf.dev/reference/cpp/arenas
-    */
     TImpl(const TType& type, Ydb::Value* arenaAllocatedValueProto)
         : Type_(type)
         , ProtoValue_{}

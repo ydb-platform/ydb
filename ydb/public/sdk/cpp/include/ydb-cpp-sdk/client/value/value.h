@@ -277,6 +277,12 @@ class TValue {
 public:
     TValue(const TType& type, const Ydb::Value& valueProto);
     TValue(const TType& type, Ydb::Value&& valueProto);
+    /**
+    * Lifetime of the arena, and hence the `Ydb::Value`, is expected to be managed by the caller.
+    * The `Ydb::Value` is expected to be arena-allocated.
+    *
+    * See: https://protobuf.dev/reference/cpp/arenas
+    */
     TValue(const TType& type, Ydb::Value* arenaAllocatedValueProto);
 
     const TType& GetType() const;

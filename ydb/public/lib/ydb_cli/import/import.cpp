@@ -1656,29 +1656,3 @@ void TImportFileClient::TImpl::ValidateTValueUpsertTable() {
 
 }
 }
-
-static const std::pair<const char*, NYdb::NConsoleClient::ESendFormat> SEND_FORMATS[] = {
-    {"default", NYdb::NConsoleClient::ESendFormat::Default},
-    {"tvalue", NYdb::NConsoleClient::ESendFormat::TValue},
-    {"arrow", NYdb::NConsoleClient::ESendFormat::ApacheArrow},
-};
-
-template<>
-NYdb::NConsoleClient::ESendFormat FromStringImpl<NYdb::NConsoleClient::ESendFormat, char>(const char* s, size_t len) {
-    TString str(s, len);
-    if (const auto* val = FindEnumFromStringImpl(str, SEND_FORMATS, Y_ARRAY_SIZE(SEND_FORMATS))) {
-        return *val;
-    }
-    ythrow yexception() << "Unknown send format: " << str;
-}
-
-template<>
-void Out<NYdb::NConsoleClient::ESendFormat>(IOutputStream& o, NYdb::NConsoleClient::ESendFormat value) {
-    for (const auto& p : SEND_FORMATS) {
-        if (p.second == value) {
-            o << p.first;
-            return;
-        }
-    }
-    o << "<unknown send format>";
-}

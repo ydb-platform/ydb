@@ -6,6 +6,7 @@ PEERDIR(
 
 SRCS(
     async_ut.cpp
+    callback_coroutine_ut.cpp
     sleep_ut.cpp
     task_group_ut.cpp
 )

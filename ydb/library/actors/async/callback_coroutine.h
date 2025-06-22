@@ -8,12 +8,12 @@ namespace NActors {
 
         template<class TCallback>
         concept IsCallbackCoroutineResumeVoid = requires(TCallback& callback) {
-            { callback() } noexcept -> std::same_as<void>;
+            { callback() } -> std::same_as<void>;
         };
 
         template<class TCallback>
         concept IsCallbackCoroutineResumeHandle = requires(TCallback& callback) {
-            { callback() } noexcept -> std::convertible_to<std::coroutine_handle<>>;
+            { callback() } -> std::convertible_to<std::coroutine_handle<>>;
         };
 
         struct TCallbackCoroutineResume {};
@@ -31,21 +31,23 @@ namespace NActors {
                 return TCallbackCoroutine<TCallback>(std::coroutine_handle<promise_type>::from_promise(*this));
             }
 
-            static std::suspend_always initial_suspend() noexcept { return {}; }
-            static std::suspend_never final_suspend() noexcept { return {}; }
-            static void unhandled_exception() noexcept {}
-            static void return_void() noexcept {}
+            static constexpr std::suspend_always initial_suspend() noexcept { return {}; }
+            static constexpr std::suspend_always final_suspend() noexcept { return {}; }
+            static void unhandled_exception() { throw; }
+            static constexpr void return_void() noexcept {}
 
             struct TResumeAwaiter {
-                static bool await_ready() noexcept { return false; }
+                static constexpr bool await_ready() noexcept { return false; }
 
-                static void await_suspend(std::coroutine_handle<promise_type> self) noexcept
+                static void await_suspend(std::coroutine_handle<promise_type> self)
+                    noexcept(noexcept(self.promise()()))
                     requires (NDetail::IsCallbackCoroutineResumeVoid<TCallback>)
                 {
                     self.promise()();
                 }
 
-                static std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> self) noexcept
+                static std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> self)
+                    noexcept(noexcept(self.promise()()))
                     requires (NDetail::IsCallbackCoroutineResumeHandle<TCallback>)
                 {
                     return self.promise()();
@@ -120,7 +122,26 @@ namespace NActors {
             return &Handle.promise();
         }
 
-        static std::coroutine_handle<> FromCallback(TCallback& callback) noexcept {
+        bool done() const {
+            return Handle.done();
+        }
+
+        void resume() const {
+            Handle.resume();
+        }
+
+        void operator()() const {
+            Handle();
+        }
+
+        void destroy() {
+            if (Handle) {
+                Handle.destroy();
+                Handle = nullptr;
+            }
+        }
+
+        static std::coroutine_handle<> FromCallback(TCallback& callback) {
             return std::coroutine_handle<promise_type>::from_promise(static_cast<promise_type&>(callback));
         }
 

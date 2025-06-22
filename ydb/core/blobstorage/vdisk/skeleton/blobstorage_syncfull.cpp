@@ -94,6 +94,12 @@ namespace NKikimr {
         static const ui32 MsgFullFlag = 0x2;
         static const ui32 LongProcessing = 0x4;
 
+
+        void Bootstrap(const TActorContext&) {
+            Become(&TThis::StateFunc);
+            RunStages();
+        }
+
         template <class TKey, class TMemRec, class TFilter>
         ui32 Process(
                 ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snapshot,
@@ -153,20 +159,32 @@ namespace NKikimr {
                 case NKikimrBlobStorage::LogoBlobs:
                     Stage = NKikimrBlobStorage::LogoBlobs;
                     pres = Process(FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter, data);
-                    if (pres & (MsgFullFlag | LongProcessing))
+                    if (pres & MsgFullFlag) {
                         break;
+                    } else if (pres & LongProcessing) {
+                        Schedule(TDuration::Zero(), new TEvents::TEvWakeup);
+                        return;
+                    }
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Blocks:
                     Stage = NKikimrBlobStorage::Blocks;
                     pres = Process(FullSnap.BlocksSnap, KeyBlock, FakeFilter, data);
-                    if (pres & (MsgFullFlag | LongProcessing))
+                    if (pres & MsgFullFlag) {
                         break;
+                    } else if (pres & LongProcessing) {
+                        Schedule(TDuration::Zero(), new TEvents::TEvWakeup);
+                        return;
+                    }
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Barriers:
                     Stage = NKikimrBlobStorage::Barriers;
                     pres = Process(FullSnap.BarriersSnap, KeyBarrier, FakeFilter, data);
+                    if (pres & LongProcessing) {
+                        Schedule(TDuration::Zero(), new TEvents::TEvWakeup);
+                        return;
+                    }
                     break;
                 default: Y_ABORT("Unexpected case: stage=%d", Stage);
             }
@@ -180,6 +198,15 @@ namespace NKikimr {
             result->Record.SetBlockTabletFrom(KeyBlock.TabletId);
             KeyBarrier.Serialize(*result->Record.MutableBarrierFrom());
             return result;
+        }
+    
+        STRICT_STFUNC(StateFunc,
+            CFunc(TEvents::TEvWakeup::EventType, RunStages)
+        )
+
+    public:
+        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+            return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
         }
 
     public:

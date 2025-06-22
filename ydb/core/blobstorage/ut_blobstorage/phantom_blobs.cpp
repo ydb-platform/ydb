@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         void RunTest(ui32 initialBlobs, ui32 unsyncedBlobs, std::vector<ENodeState> nodeStates) {
             Y_VERIFY(nodeStates.size() == NodeCount);
             const ui64 blobSize = 10;
-            const ui32 unsyncedBatchSize = unsyncedBlobs;
+            const ui32 unsyncedBatchSize = 10000;
             Initialize();
 
             ui64 tabletId = 5000;

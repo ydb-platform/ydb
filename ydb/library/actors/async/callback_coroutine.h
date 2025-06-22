@@ -1,184 +1,130 @@
 #pragma once
+#include <concepts>
 #include <coroutine>
-#include <exception>
-#include <optional>
-#include <type_traits>
-#include <utility>
 
 namespace NActors {
 
     namespace NDetail {
 
         template<class TCallback>
-        concept IsResumeCallbackVoid = requires(TCallback& callback) {
+        concept IsCallbackCoroutineResumeVoid = requires(TCallback& callback) {
             { callback() } noexcept -> std::same_as<void>;
         };
 
         template<class TCallback>
-        concept IsResumeCallbackHandle = requires(TCallback& callback) {
+        concept IsCallbackCoroutineResumeHandle = requires(TCallback& callback) {
             { callback() } noexcept -> std::convertible_to<std::coroutine_handle<>>;
-        };
-
-        template<class TCallback>
-        class TCallbackCoroutinePromise;
-
-        template<class TCallback>
-        class TCallbackCoroutineTemporary {
-        public:
-            using promise_type = TCallbackCoroutinePromise<TCallback>;
-
-            TCallbackCoroutineTemporary(std::coroutine_handle<promise_type> handle)
-                : Handle(handle)
-            {}
-
-            TCallbackCoroutineTemporary(const TCallbackCoroutineTemporary&) = delete;
-            TCallbackCoroutineTemporary& operator=(const TCallbackCoroutineTemporary&) = delete;
-
-            ~TCallbackCoroutineTemporary() {
-                if (Handle) {
-                    Handle.destroy();
-                }
-            }
-
-            std::coroutine_handle<promise_type> Release() {
-                return std::exchange(Handle, nullptr);
-            }
-
-        public:
-            std::coroutine_handle<promise_type> Handle;
         };
 
         struct TCallbackCoroutineResume {};
 
-        template<class TCallback>
-        class TCallbackCoroutinePromise {
-        public:
-            template<class... TArgs>
-            void Init(TArgs&&... args) {
-                Callback.emplace(std::forward<TArgs>(args)...);
+    } // namespace NDetail
+
+    /**
+     * A coroutine class which subclasses TCallback and calls its operator() on every resume
+     */
+    template<class TCallback>
+    class TCallbackCoroutine {
+    public:
+        struct promise_type : public TCallback {
+            TCallbackCoroutine<TCallback> get_return_object() noexcept {
+                return TCallbackCoroutine<TCallback>(std::coroutine_handle<promise_type>::from_promise(*this));
             }
 
-            TCallbackCoroutineTemporary<TCallback> get_return_object() noexcept {
-                return TCallbackCoroutineTemporary<TCallback>(
-                    std::coroutine_handle<TCallbackCoroutinePromise>::from_promise(*this));
-            }
-
-            static auto initial_suspend() noexcept { return std::suspend_always{}; }
-            static auto final_suspend() noexcept { return std::suspend_never{}; }
-
-            static void unhandled_exception() noexcept { std::terminate(); }
+            static std::suspend_always initial_suspend() noexcept { return {}; }
+            static std::suspend_never final_suspend() noexcept { return {}; }
+            static void unhandled_exception() noexcept {}
             static void return_void() noexcept {}
 
-            struct TResume {
+            struct TResumeAwaiter {
                 static bool await_ready() noexcept { return false; }
 
-                static void await_suspend(std::coroutine_handle<TCallbackCoroutinePromise> self) noexcept
-                    requires (IsResumeCallbackVoid<TCallback>)
+                static void await_suspend(std::coroutine_handle<promise_type> self) noexcept
+                    requires (NDetail::IsCallbackCoroutineResumeVoid<TCallback>)
                 {
-                    self.promise().GetCallback()();
+                    self.promise()();
                 }
 
-                static std::coroutine_handle<> await_suspend(std::coroutine_handle<TCallbackCoroutinePromise> self) noexcept
-                    requires (IsResumeCallbackHandle<TCallback>)
+                static std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> self) noexcept
+                    requires (NDetail::IsCallbackCoroutineResumeHandle<TCallback>)
                 {
-                    return self.promise().GetCallback()();
+                    return self.promise()();
                 }
 
                 static void await_resume() noexcept {}
             };
 
-            static TResume yield_value(TCallbackCoroutineResume) {
-                return TResume{};
+            static TResumeAwaiter yield_value(NDetail::TCallbackCoroutineResume) {
+                return TResumeAwaiter{};
             }
-
-            TCallback& GetCallback() noexcept {
-                return *Callback;
-            }
-
-        private:
-            std::optional<TCallback> Callback;
         };
 
-        template<class TCallback>
-        TCallbackCoroutineTemporary<TCallback> AllocateCallbackCoroutine() {
-            for (;;) {
-                co_yield TCallbackCoroutineResume{};
-            }
-        }
-
-    } // namespace NDetail
-
-    template<class TCallback>
-    class [[nodiscard]] TCallbackCoroutine {
-        using THandle = std::coroutine_handle<NDetail::TCallbackCoroutinePromise<TCallback>>;
-
     public:
-        TCallbackCoroutine() = default;
-
-        ~TCallbackCoroutine() {
-            if (Handle_) {
-                Handle_.destroy();
-            }
-        }
+        explicit TCallbackCoroutine(std::coroutine_handle<promise_type> handle) noexcept
+            : Handle(handle)
+        {}
 
         TCallbackCoroutine(TCallbackCoroutine&& rhs) noexcept
-            : Handle_(rhs.Handle_)
+            : Handle(rhs.Handle)
         {
-            rhs.Handle_ = {};
+            rhs.Handle = {};
         }
 
         TCallbackCoroutine& operator=(TCallbackCoroutine&& rhs) noexcept {
-            if (this != &rhs) {
-                if (Handle_) {
-                    Handle_.destroy();
+            if (this != &rhs) [[likely]] {
+                if (Handle) {
+                    Handle.destroy();
                 }
-                Handle_ = rhs.Handle_;
-                rhs.Handle_ = {};
+                Handle = rhs.Handle;
+                rhs.Handle = {};
             }
             return *this;
         }
 
+        ~TCallbackCoroutine() noexcept {
+            if (Handle) {
+                Handle.destroy();
+            }
+        }
+
         explicit operator bool() const noexcept {
-            return bool(Handle_);
+            return bool(Handle);
         }
 
         operator std::coroutine_handle<>() const noexcept {
-            return Handle_;
+            return Handle;
         }
 
-        TCallback& operator*() {
-            return Handle_.promise().GetCallback();
+        TCallback& operator*() const noexcept {
+            return Handle.promise();
         }
 
-        const TCallback& operator*() const {
-            return Handle_.promise().GetCallback();
+        TCallback* operator->() const noexcept {
+            return &Handle.promise();
         }
 
-        TCallback* operator->() {
-            return &Handle_.promise().GetCallback();
+        std::coroutine_handle<promise_type> Release() noexcept {
+            auto h = Handle;
+            Handle = {};
+            return h;
         }
 
-        const TCallback* operator->() const {
-            return &Handle_.promise().GetCallback();
+        static std::coroutine_handle<> FromCallback(TCallback& callback) noexcept {
+            return std::coroutine_handle<promise_type>::from_promise(static_cast<promise_type&>(callback));
         }
-
-        template<class T, class... TArgs>
-        friend TCallbackCoroutine<T> MakeCallbackCoroutine(TArgs&&... args);
 
     private:
-        explicit TCallbackCoroutine(THandle handle)
-            : Handle_(handle)
-        {}
-
-    private:
-        THandle Handle_;
+        std::coroutine_handle<promise_type> Handle;
     };
 
-    template<class TCallback, class... TArgs>
-    TCallbackCoroutine<TCallback> MakeCallbackCoroutine(TArgs&&... args) {
-        auto tmp = NDetail::AllocateCallbackCoroutine<TCallback>();
-        tmp.Handle.promise().Init(std::forward<TArgs>(args)...);
-        return TCallbackCoroutine<TCallback>(tmp.Release());
+    /**
+     * Allocates a coroutine which subclasses TCallback and calls its operator() on every resume
+     */
+    template<class TCallback>
+    inline TCallbackCoroutine<TCallback> MakeCallbackCoroutine() {
+        for (;;) {
+            co_yield NDetail::TCallbackCoroutineResume{};
+        }
     }
 
 } // namespace NActors

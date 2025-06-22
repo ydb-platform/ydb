@@ -68,7 +68,7 @@ PEERDIR(
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/storagepoolmon
     ydb/core/blobstorage/vdisk/ingress
-    ydb/core/control/lib
+    ydb/core/control
     ydb/core/util
 )
 

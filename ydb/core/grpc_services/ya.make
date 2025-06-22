@@ -111,7 +111,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/base
-    ydb/core/control/lib
+    ydb/core/control
     ydb/core/discovery
     ydb/core/engine
     ydb/core/formats

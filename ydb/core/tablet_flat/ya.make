@@ -109,7 +109,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base
-    ydb/core/control/lib
+    ydb/core/control
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat/protos

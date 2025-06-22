@@ -1,6 +1,5 @@
 #include "collector.h"
 
-#include <ydb/core/tx/columnshard/data_accessor/events.h>
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
@@ -14,10 +13,6 @@ void IGranuleDataAccessor::AskData(
 
 TDataCategorized IGranuleDataAccessor::AnalyzeData(const TPortionsByConsumer& portions) {
     return DoAnalyzeData(portions);
-}
-
-void TActorAccessorsCallback::OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors, const TActorId& owner) {
-    NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(std::move(accessors), owner));
 }
 
 std::vector<TPortionInfo::TConstPtr> TConsumerPortions::GetPortions(const TGranuleMeta& granule) const {

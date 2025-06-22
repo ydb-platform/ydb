@@ -176,7 +176,6 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
 void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
     const NDataAccessorControl::TManagerConstructionContext& context) {
     MetadataMemoryManager = constructor->Build(context).DetachResult();
-    DataAccessorsManager->RegisterController(MetadataMemoryManager->BuildCollector(PathId), context.IsUpdate());
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,

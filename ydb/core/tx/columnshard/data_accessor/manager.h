@@ -1,5 +1,4 @@
 #pragma once
-#include "events.h"
 #include "request.h"
 
 #include "abstract/collector.h"
@@ -11,29 +10,6 @@
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
-
-class TAccessorSignals: public NColumnShard::TCommonCountersOwner {
-private:
-    using TBase = NColumnShard::TCommonCountersOwner;
-
-public:
-    const NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
-    const NMonitoring::TDynamicCounters::TCounterPtr FetchingCount;
-    const NMonitoring::TDynamicCounters::TCounterPtr AskNew;
-    const NMonitoring::TDynamicCounters::TCounterPtr AskDuplication;
-    const NMonitoring::TDynamicCounters::TCounterPtr ResultFromCache;
-    const NMonitoring::TDynamicCounters::TCounterPtr ResultAskDirectly;
-
-    TAccessorSignals()
-        : TBase("AccessorsFetching")
-        , QueueSize(TBase::GetValue("Queue/Count"))
-        , FetchingCount(TBase::GetValue("Fetching/Count"))
-        , AskNew(TBase::GetDeriviative("Ask/Fault/Count"))
-        , AskDuplication(TBase::GetDeriviative("Ask/Duplication/Count"))
-        , ResultFromCache(TBase::GetDeriviative("ResultFromCache/Count"))
-        , ResultAskDirectly(TBase::GetDeriviative("ResultAskDirectly/Count")) {
-    }
-};
 
 class IDataAccessorsManager {
 private:
@@ -86,8 +62,6 @@ public:
 class TActorAccessorsManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
-    const NActors::TActorId ActorId;
-    std::shared_ptr<NDataAccessorControl::IAccessorCallbackWithOwner> AccessorsCallback;
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
         class TAdapterCallback: public NKikimr::NGeneralCache::NPublic::ICallback<NGeneralCache::TPortionsMetadataCachePolicy> {
         private:
@@ -110,13 +84,13 @@ private:
         public:
             TAdapterCallback(const std::shared_ptr<IDataAccessorRequestsSubscriber>& accCallback, const ui64 requestId)
                 : AccessorsCallback(accCallback)
-                , RequestId(requestId)
-            {
+                , RequestId(requestId) {
             }
         };
 
-        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::AskObjects(
-            request->GetConsumer(), request->BuildAddresses(GetTabletActorId()), std::make_shared<TAdapterCallback>(request->ExtractSubscriber(), request->GetRequestId()));
+        NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::AskObjects(request->GetConsumer(),
+            request->BuildAddresses(GetTabletActorId()),
+            std::make_shared<TAdapterCallback>(request->ExtractSubscriber(), request->GetRequestId()));
     }
     virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& /*controller*/, const bool /*update*/) override {
     }
@@ -131,88 +105,9 @@ private:
     }
 
 public:
-    TActorAccessorsManager(const NActors::TActorId& actorId, const NActors::TActorId& tabletActorId)
-        : TBase(tabletActorId)
-        , ActorId(actorId)
-        , AccessorsCallback(std::make_shared<TActorAccessorsCallback>(ActorId)) {
+    TActorAccessorsManager(const NActors::TActorId& tabletActorId)
+        : TBase(tabletActorId) {
         AFL_VERIFY(!!tabletActorId);
-    }
-};
-
-class TLocalManager: public IDataAccessorsManager {
-private:
-    using TBase = IDataAccessorsManager;
-    THashMap<TInternalPathId, std::unique_ptr<IGranuleDataAccessor>> Managers;
-    THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
-    TAccessorSignals Counters;
-    const std::shared_ptr<IAccessorCallback> AccessorCallback;
-
-    class TPortionToAsk {
-    private:
-        TPortionInfo::TConstPtr Portion;
-        YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
-        YDB_READONLY_DEF(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, ConsumerId);
-
-    public:
-        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag,
-            const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumerId)
-            : Portion(portion)
-            , AbortionFlag(abortionFlag)
-            , ConsumerId(consumerId) {
-        }
-
-        TPortionInfo::TConstPtr ExtractPortion() {
-            return std::move(Portion);
-        }
-    };
-
-    std::deque<TPortionToAsk> PortionsAsk;
-    TPositiveControlInteger PortionsAskInFlight;
-
-    void DrainQueue();
-
-    virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override;
-    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override;
-    virtual void DoUnregisterController(const TInternalPathId pathId) override {
-        AFL_VERIFY(Managers.erase(pathId));
-    }
-    virtual void DoAddPortion(const TPortionDataAccessor& accessor) override;
-    virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portionInfo) override {
-        auto it = Managers.find(portionInfo->GetPathId());
-        AFL_VERIFY(it != Managers.end());
-        it->second->ModifyPortions({}, { portionInfo->GetPortionId() });
-    }
-
-public:
-    class TTestingCallback: public IAccessorCallback {
-    private:
-        std::weak_ptr<TLocalManager> Manager;
-        virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override {
-            auto mImpl = Manager.lock();
-            if (!mImpl) {
-                return;
-            }
-            for (auto&& i : accessors) {
-                mImpl->AddPortion(i);
-            }
-        }
-
-    public:
-        void InitManager(const std::weak_ptr<TLocalManager>& manager) {
-            Manager = manager;
-        }
-    };
-
-    static std::shared_ptr<TLocalManager> BuildForTests() {
-        auto callback = std::make_shared<TTestingCallback>();
-        std::shared_ptr<TLocalManager> result = std::make_shared<TLocalManager>(callback);
-        callback->InitManager(result);
-        return result;
-    }
-
-    TLocalManager(const std::shared_ptr<IAccessorCallback>& callback)
-        : TBase(NActors::TActorId())
-        , AccessorCallback(callback) {
     }
 };
 

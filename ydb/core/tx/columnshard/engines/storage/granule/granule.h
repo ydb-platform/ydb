@@ -183,12 +183,6 @@ public:
         return DataAccessorsManager;
     }
 
-    std::unique_ptr<NDataAccessorControl::IGranuleDataAccessor> BuildDataAccessor() {
-        AFL_VERIFY(!DataAccessorConstructed);
-        DataAccessorConstructed = true;
-        return MetadataMemoryManager->BuildCollector(PathId);
-    }
-
     void RefreshTiering(const std::optional<TTiering>& tiering) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshTiering(tiering, context);

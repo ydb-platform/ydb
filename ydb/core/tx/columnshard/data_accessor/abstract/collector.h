@@ -16,36 +16,6 @@ public:
     virtual ~IAccessorCallback() = default;
 };
 
-class IAccessorCallbackWithOwner {
-public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors, const TActorId& owner) = 0;
-    virtual ~IAccessorCallbackWithOwner() = default;
-};
-
-class TCallbackWrapper: public IAccessorCallback {
-    const std::shared_ptr<IAccessorCallbackWithOwner> Callback;
-    TActorId Owner;
-public:
-    TCallbackWrapper(const std::shared_ptr<IAccessorCallbackWithOwner>& callback, const TActorId& owner)
-        : Callback(callback), Owner(owner)
-    {}
-
-    void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override {
-        Callback->OnAccessorsFetched(move(accessors), Owner);
-    }
-};
-
-class TActorAccessorsCallback: public IAccessorCallbackWithOwner {
-private:
-    const NActors::TActorId ActorId;
-
-public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors, const TActorId& owner) override;
-    TActorAccessorsCallback(const NActors::TActorId& actorId)
-        : ActorId(actorId) {
-    }
-};
-
 class TConsumerPortions {
 private:
     YDB_READONLY_DEF(std::vector<ui64>, PortionIds);

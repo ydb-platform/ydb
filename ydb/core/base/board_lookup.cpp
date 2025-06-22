@@ -77,7 +77,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
         TString ToString() {
             TStringStream str;
-            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess 
+            str << "{ WriteOnly: " << WriteOnly << ", WaitForReplicasToSuccess: " << WaitForReplicasToSuccess
                 << " Replicas: [" << JoinSeq(",", Replicas) << "] }";
             return str.Str();
         }
@@ -90,7 +90,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
     const TDuration& GetCurrentDelay(TReplica& replica) {
         if (replica.CurrentDelay == TDuration::Zero()) {
-            replica.CurrentDelay = BoardRetrySettings.StartDelayMs;
+            replica.CurrentDelay = BoardRetrySettings.StartDelay;
         }
         return replica.CurrentDelay;
     }
@@ -98,8 +98,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
     TDuration GetReconnectDelayForReplica(TReplica& replica) {
         auto newDelay = replica.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > BoardRetrySettings.MaxDelayMs) {
-            newDelay = BoardRetrySettings.MaxDelayMs;
+        if (newDelay > BoardRetrySettings.MaxDelay) {
+            newDelay = BoardRetrySettings.MaxDelay;
         }
         newDelay *= AppData()->RandomProvider->Uniform(50, 200);
         newDelay /= 100;
@@ -353,7 +353,7 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         }
 
         auto &replica = ReplicaGroups[groupIdx].Replicas[idx];
-        BLOG_D("Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: " 
+        BLOG_D("Handle TEvReplicaBoardInfo: groupIdx: " << groupIdx << " idx: " << idx << " reconnectNumber: "
             << reconnectNumber << " replica.ReconnectNumber: " << replica.ReconnectNumber);
         if (reconnectNumber != replica.ReconnectNumber) {
             return;

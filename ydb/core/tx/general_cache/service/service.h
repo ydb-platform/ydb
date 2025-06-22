@@ -20,7 +20,7 @@ private:
 
     using TBase = TActorBootstrapped<TDistributor<TPolicy>>;
     const NPublic::TConfig Config;
-    const TCounters Counters;
+    const TActorCounters Counters;
     std::unique_ptr<TManager> Manager;
 
     void HandleMain(NPublic::TEvents<TPolicy>::TEvAskData::TPtr& ev) {
@@ -55,7 +55,7 @@ public:
     }
 
     void Bootstrap() {
-        Manager = std::make_unique<TManager>(Config, TBase::SelfId(), Counters);
+        Manager = std::make_unique<TManager>(Config, TBase::SelfId(), Counters.GetManager());
         TBase::Become(&TDistributor::StateMain);
     }
 };

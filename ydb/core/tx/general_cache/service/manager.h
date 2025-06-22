@@ -19,6 +19,8 @@ private:
     using TObject = typename TPolicy::TObject;
     using EConsumer = typename TPolicy::EConsumer;
     using ICallback = NPublic::ICallback<TPolicy>;
+    static inline TAtomicCounter Counter = 0;
+    YDB_READONLY(ui64, RequestId, Counter.Inc());
     YDB_READONLY_DEF(THashSet<TAddress>, Wait);
     THashMap<TAddress, TObject> Result;
     THashSet<TAddress> Removed;
@@ -32,28 +34,31 @@ public:
         return Consumer;
     }
 
-    void AddResult(const TAddress& addr, const TObject& obj) {
+    [[nodiscard]] bool AddResult(const TAddress& addr, const TObject& obj) {
         AFL_VERIFY(Wait.erase(addr));
         AFL_VERIFY(Result.emplace(addr, obj).second);
         if (Wait.empty()) {
             Callback->OnResultReady(std::move(Result), std::move(Removed), std::move(Errors));
         }
+        return Wait.empty();
     }
 
-    void AddRemoved(const TAddress& addr) {
+    [[nodiscard]] bool AddRemoved(const TAddress& addr) {
         AFL_VERIFY(Wait.erase(addr));
         AFL_VERIFY(Removed.emplace(addr).second);
         if (Wait.empty()) {
             Callback->OnResultReady(std::move(Result), std::move(Removed), std::move(Errors));
         }
+        return Wait.empty();
     }
 
-    void AddError(const TAddress& addr, const TString& errorMessage) {
+    [[nodiscard]] bool AddError(const TAddress& addr, const TString& errorMessage) {
         AFL_VERIFY(Wait.erase(addr));
         AFL_VERIFY(Errors.emplace(addr, errorMessage).second);
         if (Wait.empty()) {
             Callback->OnResultReady(std::move(Result), std::move(Removed), std::move(Errors));
         }
+        return Wait.empty();
     }
 
     TRequest(THashSet<TAddress>&& addresses, std::shared_ptr<ICallback>&& callback, const EConsumer consumer)
@@ -73,35 +78,42 @@ private:
 
     const NPublic::TConfig Config;
     const TString CacheName = TPolicy::GetCacheName();
-    const TCounters& Counters;
+    const std::shared_ptr<TManagerCounters> Counters;
     std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
     TLRUCache<TAddress, TObject, TNoopDelete, typename TPolicy::TSizeCalcer> Cache;
-    THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> Requests;
+    THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
+    THashSet<ui64> RequestsInProgress;
     std::deque<std::shared_ptr<TRequest>> RequestsQueue;
-    TPositiveControlInteger RequestedObjectsInFlight;
+    TPositiveControlInteger QueueObjectsCount;
 
     void DrainQueue() {
         THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
-        while (RequestsQueue.size() && RequestedObjectsInFlight.Val() < Config.GetDirectInflightLimit()) {
+        while (RequestsQueue.size() && RequestedObjects.size() < Config.GetDirectInflightLimit()) {
             auto request = std::move(RequestsQueue.front());
             RequestsQueue.pop_front();
-            RequestedObjectsInFlight.Add(request->GetWait().size());
+            QueueObjectsCount.Sub(request->GetWait().size());
+            AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
             auto& addresses = requestedAddresses[request->GetConsumer()];
             for (auto&& i : request->GetWait()) {
-                auto it = Requests.find(i);
-                if (it == Requests.end()) {
-                    it = Requests.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
+                auto it = RequestedObjects.find(i);
+                if (it == RequestedObjects.end()) {
+                    it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
                     AFL_VERIFY(addresses.emplace(i).second);
                 }
                 it->second.emplace_back(request);
             }
         }
         ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor);
+        Counters->DirectRequests->Inc();
+        Counters->RequestsQueueSize->Set(RequestsQueue.size());
+        Counters->ObjectsQueueSize->Set(QueueObjectsCount.Val());
+        Counters->ObjectsInFlight->Set(RequestedObjects.size());
+        Counters->RequestsInFlight->Set(RequestsInProgress.size());
     }
 
 public:
     TManager(const NPublic::TConfig& config, const NActors::TActorId& ownerActorId,
-        const TCounters& counters)
+        const std::shared_ptr<TManagerCounters>& counters)
         : Config(config)
         , Counters(counters)
         , ObjectsProcessor(TPolicy::BuildObjectsProcessor(ownerActorId))
@@ -113,20 +125,27 @@ public:
         AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "add_request");
         std::vector<TAddress> addressesToAsk;
         THashMap<TAddress, TObject> objectsResult;
+        Counters->IncomingRequestsCount->Inc();
         for (auto&& i : request->GetWait()) {
             auto it = Cache.Find(i);
             if (it == Cache.End()) {
+                Counters->ObjectCacheMiss->Inc();
                 addressesToAsk.emplace_back(i);
             } else {
+                Counters->ObjectCacheHit->Inc();
                 AFL_VERIFY(objectsResult.emplace(i, it.Value()).second);
             }
         }
         for (auto&& i : objectsResult) {
-            request->AddResult(i.first, std::move(i.second));
+            Y_UNUSED(request->AddResult(i.first, std::move(i.second)));
         }
         if (request->GetWait().empty()) {
+            Counters->RequestCacheHit->Inc();
             return;
+        } else {
+            Counters->RequestCacheMiss->Inc();
         }
+        QueueObjectsCount.Add(request->GetWait().size());
         RequestsQueue.emplace_back(request);
         DrainQueue();
     }
@@ -134,44 +153,52 @@ public:
     void OnAdditionalObjectsInfo(THashMap<TAddress, TObject>&& objects) {
         AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
         for (auto&& i : objects) {
-            auto it = Requests.find(i.first);
-            if (it != Requests.end()) {
+            auto it = RequestedObjects.find(i.first);
+            if (it != RequestedObjects.end()) {
                 Cache.Insert(i.first, i.second);
                 for (auto&& r : it->second) {
-                    r->AddResult(i.first, i.second);
+                    if (r->AddResult(i.first, i.second)) {
+                        RequestsInProgress.erase(r->GetRequestId());
+                    }
                 }
-                Requests.erase(it);
+                RequestedObjects.erase(it);
             }
         }
+        DrainQueue();
     }
 
     void OnRequestResult(THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
         AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "on_result");
-        RequestedObjectsInFlight.Sub(objects.size() + removed.size() + failed.size());
         for (auto&& i : objects) {
-            auto it = Requests.find(i.first);
-            AFL_VERIFY(it != Requests.end());
+            auto it = RequestedObjects.find(i.first);
+            AFL_VERIFY(it != RequestedObjects.end());
             Cache.Insert(i.first, i.second);
             for (auto&& r : it->second) {
-                r->AddResult(i.first, i.second);
+                if (r->AddResult(i.first, i.second)) {
+                    RequestsInProgress.erase(r->GetRequestId());
+                }
             }
-            Requests.erase(it);
+            RequestedObjects.erase(it);
         }
         for (auto&& i : removed) {
-            auto it = Requests.find(i);
-            AFL_VERIFY(it != Requests.end());
+            auto it = RequestedObjects.find(i);
+            AFL_VERIFY(it != RequestedObjects.end());
             for (auto&& r : it->second) {
-                r->AddRemoved(i);
+                if (r->AddRemoved(i)) {
+                    RequestsInProgress.erase(r->GetRequestId());
+                }
             }
-            Requests.erase(it);
+            RequestedObjects.erase(it);
         }
         for (auto&& i : failed) {
-            auto it = Requests.find(i.first);
-            AFL_VERIFY(it != Requests.end());
+            auto it = RequestedObjects.find(i.first);
+            AFL_VERIFY(it != RequestedObjects.end());
             for (auto&& r : it->second) {
-                r->AddError(i.first, i.second);
+                if (r->AddError(i.first, i.second)) {
+                    RequestsInProgress.erase(r->GetRequestId());
+                }
             }
-            Requests.erase(it);
+            RequestedObjects.erase(it);
         }
         DrainQueue();
     }

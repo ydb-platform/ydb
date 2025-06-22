@@ -25,6 +25,10 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr ObjectsQueueSize;
     const NMonitoring::TDynamicCounters::TCounterPtr IncomingRequestsCount;
     const NMonitoring::TDynamicCounters::TCounterPtr DirectRequests;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdditionalObjectInfo;
+    const NMonitoring::TDynamicCounters::TCounterPtr FetchedObject;
+    const NMonitoring::TDynamicCounters::TCounterPtr NoExistsObject;
+    const NMonitoring::TDynamicCounters::TCounterPtr FailedObject;
 
     TManagerCounters(NColumnShard::TCommonCountersOwner& base)
         : TBase(base, "signals_owner", "manager")
@@ -41,7 +45,10 @@ public:
         , ObjectsQueueSize(TBase::GetValue("ObjectsQueue/Size/Count"))
         , IncomingRequestsCount(TBase::GetDeriviative("Incoming/Requests/Count"))
         , DirectRequests(TBase::GetDeriviative("DirectRequest/Count"))
-    {
+        , AdditionalObjectInfo(TBase::GetDeriviative("DirectRequest/AdditionalInfo/Count"))
+        , FetchedObject(TBase::GetDeriviative("DirectRequest/Fetched/Count"))
+        , NoExistsObject(TBase::GetDeriviative("DirectRequest/NoExists/Count"))
+        , FailedObject(TBase::GetDeriviative("DirectRequest/Failed/Count")) {
     }
 };
 

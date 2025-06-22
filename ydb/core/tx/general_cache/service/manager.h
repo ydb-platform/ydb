@@ -164,6 +164,7 @@ public:
                     if (r->AddResult(i.first, i.second)) {
                         RequestsInProgress.erase(r->GetRequestId());
                         Counters->OnRequestFinished(now - r->GetCreated());
+                        Counters->AdditionalObjectInfo->Inc();
                     }
                 }
                 RequestedObjects.erase(it);
@@ -183,6 +184,7 @@ public:
                 if (r->AddResult(i.first, i.second)) {
                     RequestsInProgress.erase(r->GetRequestId());
                     Counters->OnRequestFinished(now - r->GetCreated());
+                    Counters->FetchedObject->Inc();
                 }
             }
             RequestedObjects.erase(it);
@@ -194,6 +196,7 @@ public:
                 if (r->AddRemoved(i)) {
                     RequestsInProgress.erase(r->GetRequestId());
                     Counters->OnRequestFinished(now - r->GetCreated());
+                    Counters->NoExistsObject->Inc();
                 }
             }
             RequestedObjects.erase(it);
@@ -205,6 +208,7 @@ public:
                 if (r->AddError(i.first, i.second)) {
                     RequestsInProgress.erase(r->GetRequestId());
                     Counters->OnRequestFinished(now - r->GetCreated());
+                    Counters->FailedObject->Inc();
                 }
             }
             RequestedObjects.erase(it);

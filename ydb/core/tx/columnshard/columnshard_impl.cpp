@@ -1159,9 +1159,10 @@ public:
             const auto& granule = Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranuleVerified(i.first);
             for (auto&& c : i.second.GetConsumers()) {
                 NActors::TLogContextGuard lcGuard = NActors::TLogContextBuilder::Build()("consumer", c.first)("path_id", i.first);
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortions().size());
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("size", c.second.GetPortionsCount());
                 for (auto&& portion : c.second.GetPortions(granule)) {
-                    const NOlap::TPortionAddress pAddress(i.first, p);
+                    const ui64 p = portion->GetPortionId();
+                    const NOlap::TPortionAddress pAddress = portion->GetAddress();
                     auto itPortionConstructor = Constructors.find(pAddress);
                     if (itPortionConstructor == Constructors.end()) {
                         TPortionConstructorV2 constructor(portion);

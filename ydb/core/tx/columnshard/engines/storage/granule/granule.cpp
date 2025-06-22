@@ -155,6 +155,7 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
             AtomicSet(LastInsertWriteId, (i64)portionImpl->GetInsertWriteId());
         }
         AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portionImpl).second);
+        AFL_VERIFY(InsertedPortionsById.emplace(portionImpl->GetPortionId(), portionImpl).second);
         AFL_VERIFY(!Portions.contains(portionImpl->GetPortionId()));
     } else {
         auto portionId = portion->GetPortionId();
@@ -289,6 +290,7 @@ void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, 
     AFL_VERIFY(portionImpl->GetPortionType() == EPortionType::Written);
     auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
     AFL_VERIFY(InsertedPortions.emplace(writtenPortion->GetInsertWriteId(), writtenPortion).second);
+    AFL_VERIFY(InsertedPortionsById.emplace(portionImpl->GetPortionId(), writtenPortion).second);
     AFL_VERIFY(InsertedAccessors.emplace(writtenPortion->GetInsertWriteId(), portion).second);
     DataAccessorsManager->AddPortion(portion);
 }
@@ -305,6 +307,7 @@ void TGranuleMeta::CommitPortionOnExecute(
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());
+    AFL_VERIFY(InsertedPortionsById.erase(it->second->GetPortionId()));
     (static_cast<TColumnEngineForLogs*>(&engine))->AppendPortion(it->second);
     InsertedPortions.erase(it);
     {

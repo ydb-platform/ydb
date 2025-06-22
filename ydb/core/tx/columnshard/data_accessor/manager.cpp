@@ -49,7 +49,8 @@ void TLocalManager::DrainQueue() {
                 if (!toAsk) {
                     RequestsByPortion.erase(it);
                 } else {
-                    portionsToAsk[p->GetPathId()].UpsertConsumer(consumerId).AddPortion(p->GetPortionId());
+                    portionsToAsk[p->GetPathId()].UpsertConsumer(consumerId).AddPortion(p);
+                    
                     ++packPortionsCount;
                     ++countToFlight;
                 }

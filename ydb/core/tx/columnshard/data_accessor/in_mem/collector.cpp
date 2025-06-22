@@ -7,15 +7,9 @@ void TCollector::DoAskData(
     AFL_VERIFY(false);
 }
 
-TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) {
+TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& /*portions*/) {
     TDataCategorized result;
-    for (auto&& c : portions.GetConsumers()) {
-        for (auto&& p : c.second.GetPortions()) {
-            auto it = Accessors.find(p);
-            AFL_VERIFY(it != Accessors.end());
-            result.AddFromCache(it->second);
-        }
-    }
+    AFL_VERIFY(false);
     return result;
 }
 

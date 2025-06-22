@@ -8,22 +8,9 @@ void TCollector::DoAskData(THashMap<TInternalPathId, TPortionsByConsumer>&& port
         TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(std::move(portions), callback));
 }
 
-TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& portions) {
+TDataCategorized TCollector::DoAnalyzeData(const TPortionsByConsumer& /*portions*/) {
     TDataCategorized result;
-    for (auto&& c : portions.GetConsumers()) {
-        TConsumerPortions* cPortions = nullptr;
-        for (auto&& p : c.second.GetPortions()) {
-            auto it = AccessorsCache.Find(p);
-            if (it != AccessorsCache.End() && it.Key() == p) {
-                result.AddFromCache(it.Value());
-            } else {
-                if (!cPortions) {
-                    cPortions = &result.MutablePortionsToAsk().UpsertConsumer(c.first);
-                }
-                cPortions->AddPortion(p);
-            }
-        }
-    }
+    AFL_VERIFY(false);
     return result;
 }
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/data_accessor/events.h>
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
+#include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
@@ -17,6 +18,19 @@ TDataCategorized IGranuleDataAccessor::AnalyzeData(const TPortionsByConsumer& po
 
 void TActorAccessorsCallback::OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors, const TActorId& owner) {
     NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(std::move(accessors), owner));
+}
+
+std::vector<TPortionInfo::TConstPtr> TConsumerPortions::GetPortions(const TGranuleMeta& granule) const {
+    std::vector<TPortionInfo::TConstPtr> result;
+    result.reserve(PortionIds.size());
+    for (auto&& i : PortionIds) {
+        result.emplace_back(granule.GetPortionVerifiedPtr(i, false));
+    }
+    return result;
+}
+
+void TConsumerPortions::AddPortion(const std::shared_ptr<const TPortionInfo>& p) {
+    PortionIds.emplace_back(p->GetPortionId());
 }
 
 }   // namespace NKikimr::NOlap::NDataAccessorControl

@@ -121,6 +121,7 @@ private:
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     TAtomic LastInsertWriteId = 1;
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
+    THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, TPortionDataAccessor> InsertedAccessors;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
@@ -229,6 +230,7 @@ public:
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot ssRemove) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
+        AFL_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
         it->second->SetCommitSnapshot(ssRemove);
         it->second->SetRemoveSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);
@@ -389,10 +391,19 @@ public:
         return *it->second;
     }
 
-    const TPortionInfo::TPtr& GetPortionVerifiedPtr(const ui64 portion, const bool committedOnly = true) const {
-        auto it = Portions.find(portion);
-        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
-        return it->second;
+    TPortionInfo::TPtr GetPortionVerifiedPtr(const ui64 portion, const bool committedOnly = true) const {
+        {
+            auto it = Portions.find(portion);
+            if (it != Portions.end()) {
+                return it->second;
+            }
+        }
+        AFL_VERIFY(!committedOnly);
+        {
+            auto it = InsertedPortionsById.find(portion);
+            AFL_VERIFY(it != InsertedPortionsById.end());
+            return it->second;
+        }
     }
 
     std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {

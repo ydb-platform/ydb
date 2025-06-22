@@ -4,6 +4,11 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <library/cpp/cache/cache.h>
 
+namespace NKikimr::NOlap {
+class TGranuleMeta;
+class TPortionInfo;
+}
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IAccessorCallback {
 public:
@@ -43,29 +48,19 @@ public:
 
 class TConsumerPortions {
 private:
-    YDB_READONLY_DEF(std::vector<ui64>, CommittedPortions);
-    YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertedPortions);
+    YDB_READONLY_DEF(std::vector<ui64>, PortionIds);
 
 public:
-    std::vector<TPortionInfo::TConstPtr> GetPortions(const TGranuleMeta& granule) const {
-        std::vector<TPortionInfo::TConstPtr> result;
-        result.reserve(CommittedPortions.size() + InsertedPortions.size());
-        for (auto&& i : CommittedPortions) {
-            result.emplace_back(granule.GetPortionVerifiedPtr(i));
-        }
-        for (auto&& i : InsertedPortions) {
-            result.emplace_back(granule.GetInsertedPortionVerifiedPtr(i));
-        }
-        return result;
+    void AddPortion(const std::shared_ptr<const TPortionInfo>& p);
+    void AddPortion(const ui64 portionId) {
+        PortionIds.emplace_back(portionId);
     }
 
-    void AddCommittedPortion(const ui64 p) {
-        CommittedPortions.emplace_back(p);
+    ui32 GetPortionsCount() const {
+        return PortionIds.size();
     }
 
-    void AddInsertedPortion(const TInsertWriteId p) {
-        InsertedPortions.emplace_back(p);
-    }
+    std::vector<TPortionInfo::TConstPtr> GetPortions(const TGranuleMeta& granule) const;
 };
 
 class TPortionsByConsumer {
@@ -76,7 +71,7 @@ public:
     ui64 GetPortionsCount() const {
         ui64 result = 0;
         for (auto&& i : Consumers) {
-            result += i.second.GetPortions().size();
+            result += i.second.GetPortionsCount();
         }
         return result;
     }

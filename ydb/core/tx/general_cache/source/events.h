@@ -17,6 +17,7 @@ struct TEvents {
 
     enum EEv {
         EvObjectsInfo = EventSpaceBegin(TKikimrEvents::ES_GENERAL_CACHE_SOURCE),
+        EvAdditionalObjectsInfo,
         EvEnd
     };
 
@@ -55,6 +56,23 @@ struct TEvents {
             , Objects(std::move(objects))
             , Errors(std::move(errors))
         {
+        }
+    };
+
+    class TEvAdditionalObjectsInfo: public NActors::TEventLocal<TEvAdditionalObjectsInfo, EvAdditionalObjectsInfo> {
+    private:
+        bool ObjectsExtracted = false;
+        THashMap<TAddress, TObject> Objects;
+
+    public:
+        THashMap<TAddress, TObject> ExtractObjects() {
+            AFL_VERIFY(!ObjectsExtracted);
+            ObjectsExtracted = true;
+            return std::move(Objects);
+        }
+
+        TEvAdditionalObjectsInfo(THashMap<TAddress, TObject>&& objects)
+            : Objects(std::move(objects)) {
         }
     };
 };

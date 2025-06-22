@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
 #include <ydb/core/tx/general_cache/source/abstract.h>
+#include <ydb/core/tx/general_cache/usage/service.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -69,3 +70,7 @@ public:
 };
 
 }   // namespace NKikimr::NOlap::NGeneralCache
+
+namespace NKikimr::NOlap::NDataAccessorControl {
+    using TGeneralCache = NKikimr::NGeneralCache::TServiceOperator<NKikimr::NOlap::NGeneralCache::TPortionsMetadataCachePolicy>;
+}

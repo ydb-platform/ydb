@@ -22,8 +22,8 @@ private:
 public:
     virtual ~IObjectsProcessor() = default;
 
-    void AskData(const std::vector<TAddress>& objectAddresses, const std::shared_ptr<TSelf>& selfPtr) const {
-        DoAskData(objectAddresses, selfPtr);
+    void AskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr) const {
+        DoAskData(objectAddressesByConsumer, selfPtr);
     }
 
     void OnReceiveData(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,

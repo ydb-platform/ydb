@@ -96,7 +96,7 @@ private:
     std::optional<TDataAccessorsResult> Result;
 
 public:
-    void OnResult(const ui32 requestId, TDataAccessorsResult&& result) {
+    void OnResult(const ui64 requestId, TDataAccessorsResult&& result) {
         AFL_VERIFY(RequestIds.erase(requestId));
         if (!Result) {
             Result = std::move(result);
@@ -224,6 +224,21 @@ private:
     }
 
 public:
+    std::shared_ptr<IDataAccessorRequestsSubscriber> ExtractSubscriber() {
+        AFL_VERIFY(HasSubscriber());
+        return std::move(Subscriber);
+    }
+
+    THashSet<NGeneralCache::TGlobalPortionAddress> BuildAddresses(const NActors::TActorId tabletActorId) const {
+        THashSet<NGeneralCache::TGlobalPortionAddress> result;
+        for (auto&& i : PathIdStatus) {
+            for (auto&& [_, p] : i.second.GetPortions()) {
+                AFL_VERIFY(result.emplace(NGeneralCache::TGlobalPortionAddress(tabletActorId, p->GetAddress())).second);
+            }
+        }
+        return result;
+    }
+
     void SetColumnIds(const std::set<ui32>& columnIds) {
         AFL_VERIFY(!ColumnIds);
         ColumnIds = columnIds;

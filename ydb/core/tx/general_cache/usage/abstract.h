@@ -14,6 +14,8 @@ private:
         THashMap<TAddress, TString>&& errorAddresses) const = 0;
 
 public:
+    virtual ~ICallback() = default;
+
     void OnResultReady(THashMap<TAddress, TObject>&& objectAddresses, THashSet<TAddress>&& removedAddresses,
         THashMap<TAddress, TString>&& errorAddresses) const {
         DoOnResultReady(std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses));

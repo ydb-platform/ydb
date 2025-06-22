@@ -10,6 +10,7 @@ template <class TPolicy>
 class TServiceOperator {
 private:
     using TAddress = typename TPolicy::TAddress;
+    using TObject = typename TPolicy::TObject;
     using EConsumer = typename TPolicy::EConsumer;
     using ICallback = NPublic::ICallback<TPolicy>;
 
@@ -20,6 +21,12 @@ public:
         AFL_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvAskData(consumer, std::move(addresses), std::move(callback)));
+    }
+    static void AddObjects(THashMap<TAddress, TObject>&& objects) {
+        AFL_VERIFY(NActors::TlsActivationContext);
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Send(
+            GetCurrentNodeServiceId(), new NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo(std::move(objects)));
     }
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcCach" + TPolicy::GetServiceCode());

@@ -16,6 +16,7 @@ private:
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
     using TManager = TManager<TPolicy>;
+    using TRequest = TRequest<TPolicy>;
 
     using TBase = TActorBootstrapped<TDistributor<TPolicy>>;
     const NPublic::TConfig Config;
@@ -23,10 +24,13 @@ private:
     std::unique_ptr<TManager> Manager;
 
     void HandleMain(NPublic::TEvents<TPolicy>::TEvAskData::TPtr& ev) {
-        Manager->AddRequest(std::make_shared<TRequest>(ev->ExtractAddresses(), ev->ExtractCallback(), ev->GetConsumer()));
+        Manager->AddRequest(std::make_shared<TRequest>(ev->Get()->ExtractAddresses(), ev->Get()->ExtractCallback(), ev->Get()->GetConsumer()));
     }
     void HandleMain(NSource::TEvents<TPolicy>::TEvObjectsInfo::TPtr& ev) {
-        Manager->ModifyObjects(ev->ExtractObjects(), ev->ExtractRemoved());
+        Manager->OnRequestResult(ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors());
+    }
+    void HandleMain(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo::TPtr& ev) {
+        Manager->OnAdditionalObjectsInfo(ev->Get()->ExtractObjects());
     }
 
 public:
@@ -52,6 +56,7 @@ public:
 
     void Bootstrap() {
         Manager = std::make_unique<TManager>(Config, TBase::SelfId(), Counters);
+        TBase::Become(&TDistributor::StateMain);
     }
 };
 

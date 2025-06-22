@@ -6,8 +6,13 @@ namespace NKikimr::NGeneralCache::NPrivate {
 class TManagerCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
+    const NMonitoring::THistogramPtr RequestDuration;
 
 public:
+    void OnRequestFinished(const TDuration d) const {
+        RequestDuration->Collect(d.MicroSeconds());
+    }
+
     const NMonitoring::TDynamicCounters::TCounterPtr RequestCacheMiss;
     const NMonitoring::TDynamicCounters::TCounterPtr RequestCacheHit;
     const NMonitoring::TDynamicCounters::TCounterPtr ObjectCacheMiss;
@@ -34,7 +39,9 @@ public:
         , RequestsQueueSize(TBase::GetValue("RequestsQueue/Size/Count"))
         , ObjectsQueueSize(TBase::GetValue("ObjectsQueue/Size/Count"))
         , IncomingRequestsCount(TBase::GetDeriviative("Incoming/Requests/Count"))
-        , DirectRequests(TBase::GetDeriviative("DirectRequest/Count")) {
+        , DirectRequests(TBase::GetDeriviative("DirectRequest/Count"))
+        , RequestDuration(TBase::GetHistogram("Requests/Duration/Us", NMonitoring::ExponentialHistogram(20, 16, 2)))
+    {
     }
 };
 

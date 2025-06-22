@@ -13,7 +13,7 @@
 namespace NKikimr::NGeneralCache::NPrivate {
 
 template <class TPolicy>
-class TRequest: public NColumnShard::TMonitoringObjectsCounter<TRequest<TPolicy>> {
+class TRequest: public NColumnShard::TMonitoringObjectsCounter<TRequest<TPolicy>>, public TNonCopyable {
 private:
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
@@ -21,6 +21,7 @@ private:
     using ICallback = NPublic::ICallback<TPolicy>;
     static inline TAtomicCounter Counter = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
+    YDB_READONLY(TMonotonic, Created, TMonotonic::Now());
     YDB_READONLY_DEF(THashSet<TAddress>, Wait);
     THashMap<TAddress, TObject> Result;
     THashSet<TAddress> Removed;
@@ -159,16 +160,20 @@ public:
                 for (auto&& r : it->second) {
                     if (r->AddResult(i.first, i.second)) {
                         RequestsInProgress.erase(r->GetRequestId());
+                        Counters->OnRequestFinished(now - r->GetCreated());
                     }
                 }
                 RequestedObjects.erase(it);
             }
         }
+        Counters->CacheSizeCount->Set(Cache.Size());
+        Counters->CacheSizeBytes->Set(Cache.TotalSize());
         DrainQueue();
     }
 
     void OnRequestResult(THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
         AFL_WARN(NKikimrServices::GENERAL_CACHE)("event", "on_result");
+        const TMonotonic now = TMonotonic::Now();
         for (auto&& i : objects) {
             auto it = RequestedObjects.find(i.first);
             AFL_VERIFY(it != RequestedObjects.end());
@@ -176,6 +181,7 @@ public:
             for (auto&& r : it->second) {
                 if (r->AddResult(i.first, i.second)) {
                     RequestsInProgress.erase(r->GetRequestId());
+                    Counters->OnRequestFinished(now - r->GetCreated());
                 }
             }
             RequestedObjects.erase(it);
@@ -186,6 +192,7 @@ public:
             for (auto&& r : it->second) {
                 if (r->AddRemoved(i)) {
                     RequestsInProgress.erase(r->GetRequestId());
+                    Counters->OnRequestFinished(now - r->GetCreated());
                 }
             }
             RequestedObjects.erase(it);
@@ -196,6 +203,7 @@ public:
             for (auto&& r : it->second) {
                 if (r->AddError(i.first, i.second)) {
                     RequestsInProgress.erase(r->GetRequestId());
+                    Counters->OnRequestFinished(now - r->GetCreated());
                 }
             }
             RequestedObjects.erase(it);

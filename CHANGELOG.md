@@ -28,3 +28,5 @@
 * 18077:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 19057:Fixed "Failed to set up listener on port 9092 errno# 98 (Address already in use)" [#19057](https://github.com/ydb-platform/ydb/pull/19057) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 19115:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/19083) in stream lookup join [#19115](https://github.com/ydb-platform/ydb/pull/19115) ([Vitalii Gridnev](https://github.com/gridnevvvit))
+* 19907:If writing is done to the topic using a transaction and the retention of messages in the topic is less than the duration of the transaction, then inconsistent data could be written to the partition. [#19907](https://github.com/ydb-platform/ydb/pull/19907) ([Nikolay Shestakov](https://github.com/nshestakov))
+

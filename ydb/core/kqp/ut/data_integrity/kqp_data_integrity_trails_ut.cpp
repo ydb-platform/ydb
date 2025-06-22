@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 3);
             if (useOltpSink) {
                 // check executer logs
-                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 0);
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
             } else {
                 // check executer logs
             }

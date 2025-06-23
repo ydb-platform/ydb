@@ -222,6 +222,9 @@ public:
             << "ActorId: " << SelfId() << ", "
             << "ActorState: " << CurrentStateFuncName() << ", ";
         if (Y_LIKELY(QueryState)) {
+            if (QueryState->HasTxControl()) {
+                result << " TxId: " << QueryState->GetTxControl().tx_id() << ", ";
+            }
             result << "TraceId: " << QueryState->UserRequestContext->TraceId << ", ";
         }
         return result;
@@ -524,6 +527,7 @@ public:
     }
 
     void AddOffsetsToTransaction() {
+        LOG_I("begin request for TopicOperations");
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
             return;
@@ -534,6 +538,7 @@ public:
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
             Become(&TKqpSessionActor::ExecuteState);
+            LOG_I("begin request for SchemeNavigate");
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
             return;
         }
@@ -549,7 +554,10 @@ public:
             return;
         }
 
+        LOG_I("end request for TopicOperations");
         ReplySuccess();
+
+        LOG_I("after ReplySuccess");
     }
 
     void CompileQuery() {
@@ -2490,8 +2498,10 @@ private:
     }
 
     void ProcessTopicOps(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        LOG_I("end request for SchemeNavigate");
         YQL_ENSURE(ev->Get()->Request);
         if (ev->Get()->Request->Cookie < QueryId) {
+            LOG_I("unexpected return #2");
             return;
         }
 
@@ -2517,21 +2527,33 @@ private:
         }
 
         if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+            LOG_I("begin request for WriteId");
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
         } else {
+            LOG_I("end request for TopicOperations");
             ReplySuccess();
+
+            LOG_I("after ReplySuccess");
         }
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        LOG_I("end request for WriteId");
         if (CurrentStateFunc() != &TThis::ExecuteState || ev->Cookie < QueryId) {
+            LOG_I("unexpected return #1");
             return;
         }
 
         YQL_ENSURE(QueryState);
         YQL_ENSURE(QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_TOPIC);
+
         SetTopicWriteId(NLongTxService::TLockHandle(ev->Get()->TxId, TActivationContext::ActorSystem()));
+
+        LOG_I("end request for TopicOperations");
         ReplySuccess();
+
+        LOG_I("current state: " << CurrentStateFuncName());
+        LOG_I("after ReplySuccess");
     }
 
     bool HasTopicWriteOperations() const {

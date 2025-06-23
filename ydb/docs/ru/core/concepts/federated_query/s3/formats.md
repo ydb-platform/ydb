@@ -349,7 +349,7 @@ Year,Manufacturer,Model,Price
 |`List<T>`, `Tuple<Type1, ..., TypeN>`|✓            |✓              |✓       |✓            |              |       |    |
 |`Struct<Name1:Type1, ..., NameN:TypeN>`,<br/>`Variant<Name1:Type1, Name2:Type2>`,<br/>`Dict<String, Type>`, `Dict<Utf8, Type>`|||✓|||||
 
-Таблица всех поддерживаемых типов при запси в S3:
+Таблица всех поддерживаемых типов при записи в S3:
 
 |Тип                                  |csv_with_names|tsv_with_names|json_list|json_each_row|parquet|raw|
 |-------------------------------------|--------------|--------------|---------|-------------|-------|---|

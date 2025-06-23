@@ -6,6 +6,41 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+namespace {
+
+bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result)
+{
+    bool hasBlock = false;
+    bool hasNonBlock = false;
+
+    result.reserve(typeComponents.size());
+    for (TType* type : typeComponents) {
+        if (type->GetKind() == TType::EKind::Block) {
+            hasBlock = true;
+            type = static_cast<const TBlockType*>(type)->GetItemType();
+        } else {
+            hasNonBlock = true;
+        }
+        result.push_back(type);
+    }
+    MKQL_ENSURE(hasBlock != hasNonBlock, "Inconsistent wide item types: mixing of blocks and non-blocks detected");
+    return hasBlock;
+};
+
+void WrapArrayBlockTypes(std::vector<TType*>& types, const TDqProgramBuilder& pb)
+{
+    std::transform(
+        types.begin(),
+        types.end(),
+        types.begin(),
+        [&](TType* type) {
+            return pb.NewBlockType(type, TBlockType::EShape::Many);
+        }
+    );
+}
+
+}
+
 TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
     : TProgramBuilder(env, functionRegistry) {}
 
@@ -20,11 +55,17 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
 {
     const auto wideComponents = GetWideComponents(AS_TYPE(TFlowType, flow.GetStaticType()));
 
+    std::vector<TType*> unblockedWideComponents;
+    bool hasBlocks = UnwrapBlockTypes(wideComponents, unblockedWideComponents);
+    if (hasBlocks) {
+        unblockedWideComponents.pop_back(); // Block height parameter
+    }
+
     TRuntimeNode::TList itemArgs;
-    itemArgs.reserve(wideComponents.size());
+    itemArgs.reserve(unblockedWideComponents.size());
 
     auto i = 0U;
-    std::generate_n(std::back_inserter(itemArgs), wideComponents.size(), [&](){ return Arg(wideComponents[i++]); });
+    std::generate_n(std::back_inserter(itemArgs), unblockedWideComponents.size(), [&](){ return Arg(unblockedWideComponents[i++]); });
 
     const auto keys = keyExtractor(itemArgs);
 
@@ -51,11 +92,17 @@ TCallableBuilder TDqProgramBuilder::BuildCommonCombinerParams(
 
     const auto output = finish(finishKeyArgs, finishStateArgs);
 
-    std::vector<TType*> tupleItems;
-    tupleItems.reserve(output.size());
-    std::transform(output.cbegin(), output.cend(), std::back_inserter(tupleItems), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
+    std::vector<TType*> outputWideComponents;
+    outputWideComponents.reserve(output.size() + hasBlocks ? 1 : 0);
+    std::transform(output.cbegin(), output.cend(), std::back_inserter(outputWideComponents), std::bind(&TRuntimeNode::GetStaticType, std::placeholders::_1));
+    if (hasBlocks) {
+        WrapArrayBlockTypes(outputWideComponents, *this);
+        auto blockSizeType = NewDataType(NUdf::TDataType<ui64>::Id);
+        auto blockSizeBlockType = NewBlockType(blockSizeType, TBlockType::EShape::Scalar);
+        outputWideComponents.push_back(blockSizeBlockType);
+    }
 
-    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewFlowType(NewMultiType(tupleItems)));
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), operatorName, NewFlowType(NewMultiType(outputWideComponents)));
 
     callableBuilder.Add(flow);
     callableBuilder.Add(operatorParams);

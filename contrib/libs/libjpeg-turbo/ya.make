@@ -123,7 +123,7 @@ ELSEIF (ARCH_X86_64)
         simd/x86_64/jsimd.c
         simd/x86_64/jsimdcpu.asm
     )
-ELSEIF (ARCH_ARM7_NEON AND NOT MSVC)
+ELSEIF (ARCH_ARM7)
     ADDINCL(
         contrib/libs/libjpeg-turbo/simd/arm
     )
@@ -145,29 +145,7 @@ ELSEIF (ARCH_ARM7_NEON AND NOT MSVC)
         simd/arm/jidctred-neon.c
         simd/arm/jquanti-neon.c
     )
-ELSEIF (ARCH_ARM7 AND NOT MSVC)
-    ADDINCL(
-        contrib/libs/libjpeg-turbo/simd/arm
-    )
-    SRCS(
-        simd/arm/aarch32/jchuff-neon.c
-        simd/arm/aarch32/jsimd.c
-        simd/arm/aarch32/jsimd_neon.S
-        simd/arm/jccolor-neon.c
-        simd/arm/jcgray-neon.c
-        simd/arm/jcphuff-neon.c
-        simd/arm/jcsample-neon.c
-        simd/arm/jdcolor-neon.c
-        simd/arm/jdmerge-neon.c
-        simd/arm/jdsample-neon.c
-        simd/arm/jfdctfst-neon.c
-        simd/arm/jfdctint-neon.c
-        simd/arm/jidctfst-neon.c
-        simd/arm/jidctint-neon.c
-        simd/arm/jidctred-neon.c
-        simd/arm/jquanti-neon.c
-    )
-ELSEIF (ARCH_ARM64 AND NOT MSVC)
+ELSEIF (ARCH_ARM64)
     ADDINCL(
         contrib/libs/libjpeg-turbo/simd/arm
     )

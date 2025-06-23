@@ -197,9 +197,16 @@ namespace NInterconnect {
                 // create message and send it to the first hop
                 THolder<TEvLoadMessage> ev;
                 if (Params.UseProtobufWithPayload && size) {
-                    auto buffer = TRopeAlignedBuffer::Allocate(size);
-                    memset(buffer->GetBuffer(), '*', size);
-                    ev.Reset(new TEvLoadMessage(Hops, id, TRope(buffer)));
+                    if (Params.RdmaMode) {
+                        auto& allocator = ctx.ActorSystem()->GetRcBufAllocator();
+                        TRcBuf buffer = allocator(size, 0, 0);
+                        memset(buffer.GetDataMut(), '*', size);
+                        ev.Reset(new TEvLoadMessage(Hops, id, TRope(std::move(buffer))));
+                    } else {
+                        auto buffer = TRopeAlignedBuffer::Allocate(size);
+                        memset(buffer->GetBuffer(), '*', size);
+                        ev.Reset(new TEvLoadMessage(Hops, id, TRope(buffer)));
+                    }
                 } else {
                     TString payload;
                     if (size) {

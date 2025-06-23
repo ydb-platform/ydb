@@ -230,6 +230,8 @@
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/interconnect/cq_actor.h>
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 
@@ -250,6 +252,10 @@
 #include <util/generic/size_literals.h>
 
 #include <util/system/hostname.h>
+
+using NInterconnect::NRdma::CreateCqActor;
+using NInterconnect::NRdma::MakeCqActorId;
+using NInterconnect::NRdma::CreateDummyMemPool;
 
 namespace NKikimr::NKikimrServicesInitializers {
 
@@ -603,12 +609,25 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             }
 
             // create poller actor (whether platform supports it)
-            setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
+            setup->LocalServices.emplace_back(MakePollerActorId(),
+                TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
+            setup->LocalServices.emplace_back(MakeCqActorId(),
+                TActorSetupCmd(CreateCqActor(-1), TMailboxType::ReadAsFilled, interconnectPoolId));
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
             TIntrusivePtr<TInterconnectProxyCommon> icCommon;
             icCommon.Reset(new TInterconnectProxyCommon);
+            if (Config.GetInterconnectConfig().GetUseRdma()) {
+                icCommon->RdmaMemPool = CreateDummyMemPool();
+                auto pool = icCommon->RdmaMemPool;
+                setup->RcBufAllocator = std::move([pool](size_t size, size_t headRoom, size_t tailRoom) mutable {
+                    auto buf = pool->AllocRcBuf(size + headRoom + tailRoom);
+                    buf.TrimFront(size + tailRoom);
+                    buf.TrimBack(size);
+                    return buf;
+                });
+            }
             icCommon->NameserviceId = nameserviceId;
             icCommon->MonCounters = GetServiceCounters(counters, "interconnect");
             icCommon->ChannelsConfig = channels;

@@ -38,7 +38,7 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 );
 ```
 
-## Использование внешнего источника данных для S3-бакетов {#external-data-source-settings}
+## Использование внешнего источника данных для S3-бакета {#external-data-source-settings}
 
 При работе с {{ objstorage-full-name }} с помощью [внешних источников данных](../../datamodel/external_data_source.md) удобно выполнять прототипирование, первоначальную настройку подключений к данным.
 

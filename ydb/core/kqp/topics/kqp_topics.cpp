@@ -346,6 +346,8 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                     p->second.SetTabletId(partition.GetTabletId());
                 }
             }
+
+            CachedNavigateResult_[path] = result;
         } else {
             builder << "Topic '" << JoinPath(result.Path) << "' is missing";
 
@@ -362,9 +364,34 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
     return true;
 }
 
-bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topic, ui32 partitionId) const
+bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topicPath, ui32 partitionId)
 {
-    return Operations_.contains({topic, partitionId});
+    if (Operations_.contains({topicPath, partitionId})) {
+        return true;
+    }
+    if (!CachedNavigateResult_.contains(topicPath)) {
+        return false;
+    }
+
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& entry =
+        CachedNavigateResult_.at(topicPath);
+    const NKikimrSchemeOp::TPersQueueGroupDescription& description =
+        entry.PQGroupInfo->Description;
+
+    TString path = CanonizePath(entry.Path);
+    Y_ABORT_UNLESS(path == topicPath,
+                   "path=%s, topicPath=%s",
+                   path.data(), topicPath.data());
+
+    for (const auto& partition : description.GetPartitions()) {
+        if (partition.GetPartitionId() == partitionId) {
+            TTopicPartition key{topicPath, partitionId};
+            Operations_[key].SetTabletId(partition.GetTabletId());
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)

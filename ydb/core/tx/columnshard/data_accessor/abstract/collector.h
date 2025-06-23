@@ -21,7 +21,8 @@ class TCallbackWrapper: public IAccessorCallback {
     TActorId Owner;
 public:
     TCallbackWrapper(const std::shared_ptr<IAccessorCallbackWithOwner>& callback, const TActorId& owner)
-        : Callback(callback), Owner(owner) {}
+        : Callback(callback), Owner(owner)
+    {}
 
     void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override {
         Callback->OnAccessorsFetched(move(accessors), Owner);

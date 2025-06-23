@@ -33,7 +33,7 @@ class ImportFileCsvBase(UploadSuiteBase):
         if not csv_files:
             raise RuntimeError(f'No .csv files found in {import_dir}')
         import_path = os.path.join(import_dir, csv_files[0])
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
+        yatest.common.execute(['/usr/bin/time'] + YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
 
     def validate(self, result: YdbCliHelper.WorkloadRunResult):
         select_command = yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', f'SELECT COUNT (*) AS count FROM `{self.table_path}`', '--format', 'json-unicode'])

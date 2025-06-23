@@ -148,6 +148,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/services/auth
     ydb/services/backup
+    ydb/services/bridge
     ydb/services/cms
     ydb/services/config
     ydb/services/datastreams

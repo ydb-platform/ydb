@@ -204,10 +204,19 @@ int BuildAST(int argc, char* argv[]) {
     TString queryString;
     ui16 syntaxVersion;
     TString outFileNameFormat;
+    NYql::TLangVersion langVer;
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = NYql::YtProviderName;
     clusterMapping["pg_catalog"] = NYql::PgProviderName;
     clusterMapping["information_schema"] = NYql::PgProviderName;
+
+    auto langVerHandler = [&langVer](const TString& str) {
+        if (str == "unknown") {
+            langVer = NYql::UnknownLangVersion;
+        } else if (!NYql::ParseLangVersion(str, langVer)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    };
 
     THashSet<TString> flags;
 
@@ -234,6 +243,7 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
     opts.AddLongOption("test-complete", "check completion engine").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>(langVerHandler);
     opts.SetFreeArgDefaultTitle("query file");
     opts.AddHelpOption();
 
@@ -310,6 +320,7 @@ int BuildAST(int argc, char* argv[]) {
             google::protobuf::Arena arena;
             NSQLTranslation::TTranslationSettings settings;
             settings.Arena = &arena;
+            settings.LangVer = langVer;
             settings.ClusterMapping = clusterMapping;
             settings.Flags = flags;
             settings.SyntaxVersion = syntaxVersion;

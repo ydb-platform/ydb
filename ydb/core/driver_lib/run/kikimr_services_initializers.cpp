@@ -726,6 +726,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 Y_ABORT_UNLESS(!table->StaticNodeTable.empty());
             }
 
+            if (Config.HasBridgeConfig()) {
+                // when we work in Bridge mode, we need special actor to ensure connectivity check between nodes
+                const TActorId actorId = MakeDistconfConnectionCheckerActorId();
+                setup->LocalServices.emplace_back(actorId, TActorSetupCmd(CreateDistconfConnectionCheckerActor(),
+                    TMailboxType::ReadAsFilled, interconnectPoolId));
+                icCommon->ConnectionCheckerActorIds.push_back(actorId);
+            }
+
             ui32 maxNode = 0;
             for (const auto &node : table->StaticNodeTable) {
                 maxNode = Max(maxNode, node.first);

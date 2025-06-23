@@ -42,42 +42,42 @@ void SanitizeNonAscii(TString& s) {
 
 TTextWalker& TTextWalker::Advance(char c) {
     if (c == '\n') {
-        HaveCr = false;
-        ++LfCount;
+        HaveCr_ = false;
+        ++LfCount_;
         return *this;
     }
 
 
-    if (c == '\r' && !HaveCr) {
-        HaveCr = true;
+    if (c == '\r' && !HaveCr_) {
+        HaveCr_ = true;
         return *this;
     }
 
     ui32 charDistance = 1;
-    if (Utf8Aware && IsUTF8ContinuationByte(c)) {
+    if (Utf8Aware_ && IsUTF8ContinuationByte(c)) {
         charDistance = 0;
     }
 
     // either not '\r' or second '\r'
-    if (LfCount) {
-        Position.Row += LfCount;
-        Position.Column = charDistance;
-        LfCount = 0;
+    if (LfCount_) {
+        Position_.Row += LfCount_;
+        Position_.Column = charDistance;
+        LfCount_ = 0;
     } else {
-        Position.Column += charDistance + (HaveCr && c != '\r');
+        Position_.Column += charDistance + (HaveCr_ && c != '\r');
     }
-    HaveCr = (c == '\r');
+    HaveCr_ = (c == '\r');
     return *this;
 }
 
 void TIssue::PrintTo(IOutputStream& out, bool oneLine) const {
     out << Range() << ": " << SeverityToString(GetSeverity()) << ": ";
     if (oneLine) {
-        TString message = StripString(Message);
+        TString message = StripString(Message_);
         SubstGlobal(message, '\n', ' ');
         out << message;
     } else {
-        out << Message;
+        out << Message_;
     }
     if (GetCode()) {
         out << ", code: " << GetCode();

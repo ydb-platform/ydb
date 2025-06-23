@@ -624,7 +624,8 @@ public:
             const TString& srcPath,
             const TString& dstPath,
             EReplicationMode mode,
-            EConsistencyLevel consistency)
+            EConsistencyLevel consistency,
+            const TString& database)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -637,13 +638,18 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , LogPrefix("DstCreator", ReplicationId, TargetId)
+        , Database(database)
     {
     }
 
     void Bootstrap() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-            return Resolve(PathId);
+            if (Database) {
+                return DescribeSrcPath(true);
+            } else {
+                return Resolve(PathId);
+            }
         case TReplication::ETargetKind::IndexTable:
         case TReplication::ETargetKind::Transfer:
             // indexed table will be created along with its indexes
@@ -752,14 +758,14 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
 
     return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()));
+        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()), replication->GetDatabase());
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        EReplicationMode mode, EConsistencyLevel consistency)
+        EReplicationMode mode, EConsistencyLevel consistency, const TString& database)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database);
 }
 
 }

@@ -1,20 +1,18 @@
 #include "testactorsys.h"
-
-#include <library/cpp/time_provider/time_provider.h>
-#include <ydb/core/base/channel_profiles.h>
-#include <ydb/core/base/domain.h>
-#include <ydb/core/base/feature_flags.h>
-#include <ydb/core/base/nameservice.h>
+#include <ydb/core/tablet/bootstrapper.h>
+#include <ydb/core/tx/scheme_board/replica.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
-#include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/tablet/bootstrapper.h>
-#include <ydb/core/testlib/basics/helpers.h>
-#include <ydb/core/tx/scheme_board/replica.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/domain.h>
 
 #include <util/generic/singleton.h>
 
@@ -168,6 +166,13 @@ public:
         Y_ABORT();
     }
 };
+
+static TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex) {
+    char x[12] = {'s', 's', 'b'};
+    x[3] = (char)1;
+    memcpy(x + 5, &replicaIndex, sizeof(ui32));
+    return TActorId(node, TStringBuf(x, 12));
+}
 
 NTabletPipe::TClientConfig TTestActorSystem::GetPipeConfigWithRetries() {
     NTabletPipe::TClientConfig pipeConfig;

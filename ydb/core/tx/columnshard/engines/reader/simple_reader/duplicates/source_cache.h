@@ -52,12 +52,6 @@ private:
 
     THashMap<ui64, TFetchingInfo> FetchingSources;
     TLRUCache<ui64, TCacheItem, TNoopDelete, TSizeProvider> SourcesData;
-    ui64 NextRequestId = 0;
-
-private:
-    ui64 MakeNextRequestId() {
-        return NextRequestId++;
-    }
 
 public:
     void GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const TEvRequestFilter::TPtr& originalRequest);

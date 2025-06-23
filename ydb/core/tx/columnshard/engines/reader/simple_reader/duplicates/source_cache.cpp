@@ -173,12 +173,6 @@ void TSourceCache::OnFetchingResult(const NPrivate::TEvDuplicateFilterDataFetche
 
 void TSourceCache::GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const TEvRequestFilter::TPtr& originalRequest) {
     std::shared_ptr<TResponseConstructor> response = std::make_shared<TResponseConstructor>(sources, TCallback(Owner, originalRequest));
-    const ui64 requestId = MakeNextRequestId();
-    auto memroyProcessGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(requestId, {});
-    auto memoryScopeGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(requestId, 1);
-    auto conveyorProcessGuard = std::make_shared<NConveyorComposite::TProcessGuard>(
-        NConveyorComposite::TDeduplicationServiceOperator::StartProcess(requestId, NConveyorComposite::TCPULimitsConfig()));
-
     ui64 cacheHits = 0;
     for (const auto& source : sources) {
         const ui64 sourceId = source->GetPortionId();
@@ -196,11 +190,8 @@ void TSourceCache::GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo
         }
 
         findFetching->AddCallback(response);
-        // std::shared_ptr<TColumnFetchingContext> fetchingContext =
-        //     std::make_shared<TColumnFetchingContext>(FetchingContext, source, findFetching->GetStatus(), processGuard);
-        // TColumnFetchingContext::StartAllocation(fetchingContext);
 
-        NOlap::NDataFetcher::TRequestInput rInput({ source }, SchemaIndex, NOlap::NBlobOperations::EConsumer::DUPLICATE_FILTERING, "" /*TODO*/);
+        NOlap::NDataFetcher::TRequestInput rInput({ source }, SchemaIndex, NOlap::NBlobOperations::EConsumer::DUPLICATE_FILTERING, originalRequest->Get()->GetExternalTaskId());
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
             std::make_shared<TFetchingExecutor>(Owner, ResultSchema, originalRequest, sourceId), FetchingEnvironment,
             NConveyorComposite::ESpecialTaskCategory::Scan);

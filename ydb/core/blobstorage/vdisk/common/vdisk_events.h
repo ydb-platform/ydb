@@ -2725,7 +2725,8 @@ namespace NKikimr {
         TEvVAssimilate() = default;
 
         TEvVAssimilate(const TVDiskID& vdiskId, std::optional<ui64> skipBlocksUpTo,
-                std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo, std::optional<TLogoBlobID> skipBlobsUpTo) {
+                std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo, std::optional<TLogoBlobID> skipBlobsUpTo,
+                bool ignoreDecommitState, bool reverse) {
             VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
             if (skipBlocksUpTo) {
                 Record.SetSkipBlocksUpTo(*skipBlocksUpTo);
@@ -2737,6 +2738,12 @@ namespace NKikimr {
             }
             if (skipBlobsUpTo) {
                 LogoBlobIDFromLogoBlobID(*skipBlobsUpTo, Record.MutableSkipBlobsUpTo());
+            }
+            if (ignoreDecommitState) {
+                Record.SetIgnoreDecommitState(ignoreDecommitState);
+            }
+            if (reverse) {
+                Record.SetReverse(reverse);
             }
         }
     };

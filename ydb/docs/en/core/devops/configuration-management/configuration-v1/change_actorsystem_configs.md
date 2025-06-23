@@ -1,24 +1,22 @@
 # Changing Actor System Configuration
 
-{% include [deprecated](_includes/deprecated.md) %}
+An actor system is the basis of {{ ydb-short-name }}. Each component of the system is represented by one or more actors.
+Each actor is allocated to a specific ExecutorPool corresponding to the actor's task.
+Changing the configuration lets you more accurately distribute the number of cores reserved for each type of task.
 
-The actor system is the foundation of {{ ydb-short-name }} as most of system components are represented by one or more actors.
-Each actor is distributed to a specific ExecutorPool corresponding to the actor's task.
-Changing the configuration helps more precisely distribute the number of reserved cores for each type of task.
+## Actor System Config Description
 
-## Actor System Configuration Description
+The actor system configuration contains an enumeration of ExecutorPools, their mapping to task types, and the actor system scheduler configurations.
 
-The actor system configuration consists of an enumeration of ExecutorPools, mapping ExecutorPools to task types, and actor system scheduler configurations.
+The following task types and their respective pools are currently supported:
 
-Currently, there are the following task types and their corresponding pools:
+* System: Designed to perform fast internal {{ ydb-short-name }} operations.
+* User: Includes the entire user load for handling and executing incoming requests.
+* Batch: Tasks that have no strict limit on the execution time, mainly running background operations.
+* IO: Responsible for performing any tasks with blocking operations (for example, writing logs to a file).
+* IC: Interconnect, includes all the load associated with communication between nodes.
 
-* System - designed for executing fast internal {{ ydb-short-name }} operations;
-* User - includes all user load for processing and executing incoming requests;
-* Batch - tasks that do not have strict execution time limits, mainly executing background operations;
-* IO - responsible for executing all tasks with blocking operations (such as writing logs to a file);
-* IC - Interconnect, includes all load related to communication between nodes.
-
-Each pool is described by an Executor field, as in the example below.
+Each pool is described by the Executor field as shown in the example below.
 
 ```proto
 Executor {
@@ -29,21 +27,21 @@ Executor {
 }
 ```
 
-Description of main fields:
+A summary of the main fields:
 
-* **Type** - currently can have two types: **BASIC** and **IO**. All pools except **IO** have type **BASIC**;
-* **Threads** - number of threads (number of actors working in parallel) in this pool;
-* **SpinThreshold** - number of processor cycles before going to sleep when there are no tasks, which the thread executing actor work will perform (affects CPU consumption and request latency during light load);
-* **Name** - pool name that will be displayed in node monitoring.
+* **Type**: Currently, two types are supported, such as **BASIC** and **IO**. All pools, except **IO**, are of the **BASIC** type.
+* **Threads**: The number of threads (concurrently running actors) in this pool.
+* **SpinThreshold**: The number of CPU cycles before going to sleep if there are no tasks, which a thread running as an actor will take (affects the CPU usage and request latency under low loads).
+* **Name**: The pool name to be displayed for the node in Monitoring.
 
-Pool mapping to task types is done by setting the pool's ordinal number in special fields. Pools are numbered from zero, and multiple task types can be assigned to one pool.
+Mapping pools to task types is done by setting the pool sequence number in special fields. Pool numbering starts from 0. Multiple task types can be set for a single pool.
 
-List of fields with their tasks:
+List of fields with their respective tasks:
 
-* **SysExecutor** - System
-* **UserExecutor** - User
-* **BatchExecutor** - Batch
-* **IoExecutor** - IO
+* **SysExecutor**: System
+* **UserExecutor**: User
+* **BatchExecutor**: Batch
+* **IoExecutor**: IO
 
 Example:
 
@@ -54,7 +52,7 @@ BatchExecutor: 2
 IoExecutor: 3
 ```
 
-The IC pool is set differently, through ServiceExecutor, as in the example below.
+The IC pool is set in a different way, via ServiceExecutor, as shown in the example below.
 
 ```proto
 ServiceExecutor {
@@ -63,17 +61,17 @@ ServiceExecutor {
 }
 ```
 
-The actor system scheduler is responsible for delivering delayed messages between actors and is set by the following parameters:
+The actor system scheduler is responsible for the delivery of deferred messages exchanged by actors and is set with the following parameters:
 
-* **Resolution** - minimum time offset step in microseconds;
-* **SpinThreshold** - similar to the pool parameter, number of processor cycles before going to sleep when there are no messages;
-* **ProgressThreshold** - maximum time offset step in microseconds.
+* **Resolution**: The minimum time offset step in microseconds.
+* **SpinThreshold**: Similar to the pool parameter, the number of CPU cycles before going to sleep if there are no messages.
+* **ProgressThreshold**: The maximum time offset step in microseconds.
 
-If for unknown reasons the scheduler thread gets stuck, it will send messages according to lagging time, shifting it each time by **ProgressThreshold**.
+If, for an unknown reason, the scheduler thread is stuck, it will send messages according to the lagging time, offsetting it by the **ProgressThreshold** value each time.
 
-It is not recommended to change the scheduler configuration. In pool configurations, it is recommended to change only the number of threads.
+We do not recommend changing the scheduler config. You should only change the number of threads in the pool configs.
 
-Example of default actor system configuration:
+Example of the default actor system configuration:
 
 ```proto
 Executor {
@@ -118,13 +116,13 @@ ServiceExecutor {
 
 ## On Static Nodes
 
-Static nodes take actor system configuration from the file `/opt/ydb/cfg/config.yaml`.
+Static nodes take the configuration of the actor system from the `/opt/ydb/cfg/config.yaml` file.
 
-After replacing the configuration, the node needs to be restarted.
+After changing the configuration, restart the node.
 
 ## On Dynamic Nodes
 
-Dynamic nodes take configuration from [CMS](cms.md). To change it, you can use the following command:
+Dynamic nodes take the configuration from the [CMS](cms.md). To change it, you can use the following command:
 
 ```proto
 ConfigureRequest {
@@ -134,7 +132,7 @@ ConfigureRequest {
         // UsageScope: { ... }
         Config {
           ActorSystemConfig {
-            <actor system configuration>
+            <actor system config>
           }
         }
         MergeStrategy: 3
@@ -142,6 +140,7 @@ ConfigureRequest {
     }
   }
 }
+```
 
 ```bash
 ydbd -s <endpoint> admin console execute --domain=<domain> --retry=10 actorsystem.txt

@@ -12,6 +12,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -19,6 +20,11 @@ namespace NKikimr::NTxUT {
 
 using namespace NColumnShard;
 using namespace Tests;
+
+void SetupSharedMetadataAccessorCacheService(TTestActorRuntime& runtime, ui32 nodeIndex) {
+    runtime.AddLocalService(NKikimr::NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(runtime.GetNodeId(nodeIndex)),
+            TActorSetupCmd(NKikimr::NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor(), TMailboxType::HTSwap, 0), nodeIndex);
+}
 
 void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
@@ -46,6 +52,9 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        SetupSharedMetadataAccessorCacheService(runtime, nodeIndex);
+    }
     SetupTabletServices(runtime, &app);
 
     runtime.UpdateCurrentTime(TInstant::Now());
@@ -543,7 +552,7 @@ namespace NKikimr::NColumnShard {
              Y_UNUSED(f);
              fields.emplace_back(idx++);
          }
- 
+
          NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
          reader.SetReplyColumnIds(fields);
          auto rb = reader.ReadAll();

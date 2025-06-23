@@ -11,6 +11,9 @@ private:
         THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) override;
     virtual TDataCategorized DoAnalyzeData(const TPortionsByConsumer& portions) override;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) override;
+    virtual void DoSetCache(std::shared_ptr<TSharedMetadataAccessorCache>) override;
+    virtual void DoSetOwner(const TActorId&) override;
+
 
 public:
     TCollector(const TInternalPathId pathId)

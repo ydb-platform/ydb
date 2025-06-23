@@ -37,7 +37,7 @@ items:
       href: table-ttl-reset.md
     - name: Удаление таблицы
       href: table-drop.md
-    - name: Получение текста CREATE TABLE из файла
+    - name: Генерация скрипта создания таблицы
       href: tools-infer.md
   - name: Работа с данными
     items:

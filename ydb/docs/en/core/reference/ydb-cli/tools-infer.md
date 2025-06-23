@@ -81,7 +81,7 @@ cat ~/data_no_header.csv
 {{ ydb-cli }} tools infer csv -p newtable ~/data_no_header.csv --columns my_key,my_value
 CREATE TABLE newtable (
     my_key Int64,
-    my_value Utf8,
+    my_value Text,
     PRIMARY KEY (my_key)
 )
 WITH (

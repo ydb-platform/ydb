@@ -30,11 +30,9 @@ public:
                         if (!nodeInfo) {
                             continue;
                         }
-                        for (const auto& [state, tablets] : nodeInfo->Tablets) {
-                            if (IsAliveState(state)) {
-                                TabletsToRestart.reserve(TabletsToRestart.size() + tablets.size());
-                                TabletsToRestart.insert(TabletsToRestart.end(), tablets.begin(), tablets.end());
-                            }
+                        for (const auto& [_, tablets] : nodeInfo->Tablets) {
+                            TabletsToRestart.reserve(TabletsToRestart.size() + tablets.size());
+                            TabletsToRestart.insert(TabletsToRestart.end(), tablets.begin(), tablets.end());
                         }
                     }
                 }
@@ -47,18 +45,19 @@ public:
                 NIceDb::TUpdate<Schema::BridgePile::IsPrimary>(pileInfo.IsPrimary),
                 NIceDb::TUpdate<Schema::BridgePile::IsPromoted>(pileInfo.IsPromoted)
             );
+        }
 
-            for (auto* tablet : TabletsToRestart) {
-                tablet->BecomeStopped();
-                if (tablet->IsReadyToBoot()) {
-                    tablet->InitiateBoot();
-                }
+        for (auto* tablet : TabletsToRestart) {
+            tablet->BecomeStopped();
+            if (tablet->IsReadyToBoot()) {
+                tablet->InitiateBoot();
             }
         }
         return true;
     }
 
     void Complete(const TActorContext&) override {
+        BLOG_D("THive::TTxUpdatePiles()::Complete");
     }
 
 };

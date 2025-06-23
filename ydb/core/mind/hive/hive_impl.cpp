@@ -3619,7 +3619,9 @@ void THive::HandleInit(TEvNodeWardenStorageConfig::TPtr& ev) {
 void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
     BLOG_D("Handle TEvNodeWardenStorageConfig");
     BridgeInfo = ev->Get()->BridgeInfo;
-    UpdatePiles();
+    if (BridgeInfo) {
+        UpdatePiles();
+    }
 }
 
 void THive::MakeScaleRecommendation() {

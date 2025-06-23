@@ -22,6 +22,7 @@ FROM
     objectstorage.'/'
 WITH
 (
+    FORMAT = "csv_with_names",
     SCHEMA =
     (
         data String,
@@ -30,8 +31,7 @@ WITH
     )
 )
 WHERE
-    year=2021
-    AND month=02
+    year=2021 AND month=02
 ```
 
 Если схема партицирования данных не указана, то из S3 ({{ objstorage-full-name }}) будут считаны *все* хранимые данные, но в результате обработки данные за все другие даты будут отброшены.
@@ -45,46 +45,54 @@ FROM
     objectstorage.'/'
 WITH
 (
+    FORMAT = "csv_with_names",
     SCHEMA =
     (
         data String,
-        year Int32,
-        month Int32
+        year Int32 NOT NULL,
+        month Int32 NOT NULL
     ),
-    PARTITIONED_BY = "['year', 'month']"
+    PARTITIONED_BY = (year, month)
 )
 WHERE
-    year=2021
-    AND month=02
+    year=2021 AND month=02
 ```
 
 то в процессе исполнения запроса из S3 ({{ objstorage-full-name }}) будут считаны не все данные, а только данные за февраль 2021-го года, что существенно сократит объем обрабатываемых данных и ускорит обработку, при этом результаты обоих запросов будут идентичны.
 
 {% note info %}
 
-В примере выше показана работа с данными на уровне [соединений](../../datamodel/external_data_source.md). Такой пример выбран только для иллюстративных целей. Мы настоятельно рекомендуем для работы с данными использовать "привязки к данным" и не использовать прямую работу с соединениями.
+В примере выше показана работа с данными на уровне [внешних источников данных](../../datamodel/external_data_source.md). Такой пример выбран только для иллюстративных целей. Мы настоятельно рекомендуем для работы с данными использовать [внешние таблицы](../../datamodel/external_table.md) и не использовать прямую работу с внешними источниками.
 
 {% endnote %}
 
-## Синтаксис { #syntax }
+## Синтаксис для внешних источников данных { #syntax-external-data-source }
 
-При работе на уровне соединений партицирование задается с помощью параметра `partitioned_by`, где в JSON-формате задается список колонок.
+При работе на уровне [внешних источников данных](../../datamodel/external_data_source.md) партицирование задается с помощью параметра `partitioned_by`, где в круглых скобках задается список колонок.
 
 ```yql
 SELECT
     *
 FROM
-    <connection>.<path>
+    <object_storage_external_source_name>.<path>
 WITH
 (
-    SCHEMA=(<field1>, <field2>, <field3>),
-    PARTITIONED_BY="['field2', 'field3']"
+    SCHEMA =
+    (
+        <field1> <type1>,
+        <field2> <type2> NOT NULL,
+        <field3> <type3> NOT NULL
+    ),
+    PARTITIONED_BY = (<field2>, <field3>),
+    <format_settings>
 )
+WHERE
+    <filter>
 ```
 
-В параметре `partitioned_by` перечисляются колонки схемы данных, по которым партицированы хранимые в S3 ({{ objstorage-full-name }}) данные. Порядок указания полей в параметре partitioned_by определяет вложенность каталогов S3 ({{objstorage-full-name}}) друг в друга.
+В параметре `partitioned_by` перечисляются колонки схемы данных, по которым партицированы хранимые в S3 ({{ objstorage-full-name }}) данные. Порядок указания полей в параметре partitioned_by определяет вложенность каталогов S3 ({{objstorage-full-name}}) друг в друга. При этом запрещено указывать в схеме запроса только колонки партицирования.
 
-Например, `PARTITIONED_BY=['year', 'month']` определяет структуру каталогов
+Например, `PARTITIONED_BY=(year, month)` определяет структуру каталогов
 
 ```text
 year=2021
@@ -95,7 +103,7 @@ year=2022
     month=01
 ```
 
-А `partitioned_by=['month', 'year']` определяет другую структуру каталогов
+А `PARTITIONED_BY=(month, year)` определяет другую структуру каталогов
 
 ```text
 month=01
@@ -107,15 +115,61 @@ month=03
     year=2021
 ```
 
+## Синтаксис для внешних таблиц { #syntax-external-table }
+
+Рекомендованным способом работы с партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md), для них в параметре `partitioned_by` задаётся список колонок в JSON формате при создании таблицы:
+
+```yql
+CREATE EXTERNAL TABLE `objectstorage_data` (
+    data String,
+    year Int32 NOT NULL,
+    month Int32 NOT NULL
+) WITH (
+    DATA_SOURCE = "objectstorage",
+    LOCATION = "/",
+    FORMAT = "csv_with_names",
+    PARTITIONED_BY = "['year', 'month']"
+);
+```
+
+Далее вы можете читать из таблицы `objectstorage_data`, с возможностью быстрой фильтрации по колонкам `year` и `month`:
+
+```yql
+SELECT
+    *
+FROM
+    `objectstorage_data`
+WHERE
+    year=2021 AND month=02
+```
+
+В общем виде синтакис создания внешних таблиц с настройками партицирования выглядит следующим образом:
+
+```yql
+CREATE EXTERNAL TABLE <external_table> (
+    <field1> <type1>,
+    <field2> <type2> NOT NULL,
+    <field3> <type3> NOT NULL
+) WITH (
+    DATA_SOURCE = "<object_storage_external_source_name>",
+    LOCATION = "<path>",
+    PARTITIONED_BY = "['<field2>', '<field3>']",
+    <format_settings>
+);
+```
+
+Запрещено создавать таблицу, схема которой состоит только из колонок партицирования.
+
 ## Поддерживаемые типы данных
 
 Партицирование возможно только по следующему набору типов данных YQL:
 
-- Uint16, Uint32, Uint64
-- Int16, Int32, Int64
-- String, Utf8
+- `Uint32`, `Uint64`
+- `Int32`, `Int64`
+- `String`, `Utf8`
+- `Date`, `Datetime`
 
-При использовании других типов для указания партицирования возвращается ошибка.
+При использовании других типов для указания партицирования возвращается ошибка. Колонки партицирования должны быть отмечены как `NOT NULL`.
 
 ## Поддерживаемые форматы путей хранения
 

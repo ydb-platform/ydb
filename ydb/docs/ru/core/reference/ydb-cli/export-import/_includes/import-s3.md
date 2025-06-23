@@ -6,6 +6,12 @@
 {{ ydb-cli }} [connection options] import s3 [options]
 ```
 
+{% note warning %}
+
+Импорт таблиц из S3 с использованием [внешних таблиц](../../../../concepts/datamodel/external_table.md) описан в статье [{#T}](../../../../concepts/federated_query/s3/external_table.md#import-from-s3).
+
+{% endnote %}
+
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 В отличие от [команды `tools restore`](../tools-restore.md), команда `import s3` всегда создает объекты целиком, поэтому для её успешного выполнения ни один из загружаемых объектов (ни директорий, ни таблиц) не должен существовать.

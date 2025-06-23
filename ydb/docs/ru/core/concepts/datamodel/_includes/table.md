@@ -193,6 +193,13 @@ CREATE TABLE article (
 
 О том, как добавить, изменить, получить текущие значения или удалить атрибуты читайте в статье [{#T}](../../../dev/custom-attributes.md).
 
+### Импорт и экспорт данных в S3
+
+{{ ydb-short-name }} поддерживает импорт и экспорт данных из строковых таблиц в объектное хранилище S3 с использованием YDB CLI.
+
+Подробнее см. в статьях [{#T}](../../../reference/ydb-cli/export-import/import-s3.md) и [{#T}](../../../reference/ydb-cli/export-import/export-s3.md).
+
+
 ## Колоночные таблицы {#column-oriented-tables}
 
 {% note warning %}
@@ -260,26 +267,8 @@ AUTO_PARTITIONING_MIN_PARTITIONS_COUNT определяет минимально
 
 С учетом, что остальные параметры партицирования игнорируются, это же значение определяет и верхнее число партиций.
 
-### Импорт и экспорт данных между колоночными таблицами и S3
+### Импорт и экспорт данных в S3
 
 {{ ydb-short-name }} поддерживает экспорт данных из колоночных таблиц в объектное хранилище S3, а также импорт из S3 в новые колоночные таблицы с помощью SQL-запросов. Это позволяет быстро переносить большие объемы данных между хранилищами и {{ ydb-short-name }}.
 
-Пример запроса для экспорта данных:
-
-```yql
-INSERT INTO s3_external_table SELECT * FROM article_column_table
-```
-
-Подробнее см. в статье [{#T}](../../federated_query/s3/write_data.md#export-from-olap-to-s3).
-
-Пример запроса для импорта данных:
-
-```yql
-CREATE TABLE article_column_table (
-    PRIMARY KEY (id)
-)
-WITH (STORE = COLUMN)
-AS SELECT * FROM s3_external_table
-```
-
-Подробнее см. в статье [{#T}](../../federated_query/s3/external_table.md#import-from-s3-to-olap).
+Подробнее см. в статьях [{#T}](../../federated_query/s3/external_table.md#import-from-s3-to-olap) и [{#T}](../../federated_query/s3/write_data.md#export-from-olap-to-s3).

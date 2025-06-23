@@ -27,87 +27,167 @@ FROM
     objectstorage.'/'
 WITH
 (
+    FORMAT = "csv_with_names",
     SCHEMA =
     (
         data String,
-        year Int32,
-        month Int32
+        year Int32 NOT NULL,
+        month Int32 NOT NULL
     ),
-    PARTITIONED_BY = "['year', 'month']"
+    PARTITIONED_BY = (year, month)
 )
 WHERE
-    year=2021
-    AND month=02
+    year=2021 AND month=02
 ```
 
 То есть при работе с партицированными данными выполняется полный листинг содержимого S3 ({{objstorage-full-name}}), что может занимать продолжительное время на бакетах большого размера.
 
 Для оптимизации работы на больших объемах данных следует использовать "расширенное партицирование". В этом режиме не происходит сканирования каталогов S3 ({{ objstorage-full-name }}), вместо этого все пути вычисляются заранее и обращение происходит только к ним.
 
-Для работы расширенного партицирования необходимо задать правила работы через специальный параметр - "projection". В этом параметре описываются все правила размещения данных в каталога S3 ({{ objstorage-full-name}}).
+Для работы расширенного партицирования необходимо задать правила работы через специальный параметр - "projection". В этом параметре описываются все правила размещения данных в каталогах S3 ({{ objstorage-full-name}}).
 
-## Синтаксис { #syntax }
+## Синтаксис для внешних источников данных { #syntax-external-data-source }
 
-Расширенное партицирование называется "partition projection" и задается через параметр `projection`.
+Расширенное партицирование называется "partition projection" и на уровне [внешних источников данных](../../datamodel/external_data_source.md) задается через параметр `projection` в формате JSON.
 
 Пример указания расширенного партицирования:
 
 ```yql
-
 SELECT
     *
 FROM
-    <connection>.`/`
+    objectstorage.`/`
 WITH
 (
+    FORMAT = "csv_with_names",
     SCHEMA =
     (
         data String,
-        year Int32,
-        month Int32
+        year Int32 NOT NULL,
+        month Int32 NOT NULL
     ),
-    PARTITIONED_BY = "['year', 'month']",
-    `projection.enabled` : "true",
+    PARTITIONED_BY = (year, month),
+    PROJECTION = @@ {
+        "projection.enabled": "true",
 
-    `projection.year.type` : "integer",
-    `projection.year.min` : "2010",
-    `projection.year.max` : "2022",
-    `projection.year.interval` : "1",
+        "projection.year.type": "integer",
+        "projection.year.min": "2010",
+        "projection.year.max": "2022",
+        "projection.year.interval": "1",
 
-    `projection.month.type` : "integer",
-    `projection.month.min` : "1",
-    `projection.month.max` : "12",
-    `projection.month.interval` : "1",
-    `projection.month.digits` : "2",
+        "projection.month.type": "integer",
+        "projection.month.min": "1",
+        "projection.month.max": "12",
+        "projection.month.interval": "1",
+        "projection.month.digits": "2",
 
-    `storage.location.template` : "${year}/${month}"
+        "storage.location.template": "${year}/${month}"
+    } @@
 )
+WHERE
+    year=2021 AND month=02
 ```
 
 В примере выше указывается, что данные существуют за каждый год и каждый месяц с 2010 по 2022 годы, при этом в бакете данные размещены в каталогах вида `2022/12`. Если данные за какой-то период отсутствуют внутри бакета, то это не приводит к ошибкам, запрос выполнится успешно, а данные будут пропущены в расчетах.
 
-В общем виде настройка расширенного партицирования выглядит следующим образом:
+В общем виде настройка расширенного партицирования для [внешних источников данных](../../datamodel/external_data_source.md) выглядит следующим образом:
 
 ```yql
 SELECT
     *
 FROM
-    <connection>.<path>
+    <object_storage_external_source_name>.<path>
 WITH
 (
-    SCHEMA = (<fields>, <field1>, <field2>),
-    PARTITIONED_BY = "'['field1', 'field2']",
-    `projection.enabled` : <"true"|"false">,
+    SCHEMA =
+    (
+        <field1> <type1>,
+        <field2> <type2> NOT NULL,
+        <field3> <type3> NOT NULL
+    ),
+    PARTITIONED_BY = (field2, field3),
+    PROJECTION = @@ {
+        "projection.enabled": <"true"|"false">,
 
-    `projection.<field1_name>.type` : "<type>",
-    `projection.<field1_name>....` : "<extended_properties>",
+        "projection.<field2>.type": "<type>",
+        "projection.<field2>....": "<extended_properties>",
 
-    `projection.<field2_name>.type` : "<type>",
-    `projection.<field2_name>....` : "<extended_properties>",
+        "projection.<field3>.type": "<type>",
+        "projection.<field3>....": "<extended_properties>",
 
-    `storage.location.template` : ".../${field2}/${field1}/..."
-
+        "storage.location.template": ".../${<field3>}/${<field2>}/..."
+    } @@,
+    <format_settings>
 )
+WHERE
+    <filter>
+```
+
+## Синтаксис для внешних таблиц { #syntax-external-table }
+
+Рекомендованным способом работы с расширенным партицированием данных является использование [внешних таблиц](../../datamodel/external_table.md), для них нужно перечислить список настроек "partition projection" при создании таблицы:
+
+```yql
+CREATE EXTERNAL TABLE `objectstorage_data` (
+    data String,
+    year Int32 NOT NULL,
+    month Int32 NOT NULL
+) WITH (
+    DATA_SOURCE = "objectstorage",
+    LOCATION = "/",
+    FORMAT = "csv_with_names",
+    PARTITIONED_BY = "['year', 'month']",
+    `projection.enabled` = "true",
+
+    `projection.year.type` = "integer",
+    `projection.year.min` = "2010",
+    `projection.year.max` = "2022",
+    `projection.year.interval` = "1",
+
+    `projection.month.type` = "integer",
+    `projection.month.min` = "1",
+    `projection.month.max` = "12",
+    `projection.month.interval` = "1",
+    `projection.month.digits` = "2",
+
+    `storage.location.template` = "${year}/${month}"
+);
+```
+
+Приведённая внешняя таблица задаёт расширенное партицирование также, как внешний источник данных, описанный [выше](#syntax-external-data-source). Далее вы можете читать данные таблицы `objectstorage_data` с фильтрациеё по колонкам `year` и `month`, аналогично случаю с [обычным партицированием](partitioning.md#syntax-external-table):
+
+```yql
+SELECT
+    *
+FROM
+    `objectstorage_data`
+WHERE
+    year=2021 AND month=02
+```
+
+В общем виде синтакис создания внешних таблиц с настройками расширенного партицирования выглядит следующим образом:
+
+```yql
+CREATE EXTERNAL TABLE <external_table> (
+    <field1> <type1>,
+    <field2> <type2> NOT NULL,
+    <field3> <type3> NOT NULL
+) WITH (
+    DATA_SOURCE = "<object_storage_external_source_name>",
+    LOCATION = "<path>",
+    PARTITIONED_BY = "['<field2>', '<field3>']",
+    `projection.enabled` = <"true"|"false">,
+
+    `projection.<field2>.type` = "<type>",
+    `projection.<field2>....` = "<extended_properties>",
+
+    `projection.<field3>.type` = "<type>",
+    `projection.<field3>....` = "<extended_properties>",
+
+    `storage.location.template` = ".../${<field3>}/${<field2>}/...",
+
+    <format_settings>
+);
 ```
 
 ## Описание полей { #field_types }
@@ -146,7 +226,7 @@ WITH
 |Название поля|Обязательное|Описание поля|Пример значений|
 |----|----|----|----|
 |`projection.<field_name>.type`|Да|Тип данных поля|date|
-|`projection.<field_name>.min`|Да|Определяет минимально допустимую дату. Разрешены значения в формате `YYYY-MM-DD` или в виде выражения, содержащего специальную макроподстановку NOW| |
+|`projection.<field_name>.min`|Да|Определяет минимально допустимую дату. Разрешены значения в формате `YYYY-MM-DD` или в виде выражения, содержащего специальную макроподстановку NOW|2018-01-01<br/>NOW-10DAYS<br/>NOW-3HOURS|
 |`projection.<field_name>.max`|Да|Определяет максимально допустимую дату. Разрешены значения в формате `YYYY-MM-DD` или в виде выражения, содержащего специальную макроподстановку NOW|2020-01-01<br/>NOW-5DAYS<br/>NOW+3HOURS|
 |`projection.<field_name>.format`|Да|Строка форматирования даты на основе [strptime](https://cplusplus.com/reference/ctime/strftime/)|%Y-%m-%d<br/>%D|
 |`projection.<field_name>.unit`|Нет, по умолчанию `DAYS`|Единицы измерения интервалов времени. Допустимые значения: `YEARS`, `MONTHS`, `WEEKS`, `DAYS`, `HOURS`, `MINUTES`, `SECONDS`, `MILLISECONDS`|SECONDS<br/>YEARS|

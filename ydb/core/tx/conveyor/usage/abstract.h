@@ -55,12 +55,6 @@ public:
 
     void Finish();
 
-    TProcessGuard(TProcessGuard&& other)
-        : ProcessId(other.ProcessId)
-        , ServiceActorId(other.ServiceActorId) {
-        other.Finished = true;
-    }
-
     ~TProcessGuard() {
         if (!Finished) {
             Finish();

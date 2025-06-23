@@ -84,15 +84,4 @@ public:
     }
 };
 
-class TDeduplicationServiceOperator {
-public:
-    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 internalProcessId) {
-        return TServiceOperator::SendTaskToExecute(task, ESpecialTaskCategory::Deduplication, internalProcessId);
-    }
-
-    static TProcessGuard StartProcess(const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits) {
-        return TServiceOperator::StartProcess(ESpecialTaskCategory::Deduplication, "", externalProcessId, cpuLimits);
-    }
-};
-
 }   // namespace NKikimr::NConveyorComposite

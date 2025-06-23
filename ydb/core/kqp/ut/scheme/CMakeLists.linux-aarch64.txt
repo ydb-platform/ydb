@@ -54,8 +54,9 @@ target_link_options(ydb-core-kqp-ut-scheme PRIVATE
 
 target_sources(ydb-core-kqp-ut-scheme PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/scheme/kqp_acl_ut.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/scheme/kqp_scheme_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/scheme/kqp_constraints_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/scheme/kqp_scheme_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/scheme/kqp_secrets_ut.cpp
 )
 
 

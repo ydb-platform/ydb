@@ -100,7 +100,7 @@ public:
 class IGranuleDataAccessor {
 public:
     struct TMetadataSizeProvider {
-        size_t operator()(const TPortionDataAccessor& data) {
+        size_t operator()(const TPortionDataAccessor& data) const {
             return data.GetMetadataSize();
         }
     };

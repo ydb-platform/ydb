@@ -4667,8 +4667,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         );
                         buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
                         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {
-                            buildInfo.NewClusters->InitAggregatedClusters();
-                            buildInfo.NewClusters->SetRound(buildInfo.KMeans.Round);
+                            buildInfo.Clusters->SetRound(buildInfo.KMeans.Round);
                         }
                     });
 
@@ -4714,25 +4713,52 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     return false;
                 }
 
+                TVector<TString> clusters;
+                TVector<ui32> sizes, oldSizes;
+                TIndexBuildId lastId;
                 size_t clusterCount = 0;
+                auto fill = [&]() {
+                    if (!clusters.size()) {
+                        return;
+                    }
+                    fillBuildInfoByIdSafe(lastId, "KMeansTreeClusters", [&](TIndexBuildInfo& buildInfo) {
+                        Y_ENSURE(clusters.size() <= buildInfo.KMeans.K);
+                        bool ok = buildInfo.Clusters->SetClusters(std::move(clusters));
+                        Y_ENSURE(ok);
+                        const auto & clusters = buildInfo.Clusters->GetClusters();
+                        for (size_t i = 0; i < clusters.size(); i++) {
+                            buildInfo.Clusters->AggregateToCluster(i, clusters[i], sizes[i]);
+                            buildInfo.Clusters->SetClusterSize(i, oldSizes[i]);
+                        }
+                    });
+                    clusters.clear();
+                    sizes.clear();
+                    oldSizes.clear();
+                };
                 while (!rowset.EndOfSet()) {
                     TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeClusters::Id>();
-                    fillBuildInfoByIdSafe(id, "KMeansTreeClusters", [&](TIndexBuildInfo& buildInfo) {
-                        auto num = rowset.GetValue<Schema::KMeansTreeClusters::Row>();
-                        auto data = rowset.GetValue<Schema::KMeansTreeClusters::Data>();
-                        auto size = rowset.GetValue<Schema::KMeansTreeClusters::Size>();
-                        auto oldSize = rowset.GetValue<Schema::KMeansTreeClusters::OldSize>();
-                        Y_ENSURE(num < buildInfo.KMeans.K);
-                        if (data.size()) {
-                            buildInfo.NewClusters->AddAggregatedCluster(num, data, size);
-                        }
-                        buildInfo.NewClusters->SetOldClusterSize(num, oldSize);
-                    });
+                    if (id != lastId) {
+                        fill();
+                        lastId = id;
+                    }
+                    auto num = rowset.GetValue<Schema::KMeansTreeClusters::Row>();
+                    auto data = rowset.GetValue<Schema::KMeansTreeClusters::Data>();
+                    auto size = rowset.GetValue<Schema::KMeansTreeClusters::Size>();
+                    auto oldSize = rowset.GetValue<Schema::KMeansTreeClusters::OldSize>();
+                    if (clusters.size() <= num) {
+                        clusters.resize(num+1);
+                        sizes.resize(num+1);
+                        oldSizes.resize(num+1);
+                    }
+                    clusters[num] = data;
+                    sizes[num] = size;
+                    oldSizes[num] = oldSize;
                     clusterCount++;
                     if (!rowset.Next()) {
                         return false;
                     }
                 }
+                fill();
 
                 LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                              "KMeansTreeCluster records: " << clusterCount

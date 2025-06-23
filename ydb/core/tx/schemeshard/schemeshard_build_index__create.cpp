@@ -247,11 +247,10 @@ private:
             buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
             buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
             buildInfo.KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
-            buildInfo.NewClusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), explain);
-            if (!buildInfo.NewClusters) {
+            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
+            if (!buildInfo.Clusters) {
                 return false;
             }
-            buildInfo.NewClusters->Init(buildInfo.KMeans.K, buildInfo.KMeans.Rounds);
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:

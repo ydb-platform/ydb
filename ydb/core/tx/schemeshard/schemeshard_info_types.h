@@ -3162,6 +3162,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 << "State = " << State
                 << ", Level = " << Level << " / " << Levels
                 << ", K = " << K
+                << ", Round = " << Round
                 << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
                 << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
                 << ", TableSize = " << TableSize
@@ -3472,7 +3473,7 @@ public:
     };
     TSample Sample;
 
-    std::unique_ptr<NKikimr::NKMeans::IClusters> NewClusters;
+    std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
 
     TString DebugString() const {
         auto result = TStringBuilder() << BuildKind;
@@ -3481,7 +3482,8 @@ public:
             result << " "
                 << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
-                << ", Sample = " << Sample.State << " }, "
+                << ", Sample = " << Sample.State
+                << ", Clusters = " << Clusters->GetClusters().size() << " }, "
                 << "{ Done = " << DoneShards.size()
                 << ", ToUpload = " << ToUploadShards.size()
                 << ", InProgress = " << InProgressShards.size() << " }";
@@ -3674,9 +3676,8 @@ public:
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
                     indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
                     TString createError;
-                    indexInfo->NewClusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), createError);
-                    Y_ENSURE(indexInfo->NewClusters && createError == "");
-                    indexInfo->NewClusters->Init(indexInfo->KMeans.K, indexInfo->KMeans.Rounds);
+                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
+                    Y_ENSURE(indexInfo->Clusters && createError == "");
                     indexInfo->SpecializedIndexDescription = std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:

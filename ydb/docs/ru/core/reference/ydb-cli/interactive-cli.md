@@ -11,6 +11,7 @@
 * `global options` — [глобальные параметры](commands/global-options.md).
 
 ## Возможности {#features}
+
 * [История запросов](#query-history).
 * Подсветка синтаксиса на основе грамматики YQL.
 * [Горячие клавиши](#hotkeys).

@@ -11,6 +11,7 @@ General format of the command:
 * `global options` — [global parameters](commands/global-options.md).
 
 ## Features {#features}
+
 * [Query history](#query-history).
 * Syntax highlighting based on YQL grammar.
 * [Hotkeys](#hotkeys).

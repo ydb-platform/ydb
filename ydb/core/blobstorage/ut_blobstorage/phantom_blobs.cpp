@@ -139,15 +139,18 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 NKikimrBlobStorage::EVDiskQueueId queue = NKikimrBlobStorage::EVDiskQueueId::GetFastRead;
                 Env->WithQueueId(vdiskId, queue, [&](TActorId queueId) {
                     for (const TLogoBlobID& blob : blobs) {
-                        auto ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(vdiskId, TInstant::Max(),
-                                NKikimrBlobStorage::EGetHandleClass::FastRead);
-                        ev->AddExtremeQuery(blob, 0, 0);
-                        Env->Runtime->Send(new IEventHandle(queueId, Edge, ev.release()), Edge.NodeId());
-                        auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(Edge, false, TInstant::Max());
-                        auto record = res->Get()->Record;
-                        UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrProto::OK, record.GetErrorReason());
-                        UNIT_ASSERT_C(record.ResultSize() == 1, res->ToString());
-                        UNIT_ASSERT_C(record.GetResult(0).GetStatus() == NKikimrProto::NODATA, res->ToString());
+                        for (ui32 partIdx = 1; partIdx <= Erasure.BlobSubgroupSize(); ++partIdx) {
+                            auto ev = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(vdiskId, TInstant::Max(),
+                                    NKikimrBlobStorage::EGetHandleClass::FastRead);
+                            ev->AddExtremeQuery(blob, 0, 0);
+                            Env->Runtime->Send(new IEventHandle(queueId, Edge, ev.release()), Edge.NodeId());
+                            auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(Edge, false, TInstant::Max());
+                            auto record = res->Get()->Record;
+                            UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrProto::OK, record.GetErrorReason());
+                            UNIT_ASSERT_C(record.ResultSize() == 1, res->ToString());
+                            UNIT_ASSERT_C(record.GetResult(0).GetStatus() == NKikimrProto::NODATA, res->ToString());
+                            UNIT_ASSERT_C(!record.GetResult(0).HasIngress(), res->ToString());
+                        }
                     }
                     TLogoBlobID from(tabletId, 0, 0, channel, 0, 0, 1);
                     TLogoBlobID to(tabletId, generation + 100, 9000, channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId);
@@ -163,6 +166,13 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
     std::vector<ENodeState> GetStatesOneDead(TBlobStorageGroupType erasure) {
         std::vector<ENodeState> states(erasure.BlobSubgroupSize(), ENodeState::Alive);
         states[0] = ENodeState::Dead;
+        return states;
+    }
+
+    std::vector<ENodeState> GetStatesTwoDead(TBlobStorageGroupType erasure) {
+        std::vector<ENodeState> states(erasure.BlobSubgroupSize(), ENodeState::Alive);
+        states[0] = ENodeState::Dead;
+        states[4] = ENodeState::Dead;
         return states;
     }
 
@@ -200,6 +210,9 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
     TEST_PHANTOM_BLOBS(OneDead, Mirror3dc);
     // TEST_PHANTOM_BLOBS(OneDead, Mirror3of4);
     // TEST_PHANTOM_BLOBS(OneDead, 4Plus2Block);
+
+
+    TEST_PHANTOM_BLOBS(TwoDead, Mirror3dc);
 
     // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3dc);
     // TEST_PHANTOM_BLOBS(OneDeadAllRestart, Mirror3of4);

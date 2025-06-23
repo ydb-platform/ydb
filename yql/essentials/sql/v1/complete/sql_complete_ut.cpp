@@ -109,8 +109,8 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             }},
             "example": { "type": "Folder", "entries": {
                 "people": { "type": "Table", "columns": {
-                    "name": {},
-                    "age": {}
+                    "Name": {},
+                    "Age": {}
                 }},
                 "yql": { "type": "Folder", "entries": {
                     "tutorial": { "type": "Table", "columns": {} }
@@ -1075,29 +1075,29 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngineUT();
         {
             TVector<TCandidate> expected = {
-                {ColumnName, "age"},
-                {ColumnName, "name"},
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people`"), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {ColumnName, "age"},
+                {ColumnName, "Age"},
                 {Keyword, "ALL"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT a# FROM example.`/people`"), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {ColumnName, "age"},
-                {ColumnName, "name"},
+                {ColumnName, "Age"},
+                {ColumnName, "Name"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "USE example; SELECT # FROM `/people`"), expected);
         }
         {
             TVector<TCandidate> expected = {
-                {ColumnName, "x.age"},
-                {ColumnName, "x.name"},
+                {ColumnName, "x.Age"},
+                {ColumnName, "x.Name"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT # FROM example.`/people` AS x"), expected);
         }
@@ -1107,7 +1107,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {ColumnName, "age"},
+                {ColumnName, "Age"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT x.a# FROM example.`/people` AS x"), expected);
         }

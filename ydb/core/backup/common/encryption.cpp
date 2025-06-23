@@ -2,6 +2,10 @@
 
 #include <ydb/core/backup/common/proto/encrypted_file.pb.h>
 
+#ifndef NDEBUG
+#include <ydb/core/util/source_location.h>
+#endif
+
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
 #include <util/generic/size_literals.h>
@@ -746,9 +750,17 @@ public:
         }
     }
 
+#ifndef NDEBUG
+    static void ThrowFileIsCorrupted(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
+        throw yexception() << "File is corrupted:\n"
+            << NKikimr::NUtil::TrimSourceFileName(location.file_name()) << ":" << location.line()
+            << "\n" << location.function_name();
+    }
+#else
     static void ThrowFileIsCorrupted() {
         throw yexception() << "File is corrupted";
     }
+#endif
 
     TString GetState() const {
         TEncryptedFileDeserializerState state;

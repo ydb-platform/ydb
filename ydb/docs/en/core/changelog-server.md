@@ -10,15 +10,15 @@ Release date: 2025.
 
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
-* Added support for [auto-partitioning topics for row-oriented tables in CDC](./concepts/cdc.md#topic-partitions). This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Added support for [auto-partitioning topics]((./concepts/cdc.md#topic-partitions)) for row-oriented tables in CDC. This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` expression.
-* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the `DEBEZIUM_JSON` format for CDC](./concepts/cdc.md#debezium-json-record-structure), which can be enabled by setting the `enable_changefeed_debezium_json_format` flag.
+* [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md#debezium-json-record-structure) for CDC, which can be enabled by setting the `enable_changefeed_debezium_json_format` flag.
 * The scope of supported objects in backup and restore operations has been expanded:
   * [Support for changefeeds](https://github.com/ydb-platform/ydb/issues/7054) (enabled with the `enable_changefeeds_export` and `enable_changefeeds_import` flags).
   * [Support for views](https://github.com/ydb-platform/ydb/issues/12724) (enabled with the `enable_view_export` flag).
 * [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity check of backups during import, which prevents restoration from corrupted backups and protects against data loss.
 * [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDF](./yql/reference/builtins/basic.md#udf) in queries.
-* Added system views with information about [access right settings](./dev/system-views#auth) and [table partitions](./dev/system-views.md#partitions).
+* Added system views with information about [access right settings](./dev/system-views.md#auth) and [history of overloaded partitions](./dev/system-views.md#top-overload-partitions).
 * Added new parameters to the [CREATE USER](./yql/reference/syntax/create-user.md) and [ALTER USER](./yql/reference/syntax/alter-user.md) operators:
   * `HASH` — set a password in the encrypted form.
   * `LOGIN` and `NOLOGIN` — unlock and block a user.
@@ -40,7 +40,7 @@ Release date: 2025.
 
 #### Backward incompatible changes
 
-*  If you are using [Temporary over DB](https://github.com/yandex/temporal-over-ydb ), update its version before updating YDB to avoid errors in query execution.
+* If you are using [temporal over YDB](https://github.com/yandex/temporal-over-ydb), update its version before updating YDB to avoid errors in query execution.
 
 #### Performance
 

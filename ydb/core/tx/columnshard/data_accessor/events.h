@@ -119,7 +119,8 @@ private:
 public:
     explicit TEvAskServiceDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request, TActorId owner)
         : Request(request)
-        , Owner(owner) {
+        , Owner(owner)
+    {
     }
 };
 

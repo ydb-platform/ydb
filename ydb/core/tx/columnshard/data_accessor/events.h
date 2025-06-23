@@ -78,7 +78,8 @@ private:
 public:
     explicit TEvUnregisterController(const TInternalPathId pathId, TActorId owner)
         : PathId(pathId)
-        , Owner(owner) {
+        , Owner(owner)
+    {
     }
 };
 

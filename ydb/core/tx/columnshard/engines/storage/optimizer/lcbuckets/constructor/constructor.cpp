@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
+TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
     auto counters = std::make_shared<TCounters>();
     auto portionsInfo =  std::make_shared<TSimplePortionsGroupInfo>();
     const TString defaultSelectorName = "default";
@@ -114,7 +114,8 @@ NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimiz
         }
     }
     std::reverse(levels.begin(), levels.end());
-    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), counters, portionsInfo, std::move(levels), std::move(selectors));
+    return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), counters, portionsInfo,
+        std::move(levels), std::move(selectors), NodePortionsCountLimit);
 }
 
 bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& /*current*/) const {
@@ -129,12 +130,16 @@ void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
     for (auto&& i : SelectorConstructors) {
         *proto.MutableLCBuckets()->AddSelectors() = i.SerializeToProto();
     }
+    proto.MutableLCBuckets()->SetNodePortionsCountLimit(NodePortionsCountLimit);
 }
 
 bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     if (!proto.HasLCBuckets()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse lc-buckets optimizer from proto")("proto", proto.DebugString());
         return false;
+    }
+    if (proto.GetLCBuckets().HasNodePortionsCountLimit()) {
+        NodePortionsCountLimit = proto.GetLCBuckets().GetNodePortionsCountLimit();
     }
     for (auto&& i : proto.GetLCBuckets().GetLevels()) {
         TLevelConstructorContainer lContainer;
@@ -156,6 +161,13 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
 }
 
 TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+    if (jsonInfo.Has("node_portions_count_limit")) {
+        const auto& jsonValue = jsonInfo["node_portions_count_limit"];
+        if (!jsonValue.IsUInteger()) {
+            return TConclusionStatus::Fail("incorrect node_portions_count_limit value have to be unsigned int");
+        }
+        NodePortionsCountLimit = jsonValue.GetUInteger();
+    }
     std::set<TString> selectorNames;
     if (jsonInfo.Has("selectors")) {
         if (!jsonInfo["selectors"].IsArray()) {

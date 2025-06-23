@@ -20,6 +20,9 @@ private:
     std::map<ui64, std::shared_ptr<IPortionsLevel>, std::greater<ui64>> LevelsByWeight;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
+    const ui32 NodePortionsCountLimit = 0;
+    static inline TAtomicCounter NodePortionsCounter = 0;
+    TPositiveControlInteger LocalPortionsCount;
 
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& info) const override {
         ui32 result = baseLevel;
@@ -34,6 +37,9 @@ private:
     }
 
     virtual bool DoIsOverloaded() const override {
+        if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {
+            return true;
+        }
         for (auto&& i : Levels) {
             if (i->IsOverloaded()) {
                 return true;
@@ -68,6 +74,11 @@ protected:
     }
 
     virtual void DoModifyPortions(const THashMap<ui64, TPortionInfo::TPtr>& add, const THashMap<ui64, TPortionInfo::TPtr>& remove) override {
+        LocalPortionsCount.Add(add.size());
+        LocalPortionsCount.Sub(remove.size());
+        NodePortionsCounter.Add(add.size());
+        NodePortionsCounter.Sub(remove.size());
+        Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
         std::vector<std::vector<TPortionInfo::TPtr>> removePortionsByLevel;
         removePortionsByLevel.resize(Levels.size());
         std::vector<std::vector<TPortionInfo::TPtr>> addPortionsByLevels;
@@ -151,9 +162,13 @@ public:
         return result;
     }
 
+    ~TOptimizerPlanner() {
+        NodePortionsCounter.Sub(LocalPortionsCount.Val());
+    }
+
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo,
-        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors);
+        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const ui32 nodePortionsCountLimit);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

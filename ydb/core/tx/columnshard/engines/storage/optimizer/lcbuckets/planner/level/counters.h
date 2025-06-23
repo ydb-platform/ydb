@@ -26,18 +26,28 @@ class TGlobalCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
     std::vector<std::shared_ptr<TLevelAgents>> Levels;
+    const NMonitoring::TDynamicCounters::TCounterPtr NodePortionsCount;
 
 public:
     TGlobalCounters()
-        : TBase("LeveledCompactionOptimizer") {
+        : TBase("LeveledCompactionOptimizer")
+        , NodePortionsCount(TBase::GetValue("Node/Portions/Count")) {
         for (ui32 i = 0; i <= 10; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>(i, *this));
         }
     }
 
-    static std::shared_ptr<TPortionCategoryCounters> BuildPortionsCounter(const ui32 levelId) {
+    static const NMonitoring::TDynamicCounters::TCounterPtr& GetNodePortionsCount() {
+        return Singleton<TGlobalCounters>()->NodePortionsCount;
+    }
+
+    static std::shared_ptr<TLevelAgents> GetLevelAgents(const ui32 levelId) {
         AFL_VERIFY(levelId < Singleton<TGlobalCounters>()->Levels.size());
-        return std::make_shared<TPortionCategoryCounters>(*Singleton<TGlobalCounters>()->Levels[levelId]->Portions);
+        return Singleton<TGlobalCounters>()->Levels[levelId];
+    }
+
+    static std::shared_ptr<TPortionCategoryCounters> BuildPortionsCounter(const ui32 levelId) {
+        return std::make_shared<TPortionCategoryCounters>(*GetLevelAgents(levelId)->Portions);
     }
 };
 
@@ -52,8 +62,11 @@ public:
 class TCounters {
 public:
     std::vector<TLevelCounters> Levels;
+    const NMonitoring::TDynamicCounters::TCounterPtr NodePortionsCount;
 
-    TCounters() {
+    TCounters()
+        : NodePortionsCount(TGlobalCounters::GetNodePortionsCount())
+    {
         for (ui32 i = 0; i < 10; ++i) {
             Levels.emplace_back(i);
         }

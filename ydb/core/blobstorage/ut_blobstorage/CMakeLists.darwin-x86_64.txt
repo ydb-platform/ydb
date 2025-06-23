@@ -84,6 +84,7 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/monitoring.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/multiget.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/patch.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/phantom_blobs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/recovery.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/sanitize_groups.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/scrub_fast.cpp

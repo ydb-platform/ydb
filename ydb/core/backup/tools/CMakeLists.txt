@@ -12,7 +12,4 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(common)
-add_subdirectory(impl)
-add_subdirectory(controller)
-add_subdirectory(tools)
+add_subdirectory(decrypt)

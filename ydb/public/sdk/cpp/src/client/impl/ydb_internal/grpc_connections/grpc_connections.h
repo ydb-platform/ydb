@@ -325,6 +325,32 @@ public:
             }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
+    // Run request using discovery endpoint.
+    // Mostly usefull to make calls from credential provider
+    template<typename TService, typename TRequest, typename TResponse>
+    static void RunOnDiscoveryEndpoint(
+        std::shared_ptr<ICoreFacility> facility,
+        TRequest&& request,
+        TResponseCb<TResponse>&& responseCb,
+        TSimpleRpc<TService, TRequest, TResponse> rpc,
+        TRpcRequestSettings requestSettings)
+    {
+        requestSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
+        requestSettings.UseAuth = false;
+        // TODO: Change implementation of Run, to use ICoreFacility and remove this cast
+        auto dbState = std::dynamic_pointer_cast<TDbDriverState>(facility);
+        Y_ABORT_UNLESS(dbState);
+        auto self = dynamic_cast<TGRpcConnectionsImpl*>(dbState->Client);
+        Y_ABORT_UNLESS(self);
+        self->Run<TService, TRequest, TResponse>(
+            std::move(request),
+            std::move(responseCb),
+            rpc,
+            dbState,
+            requestSettings,
+            nullptr);
+    }
+
     template<typename TService, typename TRequest, typename TResponse>
     void RunDeferred(
         TRequestWrapper<TRequest>&& requestWrapper,
@@ -406,32 +432,6 @@ public:
             requestSettings,
             true, // poll
             context);
-    }
-
-    // Run request using discovery endpoint.
-    // Mostly usefull to make calls from credential provider
-    template<typename TService, typename TRequest, typename TResponse>
-    static void RunOnDiscoveryEndpoint(
-        std::shared_ptr<ICoreFacility> facility,
-        TRequest&& request,
-        TResponseCb<TResponse>&& responseCb,
-        TSimpleRpc<TService, TRequest, TResponse> rpc,
-        TRpcRequestSettings requestSettings)
-    {
-        requestSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
-        requestSettings.UseAuth = false;
-        // TODO: Change implementation of Run, to use ICoreFacility and remove this cast
-        auto dbState = std::dynamic_pointer_cast<TDbDriverState>(facility);
-        Y_ABORT_UNLESS(dbState);
-        auto self = dynamic_cast<TGRpcConnectionsImpl*>(dbState->Client);
-        Y_ABORT_UNLESS(self);
-        self->Run<TService, TRequest, TResponse>(
-            std::move(request),
-            std::move(responseCb),
-            rpc,
-            dbState,
-            requestSettings,
-            nullptr);
     }
 
     template<class TService, class TRequest, class TResponse, template<typename TA, typename TB, typename TC> class TStream>

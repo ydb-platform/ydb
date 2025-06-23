@@ -343,7 +343,6 @@ namespace {
     struct TEvPrivate {
         enum EEv {
             EvReplicaMissing = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-            EvSwitchReplica,
 
             EvEnd,
         };
@@ -617,11 +616,6 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         };
     }
 
-    void HandleSwitchReplica(STATEFN_SIG) {
-        Replica = ev->Sender;
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ReplicaSubscriber, this->SelfId(), nullptr, 0));
-    }
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SCHEME_BOARD_SUBSCRIBER_PROXY_ACTOR;
@@ -667,8 +661,6 @@ public:
             hFunc(TEvents::TEvGone, Handle);
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-
-            fFunc(TEvPrivate::EvSwitchReplica, HandleSwitchReplica);
         }
     }
 
@@ -680,8 +672,6 @@ public:
 
             CFunc(TEvents::TEvWakeup::EventType, Bootstrap);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-
-            fFunc(TEvPrivate::EvSwitchReplica, HandleSwitchReplica);
         }
     }
 

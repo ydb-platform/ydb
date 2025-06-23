@@ -5,5 +5,5 @@ from reconfig_state_storage_workload_test import ReconfigStateStorageWorkloadTes
 
 class TestReconfigStateStorageBoardWorkload(ReconfigStateStorageWorkloadTest):
     def test_state_storage_board(self):
-        with WorkloadRunner(self.client, self.cluster, 'reconfig_state_storage_workload', 120, True, "SchemeBoard") as runner:
+        with WorkloadRunner(self.client, self.cluster, 'reconfig_scheme_board_workload', 120, True, "SchemeBoard") as runner:
             runner.run()

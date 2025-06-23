@@ -10,7 +10,7 @@ Deploying {{ ydb-short-name }} in {{ k8s }} is a simple way to set up and run a 
 2. The `kubectl` command line tool is [installed](https://kubernetes.io/docs/tasks/tools/install-kubectl) and {{ k8s }} cluster access is configured.
 3. The Helm package manager with a version higher than 3.1.0 is [installed](https://helm.sh/docs/intro/install/).
 
-{% include [_includes/storage-device-requirements.md](../../../../_includes/storage-device-requirements.md) %}
+{% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
 
 ## Creating a {{ k8s }} Cluster
 

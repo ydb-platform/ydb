@@ -1,10 +1,10 @@
 # {{ ydb-short-name }} System Requirements and Recommendations
 
-This section provides recommendations for deploying {{ ydb-short-name }} clusters that are relevant regardless of the chosen deployment method ([Ansible](./ansible/index.md), [Kubernetes](./kubernetes/index.md), or [manual](./manual/index.md)).
+This section provides recommendations for deploying {{ ydb-short-name }} clusters that are relevant regardless of the chosen deployment method ([Ansible](../deployment-options/ansible/index.md), [Kubernetes](../deployment-options/kubernetes/index.md), or [manual](../deployment-options/manual/index.md)).
 
 ## Hardware Configuration {#hardware}
 
-The fault-tolerance requirements determine the necessary number of servers and disks. For more information, see [{#T}](../concepts/topology.md).
+The fault-tolerance requirements determine the necessary number of servers and disks. For more information, see [{#T}](../../concepts/topology.md).
 
 ### Processor (CPU)
 
@@ -20,7 +20,7 @@ We recommend using error-correcting code (ECC) memory to protect against hardwar
 
 A {{ ydb-short-name }} server can run on servers with any disk type (HDD/SSD/NVMe). However, we recommend using SSD/NVMe disks for better performance.
 
-{% include [_includes/storage-device-requirements.md](../_includes/storage-device-requirements.md) %}
+{% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
 {{ ydb-short-name }} works with disk drives directly and does not use any filesystem to store data. Don't mount a file system or perform other operations with partitions used by {{ ydb-short-name }}. Also, avoid sharing the {{ ydb-short-name }}'s block device with the operating system and different processes, which can lead to significant performance degradation.
 
@@ -34,4 +34,4 @@ A {{ ydb-short-name }} server can be run on servers with a Linux operating syste
 
 If the server has more than 32 CPU cores, to increase {{ ydb-short-name }} performance, run each dynamic node in a separate taskset/cpuset of 10 to 32 cores. For example, in the case of 128 CPU cores a viable approach would be to run four 32-CPU dynamic nodes, each in a dedicated taskset.
 
-MacOS and Windows operating systems are currently unsupported for running production {{ ydb-short-name }} servers. However, running {{ ydb-short-name }} in a [Docker container](../quickstart.md) on them is acceptable for development and functional testing.
+MacOS and Windows operating systems are currently unsupported for running production {{ ydb-short-name }} servers. However, running {{ ydb-short-name }} in a [Docker container](../../quickstart.md) on them is acceptable for development and functional testing.

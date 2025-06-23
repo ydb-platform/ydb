@@ -176,6 +176,8 @@ public:
 
     size_t GetSize() const;
 
+    bool HasThisPartitionAlreadyBeenAdded(const TString& topic, ui32 partitionId) const;
+
 private:
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;

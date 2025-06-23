@@ -369,7 +369,7 @@ public:
 
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
-          
+        
         UserDb.UpsertRow(tableId, key, ops, {});
     }
 

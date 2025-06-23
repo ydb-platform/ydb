@@ -1457,21 +1457,6 @@ NThreading::TFuture<void> TTableClient::Stop() {
     return Impl_->Stop();
 }
 
-TAsyncBulkUpsertResult TTableClient::BulkUpsertUnretryableUnsafe(const std::string& table, TValue&& rows,
-    const TBulkUpsertSettings& settings)
-{
-    return Impl_->BulkUpsertUnretryableUnsafe(table, std::move(rows), settings);
-}
-
-TAsyncBulkUpsertResult TTableClient::BulkUpsertUnretryableArenaAllocatedUnsafe(
-    const std::string& table,
-    TValue&& rows,
-    google::protobuf::Arena* arena,
-    const TBulkUpsertSettings& settings)
-{
-    return Impl_->BulkUpsertUnretryableArenaAllocatedUnsafe(table, std::move(rows), arena, settings);
-}
-
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {

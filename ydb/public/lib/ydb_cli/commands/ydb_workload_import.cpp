@@ -11,39 +11,59 @@
 
 namespace NYdb::NConsoleClient {
 
+std::unique_ptr<TClientCommand> TWorkloadCommandImport::Create(NYdbWorkload::TWorkloadParams& workloadParams) {
+    auto initializers = workloadParams.CreateDataInitializers();
+    if (initializers.empty()) {
+        return {};
+    }
+    if (initializers.size() == 1 && initializers.front()->GetName().empty()) {
+        return std::make_unique<TUploadCommand>(workloadParams, nullptr, initializers.front());
+    }
+    return std::unique_ptr<TClientCommand>(new TWorkloadCommandImport(workloadParams, initializers));
+}
+
 TWorkloadCommandImport::TWorkloadCommandImport(NYdbWorkload::TWorkloadParams& workloadParams, NYdbWorkload::TWorkloadDataInitializer::TList initializers)
     : TClientCommandTree("import", {}, "Fill tables for workload with data.")
-    , WorkloadParams(workloadParams)
+    , UploadParams(workloadParams)
 {
     for (auto initializer: initializers) {
-        AddCommand(std::make_unique<TUploadCommand>(workloadParams, UploadParams, initializer));
+        AddCommand(std::make_unique<TUploadCommand>(workloadParams, &UploadParams, initializer));
     }
 }
 
 void TWorkloadCommandImport::Config(TConfig& config) {
     TClientCommandTree::Config(config);
+    UploadParams.Config(config);
+}
+
+void TWorkloadCommandImport::TUploadParams::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "upload-threads", "Number of threads to generate tables content.")
-        .Optional().DefaultValue(UploadParams.Threads).StoreResult(&UploadParams.Threads);
+        .Optional().DefaultValue(Threads).StoreResult(&Threads);
     config.Opts->AddLongOption("bulk-size", "Data portion size in rows for upload.")
         .DefaultValue(WorkloadParams.BulkSize).StoreResult(&WorkloadParams.BulkSize);
     config.Opts->AddLongOption("max-in-flight", "Maximum number if data portions that can be simultaneously in process.")
-        .DefaultValue(UploadParams.MaxInFlight).StoreResult(&UploadParams.MaxInFlight);
+        .DefaultValue(MaxInFlight).StoreResult(&MaxInFlight);
     config.Opts->AddLongOption('f', "file-output-path", "Path to a directory to save tables into as files instead of uploading it to db.")
-        .StoreResult(&UploadParams.FileOutputPath);
+        .StoreResult(&FileOutputPath);
 }
 
-TWorkloadCommandImport::TUploadParams::TUploadParams()
+TWorkloadCommandImport::TUploadParams::TUploadParams(NYdbWorkload::TWorkloadParams& workloadParams)
     : Threads(std::thread::hardware_concurrency())
+    , WorkloadParams(workloadParams)
 {}
 
 void TWorkloadCommandImport::TUploadCommand::Config(TConfig& config) {
     TWorkloadCommandBase::Config(config);
+    if (OwnedUploadParams) {
+        OwnedUploadParams->Config(config);
+    }
     Initializer->ConfigureOpts(config.Opts->GetOpts());
 }
 
-TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadParams& workloadParams, const TUploadParams& uploadParams, NYdbWorkload::TWorkloadDataInitializer::TPtr initializer)
-    : TWorkloadCommandBase(initializer->GetName(), workloadParams, NYdbWorkload::TWorkloadParams::ECommandType::Import, initializer->GetDescription())
-    , UploadParams(uploadParams)
+TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadParams& workloadParams, const TUploadParams* uploadParams, NYdbWorkload::TWorkloadDataInitializer::TPtr initializer)
+    : TWorkloadCommandBase(initializer->GetName() ? initializer->GetName() : "import", workloadParams, NYdbWorkload::TWorkloadParams::ECommandType::Import, initializer->GetDescription())
+    , OwnedUploadParams(uploadParams ? nullptr : new TUploadParams(workloadParams))
+    , UploadParams(uploadParams ? *uploadParams : *OwnedUploadParams)
     , Initializer(initializer)
 {}
 

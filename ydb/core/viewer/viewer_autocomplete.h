@@ -15,9 +15,6 @@ using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 class TJsonAutocomplete : public TViewerPipeClient {
     using TThis = TJsonAutocomplete;
     using TBase = TViewerPipeClient;
-    TEvViewer::TEvViewerRequest::TPtr ViewerRequest;
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
 
     std::optional<TRequestResponse<NConsole::TEvConsole::TEvListTenantsResponse>> ConsoleResult;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> CacheResult;
@@ -53,34 +50,7 @@ class TJsonAutocomplete : public TViewerPipeClient {
 public:
     TJsonAutocomplete(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TBase(viewer, ev)
-    {
-        const auto& params(Event->Get()->Request.GetParams());
-        InitConfig(params);
-        ParseCgiParameters(params);
-        if (IsPostContent()) {
-            TStringBuf content = Event->Get()->Request.GetPostContent();
-            ParsePostContent(content);
-        }
-        PrepareParameters();
-    }
-
-    // proxied request
-    TJsonAutocomplete(TEvViewer::TEvViewerRequest::TPtr& ev)
-        : ViewerRequest(ev)
-    {
-        auto& request = ViewerRequest->Get()->Record.GetAutocompleteRequest();
-
-        Database = request.GetDatabase();
-        for (auto& table: request.GetTables()) {
-            Tables.emplace_back(table);
-        }
-        Prefix = request.GetPrefix();
-        Limit = request.GetLimit();
-
-        Timeout = ViewerRequest->Get()->Record.GetTimeout();
-        Direct = true;
-        PrepareParameters();
-    }
+    {}
 
     void PrepareParameters() {
         if (Database) {
@@ -113,31 +83,13 @@ public:
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        StringSplitter(params.Get("table")).Split(',').SkipEmpty().Collect(&Tables);
+        for (const auto& value : params.Range("table")) {
+            TVector<TString> tables;
+            StringSplitter(value).Split(',').SkipEmpty().Collect(&tables);
+            Tables.insert(Tables.end(), tables.begin(), tables.end());
+        }
         Prefix = params.Get("prefix");
         Limit = FromStringWithDefault<ui32>(params.Get("limit"), Limit);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-    }
-
-    void ParsePostContent(const TStringBuf& content) {
-        NJson::TJsonValue requestData;
-        bool success = NJson::ReadJsonTree(content, &requestData);
-        if (success) {
-            Database = Database.empty() ? requestData["database"].GetStringSafe({}) : Database;
-            if (requestData["table"].IsArray()) {
-                for (const auto& table : requestData["table"].GetArraySafe()) {
-                    Tables.emplace_back(table.GetStringSafe());
-                }
-            }
-            Prefix = Prefix.empty() ? requestData["prefix"].GetStringSafe({}) : Prefix;
-            if (requestData["limit"].IsDefined()) {
-                Limit = requestData["limit"].GetInteger();
-            }
-        }
-    }
-
-    bool IsPostContent() const {
-        return NViewer::IsPostContent(Event);
     }
 
     TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> MakeRequestSchemeCacheNavigate() {
@@ -156,22 +108,19 @@ public:
     }
 
     void Bootstrap() override {
-        if (ViewerRequest) {
-            // handle proxied request
+        if (NeedToRedirect()) {
+            return;
+        }
+        ParseCgiParameters(Params);
+        PrepareParameters();
+        if (Database) {
             CacheResult = MakeRequestSchemeCacheNavigate();
         } else {
-            if (NeedToRedirect()) {
-                return;
-            }
-            if (Database) {
-                CacheResult = MakeRequestSchemeCacheNavigate();
-            } else {
-                // autocomplete database list via console request
-                ConsoleResult = MakeRequestConsoleListTenants();
-            }
+            // autocomplete database list via console request
+            ConsoleResult = MakeRequestConsoleListTenants();
         }
 
-        Become(&TThis::StateRequestedDescribe, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateRequestedDescribe, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(StateRequestedDescribe) {
@@ -276,19 +225,19 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        CacheResult->Set(std::move(ev));
-        RequestDone();
+        if (CacheResult->Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        ConsoleResult->Set(std::move(ev));
-        RequestDone();
+        if (ConsoleResult->Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void ReplyAndPassAway() override {
-        if (Viewer) {
-            Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/autocomplete"));
-        }
+        Result.SetVersion(Viewer->GetCapabilityVersion("/viewer/autocomplete"));
 
         if (CacheResult) {
             if (CacheResult->IsOk()) {
@@ -329,25 +278,7 @@ public:
             }
         }
 
-        if (ViewerRequest) {
-            TEvViewer::TEvViewerResponse* viewerResponse = new TEvViewer::TEvViewerResponse();
-            viewerResponse->Record.MutableAutocompleteResponse()->CopyFrom(Result);
-            Send(ViewerRequest->Sender, viewerResponse);
-            PassAway();
-        } else {
-            TStringStream json;
-            TProtoToJson::ProtoToJson(json, Result, JsonSettings);
-            TBase::ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
-        }
-    }
-
-    void HandleTimeout() {
-        if (ViewerRequest) {
-            Result.add_error("Request timed out");
-            ReplyAndPassAway();
-        } else {
-            TBase::ReplyAndPassAway(GetHTTPGATEWAYTIMEOUT());
-        }
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(Result));
     }
 
     static YAML::Node GetSwagger() {

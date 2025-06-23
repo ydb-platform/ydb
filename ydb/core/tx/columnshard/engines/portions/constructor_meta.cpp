@@ -39,9 +39,6 @@ TPortionMetaConstructor::TPortionMetaConstructor(const TPortionMeta& meta, const
     if (withBlobs) {
         BlobIds = meta.BlobIds;
     }
-    if (meta.Produced != NPortion::EProduced::UNSPECIFIED) {
-        Produced = meta.Produced;
-    }
 }
 
 TPortionMeta TPortionMetaConstructor::Build() {
@@ -65,7 +62,6 @@ TPortionMeta TPortionMetaConstructor::Build() {
     result.BlobIds.shrink_to_fit();
     result.CompactionLevel = *TValidator::CheckNotNull(CompactionLevel);
     result.DeletionsCount = *TValidator::CheckNotNull(DeletionsCount);
-    result.Produced = *TValidator::CheckNotNull(Produced);
 
     result.RecordsCount = *TValidator::CheckNotNull(RecordsCount);
     result.ColumnRawBytes = *TValidator::CheckNotNull(ColumnRawBytes);
@@ -80,7 +76,6 @@ TPortionMeta TPortionMetaConstructor::Build() {
 
 bool TPortionMetaConstructor::LoadMetadata(
     const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
-    AFL_VERIFY(!Produced)("produced", Produced);
     if (portionMeta.GetTierName()) {
         TierName = portionMeta.GetTierName();
     }
@@ -99,20 +94,6 @@ bool TPortionMetaConstructor::LoadMetadata(
     ColumnBlobBytes = TValidator::CheckNotNull(portionMeta.GetColumnBlobBytes());
     IndexRawBytes = portionMeta.GetIndexRawBytes();
     IndexBlobBytes = portionMeta.GetIndexBlobBytes();
-    if (portionMeta.GetIsInserted()) {
-        Produced = TPortionMeta::EProduced::INSERTED;
-    } else if (portionMeta.GetIsCompacted()) {
-        Produced = TPortionMeta::EProduced::COMPACTED;
-    } else if (portionMeta.GetIsSplitCompacted()) {
-        Produced = TPortionMeta::EProduced::SPLIT_COMPACTED;
-    } else if (portionMeta.GetIsEvicted()) {
-        Produced = TPortionMeta::EProduced::EVICTED;
-    } else {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "incorrect portion meta")(
-            "meta", portionMeta.DebugString());
-        return false;
-    }
-    AFL_VERIFY(Produced != TPortionMeta::EProduced::UNSPECIFIED);
     if (portionMeta.HasPrimaryKeyBordersV1()) {
         FirstAndLastPK = NArrow::TFirstLastSpecialKeys(
             portionMeta.GetPrimaryKeyBordersV1().GetFirst(), portionMeta.GetPrimaryKeyBordersV1().GetLast(), indexInfo.GetReplaceKey());

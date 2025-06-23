@@ -306,6 +306,7 @@ struct TUserTable : public TThrRefBase {
         EState State;
         bool VirtualTimestamps = false;
         TDuration ResolvedTimestampsInterval;
+        bool SchemaChanges = false;
         TMaybe<TString> AwsRegion;
 
         TCdcStream() = default;
@@ -317,6 +318,7 @@ struct TUserTable : public TThrRefBase {
             , State(streamDesc.GetState())
             , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
             , ResolvedTimestampsInterval(TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs()))
+            , SchemaChanges(streamDesc.GetSchemaChanges())
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;
@@ -459,6 +461,7 @@ struct TUserTable : public TThrRefBase {
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
     ui32 JsonCdcStreamCount = 0;
+    TSet<TPathId> SchemaChangesCdcStreams;
 
     // Tablet thread access only, updated in-place
     mutable TStats Stats;
@@ -515,6 +518,7 @@ struct TUserTable : public TThrRefBase {
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
     bool NeedSchemaSnapshots() const;
+    const TSet<TPathId>& GetSchemaChangesCdcStreams() const;
 
     bool IsReplicated() const;
     bool IsIncrementalRestore() const;

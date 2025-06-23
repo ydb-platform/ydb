@@ -136,7 +136,6 @@ void InferStatisticsForKqpTable(
                 }
             }
             std::int64_t orderingIdx = orderingsFSM->FDStorage.FindInterestingOrderingIdx(shuffledBy, TOrdering::EShuffle, nullptr);
-            Y_ENSURE(orderingIdx >= 0, TStringBuilder{} << "Ordering wasn't found: " << NYql::TOptimizerStatistics::TShuffledByColumns(shuffledBy).ToString());
             tableStats->LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
         }
 

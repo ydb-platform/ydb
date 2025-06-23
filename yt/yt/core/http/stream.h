@@ -7,7 +7,7 @@
 #include <yt/yt/core/net/connection.h>
 #include <yt/yt/core/net/address.h>
 
-#include <contrib/restricted/http-parser/http_parser.h>
+#include <contrib/deprecated/http-parser/http_parser.h>
 
 #include <util/stream/buffer.h>
 

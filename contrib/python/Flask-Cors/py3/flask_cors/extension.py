@@ -1,9 +1,9 @@
 import logging
-from urllib.parse import unquote_plus
+from urllib.parse import unquote
 
 from flask import request
 
-from .core import ACL_ORIGIN, get_cors_options, get_regexp_pattern, parse_resources, set_cors_headers, try_match
+from .core import ACL_ORIGIN, get_cors_options, get_regexp_pattern, parse_resources, set_cors_headers, try_match_pattern
 
 LOG = logging.getLogger(__name__)
 
@@ -188,9 +188,9 @@ def make_after_request_function(resources):
         if resp.headers is not None and resp.headers.get(ACL_ORIGIN):
             LOG.debug("CORS have been already evaluated, skipping")
             return resp
-        normalized_path = unquote_plus(request.path)
+        normalized_path = unquote(request.path)
         for res_regex, res_options in resources:
-            if try_match(normalized_path, res_regex):
+            if try_match_pattern(normalized_path, res_regex, caseSensitive=True):
                 LOG.debug(
                     "Request to '%r' matches CORS resource '%s'. Using options: %s",
                     request.path,

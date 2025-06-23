@@ -28,6 +28,8 @@ std::string_view GetTzName(int tzIndex);
 
 int GetTzIndex(std::string_view tzName);
 
+int GetMaxPossibleTzStringSize();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTzTypes

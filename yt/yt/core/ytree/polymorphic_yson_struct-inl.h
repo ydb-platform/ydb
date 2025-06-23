@@ -18,10 +18,10 @@ TIntrusivePtr<TBase> TMappingLeaf<TEnum, Value, TBase, TDerived>::CreateInstance
     return New<TDerived>();
 }
 
-template <class TEnum, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
+template <class TEnum, TEnum... DefaultValue, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
     requires (CHierarchy<TBase, TDerived...>)
 TIntrusivePtr<TBase>
-TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>::
+TPolymorphicMapping<TEnum, TOptionalValue<TEnum, DefaultValue...>, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>::
 CreateInstance(TEnum value)
 {
     if (value == BaseValue) {
@@ -84,10 +84,12 @@ void TPolymorphicYsonStruct<TMapping>::Load(
 
     auto key = map->FindChildValue<TKey>("type");
     THROW_ERROR_EXCEPTION_UNLESS(
-        key.has_value(),
-        "Concrete type must be specified! Use \"type\": \"concrete_type\"");
+        key.has_value() || DefaultType_,
+        "Concrete type must be specified! Use \"type\": \"concrete_type\" or specify default type");
 
-    auto type = *key;
+    auto type = key
+        ? *key
+        : *DefaultType_;
     if (!Storage_ || HeldType_ != type) {
         // NB: We will try to merge configs if types match.
         HeldType_ = type;
@@ -207,7 +209,9 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source)
 ////////////////////////////////////////////////////////////////////////////////
 
 #undef DEFINE_POLYMORPHIC_YSON_STRUCT
+#undef DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT
 #undef DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM
+#undef DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT
 
 #define POLYMORPHIC_YSON_STRUCT_IMPL__GET_ENUM_SEQ_ELEM(item) \
     PP_LEFT_PARENTHESIS PP_ELEMENT(item, 0) PP_RIGHT_PARENTHESIS
@@ -231,13 +235,32 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source)
     PP_COMMA() ::NYT::NYTree::NDetail::TLeafTag<EType:: PP_ELEMENT(item, 0), PP_ELEMENT(item, 1)>
 
 #define POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(Struct, seq) \
-    using TMapping = ::NYT::NYTree::TPolymorphicEnumMapping<EType PP_FOR_EACH(POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_LEAF_FROM_ETYPE, seq)>
+    using TMapping = ::NYT::NYTree::TPolymorphicEnumMapping< \
+        EType, \
+        ::NYT::NYTree::NDetail::TOptionalValue<EType> \
+        PP_FOR_EACH(POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_LEAF_FROM_ETYPE, seq) \
+    >
+
+#define POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(Struct, default, seq) \
+    using TMapping = ::NYT::NYTree::TPolymorphicEnumMapping< \
+        EType, \
+        ::NYT::NYTree::NDetail::TOptionalValue<EType, default> \
+        PP_FOR_EACH(POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_LEAF_FROM_ETYPE, seq) \
+    >
 
 #define DEFINE_POLYMORPHIC_YSON_STRUCT(name, seq) \
 namespace NPolymorphicYsonStructFor##name { \
- \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM(seq); \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(name, seq); \
+} /*NPolymorphicYsonStructFor##name*/ \
+using POLYMORPHIC_YSON_STRUCT_IMPL__ENUM_NAME(name) = NPolymorphicYsonStructFor##name::EType; \
+using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
+static_assert(true)
+
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(name, default, seq) \
+namespace NPolymorphicYsonStructFor##name { \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM(seq); \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(name, EType::default, seq); \
 } /*NPolymorphicYsonStructFor##name*/ \
 using POLYMORPHIC_YSON_STRUCT_IMPL__ENUM_NAME(name) = NPolymorphicYsonStructFor##name::EType; \
 using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
@@ -247,6 +270,14 @@ static_assert(true)
 namespace NPolymorphicYsonStructFor##name { \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM_ALIAS(enum); \
     POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS(name, seq); \
+} /*NPolymorphicYsonStructFor##name*/ \
+using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
+static_assert(true)
+
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(name, enum, default, seq) \
+namespace NPolymorphicYsonStructFor##name { \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_ENUM_ALIAS(enum); \
+    POLYMORPHIC_YSON_STRUCT_IMPL__MAKE_MAPPING_CLASS_WITH_DEFAULT(name, EType::default, seq); \
 } /*NPolymorphicYsonStructFor##name*/ \
 using T##name = ::NYT::NYTree::TPolymorphicYsonStruct<NPolymorphicYsonStructFor##name::TMapping>; \
 static_assert(true)

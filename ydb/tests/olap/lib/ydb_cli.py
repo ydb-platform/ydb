@@ -174,11 +174,9 @@ class YdbCliHelper:
         def __get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
                 'workload', str(self.workload_type), '--path', self.db_path]
-            if self.external_path:
-                cmd += ['--data-path', self.external_path]
             cmd += ['run']
-            if self.workload_type == WorkloadType.EXTERNAL:
-                cmd += ['olap']
+            if self.external_path:
+                cmd += ['--suite-path', self.external_path]
             cmd += [
                 '--json', self.json_path,
                 '--output', self.__query_output_path,

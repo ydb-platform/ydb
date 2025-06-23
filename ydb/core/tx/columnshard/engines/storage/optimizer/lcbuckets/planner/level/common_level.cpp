@@ -2,7 +2,9 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-void TOneLayerPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
+std::vector<TPortionInfo::TPtr> TOneLayerPortions::DoModifyPortions(
+    const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
+    std::vector<TPortionInfo::TPtr> problems;
     for (auto&& i : remove) {
         auto it = Portions.find(TOrderedPortion(i));
         AFL_VERIFY(it != Portions.end());
@@ -18,26 +20,34 @@ void TOneLayerPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& 
             {
                 auto it = info.first;
                 ++it;
-                if (it != Portions.end()) {
-                    AFL_VERIFY(i->IndexKeyEnd() < it->GetStart())("start", i->IndexKeyStart().DebugString())("end", i->IndexKeyEnd().DebugString())(
-                                                      "next", it->GetStart().DebugString())("next1", it->GetStart().DebugString())(
-                                                      "next2", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())(
-                                                      "portion_id_new", i->GetPortionId())("portion_id_old", it->GetPortion()->GetPortionId())(
-                                                      "portion_old", it->GetPortion()->DebugString())("add", sb);
+                if (it != Portions.end() && it->GetStart() <= i->IndexKeyEnd()) {
+                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("start", i->IndexKeyStart().DebugString())(
+                        "end", i->IndexKeyEnd().DebugString())("next", it->GetStart().DebugString())("next1", it->GetStart().DebugString())(
+                        "next2", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())("portion_id_new", i->GetPortionId())(
+                        "portion_id_old", it->GetPortion()->GetPortionId())("portion_old", it->GetPortion()->DebugString())("add", sb);
+                    problems.emplace_back(i);
+                    Portions.erase(info.first);
+                    continue;
                 }
             }
             {
                 auto it = info.first;
                 if (it != Portions.begin()) {
                     --it;
-                    AFL_VERIFY(it->GetPortion()->IndexKeyEnd() < i->IndexKeyStart())
-                    ("start", i->IndexKeyStart().DebugString())("finish", i->IndexKeyEnd().DebugString())("pred_start",
-                        it->GetPortion()->IndexKeyStart().DebugString())("pred_finish", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())(
-                        "portion_id_new", i->GetPortionId())("portion_id_old", it->GetPortion()->GetPortionId())("add", sb);
+                    if (i->IndexKeyStart() <= it->GetPortion()->IndexKeyEnd()) {
+                        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("start", i->IndexKeyStart().DebugString())(
+                            "finish", i->IndexKeyEnd().DebugString())("pred_start", it->GetPortion()->IndexKeyStart().DebugString())(
+                            "pred_finish", it->GetPortion()->IndexKeyEnd().DebugString())("level_id", GetLevelId())(
+                            "portion_id_new", i->GetPortionId())("portion_id_old", it->GetPortion()->GetPortionId())("add", sb);
+                        problems.emplace_back(i);
+                        Portions.erase(info.first);
+                        continue;
+                    }
                 }
             }
         }
     }
+    return problems;
 }
 
 TCompactionTaskData TOneLayerPortions::DoGetOptimizationTask() const {
@@ -69,4 +79,4 @@ TCompactionTaskData TOneLayerPortions::DoGetOptimizationTask() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

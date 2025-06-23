@@ -959,7 +959,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr& ev) {
         SBS_LOG_D("Handle " << ev->Get()->ToString());
 
-        const auto& replicas = ev->Get()->Replicas;
+        const auto& replicas = ev->Get()->GetPlainReplicas();
 
         if (replicas.empty()) {
             Y_ABORT_UNLESS(Proxies.empty());

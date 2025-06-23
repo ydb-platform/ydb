@@ -8,27 +8,6 @@
 
 namespace NKikimr::NColumnShard::NLoading {
 
-bool TInsertTableInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
-    for (auto&& i : Self->TablesManager.GetTables()) {
-        localInsertTable->RegisterPathInfo(i.first);
-    }
-    if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
-        ACFL_ERROR("step", "TInsertTable::Load_Fails");
-        return false;
-    }
-    Self->InsertTable.swap(localInsertTable);
-    return true;
-}
-
-bool TInsertTableInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::InsertTable>(db, txc.DB.GetScheme());
-}
-
 bool TTxControllerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     auto localTxController = std::make_unique<TTxController>(*Self);
     if (!localTxController->Load(txc)) {
@@ -70,40 +49,6 @@ bool TStoragesManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionC
            (int)Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme()) &
            (int)Schema::Precharge<Schema::SharedBlobIds>(db, txc.DB.GetScheme()) &
            (int)Schema::Precharge<Schema::BorrowedBlobIds>(db, txc.DB.GetScheme());
-}
-
-bool TLongTxInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    auto rowset = db.Table<Schema::LongTxWrites>().Select();
-    if (!rowset.IsReady()) {
-        return false;
-    }
-
-    while (!rowset.EndOfSet()) {
-        const TInsertWriteId writeId = (TInsertWriteId)rowset.GetValue<Schema::LongTxWrites::WriteId>();
-        const ui32 writePartId = rowset.GetValue<Schema::LongTxWrites::WritePartId>();
-        NKikimrLongTxService::TLongTxId proto;
-        Y_ABORT_UNLESS(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
-        const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
-
-        std::optional<ui32> granuleShardingVersion;
-        if (rowset.HaveValue<Schema::LongTxWrites::GranuleShardingVersion>() &&
-            rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>()) {
-            granuleShardingVersion = rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>();
-        }
-
-        Self->LoadLongTxWrite(writeId, writePartId, longTxId, granuleShardingVersion);
-
-        if (!rowset.Next()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool TLongTxInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
 }
 
 bool TDBLocksInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

@@ -10,7 +10,6 @@
 #include <ydb/core/tablet_flat/flat_row_state.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -114,7 +113,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        LOG_D("Seek " << seq << " " << Debug());
+        LOG_T("Seek " << seq << " " << Debug());
 
         lead = Lead;
 
@@ -122,10 +121,10 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
-        LOG_T("Feed " << Debug());
+        // LOG_T("Feed " << Debug());
 
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountRowCellBytes(key, *row);
 
         Sampler.Add([&row](){
             return TSerializedCellVec::Serialize(*row);
@@ -140,7 +139,7 @@ public:
 
     EScan Exhausted() final
     {
-        LOG_D("Exhausted " << Debug());
+        LOG_T("Exhausted " << Debug());
 
         return EScan::Final;
     }
@@ -169,9 +168,9 @@ public:
         NYql::IssuesToMessage(Issues, record.MutableIssues());
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_N("Done " << Debug() << " " << ToShortDebugString(Response->Record));
         } else {
-            LOG_E("Failed " << Debug() << " " << Response->Record.ShortDebugString());
+            LOG_E("Failed " << Debug() << " " << ToShortDebugString(Response->Record));
         }
         Send(ResponseActorId, Response.Release());
 
@@ -279,7 +278,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
                 LOG_E("Rejecting TSampleKScan bad request TabletId: " << TabletID()
                     << " " << request.ShortDebugString()
-                    << " with response " << response->Record.ShortDebugString());
+                    << " with response " << ToShortDebugString(response->Record));
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {

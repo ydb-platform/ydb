@@ -12,6 +12,10 @@ class TBlockExistsExec {
 public:
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         const auto& input = batch.values[0];
+        if (input.is_scalar()) {
+            *res = arrow::Datum(static_cast<ui8>(input.scalar()->is_valid));
+            return arrow::Status::OK();
+        }
         MKQL_ENSURE(input.is_array(), "Expected array");
         const auto& arr = *input.array();
 

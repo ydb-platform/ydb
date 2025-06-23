@@ -36,6 +36,7 @@ using namespace NNamedValue;
 using namespace NSkiff;
 using namespace NSkiffExt;
 using namespace NTableClient;
+using namespace NTzTypes;
 using namespace NYTree;
 using namespace NYson;
 
@@ -227,7 +228,7 @@ TEST(TSkiffSchemaDescription, TestDescriptionDerivation)
     EXPECT_EQ(std::ssize(denseFieldDescriptionList), 2);
 
     EXPECT_EQ(denseFieldDescriptionList[0].Name(), "Foo");
-    EXPECT_EQ(denseFieldDescriptionList[0].ValidatedSimplify(), EWireType::Uint64);
+    EXPECT_EQ(denseFieldDescriptionList[0].ValidatedGetDeoptionalizeType(/*simplify*/ true), EWireType::Uint64);
 }
 
 TEST(TSkiffSchemaDescription, TestKeySwitchColumn)
@@ -544,7 +545,7 @@ void TestAllWireTypes(bool useSchema)
     TStringInput resultInput(result);
     TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-    // row 0
+    // Row 0.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), -1);
     ASSERT_EQ(checkedSkiffParser.ParseUint64(), 2u);
@@ -575,7 +576,7 @@ void TestAllWireTypes(bool useSchema)
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "eight");
 
-    // row 1
+    // Row 1.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), -9);
     ASSERT_EQ(checkedSkiffParser.ParseUint64(), 10u);
@@ -595,7 +596,7 @@ void TestAllWireTypes(bool useSchema)
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
 
-    // end
+    // The end.
     ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
     checkedSkiffParser.ValidateFinished();
 }
@@ -629,10 +630,6 @@ public:
         }
 
         for (const auto type : TEnumTraits<ESimpleLogicalValueType>::GetDomainValues()) {
-            if (IsTzType(SimpleLogicalType(type))) {
-                // TODO(nadya02): YT-15805: Support tz types.
-                continue;
-            }
             auto logicalType = OptionalLogicalType(SimpleLogicalType(type));
             if (IsV3Composite(logicalType)) {
                 // Optional<Null> is not v1 type
@@ -808,61 +805,61 @@ TEST(TSkiffWriter, TestYsonWireType)
         return ConvertToNode(TYsonString(yson));
     };
 
-    // Row 0 (Null)
+    // Row 0 (Null).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->GetType(), ENodeType::Entity);
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
 
-    // Row 1 (Int64)
+    // Row 1 (Int64).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsInt64()->GetValue(), -5);
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsInt64()->GetValue(), -6);
 
-    // Row 2 (Uint64)
+    // Row 2 (Uint64).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsUint64()->GetValue(), 42u);
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsUint64()->GetValue(), 43u);
 
-    // Row 3 (Double)
+    // Row 3 (Double).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsDouble()->GetValue(), 2.7182818);
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsDouble()->GetValue(), 3.1415926);
 
-    // Row 4 (Boolean)
+    // Row 4 (Boolean).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsBoolean()->GetValue(), true);
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsBoolean()->GetValue(), false);
 
-    // Row 5 (String)
+    // Row 5 (String).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsString()->GetValue(), "Yin");
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsString()->GetValue(), "Yang");
 
-    // Row 6 (Any)
+    // Row 6 (Any).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsMap()->GetChildOrThrow("foo")->AsString()->GetValue(), "bar");
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->AsMap()->GetChildOrThrow("bar")->AsString()->GetValue(), "baz");
 
-    // Row 7 (Null)
+    // Row 7 (Null).
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser)->GetType(), ENodeType::Entity);
 
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
 
-    // end
+    // The end.
     ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
     checkedSkiffParser.ValidateFinished();
 }
@@ -1411,21 +1408,21 @@ TEST(TSkiffWriter, TestRearrange)
     TStringInput resultInput(result);
     TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-    // row 0
+    // Row 0.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), 1);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "one");
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
 
-    // row 1
+    // Row 1.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), 2);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "dva");
 
-    // row 2
+    // Row 2.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), 3);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
@@ -1433,7 +1430,7 @@ TEST(TSkiffWriter, TestRearrange)
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "tri");
 
-    // end
+    // The end.
     ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
     checkedSkiffParser.ValidateFinished();
 }
@@ -1521,7 +1518,7 @@ TEST(TSkiffWriter, TestSparse)
     TStringInput resultInput(result);
     TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-    // row 0
+    // Row 0.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), -1);
@@ -1529,7 +1526,7 @@ TEST(TSkiffWriter, TestSparse)
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "minus one");
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), EndOfSequenceTag<ui16>());
 
-    // row 1
+    // Row 1.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 2);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "minus five");
@@ -1537,23 +1534,23 @@ TEST(TSkiffWriter, TestSparse)
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), -5);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), EndOfSequenceTag<ui16>());
 
-    // row 2
+    // Row 2.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 1);
     ASSERT_EQ(checkedSkiffParser.ParseUint64(), 42u);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), EndOfSequenceTag<ui16>());
 
-    // row 3
+    // Row 3.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), -8);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), EndOfSequenceTag<ui16>());
 
-    // row 4
+    // Row 4.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), EndOfSequenceTag<ui16>());
 
-    // end
+    // The end.
     ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
     checkedSkiffParser.ValidateFinished();
 }
@@ -1656,23 +1653,23 @@ TEST(TSkiffWriter, TestOtherColumns)
         return ConvertToYsonTextStringStable(ConvertToNode(TYsonString(yson)));
     };
 
-    // row 0
+    // Row 0.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser), "{\"string_column\"=\"foo\";}");
 
-    // row 1
+    // Row 1.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), 42);
     ASSERT_EQ(parseYson(&checkedSkiffParser), "{}");
 
-    // row 2
+    // Row 2.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
     ASSERT_EQ(parseYson(&checkedSkiffParser), "{\"other_string_column\"=\"bar\";}");
 
-    // end
+    // The end.
     ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
     checkedSkiffParser.ValidateFinished();
 }
@@ -1718,22 +1715,22 @@ TEST(TSkiffWriter, TestKeySwitch)
 
     TString buf;
 
-    // row 0
+    // Row 0.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "one");
     ASSERT_EQ(checkedSkiffParser.ParseBoolean(), false);
 
-    // row 1
+    // Row 1.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "one");
     ASSERT_EQ(checkedSkiffParser.ParseBoolean(), false);
 
-    // row 2
+    // Row 2.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "two");
     ASSERT_EQ(checkedSkiffParser.ParseBoolean(), true);
 
-    // end
+    // The end.
     ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
     checkedSkiffParser.ValidateFinished();
 }
@@ -2009,7 +2006,7 @@ TEST(TSkiffWriter, TestRowIndexOnlyOrRangeIndexOnly)
         TStringInput resultInput(resultStream.Str());
         TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-        // row 0
+        // Row 0.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
         ASSERT_EQ(checkedSkiffParser.ParseInt64(), 0);
@@ -2065,7 +2062,7 @@ TEST(TSkiffWriter, TestComplexType)
         TStringInput resultInput(resultStream.Str());
         TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-        // row 0
+        // Row 0.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseString32(), "foo");
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
@@ -2079,6 +2076,140 @@ TEST(TSkiffWriter, TestComplexType)
         ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
         checkedSkiffParser.ValidateFinished();
     }
+}
+
+TEST(TSkiffWriter, TestTzTime)
+{
+    auto skiffSchema = CreateTupleSchema({
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint16),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("dateColumn"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint32),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("datetimeColumn"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint64),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("timestampColumn"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Int32),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("date32Column"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Int64),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("datetime64Column"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Int64),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("timestamp64Column")
+    });
+
+    TStringStream resultStream;
+    auto nameTable = New<TNameTable>();
+    auto tableSchema = New<TTableSchema>(std::vector{
+        TColumnSchema("dateColumn", ESimpleLogicalValueType::TzDate),
+        TColumnSchema("datetimeColumn", ESimpleLogicalValueType::TzDatetime),
+        TColumnSchema("timestampColumn", ESimpleLogicalValueType::TzTimestamp),
+        TColumnSchema("date32Column", ESimpleLogicalValueType::TzDate32),
+        TColumnSchema("datetime64Column", ESimpleLogicalValueType::TzDatetime64),
+        TColumnSchema("timestamp64Column", ESimpleLogicalValueType::TzTimestamp64)
+    });
+
+    auto writer = CreateSkiffWriter(skiffSchema, nameTable, &resultStream, std::vector{tableSchema});
+
+    auto dateValueString = MakeTzString<ui16>(42, "Europe/Moscow");
+    auto datetimeValueString = MakeTzString<ui32>(42, "Europe/Moscow");
+    auto timestampValueString = MakeTzString<ui64>(42, "Europe/Moscow");
+    auto date32ValueString = MakeTzString<i32>(42, "Europe/Moscow");
+    auto datetime64ValueString = MakeTzString<i64>(42, "Europe/Moscow");
+    auto timestamp64ValueString = MakeTzString<i64>(42, "Europe/Moscow");
+
+    // Row 0.
+    Y_UNUSED(writer->Write({
+        MakeRow(nameTable, {
+            {"dateColumn", dateValueString},
+            {"datetimeColumn", datetimeValueString},
+            {"timestampColumn", timestampValueString},
+            {"date32Column", date32ValueString},
+            {"datetime64Column", datetime64ValueString},
+            {"timestamp64Column", timestamp64ValueString},
+        }).Get(),
+    }));
+    writer->Close()
+        .Get()
+        .ThrowOnError();
+
+    TStringInput resultInput(resultStream.Str());
+    TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
+
+    // Row 0.
+    ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
+    // Date.
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), static_cast<ui16>(42));
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), 1);
+
+    // Datetime.
+    ASSERT_EQ(checkedSkiffParser.ParseUint32(), static_cast<ui32>(42));
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), 1);
+
+    // Timestamp.
+    ASSERT_EQ(checkedSkiffParser.ParseUint64(), static_cast<ui64>(42));
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), 1);
+
+    // Date32.
+    ASSERT_EQ(checkedSkiffParser.ParseInt32(), 42);
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), 1);
+
+    // Datetime64.
+    ASSERT_EQ(checkedSkiffParser.ParseInt64(), 42);
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), 1);
+
+    // Timestamp64.
+    ASSERT_EQ(checkedSkiffParser.ParseInt64(), 42);
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), 1);
+
+    ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
+    checkedSkiffParser.ValidateFinished();
+}
+
+TEST(TSkiffWriter, TestTimezoneString)
+{
+    auto skiffSchema = CreateTupleSchema({
+        CreateSimpleTypeSchema(EWireType::String32)->SetName("dateColumn")
+    });
+
+    TStringStream resultStream;
+    auto nameTable = New<TNameTable>();
+    auto tableSchema = New<TTableSchema>(std::vector{
+        TColumnSchema("dateColumn", ESimpleLogicalValueType::TzDate)
+    });
+
+    auto writer = CreateSkiffWriter(skiffSchema, nameTable, &resultStream, std::vector{tableSchema});
+
+    auto dateValueString = MakeTzString<ui16>(42, "Europe/Moscow");
+    // Row 0.
+    Y_UNUSED(writer->Write({
+        MakeRow(nameTable, {
+            {"dateColumn", dateValueString}
+        }).Get(),
+    }));
+    writer->Close()
+        .Get()
+        .ThrowOnError();
+
+    TStringInput resultInput(resultStream.Str());
+    TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
+
+    // Row 0.
+    ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
+    // Date.
+    ASSERT_EQ(checkedSkiffParser.ParseString32(), dateValueString);
+
+    ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
+    checkedSkiffParser.ValidateFinished();
 }
 
 TEST(TSkiffWriter, TestEmptyComplexType)
@@ -2119,7 +2250,7 @@ TEST(TSkiffWriter, TestEmptyComplexType)
         TStringInput resultInput(resultStream.Str());
         TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-        // row 0
+        // Row 0.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 0);
 
@@ -2165,7 +2296,7 @@ TEST(TSkiffWriter, TestSparseComplexType)
         TStringInput resultInput(resultStream.Str());
         TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-        // row 0
+        // Row 0.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseString32(), "foo");
@@ -2217,7 +2348,7 @@ TEST(TSkiffWriter, TestSparseComplexTypeWithExtraOptional)
     TStringInput resultInput(resultStream.Str());
     TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-    // row 0
+    // Row 0.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
@@ -2243,7 +2374,7 @@ TEST(TSkiffWriter, TestBadWireTypeForSimpleColumn)
     TStringStream resultStream;
     EXPECT_THROW_WITH_SUBSTRING(
         CreateSkiffWriter(skiffSchema, nameTable, &resultStream, std::vector{New<TTableSchema>()}),
-        "cannot be represented with Skiff schema");
+        "Unexpected wire type");
 }
 
 TEST(TSkiffWriter, TestMissingComplexColumn)
@@ -2258,11 +2389,11 @@ TEST(TSkiffWriter, TestMissingComplexColumn)
         CreateRepeatedVariant8Schema({CreateSimpleTypeSchema(EWireType::Int64)})->SetName("opt_list"),
     });
 
-    { // Non optional Skiff schema
+    { // Non optional Skiff schema.
         auto nameTable = New<TNameTable>();
         EXPECT_THROW_WITH_SUBSTRING(
             CreateSkiffWriter(requiredSkiffSchema, nameTable, &Cnull, std::vector{New<TTableSchema>()}),
-            "cannot be represented with Skiff schema");
+            "Unexpected wire type");
     }
 
     {
@@ -2338,7 +2469,7 @@ TEST(TSkiffWriter, TestSkippedFields)
         TStringInput resultInput(result);
         TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-        // row 0
+        // Row 0.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseInt64(), 1);
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
@@ -2346,7 +2477,7 @@ TEST(TSkiffWriter, TestSkippedFields)
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
         ASSERT_EQ(checkedSkiffParser.ParseInt64(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseDouble(), 1.5);
-        // row 1
+        // Row 1.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseInt64(), 1);
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
@@ -2400,11 +2531,11 @@ TEST(TSkiffWriter, TestSkippedFieldsOutOfRange)
         TStringInput resultInput(result);
         TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
 
-        // row 0
+        // Row 0.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
         ASSERT_EQ(checkedSkiffParser.ParseInt64(), 0);
-        // row 1
+        // Row 1.
         ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
         ASSERT_EQ(checkedSkiffParser.ParseVariant8Tag(), 1);
         ASSERT_EQ(checkedSkiffParser.ParseInt64(), 5);
@@ -2459,25 +2590,25 @@ TEST(TSkiffWriter, TestSkippedFieldsAndKeySwitch)
 
     TString buf;
 
-    // row 0
+    // Row 0.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "one");
     ASSERT_EQ(checkedSkiffParser.ParseBoolean(), false);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), 0);
 
-    // row 1
+    // Row 1.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "one");
     ASSERT_EQ(checkedSkiffParser.ParseBoolean(), false);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), 1);
 
-    // row 2
+    // Row 2.
     ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
     ASSERT_EQ(checkedSkiffParser.ParseString32(), "two");
     ASSERT_EQ(checkedSkiffParser.ParseBoolean(), true);
     ASSERT_EQ(checkedSkiffParser.ParseInt64(), 2);
 
-    // end
+    // The end.
     ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
     checkedSkiffParser.ValidateFinished();
 
@@ -2616,18 +2747,18 @@ TEST(TSkiffParser, TestSparse)
     TStringStream dataStream;
     TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
 
-    // row 1
+    // Row 1.
     checkedSkiffWriter.WriteVariant16Tag(0);
-    // sparse fields begin
+    // Sparse fields begin.
     checkedSkiffWriter.WriteVariant16Tag(0);
     checkedSkiffWriter.WriteInt64(-42);
     checkedSkiffWriter.WriteVariant16Tag(1);
     checkedSkiffWriter.WriteUint64(54);
     checkedSkiffWriter.WriteVariant16Tag(EndOfSequenceTag<ui16>());
 
-    // row 2
+    // Row 2.
     checkedSkiffWriter.WriteVariant16Tag(0);
-    // sparse fields begin
+    // Sparse fields begin.
     checkedSkiffWriter.WriteVariant16Tag(2);
     checkedSkiffWriter.WriteString32("foo");
     checkedSkiffWriter.WriteVariant16Tag(EndOfSequenceTag<ui16>());
@@ -2836,6 +2967,163 @@ TEST(TSkiffParser, TestComplexColumn)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TSkiffParser, TestTimezoneTime)
+{
+    auto skiffSchema = CreateTupleSchema({
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint16),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("dateColumn"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint32),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("datetimeColumn"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint64),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("timestampColumn"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Int32),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("date32Column"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Int64),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("datetime64Column"),
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Int64),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("timestamp64Column")
+    });
+
+    TCollectingValueConsumer rowCollector(
+        New<TTableSchema>(std::vector{
+            TColumnSchema("dateColumn", ESimpleLogicalValueType::TzDate),
+            TColumnSchema("datetimeColumn", ESimpleLogicalValueType::TzDatetime),
+            TColumnSchema("timestampColumn", ESimpleLogicalValueType::TzTimestamp),
+            TColumnSchema("date32Column", ESimpleLogicalValueType::TzDate32),
+            TColumnSchema("datetime64Column", ESimpleLogicalValueType::TzDatetime64),
+            TColumnSchema("timestamp64Column", ESimpleLogicalValueType::TzTimestamp64)
+        }));
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
+
+    TStringStream dataStream;
+    TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
+
+    // Row 0.
+    checkedSkiffWriter.WriteVariant16Tag(0);
+
+    checkedSkiffWriter.WriteUint16(DateUpperBound - 1);
+    checkedSkiffWriter.WriteUint16(1);
+
+    checkedSkiffWriter.WriteUint32(DatetimeUpperBound - 1);
+    checkedSkiffWriter.WriteUint16(2);
+
+    checkedSkiffWriter.WriteUint64(TimestampUpperBound - 1);
+    checkedSkiffWriter.WriteUint16(3);
+
+    checkedSkiffWriter.WriteInt32(Date32LowerBound);
+    checkedSkiffWriter.WriteUint16(1);
+
+    checkedSkiffWriter.WriteInt64(Datetime64LowerBound);
+    checkedSkiffWriter.WriteUint16(2);
+
+    checkedSkiffWriter.WriteInt64(Timestamp64LowerBound);
+    checkedSkiffWriter.WriteUint16(3);
+
+    checkedSkiffWriter.Finish();
+
+    parser->Read(dataStream.Str());
+    parser->Finish();
+
+    ASSERT_EQ(rowCollector.Size(), 1);
+
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "dateColumn")), MakeTzString<ui16>(DateUpperBound - 1, GetTzName(1)));
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "datetimeColumn")), MakeTzString<ui32>(DatetimeUpperBound - 1, GetTzName(2)));
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "timestampColumn")), MakeTzString<ui64>(TimestampUpperBound - 1, GetTzName(3)));
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "date32Column")), MakeTzString<i32>(Date32LowerBound, GetTzName(1)));
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "datetime64Column")), MakeTzString<i64>(Datetime64LowerBound, GetTzName(2)));
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "timestamp64Column")), MakeTzString<i64>(Timestamp64LowerBound, GetTzName(3)));
+}
+
+TEST(TSkiffParser, TestTimezoneString)
+{
+    auto skiffSchema = CreateTupleSchema({
+        CreateSimpleTypeSchema(EWireType::String32)->SetName("dateColumn")
+    });
+
+    TCollectingValueConsumer rowCollector(
+        New<TTableSchema>(std::vector{
+            TColumnSchema("dateColumn", ESimpleLogicalValueType::TzDate),
+        }));
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
+
+    TStringStream dataStream;
+    TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
+
+    // Row 0.
+    checkedSkiffWriter.WriteVariant16Tag(0);
+
+    checkedSkiffWriter.WriteString32(MakeTzString<ui16>(DateUpperBound - 1, GetTzName(1)));
+
+    checkedSkiffWriter.Finish();
+
+    parser->Read(dataStream.Str());
+    parser->Finish();
+
+    ASSERT_EQ(rowCollector.Size(), 1);
+
+    ASSERT_EQ(GetString(rowCollector.GetRowValue(0, "dateColumn")), MakeTzString<ui16>(DateUpperBound - 1, GetTzName(1)));
+}
+
+TEST(TSkiffParser, TestWrongTimezoneName)
+{
+    auto skiffSchema = CreateTupleSchema({
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint16),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("dateColumn")
+    });
+
+    TCollectingValueConsumer rowCollector(
+        New<TTableSchema>(std::vector{
+            TColumnSchema("dateColumn", ESimpleLogicalValueType::TzDate)
+        }));
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
+
+    TStringStream dataStream;
+    TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
+
+    // Row 0.
+    checkedSkiffWriter.WriteVariant16Tag(0);
+
+    checkedSkiffWriter.WriteUint16(42);
+    checkedSkiffWriter.WriteUint16(1000);
+
+    checkedSkiffWriter.Finish();
+
+    EXPECT_THROW_WITH_SUBSTRING(parser->Read(dataStream.Str()), "Invalid timezone index");
+}
+
+TEST(TSkiffParser, TestWrongTimezoneType)
+{
+    auto skiffSchema = CreateTupleSchema({
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::Uint16),
+            CreateSimpleTypeSchema(EWireType::Uint16),
+        })->SetName("dateColumn")
+    });
+
+    TCollectingValueConsumer rowCollector(
+        New<TTableSchema>(std::vector{
+            TColumnSchema("dateColumn", ESimpleLogicalValueType::TzDatetime)
+        }));
+
+    EXPECT_THROW_WITH_SUBSTRING(CreateParserForSkiff(skiffSchema, &rowCollector), "Cannot create Skiff parser for table");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TSkiffParser, TestEmptyInput)
 {
     auto skiffSchema = CreateTupleSchema({
@@ -3004,7 +3292,7 @@ TEST(TSkiffParser, TestBadWireTypeForSimpleColumn)
     TCollectingValueConsumer rowCollector;
     EXPECT_THROW_WITH_SUBSTRING(
         CreateParserForSkiff(skiffSchema, &rowCollector),
-        "cannot be represented with Skiff schema");
+        "Unexpected wire type");
 }
 
 TEST(TSkiffParser, TestEmptyColumns)
@@ -3024,6 +3312,75 @@ TEST(TSkiffFormat, TestTimestamp)
     using namespace NLogicalTypeShortcuts;
     CHECK_BIDIRECTIONAL_CONVERSION(Timestamp(), CreateSimpleTypeSchema(EWireType::Uint64), 42ull, "2A000000" "00000000");
     CHECK_BIDIRECTIONAL_CONVERSION(Interval(), CreateSimpleTypeSchema(EWireType::Int64), 42, "2A000000" "00000000");
+}
+
+TEST(TSkiffFormat, ComplexTzType)
+{
+    auto skiffSchema = CreateTupleSchema({
+        CreateTupleSchema({
+            CreateSimpleTypeSchema(EWireType::String32)->SetName("key"),
+            CreateTupleSchema({
+                CreateSimpleTypeSchema(EWireType::Int64),
+                CreateSimpleTypeSchema(EWireType::Uint16),
+            })->SetName("value"),
+        })->SetName("column")
+    });
+
+    auto tableSchema = New<TTableSchema>(std::vector{
+        TColumnSchema("column", NTableClient::StructLogicalType({
+            {"key", NTableClient::SimpleLogicalType(ESimpleLogicalValueType::String)},
+            {"value", NTableClient::SimpleLogicalType(ESimpleLogicalValueType::TzTimestamp64)}
+        }))
+    });
+
+    TCollectingValueConsumer rowCollector(tableSchema);
+    auto parser = CreateParserForSkiff(skiffSchema, &rowCollector);
+
+    TStringStream dataStream;
+    TCheckedSkiffWriter checkedSkiffWriter(CreateVariant16Schema({skiffSchema}), &dataStream);
+
+    // Row 0.
+    checkedSkiffWriter.WriteVariant16Tag(0);
+
+    checkedSkiffWriter.WriteString32("row_0");
+    checkedSkiffWriter.WriteInt64(42);
+    checkedSkiffWriter.WriteUint16(1);
+
+    checkedSkiffWriter.Finish();
+
+    parser->Read(dataStream.Str());
+    parser->Finish();
+
+    ASSERT_EQ(rowCollector.Size(), 1);
+    auto compositeString = ConvertToYsonTextStringStable(GetComposite(rowCollector.GetRowValue(0, "column")));
+
+    TStringStream resultStream;
+    auto nameTable = New<TNameTable>();
+
+    auto writer = CreateSkiffWriter(skiffSchema, nameTable, &resultStream, std::vector{tableSchema});
+
+    // Row 0.
+    Y_UNUSED(writer->Write({
+        MakeRow(nameTable, {
+            {"column", EValueType::Composite, compositeString},
+        }).Get(),
+    }));
+
+    writer->Close()
+        .Get()
+        .ThrowOnError();
+
+    TStringInput resultInput(resultStream.Str());
+    TCheckedSkiffParser checkedSkiffParser(CreateVariant16Schema({skiffSchema}), &resultInput);
+
+    // Row 0.
+    ASSERT_EQ(checkedSkiffParser.ParseVariant16Tag(), 0);
+    ASSERT_EQ(checkedSkiffParser.ParseString32(), "row_0");
+    ASSERT_EQ(checkedSkiffParser.ParseInt64(), 42);
+    ASSERT_EQ(checkedSkiffParser.ParseUint16(), 1);
+
+    ASSERT_EQ(checkedSkiffParser.HasMoreData(), false);
+    checkedSkiffParser.ValidateFinished();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

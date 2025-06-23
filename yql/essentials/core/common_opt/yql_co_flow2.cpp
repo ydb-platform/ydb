@@ -1684,7 +1684,7 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     size_t separableComponents = 0;
     for (auto& p : andComponents) {
         TSet<TStringBuf> usedFields;
-        if (p->IsCallable("Likely") ||
+        if (IsNoPush(*p) ||
             HasDependsOn(p, arg.Ptr()) ||
             !HaveFieldsSubset(p, arg.Ref(), usedFields, *optCtx.ParentsMap) ||
             !AllOf(usedFields, [&](TStringBuf field) { return keyColumns.contains(field); }) ||
@@ -1701,7 +1701,7 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     size_t maxKeyPredicates = 0;
     if (AllowComplexFiltersOverAggregatePushdown(optCtx)) {
         for (auto& p : restComponents) {
-            if (p->IsCallable("Likely")) {
+            if (IsNoPush(*p)) {
                 continue;
             }
             const TNodeMap<ESubgraphType> marked = MarkSubgraphForAggregate(p, arg, keyColumns);
@@ -1740,7 +1740,7 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
                 calculator->DropCache();
             }
             nonSeparableComponents += canPush;
-            p = ctx.WrapByCallableIf(canPush, "Likely", std::move(p));
+            p = ctx.WrapByCallableIf(canPush, "NoPush", std::move(p));
         }
     }
 
@@ -2097,56 +2097,27 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 continue;
             }
 
+            THashSet<TString> columns;
             auto itemNames = columnsForPruneKeysExtractor.find(scope.Ref().Content());
             if (itemNames == columnsForPruneKeysExtractor.end() || itemNames->second.empty()) {
                 children.push_back(equiJoin.Arg(i).Ptr());
                 continue;
             }
-
-            if (auto distinct = list.Ref().GetConstraint<TDistinctConstraintNode>()) {
-                if (distinct->ContainsCompleteSet(std::vector<std::string_view>(itemNames->second.cbegin(), itemNames->second.cend()))) {
-                    children.push_back(equiJoin.Arg(i).Ptr());
-                    continue;
-                }
+            for (const auto& elem : itemNames->second) {
+                columns.insert(TString(elem));
             }
 
-            bool isOrdered = false;
-            if (auto sorted = list.Ref().GetConstraint<TSortedConstraintNode>()) {
-                for (const auto& item : sorted->GetContent()) {
-                    size_t foundItemNamesCount = 0;
-                    for (const auto& path : item.first) {
-                        if (itemNames->second.contains(path.front())) {
-                            foundItemNamesCount++;
-                        }
-                    }
-                    if (foundItemNamesCount == itemNames->second.size()) {
-                        isOrdered = true;
-                        break;
-                    }
-                }
+            if (IsAlreadyDistinct(list.Ref(), columns)) {
+                children.push_back(equiJoin.Arg(i).Ptr());
+                continue;
             }
-
-            auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+            auto pruneKeysCallable = IsOrdered(list.Ref(), columns) ? "PruneAdjacentKeys" : "PruneKeys";
             YQL_CLOG(DEBUG, Core) << "Add " << pruneKeysCallable << " to EquiJoin input #" << i << ", label " << scope.Ref().Content();
             children.push_back(ctx.Builder(child.Pos())
                 .List()
                     .Callable(0, pruneKeysCallable)
                         .Add(0, list.Ptr())
-                        .Lambda(1)
-                            .Param("item")
-                            .List(0)
-                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
-                                    ui32 i = 0;
-                                    for (const auto& column : itemNames->second) {
-                                        parent.Callable(i++, "Member")
-                                            .Arg(0, "item")
-                                            .Atom(1, column)
-                                        .Seal();
-                                    }
-                                    return parent;
-                                })
-                            .Seal()
-                        .Seal()
+                        .Add(1, MakePruneKeysExtractorLambda(child.Ref(), columns, ctx))
                     .Seal()
                     .Add(1, scope.Ptr())
                 .Seal()
@@ -2200,7 +2171,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         if (self.Input().Maybe<TCoFilterNullMembers>()) {
-            if (auto res = ApplyExtractMembersToFilterNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
+            if (auto res = ApplyExtractMembersToFilterNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, optCtx, {})) {
                 return res;
             }
             return node;

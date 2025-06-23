@@ -24,6 +24,26 @@
             "uri": "file://test.test_FindAndConsumeEmpty_/results.txt"
         }
     ],
+    "test.test[InvalidCaptureRegexFail]": [
+        {
+            "uri": "file://test.test_InvalidCaptureRegexFail_/extracted"
+        }
+    ],
+    "test.test[InvalidRegexFail_2025.02]": [
+        {
+            "uri": "file://test.test_InvalidRegexFail_2025.02_/extracted"
+        }
+    ],
+    "test.test[InvalidRegexFail_2025.03]": [
+        {
+            "uri": "file://test.test_InvalidRegexFail_2025.03_/extracted"
+        }
+    ],
+    "test.test[InvalidRegexSuccess_2025.02]": [
+        {
+            "uri": "file://test.test_InvalidRegexSuccess_2025.02_/results.txt"
+        }
+    ],
     "test.test[LikeEscape]": [
         {
             "uri": "file://test.test_LikeEscape_/results.txt"

@@ -64,6 +64,8 @@ public:
 
     void Synchronize(TInstant deadline = TInstant::Max());
 
+    double GetBacklogQueueFillFraction() const;
+
 private:
     TLogManager();
 

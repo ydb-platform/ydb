@@ -2805,7 +2805,7 @@ TExprNode::TPtr TExprContext::ExactChangeChildren(const TExprNode& node, TExprNo
     newNode->SetTypeAnn(node.GetTypeAnn());
     newNode->CopyConstraints(node);
     newNode->SetState(node.GetState());
-    newNode->Result = node.Result;
+    newNode->Result_ = node.Result_;
     ExprNodes.emplace_back(newNode.Get());
     return newNode;
 }
@@ -2816,7 +2816,7 @@ TExprNode::TPtr TExprContext::ExactShallowCopy(const TExprNode& node) {
     newNode->SetTypeAnn(node.GetTypeAnn());
     newNode->CopyConstraints(node);
     newNode->SetState(node.GetState());
-    newNode->Result = node.Result;
+    newNode->Result_ = node.Result_;
     ExprNodes.emplace_back(newNode.Get());
     return newNode;
 }
@@ -3062,7 +3062,7 @@ bool TDataExprParamsType::Validate(TPositionHandle position, TExprContext& ctx) 
 }
 
 bool TItemExprType::Validate(TPosition position, TExprContext& ctx) const {
-    return ValidateName(position, Name, "member", ctx);
+    return ValidateName(position, Name_, "member", ctx);
 }
 
 bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
@@ -3071,11 +3071,11 @@ bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const 
 
 TStringBuf TItemExprType::GetCleanName(bool isVirtual) const {
     if (!isVirtual) {
-        return Name;
+        return Name_;
     }
 
-    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
-    return Name.SubStr(YqlVirtualPrefix.size());
+    YQL_ENSURE(Name_.StartsWith(YqlVirtualPrefix));
+    return Name_.SubStr(YqlVirtualPrefix.size());
 }
 
 const TItemExprType* TItemExprType::GetCleanItem(bool isVirtual, TExprContext& ctx) const {
@@ -3083,13 +3083,13 @@ const TItemExprType* TItemExprType::GetCleanItem(bool isVirtual, TExprContext& c
         return this;
     }
 
-    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
-    return ctx.MakeType<TItemExprType>(Name.SubStr(YqlVirtualPrefix.size()), ItemType);
+    YQL_ENSURE(Name_.StartsWith(YqlVirtualPrefix));
+    return ctx.MakeType<TItemExprType>(Name_.SubStr(YqlVirtualPrefix.size()), ItemType_);
 }
 
 bool TMultiExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (Items.size() > Max<ui16>()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Too many elements: " << Items.size()));
+    if (Items_.size() > Max<ui16>()) {
+        ctx.AddError(TIssue(position, TStringBuilder() << "Too many elements: " << Items_.size()));
         return false;
     }
 
@@ -3101,8 +3101,8 @@ bool TMultiExprType::Validate(TPositionHandle position, TExprContext& ctx) const
 }
 
 bool TTupleExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (Items.size() > Max<ui16>()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Too many tuple elements: " << Items.size()));
+    if (Items_.size() > Max<ui16>()) {
+        ctx.AddError(TIssue(position, TStringBuilder() << "Too many tuple elements: " << Items_.size()));
         return false;
     }
 
@@ -3114,13 +3114,13 @@ bool TTupleExprType::Validate(TPositionHandle position, TExprContext& ctx) const
 }
 
 bool TStructExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (Items.size() > Max<ui16>()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Too many struct members: " << Items.size()));
+    if (Items_.size() > Max<ui16>()) {
+        ctx.AddError(TIssue(position, TStringBuilder() << "Too many struct members: " << Items_.size()));
         return false;
     }
 
     TString lastName;
-    for (auto& item : Items) {
+    for (auto& item : Items_) {
         if (!item->Validate(position, ctx)) {
             return false;
         }
@@ -3141,20 +3141,20 @@ bool TStructExprType::Validate(TPositionHandle position, TExprContext& ctx) cons
 }
 
 bool TVariantExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (UnderlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
-        if (!UnderlyingType->Cast<TTupleExprType>()->GetSize()) {
+    if (UnderlyingType_->GetKind() == ETypeAnnotationKind::Tuple) {
+        if (!UnderlyingType_->Cast<TTupleExprType>()->GetSize()) {
             ctx.AddError(TIssue(position, TStringBuilder() << "Empty tuple is not allowed as underlying type"));
             return false;
         }
     }
-    else if (UnderlyingType->GetKind() == ETypeAnnotationKind::Struct) {
-        if (!UnderlyingType->Cast<TStructExprType>()->GetSize()) {
+    else if (UnderlyingType_->GetKind() == ETypeAnnotationKind::Struct) {
+        if (!UnderlyingType_->Cast<TStructExprType>()->GetSize()) {
             ctx.AddError(TIssue(position, TStringBuilder() << "Empty struct is not allowed as underlying type"));
             return false;
         }
     }
     else {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Expected tuple or struct, but got:" << *UnderlyingType));
+        ctx.AddError(TIssue(position, TStringBuilder() << "Expected tuple or struct, but got:" << *UnderlyingType_));
         return false;
     }
 
@@ -3191,15 +3191,15 @@ ui32 TVariantExprType::MakeFlags(const TTypeAnnotationNode* underlyingType) {
 
 
 bool TDictExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (KeyType->IsHashable() && KeyType->IsEquatable()) {
+    if (KeyType_->IsHashable() && KeyType_->IsEquatable()) {
         return true;
     }
 
-    if (KeyType->IsComparableInternal()) {
+    if (KeyType_->IsComparableInternal()) {
         return true;
     }
 
-    ctx.AddError(TIssue(position, TStringBuilder() << "Expected hashable and equatable or internally comparable dict key type, but got: " << *KeyType));
+    ctx.AddError(TIssue(position, TStringBuilder() << "Expected hashable and equatable or internally comparable dict key type, but got: " << *KeyType_));
     return false;
 }
 
@@ -3208,14 +3208,14 @@ bool TDictExprType::Validate(TPositionHandle position, TExprContext& ctx) const 
 }
 
 bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (OptionalArgumentsCount > Arguments.size()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Too many optional arguments: " << OptionalArgumentsCount
-            << ", function has only " << Arguments.size() << " arguments"));
+    if (OptionalArgumentsCount_ > Arguments_.size()) {
+        ctx.AddError(TIssue(position, TStringBuilder() << "Too many optional arguments: " << OptionalArgumentsCount_
+            << ", function has only " << Arguments_.size() << " arguments"));
         return false;
     }
 
-    for (ui32 index = Arguments.size() - OptionalArgumentsCount; index < Arguments.size(); ++index) {
-        auto type = Arguments[index].Type;
+    for (ui32 index = Arguments_.size() - OptionalArgumentsCount_; index < Arguments_.size(); ++index) {
+        auto type = Arguments_[index].Type;
         if (type->GetKind() != ETypeAnnotationKind::Optional) {
             ctx.AddError(TIssue(position, TStringBuilder() << "Expected optional type for argument: " << (index + 1)
                 << " because it's an optional argument, but got: " << *type));
@@ -3224,9 +3224,9 @@ bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
     }
 
     bool startedNames = false;
-    std::unordered_set<std::string_view> usedNames(Arguments.size());
-    for (ui32 index = 0; index < Arguments.size(); ++index) {
-        bool hasName = !Arguments[index].Name.empty();
+    std::unordered_set<std::string_view> usedNames(Arguments_.size());
+    for (ui32 index = 0; index < Arguments_.size(); ++index) {
+        bool hasName = !Arguments_[index].Name.empty();
         if (startedNames) {
             if (!hasName) {
                 ctx.AddError(TIssue(position, TStringBuilder() << "Unexpected positional argument at position "
@@ -3238,8 +3238,8 @@ bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
         }
 
         if (hasName) {
-            if (!usedNames.insert(Arguments[index].Name).second) {
-                ctx.AddError(TIssue(position, TStringBuilder() << "Duplication of named argument: " << Arguments[index].Name));
+            if (!usedNames.insert(Arguments_[index].Name).second) {
+                ctx.AddError(TIssue(position, TStringBuilder() << "Duplication of named argument: " << Arguments_[index].Name));
                 return false;
             }
         }
@@ -3253,7 +3253,7 @@ bool TCallableExprType::Validate(TPositionHandle position, TExprContext& ctx) co
 }
 
 bool TTaggedExprType::Validate(TPosition position, TExprContext& ctx) const {
-    return ValidateName(position, Tag, "tag", ctx);
+    return ValidateName(position, Tag_, "tag", ctx);
 }
 
 bool TTaggedExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
@@ -3261,7 +3261,7 @@ bool TTaggedExprType::Validate(TPositionHandle position, TExprContext& ctx) cons
 }
 
 const TString& TPgExprType::GetName() const {
-    return NPg::LookupType(TypeId).Name;
+    return NPg::LookupType(TypeId_).Name;
 }
 
 ui32 TPgExprType::GetFlags(ui32 typeId) {
@@ -3329,14 +3329,14 @@ TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
     , Frozen(false)
-    , PositionSet(
+    , PositionSet_(
         16,
         [this](TPositionHandle p) { return GetHash(p); },
         [this](TPositionHandle a, TPositionHandle b) { return IsEqual(a, b); }
     )
 {
     auto handle = AppendPosition(TPosition());
-    YQL_ENSURE(handle.Handle == 0);
+    YQL_ENSURE(handle.Handle_ == 0);
     IssueManager.SetWarningToErrorTreatMessage(
         "Treat warning as error mode enabled. "
         "To disable it use \"pragma warning(\"default\", <code>);\"");
@@ -3344,24 +3344,24 @@ TExprContext::TExprContext(ui64 nextUniqueId)
 }
 
 TPositionHandle TExprContext::AppendPosition(const TPosition& pos) {
-    YQL_ENSURE(Positions.size() <= Max<ui32>(), "Too many positions");
+    YQL_ENSURE(Positions_.size() <= Max<ui32>(), "Too many positions");
 
     TPositionHandle handle;
-    handle.Handle = (ui32)Positions.size();
-    Positions.push_back(pos);
+    handle.Handle_ = (ui32)Positions_.size();
+    Positions_.push_back(pos);
 
-    auto inserted = PositionSet.insert(handle);
+    auto inserted = PositionSet_.insert(handle);
     if (inserted.second) {
         return handle;
     }
 
-    Positions.pop_back();
+    Positions_.pop_back();
     return *inserted.first;
 }
 
 TPosition TExprContext::GetPosition(TPositionHandle handle) const {
-    YQL_ENSURE(handle.Handle < Positions.size(), "Unknown PositionHandle");
-    return Positions[handle.Handle];
+    YQL_ENSURE(handle.Handle_ < Positions_.size(), "Unknown PositionHandle");
+    return Positions_[handle.Handle_];
 }
 
 TExprContext::~TExprContext() {
@@ -3395,15 +3395,15 @@ void TExprContext::Reset() {
 }
 
 bool TExprContext::IsEqual(TPositionHandle a, TPositionHandle b) const {
-    YQL_ENSURE(a.Handle < Positions.size());
-    YQL_ENSURE(b.Handle < Positions.size());
-    return Positions[a.Handle] == Positions[b.Handle];
+    YQL_ENSURE(a.Handle_ < Positions_.size());
+    YQL_ENSURE(b.Handle_ < Positions_.size());
+    return Positions_[a.Handle_] == Positions_[b.Handle_];
 }
 
 size_t TExprContext::GetHash(TPositionHandle p) const {
-    YQL_ENSURE(p.Handle < Positions.size());
+    YQL_ENSURE(p.Handle_ < Positions_.size());
 
-    const TPosition& pos = Positions[p.Handle];
+    const TPosition& pos = Positions_[p.Handle_];
     size_t h = ComputeHash(pos.File);
     h = CombineHashes(h, NumericHash(pos.Row));
     return CombineHashes(h, NumericHash(pos.Column));
@@ -3682,27 +3682,27 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
 class TCacheKeyBuilder {
 public:
     TString Process(const TExprNode& root) {
-        SHA256_Init(&Sha);
+        SHA256_Init(&Sha_);
         unsigned char hash[SHA256_DIGEST_LENGTH];
         Visit(root);
-        SHA256_Final(hash, &Sha);
+        SHA256_Final(hash, &Sha_);
         return TString((const char*)hash, sizeof(hash));
     }
 
 private:
     void Visit(const TExprNode& node) {
-        auto [it, inserted] = Visited.emplace(&node, Visited.size());
-        SHA256_Update(&Sha, &it->second, sizeof(it->second));
+        auto [it, inserted] = Visited_.emplace(&node, Visited_.size());
+        SHA256_Update(&Sha_, &it->second, sizeof(it->second));
         if (!inserted) {
             return;
         }
 
         ui32 type = node.Type();
-        SHA256_Update(&Sha, &type, sizeof(type));
+        SHA256_Update(&Sha_, &type, sizeof(type));
         if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Callable) {
             ui32 textLen = node.Content().size();
-            SHA256_Update(&Sha, &textLen, sizeof(textLen));
-            SHA256_Update(&Sha, node.Content().data(), textLen);
+            SHA256_Update(&Sha_, &textLen, sizeof(textLen));
+            SHA256_Update(&Sha_, node.Content().data(), textLen);
         }
 
         if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Argument || node.Type() == TExprNode::EType::World) {
@@ -3710,15 +3710,15 @@ private:
         }
 
         ui32 len = node.ChildrenSize();
-        SHA256_Update(&Sha, &len, sizeof(len));
+        SHA256_Update(&Sha_, &len, sizeof(len));
         for (const auto& child : node.Children()) {
             Visit(*child);
         }
     }
 
 private:
-    SHA256_CTX Sha;
-    TNodeMap<ui64> Visited;
+    SHA256_CTX Sha_;
+    TNodeMap<ui64> Visited_;
 };
 
 TString MakeCacheKey(const TExprNode& root) {

@@ -4101,6 +4101,13 @@ TRuntimeNode TProgramBuilder::Udf(
     TStatus status = FunctionRegistry.FindFunctionTypeInfo(
         LangVer, Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
+    if (funcInfo.MinLangVer != NYql::UnknownLangVersion && LangVer != NYql::UnknownLangVersion && LangVer < funcInfo.MinLangVer) {
+        throw yexception() << "UDF " << funcName << " is not available in given language version yet";
+    }
+
+    if (funcInfo.MaxLangVer != NYql::UnknownLangVersion && LangVer != NYql::UnknownLangVersion && LangVer > funcInfo.MaxLangVer) {
+        throw yexception() << "UDF " << funcName << " is not available in given language version anymore";
+    }
 
     auto runConfigType = funcInfo.RunConfigType;
     if (runConfig) {

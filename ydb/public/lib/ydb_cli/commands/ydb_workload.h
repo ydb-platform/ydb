@@ -104,6 +104,9 @@ protected:
     THolder<NQuery::TQueryClient> QueryClient;
     int Type = 0;
     bool DryRun = false;
+
+private:
+    void RmParentIfEmpty(TStringBuf path, TConfig& config);
 };
 
 class TWorkloadCommandInit final: public TWorkloadCommandBase {

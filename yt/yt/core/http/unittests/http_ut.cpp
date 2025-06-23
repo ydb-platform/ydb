@@ -641,8 +641,8 @@ private:
             serverConfig->Credentials = New<NHttps::TServerCredentialsConfig>();
             serverConfig->Credentials->PrivateKey = New<TPemBlobConfig>();
             serverConfig->Credentials->PrivateKey->Value = TestCertificate;
-            serverConfig->Credentials->CertChain = New<TPemBlobConfig>();
-            serverConfig->Credentials->CertChain->Value = TestCertificate;
+            serverConfig->Credentials->CertificateChain = New<TPemBlobConfig>();
+            serverConfig->Credentials->CertificateChain->Value = TestCertificate;
             SetupServer(serverConfig);
             ServerConfig = serverConfig;
             Server = NHttps::CreateServer(serverConfig, Poller);
@@ -651,8 +651,8 @@ private:
             clientConfig->Credentials = New<NHttps::TClientCredentialsConfig>();
             clientConfig->Credentials->PrivateKey = New<TPemBlobConfig>();
             clientConfig->Credentials->PrivateKey->Value = TestCertificate;
-            clientConfig->Credentials->CertChain = New<TPemBlobConfig>();
-            clientConfig->Credentials->CertChain->Value = TestCertificate;
+            clientConfig->Credentials->CertificateChain = New<TPemBlobConfig>();
+            clientConfig->Credentials->CertificateChain->Value = TestCertificate;
             SetupClient(clientConfig);
             Client = NHttps::CreateClient(clientConfig, Poller);
         }

@@ -16,6 +16,7 @@ TFmrTableDataServiceReader::TFmrTableDataServiceReader(
     TableDataService_(tableDataService),
     ReadAheadChunks_(settings.ReadAheadChunks)
 {
+    SetMinChunkInNewRange();
     ReadAhead();
 }
 
@@ -40,12 +41,12 @@ size_t TFmrTableDataServiceReader::DoRead(void* buf, size_t len) {
             try {
                 data = chunk.Data.GetValueSync();
             } catch (...) {
-                ythrow yexception() << "Error reading chunk: " << chunk.Meta << "Error: " << CurrentExceptionMessage();
+                ythrow yexception() << "Error reading chunk: " << chunk.Meta.ToString() << "Error: " << CurrentExceptionMessage();
             }
             if (data) {
                 DataBuffer_.Assign(data->data(), data->size());
             } else {
-                ythrow yexception() << "No data for chunk:" << chunk.Meta;
+                ythrow yexception() << "No data for chunk:" << chunk.Meta.ToString();
             }
 
             PendingChunks_.pop();
@@ -71,7 +72,14 @@ void TFmrTableDataServiceReader::ReadAhead() {
             CurrentChunk_++;
         } else {
             CurrentRange_++;
+            SetMinChunkInNewRange();
         }
+    }
+}
+
+void TFmrTableDataServiceReader::SetMinChunkInNewRange() {
+    if (CurrentRange_ < TableRanges_.size()) {
+        CurrentChunk_ = TableRanges_[0].MinChunk;
     }
 }
 
@@ -83,6 +91,10 @@ void TFmrTableDataServiceReader::ResetRetries() { }
 
 bool TFmrTableDataServiceReader::HasRangeIndices() const {
     return false;
+}
+
+TString TFmrTableDataServiceReader::TFmrChunkMeta::ToString() const {
+    return TStringBuilder() << TableId << "_" << PartId << ":" << Chunk;
 }
 
 } // namespace NYql::NFmr

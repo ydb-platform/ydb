@@ -42,6 +42,10 @@ public:
         return future;
     }
 
+    ui64 GetMaxParallelJobCount() const override {
+        return NumThreads_;
+    }
+
     void Start() override {
         ThreadPool_ = CreateThreadPool(NumThreads_);
     }
@@ -52,7 +56,7 @@ public:
 
 private:
     THolder<IThreadPool> ThreadPool_;
-    i32 NumThreads_;
+    ui64 NumThreads_;
     std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
 };

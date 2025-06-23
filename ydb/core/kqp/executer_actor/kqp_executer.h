@@ -123,9 +123,31 @@ struct TEvKqpExecuter {
 
 struct TKqpFederatedQuerySetup;
 
+struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
+    std::atomic<bool> EnableRowsDuplicationCheck = false;
+    std::atomic<bool> EnableParallelPointReadConsolidation = false;
+    std::atomic<bool> VerboseMemoryLimitException = false;
+
+    void ApplyFromTableServiceConfig(const NKikimrConfig::TTableServiceConfig& tableServiceConfig) {
+        EnableRowsDuplicationCheck.store(tableServiceConfig.GetEnableRowsDuplicationCheck());
+        EnableParallelPointReadConsolidation.store(tableServiceConfig.GetEnableParallelPointReadConsolidation());
+        VerboseMemoryLimitException.store(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException());
+    }
+};
+
+struct TExecuterConfig : TNonCopyable {
+    TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
+    const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
+
+    TExecuterConfig( TIntrusivePtr<TExecuterMutableConfig> mutableConfig, const NKikimrConfig::TTableServiceConfig& tableServiceConfig)
+        : MutableConfig(mutableConfig)
+        , TableServiceConfig(tableServiceConfig)
+    {}
+};
+
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
-    const NKikimrConfig::TTableServiceConfig tableServiceConfig,
+    const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,

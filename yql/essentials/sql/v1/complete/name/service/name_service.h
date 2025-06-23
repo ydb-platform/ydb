@@ -30,6 +30,14 @@ namespace NSQLComplete {
 
     struct TTypeName: TIndentifier {
         struct TConstraints {};
+
+        enum class EKind {
+            Simple,
+            Container,
+            Parameterized,
+        };
+
+        EKind Kind = EKind::Simple;
     };
 
     struct TFunctionName: TIndentifier {
@@ -58,6 +66,17 @@ namespace NSQLComplete {
         struct TConstraints: TNamespaced {};
     };
 
+    struct TColumnName: TIndentifier {
+        struct TConstraints {
+            TVector<TTableId> Tables;
+        };
+
+        TTableId Table;
+    };
+
+    struct TBindingName: TIndentifier {
+    };
+
     struct TUnkownName {
         TString Content;
         TString Type;
@@ -72,6 +91,8 @@ namespace NSQLComplete {
         TFolderName,
         TTableName,
         TClusterName,
+        TColumnName,
+        TBindingName,
         TUnkownName>;
 
     struct TNameConstraints {
@@ -81,6 +102,17 @@ namespace NSQLComplete {
         TMaybe<THintName::TConstraints> Hint;
         TMaybe<TObjectNameConstraints> Object;
         TMaybe<TClusterName::TConstraints> Cluster;
+        TMaybe<TColumnName::TConstraints> Column;
+
+        bool IsEmpty() const {
+            return !Pragma &&
+                   !Type &&
+                   !Function &&
+                   !Hint &&
+                   !Object &&
+                   !Cluster &&
+                   !Column;
+        }
 
         TGenericName Qualified(TGenericName unqualified) const;
         TGenericName Unqualified(TGenericName qualified) const;
@@ -95,19 +127,13 @@ namespace NSQLComplete {
         size_t Limit = 128;
 
         bool IsEmpty() const {
-            return Keywords.empty() &&
-                   !Constraints.Pragma &&
-                   !Constraints.Type &&
-                   !Constraints.Function &&
-                   !Constraints.Hint &&
-                   !Constraints.Object &&
-                   !Constraints.Cluster;
+            return Keywords.empty() && Constraints.IsEmpty();
         }
     };
 
     struct TNameResponse {
         TVector<TGenericName> RankedNames;
-        TMaybe<size_t> NameHintLength;
+        TMaybe<size_t> NameHintLength = Nothing();
 
         bool IsEmpty() const {
             return RankedNames.empty();
@@ -118,8 +144,8 @@ namespace NSQLComplete {
     public:
         using TPtr = TIntrusivePtr<INameService>;
 
+        ~INameService() override = default;
         virtual NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const = 0;
-        virtual ~INameService() = default;
     };
 
     TString NormalizeName(TStringBuf name);

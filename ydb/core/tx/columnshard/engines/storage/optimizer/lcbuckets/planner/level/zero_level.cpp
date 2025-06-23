@@ -26,7 +26,7 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
         return 0;
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {
-        if (GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) < ExpectedBlobsSize) {
+        if (GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) < std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())) {
             return 0;
         }
     }

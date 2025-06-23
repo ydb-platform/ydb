@@ -763,6 +763,7 @@ struct TEvBlobStorage {
         EvSyncToken,
         EvReleaseSyncToken,
         EvBSQueueResetConnection, // for test purposes
+        EvYardResize,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -816,6 +817,7 @@ struct TEvBlobStorage {
         EvShredPDiskResult,
         EvPreShredCompactVDiskResult,
         EvShredVDiskResult,
+        EvYardResizeResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -920,6 +922,12 @@ struct TEvBlobStorage {
         EvNodeWardenReadMetadataResult,
         EvNodeWardenWriteMetadata,
         EvNodeWardenWriteMetadataResult,
+        EvNodeWardenUpdateCache,
+        EvNodeWardenQueryCache,
+        EvNodeWardenQueryCacheResult,
+        EvNodeWardenUnsubscribeFromCache,
+        EvNodeWardenNotifyConfigMismatch,
+        EvNodeWardenUpdateConfigFromPeer,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -1364,6 +1372,13 @@ struct TEvBlobStorage {
             , GroupId(groupId)
         {}
 
+        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TArrayHolder<TResponse> responses, TGroupId groupId)
+            : Status(status)
+            , ResponseSz(sz)
+            , Responses(std::move(responses))
+            , GroupId(groupId.GetRawId())
+        {}
+
         TString Print(bool isFull) const {
             TStringStream str;
             str << "TEvGetResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
@@ -1464,12 +1479,12 @@ struct TEvBlobStorage {
         TString ErrorReason;
 
         enum EPlacementStatus {
-            PS_OK = 1,          // blob parts are placed according to fail model
-            PS_ERROR = 2,       // blob is lost/unrecoverable
-            PS_UNKNOWN = 3,     // status is unknown because of missing disks or network problems
-            PS_NOT_YET = 4,     // there are missing parts but status may become OK after replication
-            PS_RECOVERABLE = 5, // blob parts are definitely placed incorrectly or there are missing parts
-                                // but blob may be recovered
+            PS_OK = 1,                      // blob parts are placed according to fail model
+            PS_BLOB_IS_LOST = 2,            // blob is lost/unrecoverable
+            PS_UNKNOWN = 3,                 // status is unknown because of missing disks or network problems
+            PS_REPLICATION_IN_PROGRESS = 4, // there are missing parts but status may become OK after replication
+            PS_BLOB_IS_RECOVERABLE = 5,     // blob parts are definitely placed incorrectly or there are missing parts
+                                            // but blob may be recovered
         };
         EPlacementStatus PlacementStatus;
 
@@ -2457,6 +2472,12 @@ struct TEvBlobStorage {
         TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags)
             : Status(status)
             , StatusFlags(statusFlags)
+        {}
+
+        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags, float approximateFreeSpaceShare)
+            : Status(status)
+            , StatusFlags(statusFlags)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
         {}
 
         TString Print(bool isFull) const {

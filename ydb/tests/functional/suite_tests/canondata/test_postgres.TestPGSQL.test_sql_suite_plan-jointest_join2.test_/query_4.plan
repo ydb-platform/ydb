@@ -68,6 +68,7 @@
                                         "PlanNodeId": 11,
                                         "Plans": [
                                             {
+                                                "HashFunc": "HashV1",
                                                 "KeyColumns": [
                                                     "name"
                                                 ],
@@ -122,6 +123,7 @@
                                                 ]
                                             },
                                             {
+                                                "HashFunc": "HashV1",
                                                 "KeyColumns": [
                                                     "name"
                                                 ],

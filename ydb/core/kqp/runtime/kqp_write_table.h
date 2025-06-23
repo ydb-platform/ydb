@@ -46,6 +46,20 @@ IDataBatcherPtr CreateColumnDataBatcher(
     std::vector<ui32> writeIndex,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
 
+class IDataBatchProjection : public TThrRefBase {
+public:
+    virtual IDataBatchPtr Project(const IDataBatchPtr& data) const = 0;
+};
+
+using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;
+
+IDataBatchProjectionPtr CreateDataBatchProjection(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<ui32> inputWriteIndex,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+    const TConstArrayRef<ui32> outputWriteIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+
 class IShardedWriteController : public TThrRefBase {
 public:
     virtual void OnPartitioningChanged(
@@ -59,7 +73,8 @@ public:
     // For two writes A and B:
     // A happend before B <=> Close(A) happend before Open(B) otherwise Priority(A) < Priority(B).
 
-    virtual TWriteToken Open(
+    virtual void Open(
+        const TWriteToken token,
         const TTableId TableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
@@ -68,6 +83,8 @@ public:
         const i64 priority) = 0;
     virtual void Write(TWriteToken token, IDataBatchPtr&& data) = 0;
     virtual void Close(TWriteToken token) = 0;
+
+    virtual void CleanupClosedTokens() = 0;
 
     virtual void FlushBuffers() = 0;
 
@@ -79,7 +96,9 @@ public:
         ui64 ShardId;
         bool HasRead;
     };
-    virtual TVector<TPendingShardInfo> GetPendingShards() const = 0;
+    virtual void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const = 0;
+    virtual std::vector<TPendingShardInfo> ExtractShardUpdates() = 0;
+
     virtual ui64 GetShardsCount() const = 0;
     virtual TVector<ui64> GetShardsIds() const = 0;
 

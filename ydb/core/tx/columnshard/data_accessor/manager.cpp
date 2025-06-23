@@ -10,10 +10,12 @@ void TLocalManager::DrainQueue() {
     std::optional<TInternalPathId> lastPathId;
     IGranuleDataAccessor* lastDataAccessor = nullptr;
     TPositiveControlInteger countToFlight;
-    while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() &&
-           PortionsAsk.size()) {
+    const ui32 inFlightLimit = NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk();
+    while (PortionsAskInFlight + countToFlight < inFlightLimit && PortionsAsk.size()) {
         THashMap<TInternalPathId, TPortionsByConsumer> portionsToAsk;
-        while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
+        ui32 packPortionsCount = 0;
+        while (PortionsAskInFlight + countToFlight < inFlightLimit && packPortionsCount < std::min<ui32>(inFlightLimit, 1000) &&
+               PortionsAsk.size()) {
             auto p = PortionsAsk.front().ExtractPortion();
             const TString consumerId = PortionsAsk.front().GetConsumerId();
             PortionsAsk.pop_front();
@@ -48,6 +50,7 @@ void TLocalManager::DrainQueue() {
                     RequestsByPortion.erase(it);
                 } else {
                     portionsToAsk[p->GetPathId()].UpsertConsumer(consumerId).AddPortion(p);
+                    ++packPortionsCount;
                     ++countToFlight;
                 }
             }

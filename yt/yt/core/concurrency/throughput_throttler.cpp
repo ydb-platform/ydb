@@ -758,7 +758,7 @@ public:
         return true;
     }
 
-    // TODO: implement TryAcquireAvailable the same way as TryAcquire.
+    // TODO(vvshlyaga): implement TryAcquireAvailable the same way as TryAcquire.
     i64 TryAcquireAvailable(i64 /*amount*/) override
     {
         YT_ABORT();

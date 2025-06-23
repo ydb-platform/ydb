@@ -4589,6 +4589,17 @@ try:
 except ImportError:
     pass
 
+def save_path(module_name, elements):
+    """ Recursively sets path. """
+    for elem, signature in elements.items():
+        if isinstance(signature, dict):  # Submodule case
+            save_path(module_name + (elem,), signature)
+        else:
+            signature.path = module_name + (elem,)
+
+save_path((), CLASSES)
+save_path((), MODULES)
+
 def looks_like_a_forward_function(spec):
     return not spec.args and spec.varargs == 'args' and spec.varkw == 'kwargs'
 

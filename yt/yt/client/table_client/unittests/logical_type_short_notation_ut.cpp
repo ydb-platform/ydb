@@ -8,7 +8,8 @@
 #include <util/string/escape.h>
 
 template <>
-void Out<NYT::NTableClient::TLogicalTypePtr>(IOutputStream& out, const NYT::NTableClient::TLogicalTypePtr& value) {
+void Out<NYT::NTableClient::TLogicalTypePtr>(IOutputStream& out, const NYT::NTableClient::TLogicalTypePtr& value)
+{
     out << NYT::NTableClient::ToString(*value);
 }
 

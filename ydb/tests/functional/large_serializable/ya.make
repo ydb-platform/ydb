@@ -1,6 +1,6 @@
 IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_ERASURE=mirror_3_dc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
@@ -17,7 +17,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/tests/tools/ydb_serializable
-    ydb/apps/ydbd
 )
 
 PEERDIR(

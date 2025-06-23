@@ -5,11 +5,21 @@ on:
     - cron: "0 3 * * *"  # At 03:00 every day
   workflow_dispatch:
     inputs:
-      git_ref:
+      ydbd_git_ref:
         type: string
         required: true
         default: main
-        description: "Git branch/tag revision to build"
+        description: "Git branch/tag revision to build ydbd"
+      cli_git_ref:
+        type: string
+        required: true
+        default: main
+        description: "Git branch/tag revision to build CLI"
+      local_ydb_git_ref:
+        type: string
+        required: true
+        default: main
+        description: "Git branch/tag revision to build local_ydb binary"
       dockerfile_branch:
         type: string
         required: true
@@ -32,18 +42,30 @@ jobs:
           sparse-checkout: |
             .github
 
-      - name: Checkout
+      - name: Checkout repository for build ydbd
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.git_ref || 'main' }}
-          path: ydb
+          ref: ${{ inputs.ydbd_git_ref || 'main' }}
+          path: ydbd
 
-      - name: get revision
+      - name: get revision for ydbd
         shell: bash
         id: get-sha
-        working-directory: ydb
+        working-directory: ydbd
         run: |
           echo "SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Checkout repository for build CLI
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.cli_git_ref || 'main' }}
+          path: cli
+
+      - name: Checkout repository for build local_ydb binary
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.local_ydb_git_ref || 'main' }}
+          path: local_ydb
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v2

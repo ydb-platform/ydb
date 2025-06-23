@@ -115,7 +115,7 @@ void AppendAttributes(TStringBuilderBase* builder, const IAttributeDictionary& a
 }
 
 template <class TFunc>
-auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc accessor) -> decltype(accessor())
+auto RunAttributeAccessor(const TRichYPath& path, const std::string& key, TFunc accessor) -> decltype(accessor())
 {
     try {
         return accessor();
@@ -127,7 +127,7 @@ auto RunAttributeAccessor(const TRichYPath& path, const TString& key, TFunc acce
 }
 
 template <class T>
-T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue)
+T GetAttribute(const TRichYPath& path, const std::string& key, const T& defaultValue)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Get(key, defaultValue);
@@ -135,14 +135,14 @@ T GetAttribute(const TRichYPath& path, const TString& key, const T& defaultValue
 }
 
 template <class T>
-typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const TString& key)
+typename TOptionalTraits<T>::TOptional FindAttribute(const TRichYPath& path, const std::string& key)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().Find<T>(key);
     });
 }
 
-TYsonString FindAttributeYson(const TRichYPath& path, const TString& key)
+TYsonString FindAttributeYson(const TRichYPath& path, const std::string& key)
 {
     return RunAttributeAccessor(path, key, [&] {
         return path.Attributes().FindYson(key);

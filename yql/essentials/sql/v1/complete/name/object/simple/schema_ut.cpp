@@ -9,19 +9,18 @@ using namespace NSQLComplete;
 Y_UNIT_TEST_SUITE(StaticSchemaTests) {
 
     ISchema::TPtr MakeStaticSchemaUT() {
-        THashMap<TString, TVector<TFolderEntry>> fs = {
-            {"/", {{"Folder", "local"},
-                   {"Folder", "test"},
-                   {"Folder", "prod"}}},
-            {"/local/", {{"Table", "example"},
-                         {"Table", "account"},
-                         {"Table", "abacaba"}}},
-            {"/test/", {{"Folder", "service"},
-                        {"Table", "meta"}}},
-            {"/test/service/", {{"Table", "example"}}},
+        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> fs = {
+            {"", {{"/", {{"Folder", "local"},
+                         {"Folder", "test"},
+                         {"Folder", "prod"}}},
+                  {"/local/", {{"Table", "example"},
+                               {"Table", "account"},
+                               {"Table", "abacaba"}}},
+                  {"/test/", {{"Folder", "service"},
+                              {"Table", "meta"}}},
+                  {"/test/service/", {{"Table", "example"}}}}},
         };
-        return MakeSimpleSchema(
-            MakeStaticSimpleSchema(std::move(fs)));
+        return MakeSimpleSchema(MakeStaticSimpleSchema({.Folders = std::move(fs)}));
     }
 
     Y_UNIT_TEST(ListFolderBasic) {

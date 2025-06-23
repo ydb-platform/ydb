@@ -223,6 +223,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(code); delay.Defined()) {
+            INFO("Repeat the request to KQP in " << *delay);
             Schedule(*delay, new TEvents::TEvWakeup());
         }
     }
@@ -276,7 +277,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
     void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         INFO("End of the request to KQP for the WriteId. " <<
              "SessionId: " << Opts.SessionId <<
-             " TxId: " << Opts.TxId);
+             " TxId: " << Opts.TxId <<
+             " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
 
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
@@ -423,7 +425,8 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
     void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         INFO("End of a request to KQP to save PartitionId. " <<
              "SessionId: " << Opts.SessionId <<
-             " TxId: " << Opts.TxId);
+             " TxId: " << Opts.TxId <<
+             " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
 
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {

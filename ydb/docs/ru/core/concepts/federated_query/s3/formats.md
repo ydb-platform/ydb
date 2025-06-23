@@ -367,4 +367,4 @@ Year,Manufacturer,Model,Price
 |`List<T>`, `Tuple<Type1, ..., TypeN>`|✓            |✓              |✓       |✓            |✓      |    |
 |`Struct<Name1:Type1, ..., NameN:TypeN>`,<br/>`Variant<Name1:Type1, Name2:Type2>`,<br/>`Dict<String, Type>`, `Dict<Utf8, Type>`|||✓||||
 
-Для всех форматов четния из S3 и записи в S3, кроме `json_list`, разрешено использвоать тип `Optional<T>` только когда `T` - [примтивный YQL тип](../../../yql/reference/types/primitive.md).
+Для всех форматов чтения из S3 и записи в S3, кроме `json_list`, разрешено использовать тип `Optional<T>` только когда `T` - [примитивный YQL тип](../../../yql/reference/types/primitive.md).

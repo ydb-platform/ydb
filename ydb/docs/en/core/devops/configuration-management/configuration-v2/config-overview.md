@@ -47,7 +47,7 @@ $ ydb -e grpc://<ydb.example.com>:2135 admin cluster config replace -f config.ya
 
 {% endcut %}
 
-Loading changes back to the cluster is not always successful. In addition to basic validation of configuration file correctness, the system has protection against concurrent changes by multiple administrators. The system increments the `metadata.version` field with each configuration change and refuses to accept a new version if its number does not match the expected one, as this means that there was another change between `fetch` and `replace`, and `replace` would erase it. To minimize such conflicts, you can use the ["Infrastructure as Code"](https://en.wikipedia.org/wiki/Infrastructure_as_code) approach: store a copy of the configuration file in a [version control system](https://en.wikipedia.org/wiki/Version_control) repository (for example, [Git](https://git-scm.com/)) and run `fetch` and `replace` commands not manually, but only from a [continuous integration](https://en.wikipedia.org/wiki/Continuous_integration) and [delivery](https://en.wikipedia.org/wiki/Continuous_delivery) (CI/CD) system linked to this repository, reacting to changes in the {{ ydb-short-name }} configuration file in the repository and ensuring sequential sending of all changes to the {{ ydb-short-name }} cluster.
+Loading changes back to the cluster is not always successful. In addition to basic validation of a configuration file, the system has protection against concurrent changes by multiple administrators. The system increments the `metadata.version` field with each configuration change and refuses to accept a new version if its number does not match the expected one, as this means that there was another change between `fetch` and `replace`, and `replace` would erase it. To minimize such conflicts, you can use the ["Infrastructure as Code"](https://en.wikipedia.org/wiki/Infrastructure_as_code) approach: store a copy of the configuration file in a [version control system](https://en.wikipedia.org/wiki/Version_control) repository (for example, [Git](https://git-scm.com/)) and run `fetch` and `replace` commands only from a [continuous integration](https://en.wikipedia.org/wiki/Continuous_integration) and [delivery](https://en.wikipedia.org/wiki/Continuous_delivery) (CI/CD) system linked to this repository, reacting to changes in the {{ ydb-short-name }} configuration file in the repository and ensuring sequential sending of all changes to the {{ ydb-short-name }} cluster.
 
 {% cut "Infrastructure as Code approach diagram" %}
 
@@ -75,7 +75,7 @@ For cluster configuration during initial deployment, it is recommended to use in
 
 ### Configuration Update {#update-config}
 
-To update configuration on an already deployed cluster, you need to use the appropriate commands depending on the deployment method:
+To update the configuration of an already deployed cluster, you need to use the appropriate commands depending on the deployment method:
 
 - [{#T}](../../deployment-options/ansible/update-config.md);
 - [{#T}](../../deployment-options/manual/update-config.md).

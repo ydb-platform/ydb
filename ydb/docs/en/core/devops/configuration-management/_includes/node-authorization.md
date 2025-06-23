@@ -4,7 +4,7 @@ Database node authentication in a {{ ydb-short-name }} cluster ensures verificat
 
 Database node authentication and authorization is performed in the following order:
 
-1. The starting database node opens a gRPC connection to one of the cluster storage nodes specified in the `--node-broker` command line option. The connection uses the TLS protocol, and the starting node's certificate is used as the client certificate in the connection settings.
+1. The starting database node opens a gRPC connection to one of the cluster storage nodes specified in the `--node-broker` command-line option. The connection uses the TLS protocol, and the starting node's certificate is used as the client certificate in the connection settings.
 2. The storage node and database node perform mutual authenticity verification using the TLS protocol: the certificate trust chain is verified and the hostname correspondence to the "Subject Name" field value of the certificate is checked.
 3. The storage node verifies that the "Subject" field of the certificate meets the requirements [established by settings](../../../reference/configuration/client_certificate_authorization.md) in the static configuration.
 4. Upon successful completion of the above checks, the connection from the database node is considered authenticated, and it is assigned an access subject identifier — [SID](../../../concepts/glossary.md#access-sid), determined by the settings.
@@ -12,24 +12,24 @@ Database node authentication and authorization is performed in the following ord
 6. The storage node verifies that the SID assigned to the gRPC connection is in the list of allowed ones. Upon successful completion of this check, the storage node registers the database node in the cluster, mapping the received network address to the node identifier.
 7. The database node joins the cluster by connecting through its network address and specifying the node identifier received during registration. Attempts to join the cluster by nodes with unknown network addresses or identifiers are blocked by other nodes.
 
-The following describes the settings necessary to enable database node authentication and authorization functionality.
+The following describes the settings necessary to enable database node authentication and authorization.
 
 ## Configuration Prerequisites
 
 1. The deployed {{ ydb-short-name }} cluster must have [gRPC traffic encryption configured](../../../reference/configuration/tls.md#grpc) using the TLS protocol.
-2. When preparing node certificates for a cluster where database node authentication and authorization functionality is planned to be used, it is necessary to ensure uniform rules for filling the "Subject" field of certificates, allowing identification of certificates issued for cluster nodes. More detailed information is provided in the [certificate verification rules configuration documentation](../../../reference/configuration/client_certificate_authorization.md).
+2. When preparing node certificates for a cluster where database node authentication and authorization is planned to be used, it is necessary to ensure uniform rules for filling the "Subject" field of certificates, allowing identification of certificates issued for cluster nodes. More information is provided in the [certificate verification rules configuration documentation](../../../reference/configuration/client_certificate_authorization.md).
 
     {% note info %}
 
-    The proposed [example script](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/tls_cert_gen/) for generating self-signed {{ ydb-short-name }} node certificates fills the "Subject" field with the value `O=YDB` for all node certificates. The configuration examples provided below are prepared for certificates with exactly this "Subject" field filling.
+    The proposed [example script](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/tls_cert_gen/) for generating self-signed {{ ydb-short-name }} node certificates fills the "Subject" field with the value `O=YDB` for all node certificates. The configuration examples provided below are prepared for certificates with exactly this "Subject" field content.
 
     {% endnote %}
 
-3. The command line parameters for [starting database nodes](../../deployment-options/manual/initial-deployment.md#start-dynnode) must include options specifying paths to trusted certificate authority certificate files, node certificate, and node key. The list of additional options is provided in the table below.
+3. The command-line parameters for [starting database nodes](../../deployment-options/manual/initial-deployment.md#start-dynnode) must include options that specify paths to certificate files from trusted certificate authorities, a node certificate, and a node key. The list of additional options is provided in the table below.
 
-    | **Command Line Option** | **Description** |
+    | **Command-line Option** | **Description** |
     |-------------------------|-----------------|
-    | `--grpc-ca`             | Path to the trusted certificate authority certificates file `ca.crt`. |
+    | `--grpc-ca`             | Path to the certificate file `ca.crt` from a trusted certificate authority. |
     | `--grpc-cert`           | Path to the node certificate file `node.crt`. |
     | `--grpc-key`            | Path to the node private key file `node.key`. |
 
@@ -64,9 +64,9 @@ To enable mandatory database node authorization, the following configuration blo
 
     If necessary, add other certificate checks [according to the documentation](../../../reference/configuration/client_certificate_authorization.md).
 
-    Upon successful certificate verification and compliance of the certificate's "Subject" field components with the requirements established in the `subject_terms` block, the connection will be assigned access subjects listed in the `member_groups` parameter. To separate such access subjects from other groups and accounts, the suffix `@cert` is added to their names.
+    After the certificate is verified and its "Subject" field is confirmed to comply with the requirements established in the `subject_terms` block, the connection will be assigned access subjects from the `member_groups` parameter. To distinguish such access subjects, the `@cert` suffix is added to their names.
 
-2. In the cluster authentication settings block `security_config`, add the `register_dynamic_node_allowed_sids` element, specifying the list of access subjects allowed to register database nodes. For technical reasons, this list must also include the access subject `root@builtin`. Example:
+2. In the `security_config` section of the cluster configuration, add the `register_dynamic_node_allowed_sids` element with a list of access subjects allowed to register database nodes. For technical reasons, this list must also include the access subject `root@builtin`. Example:
 
     ```yaml
     security_config:
@@ -77,7 +77,7 @@ To enable mandatory database node authorization, the following configuration blo
       - "registerNode@cert"
     ```
 
-    More detailed information on configuring cluster authentication parameters is provided in the [corresponding documentation section](../../../reference/configuration/index.md#security-access-levels).
+    For more information on configuring cluster authentication parameters, see [{#T}](../../../reference/configuration/security_config.md#security-access-levels).
 
 3. Update the static configuration files on all cluster nodes manually or using the [Ansible playbook](../../deployment-options/ansible/update-config.md).
 

@@ -9,7 +9,7 @@ There are two main ways to check which configuration mechanism version ([V1](../
 
 This method can be used if metrics collection from the {{ ydb-short-name }} cluster to the monitoring system is not configured. You can check the configuration version for a specific node or switch between nodes in the built-in web interface [Embedded UI](../../reference/embedded-ui/index.md):
 
-1. Open the `configs_dispatcher` actor page for any cluster node in your browser. The URL has the form:
+1. Open the `configs_dispatcher` actor page for any cluster node in your browser:
 
     ```text
     http://<endpoint>:8765/actors/configs_dispatcher
@@ -17,7 +17,7 @@ This method can be used if metrics collection from the {{ ydb-short-name }} clus
 
     where `<endpoint>` is the address of any {{ ydb-short-name }} cluster node.
 
-2. In the upper part of the opened page, find the `Configuration version` field. It will show the configuration version (`v1` or `v2`) used by this node.
+2. In the upper part of the opened page, find the `Configuration version` field. It shows the configuration version (`v1` or `v2`) used by this node.
 
     This is how the page of a node using configuration V1 looks:
 

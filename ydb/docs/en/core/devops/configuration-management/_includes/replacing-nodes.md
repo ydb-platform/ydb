@@ -1,6 +1,6 @@
 # Replacing Node FQDN
 
-This procedure describes how to replace the FQDN (Fully Qualified Domain Name) of a {{ ydb-short-name }} cluster node while maintaining cluster operation.
+This procedure describes how to replace the FQDN (Fully Qualified Domain Name) of a {{ ydb-short-name }} cluster node without downtime.
 
 ## Prerequisites
 
@@ -12,9 +12,9 @@ This procedure describes how to replace the FQDN (Fully Qualified Domain Name) o
 
 The FQDN replacement process involves:
 
-1. **Preparation**: Verify cluster health and prepare new node configuration
+1. **Preparation**: Verify cluster health and prepare a new node configuration
 2. **Node shutdown**: Gracefully stop the node to be replaced
-3. **Configuration update**: Update cluster configuration with new FQDN
+3. **Configuration update**: Update the cluster configuration with a new FQDN
 4. **Node restart**: Start the node with new FQDN
 5. **Verification**: Confirm successful FQDN change
 
@@ -106,9 +106,9 @@ Confirm the FQDN change was successful:
 
 If the FQDN replacement fails:
 
-1. Revert DNS changes to original FQDN
-2. Restore original configuration
-3. Restart the node with original settings
+1. Revert DNS changes to the original FQDN
+2. Restore the original configuration
+3. Restart the node with the original settings
 4. Investigate and resolve the underlying issue
 
 ## Best Practices

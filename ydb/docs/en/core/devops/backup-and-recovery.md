@@ -10,7 +10,7 @@ Backup is used to protect against data loss, allowing you to restore data from a
 
 ### Files {#files}
 
-The following commands are used to perform backup to files:
+The following commands are used to back up files:
 
 - `{{ ydb-cli }} admin cluster dump` — for backing up cluster metadata
 - `{{ ydb-cli }} admin database dump` — for backing up a database
@@ -28,9 +28,9 @@ You can learn more about these commands in [{#T}](../reference/ydb-cli/export-im
 
 ### S3-Compatible Storage {#s3}
 
-The `{{ ydb-cli }} export s3` command is used to perform backup to S3-compatible storage (for example, [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html)). Follow [this link](../reference/ydb-cli/export-import/export-s3.md) to the {{ ydb-short-name }} CLI reference for information about this command.
+The `{{ ydb-cli }} export s3` command is used to back up data to S3-compatible storage (for example, [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html)). Follow [this link](../reference/ydb-cli/export-import/export-s3.md) to the {{ ydb-short-name }} CLI reference for information about this command.
 
-The `{{ ydb-cli }} import s3` command is used to perform recovery from a backup created in S3-compatible storage. Follow [this link](../reference/ydb-cli/export-import/import-s3.md) to the {{ ydb-short-name }} CLI reference for information about this command.
+The `{{ ydb-cli }} import s3` command is used to recover data from a backup created in S3-compatible storage. Follow [this link](../reference/ydb-cli/export-import/import-s3.md) to the {{ ydb-short-name }} CLI reference for information about this command.
 
 {% note info %}
 

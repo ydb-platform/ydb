@@ -4,32 +4,37 @@
 
 1. Last two digits of the release year
 2. Major version number within the year
-3. Minor version number within the major
-4. Patch number within the minor
+3. Minor version number within the major version
+4. Patch number within the minor version
 5. Release type
 
-Thus, major releases are usually identified by two components, for example, `24.3` is the third major release in 2024. Minor releases are identified by three components, for example, `24.3.14` is the fourteenth minor release within the third major version of 2024.
+Major releases are usually identified by two components, for example, `24.3` is the third major release in 2024. Minor releases are identified by three components, for example, `24.3.14` is the fourteenth minor release within the third major version of 2024.
 
-A list of available versions can be found on the [download page](../../downloads/index.md). The {{ ydb-short-name }} release policy is described in more detail in the [{#T}](../../contributor/manage-releases.md) article in the {{ ydb-short-name }} developer documentation section.
+The list of available {{ ydb-short-name }} releases is published on the [download page](../../downloads/index.md). The {{ ydb-short-name }} release policy is described in detail in the [{#T}](../../contributor/manage-releases.md) article in the documentation section for {{ ydb-short-name }} developers.
 
 ## Version Compatibility {#version-compatibility}
 
 {% note info %}
 
-Previously, the {{ ydb-short-name }} server version consisted of 3 numbers (for example, `v24.3.3`), starting with major version `25.1`, a fourth number has been added, which denotes the patch number (for example, `v25.1.1.3`). More details about changes in version naming are [here](../../contributor/manage-releases.md).
+Previously, the {{ ydb-short-name }} server version consisted of three numbers (for example, `v24.3.3`), starting with major version `25.1`. The fourth number was added to specify the patch number (for example, `v25.1.1.3`). For more details about changes in version naming, see [{#T}](../../contributor/manage-releases.md).
 
 {% endnote %}
 
-All minor versions within one major version are compatible for updates. Major versions are sequentially compatible. To update to the next major version, you should first update to the last available minor release of the current major version. For example:
+You can update {{ ydb-short-name }} to a new version in the following cases:
 
-* `X.Y.*.* → X.Y.*.*` — update is possible, all minor versions within one major are compatible.
+- If the major version numbers are the same, the minor versions can differ.
+- If the major version numbers differ by one, first update to the latest available minor release of the current major version before updating to the next major version.
+
+For example:
+
+* `X.Y.*.* → X.Y.*.*` — update is possible, all minor versions within the same major version are compatible.
 * `X.Y.Z.*` (last available `X.Y.*.*`) → `X.Y+1.*.*` - update is possible, major versions are sequential.
 * `X.Y.*.*` → `X.Y+2.*.*` — update is not possible, major versions are non-sequential.
 * `X.Y.*.* → X.Y-2.*.*` — update is not possible, major versions are non-sequential.
 
 {% note warning %}
 
-Also, in any case, you cannot roll back more than 2 major versions back from a version that was installed at least once, as such an old version may not know how to work with data on disks written by the current version.
+Also, you cannot downgrade {{ ydb-short-name }} by more than two major versions because the older version might not support newer data formats stored on disk.
 
 {% endnote %}
 

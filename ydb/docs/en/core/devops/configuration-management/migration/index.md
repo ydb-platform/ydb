@@ -15,4 +15,4 @@ If unexpected problems arise when using migration instructions (especially when 
 
 {% endnote %}
 
-Before performing migration, make sure which configuration version is currently used in your cluster using the [version check instructions](../check-config-version.md).
+Before performing migration, make sure to determine which configuration version is currently used in your cluster using the [version check instructions](../check-config-version.md).

@@ -33,9 +33,9 @@ To replace `node_id:1`, we use another host with a static node deployed on it wi
 
 To move part of the static group from host `node_id:1` to `node_id:10`:
 
-1. Disable automatic static group management
-2. Get the current static group configuration
-3. Make changes and apply the modified configuration as the target static group configuration
+1. Disable automatic static group management.
+2. Get the current static group configuration.
+3. Make changes and apply the modified configuration as the target static group configuration.
     In the configuration file `config.yaml`, change the `node_id` value, replacing the identifier of the host being removed with the identifier of the host being added:
 
     ```yaml

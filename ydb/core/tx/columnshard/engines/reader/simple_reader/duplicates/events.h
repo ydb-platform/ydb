@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
@@ -22,9 +24,12 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
+    YDB_READONLY_DEF(TString, ExternalTaskId);
+    NArrow::TSimpleRow MinPK;
+    NArrow::TSimpleRow MaxPK;
     YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY_DEF(ui64, RecordsCount);
     TSnapshot MaxVersion;
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, MemoryGroup);
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
     YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
 
@@ -33,10 +38,6 @@ public:
 
     TSnapshot GetMaxVersion() const {
         return MaxVersion;
-    }
-
-    ui64 GetRawSize() const {
-        return MemoryGuard->GetMemory();
     }
 };
 

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "common.h"
+#include "context.h"
 #include "events.h"
+#include "interval_tree.h"
 #include "private_events.h"
 #include "source_cache.h"
-#include "splitter.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
@@ -21,102 +23,15 @@ class TColumnFetchingContext;
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-class TInternalFilterConstructor: TMoveOnly {
-private:
-    class TRowRange {
-    private:
-        YDB_READONLY_DEF(ui64, Begin);
-        YDB_READONLY_DEF(ui64, End);
-
-    public:
-        TRowRange(const ui64 begin, const ui64 end)
-            : Begin(begin)
-            , End(end) {
-            AFL_VERIFY(end >= begin);
-        }
-
-        std::partial_ordering operator<=>(const TRowRange& other) const {
-            return std::tie(Begin, End) <=> std::tie(other.Begin, other.End);
-        }
-        bool operator==(const TRowRange& other) const {
-            return (*this <=> other) == std::partial_ordering::equivalent;
-        }
-
-        ui64 NumRows() const {
-            return End - Begin;
-        }
-    };
-
-private:
-    std::shared_ptr<IFilterSubscriber> Callback;
-    ui64 RowsCount;
-    std::map<TRowRange, NArrow::TColumnFilter> FiltersByRange;
-
-    bool IsReady() const {
-        return !FiltersByRange.empty() && FiltersByRange.begin()->first.GetBegin() == 0 && FiltersByRange.begin()->first.GetEnd() == RowsCount;
-    }
-
-    void Complete() {
-        AFL_VERIFY(!IsDone());
-        AFL_VERIFY(IsReady());
-        Callback->OnFilterReady(std::move(FiltersByRange.begin()->second));
-        Callback.reset();
-        AFL_VERIFY(IsDone());
-    }
-
-public:
-    void AddFilter(const TDuplicateMapInfo& info, const NArrow::TColumnFilter& filterExt) {
-        AFL_VERIFY(!IsDone());
-        AFL_VERIFY(filterExt.GetRecordsCountVerified() == info.GetRowsCount())("filter", filterExt.GetRecordsCountVerified())(
-                                                              "info", info.GetRowsCount());
-        FiltersByRange.emplace(TRowRange(info.GetOffset(), info.GetOffset() + info.GetRowsCount()), filterExt);
-
-        while (FiltersByRange.size() > 1 && FiltersByRange.begin()->first.GetEnd() >= std::next(FiltersByRange.begin())->first.GetBegin()) {
-            auto l = FiltersByRange.begin();
-            auto r = std::next(FiltersByRange.begin());
-            AFL_VERIFY(l->first.GetEnd() == r->first.GetBegin());
-            TRowRange range = TRowRange(l->first.GetBegin(), r->first.GetEnd());
-            NArrow::TColumnFilter filter = l->second;
-            filter.Append(r->second);
-            FiltersByRange.erase(FiltersByRange.begin());
-            FiltersByRange.erase(FiltersByRange.begin());
-            AFL_VERIFY(filter.GetRecordsCountVerified() == range.NumRows())("filter", filter.GetRecordsCountVerified())(
-                                                               "range", range.NumRows());
-            FiltersByRange.emplace(range, std::move(filter));
-        }
-
-        if (IsReady()) {
-            Complete();
-        }
-    }
-
-    bool IsDone() const {
-        return !Callback;
-    }
-
-    void Abort(const TString& error) {
-        Callback->OnFailure(error);
-        Callback.reset();
-    }
-
-    TInternalFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const ui64 rowsCount);
-
-    ~TInternalFilterConstructor() {
-        AFL_VERIFY(IsDone());
-    }
-};
-
 class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
 private:
+    inline static TAtomicCounter NextRequestId = 0;
+
     NColumnShard::TDuplicateFilteringCounters Counters;
-    TSourceCache* SourceCache;
     const THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     const TIntervalTree<NArrow::TSimpleRow, ui64> Intervals;
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
     THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
-    std::shared_ptr<NConveyor::TProcessGuard> ConveyorProcessGuard;
-
-private:
     TSourceCache Fetcher;
 
 private:
@@ -127,8 +42,6 @@ private:
             hFunc(NPrivate::TEvDuplicateFilterDataFetched, Handle);
             hFunc(NPrivate::TEvDuplicateSourceCacheResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
-            hFunc(TEvDuplicateSourceCacheResult, Handle);
-            hFunc(TEvFilterConstructionResult, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -153,13 +66,14 @@ private:
         PassAway();
     }
 
-    void AbortAndPassAway(const TString& reason);
-    void StartAllocation(const ui64 sourceId, const std::shared_ptr<IDataSource>& requester);
-    void StartMergingColumns(const ui32 intervalIdx);
     const std::shared_ptr<TPortionInfo>& GetPortionVerified(const ui64 portionId) const {
         const auto* portion = Portions.FindPtr(portionId);
         AFL_VERIFY(portion);
         return *portion;
+    }
+
+    ui64 MakeRequestId() {
+        return NextRequestId.Inc();
     }
 
 public:

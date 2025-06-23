@@ -1,6 +1,10 @@
 #pragma once
 
-#include "events.h"
+#include "common.h"
+
+#include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/formats/arrow/special_keys.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 

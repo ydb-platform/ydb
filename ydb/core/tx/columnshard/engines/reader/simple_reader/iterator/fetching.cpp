@@ -221,18 +221,6 @@ TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDa
     , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard()) {
 }
 
-void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
-    if (auto source = Source.lock()) {
-        source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
-    }
-}
-
-TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
-    : Source(source)
-    , Step(step)
-    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard()) {
-}
-
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     source->StartFetchingDuplicateFilter(std::make_shared<TFilterSubscriber>(source, step));
     return false;

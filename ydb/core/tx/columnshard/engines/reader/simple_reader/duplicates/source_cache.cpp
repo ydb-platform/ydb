@@ -12,12 +12,12 @@ namespace {
 class TCallback: TMoveOnly {
 private:
     TActorId Owner;
-    TEvRequestFilter::TPtr OriginalRequest;
+    std::shared_ptr<TInternalFilterConstructor> Context;
 
 public:
     void OnSourcesReady(TSourceCache::TSourcesData&& result) {
         AFL_VERIFY(Owner);
-        TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(OriginalRequest, std::move(result)));
+        TActorContext::AsActorContext().Send(Owner, new NPrivate::TEvDuplicateSourceCacheResult(Context, std::move(result)));
         Owner = TActorId();
     }
     void OnFailure(const TString& error) {
@@ -26,9 +26,9 @@ public:
         Owner = TActorId();
     }
 
-    TCallback(const TActorId& owner, const TEvRequestFilter::TPtr& originalRequest)
+    TCallback(const TActorId& owner, const std::shared_ptr<TInternalFilterConstructor>& context)
         : Owner(owner)
-        , OriginalRequest(originalRequest) {
+        , Context(context) {
     }
 
     TCallback(TCallback&& other)
@@ -45,11 +45,11 @@ class TFetchingExecutor: public NOlap::NDataFetcher::IFetchCallback {
 private:
     const NActors::TActorId ParentActorId;
     std::shared_ptr<ISnapshotSchema> ResultSchema;
-    TEvRequestFilter::TPtr OriginalRequest;
+    std::shared_ptr<TInternalFilterConstructor> Context;
     ui64 PortionId;
 
     virtual bool IsAborted() const override {
-        return OriginalRequest->Get()->GetAbortionFlag()->Val();
+        return Context->GetRequest()->Get()->GetAbortionFlag()->Val();
     }
 
     virtual TString GetClassName() const override {
@@ -66,7 +66,7 @@ private:
             ParentActorId, new NPrivate::TEvDuplicateFilterDataFetched(portion.GetPortionInfo().GetPortionId(),
                                TColumnsData(portion
                                                 .PrepareForAssemble(*ResultSchema, *ResultSchema, blobs,
-                                                    portion.GetPortionInfo().GetDataSnapshot(OriginalRequest->Get()->GetMaxVersion()))
+                                                    portion.GetPortionInfo().GetDataSnapshot(Context->GetRequest()->Get()->GetMaxVersion()))
                                                 .AssembleToGeneralContainer({})
                                                 .DetachResult(),
                                    std::move(context.GetResourceGuards().front()))));
@@ -78,11 +78,11 @@ private:
     }
 
 public:
-    TFetchingExecutor(
-        const TActorId& owner, const std::shared_ptr<ISnapshotSchema>& resultSchema, const TEvRequestFilter::TPtr& request, const ui64 portionId)
+    TFetchingExecutor(const TActorId& owner, const std::shared_ptr<ISnapshotSchema>& resultSchema,
+        const std::shared_ptr<TInternalFilterConstructor>& context, const ui64 portionId)
         : ParentActorId(owner)
         , ResultSchema(resultSchema)
-        , OriginalRequest(request)
+        , Context(context)
         , PortionId(portionId) {
     }
 };
@@ -171,13 +171,9 @@ void TSourceCache::OnFetchingResult(const NPrivate::TEvDuplicateFilterDataFetche
     }
 }
 
-void TSourceCache::GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const TEvRequestFilter::TPtr& originalRequest) {
-    std::shared_ptr<TResponseConstructor> response = std::make_shared<TResponseConstructor>(sources, TCallback(Owner, originalRequest));
-    const ui64 requestId = MakeNextRequestId();
-    auto memroyProcessGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(requestId, {});
-    auto memoryScopeGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(requestId, 1);
-    auto conveyorProcessGuard = std::make_shared<NConveyorComposite::TProcessGuard>(
-        NConveyorComposite::TDeduplicationServiceOperator::StartProcess(requestId, NConveyorComposite::TCPULimitsConfig()));
+void TSourceCache::GetSourcesData(
+    const std::vector<std::shared_ptr<TPortionInfo>>& sources, const std::shared_ptr<TInternalFilterConstructor>& context) {
+    std::shared_ptr<TResponseConstructor> response = std::make_shared<TResponseConstructor>(sources, TCallback(Owner, context));
 
     ui64 cacheHits = 0;
     for (const auto& source : sources) {
@@ -196,13 +192,10 @@ void TSourceCache::GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo
         }
 
         findFetching->AddCallback(response);
-        // std::shared_ptr<TColumnFetchingContext> fetchingContext =
-        //     std::make_shared<TColumnFetchingContext>(FetchingContext, source, findFetching->GetStatus(), processGuard);
-        // TColumnFetchingContext::StartAllocation(fetchingContext);
 
-        NOlap::NDataFetcher::TRequestInput rInput({ source }, SchemaIndex, NOlap::NBlobOperations::EConsumer::DUPLICATE_FILTERING, "" /*TODO*/);
+        NOlap::NDataFetcher::TRequestInput rInput({ source }, SchemaIndex, NOlap::NBlobOperations::EConsumer::DUPLICATE_FILTERING, context->GetRequest()->Get()->GetExternalTaskId());
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
-            std::make_shared<TFetchingExecutor>(Owner, ResultSchema, originalRequest, sourceId), FetchingEnvironment,
+            std::make_shared<TFetchingExecutor>(Owner, ResultSchema, context, sourceId), FetchingEnvironment,
             NConveyorComposite::ESpecialTaskCategory::Scan);
     }
 
@@ -213,8 +206,6 @@ TSourceCache::~TSourceCache() {
     for (auto& [_, info] : FetchingSources) {
         info.Abort("aborted");
     }
-
-    Counters.OnSourceCacheRequest(cacheHits, sources.size() - cacheHits);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

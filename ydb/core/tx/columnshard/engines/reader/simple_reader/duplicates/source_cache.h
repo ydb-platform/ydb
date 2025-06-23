@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/data_reader/contexts.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/context.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
@@ -52,20 +53,9 @@ private:
 
     THashMap<ui64, TFetchingInfo> FetchingSources;
     TLRUCache<ui64, TCacheItem, TNoopDelete, TSizeProvider> SourcesData;
-    ui64 NextRequestId = 0;
-
-private:
-    ui64 MakeNextRequestId() {
-        return NextRequestId++;
-    }
-
-    virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& /*parentId*/) override {
-        FetchingContext->SetOwner(self);
-        return TAutoPtr<IEventHandle>();
-    }
 
 public:
-    void GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const TEvRequestFilter::TPtr& originalRequest);
+    void GetSourcesData(const std::vector<std::shared_ptr<TPortionInfo>>& sources, const std::shared_ptr<TInternalFilterConstructor>& context);
     void OnFetchingResult(const NPrivate::TEvDuplicateFilterDataFetched::TPtr&);
     void InitOwner(const TActorId& owner);
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "context.h"
 #include "events.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
@@ -52,12 +53,12 @@ class TEvDuplicateSourceCacheResult
 private:
     using TDataBySource = THashMap<ui64, std::shared_ptr<TColumnsData>>;
     YDB_READONLY_DEF(TDataBySource, ColumnData);
-    YDB_READONLY_DEF(TEvRequestFilter::TPtr, OriginalRequest);
+    YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Context);
 
 public:
-    TEvDuplicateSourceCacheResult(const TEvRequestFilter::TPtr& originalRequest, TDataBySource&& data)
+    TEvDuplicateSourceCacheResult(const std::shared_ptr<TInternalFilterConstructor>& context, TDataBySource&& data)
         : ColumnData(std::move(data))
-        , OriginalRequest(originalRequest) {
+        , Context(context) {
     }
 };
 

@@ -12,21 +12,9 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering  {
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
-TInternalFilterConstructor::TInternalFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const ui64 rowsCount)
-    : Callback(callback)
-    , RowsCount(rowsCount) {
-    AFL_VERIFY(!!Callback);
-    AFL_VERIFY(RowsCount);
-}
-
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context)
     : TActor(&TDuplicateManager::StateMain)
     , Counters(context.GetCommonContext()->GetDuplicateFilteringCounters())
-    , SourceCache([this, &context]() {
-        TSourceCache* cache = new TSourceCache(context.GetCommonContext());
-        RegisterWithSameMailbox((IActor*)cache);
-        return cache;
-    }())
     , Portions([&context]() {
         THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
         for (const auto& portion : context.GetReadMetadata()->SelectInfo->Portions) {
@@ -42,7 +30,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context)
         return intervals;
     }())
     , FiltersCache(100)   // FIXME configure
-    , ConveyorProcessGuard(context.GetCommonContext()->GetConveyorProcessGuard()) {
+    , Fetcher(context.GetCommonContext(), SelfId()) {
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
@@ -72,24 +60,22 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
 
     TColumnDataSplitter splitter(
         borders, NArrow::TFirstLastSpecialKeys(source->IndexKeyStart(), source->IndexKeyEnd(), source->IndexKeyStart().GetSchema()));
+    std::shared_ptr<TInternalFilterConstructor> constructor = std::make_shared<TInternalFilterConstructor>(ev, std::move(splitter));
 
-    SourceCache->GetSourcesData(
-        std::move(sourcesToFetch), ev->Get()->GetMemoryGroup(), std::make_unique<TSourceDataSubscriber>(SelfId(), ev, std::move(splitter)));
+    Fetcher.GetSourcesData(std::move(sourcesToFetch), constructor);
 }
 
-void TDuplicateManager::Handle(const TEvDuplicateSourceCacheResult::TPtr& ev) {
-    const auto& filterRequest = ev->Get()->GetOriginalRequest()->Get();
+void TDuplicateManager::Handle(const NPrivate::TEvDuplicateSourceCacheResult::TPtr& ev) {
+    const std::shared_ptr<TInternalFilterConstructor>& context = ev->Get()->GetContext();
+    const TEvRequestFilter* filterRequest = context->GetRequest()->Get();
     const std::shared_ptr<TPortionInfo>& requestedPortion = GetPortionVerified(filterRequest->GetSourceId());
-    const TColumnDataSplitter& splitter = ev->Get()->GetSplitter();
-    const TSnapshot maxVersion = ev->Get()->GetOriginalRequest()->Get()->GetMaxVersion();
+    const TColumnDataSplitter& splitter = context->GetIntervals();
+    const TSnapshot maxVersion = context->GetRequest()->Get()->GetMaxVersion();
 
     THashMap<ui64, std::vector<TDuplicateMapInfo>> splitted;
     for (const auto& [id, data] : ev->Get()->GetColumnData()) {
         splitted[id] = splitter.SplitPortion(data, id, maxVersion);
     }
-
-    std::shared_ptr<TInternalFilterConstructor> constructor =
-        std::make_shared<TInternalFilterConstructor>(filterRequest->GetSubscriber(), requestedPortion->GetRecordsCount());
 
     THashSet<ui64> builtIntervals;
     {
@@ -99,19 +85,19 @@ void TDuplicateManager::Handle(const TEvDuplicateSourceCacheResult::TPtr& ev) {
             if (!splittedMain[i].GetRowsCount()) {
                 builtIntervals.insert(i);
             } else if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i])) {
-                findBuilding->emplace_back(constructor);
+                findBuilding->emplace_back(context);
                 builtIntervals.insert(i);
             } else if (auto findCached = FiltersCache.Find(splittedMain[i]); findCached != FiltersCache.End()) {
-                constructor->AddFilter(findCached.Key(), findCached.Value());
+                context->AddFilter(findCached.Key(), findCached.Value());
                 builtIntervals.insert(i);
             } else {
-                BuildingFilters[splittedMain[i]].emplace_back(constructor);
+                BuildingFilters[splittedMain[i]].emplace_back(context);
             }
         }
     }
     LOCAL_LOG_TRACE("event", "construct_filters")
     ("source", filterRequest->GetSourceId())("built_intervals", builtIntervals.size())("intervals", splitter.NumIntervals());
-    if (constructor->IsDone()) {
+    if (context->IsDone()) {
         return;
     }
 
@@ -139,8 +125,12 @@ void TDuplicateManager::Handle(const TEvDuplicateSourceCacheResult::TPtr& ev) {
             NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
             filter.Add(true, mapInfo.GetRowsCount());
             AFL_VERIFY(BuildingFilters.contains(mapInfo));
-            Send(SelfId(), new TEvFilterConstructionResult(THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>({ { mapInfo, filter } })));
+            Send(SelfId(),
+                new NPrivate::TEvFilterConstructionResult(THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>({ { mapInfo, filter } })));
         } else {
+            if (!context->IsProcessStarted()) {
+                context->StartProcess(MakeRequestId());
+            }
             THashMap<ui64, TDuplicateMapInfo> mapInfos;
             for (auto&& [source, segment] : segments) {
                 mapInfos.emplace(source, segment);
@@ -154,12 +144,12 @@ void TDuplicateManager::Handle(const TEvDuplicateSourceCacheResult::TPtr& ev) {
                 task->AddSource(*columnData, segment);
                 Y_UNUSED(BuildingFilters.emplace(segment, std::vector<std::shared_ptr<TInternalFilterConstructor>>()).second);
             }
-            NConveyor::TScanServiceOperator::SendTaskToExecute(task, ConveyorProcessGuard->GetProcessId());
+            NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task, context->GetConveyorProcessId());
         }
     }
 }
 
-void TDuplicateManager::Handle(const TEvFilterConstructionResult::TPtr& ev) {
+void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr& ev) {
     if (ev->Get()->GetConclusion().IsFail()) {
         return AbortAndPassAway(ev->Get()->GetConclusion().GetErrorMessage());
     }
@@ -173,23 +163,6 @@ void TDuplicateManager::Handle(const TEvFilterConstructionResult::TPtr& ev) {
 
         FiltersCache.Insert(key, filter);
     }
-}
-
-void TDuplicateManager::TSourceDataSubscriber::OnSourcesReady(TSourceCache::TSourcesData&& result) {
-    TActorContext::AsActorContext().Send(Owner, new TEvConstructFilters(OriginalRequest, std::move(result), std::move(Splitter)));
-}
-
-void TDuplicateManager::TMergeResultSubscriber::OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) {
-    THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
-    for (const auto& [source, filter] : result) {
-        filters.emplace(*TValidator::CheckNotNull(InfoBySource.FindPtr(source)), filter);
-    }
-    TActorContext::AsActorContext().Send(Owner, new TEvFiltersConstructed(std::move(filters)));
-}
-
-TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context)
-    : TActor(&TDuplicateManager::StateMain)
-    , Fetcher(context.GetCommonContext(), SelfId()) {
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvDuplicateFilterDataFetched::TPtr& ev) {

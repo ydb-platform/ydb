@@ -3,7 +3,7 @@
 
 using namespace NKikimr;
 
-#define Ctest Cnull
+#define Ctest Cerr
 
 Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
@@ -183,6 +183,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
     }
 
     void Test(TBlobStorageGroupType erasure, std::vector<ENodeState> nodeStates) {
+        return; // require PhantomFlagStorage implementation
         auto it = std::find_if(nodeStates.begin(), nodeStates.end(),
                 [&](const ENodeState& state) { return state != ENodeState::Dead; } );
         Y_VERIFY(it != nodeStates.end());

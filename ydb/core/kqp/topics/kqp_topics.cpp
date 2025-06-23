@@ -137,7 +137,6 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
 {
     Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == rhs.Topic_);
     Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == rhs.Partition_);
-    Y_ABORT_UNLESS(TabletId_.Empty() || TabletId_ == rhs.TabletId_);
 
     if (Topic_.Empty()) {
         Topic_ = rhs.Topic_;
@@ -354,6 +353,11 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
     message = "";
 
     return true;
+}
+
+bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topic, ui32 partitionId) const
+{
+    return Operations_.contains({topic, partitionId});
 }
 
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)

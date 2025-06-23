@@ -1921,6 +1921,7 @@ message TColumnShardConfig {
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
     optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
+    optional uint64 SharedMetadataAccessorCacheSize = 45 [default = 1073741824]; // 1Gb
 }
 
 message TSchemeShardConfig {

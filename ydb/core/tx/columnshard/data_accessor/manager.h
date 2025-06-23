@@ -85,21 +85,21 @@ class TActorAccessorsManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
     const NActors::TActorId ActorId;
-    std::shared_ptr<NDataAccessorControl::IAccessorCallbackWithOwner> AccessorsCallback;
+    std::shared_ptr<NDataAccessorControl::IAccessorCallback> AccessorsCallback;
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAskServiceDataAccessors>(request, GetTabletActorId()));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAskServiceDataAccessors>(request));
     }
     virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(std::move(controller), update, GetTabletActorId()));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(std::move(controller), update));
     }
     virtual void DoUnregisterController(const TInternalPathId pathId) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvUnregisterController>(pathId, GetTabletActorId()));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvUnregisterController>(pathId));
     }
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(accessor, GetTabletActorId()));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(accessor));
     }
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRemovePortion>(portion, GetTabletActorId()));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRemovePortion>(portion));
     }
 
 public:

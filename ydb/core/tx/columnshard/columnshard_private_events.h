@@ -68,7 +68,6 @@ struct TEvPrivate {
         EvAskServiceDataAccessors,
         EvAddPortionDataAccessor,
         EvRemovePortionDataAccessor,
-        EvClearCacheDataAccessor,
         EvMetadataAccessorsInfo,
 
         EvRequestFilter,

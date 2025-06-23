@@ -15,8 +15,8 @@ TDataCategorized IGranuleDataAccessor::AnalyzeData(const TPortionsByConsumer& po
     return DoAnalyzeData(portions);
 }
 
-void TActorAccessorsCallback::OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors, const TActorId& owner) {
-    NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(std::move(accessors), owner));
+void TActorAccessorsCallback::OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) {
+    NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(std::move(accessors)));
 }
 
 }   // namespace NKikimr::NOlap::NDataAccessorControl

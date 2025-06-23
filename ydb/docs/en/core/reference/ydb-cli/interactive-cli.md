@@ -25,7 +25,9 @@ Using up and down arrow keys you can navigate through the query history:
 
 History is stored locally, as though persists between CLI launches.
 
-A query search function (`CTRL + R`) is also supported.
+A query search function (`CTRL + R`) is also supported:
+
+![Search](_assets/history-search.gif)
 
 ## Hotkeys {#hotkeys}
 
@@ -115,11 +117,15 @@ ResultSet
 
 While in interactive mode, auto completion helps with creating a query text showing suggestions of completion of current word based on the YQL syntax.
 
+It also searches for schema object names in database where possible.
+
 There are two types of suggestions: auto completion by pressing `TAB` key and interactive hints.
 
 ### Auto completion by pressing `TAB` key {#auto-completion-tab}
 
 While in interactive mode, pressing `TAB` key will show a list of suggestions of completion of current word according to the YQL syntax.
+
+![Auto completion](_assets/candidates.gif)
 
 If there is only one suggestion available, pressing TAB will complete current word to it.
 
@@ -127,4 +133,7 @@ If there is only one suggestion available, pressing TAB will complete current wo
 
 While typing in interactive mode, a list of hints will appear under the cursor, showing first 4 suggestions of completion of current word according to the YQL grammar.
 
-When there is only one suggestion left, it appears in-line.
+![Interactive hints](_assets/hints.gif)
+
+It is very handy because usually you don't need to see all the candidates, you just need to see a couple to make sure you are on the right way.
+

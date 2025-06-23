@@ -17,7 +17,9 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
-    template <std::regular T>
+    template <class T>
+        requires std::regular<T> &&
+                 requires(T x) { {x < x} -> std::convertible_to<bool>; }
     struct TAliased: T {
         TString Alias;
 
@@ -30,6 +32,10 @@ namespace NSQLComplete {
         TAliased(T value)
             : T(std::move(value))
         {
+        }
+
+        friend bool operator<(const TAliased& lhs, const TAliased& rhs) {
+            return std::tie(lhs.Alias, static_cast<const T&>(lhs)) < std::tie(rhs.Alias, static_cast<const T&>(rhs));
         }
 
         friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;

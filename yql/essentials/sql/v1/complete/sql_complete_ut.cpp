@@ -113,7 +113,11 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                     "Age": {}
                 }},
                 "yql": { "type": "Folder", "entries": {
-                    "tutorial": { "type": "Table", "columns": {} }
+                    "tutorial": { "type": "Table", "columns": {
+                       "course": {},
+                       "room": {},
+                       "time": {}
+                    }}
                 }}
             }},
             "saurus": { "type": "Folder", "entries": {
@@ -1114,6 +1118,26 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {};
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(2, engine, "SELECT y.a# FROM example.`/people` AS x"), expected);
+        }
+    }
+
+    Y_UNIT_TEST(ColumnsAtJoin) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TString query = R"(
+                SELECT #
+                FROM example.`/people` AS ep
+                JOIN example.`/yql/tutorial` AS et ON 1 = 1
+            )";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "ep.Age"},
+                {ColumnName, "ep.Name"},
+                {ColumnName, "et.course"},
+                {ColumnName, "et.room"},
+                {ColumnName, "et.time"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
         }
     }
 

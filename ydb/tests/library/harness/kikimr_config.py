@@ -274,6 +274,8 @@ class KikimrConfigGenerator(object):
         if "table_service_config" not in self.yaml_config:
             self.yaml_config["table_service_config"] = {}
 
+        self.yaml_config["table_service_config"]["resource_manager"]["verbose_memory_limit_exception"] = True
+
         if table_service_config:
             self.yaml_config["table_service_config"].update(table_service_config)
 

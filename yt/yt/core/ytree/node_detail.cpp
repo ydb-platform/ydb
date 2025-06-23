@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/async_writer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -18,6 +19,7 @@ using namespace NYPath;
 using namespace NYson;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -65,7 +67,7 @@ void TNodeBase::GetSelf(
     writer.Finish()
         .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
             if (resultOrError.IsOK()) {
-                response->set_value(resultOrError.Value().ToString());
+                response->set_value(ToProto(resultOrError.Value()));
                 context->Reply();
             } else {
                 context->Reply(resultOrError);
@@ -102,7 +104,7 @@ void TNodeBase::GetKeySelf(
     }
 
     context->SetResponseInfo("Key: %v", key);
-    response->set_value(ConvertToYsonString(key).ToString());
+    response->set_value(ToProto(ConvertToYsonString(key)));
 
     context->Reply();
 }
@@ -357,7 +359,7 @@ void TMapNodeMixin::ListSelf(
     writer.Finish()
         .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
             if (resultOrError.IsOK()) {
-                response->set_value(resultOrError.Value().ToString());
+                response->set_value(ToProto(resultOrError.Value()));
                 context->Reply();
             } else {
                 context->Reply(resultOrError);

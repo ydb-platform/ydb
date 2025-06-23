@@ -12,7 +12,7 @@ QUERY_NAMES = [f'Query{query_num:02d}' for query_num in range(0, 43)]
 
 class TestClickbench(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.Clickbench
-    path = get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')
+    path = get_external_param('table-path-clickbench', YdbCluster.get_tables_path('clickbench/hits'))
 
     @classmethod
     def do_setup_class(cls):
@@ -58,7 +58,7 @@ class ClickbenchParallelBase(LoadSuiteParallel):
         return QUERY_NAMES
 
     def get_path() -> str:
-        return get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')
+        return get_external_param('table-path-clickbench', YdbCluster.get_tables_path('clickbench/hits'))
 
     @classmethod
     def do_setup_class(cls):

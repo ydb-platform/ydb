@@ -139,15 +139,15 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     void SaveErrorType(const TErrorExprType& errorType) {
         TBase::SaveTypeHeader("ErrorType");
         auto err = errorType.GetError();
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnInt64Scalar(err.Position.Row);
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnInt64Scalar(err.Position.Column);
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnStringScalar(err.Position.File);
-        TBase::Writer.OnListItem();
-        TBase::Writer.OnStringScalar(err.GetMessage());
-        TBase::Writer.OnEndList();
+        TBase::Writer_.OnListItem();
+        TBase::Writer_.OnInt64Scalar(err.Position.Row);
+        TBase::Writer_.OnListItem();
+        TBase::Writer_.OnInt64Scalar(err.Position.Column);
+        TBase::Writer_.OnListItem();
+        TBase::Writer_.OnStringScalar(err.Position.File);
+        TBase::Writer_.OnListItem();
+        TBase::Writer_.OnStringScalar(err.GetMessage());
+        TBase::Writer_.OnEndList();
     }
 
 public:

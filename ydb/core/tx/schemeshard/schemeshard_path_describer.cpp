@@ -899,6 +899,7 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     entry->SetShardsLimit(subDomainInfo->GetSchemeLimits().MaxShards);
     entry->SetPQPartitionsInside(subDomainInfo->GetPQPartitionsInside());
     entry->SetPQPartitionsLimit(subDomainInfo->GetSchemeLimits().MaxPQPartitions);
+    *entry->MutableSchemeLimits() = subDomainInfo->GetSchemeLimits().AsProto();
 
     NKikimrSubDomains::TDomainKey *resourcesKey = entry->MutableResourcesDomainKey();
     resourcesKey->SetSchemeShard(subDomainInfo->GetResourcesDomainId().OwnerId);
@@ -1122,9 +1123,13 @@ void TPathDescriber::DescribeSysView(const TActorContext&, TPathId pathId, TPath
     Y_ABORT_UNLESS(it, "SysView is not found");
     TSysViewInfo::TPtr sysViewInfo = *it;
 
+    const TPath sysViewPath = TPath::Init(pathId, Self);
+    const TPath sourceObjectPath = sysViewPath.Parent().Parent();
+
     auto entry = Result->Record.MutablePathDescription()->MutableSysViewDescription();
     entry->SetName(pathEl->Name);
     entry->SetType(sysViewInfo->Type);
+    sourceObjectPath.GetPathIdForDomain().ToProto(entry->MutableSourceObject());
 }
 
 static bool ConsiderAsDropped(const TPath& path) {

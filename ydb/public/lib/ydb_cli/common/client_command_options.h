@@ -273,7 +273,7 @@ protected:
 
 class TAuthMethodOption : public TClientCommandOption {
 public:
-    using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly)>;
+    using TProfileParser = std::function<bool(const YAML::Node& authData, TString* value, bool* isFileName, std::vector<TString>* errors, bool parseOnly)>;
 public:
     TAuthMethodOption(NLastGetopt::TOpt& opt, TClientCommandOptions* clientOptions);
 

@@ -28,6 +28,10 @@ bool IsPassthroughLambda(const NNodes::TCoLambda& lambda, TMaybe<THashSet<TStrin
 bool IsTablePropsDependent(const TExprNode& node);
 bool IsNoPush(const TExprNode& node);
 
+bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns);
+bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns);
+TExprNode::TPtr MakePruneKeysExtractorLambda(const TExprNode& node, const THashSet<TString>& columns, TExprContext& ctx);
+
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType);
 
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx);
@@ -159,7 +163,8 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler);
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
+    bool withOptionals = false);
 
 template<bool Ordered = false>
 std::optional<TPartOfConstraintBase::TPathType> GetPathToKey(const TExprNode& body, const TExprNode& arg);

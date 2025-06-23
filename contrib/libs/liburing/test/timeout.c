@@ -1074,6 +1074,9 @@ static int test_update_multishot_timeouts(struct io_uring *ring, unsigned long m
 	int ret, i, nr = 6;
 	__u32 mode = 0;
 
+	if (no_multishot)
+		return T_EXIT_SKIP;
+
 	msec_to_ts(&ts, base_ms);
 
 	msec_to_ts(&ts_upd, ms);
@@ -1936,7 +1939,7 @@ int main(int argc, char *argv[])
 		}
 
 		ret = test_update_multishot_timeouts(&ring, 200);
-		if (ret) {
+		if (ret && ret != T_EXIT_SKIP) {
 			fprintf(stderr, "test_update_multishot_timeouts linked failed\n");
 			return ret;
 		}

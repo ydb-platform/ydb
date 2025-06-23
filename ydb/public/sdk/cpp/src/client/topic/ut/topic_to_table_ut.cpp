@@ -111,7 +111,9 @@ protected:
     void CreateTopic(const TString& path = TString{TEST_TOPIC},
                      const TString& consumer = TEST_CONSUMER,
                      size_t partitionCount = 1,
-                     std::optional<size_t> maxPartitionCount = std::nullopt);
+                     std::optional<size_t> maxPartitionCount = std::nullopt,
+                     const TDuration retention = TDuration::Hours(1),
+                     bool important = false);
     TTopicDescription DescribeTopic(const TString& path);
 
     void AddConsumer(const TString& topicPath, const TVector<TString>& consumers);
@@ -862,10 +864,12 @@ void TFixture::WriteMessages(const TVector<TString>& messages,
 void TFixture::CreateTopic(const TString& path,
                            const TString& consumer,
                            size_t partitionCount,
-                           std::optional<size_t> maxPartitionCount)
+                           std::optional<size_t> maxPartitionCount,
+                           const TDuration retention,
+                           bool important)
 
 {
-    Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount);
+    Setup->CreateTopic(path, consumer, partitionCount, maxPartitionCount, retention, important);
 }
 
 void TFixture::AddConsumer(const TString& topicPath,
@@ -4427,6 +4431,56 @@ Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixt
 
     RestartPQTablet("topic_A", 0);
     RestartPQTablet("topic_A", 1);
+}
+
+Y_UNIT_TEST_F(TestRetentionOnLongTxAndBigMessages, TFixtureQuery)
+{
+    // TODO uncomment
+    return;
+
+    auto bigMessage = []() {
+        TStringBuilder sb;
+        sb.reserve(10_MB);
+        for (size_t i = 0; i < sb.capacity(); ++i) {
+            sb << RandomNumber<char>();
+        }
+        return sb;
+    };
+
+    TString msg = bigMessage();
+
+    CreateTopic("topic_A", TEST_CONSUMER, 1, 1, TDuration::Seconds(1), true);
+
+    auto session = CreateSession();
+    auto tx0 = session->BeginTx();
+    auto tx1 = session->BeginTx();
+
+    WriteToTopic("topic_A", "grp-0", msg, tx0.get());
+    WriteToTopic("topic_A", "grp-1", msg, tx1.get());
+
+    Sleep(TDuration::Seconds(3));
+
+    WriteToTopic("topic_A", "grp-0", "short-msg", tx0.get());
+    WriteToTopic("topic_A", "grp-1", "short-msg", tx1.get());
+
+    WriteToTopic("topic_A", "grp-0", msg, tx0.get());
+    WriteToTopic("topic_A", "grp-1", msg, tx1.get());
+
+    Sleep(TDuration::Seconds(3));
+
+    WriteToTopic("topic_A", "grp-0", msg, tx0.get());
+    WriteToTopic("topic_A", "grp-1", msg, tx1.get());
+
+    Sleep(TDuration::Seconds(3));
+
+    session->CommitTx(*tx0, EStatus::SUCCESS);
+    session->CommitTx(*tx1, EStatus::SUCCESS);
+
+    //RestartPQTablet("topic_A", 0);
+
+    auto read = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
+    UNIT_ASSERT(read.size() > 0);
+    UNIT_ASSERT_EQUAL(msg, read[0]);
 }
 
 }

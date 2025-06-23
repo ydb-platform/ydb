@@ -3433,6 +3433,40 @@ TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, T
     return node;
 }
 
+bool IsDropAnyOverEquiJoinInputsEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "DropAnyOverEquiJoinInputs";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
+TExprNode::TPtr DropAnyOverEquiJoinInputs(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (!IsDropAnyOverEquiJoinInputsEnabled(optCtx.Types)) {
+        return node;
+    }
+
+    size_t inputsCount = node->ChildrenSize() - 2;
+
+    TJoinLabels labels;
+    for (size_t inputIndex = 0; inputIndex < inputsCount; inputIndex++) {
+        const auto& list = node->Child(inputIndex)->Head();
+        auto unique = list.GetConstraint<TUniqueConstraintNode>();
+        auto distinct = list.GetConstraint<TDistinctConstraintNode>();
+        YQL_ENSURE(!labels.Add(
+            ctx,
+            node->Child(inputIndex)->Tail(),
+            GetSeqItemType(*list.GetTypeAnn()).Cast<TStructExprType>(),
+            unique,
+            distinct
+        ));
+    }
+
+    auto joinTree = node->ChildPtr(inputsCount);
+    auto joinKeyByLabel = CollectEquiJoinKeyColumnsByLabel(*joinTree);
+
+    auto newJoinTree = DropAnyOverJoinInputs(joinTree, labels, joinKeyByLabel, ctx);
+    return newJoinTree != joinTree ? ctx.ChangeChild(*node, inputsCount, std::move(newJoinTree)): node;
+}
+
 TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStringBuf parseUdfName, const THashSet<TStringBuf>& serializeUdfNames) {
     auto apply = TExprBase(node).Cast<TCoApply>();
 
@@ -4007,6 +4041,14 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
         const auto self = TCoFilterNullMembers(node);
         if (self.Members() && self.Members().Cast().Size() == 1) {
+            static const char optNameMember[] = "MemberNthOverFlatMap";
+            const bool canDropAssume = !IsOptimizerDisabled<optNameMember>(*optCtx.Types);
+            if (canDropAssume) {
+                if (auto maybeAssume = self.Input().Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
+                    YQL_CLOG(DEBUG, Core) << node->Content() << " with single member over " << maybeAssume.Cast().CallableName();
+                    return ctx.ChangeChild(*node, TCoFilterNullMembers::idx_Input, maybeAssume.Cast().Input().Ptr());
+                }
+            }
             if (auto maybeJust = self.Input().Maybe<TCoJust>()) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with single member over Just";
                 auto name = self.Members().Cast().Item(0);
@@ -5332,6 +5374,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return ctx.NewCallable(node->Pos(), "SqlAggregateAll", { ctx.NewCallable(node->Pos(), "UnionAll", node->ChildrenList()) });
     };
 
+    map["IntersectAll"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "intersect_all", ctx);
+    };
+    map["Intersect"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "intersect", ctx);
+    };
+
+    map["ExceptAll"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "except_all", ctx);
+    };
+    map["Except"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "except", ctx);
+    };
+
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoAggregate self(node);
         if (self.Keys().Size() == 0 && !HasPayload(self)) {
@@ -5446,6 +5506,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         ret = PullAssumeColumnOrderOverEquiJoin(node, ctx, optCtx);
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "Pull AssumeColumnOrder over EquiJoin";
+            return ret;
+        }
+
+        ret = DropAnyOverEquiJoinInputs(node, ctx, optCtx);
+        if (ret != node) {
+            YQL_CLOG(DEBUG, Core) << "Drop unnecessary Any over EquiJoin inputs";
             return ret;
         }
 
@@ -6217,7 +6283,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Unordered"] = map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply","PartitionByKey","PartitionsByKeys"})) {
+        if (node->Head().IsCallable({"AsList","EquiJoin","Filter","Map","FlatMap","MultiMap","Extend", "Apply","PartitionByKey","PartitionsByKeys","PruneKeys"})) {
             YQL_CLOG(DEBUG, Core) << "Drop " << node->Content() << " over " << node->Head().Content();
             return node->HeadPtr();
         }

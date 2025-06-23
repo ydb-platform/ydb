@@ -156,6 +156,7 @@ message TEvCreateReplication {
     optional NKikimrProto.TPathID PathId = 1;
     optional TOperationId OperationId = 2;
     optional TReplicationConfig Config = 3;
+    optional string Database = 4;
 }
 
 message TEvCreateReplicationResult {
@@ -273,6 +274,7 @@ message TRunWorkerCommand {
     }
 
     optional TConsistencySettings ConsistencySettings = 3;
+    optional string Database = 5;
 }
 
 message TEvRunWorker {

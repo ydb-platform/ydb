@@ -256,6 +256,7 @@ public:
 
         REGISTER    (TUpdateChaosTableReplicaProgressCommand, "update_replication_progress",  Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TAlterReplicationCardCommand,         "alter_replication_card",          Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TPingChaosLeaseCommand,               "ping_chaos_lease",                Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TMergeCommand,                        "merge",                           Null,       Structured, true,  false, ApiVersion3);
         REGISTER    (TEraseCommand,                        "erase",                           Null,       Structured, true,  false, ApiVersion3);
@@ -307,6 +308,7 @@ public:
         REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Structured, false, true );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
+        REGISTER_ALL(TListOperationEventsCommand,          "list_operation_events",           Null,       Structured, false, false);
         REGISTER_ALL(TListOperationsCommand,               "list_operations",                 Null,       Structured, false, false);
         REGISTER_ALL(TListJobsCommand,                     "list_jobs",                       Null,       Structured, false, false);
         REGISTER_ALL(TGetJobCommand,                       "get_job",                         Null,       Structured, false, false);

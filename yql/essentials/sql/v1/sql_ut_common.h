@@ -1724,6 +1724,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with ON\n");
     }
 
+    // UNION
+
     Y_UNIT_TEST(UnionAllTest) {
         NYql::TAstParseResult res = SqlToYql("PRAGMA DisableEmitUnionMerge; SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
         UNIT_ASSERT(res.Root);
@@ -1797,6 +1799,77 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(2, elementStat["UnionMerge"]);
         UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
     }
+
+    // INTERSECT
+
+    Y_UNIT_TEST(IntersectAllTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT ALL select subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("IntersectAll"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["IntersectAll"]);
+    }
+
+    Y_UNIT_TEST(IntersectTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT select subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Intersect"]);
+    }
+
+    Y_UNIT_TEST(IntersectDistinctTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input INTERSECT DISTINCT select subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Intersect"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Intersect"]);
+    }
+
+    // EXCEPT
+
+    Y_UNIT_TEST(ExceptAllTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT ALL select subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("ExceptAll"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["ExceptAll"]);
+    }
+
+    Y_UNIT_TEST(ExceptTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT select subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
+    }
+
+    Y_UNIT_TEST(ExceptDistinctTest) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = 202503;
+        NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT key FROM plato.Input EXCEPT DISTINCT select subkey FROM plato.Input;", settings);
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Except"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Except"]);
+    }
+
 
     Y_UNIT_TEST(DeclareDecimalParameter) {
         NYql::TAstParseResult res = SqlToYql("declare $value as Decimal(22,9); select $value as cnt;");

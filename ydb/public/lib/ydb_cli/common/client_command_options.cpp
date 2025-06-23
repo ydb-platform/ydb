@@ -361,7 +361,7 @@ TAuthMethodOption& TAuthMethodOption::AuthProfileParser(TProfileParser parser, c
 }
 
 TAuthMethodOption& TAuthMethodOption::SimpleProfileDataParam(const TString& authMethod, bool isFileName) {
-    auto parser = [this, isFileName, authMethod](const YAML::Node& authData, TString* value, std::vector<TString>* errors, bool parseOnly) -> bool {
+    auto parser = [this, isFileName, authMethod](const YAML::Node& authData, TString* value, bool* isFileNameOut, std::vector<TString>* errors, bool parseOnly) -> bool {
         Y_UNUSED(errors, parseOnly);
 
         const bool needData = GetHasArg() != NLastGetopt::NO_ARGUMENT;
@@ -372,17 +372,11 @@ TAuthMethodOption& TAuthMethodOption::SimpleProfileDataParam(const TString& auth
             return true;
         }
 
-        if (!isFileName) {
-            if (value) {
-                *value = authData.as<TString>();
-            }
-            return true;
-        }
-
-        TString path = authData.as<TString>();
-        TString val = ReadFromFile(path, path);
         if (value) {
-            *value = std::move(val);
+            *value = authData.as<TString>();
+        }
+        if (isFileNameOut) {
+            *isFileNameOut = isFileName;
         }
         return true;
     };
@@ -390,8 +384,6 @@ TAuthMethodOption& TAuthMethodOption::SimpleProfileDataParam(const TString& auth
 }
 
 bool TAuthMethodOption::TryParseFromProfile(const std::shared_ptr<IProfile>& profile, TString* parsedValue, bool* isFileName, std::vector<TString>* errors, bool parseOnly) const {
-    Y_UNUSED(isFileName);
-
     if (!profile || !profile->Has("authentication")) {
         return false;
     }
@@ -410,7 +402,7 @@ bool TAuthMethodOption::TryParseFromProfile(const std::shared_ptr<IProfile>& pro
     if (parser == ProfileParsers.end()) {
         return false;
     }
-    return parser->second(authValue["data"], parsedValue, errors, parseOnly);
+    return parser->second(authValue["data"], parsedValue, isFileName, errors, parseOnly);
 }
 
 

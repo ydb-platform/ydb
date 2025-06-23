@@ -219,6 +219,7 @@ SRCS(
     build_index/local_kmeans.cpp
     build_index/sample_k.cpp
     build_index/secondary_index.cpp
+    build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
 )
 
@@ -262,6 +263,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
@@ -280,6 +282,7 @@ PEERDIR(
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
     yql/essentials/types/uuid
+    ydb/core/io_formats/cell_maker
 )
 
 YQL_LAST_ABI_VERSION()

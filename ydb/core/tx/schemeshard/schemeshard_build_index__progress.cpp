@@ -52,14 +52,14 @@ protected:
 
     const TActorId ResponseActorId;
     const TIndexBuildId BuildId;
-    TIndexBuildInfo::TSample::TRows Init;
+    TIndexBuildInfo::TSample::TRows Sample;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
-    std::shared_ptr<NTxProxy::TUploadRows> Rows;
+    std::shared_ptr<NTxProxy::TUploadRows> UploadRows;
 
     TActorId Uploader;
     ui32 RetryCount = 0;
-    ui32 RowsBytes = 0;
+    ui32 UploadBytes = 0;
     const NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
@@ -71,7 +71,7 @@ public:
                    const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    TIndexBuildId buildId,
-                   TIndexBuildInfo::TSample::TRows init,
+                   TIndexBuildInfo::TSample::TRows sample,
                    NTableIndex::TClusterId parent,
                    NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
@@ -79,14 +79,14 @@ public:
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildId(buildId)
-        , Init(std::move(init))
+        , Sample(std::move(sample))
         , Parent(parent)
         , Child(child)
     {
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildId
             << " ResponseActorId: " << ResponseActorId;
-        Y_ENSURE(!Init.empty());
+        Y_ENSURE(!Sample.empty());
         Y_ENSURE(Parent < Child);
         Y_ENSURE(Child != 0);
     }
@@ -109,12 +109,11 @@ public:
     }
 
     void Bootstrap() {
-        Rows = std::make_shared<NTxProxy::TUploadRows>();
-        Rows->reserve(Init.size());
+        UploadRows = std::make_shared<NTxProxy::TUploadRows>();
+        UploadRows->reserve(Sample.size());
         std::array<TCell, 2> pk;
         pk[0] = TCell::Make(Parent);
-        for (auto& [_, row] : Init) {
-            RowsBytes += row.size();
+        for (auto& [_, row] : Sample) {
             auto child = Child++;
             if (IsPostingLevel) {
                 child = SetPostingParentFlag(child);
@@ -123,11 +122,11 @@ public:
             }
             pk[1] = TCell::Make(child);
 
-            // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
-            Rows->emplace_back(TSerializedCellVec{pk}, std::move(row));
+            TSerializedCellVec vec(row);
+            UploadBytes += NDataShard::CountRowCellBytes(pk, vec.GetCells());
+            UploadRows->emplace_back(TSerializedCellVec{pk}, std::move(row));
         }
-        Init = {}; // release memory
-        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(pk);
+        Sample = {}; // release memory
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
@@ -155,13 +154,13 @@ private:
     void HandleWakeup() {
         LOG_D("Retry upload " << Debug());
 
-        if (Rows) {
+        if (UploadRows) {
             Upload(true);
         }
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_T("Handle TEvUploadRowsResponse "
+        LOG_D("Handle TEvUploadRowsResponse "
               << Debug()
               << " Uploader: " << Uploader.ToString()
               << " ev->Sender: " << ev->Sender.ToString());
@@ -187,8 +186,8 @@ private:
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
 
         response->Record.SetId(ui64(BuildId));
-        response->Record.SetUploadRows(Rows->size());
-        response->Record.SetUploadBytes(RowsBytes);
+        response->Record.SetUploadRows(UploadRows->size());
+        response->Record.SetUploadBytes(UploadBytes);
 
         UploadStatusToMessage(response->Record);
 
@@ -207,7 +206,7 @@ private:
             SelfId(),
             TargetTable,
             Types,
-            Rows,
+            UploadRows,
             NTxProxy::EUploadRowsMode::WriteToTableShadow, // TODO(mbkkt) is it fastest?
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
@@ -348,9 +347,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         op.SetName(TString::Join(PostingTable, suffix));
         NTableIndex::FillIndexTableColumns(tableInfo->Columns, implTableColumns.Keys, implTableColumns.Columns, op);
         auto& policy = *resetPartitionsSettings();
-        const auto shards = tableInfo->GetShard2PartitionIdx().size();
-        policy.SetMinPartitionsCount(shards);
-        policy.SetMaxPartitionsCount(shards);
+        // Prevent merging partitions
+        policy.SetMinPartitionsCount(32768);
+        policy.SetMaxPartitionsCount(0);
 
         LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, 
             "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
@@ -512,30 +511,35 @@ struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuil
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
-    template <bool WithSnapshot = true, typename Record>
-    TTabletId CommonFillRecord(Record& record, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+    template <bool WithSnapshot = true, typename TRequest>
+    TTabletId CommonFillScanRequest(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
-        record.SetTabletId(ui64(shardId));
+        request.SetTabletId(ui64(shardId));
+
         if constexpr (WithSnapshot) {
             if (buildInfo.SnapshotTxId) {
                 Y_ENSURE(buildInfo.SnapshotStep);
-                record.SetSnapshotTxId(ui64(buildInfo.SnapshotTxId));
-                record.SetSnapshotStep(ui64(buildInfo.SnapshotStep));
+                request.SetSnapshotTxId(ui64(buildInfo.SnapshotTxId));
+                request.SetSnapshotStep(ui64(buildInfo.SnapshotStep));
             }
         }
 
         auto& shardStatus = buildInfo.Shards.at(shardIdx);
-        if constexpr (requires { record.MutableKeyRange(); }) {
+        if constexpr (requires { request.MutableKeyRange(); }) {
             if (shardStatus.LastKeyAck) {
                 TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
-                range.Serialize(*record.MutableKeyRange());
+                range.Serialize(*request.MutableKeyRange());
             } else if (buildInfo.KMeans.Parent == 0) {
-                shardStatus.Range.Serialize(*record.MutableKeyRange());
+                shardStatus.Range.Serialize(*request.MutableKeyRange());
             }
         }
 
-        record.SetSeqNoGeneration(Self->Generation());
-        record.SetSeqNoRound(++shardStatus.SeqNoRound);
+        if constexpr (requires { request.MutableScanSettings(); }) {
+            request.MutableScanSettings()->CopyFrom(buildInfo.ScanSettings);
+        }
+
+        request.SetSeqNoGeneration(Self->Generation());
+        request.SetSeqNoRound(++shardStatus.SeqNoRound);
         return shardId;
     }
 
@@ -562,7 +566,7 @@ private:
 
         ev->Record.AddColumns(buildInfo.IndexColumns.back());
 
-        auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
+        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
         LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
@@ -602,7 +606,7 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
-        auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
+        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
         LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -650,7 +654,7 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
-        auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
+        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
         LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
@@ -695,7 +699,7 @@ private:
             ev->Record.AddSourcePrimaryKeyColumns(tableInfo.Columns.at(keyPos).Name);
         }
 
-        auto shardId = CommonFillRecord<false>(ev->Record, shardIdx, buildInfo);
+        auto shardId = CommonFillScanRequest<false>(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
         LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
@@ -744,9 +748,7 @@ private:
 
         ev->Record.SetTargetName(buildInfo.TargetName);
 
-        ev->Record.MutableScanSettings()->CopyFrom(buildInfo.ScanSettings);
-
-        auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
+        auto shardId = CommonFillScanRequest(ev->Record, shardIdx, buildInfo);
 
         LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
 
@@ -863,6 +865,10 @@ private:
     bool FillPrefixKMeans(TIndexBuildInfo& buildInfo) {
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
+        }
+        size_t i = 0;
+        for (auto& [shardIdx, shardStatus]: buildInfo.Shards) {
+            shardStatus.Index = i++;
         }
         return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendPrefixKMeansRequest(shardIdx, buildInfo); }) &&
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
@@ -1425,7 +1431,7 @@ public:
                 LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
                 buildInfo.AddParent(shardRange, x.ShardIdx);
             }
-            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), "", buildInfo.Shards.size()});
+            auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
             shardRange.From = std::move(bound);
 
@@ -1892,7 +1898,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplyProgress: public TTxShardReply<TEvDa
 
     TBillingStats GetBillingStats() const override {
         auto& record = Response->Get()->Record;
-        // TODO(mbkkt) we should account uploads and reads separately
+        // secondary index reads and writes almost the same amount of data
+        // do not count them separately for simplicity
         return {record.GetRowsDelta(), record.GetBytesDelta(), record.GetRowsDelta(), record.GetBytesDelta()};
     }
 };

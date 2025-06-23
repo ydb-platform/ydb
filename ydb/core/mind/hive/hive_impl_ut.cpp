@@ -16,6 +16,25 @@
 using namespace NKikimr;
 using namespace NHive;
 
+namespace {
+
+class TTestHive : public THive {
+public:
+    TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
+
+    template<typename F>
+    void UpdateConfig(F func) {
+        func(ClusterConfig);
+        BuildCurrentConfig();
+    }
+
+    TBootQueue& GetBootQueue() {
+        return BootQueue;
+    }
+};
+
+} // namespace
+
 using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
 
@@ -43,7 +62,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
             tablet.Weight = RandomNumber<double>();
-            bootQueue.EmplaceToBootQueue(tablet);
+            bootQueue.AddToBootQueue(tablet, 0UL);
         }
 
         double passed = timer.Get().SecondsFloat();
@@ -69,7 +88,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             UNIT_ASSERT(tablets.contains(record.TabletId));
             records.push_back(record);
             if (++i == NUM_TABLETS / 2) {
-                // to test both modes 
+                // to test both modes
                 bootQueue.IncludeWaitQueue();
             }
         }
@@ -227,19 +246,109 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(expectedStDev, stDev1, 1e-6);
         UNIT_ASSERT_VALUES_EQUAL(stDev1, stDev2);
     }
+
+    Y_UNIT_TEST(BootQueueConfigurePriorities) {
+        auto hiveStorage = MakeIntrusive<TTabletStorageInfo>();
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+
+        // Emulate initial BuildCurrentConfig call
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig&){});
+
+        TFollowerGroup followerGroup(hive);
+
+        // Part 1: Test default priorities with empty configuration
+        {
+            TLeaderTabletInfo ssTablet(1UL, hive);
+            ssTablet.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&ssTablet);
+
+            TLeaderTabletInfo dummyTablet(2UL, hive);
+            dummyTablet.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&dummyTablet);
+
+            TFollowerTabletInfo dummyFollowerTablet(dummyTablet, 3UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTablet);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should follow defaults
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+
+        // Part 2: Configure custom priorities for known and unknown types
+        {
+            constexpr double SS_BOOT_PRIORITY = 2.5;
+            constexpr double DUMMY_BOOT_PRIORITY = 0.5;
+
+            hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                auto* ssItem = config.AddTabletTypeToBootPriority();
+                ssItem->SetTabletType(TTabletTypes::SchemeShard);
+                ssItem->SetPriority(SS_BOOT_PRIORITY);
+
+                auto* dummyItem = config.AddTabletTypeToBootPriority();
+                dummyItem->SetTabletType(TTabletTypes::Dummy);
+                dummyItem->SetPriority(DUMMY_BOOT_PRIORITY);
+            });
+
+            TLeaderTabletInfo configuredSsTablet(4UL, hive);
+            configuredSsTablet.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&configuredSsTablet);
+
+            TLeaderTabletInfo configuredDummyTablet(5UL, hive);
+            configuredDummyTablet.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&configuredDummyTablet);
+
+            TFollowerTabletInfo configuredDummyFollowerTablet(configuredDummyTablet, 6UL, followerGroup);
+            hive.AddToBootQueue(&configuredDummyFollowerTablet);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should use configured values
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, SS_BOOT_PRIORITY); // Configured SchemeShard
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, DUMMY_BOOT_PRIORITY); // Configured Dummy
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default (should not change)
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+
+        // Part 3: Clear configuration and verify defaults again
+        {
+            hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+                config.ClearTabletTypeToBootPriority();
+            });
+
+            TLeaderTabletInfo ssTabletAfterClear(7UL, hive);
+            ssTabletAfterClear.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&ssTabletAfterClear);
+
+            TLeaderTabletInfo dummyTabletAfterClear(8UL, hive);
+            dummyTabletAfterClear.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&dummyTabletAfterClear);
+
+            TFollowerTabletInfo dummyFollowerTabletAfterClear(dummyTabletAfterClear, 9UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTabletAfterClear);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should revert to defaults
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {
-    class TTestHive : public THive {
-    public:
-        TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
-
-        template<typename F>
-        void UpdateConfig(F func) {
-            func(ClusterConfig);
-            BuildCurrentConfig();
-        }
-    };
 
     Y_UNIT_TEST(BasicTest) {
         TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;

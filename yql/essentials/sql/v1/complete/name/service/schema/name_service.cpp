@@ -12,13 +12,28 @@ namespace NSQLComplete {
             }
 
             NThreading::TFuture<TNameResponse> Lookup(TNameRequest request) const override {
-                if (!request.Constraints.Object) {
-                    return NThreading::MakeFuture<TNameResponse>({});
+                if (request.Constraints.Object) {
+                    return Schema_
+                        ->List(ToListRequest(std::move(request)))
+                        .Apply(ToListNameResponse);
                 }
 
-                return Schema_
-                    ->List(ToListRequest(std::move(request)))
-                    .Apply(ToNameResponse);
+                if (request.Constraints.Column && !request.Constraints.Column->Tables.empty()) {
+                    Y_ENSURE(request.Constraints.Column->Tables.size() == 1, "Not Implemented");
+                    TTableId table = request.Constraints.Column->Tables[0];
+                    return Schema_
+                        ->Describe({
+                            .TableCluster = table.Cluster,
+                            .TablePath = table.Path,
+                            .ColumnPrefix = request.Prefix,
+                            .ColumnsLimit = request.Limit,
+                        })
+                        .Apply([table = std::move(table)](auto f) {
+                            return ToDescribeNameResponse(std::move(f), std::move(table));
+                        });
+                }
+
+                return NThreading::MakeFuture<TNameResponse>({});
             }
 
         private:
@@ -53,7 +68,7 @@ namespace NSQLComplete {
                 }
             }
 
-            static TNameResponse ToNameResponse(NThreading::TFuture<TListResponse> f) {
+            static TNameResponse ToListNameResponse(NThreading::TFuture<TListResponse> f) {
                 TListResponse list = f.ExtractValue();
 
                 TNameResponse response;
@@ -81,6 +96,21 @@ namespace NSQLComplete {
                     name = std::move(local);
                 }
                 return name;
+            }
+
+            static TNameResponse ToDescribeNameResponse(
+                NThreading::TFuture<TDescribeTableResponse> f,
+                TTableId table) {
+                TDescribeTableResponse info = f.ExtractValue();
+
+                TNameResponse response;
+                for (TString& column : info.Columns) {
+                    TColumnName name;
+                    name.Indentifier = std::move(column);
+                    name.Table = table;
+                    response.RankedNames.emplace_back(std::move(name));
+                }
+                return response;
             }
 
             ISchema::TPtr Schema_;

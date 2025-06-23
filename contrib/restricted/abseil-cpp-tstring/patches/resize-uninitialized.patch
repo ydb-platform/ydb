@@ -1,0 +1,35 @@
+--- contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/resize_uninitialized.h	(5a0ee36671601ee85a9da7de34e2122e505de074)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/resize_uninitialized.h	(b3328a05af28b980a2350182d59bb4e482a94671)
+@@ -49,6 +49,16 @@ struct ResizeUninitializedTraits<
+   }
+ };
+
++template <typename string_type>
++struct ResizeUninitializedTraits<
++    string_type, y_absl::void_t<decltype(std::declval<string_type&>()
++                                           .ReserveAndResize(237))> > {
++  using HasMember = std::true_type;
++  static void Resize(string_type* s, size_t new_size) {
++    s->ReserveAndResize(new_size);
++  }
++};
++
+ // Returns true if the TString implementation supports a resize where
+ // the new characters added to the TString are left untouched.
+ //
+@@ -98,6 +108,15 @@ struct AppendUninitializedTraits<
+   }
+ };
+
++template <typename string_type>
++struct AppendUninitializedTraits<
++    string_type, y_absl::void_t<decltype(std::declval<string_type&>()
++                                           .ReserveAndResize(237))> > {
++  static void Append(string_type* s, size_t n) {
++    s->ReserveAndResize(s->size() + n);
++  }
++};
++
+ // Like STLStringResizeUninitialized(str, new_size), except guaranteed to use
+ // exponential growth so that the amortized complexity of increasing the string
+ // size by a small amount is O(1), in contrast to O(str->size()) in the case of

@@ -1024,9 +1024,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
     if (Config.GetEnableCompactification()) {
         Cerr << "=== Create compacter on init\n";
-        ui64 readQuota = AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TotalPartitionWriteSpeed : std::numeric_limits<ui64>::max();
-        Compacter = MakeHolder<TPartitionCompaction>(0, 1000, 2000, this, readQuota); //ToDo!!
-        Compacter->TryCompactionIfPossible();
+        CreateCompacter();
     }
 }
 
@@ -1267,6 +1265,23 @@ void TPartition::InitSplitMergeSlidingWindow() {
     SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
+void TPartition::CreateCompacter() {
+    if (!CompacterStartCookie.Defined()) {
+        Send(Tablet, new TEvPQ::TEvAllocateCookie(100));
+        return;
+    } else {
+        ui64 readQuota = AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TotalPartitionWriteSpeed : std::numeric_limits<ui64>::max();
+        Compacter = MakeHolder<TPartitionCompaction>(0, *CompacterStartCookie, *CompacterStartCookie + 100, this, readQuota);
+        Compacter->TryCompactionIfPossible();
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev) {
+    CompacterStartCookie = ev->Get()->StartCookie;
+    if (Config.GetEnableCompactification()) {
+        CreateCompacter();
+    }
+}
 //
 // Functions
 //

@@ -1045,7 +1045,8 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
                              ui64 creationUnixTime,
-                             const TActorContext& ctx)
+                             const TActorContext& ctx,
+                             bool includeToWriteCycle)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
@@ -1060,14 +1061,15 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
 
     TKey resKey = newWrite->Key;
     resKey.SetType(TKeyPrefix::TypeData);
-    WriteCycleSize += newWrite->Value.size();
+    if (includeToWriteCycle)
+        WriteCycleSize += newWrite->Value.size();
 }
 
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
-                             const TActorContext& ctx)
+                             const TActorContext& ctx, bool includeToWriteCycle)
 {
-    AddCmdWrite(newWrite, request, 0, ctx);
+    AddCmdWrite(newWrite, request, 0, ctx, includeToWriteCycle);
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,

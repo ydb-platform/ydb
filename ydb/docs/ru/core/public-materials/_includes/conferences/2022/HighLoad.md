@@ -54,7 +54,7 @@
 
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_million_rps_metrika/presentation.pdf)
 
-### {{ ydb-short-name }}: мультиверсионность в распределенной базе {#2022-conf-hl-ydb-multiver}
+## {{ ydb-short-name }}: мультиверсионность в распределенной базе {#2022-conf-hl-ydb-multiver}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -70,7 +70,7 @@
 
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_mvcc/presentation.pdf)
 
-### Q&A про Open Source {{ ydb-short-name }} и планы на будущее {#2022-conf-hl-qa}
+## Q&A про Open Source {{ ydb-short-name }} и планы на будущее {#2022-conf-hl-qa}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
@@ -86,7 +86,7 @@
 
 Выступление будет интересно тем, кто хочет глубже понять некоторые аспекты реализации и работы {{ ydb-short-name }}.
 
-### Дедупликация 5 миллионов событий в секунду на YDB в АппМетрике {#2022-conf-hl-dedup-ydb}
+## Дедупликация 5 миллионов событий в секунду на YDB в АппМетрике {#2022-conf-hl-dedup-ydb}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 
@@ -105,7 +105,7 @@
 
 [Слайды](https://presentations.ydb.tech/2022/ru/highload_foundation_deduplicate_5m_events_per_second/presentation.pdf)
 
-### Просто о сложном: как работает драйвер распределенной базы данных YDB {#2022-conf-hl-ydb-driver}
+## Просто о сложном: как работает драйвер распределенной базы данных YDB {#2022-conf-hl-ydb-driver}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

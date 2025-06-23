@@ -1,4 +1,4 @@
-### {{ ydb-short-name }} Topics: история взаимоотношений с Kafka {#2024-ya-inf}
+## {{ ydb-short-name }} Topics: история взаимоотношений с Kafka {#2024-ya-inf}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

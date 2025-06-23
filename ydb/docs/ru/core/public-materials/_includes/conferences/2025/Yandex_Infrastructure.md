@@ -1,4 +1,4 @@
-### YDB Topics — корпоративный брокер сообщений от Яндекса
+## YDB Topics — корпоративный брокер сообщений от Яндекса
 
 {% include notitle [general_tag](../../tags.md#general) %}
 
@@ -10,7 +10,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 @[](https://runtime.strm.yandex.ru/player/episode/vpled3lm6gfqgtdb3gtw?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
-### Как Яндекс разработал алгоритм для стоимостного оптимизатора в YDB
+## Как Яндекс разработал алгоритм для стоимостного оптимизатора в YDB
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -22,7 +22,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 @[](https://runtime.strm.yandex.ru/player/episode/vpledjxhhhm7dev3cg72?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
-### YDB (СУБД Яндекса) для задач интеграции данных и бизнес-аналитики
+## YDB (СУБД Яндекса) для задач интеграции данных и бизнес-аналитики
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
@@ -38,7 +38,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 @[](https://runtime.strm.yandex.ru/player/episode/vpleedipvdfxfl7upbjb?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
-### Внутреннее устройство аналитической СУБД Яндекса — YDB DWH
+## Внутреннее устройство аналитической СУБД Яндекса — YDB DWH
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -52,7 +52,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 @[](https://runtime.strm.yandex.ru/player/episode/vplenkblbdqdawpj2qoa?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
-### Новые возможности YDB (СУБД Яндекса) для аналитических систем
+## Новые возможности YDB (СУБД Яндекса) для аналитических систем
 
 {% include notitle [general_tag](../../tags.md#general) %}
 

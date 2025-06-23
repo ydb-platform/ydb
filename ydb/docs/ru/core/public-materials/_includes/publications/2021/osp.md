@@ -1,4 +1,4 @@
-### Бессерверная альтернатива традиционным базам данных {#2021-smi-serverless-alternative}
+## Бессерверная альтернатива традиционным базам данных {#2021-smi-serverless-alternative}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

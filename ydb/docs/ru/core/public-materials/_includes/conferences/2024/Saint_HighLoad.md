@@ -1,4 +1,4 @@
-### Гарантии доставки сообщений в {{ ydb-short-name }} Topics {#2024-saint-highload}
+## Гарантии доставки сообщений в {{ ydb-short-name }} Topics {#2024-saint-highload}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

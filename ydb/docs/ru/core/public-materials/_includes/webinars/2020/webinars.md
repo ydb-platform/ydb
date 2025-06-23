@@ -1,4 +1,4 @@
-### Новости {{ ydb-name }} — обзор новых возможностей {#2020-webinar-ydb-news}
+## Новости {{ ydb-name }} — обзор новых возможностей {#2020-webinar-ydb-news}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 

@@ -1,4 +1,4 @@
-### Практические примеры использования Change Data Capture в YDB {#2022-webinar-cdc}
+## Практические примеры использования Change Data Capture в YDB {#2022-webinar-cdc}
 
 {% include notitle [practice_tag](../../tags.md#practice) %}
 
@@ -11,7 +11,7 @@
 
 @[YouTube](https://www.youtube.com/watch?v=BG6pPfQ0IHE)
 
-### Управляемый сервис YDB: настройка, применение, мониторинг {#2022-webinar-ydb-managment}
+## Управляемый сервис YDB: настройка, применение, мониторинг {#2022-webinar-ydb-managment}
 
 {% include notitle [practice_tag](../../tags.md#practice) %}
 

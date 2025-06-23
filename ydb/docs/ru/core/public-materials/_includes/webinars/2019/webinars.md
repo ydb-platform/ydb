@@ -1,4 +1,4 @@
-### Опыт использования {{ ydb-name }} на примере продуктов Яндекса {#2019-webinar-ydb-exp}
+## Опыт использования {{ ydb-name }} на примере продуктов Яндекса {#2019-webinar-ydb-exp}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 

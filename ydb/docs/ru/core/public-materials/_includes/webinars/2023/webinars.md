@@ -1,4 +1,4 @@
-### О релизе {{ ydb-short-name }} v23.1 {#2023-webinar-ydb-23-1}
+## О релизе {{ ydb-short-name }} v23.1 {#2023-webinar-ydb-23-1}
 
 {% include notitle [releases_tag](../../tags.md#releases) %}
 
@@ -16,7 +16,7 @@
 
 [Слайды](https://presentations.ydb.tech/2023/ru/release_webinar_v23.1/presentation.pdf)
 
-### Используем {{ ydb-short-name }}: Возможности встроенного веб-интерфейса и CLI {#2023-webinar-ydb-interface}
+## Используем {{ ydb-short-name }}: Возможности встроенного веб-интерфейса и CLI {#2023-webinar-ydb-interface}
 
 {% include notitle [practice_tag](../../tags.md#practice) %}
 
@@ -26,7 +26,7 @@
 
 Вебинар будет полезен тем, кто работает с {{ ydb-short-name }}, в том числе и разработчикам приложений.
 
-### Развертывание {{ ydb-short-name }} в Kubernetes {#2023-webinar-ydb-kubernetes}
+## Развертывание {{ ydb-short-name }} в Kubernetes {#2023-webinar-ydb-kubernetes}
 
 {% include notitle [practice_tag](../../tags.md#practice) %}
 
@@ -36,7 +36,7 @@
 
 Вебинар будет полезен SRE-инженерам и разработчикам, которые занимаются развёртыванием и администрированием {{ ydb-short-name }} с помощью Kubernetes® — как в публичных, так и в частных облаках.
 
-### Анализ потоковых данных с помощью Yandex Query - интерактивного сервиса виртуализации данных в {{ ydb-short-name }} {#2023-webinar-ydb-data-streams}
+## Анализ потоковых данных с помощью Yandex Query - интерактивного сервиса виртуализации данных в {{ ydb-short-name }} {#2023-webinar-ydb-data-streams}
 [{{ team.dmitriev.name }}]({{ team.dmitriev.profile }}) ({{ team.dmitriev.position }}) рассказал, что такое обработка потоковых данных, с какими задачами она помогает справляться и как её выполнять с помощью Yandex Query. В практической части вебинара показаны решения нескольких задач с помощью потоковой аналитики в сервисе Yandex Query.
 
 @[YouTube](https://www.youtube.com/watch?v=PW7v57ELCfQ)

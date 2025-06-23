@@ -1,4 +1,4 @@
-### Бессерверная альтернатива традиционным базам данных {#2021-smi-serverless}
+## Бессерверная альтернатива традиционным базам данных {#2021-smi-serverless}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
@@ -13,7 +13,7 @@
 * Архитектура {{ ydb-name }}.
 * Бессерверный режим в {{ ydb-name }}.
 
-### Погружение в Serverless. Рождение {{ ydb-name }} {#2021-smi-inner-serverless}
+## Погружение в Serverless. Рождение {{ ydb-name }} {#2021-smi-inner-serverless}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -21,7 +21,7 @@
 
 Продолжение беседы с разработчиками экосистемы сервисов Serverless. В начале нашего путешествия Глеб Борисов описал ситуацию с Yandex Cloud Function, затем Данил Ошеров погрузил нас в мир протокола S3 и сервиса Object Storage. В этой [статье](https://habr.com/ru/post/552032/) [{{ team.fomichev.name }}]({{ team.fomichev.profile }})({{ team.fomichev.position }}) поделился подробностями о NewSQL.
 
-### Мультиарендный подход Яндекса к построению инфраструктуры работы с данными {#2021-smi-multiarend}
+## Мультиарендный подход Яндекса к построению инфраструктуры работы с данными {#2021-smi-multiarend}
 
 {% include notitle [overview_tag](../../tags.md#overview) %}
 
@@ -31,7 +31,7 @@
 
 В [статье](https://habr.com/ru/company/yandex/blog/564854/) [{{ team.fomichev.name }}]({{ team.fomichev.profile }})({{ team.fomichev.position }}) рассказал о бессерверных решениях, которые еще до всеобщего хайпа стали популярны в Яндексе и по-прежнему используются для хранения и обработки данных.
 
-### Готовим c serverless. Голосовой сервис записи к врачу и регистрации в поликлинике {#2021-smi-serverless-cook}
+## Готовим c serverless. Голосовой сервис записи к врачу и регистрации в поликлинике {#2021-smi-serverless-cook}
 
 {% include notitle [use_cases_tag](../../tags.md#use_cases) %}
 

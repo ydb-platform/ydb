@@ -173,7 +173,6 @@
                                                                                 "PlanNodeId": 3,
                                                                                 "Plans": [
                                                                                     {
-                                                                                        "CTE Name": "Filter-TableFullScan_9",
                                                                                         "HashFunc": "HashV1",
                                                                                         "KeyColumns": [
                                                                                             "SearchPhrase",

@@ -7,11 +7,10 @@
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
-
 class TSharedMetadataAccessorCacheActor: public TActorBootstrapped<TSharedMetadataAccessorCacheActor> {
 private:
-    THashMap<TActorId, TLocalManager> Managers;
     ui64 TotalMemorySize = 1 << 30;
+    THashMap<TActorId, TLocalManager> Managers;
     std::shared_ptr<IGranuleDataAccessor::TSharedMetadataAccessorCache> MetadataCache;
     std::shared_ptr<IAccessorCallbackWithOwner> AccessorsCallback;
 
@@ -32,6 +31,7 @@ private:
         }
         manager->second.RegisterController(move(controller), ev->Get()->GetIsUpdateFlag());
     }
+
     void Handle(TEvUnregisterController::TPtr& ev) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "TEvUnregisterController")("owner", ev->Get()->GetOwner());
         if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
@@ -40,6 +40,7 @@ private:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "owner_not_found");
         }
     }
+
     void Handle(TEvAddPortion::TPtr& ev) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "TEvAddPortion")("owner", ev->Get()->GetOwner());
         if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
@@ -59,6 +60,7 @@ private:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "owner_not_found");
         }
     }
+
     void Handle(TEvAskServiceDataAccessors::TPtr& ev) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "TEvAskServiceDataAccessors")("owner", ev->Get()->GetOwner());
         if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
@@ -67,6 +69,7 @@ private:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "owner_not_found");
         }
     }
+
     void Handle(TEvClearCache::TPtr& ev) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "TEvClearCache")("owner", ev->Get()->GetOwner());
         if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
@@ -74,7 +77,6 @@ private:
         } else {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "owner_not_found");
         }
-
     }
 
 public:

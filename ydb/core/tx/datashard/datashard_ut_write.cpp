@@ -127,29 +127,29 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Upsert exist row with default values in columns 5, 6 =========\n";
         {
-            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // key and numerical columns
-            TVector<ui32> defaultFilledColumns = {5, 6};
+            TVector<ui32> columnIds = {1, 2, 3, 4, 7, 8, 9, 5, 6}; // key and numerical columns
+            ui32 defaultFilledColumns = 2;
             
             TVector<TCell> increments = {
                 TCell::Make(ui64(1)),    // key = 1
                 TCell::Make(ui8(22)),
                 TCell::Make(ui16(33)),
                 TCell::Make(ui32(44)),
-                TCell::Make(ui64(55)),
-                TCell::Make(i8(-66)),
                 TCell::Make(i16(-77)),
                 TCell::Make(i32(-88)),
                 TCell::Make(i64(-99)),
+                TCell::Make(ui64(55)),
+                TCell::Make(i8(-66)),
                 
                 TCell::Make(ui64(333)),    // key = 33
                 TCell::Make(ui8(22)),
                 TCell::Make(ui16(33)),
                 TCell::Make(ui32(44)),
-                TCell::Make(ui64(55)),
-                TCell::Make(i8(-66)),
                 TCell::Make(i16(-77)),
                 TCell::Make(i32(-88)),
-                TCell::Make(i64(-99))
+                TCell::Make(i64(-99)),
+                TCell::Make(ui64(55)),
+                TCell::Make(i8(-66)),
             };
 
             auto result = Upsert(runtime, sender, shard, tableId, txId, 
@@ -172,44 +172,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             );
         }
 
-        Cout << "========= Try upsert with key columns as default (should fail) =========\n";
-        {
-            TVector<ui32> columnIds = {1, 2}; // id, uint8_val
-            TVector<ui32> defaultFilledColumns = {1};
-            TVector<TCell> increments = {
-                TCell::Make(ui64(1)),
-                TCell::Make(ui8(3)),
-            };
-            
-            auto result = Upsert(runtime, sender, shard, tableId, txId, 
-                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        }
-
-        Cout << "========= Try upsert with default columns not a subset of columnsIds (should fail) =========\n";
-        {
-            TVector<ui32> columnIds = {1, 2, 3, 4}; // id, uint8_val
-            TVector<ui32> defaultFilledColumns = {2, 5};
-            TVector<TCell> increments = {
-                TCell::Make(ui64(1)),
-                TCell::Make(ui8(3)),
-                TCell::Make(ui16(3)),
-                TCell::Make(ui32(3))
-            };
-            
-            auto result = Upsert(runtime, sender, shard, tableId, txId, 
-                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
-        }
-
         Cout << "========= Try replace with default values in columns 2, 3 (should fail) =========\n";
         {
-            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-            TVector<ui32> defaultFilledColumns = {2, 3};
+            TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 10, 11, 2, 3};
+            ui32 defaultFilledColumns = 2;
             TVector<TCell> increments = {
                 TCell::Make(ui64(1)),    // key = 1
-                TCell::Make(ui8(92)),
-                TCell::Make(ui16(933)),
                 TCell::Make(ui32(944)),
                 TCell::Make(ui64(955)),
                 TCell::Make(i8(-96)),
@@ -218,6 +186,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(i64(-999)),
                 TCell::Make("newtext-10-1"),
                 TCell::Make(double(11.1)),
+                TCell::Make(ui8(92)),
+                TCell::Make(ui16(933))
             };
             
             auto result = Replace(runtime, sender, shard, tableId, txId, 

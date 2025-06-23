@@ -105,23 +105,11 @@ void TDataShardUserDb::ChangeOptsDefaultColumnsFilledLogic(
     ui64 localTableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const TStackVec<NTable::TTag>& defaultFilledColumnsIds
+    const ui32 defaultFilledColumnsCnt
 )
 {
-    if (defaultFilledColumnsIds.size() == 0) {
+    if (defaultFilledColumnsCnt == 0 || !RowExists(tableId, key)) {
         // no default columns - no changes need
-        UpsertIncrease(op, tableId, localTableId, key, ops);
-        return;
-    }
-
-    TStackVec<NTable::TTag> columns(ops.size());
-    for (size_t i = 0; i < ops.size(); i++) {
-        columns[i] = ops[i].Tag;
-    }
-
-    auto currentRow = GetRowState(tableId, key, columns);
-    
-    if (currentRow.Size() == 0) {
         // row not exist - no changes need
         UpsertIncrease(op, tableId, localTableId, key, ops);
         return;
@@ -133,7 +121,7 @@ void TDataShardUserDb::ChangeOptsDefaultColumnsFilledLogic(
         newOps.push_back(op);
     }
 
-    DeleteSomeOpsByTagIds(defaultFilledColumnsIds, newOps);
+    newOps.resize(ops.size() - defaultFilledColumnsCnt); // default columns are always at the end
     
     UpsertIncrease(op, tableId, localTableId, key, newOps);
 }
@@ -142,7 +130,7 @@ void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
     const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const TStackVec<NTable::TTag>& defaultFilledColumnsIds
+    const ui32 defaultFilledColumnsCnt
 )
 {
     auto localTableId = Self.GetLocalTableId(tableId);
@@ -186,9 +174,9 @@ void TDataShardUserDb::UpsertRow(
         if (specUpdates.ColIdUpdateNo != Max<ui32>()) {
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
-        ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps, defaultFilledColumnsIds);
+        ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps, defaultFilledColumnsCnt);
     } else {
-        ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, defaultFilledColumnsIds);
+        ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Upsert, tableId, localTableId, key, ops, defaultFilledColumnsCnt);
     }
 }
 

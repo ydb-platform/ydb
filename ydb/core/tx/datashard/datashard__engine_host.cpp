@@ -369,12 +369,12 @@ public:
 
         TSmallVec<NTable::TUpdateOp> ops;
         ConvertTableValues(Scheme, tableInfo, commands, ops, nullptr);
-        
-        UserDb.UpsertRow(tableId, key, ops, {});
+
+        UserDb.UpsertRow(tableId, key, ops, 0);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TStackVec<NTable::TTag>&  defaultFilledColumnsIds) override {
-        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnsIds);
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnsCnt) override {
+        UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnsCnt);
     }
 
     void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {

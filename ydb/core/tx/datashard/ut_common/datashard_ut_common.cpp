@@ -2189,7 +2189,7 @@ std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<u
     return evWrite;
 }
 
-std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const std::vector<ui32>& defaultFilledColumns) {
+std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeWriteRequest(std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumns) {
     UNIT_ASSERT((cells.size() % columnIds.size()) == 0);
 
     TSerializedCellMatrix matrix(cells, cells.size() / columnIds.size(), columnIds.size());
@@ -2295,19 +2295,19 @@ NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
-NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const std::vector<ui32>& defaultFilledColumns)
+NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumns)
 {
     auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, cells, defaultFilledColumns);
     return Write(runtime, sender, shardId, std::move(request));
 }
 
-NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const std::vector<ui32>& defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+NKikimrDataEvents::TEvWriteResult Upsert(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, cells, defaultFilledColumns);
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
-NKikimrDataEvents::TEvWriteResult Replace(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const std::vector<ui32>& defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+NKikimrDataEvents::TEvWriteResult Replace(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, const ui32 defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, columnIds, cells, defaultFilledColumns);
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);

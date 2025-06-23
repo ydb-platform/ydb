@@ -33,9 +33,9 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 `--destination-prefix PREFIX`: Destination prefix in the S3 bucket.
 
-`--include PATH`: Schema objects to be included in the export. Directories are traversed recursively. Paths are relative to the 'root-path'. You may provide a comma-separated list of values and/or specify this parameter multiple times to include several objects. If not specified, all non-system objects in the 'root-path' are exported.
+`--include PATH`: Schema objects to be included in the export. Directories are traversed recursively. Paths are relative to the `root-path`. You may provide a comma-separated list of values and/or specify this parameter multiple times to include several objects. If not specified, all non-system objects in the `root-path` are exported.
 
-`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Paths are relative to the `root-path`. Specify this parameter multiple times for different templates.
 
 {% cut "Alternate syntax" %}
 
@@ -59,7 +59,7 @@ The exports made using the alternate syntax will not contain a list of objects a
 | `--description STRING` | Operation text description saved to the history of operations. |
 | `--retries NUM` | Number of export retries to be made by the server.<br/>Defaults to `10`. |
 | `--compression STRING` | Compress exported data.<br/>If the default compression level is used for the [Zstandard](https://en.wikipedia.org/wiki/Zstandard) algorithm, data can be compressed by 5-10 times. Compressing data uses the CPU and may affect the speed of performing other DB operations.<br/>Possible values:<br/><ul><li>`zstd`: Compression using the Zstandard algorithm with the default compression level (`3`).</li><li>`zstd-N`: Compression using the Zstandard algorithm, where `N` stands for the compression level (`1` — `22`).</li></ul> |
-| `--encryption-algorithm ALGORITHM` | Encryption algorithm (only for encrypted exports). Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`. |
+| `--encryption-algorithm ALGORITHM` | Encrypt exported data using the specified algorythm. Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`. |
 | `--encryption-key-file PATH` | File path containing the encryption key (only for encrypted exports) |
 | `--format STRING` | Result format.<br/>Possible values:<br/><ul><li>`pretty`: Human-readable format (default).</li><li>`proto-json-base64`: [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |
 

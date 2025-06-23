@@ -166,8 +166,8 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
     if (response.CurlResponseCode != CURLE_OK) {
         TString issues = response.Issues.ToOneLineString();
 
-        for (const auto &whitelistIssue : whitelistIssues) {
-            if (issues.find(whitelistIssue)) {
+        for (const auto& whitelistIssue : whitelistIssues) {
+            if (issues.find(whitelistIssue) != issues.npos) {
                 result.PointsCount = 0;
                 return TGetPointsCountResponse(std::move(result));
             }

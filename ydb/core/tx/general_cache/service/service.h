@@ -40,6 +40,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NPublic::TEvents<TPolicy>::TEvAskData, HandleMain);
             hFunc(NSource::TEvents<TPolicy>::TEvObjectsInfo, HandleMain);
+            hFunc(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo, HandleMain);
             default:
                 AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for general cache")("ev_type", ev->GetTypeName());
                 break;

@@ -91,6 +91,7 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTest
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read DirectReadWithClient.ManyMessages
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read [*/*] chunk chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
+ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffsetBadOffsets
 ydb/services/ydb/backup_ut CommonEncryptionRequirementsTest.CommonEncryptionRequirements
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
 ydb/services/ydb/table_split_ut [*/*] chunk chunk

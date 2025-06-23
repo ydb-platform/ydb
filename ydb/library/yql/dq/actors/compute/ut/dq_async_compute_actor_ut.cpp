@@ -105,7 +105,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         , TransportVersion(transportVersion)
     {
         TVector<TStructMember> members;
-        members.emplace_back("x", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv));
+        members.emplace_back("key", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv));
         RowType = TStructType::Create(members.size(), members.data(), TypeEnv);
         TVector<TType*> components;
         for (ui32 i = 0; i < RowType->GetMembersCount(); ++i) {

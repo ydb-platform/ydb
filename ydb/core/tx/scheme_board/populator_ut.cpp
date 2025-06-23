@@ -281,14 +281,6 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         return desc;
     }
 
-    bool Ignore(const TStateStorageInfo::TRingGroup& ringGroup) {
-        return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
-    }
-
-    bool CheckQuorum(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
-        return ringGroupAcks > ringGroup.NToSelect / 2;
-    }
-
     TVector<TUpdateAck::TPtr> GetAcksRequiredForQuorum(
         std::deque<TUpdateAck::TPtr>& blockedAcks,
         THashMap<TActorId, TActorId>& populatorToReplicaMap,
@@ -310,7 +302,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         for (const auto& event : blockedAcks) {
             const auto& replica = populatorToReplicaMap.at(event->Sender);
             const size_t ringGroup = replicaToRingGroupMap.at(replica);
-            if (Ignore(ringGroups[ringGroup]) || CheckQuorum(ringGroups[ringGroup], ringGroupAcks[ringGroup])) {
+            if (ShouldIgnore(ringGroups[ringGroup]) || IsMajorityReached(ringGroups[ringGroup], ringGroupAcks[ringGroup])) {
                 // not required for quorum
                 continue;
             }

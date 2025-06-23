@@ -82,9 +82,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     TScopedAlloc Alloc;
     TTypeEnvironment TypeEnv;
     TMemoryUsageInfo MemInfo;
+    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
     THolderFactory HolderFactory;
     TDefaultValueBuilder Vb;
-    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
     bool IsWide; // BEWARE Wide tests are partially unimplemented
     NDqProto::EDataTransportVersion TransportVersion;
     TStructType* RowType = nullptr;
@@ -98,9 +98,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
         , MemInfo("Mem")
-        , HolderFactory(Alloc.Ref(), MemInfo)
-        , Vb(HolderFactory)
         , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
+        , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
+        , Vb(HolderFactory)
         , IsWide(isWide)
         , TransportVersion(transportVersion)
     {
@@ -264,7 +264,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 });
         auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
         auto factory = NTaskRunnerProxy::CreateFactory(
-                &*FunctionRegistry,
+                FunctionRegistry.Get(),
                 dqCompFactory,
                 dqTaskTransformFactory,
                 patternCache, false);
@@ -284,7 +284,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 LogPrefix,
                 &task, // NYql::NDqProto::TDqTask* task,
                 {}, // IDqAsyncIoFactory::TPtr asyncIoFactory,
-                &*FunctionRegistry,
+                FunctionRegistry.Get(),
                 {}, // TComputeRuntimeSettings& settings,
                 memoryLimits,
                 taskRunnerActorFactory,

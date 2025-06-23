@@ -499,10 +499,10 @@ namespace NYql::NDq {
                 auto& list = *in.mutable_list();
                 ExportTypeToProto(
                     KeyType->GetMemberType(0),
-                    *list.mutable_typed_value()->mutable_type()->mutable_list_type()->mutable_type());
+                    *list.mutable_type()->mutable_list_type()->mutable_item());
                 for (const auto& [keys, _] : *Request) {
-                    auto& rightValue = *list.mutable_items().Add();
-                    ExportValueToProto(KeyType->GetMemberType(0), keys.GetElement(0), *rightValue.mutable_value());
+                    auto& rightValue = *list.mutable_value()->add_items();
+                    ExportValueToProto(KeyType->GetMemberType(0), keys.GetElement(0), rightValue);
                 }
                 return {};
             }

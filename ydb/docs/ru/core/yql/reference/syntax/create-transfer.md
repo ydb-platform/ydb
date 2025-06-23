@@ -67,7 +67,7 @@ CREATE TRANSFER example_transfer
 
 {% endnote %}
 
-```
+```yql
 $transformation_lambda = ($msg) -> {
     return [
         <|
@@ -107,7 +107,7 @@ WITH (
 
 Пример обработки сообщения в формате JSON
 
-```
+```yql
 // example message:
 // {
 //   "update": {

@@ -3889,8 +3889,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(GroupByWithMakeDatetime) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();

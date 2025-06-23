@@ -33,7 +33,8 @@ target_link_libraries(tx-columnshard-data_accessor PUBLIC
 target_sources(tx-columnshard-data_accessor PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/request.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/manager.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/request.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.cpp
 )
 

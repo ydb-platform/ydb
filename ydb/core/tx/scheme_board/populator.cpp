@@ -733,7 +733,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
     bool CheckQuorum(TVector<ui32>& ringGroupAcks, TActorId ackedReplica) const {
         TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
-        for (size_t i = 0; i < GroupInfo->RingGroups.size(); ++i) {
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             const auto& ringGroup = GroupInfo->RingGroups[i];
             ringGroupQuorums[i] = Ignore(ringGroup) || CheckQuorum(ringGroup, ringGroupAcks[i]);
         }

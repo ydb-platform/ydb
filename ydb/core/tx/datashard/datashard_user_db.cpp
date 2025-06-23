@@ -88,7 +88,7 @@ void DeleteSomeOpsByTagIds(TStackVec<NTable::TTag> IdsToDelete, TStackVec<NIceDb
     int newSize = ops.size();
     int index = (int)IdsToDelete.size() - 1;
     for (int i = (int)ops.size() - 1; i >= 0; i--) {
-        while (index >=0 && ops[i].Tag < IdsToDelete[index]) {
+        while (index >= 0 && ops[i].Tag < IdsToDelete[index]) {
             index--;
         }
         if (index >= 0 && ops[i].Tag == IdsToDelete[index]) {
@@ -195,13 +195,14 @@ void TDataShardUserDb::UpsertRow(
 void TDataShardUserDb::ReplaceRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops,
-    const TStackVec<NTable::TTag>& defaultFilledColumnsIds)
+    const TArrayRef<const NIceDb::TUpdateOp> ops)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected ReplaceRow for an unknown table");
 
-    ChangeOptsDefaultColumnsFilledLogic(NTable::ERowOp::Reset, tableId, localTableId, key, ops, defaultFilledColumnsIds);
+    UpsertRowInt(NTable::ERowOp::Reset, tableId, localTableId, key, ops);
+
+    IncreaseUpdateCounters(key, ops);
 }
 
 void TDataShardUserDb::InsertRow(

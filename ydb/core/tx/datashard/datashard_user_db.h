@@ -46,8 +46,7 @@ public:
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const TStackVec<NTable::TTag>& defaultFilledColumnsIds) = 0;
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
     
     virtual void InsertRow(
             const TTableId& tableId,
@@ -128,8 +127,7 @@ public:
     void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
-            const TArrayRef<const NIceDb::TUpdateOp> ops,
-            const TStackVec<NTable::TTag>& defaultFilledColumnsIds) override;
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
             
     void InsertRow(
             const TTableId& tableId,

@@ -377,8 +377,8 @@ public:
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnsIds);
     }
 
-    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TStackVec<NTable::TTag>& defaultFilledColumnsIds) override {
-        UserDb.ReplaceRow(tableId, key, ops, defaultFilledColumnsIds);
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {
+        UserDb.ReplaceRow(tableId, key, ops);
     }
 
     void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops) override {

@@ -106,8 +106,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     DefaultFilledColumnsIds = {recordOperation.GetDefaultFilledColumnIds().begin(), recordOperation.GetDefaultFilledColumnIds().end()};
     
     if (DefaultFilledColumnsIds.size() != 0 && 
-        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT &&
-        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE) 
+        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) 
     {
         return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " doesn't support DefaultFilledColumnsIds"};
     }

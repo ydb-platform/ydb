@@ -195,7 +195,7 @@ public:
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.ReplaceRow(fullTableId, key, ops, defaultFilledColumnsIds);
+                    userDb.ReplaceRow(fullTableId, key, ops);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE: {

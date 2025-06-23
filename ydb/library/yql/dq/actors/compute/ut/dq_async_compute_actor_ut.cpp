@@ -223,9 +223,12 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             LOG_D(msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
+        TDqOutputChannelSettings settings;
+        settings.TransportVersion = TransportVersion;
+        settings.MutableSettings.IsLocalChannel = true;
         return CreateDqOutputChannel(channelId, ThisStageId,
                 (IsWide ? (TType*)WideRowType : (TType *)RowType), HolderFactory,
-                /* const TDqOutputChannelSettings&*/ {},
+                settings,
                 logFunc);
     }
 

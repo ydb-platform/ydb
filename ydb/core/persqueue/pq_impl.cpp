@@ -199,21 +199,29 @@ private:
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             bool isNewMsg = !readResult.GetResult(i).HasPartNo() || readResult.GetResult(i).GetPartNo() == 0;
+            bool isEmptyPart = readResult.GetResult(i).GetTotalParts() > 1 && readResult.GetResult(i).GetData().empty();
             if (!isStart) {
                 Y_ABORT_UNLESS(partResp->ResultSize() > 0);
                 auto& back = partResp->GetResult(partResp->ResultSize() - 1);
                 bool lastMsgIsNotFull = back.GetPartNo() + 1 < back.GetTotalParts();
-                bool trancate = lastMsgIsNotFull && isNewMsg;
+                bool trancate = isNewMsg && (lastMsgIsNotFull  // Multipart message with missing part, remove it.
+                    // Got empty part for multipart message which was already stored in partResp;
+                    // This message should've been cut out by compactification. Remove it from response;
+                    || isEmptyPart && back.GetOffset() == readResult.GetResult(i).GetOffset());
+
                 if (trancate) {
                     partResp->MutableResult()->RemoveLast();
-                    if (partResp->GetResult().empty()) isStart = false;
+                    if (partResp->GetResult().empty()) isStart = true;
                 }
             }
-
+            if (isEmptyPart) { //Multipart message containing empty part. Ignore the part.
+                continue;
+            }
             if (isNewMsg) {
                 if (!isStart && readResult.GetResult(i).HasTotalParts()
                              && readResult.GetResult(i).GetTotalParts() + i > readResult.ResultSize()) //last blob is not full
                     break;
+
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));
                 isStart = false;
             } else { //glue to last res

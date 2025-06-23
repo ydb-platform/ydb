@@ -69,6 +69,11 @@ namespace NKikimr::NKqp {
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_host("localhost");
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_port(1234);
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
         return appConfig;
     }
 

@@ -97,6 +97,20 @@
             "uri": "https://{canondata_backend}/1942525/03f327593648b37dc4a00dc0267d6412ab0962f1/resource.tar.gz#test.test_EquiJoin-JoinInMemAliasTwo12-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[EquiJoin-PullUpFlatMapOverEquiJoins-default.txt-Debug]": [
+        {
+            "checksum": "3df31dfd03165450b9e46b238654cfa2",
+            "size": 1356,
+            "uri": "https://{canondata_backend}/1900335/e6a961488cb1e9e4522ff434f8075f5ec48c274f/resource.tar.gz#test.test_EquiJoin-PullUpFlatMapOverEquiJoins-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[EquiJoin-PullUpFlatMapOverEquiJoins-default.txt-Results]": [
+        {
+            "checksum": "4fd94327acee5800e240ae30669086ad",
+            "size": 2357,
+            "uri": "https://{canondata_backend}/1777230/b1b0d9e9287141d50e299080d0e2e4404ac41ee1/resource.tar.gz#test.test_EquiJoin-PullUpFlatMapOverEquiJoins-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[File-ConfigureFileFromUrl-default.txt-Debug]": [
         {
             "checksum": "06b6c365462b3f67076b04fa1fc55938",

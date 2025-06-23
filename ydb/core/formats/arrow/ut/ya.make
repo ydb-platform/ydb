@@ -14,6 +14,7 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+
 )
 
 ADDINCL(
@@ -32,6 +33,7 @@ SRCS(
     ut_dictionary.cpp
     ut_column_filter.cpp
     ut_hash.cpp
+    ut_reader.cpp
 )
 
 END()

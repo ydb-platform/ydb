@@ -1,36 +1,29 @@
 #include "constructor.h"
 #include "meta.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
-    std::set<ui32> columnIds;
-    for (auto&& i : ColumnNames) {
-        auto* columnInfo = currentSchema.GetColumns().GetByName(i);
-        if (!columnInfo) {
-            errors.AddError("no column with name " + i);
-            return nullptr;
-        }
-        AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
+std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
+    const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
+    auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
+    if (!columnInfo) {
+        errors.AddError("no column with name " + GetColumnName());
+        return nullptr;
     }
-    return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnIds, FalsePositiveProbability);
+    const ui32 columnId = columnInfo->GetId();
+    return std::make_shared<TBloomIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnId,
+        FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(), TBase::GetBitsStorageConstructor());
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
-    if (!jsonInfo.Has("column_names")) {
-        return TConclusionStatus::Fail("column_names have to be in bloom filter features");
-    }
-    const NJson::TJsonValue::TArray* columnNamesArray;
-    if (!jsonInfo["column_names"].GetArrayPointer(&columnNamesArray)) {
-        return TConclusionStatus::Fail("column_names have to be in bloom filter features as array ['column_name_1', ... , 'column_name_N']");
-    }
-    for (auto&& i : *columnNamesArray) {
-        if (!i.IsString()) {
-            return TConclusionStatus::Fail("column_names have to be in bloom filter features as array of strings ['column_name_1', ... , 'column_name_N']");
+    {
+        auto conclusion = TBase::DoDeserializeFromJson(jsonInfo);
+        if (conclusion.IsFail()) {
+            return conclusion;
         }
-        ColumnNames.emplace(i.GetString());
     }
     if (!jsonInfo["false_positive_probability"].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
@@ -49,24 +42,25 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& bFilter = proto.GetBloomFilter();
+    {
+        auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
     FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
     if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
         const TString errorMessage = "FalsePositiveProbability have to be in interval[0.01, 1)";
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);
         return TConclusionStatus::Fail(errorMessage);
     }
-    for (auto&& i : bFilter.GetColumnNames()) {
-        ColumnNames.emplace(i);
-    }
     return TConclusionStatus::Success();
 }
 
 void TBloomIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomFilter();
+    TBase::SerializeToProtoImpl(*filterProto);
     filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
-    for (auto&& i : ColumnNames) {
-        filterProto->AddColumnNames(i);
-    }
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

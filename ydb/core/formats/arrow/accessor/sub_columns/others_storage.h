@@ -73,6 +73,22 @@ public:
             CurrentIndex = 0;
         }
 
+        bool SkipRecordTo(const ui32 recordIndex) {
+            AFL_VERIFY(IsValid());
+            if (recordIndex <= RecordIndex->Value(CurrentIndex)) {
+                return true;
+            }
+            auto idx = NArrow::FindUpperOrEqualPosition(*RecordIndex, recordIndex, CurrentIndex);
+            if (!idx) {
+                CurrentIndex = RecordIndex->length();
+                return false;
+            } else {
+                CurrentIndex = *idx;
+                AFL_VERIFY(recordIndex <= RecordIndex->Value(CurrentIndex));
+                return CurrentIndex < RecordsCount;
+            }
+        }
+
         std::optional<ui32> FindPosition(const ui32 findRecordIndex) const {
             return NArrow::FindUpperOrEqualPosition(*RecordIndex, findRecordIndex);
         }
@@ -121,10 +137,6 @@ public:
         return Stats;
     }
 
-    ui32 GetColumnsCount() const {
-        return Records->num_rows();
-    }
-
     static std::shared_ptr<arrow::Schema> GetSchema() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("record_idx", arrow::uint32()),
             std::make_shared<arrow::Field>("key", arrow::uint32()), std::make_shared<arrow::Field>("value", arrow::utf8()) };
@@ -135,6 +147,7 @@ public:
     TOthersData(const TDictStats& stats, const std::shared_ptr<TGeneralContainer>& records)
         : Stats(stats)
         , Records(records) {
+        AFL_VERIFY(Records);
         AFL_VERIFY(Records->num_columns() == 3)("count", Records->num_columns());
         AFL_VERIFY(Records->GetColumnVerified(0)->GetDataType()->id() == arrow::uint32()->id());
         AFL_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::uint32()->id());
@@ -176,11 +189,16 @@ public:
         std::optional<ui32> LastKeyIndex;
         ui32 RecordsCount = 0;
         YDB_READONLY_DEF(std::vector<TDictStats::TRTStatsValue>, StatsByKeyIndex);
-
     public:
         TBuilderWithStats();
 
-        void Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value);
+        void AddImpl(const ui32 recordIndex, const ui32 keyIndex, const std::string_view* value);
+        void Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value) {
+            return AddImpl(recordIndex, keyIndex, &value);
+        }
+        void AddNull(const ui32 recordIndex, const ui32 keyIndex) {
+            return AddImpl(recordIndex, keyIndex, nullptr);
+        }
 
         TOthersData Finish(const TFinishContext& finishContext);
     };

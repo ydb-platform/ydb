@@ -22,7 +22,7 @@ DATA(
     arcadia/ydb/library/yql/tests/sql
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator_grpc/recipe.inc)
 
 PEERDIR(
     library/python/testing/swag/lib

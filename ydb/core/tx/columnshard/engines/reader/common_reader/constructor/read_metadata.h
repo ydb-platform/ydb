@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
 
@@ -16,7 +17,7 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
 
@@ -102,14 +103,14 @@ public:
         BrokenWithCommitted->Inc();
     }
 
-    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TSimpleRow& key) const;
     virtual std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const = 0;
 
     bool HasProcessingColumnIds() const {
         return GetProgram().HasProcessingColumnIds();
     }
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -117,12 +118,7 @@ public:
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting,
-        const TProgramContainer& ssaProgram, const std::shared_ptr<IScanCursor>& scanCursor)
-        : TBase(info, sorting, ssaProgram, info->GetSchemaVerified(snapshot), snapshot, scanCursor)
-        , PathId(pathId)
-        , ReadStats(std::make_shared<TReadStats>()) {
-    }
+    TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read);
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();

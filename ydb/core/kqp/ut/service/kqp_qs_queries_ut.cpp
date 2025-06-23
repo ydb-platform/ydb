@@ -4825,12 +4825,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 result = session.ExecuteQuery(fmt::format(R"(
                     INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ({}u, 0);
                 )", index), NYdb::NQuery::TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
-                if (GetIsOlap()) {
-                    // https://github.com/ydb-platform/ydb/issues/14383
-                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-                }
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             }
         }
     };

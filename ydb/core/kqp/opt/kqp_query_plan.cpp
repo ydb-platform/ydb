@@ -65,13 +65,12 @@ std::string RemoveForbiddenChars(std::string s) {
     return NYql::IsUtf8(s)? s: "Non-UTF8 string";
 }
 
-struct TTableRead {
+struct TTableRead: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
     EPlanTableReadType Type = EPlanTableReadType::Unspecified;
     TVector<TString> LookupBy;
     TVector<TString> ScanBy;
     TVector<TString> Columns;
     TMaybe<TString> Limit;
-    bool Reverse = false;
 };
 
 struct TTableWrite {
@@ -1178,6 +1177,8 @@ private:
                     return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
                 }
             }
+        } else if (auto olapApply = TMaybeNode<TKqpOlapApply>(node)) {
+            return NPlanUtils::ExtractPredicate(olapApply.Cast().Lambda()).Body;
         }
 
         for (const auto& child: node->Children()) {
@@ -1937,9 +1938,11 @@ private:
             readInfo.Limit = limit;
             op.Properties["ReadLimit"] = limit;
         }
-        if (settings.Reverse) {
-            readInfo.Reverse = true;
+        readInfo.SetSorting(settings.GetSorting());
+        if (settings.GetSorting() == ERequestSorting::DESC) {
             op.Properties["Reverse"] = true;
+        } else if (settings.GetSorting() == ERequestSorting::ASC) {
+            op.Properties["Reverse"] = false;
         }
 
         if (settings.SequentialInFlight) {
@@ -2029,7 +2032,7 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
                 if (read.Limit) {
                     writer.WriteKey("limit").WriteString(*read.Limit);
                 }
-                if (read.Reverse) {
+                if (read.IsReverse()) {
                     writer.WriteKey("reverse").WriteBool(true);
                 }
 
@@ -2232,6 +2235,10 @@ struct TQueryPlanReconstructor {
             NJson::TJsonValue planInputs;
 
             result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
+
+            if (plan.GetMapSafe().at("Node Type") == "HashShuffle") {
+                result["Node Type"] = TStringBuilder{} << "HashShuffle (KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ")";
+            }
 
             if (plan.GetMapSafe().contains("CTE Name")) {
                 auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
@@ -2534,7 +2541,6 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "UnionAll",
         "Broadcast",
         "Map",
-        "HashShuffle",
         "Merge",
         "Collect",
         "Stage",
@@ -2911,6 +2917,10 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
+                stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
+                if (auto updateTimeUs = (*stat)->GetUpdateTimeMs(); updateTimeUs) {
+                    stats["UpdateTimeMs"] = updateTimeUs;
+                }
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 

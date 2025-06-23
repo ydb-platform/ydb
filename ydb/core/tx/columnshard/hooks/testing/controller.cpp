@@ -92,9 +92,9 @@ void TController::DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard&
     AFL_VERIFY(ShardActuals.erase(shard.TabletID()));
 }
 
-std::vector<ui64> TController::GetPathIds(const ui64 tabletId) const {
+std::vector<NKikimr::NColumnShard::TInternalPathId> TController::GetPathIds(const ui64 tabletId) const {
     TGuard<TMutex> g(Mutex);
-    std::vector<ui64> result;
+    std::vector<NKikimr::NColumnShard::TInternalPathId> result;
     for (auto&& i : ShardActuals) {
         if (i.first == tabletId) {
             const auto& index = i.second->GetIndexAs<NOlap::TColumnEngineForLogs>();

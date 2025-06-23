@@ -16,7 +16,7 @@ enum TInputChannelFormat {
     LEGACY_CH,
     LEGACY_SIMPLE_BLOCK,
     LEGACY_TUPLED_BLOCK
-};  
+};
 
 template <class TDerived, class IInputInterface>
 class TDqInputImpl : public IInputInterface {
@@ -157,28 +157,20 @@ public:
         }
     }
 
-    void AddBatch(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) {
+    ui64 AddBatch(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) {
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
 
+        ui64 rows = GetRowsCount(batch);
         StoredBytes += space;
-        StoredRows += batch.RowCount();
-        auto& pushStats = static_cast<TDerived*>(this)->PushStats;
-
-        if (pushStats.CollectBasic()) {
-            pushStats.Bytes += space;
-            pushStats.Rows += GetRowsCount(batch);
-            pushStats.Chunks++;
-            pushStats.Resume();
-            if (pushStats.CollectFull()) {
-                pushStats.MaxMemoryUsage = std::max(pushStats.MaxMemoryUsage, StoredBytes);
-            }
-        }
+        StoredRows += rows;
 
         if (GetFreeSpace() < 0) {
             static_cast<TDerived*>(this)->PopStats.TryPause();
         }
 
         Batches.emplace_back(std::move(batch));
+
+        return rows;
     }
 
     [[nodiscard]]

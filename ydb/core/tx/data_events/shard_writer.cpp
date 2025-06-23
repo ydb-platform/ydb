@@ -29,12 +29,10 @@ namespace NKikimr::NEvWrite {
     void TWritersController::OnFail(const Ydb::StatusIds::StatusCode code, const TString& message) {
         Counters->OnCSFailed(code);
         FailsCount.Inc();
-        if (!Code) {
-            TGuard<TMutex> g(Mutex);
-            if (!Code) {
-                Issues.AddIssue(message);
-                Code = code;
-            }
+        if (AtomicCas(&HasCodeFail, 1, 0)) {
+            AFL_VERIFY(!Code);
+            Issues.AddIssue(message);
+            Code = code;
         }
         if (!WritesCount.Dec()) {
             SendReply();

@@ -153,6 +153,7 @@ void TViewerPipeClient::BuildParamsFromJson(TStringBuf data) {
                 }
             }
         }
+        PostData = std::move(jsonData);
     }
 }
 
@@ -360,6 +361,19 @@ TString TViewerPipeClient::GetError(const NSchemeShard::TEvSchemeShard::TEvDescr
         return ev.GetRecord().GetReason();
     }
     return NKikimrScheme::EStatus_Name(ev.GetRecord().GetStatus());
+}
+
+bool TViewerPipeClient::IsSuccess(const TEvTxUserProxy::TEvProposeTransactionStatus& ev) {
+    switch (ev.Record.GetStatus()) {
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
+        case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress:
+            return true;
+    }
+    return false;
+}
+
+TString TViewerPipeClient::GetError(const TEvTxUserProxy::TEvProposeTransactionStatus& ev) {
+    return TStringBuilder() << ev.Record.GetStatus();
 }
 
 void TViewerPipeClient::RequestHiveDomainStats(NNodeWhiteboard::TTabletId hiveId) {

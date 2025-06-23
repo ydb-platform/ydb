@@ -1,309 +1,23 @@
 # Cluster Configuration DSL
 
-{{ ydb-short-name }} supports a domain-specific language (DSL) for cluster configuration that allows you to apply different configuration parameters to different cluster nodes based on their characteristics. This mechanism is called **selectors**.
+## Selectors {#selectors-intro}
 
-## Selectors
-
-Selectors allow you to specify which nodes a particular configuration section should apply to. They are specified using the `selector` field in the configuration.
-
-### Basic Syntax
-
-```yaml
-config:
-  feature_flags:
-    enable_something: true
-  selector:
-    - node_id: [1, 2, 3]
-```
-
-This configuration will apply the `feature_flags` section only to nodes with IDs 1, 2, and 3.
-
-### Selector Types
-
-#### By Node ID
-
-```yaml
-selector:
-  - node_id: [1, 2, 3]
-```
-
-#### By Node Host
-
-```yaml
-selector:
-  - node_host: ["host1.example.com", "host2.example.com"]
-```
-
-#### By Data Center
-
-```yaml
-selector:
-  - data_center: ["dc1", "dc2"]
-```
-
-#### By Rack
-
-```yaml
-selector:
-  - rack: ["rack1", "rack2"]
-```
-
-#### By Node Type
-
-```yaml
-selector:
-  - node_type: ["storage", "compute"]
-```
-
-### Combining Selectors
-
-You can combine multiple selector conditions:
-
-```yaml
-selector:
-  - node_id: [1, 2]
-    data_center: ["dc1"]
-```
-
-This will apply to nodes 1 and 2 that are located in data center "dc1".
-
-### Multiple Selector Blocks
-
-You can specify multiple selector blocks for different node groups:
-
-```yaml
-config:
-  feature_flags:
-    enable_feature_a: true
-  selector:
-    - node_id: [1, 2, 3]
-
----
-config:
-  feature_flags:
-    enable_feature_b: true
-  selector:
-    - data_center: ["dc2"]
-```
-
-## Labels
-
-Labels provide a way to tag configuration sections and reference them later. They are useful for organizing complex configurations.
-
-### Basic Label Usage
-
-```yaml
-config: &storage_config
-  feature_flags:
-    enable_storage_feature: true
-  selector:
-    - node_type: ["storage"]
-
----
-config: *storage_config
-```
-
-### Label Inheritance
-
-You can use labels to create base configurations and extend them:
-
-```yaml
-base_config: &base
-  feature_flags:
-    enable_basic_feature: true
-
-storage_config:
-  <<: *base
-  feature_flags:
-    enable_storage_feature: true
-  selector:
-    - node_type: ["storage"]
-```
-
-## YAML Tags
-
-{{ ydb-short-name }} supports special YAML tags for advanced configuration manipulation.
-
-### !inherit Tag
-
-The `!inherit` tag allows you to inherit configuration from a parent section while adding or modifying specific parameters:
-
-```yaml
-base_config: &base
-  feature_flags:
-    feature_a: true
-    feature_b: false
-
-extended_config:
-  config: !inherit
-    base: *base
-    feature_flags:
-      feature_c: true
-  selector:
-    - node_type: ["compute"]
-```
-
-This will result in:
-```yaml
-feature_flags:
-  feature_a: true
-  feature_b: false
-  feature_c: true
-```
-
-### !remove Tag
-
-The `!remove` tag allows you to remove specific configuration parameters:
-
-```yaml
-base_config: &base
-  feature_flags:
-    feature_a: true
-    feature_b: true
-    feature_c: true
-
-modified_config:
-  config: !remove
-    base: *base
-    feature_flags:
-      feature_b: null
-  selector:
-    - node_type: ["storage"]
-```
-
-This will result in:
-```yaml
-feature_flags:
-  feature_a: true
-  feature_c: true
-```
-
-### !append Tag
-
-The `!append` tag allows you to append values to arrays:
-
-```yaml
-base_config: &base
-  allowed_hosts: ["host1", "host2"]
-
-extended_config:
-  config: !append
-    base: *base
-    allowed_hosts: ["host3", "host4"]
-  selector:
-    - data_center: ["dc1"]
-```
-
-This will result in:
-```yaml
-allowed_hosts: ["host1", "host2", "host3", "host4"]
-```
-
-## CLI Examples
-
-### Loading Configuration with Selectors
-
-```bash
-{{ ydb-cli }} admin config replace --config-file config.yaml
-```
-
-### Viewing Current Configuration
-
-```bash
-{{ ydb-cli }} admin config fetch
-```
-
-### Validating Configuration Before Applying
-
-```bash
-{{ ydb-cli }} admin config validate --config-file config.yaml
-```
-
-## Best Practices
-
-1. **Use meaningful labels**: Choose descriptive names for your configuration labels to make them easy to understand and maintain.
-
-2. **Group related configurations**: Use selectors to group configurations logically by node type, data center, or other relevant characteristics.
-
-3. **Test configurations**: Always validate your configuration before applying it to production clusters.
-
-4. **Document complex selectors**: Add comments to explain complex selector logic and inheritance patterns.
-
-5. **Use inheritance wisely**: Leverage the `!inherit`, `!remove`, and `!append` tags to avoid configuration duplication while maintaining clarity.
-
-## Example: Complete Configuration with Selectors
-
-```yaml
-# Base configuration for all nodes
-base_config: &base
-  feature_flags:
-    enable_basic_logging: true
-    enable_metrics: true
-  log_config:
-    default_level: 3
-
-# Storage node specific configuration
-storage_config: &storage
-  config: !inherit
-    base: *base
-    feature_flags:
-      enable_storage_optimization: true
-    blob_storage_config:
-      service_set:
-        availability_domains: 3
-  selector:
-    - node_type: ["storage"]
-
-# Compute node specific configuration
-compute_config: &compute
-  config: !inherit
-    base: *base
-    feature_flags:
-      enable_compute_optimization: true
-  selector:
-    - node_type: ["compute"]
-
-# Data center specific overrides
-dc1_config:
-  config: !inherit
-    base: *base
-    feature_flags:
-      enable_dc1_feature: true
-  selector:
-    - data_center: ["dc1"]
-
----
-config: *storage
-
----
-config: *compute
-
----
-config: *dc1_config
-```
-
-This configuration demonstrates how to use selectors, labels, and YAML tags to create a flexible and maintainable cluster configuration.
-
-{% note info %}
-
-The selector mechanism is supported only for [database nodes](../../../concepts/glossary.md#database-node).
-
-{% endnote %}
+The main entity of the DSL is **selectors**. They allow the overriding of parts of the configuration or the entire configuration for specific nodes or groups of nodes. For example, they can be used to enable experimental functionality for nodes of a particular database. Each selector is an array of overrides and extensions to the main configuration. Each selector has a `description` field, which can be used to store an arbitrary description string. The `selector` field represents a set of rules that determine whether the selector should be applied to a specific node based on a set of labels. The `config` field describes the override rules. Selectors are applied in the order they are described.
 
 ## Labels {#labels}
 
-Labels are special tags that can be used to mark nodes or groups of nodes. Each node has a set of automatically assigned labels:
+Labels are special tags used to mark nodes or groups of nodes. Each node has a set of automatically assigned labels:
 
-* `node_id` — internal node identifier in the system;
-* `node_host` — node `hostname` obtained at startup;
-* `tenant` — database served by this node;
-* `dynamic` — whether this node is dynamic (true/false).
+* `node_id` — the internal identifier of the node in the system
+* `node_host` — the node's `hostname` obtained at startup
+* `tenant` — the database served by this node
+* `dynamic` — whether this node is dynamic (true/false)
 
-And, optionally, any additional labels explicitly defined by the user when starting the `ydbd` process on the node using command line arguments. For example: `--label example=test`.
+Additionally, the user can explicitly define any additional labels when starting the `ydbd` process on the node using command-line arguments, such as `--label example=test`.
 
-## Selector Usage Example {#selectors-example}
+## Example of Using Selectors {#selectors-example}
 
-The example below defines a general actor system configuration and configuration for the `large_tenant` tenant. By default, with this configuration, the actor system assumes that the node has 4 cores, and nodes of the `large_tenant` tenant have 16 cores each, while also overriding the node type for the actor system to `COMPUTE`.
+The example below defines the actor system's general configuration and the tenant `large_tenant` configuration. By default, with such a configuration, the actor system assumes that each node has 4 cores, while nodes of the `large_tenant` have 16 cores. The actor system's node type is overridden to `COMPUTE`.
 
 ```yaml
 metadata:
@@ -315,34 +29,34 @@ config:
     node_type: STORAGE
     cpu_count: 4
 
-# Section used as a hint when generating possible configurations using the resolve command
+# This section is used as a hint when generating possible configurations using the resolve command
 allowed_labels:
   dynamic:
     type: string
 
 selector_config:
 - description: large_tenant has bigger nodes with 16 cpu # arbitrary description string
-  selector: # selector for all nodes of large_tenant tenant
+  selector: # selector for all nodes of the tenant large_tenant
     tenant: large_tenant
   config:
-    actor_system_config: !inherit # reuse original actor_system_config, !inherit semantics described in section below
-      # in this case !inherit allows managing actor_system_config.use_auto_config parameter simultaneously for the entire cluster by changing only the base setting
+    actor_system_config: !inherit # reuse the original actor_system_config, the semantics of !inherit are described in the section below
+      # in this case, !inherit allows managing the actor_system_config.use_auto_config parameter for the entire cluster by changing only the base setting
       cpu_count: 16
       node_type: COMPUTE
 ```
 
-## Allowed Labels
+## Permissive Labels
 
-A mapping where you can specify allowed values for labels. The section is used as a hint when generating possible configurations using the `resolve` command. Values are not validated when starting nodes.
+A mapping in which you can set the allowable values for labels. This section is used as a hint when generating possible configurations using the resolve command. Values are not validated at node startup.
 
-Two types of labels are available:
+There are two types of labels available:
 
-* `string`;
-* `enum`.
+* string;
+* enum.
 
 ### string
 
-Can take any values or be unset.
+It can take any value or be unset.
 
 Example:
 
@@ -355,7 +69,7 @@ host_name:
 
 ### enum
 
-Can take values from the `values` list or be unset.
+It can take values from the `values` list or be unset.
 
 Example:
 
@@ -370,11 +84,11 @@ flavour:
 
 ## Selector Behavior
 
-Selectors represent a simple predicate language. Selectors for each label are combined through an **AND** condition.
+Selectors represent a simple predicate language. Selectors for each label are combined using the **AND** condition.
 
 ### Simple Selector
 
-The following selector will select nodes where the value of label `label1` equals `value1` **and** label `label2` equals `value2`:
+The following selector will select nodes where the `label1` is equal to `value1` **and** the `label2` is equal to `value2`:
 
 ```yaml
 selector:
@@ -382,7 +96,7 @@ selector:
   label2: value2
 ```
 
-The following selector will select **ALL** nodes in the cluster, since no conditions are specified:
+The following selector will select **ALL** nodes in the cluster, as no conditions are specified:
 
 ```yaml
 selector: {}
@@ -390,9 +104,9 @@ selector: {}
 
 ### In
 
-This operator allows selecting nodes with label values from a list.
+This operator allows for selecting nodes with label values from a list.
 
-The following selector will select all nodes where label `label1` equals `value1` **or** `value2`:
+The following selector will select all nodes where `label1` is equal to `value1` **or** `value2`:
 
 ```yaml
 selector:
@@ -404,9 +118,9 @@ selector:
 
 ### NotIn
 
-This operator allows selecting nodes where the selected label does not equal a value from the list.
+This operator allows selecting nodes where the chosen label does not match any value from a list.
 
-The following selector will select all nodes where label `label1` equals `value1` **and** `label2` does not equal `value2` **and** `value3`:
+The following selector will select all nodes where `label1` is equal to `value1` **and** `label2` is not equal to `value2` **and** `value3`:
 
 ```yaml
 selector:
@@ -419,16 +133,16 @@ selector:
 
 ## Additional YAML Tags
 
-Tags are necessary for partial or complete reuse of configurations from previous selectors. With them, you can combine, extend, delete, and completely override parameters specified in previous selectors and the main configuration.
+Tags are necessary for partial or complete reuse of configurations from previous selectors. They allow you to merge, extend, delete, and override parameters set in previous selectors and the main configuration.
 
 ### !inherit
 
 **Scope:** [YAML mapping](https://yaml.org/spec/1.2.2/#mapping)
-**Action:** similar to [merge tag](https://yaml.org/type/merge.html) in YAML, copy all child elements from the parent mapping and merge with current ones with overwriting
+**Action:** similar to the [merge tag](https://yaml.org/type/merge.html) in YAML, copy all child elements from the parent mapping and merge with the current ones, overwriting them.
 **Example:**
 
 #|
-|| Initial configuration | Override | Resulting configuration ||
+|| Original configuration | Override | Resulting configuration ||
 ||
 
 ```yaml
@@ -463,11 +177,11 @@ config:
 ### !inherit:\<key\>
 
 **Scope:** [YAML sequence](https://yaml.org/spec/1.2.2/#sequence)
-**Action:** copy elements from the parent array and overwrite, treating the key object in elements as a key, appending new keys to the end
+**Action:** copy elements from the parent array and overwrite, treating the `key` object in the elements as the key, appending new keys to the end.
 **Example:**
 
 #|
-|| Initial configuration | Override | Resulting configuration ||
+|| Original configuration | Override | Resulting configuration ||
 ||
 
 ```yaml
@@ -513,11 +227,11 @@ config:
 ### !remove
 
 **Scope:** YAML sequence element under `!inherit:<key>`
-**Action:** remove element with the corresponding key.
+**Action:** remove the element with the corresponding key.
 **Example:**
 
 #|
-|| Initial configuration | Override | Resulting configuration ||
+|| Original configuration | Override | Resulting configuration ||
 ||
 
 ```yaml
@@ -557,11 +271,11 @@ config:
 ### !append
 
 **Scope:** [YAML sequence](https://yaml.org/spec/1.2.2/#sequence)
-**Action:** copy elements from the parent array and append new ones to the end
+**Action:** copy elements from the parent array and append new ones to the end.
 **Example:**
 
 #|
-|| Initial configuration | Override | Resulting configuration ||
+|| Original configuration | Override | Resulting configuration ||
 ||
 
 ```yaml
@@ -609,24 +323,24 @@ config:
 
 ## Generating Final Configurations {#selectors-resolve}
 
-Configurations can contain complex sets of overrides. Using [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md), it is possible to view final configurations for:
+Configurations can contain complex sets of overrides. With the [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md), you can view the final configurations for:
 
-* specific nodes;
-* label sets;
-* all possible combinations for the current configuration.
+* specific nodes
+* sets of labels
+* all possible combinations for the current configuration
 
 ```bash
 # Generate all possible final configurations for cluster.yaml
 {{ ydb-cli }} admin config resolve --all -f cluster.yaml
-# Generate configuration for cluster.yaml with labels tenant=/Root/test and canary=true
+# Generate the configuration for cluster.yaml with labels tenant=/Root/test and canary=true
 {{ ydb-cli }} admin config resolve -f cluster.yaml --label tenant=/Root/test --label canary=true
-# Generate configuration for cluster.yaml with labels similar to current ones on node 1001
+# Generate the configuration for cluster.yaml with labels similar to those on node 1001
 {{ ydb-cli }} admin config resolve -f cluster.yaml --node_id 1001
-# Take current cluster configuration and generate final configuration for it with labels similar to current ones on node 1001
+# Take the current cluster configuration and generate the final configuration for it with labels similar to those on node 1001
 {{ ydb-cli }} admin config resolve --from-cluster --node_id 1001
 ```
 
-The configuration transformation command is described in more detail in the [{#T}](../../../reference/ydb-cli/configs.md) section.
+The configuration transformation command is described in more detail in the section [{#T}](../../reference/ydb-cli/configs.md).
 
 Example output of `{{ ydb-cli }} admin config resolve --all -f cluster.yaml` for the following configuration file:
 
@@ -647,7 +361,7 @@ selector_config:
   selector: # selector for all nodes with label dynamic = true
     dynamic: true
   config:
-    actor_system_config: !inherit # reuse original actor_system_config, !inherit semantics described in section below
+    actor_system_config: !inherit # reuse the original actor_system_config, the semantics of !inherit are described in the section below
       node_type: COMPUTE
       cpu_count: 8
 ```
@@ -656,7 +370,7 @@ Output:
 
 ```yaml
 ---
-label_sets: # label sets for which configuration was generated
+label_sets: # sets of labels for which the configuration is generated
 - dynamic:
     type: NOT_SET # one of three label types: NOT_SET | COMMON | EMPTY
 config: # generated configuration
@@ -676,3 +390,4 @@ config:
     use_auto_config: true
     node_type: COMPUTE
     cpu_count: 8
+```

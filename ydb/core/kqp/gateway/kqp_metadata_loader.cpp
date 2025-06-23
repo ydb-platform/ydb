@@ -392,7 +392,9 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
     }
 
     YQL_ENSURE(entry.SysViewInfo);
-    tableMeta->SysViewType = entry.SysViewInfo->Description.GetType();
+    auto& sysViewInfo = tableMeta->SysViewInfo.ConstructInPlace();
+    sysViewInfo.SetType(entry.SysViewInfo->Description.GetType());
+    *sysViewInfo.MutableSourceObject() = entry.SysViewInfo->Description.GetSourceObject();
 
     return result;
 }

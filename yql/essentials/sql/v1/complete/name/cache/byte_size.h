@@ -5,6 +5,7 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 
 namespace NSQLComplete {
 
@@ -35,6 +36,14 @@ namespace NSQLComplete {
     struct TByteSize<TString> {
         size_t operator()(const TString& x) const noexcept {
             return std::max(sizeof(x), sizeof(x) + x.capacity());
+        }
+    };
+
+    template <class T>
+    struct TByteSize<TMaybe<T>> {
+        size_t operator()(const TMaybe<T>& x) const noexcept {
+            return x.Transform([](const T& x) { return TByteSize<T>()(x) - sizeof(T); }).GetOrElse(0) +
+                   sizeof(TMaybe<T>);
         }
     };
 

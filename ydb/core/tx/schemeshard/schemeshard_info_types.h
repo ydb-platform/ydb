@@ -3345,7 +3345,7 @@ public:
         TSerializedTableRange Range;
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
-        size_t Index = 0;  // size of Shards map before this element was added
+        size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
 
         NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
@@ -3354,7 +3354,7 @@ public:
 
         TBillingStats Processed;
 
-        TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount);
+        TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
         TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
             TStringBuilder result;
@@ -3636,8 +3636,8 @@ public:
 
         auto& billed = indexInfo->Billed;
         billed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
         };
@@ -3698,7 +3698,7 @@ public:
             AddParent(bound, shardIdx);
         }
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =
@@ -3712,8 +3712,8 @@ public:
 
         auto& processed = shardStatus.Processed;
         processed = {
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadBytesProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
         };

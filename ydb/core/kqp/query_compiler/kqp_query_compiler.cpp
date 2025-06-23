@@ -179,8 +179,8 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     FillTableId(tableMeta, *tableProto.MutableId());
     tableProto.SetKind(GetPhyTableKind(tableMeta.Kind));
 
-    if (tableMeta.SysViewType) {
-        tableProto.SetSysViewType(static_cast<ui32>(*tableMeta.SysViewType));
+    if (tableMeta.SysViewInfo) {
+        *tableProto.MutableSysViewInfo() = *tableMeta.SysViewInfo;
     }
 
     for (const auto& keyColumnName : tableMeta.KeyColumnNames) {
@@ -1394,6 +1394,7 @@ private:
                 using enum NDq::EHashShuffleFuncType;
                 case HashV1: {
                     shuffleProto.MutableHashV1();
+                    break;
                 }
                 case ColumnShardHashV1: {
                     auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
@@ -1431,6 +1432,7 @@ private:
                         auto typeId = GetDataTypeInfo(slot).TypeId;
                         columnHashV1.AddKeyColumnTypes(typeId);
                     }
+                    break;
                 }
             };
 

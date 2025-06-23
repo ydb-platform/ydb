@@ -129,8 +129,8 @@ static void extend_containers(roaring64_bitmap_t *r) {
         new_capacity = 5 * r->capacity / 4;
     }
     uint64_t increase = new_capacity - r->capacity;
-    r->containers =
-        roaring_realloc(r->containers, new_capacity * sizeof(container_t *));
+    r->containers = (container_t **)roaring_realloc(
+        r->containers, new_capacity * sizeof(container_t *));
     memset(r->containers + r->capacity, 0, increase * sizeof(container_t *));
     r->capacity = new_capacity;
 }
@@ -987,8 +987,8 @@ size_t roaring64_bitmap_shrink_to_fit(roaring64_bitmap_t *r) {
     }
     uint64_t new_capacity = r->first_free;
     if (new_capacity < r->capacity) {
-        r->containers = roaring_realloc(r->containers,
-                                        new_capacity * sizeof(container_t *));
+        r->containers = (container_t **)roaring_realloc(
+            r->containers, new_capacity * sizeof(container_t *));
         freed += (r->capacity - new_capacity) * sizeof(container_t *);
         r->capacity = new_capacity;
     }
@@ -2454,7 +2454,7 @@ roaring64_bitmap_t *roaring64_bitmap_frozen_view(const char *buf,
     maxbytes -= sizeof(r->capacity);
 
     r->containers =
-        (container_t *)roaring_malloc(r->capacity * sizeof(container_t *));
+        (container_t **)roaring_malloc(r->capacity * sizeof(container_t *));
 
     // Container element counts.
     if (maxbytes < r->capacity * sizeof(uint16_t)) {

@@ -253,6 +253,10 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
             RunAlterStore(body.GetAlterStore(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
+            RunMoveTable(body.GetMoveTable(), version, txc);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }
@@ -399,6 +403,16 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
     TablesManager.DropTable(*internalPathId, version, db);
 }
+
+void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
+    const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
+    TablesManager.MoveTableProgress(db, srcPathId, dstPathId);
+}
+
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version,
     NTabletFlatExecutor::TTransactionContext& txc) {
@@ -558,6 +572,28 @@ private:
         }
         TActorContext::AsActorContext().Send(ParentActorId, std::move(ev));
     }
+
+    virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<NOlap::NReader::NCommon::TColumnsSetIds>& columnIds,
+        const std::vector<NOlap::TPortionDataAccessor>& acc) const override {
+        AFL_VERIFY(!columnIds);
+        THashMap<ui32, ui64> memoryByColumns;
+        for (auto&& a : acc) {
+            THashMap<ui32, ui64> memoryByPortionColumns;
+            for (auto&& c : a.GetRecordsVerified()) {
+                const ui64 current = memoryByPortionColumns[c.GetEntityId()];
+                memoryByPortionColumns[c.GetEntityId()] = std::max<ui64>(current, c.GetMeta().GetRawBytes());
+            }
+            for (auto&& c : memoryByPortionColumns) {
+                memoryByColumns[c.first] += c.second;
+            }
+        }
+        ui64 max = 0;
+        for (auto&& c : memoryByColumns) {
+            max = std::max(max, c.second);
+        }
+        return max;
+    }
+
     virtual void DoOnError(const TString& errorMessage) override {
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(Changes, false);
         ev->SetPutStatus(NKikimrProto::ERROR);

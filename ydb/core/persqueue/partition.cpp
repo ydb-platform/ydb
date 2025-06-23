@@ -2,7 +2,7 @@
 #include "mirrorer.h"
 #include "offload_actor.h"
 #include "partition_util.h"
-#include "partition.h"
+#include "partition_common.h"
 #include "partition_log.h"
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -401,6 +401,10 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
 }
 
 bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+    if (IsSupportive()) {
+        return false;
+    }
+
     bool haveChanges = CleanUpBlobs(request, ctx);
 
     PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
@@ -1481,7 +1485,8 @@ void TPartition::OnReadComplete(TReadInfo& info,
 {
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
-        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
+        info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
+        GetResultPostProcessor<NKikimrClient::TCmdReadResult>(info.User)
     );
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
 

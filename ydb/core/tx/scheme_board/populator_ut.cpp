@@ -135,16 +135,6 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     using TUpdateAck = NSchemeshardEvents::TEvUpdateAck;
 
-    TActorId MakeBoardReplicaID(
-        const ui32 node,
-        const ui32 replicaIndex
-    ) {
-        char x[12] = { 's', 's', 'b' };
-        x[3] = (char)1;
-        memcpy(x + 5, &replicaIndex, sizeof(ui32));
-        return TActorId(node, TStringBuf(x, 12));
-    }
-
     void AddReplicas(TStateStorageInfo::TRingGroup& group, const TVector<TActorId>& replicas) {
         group.NToSelect = replicas.size();
         group.Rings.resize(replicas.size());

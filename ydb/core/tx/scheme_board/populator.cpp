@@ -725,6 +725,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                         if (CheckQuorum(ringGroup, ringGroupAcks[ringGroupIndex])) {
                             ringGroupQuorums[ringGroupIndex] = true;
                         }
+                        break;
                     }
                 }
             }
@@ -734,8 +735,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
     bool CheckQuorum(TVector<ui32>& ringGroupAcks, TActorId ackedReplica) const {
         TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
-            const auto& ringGroup = GroupInfo->RingGroups[i];
-            ringGroupQuorums[i] = Ignore(ringGroup) || CheckQuorum(ringGroup, ringGroupAcks[i]);
+            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
+            ringGroupQuorums[ringGroupIndex] = Ignore(ringGroup) || CheckQuorum(ringGroup, ringGroupAcks[ringGroupIndex]);
         }
         ProcessReplicaAck(ringGroupAcks, ackedReplica, ringGroupQuorums);
         return Count(ringGroupQuorums, false) == 0;

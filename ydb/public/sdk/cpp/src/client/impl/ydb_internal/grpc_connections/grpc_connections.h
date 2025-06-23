@@ -146,13 +146,11 @@ public:
         // Implicit conversion from rvalue reference
         TRequestWrapper(TRequest&& request) 
             : Storage_(std::move(request))
-            , IsPointer_(false)
         {}
 
         // Implicit conversion from pointer. Means that request is allocated on Arena
         TRequestWrapper(TRequest* request)
             : Storage_(request)
-            , IsPointer_(true)
         {}
 
         // Copy constructor
@@ -175,8 +173,8 @@ public:
             const TCallMeta& meta,
             IQueueClientContext* context) 
         {
-            if (IsPointer_) {
-                serviceConnection->DoAdvancedRequest(*std::get<TRequest*>(Storage_), 
+            if (auto ptr = std::get_if<TRequest*>(&Storage_)) {
+                serviceConnection->DoAdvancedRequest(**ptr, 
                     std::move(responseCbLow), rpc, meta, context);
             } else {
                 serviceConnection->DoAdvancedRequest(std::move(std::get<TRequest>(Storage_)), 
@@ -186,7 +184,6 @@ public:
 
     private:
         std::variant<TRequest*, TRequest> Storage_;
-        bool IsPointer_;
     };
 
     template<typename TService, typename TRequest, typename TResponse>

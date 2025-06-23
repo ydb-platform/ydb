@@ -185,11 +185,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         }
     }
 
-    void MergeReply(TActorId &sender, TEvStateStorage::TEvReplicaInfo *ev) {
+    bool CheckConfigVersion(TActorId &sender, TEvStateStorage::TEvReplicaInfo *ev) {
         const auto &record = ev->Record;
-        const NKikimrProto::EReplyStatus status = record.GetStatus();
-        const ui64 cookie = record.GetCookie();
-
         const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
         const ui64 clusterStateGuid = record.GetClusterStateGuid();
         if (Info->ClusterStateGeneration < clusterStateGeneration || 
@@ -201,8 +198,20 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
                 new NStorage::TEvNodeWardenNotifyConfigMismatch(sender.NodeId(), clusterStateGeneration, clusterStateGuid));
             ReplyAndDie(NKikimrProto::ERROR);
+            return false;
+        }
+        return true;
+    }
+
+    void MergeReply(TActorId &sender, TEvStateStorage::TEvReplicaInfo *ev) {
+        const auto &record = ev->Record;
+        const NKikimrProto::EReplyStatus status = record.GetStatus();
+        const ui64 cookie = record.GetCookie();
+
+        if (!CheckConfigVersion(sender, ev)) {
             return;
         }
+
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
         Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
@@ -507,6 +516,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         BLOG_D("ProxyRequest::HandleUpdateSig ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
 
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
+
+        CheckConfigVersion(ev->Sender, msg);
+
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
@@ -876,7 +888,7 @@ public:
         AllReplicas = Info->SelectAllReplicas();
         if (!AllReplicas.empty()) {
             for (const TActorId &replica : AllReplicas) {
-                Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID), IEventHandle::FlagTrackDelivery);
+                Send(replica, new TEvStateStorage::TEvReplicaDelete(TabletID, Info->ClusterStateGeneration, Info->ClusterStateGuid), IEventHandle::FlagTrackDelivery);
             }
             Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
             Become(&TThis::StateRequestedDelete);
@@ -903,8 +915,18 @@ public:
         OnResponseReceived();
     }
 
-    void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &) {
+    void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         ++Count;
+        auto &record = ev->Get()->Record;
+        const ui64 clusterStateGeneration = record.GetClusterStateGeneration();
+        const ui64 clusterStateGuid = record.GetClusterStateGuid();
+        if (Info->ClusterStateGeneration < clusterStateGeneration || 
+            (Info->ClusterStateGeneration == clusterStateGeneration && Info->ClusterStateGuid != clusterStateGuid)) {
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), 
+                new NStorage::TEvNodeWardenNotifyConfigMismatch(ev->Sender.NodeId(), clusterStateGeneration, clusterStateGuid));
+            SendResponse();
+            return;
+        }
         OnResponseReceived();
     }
 
@@ -931,7 +953,7 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
 
     void SpreadCleanupRequest(const TStateStorageInfo::TSelection &selection, ui64 tabletId, TActorId proposedLeader) {
         for (ui32 i = 0; i < selection.Sz; ++i)
-            Send(selection.SelectedReplicas[i], new TEvStateStorage::TEvReplicaCleanup(tabletId, proposedLeader));
+            Send(selection.SelectedReplicas[i], new TEvStateStorage::TEvReplicaCleanup(tabletId, proposedLeader, Info->ClusterStateGeneration, Info->ClusterStateGuid));
     }
 
     void Handle(TEvStateStorage::TEvCleanup::TPtr &ev) {

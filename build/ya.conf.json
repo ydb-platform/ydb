@@ -2446,8 +2446,7 @@
             "description": "Python styler, Python 3 only"
         },
         "bloat": {
-            "description": "Run bloat tool",
-            "visible": false
+            "description": "Run bloat tool"
         },
         "buf": {
             "description": "Protobuf lint and breaking change detector"

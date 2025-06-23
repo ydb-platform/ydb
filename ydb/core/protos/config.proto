@@ -89,6 +89,10 @@ message TActorSystemConfig {
         optional bool HasSharedThread = 18;
         optional uint32 MaxLocalQueueSize = 20;
         optional uint32 MinLocalQueueSize = 21;
+
+        // Tiny YDB
+        repeated uint32 AdjacentPools = 22;
+        optional uint32 ForcedForeignSlots = 23;
     }
 
     message TScheduler {
@@ -1985,6 +1989,7 @@ message TColumnShardConfig {
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
     optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
+    optional bool ProxyWritingEnabled = 44 [default = true];
 }
 
 message TSchemeShardConfig {

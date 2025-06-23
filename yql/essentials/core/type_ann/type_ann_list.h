@@ -63,7 +63,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus ChopperWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus HasItemsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus ExtendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-    IGraphTransformer::TStatus UnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus SelectOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus UnionAllPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
     template <bool IsStrict>
     IGraphTransformer::TStatus ListExtendWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);

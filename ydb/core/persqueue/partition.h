@@ -314,6 +314,8 @@ private:
                                                    const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
                                                    ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
 
+    template<typename T>
+    std::function<void(bool, T& r)> GetResultPostProcessor(const TString& consumer = "");
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
@@ -1004,6 +1006,10 @@ private:
 
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
+                     ui64 creationUnixTime,
+                     const TActorContext& ctx);
+    void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                     TEvKeyValue::TEvRequest* request,
                      const TActorContext& ctx);
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
@@ -1054,6 +1060,8 @@ private:
     TInstant GetFirstUncompactedBlobTimestamp() const;
 
     void TryCorrectStartOffset(TMaybe<ui64> offset);
+
+    ui64 LastRequestedBlobCreationUnixTime = 0;
 };
 
 } // namespace NKikimr::NPQ

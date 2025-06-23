@@ -1368,6 +1368,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
 
     TVector<TSourcePtr> sources{ std::move(first.Source)};
     bool currentQuantifier = false;
+    TString currentSelectOperator;
 
     for (int i = 0; i < blocks.size(); ++i) {
         auto& b = blocks[i];
@@ -1389,14 +1390,16 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
         }
 
         auto selectOp = b.GetRule_select_op1();
-        const TString token = ToLowerUTF8(Token(selectOp.GetToken1()));
-        if (token == "union") {
+        const TString selectOperator = ToLowerUTF8(Token(selectOp.GetToken1()));
+        if (selectOperator == "union") {
             // nothing
-        } else if (token == "intersect" || token == "except") {
-            Ctx_.Error() << "INTERSECT and EXCEPT are not implemented yet";
-            return nullptr;
+        } else if (selectOperator == "intersect" || selectOperator == "except") {
+            if (!IsBackwardCompatibleFeatureAvailable(Ctx_.Settings.LangVer, MakeLangVersion(2025, 3), Ctx_.Settings.BackportMode)) {
+                Ctx_.Error() << "INTERSECT and EXCEPT are available starting from 2025.03 version";
+                return nullptr;
+            }
         } else {
-            Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", token.c_str());
+            Y_ABORT("You should change implementation according to grammar changes. Invalid token: %s", selectOperator.c_str());
         }
 
         bool quantifier = false;
@@ -1411,17 +1414,19 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
             }
         }
 
-        if (!second && quantifier != currentQuantifier) {
-            auto source = BuildUnion(pos, std::move(sources), currentQuantifier, {});
+        // currentSelectOperator == "" <=> second == true
+        if (!second && (currentSelectOperator != selectOperator || quantifier != currentQuantifier)) {
+            auto source = BuildSelectOp(pos, std::move(sources), currentSelectOperator, currentQuantifier, {});
             sources.clear();
             sources.emplace_back(std::move(source));
         }
 
         sources.emplace_back(std::move(next.Source));
         currentQuantifier = quantifier;
+        currentSelectOperator = selectOperator;
     }
 
-    auto result = BuildUnion(pos, std::move(sources), currentQuantifier, outermostSettings);
+    auto result = BuildSelectOp(pos, std::move(sources), currentSelectOperator, currentQuantifier, outermostSettings);
 
     if (orderBy) {
         TVector<TNodePtr> groupByExpr;

@@ -57,6 +57,7 @@ namespace NPQ {
         TString Value;
         bool Cached;
         TKey Key;
+        ui64 CreationUnixTime = 0;
 
         TRequestedBlob() = delete;
 

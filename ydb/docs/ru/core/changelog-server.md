@@ -10,7 +10,7 @@
 #### Функциональность
 
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](./concepts/async-replication.md).
-* Добавлена поддержка параметризованного типа Decimal.
+* Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).
 * Добавлена поддержка [автопартиционирования топиков в CDC](./concepts/cdc.md#topic-partitions) для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в [конфигурации кластера](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc.md#topic-options) в CDC топике с использованием выражения `ALTER TOPIC`.
 * [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) формат [`DEBEZIUM_JSON` для потоков изменений](./concepts/cdc.md#debezium-json-record-structure) (changefeed). Включается установкой флага `enable_changefeed_ debezium_json_format`.
@@ -18,7 +18,7 @@
   * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (changefeed) (флаги `enable_changefeeds_export` и `enable_changefeeds_import`),
   * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (VIEW) (флаг `enable_view_export`).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, которая предотвращает восстановление из поврежденных резервных копий и защищает от потери данных.
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений (VIEW), использующих [UDF](./yql/reference/builtins/basic.md#udf) в своих запросах.
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md#udf) в своих запросах.
 * Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth) и [партициях таблиц базы данных](./dev/system-views.md#partitions).
 * Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user.md) и [ALTER USER](./yql/reference/syntax/alter-user.md):
   * `HASH` - возможность задания пароля в зашифрованном виде,
@@ -38,10 +38,10 @@
   * `enable_strict_user_management` включает строгие проверки для локальных пользователей,
   * `enable_database_admin` включает функции администратора базы данных,
   * `enable_data_erasure` [включает]((https://github.com/ydb-platform/ydb/pull/14460)) процедура многократной перезаписи удаленных данных для снижения риска их прочтения при непосредственном обращении к блочным устройствам средствами ОС.
- 
+
 #### Изменения с потерей обратной совместимости
 
-* Если вы используете [Temporal over YDB](https://github.com/yandex/temporal-over-ydb), обновите его версию перед обновление YDB, чтобы избежать ошибок в выполнении запросов. 
+* Если вы используете [Temporal over YDB](https://github.com/yandex/temporal-over-ydb), обновите его версию перед обновление YDB, чтобы избежать ошибок в выполнении запросов.
 
 #### Производительность
 
@@ -58,7 +58,7 @@
 #### Исправления ошибок
 
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/9707) ошибка в настройке [Interconnect](../concepts/glossary#actor-system-interconnect), приводящая к снижению производительности.
-* [Ошибка](https://github.com/ydb-platform/ydb/pull/13993) out of memory при удалении очень больших таблиц за счет регулирования количества одновременно обрабатывающих данную операцию таблеток.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/13993) ошибка "Out of memory" при удалении очень больших таблиц за счет регулирования количества одновременно обрабатывающих данную операцию таблеток.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/9848) ошибка, которая возникала, если в конфигурации для системных таблеток один узел базы данных указан несколько раз.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/11059) ошибка длительного (секунды) чтения данных при частых операциях перешардирования таблицы.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/9723) ошибка чтения из асинхронных реплик, которая приводила к сбою.
@@ -71,7 +71,7 @@
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/13741) некорректное определение конца поля с метаданными в [динамической конфигурации кластера](./maintenance/manual/dynamic-config).
 * [Улучшено](https://github.com/ydb-platform/ydb/pull/16420) построение вторичных индексов: при возникновении некоторых ошибок система ретраит процесс, а не прерывает его.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16635) ошибка выполнения выражения `RETURNING` в операциях INSERT/UPSERT.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/16269) проблема зависания операции Drop Tablet в PQ tablet особенно во время задержек в работе Interconnect.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/16269) проблема зависания операции "Drop Tablet" в PQ tablet особенно во время задержек в работе Interconnect.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16194) ошибка, возникавшая во время [компакшн](./concepts/glossary#compaction) VDisk.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15233) проблема, из-за которой длительные сессии чтения топика завершались с ошибками "too big inflight".
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/15515) зависание при чтении топика, если хотя бы одна партиция не имела входящих данных, но читалась несколькими потребителями.

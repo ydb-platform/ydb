@@ -26,6 +26,8 @@ struct TIndexInfo;
 
 namespace NKikimr::NTxUT {
 
+void SetupSharedMetadataAccessorCacheService(TTestActorRuntime& runtime, ui32 nodeIndex);
+
 using TPlanStep = TPositiveIncreasingControlInteger;
 
 // Private events of different actors reuse the same ES_PRIVATE range

@@ -2318,7 +2318,7 @@ protected:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const bool VerboseMemoryLimitException;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
-    TMaybe<ui8> BufferPageAllocSize;
+    TMaybe<size_t> BufferPageAllocSize;
 
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;

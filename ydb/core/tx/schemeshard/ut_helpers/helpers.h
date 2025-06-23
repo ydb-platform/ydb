@@ -486,6 +486,8 @@ namespace NSchemeShardUT_Private {
     TVector<ui64> GetTableShards(TTestActorRuntime& runtime, ui64 schemeShard,  const TString& path);
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime);
 
+    TLocalPathId GetNextLocalPathId(TTestActorRuntime& runtime, ui64& txId);
+
     template <typename TCreateFunc>
     void CreateWithIntermediateDirs(TCreateFunc func) {
         TTestWithReboots t;
@@ -508,8 +510,14 @@ namespace NSchemeShardUT_Private {
     void CreateWithIntermediateDirsForceDrop(TCreateFunc func) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TLocalPathId nextPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                nextPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             func(runtime, ++t.TxId, "/MyRoot");
-            AsyncForceDropUnsafe(runtime, ++t.TxId, 3);
+            AsyncForceDropUnsafe(runtime, ++t.TxId, nextPathId);
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -666,5 +674,7 @@ namespace NSchemeShardUT_Private {
         ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds = {});
 
     void TestCreateServerLessDb(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId, ui64& tenantSchemeShard);
+
+    void MeteringDataEqual(const TString& leftMsg, const TString& rightMsg);
 
 } //NSchemeShardUT_Private

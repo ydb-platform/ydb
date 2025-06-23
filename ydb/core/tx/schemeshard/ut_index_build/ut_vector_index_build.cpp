@@ -764,9 +764,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 130 (ReadTable: 128, BulkUpsert: 2)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
@@ -792,9 +792,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 130 (ReadTable: 128, BulkUpsert: 2)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
         }
 
         reshuffleBlocker.Unblock();
@@ -809,10 +809,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 155 (ReadTable: 128, BulkUpsert: 27)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ " + shardReshuffleBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
@@ -838,10 +838,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 155 (ReadTable: 128, BulkUpsert: 27)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ " + shardReshuffleBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
         }
 
         reshuffleBlocker.Stop().Unblock();
@@ -868,9 +868,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 338 (ReadTable: 128, BulkUpsert: 210)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
@@ -896,9 +896,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 6 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 338 (ReadTable: 128, BulkUpsert: 210)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
         }
     }
 

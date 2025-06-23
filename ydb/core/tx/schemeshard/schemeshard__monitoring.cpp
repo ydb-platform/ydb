@@ -869,9 +869,9 @@ private:
 
                 TString requestUnitsExplain;
                 ui64 requestUnits = TRUCalculator::Calculate(info.Processed, requestUnitsExplain);
-                str << "Processed: " << info.Processed << Endl
+                str << "Processed: " << info.Processed.ShortDebugString() << Endl
                     << "Request Units: " << requestUnits << " (" << requestUnitsExplain << ")" << Endl
-                    << "Billed: " << info.Billed << Endl;
+                    << "Billed: " << info.Billed.ShortDebugString() << Endl;
             }
 
             auto getKeyTypes = [&](TPathId pathId) {
@@ -956,7 +956,7 @@ private:
                                 str << Self->Generation() << ":" << status.SeqNoRound;
                             }
                             TABLED() {
-                                str << status.Processed;
+                                str << status.Processed.ShortDebugString();
                             }
                         }
                         str << "\n";

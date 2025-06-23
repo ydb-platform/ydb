@@ -1668,12 +1668,12 @@ message TEvRecomputeKMeansResponse {
     optional NKikimrIndexBuilder.EBuildStatus Status = 6;
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
-    optional uint64 ReadRows = 8;
-    optional uint64 ReadBytes = 9;
-
     // recomputed clusters and cluster sizes (row counts for every cluster)
     repeated bytes Clusters = 10;
     repeated uint64 ClusterSizes = 11;
+
+    reserved 8 to 9;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 }
 
 message TEvPrefixKMeansRequest {

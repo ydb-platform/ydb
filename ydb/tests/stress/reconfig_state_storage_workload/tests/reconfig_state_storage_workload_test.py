@@ -19,9 +19,6 @@ class ReconfigStateStorageWorkloadTest(object):
                 "version": 0,
                 "cluster": "",
             },
-            column_shard_config={
-                "allow_nullable_columns_in_pk": True,
-            },
             additional_log_configs={
                 'BS_NODE': LogLevels.DEBUG,
                 'BOARD_LOOKUP': LogLevels.DEBUG,

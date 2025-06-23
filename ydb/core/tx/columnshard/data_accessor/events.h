@@ -33,7 +33,9 @@ public:
     }
 
     explicit TEvAddPortion(const std::vector<TPortionDataAccessor>& accessors, TActorId owner)
-        : Accessors(accessors), Owner(owner) {
+        : Accessors(accessors)
+        , Owner(owner)
+    {
     }
 };
 

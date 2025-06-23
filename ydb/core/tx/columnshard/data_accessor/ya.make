@@ -2,10 +2,10 @@ LIBRARY()
 
 SRCS(
     actor.cpp
-    shared_metadata_accessor_cache_actor.cpp
     events.cpp
-    request.cpp
     manager.cpp
+    request.cpp
+    shared_metadata_accessor_cache_actor.cpp
 )
 
 PEERDIR(

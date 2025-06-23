@@ -131,12 +131,12 @@ public:
                  "there is attempt to write to the DB when it is protected,"
                  " in that case all writes should be done over TStorageChanges"
                  " in order to maintain revert the changes");
-        
+
         // Store the location of first GetDB call for better error reporting
         if (!DirectAccessGranted) {
             FirstGetDbLocation = location;
         }
-        
+
         DirectAccessGranted = true;
         return GetTxc().DB;
     }

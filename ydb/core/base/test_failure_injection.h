@@ -8,7 +8,6 @@ namespace NActors {
 
 namespace NKikimr {
 
-// Enum for different types of test failures that can be injected
 enum class EInjectedFailureType : ui64 {
     BackupCollectionNotFound = 1,
     BackupChildrenEmpty = 2,
@@ -18,7 +17,6 @@ enum class EInjectedFailureType : ui64 {
     LateBackupCollectionNotFound = 6,
 };
 
-// Helper functions for easier test failure injection
 class TTestFailureInjector {
 public:
     static void InjectFailure(NActors::TActorSystem* actorSystem, EInjectedFailureType failureType);

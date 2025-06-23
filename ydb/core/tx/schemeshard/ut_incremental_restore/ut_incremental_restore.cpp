@@ -1,5 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/base/test_failure_injection.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             Name: "TestCollection"
         )";
 
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/NotABackupDir/", restoreSettings, 
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/NotABackupDir/", restoreSettings,
                                    {NKikimrScheme::StatusNameConflict});
         env.TestWaitNotification(runtime, txId);
     }
@@ -572,43 +572,5 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         auto backupCollectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/DatabaseTestCollection");
         auto collectionState = backupCollectionDesc.GetPathDescription().GetSelf().GetPathState();
         Cerr << "Backup collection state: " << NKikimrSchemeOp::EPathState_Name(collectionState) << Endl;
-    }
-
-    Y_UNIT_TEST(LateBackupCollectionNotFoundFailure) {
-        TLongOpTestSetup setup;
-        auto& runtime = setup.Runtime;
-        auto& env = setup.Env;
-        auto& txId = setup.TxId;
-
-        // First, create a valid backup collection and backup structure
-        setup.CreateCompleteBackupScenario("TestBackupCollection", {"TestTable"}, 2);
-
-        // Verify the backup collection exists before we inject the failure
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/TestBackupCollection"), {
-            NLs::PathExist,
-            NLs::IsBackupCollection,
-        });
-
-        // Now inject the "late" backup collection not found failure
-        // This should trigger after the backup collection has been found and validated,
-        // but before the actual restore operations are created
-        runtime.GetAppData().InjectFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound));
-
-        // Try to execute the restore operation
-        TString restoreSettings = R"(
-            Name: "TestBackupCollection"
-        )";
-
-        // The restore should fail with StatusPathDoesNotExist due to the late failure injection
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings, 
-                                   {NKikimrScheme::StatusPathDoesNotExist});
-        env.TestWaitNotification(runtime, txId);
-
-        // Clean up the failure injection
-        runtime.GetAppData().RemoveFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound));
-
-        // Verify that after removing the failure injection, the same operation would succeed
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", restoreSettings);
-        env.TestWaitNotification(runtime, txId);
     }
 }

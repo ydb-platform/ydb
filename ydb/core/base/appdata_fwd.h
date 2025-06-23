@@ -324,15 +324,15 @@ struct TAppData {
     void InjectFailure(ui64 failureType) {
         InjectedFailures.insert(failureType);
     }
-    
+
     void RemoveFailure(ui64 failureType) {
         InjectedFailures.erase(failureType);
     }
-    
+
     void ClearAllFailures() {
         InjectedFailures.clear();
     }
-    
+
     bool HasInjectedFailure(ui64 failureType) const {
         return InjectedFailures.contains(failureType);
     }

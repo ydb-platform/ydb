@@ -272,27 +272,27 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
     TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()});
 
     if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::BackupCollectionNotFound))) {
-        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Backup collection not found (injected failure)")};
+        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Backup collection not found")};
         return result;
     }
 
     if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::BackupChildrenEmpty))) {
-        result = {CreateReject(opId, NKikimrScheme::StatusSchemeError, "Backup collection children empty (injected failure)")};
+        result = {CreateReject(opId, NKikimrScheme::StatusSchemeError, "Backup collection children empty")};
         return result;
     }
 
     if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::PathSplitFailure))) {
-        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Path split failure (injected failure)")};
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Path split failure")};
         return result;
     }
 
     if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::IncrementalBackupPathNotResolved))) {
-        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Incremental backup path not resolved (injected failure)")};
+        result = {CreateReject(opId, NKikimrScheme::StatusPathDoesNotExist, "Incremental backup path not resolved")};
         return result;
     }
 
     if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::CreateChangePathStateFailed))) {
-        result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, "Create change path state failed (injected failure)")};
+        result = {CreateReject(opId, NKikimrScheme::StatusMultipleModifications, "Create change path state failed")};
         return result;
     }
 

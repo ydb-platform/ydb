@@ -131,7 +131,7 @@ void TMemoryChanges::GrabSysView(TSchemeShard* ss, const TPathId& pathId) {
 
 void TMemoryChanges::GrabNewLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
     Y_ABORT_UNLESS(!ss->LongIncrementalRestoreOps.contains(opId));
-    LongIncrementalRestoreOps.emplace(opId, std::nullopt); // will be removed on UnDo()
+    LongIncrementalRestoreOps.emplace(opId, std::nullopt);
 }
 
 void TMemoryChanges::GrabLongIncrementalRestoreOp(TSchemeShard* ss, const TOperationId& opId) {
@@ -299,10 +299,8 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     while (LongIncrementalRestoreOps) {
         const auto& [id, elem] = LongIncrementalRestoreOps.top();
         if (elem.has_value()) {
-            // This was an existing operation that should be restored
             ss->LongIncrementalRestoreOps[id] = elem.value();
         } else {
-            // This was a new operation that should be removed
             ss->LongIncrementalRestoreOps.erase(id);
         }
         LongIncrementalRestoreOps.pop();

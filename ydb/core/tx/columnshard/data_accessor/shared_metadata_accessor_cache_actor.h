@@ -59,7 +59,7 @@ private:
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "owner_not_found");
         }
     }
-   void Handle(TEvAskServiceDataAccessors::TPtr& ev) {
+    void Handle(TEvAskServiceDataAccessors::TPtr& ev) {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("shared_metadata_accessor_cache", "TEvAskServiceDataAccessors")("owner", ev->Get()->GetOwner());
         if (auto manager = Managers.find(ev->Get()->GetOwner()); manager != Managers.end()) {
             manager->second.AskData(ev->Get()->GetRequest());

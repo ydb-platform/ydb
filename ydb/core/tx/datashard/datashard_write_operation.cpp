@@ -103,7 +103,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
 
     ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
-    DefaultFilledColumnsCnt = recordOperation.GetDefaultFilledColumnCnt();
+    DefaultFilledColumnsCnt = recordOperation.GetDefaultFilledColumnsCnt();
     
     if (DefaultFilledColumnsCnt != 0 && 
         OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) 

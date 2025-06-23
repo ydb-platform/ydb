@@ -67,7 +67,8 @@ public:
     explicit TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const bool isUpdate, TActorId owner)
         : Controller(std::move(accessor))
         , IsUpdateFlag(isUpdate)
-        , Owner(owner) {
+        , Owner(owner)
+    {
     }
 };
 

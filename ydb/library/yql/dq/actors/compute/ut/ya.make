@@ -5,8 +5,14 @@ SRCS(
     dq_compute_actor_ut.cpp
     dq_compute_actor_async_input_helper_ut.cpp
     dq_compute_issues_buffer_ut.cpp
+)
+IF (NOT OS_WINDOWS)
+SRCS(
     dq_source_watermark_tracker_ut.cpp
 )
+ELSE()
+# TTestActorRuntimeBase(..., true) seems broken on windows
+ENDIF()
 
 PEERDIR(
     library/cpp/testing/unittest

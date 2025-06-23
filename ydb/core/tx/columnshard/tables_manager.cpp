@@ -78,7 +78,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::MaxInternalPathId, maxPathId)) {
             return false;
         }
-        if (maxPathId) {
+        if (GenerateInternalPathId && maxPathId) {
             MaxInternalPathId =TInternalPathId::FromRawValue(*maxPathId);
             AFL_VERIFY(MaxInternalPathId >= GetInitialMaxInternalPathId(TabletId));
         }
@@ -246,8 +246,7 @@ bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDelet
 }
 
 TInternalPathId TTablesManager::CreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
-    if (NYDBTest::TControllers::GetColumnShardController()->IsForcedGenerateInternalPathId() ||
-        AppData()->ColumnShardConfig.GetGenerateInternalPathId()) {
+    if (GenerateInternalPathId) {
         const auto result = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
         MaxInternalPathId = result;
         return result;
@@ -306,7 +305,9 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
     AFL_VERIFY(SchemeShardLocalToInternal.emplace(table.GetPathId().SchemeShardLocalPathId, table.GetPathId().InternalPathId).second);
     Schema::SaveTableSchemeShardLocalPathId(db, table.GetPathId().InternalPathId, table.GetPathId().SchemeShardLocalPathId);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::MaxInternalPathId, MaxInternalPathId.GetRawValue());
+    if (GenerateInternalPathId) {
+        Schema::SaveSpecialValue(db, Schema::EValueIds::MaxInternalPathId, MaxInternalPathId.GetRawValue());
+    }
     if (PrimaryIndex) {
         PrimaryIndex->RegisterTable(pathId);
     }
@@ -405,6 +406,10 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
     , TabletId(tabletId)
+    , GenerateInternalPathId(
+        AppData()->ColumnShardConfig.GetGenerateInternalPathId() ||
+        NYDBTest::TControllers::GetColumnShardController()->IsForcedGenerateInternalPathId()
+    )
     , MaxInternalPathId(GetInitialMaxInternalPathId(TabletId)) {
 }
 

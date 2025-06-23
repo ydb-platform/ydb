@@ -216,6 +216,7 @@ private:
     NBackgroundTasks::TControlInterfaceContainer<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
     std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
+    bool GenerateInternalPathId;
     TInternalPathId MaxInternalPathId;
 
     friend class TTxInit;

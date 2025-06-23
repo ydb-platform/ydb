@@ -11,15 +11,15 @@
 
 * [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка консистентной [асинхронной репликации](./concepts/async-replication.md).
 * Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).
-* Добавлена поддержка [автопартиционирования топиков в CDC](./concepts/cdc.md#topic-partitions) для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в [конфигурации кластера](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
+* Добавлена поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions)  в CDC для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в [конфигурации кластера](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc.md#topic-options) в CDC топике с использованием выражения `ALTER TOPIC`.
-* [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) формат [`DEBEZIUM_JSON` для потоков изменений](./concepts/cdc.md#debezium-json-record-structure) (changefeed). Включается установкой флага `enable_changefeed_ debezium_json_format`.
+* [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md#debezium-json-record-structure)  для потоков изменений (changefeed). Включается установкой флага `enable_changefeed_ debezium_json_format`.
 * В операциях резервного копирования и восстановления расширен состав поддерживаемых объектов. Включается установкой флагов, указанных в скобках:
   * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (changefeed) (флаги `enable_changefeeds_export` и `enable_changefeeds_import`),
   * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (VIEW) (флаг `enable_view_export`).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, которая предотвращает восстановление из поврежденных резервных копий и защищает от потери данных.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md#udf) в своих запросах.
-* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth) и [партициях таблиц базы данных](./dev/system-views.md#partitions).
+* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth) и [истории перегруженных партиций](./dev/system-views#top-overload-partitions).
 * Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user.md) и [ALTER USER](./yql/reference/syntax/alter-user.md):
   * `HASH` - возможность задания пароля в зашифрованном виде,
   * `LOGIN` и `NOLOGIN` - разблокировка и блокировка пользователя.
@@ -41,7 +41,7 @@
 
 #### Изменения с потерей обратной совместимости
 
-* Если вы используете [Temporal over YDB](https://github.com/yandex/temporal-over-ydb), обновите его версию перед обновление YDB, чтобы избежать ошибок в выполнении запросов.
+* Если вы используете [temporal over YDB](https://github.com/yandex/temporal-over-ydb), обновите его версию перед обновление YDB, чтобы избежать ошибок в выполнении запросов.
 
 #### Производительность
 

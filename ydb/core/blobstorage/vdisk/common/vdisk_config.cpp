@@ -19,11 +19,11 @@ namespace NKikimr {
         FreshUseDreg = false;
         Level0UseDreg = true;
         HullCutLogDuration = TDuration::Seconds(1);
-        HullCompSchedulingInterval = TDuration::Seconds(1);
+        HullCompSchedulingInterval = TDuration::Seconds(1); // We can control how often try to start compaction
         HullCompStorageRatioCalcPeriod = TDuration::Minutes(5);
         HullCompStorageRatioMaxCalcDuration = TDuration::Seconds(1);
         LevelCompaction = true;
-        FreshCompaction = true;
+        FreshCompaction = true; // We can turn off fresh compaction
         GCOnlySynced = true;
         AllowKeepFlags = true;              // by default vdisk client can send keep/don'tkeep flags, for log can't
         CheckHugeBlobs = false;

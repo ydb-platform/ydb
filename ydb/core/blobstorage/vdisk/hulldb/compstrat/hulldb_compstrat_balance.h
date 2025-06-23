@@ -232,11 +232,12 @@ namespace NKikimr {
                 }
 
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: TBalancePartiallySortedLevels::CalculateRank: %s",
+                                "%s: TBalancePartiallySortedLevels::CalculateRank: %s, "
+                                "freeLevels: %d, totalPsl %d",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ToString().data()));
+                                ToString().data()), freeLevels, totalPsl);
                 }
 
                 Y_ABORT_UNLESS(freeLevels <= totalPsl);

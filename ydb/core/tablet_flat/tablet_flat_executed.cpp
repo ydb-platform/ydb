@@ -238,7 +238,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app") {
+    if (path.StartsWith("/app")) {
         OnRenderAppHtmlPage(ev, ctx);
         return;
     } else if (path == "/executorInternals") {

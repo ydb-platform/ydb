@@ -50,6 +50,14 @@ namespace {
 
 } // anonymous
 
+bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+}
+
+bool IsMajorityReached(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
+    return ringGroupAcks > ringGroup.NToSelect / 2;
+}
+
 class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     void ProcessSync(NInternalEvents::TEvDescribeResult* msg = nullptr, const TPathId& pathId = TPathId()) {
         if (msg == nullptr) {
@@ -707,14 +715,6 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    static bool Ignore(const TStateStorageInfo::TRingGroup& ringGroup) {
-        return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
-    }
-
-    static bool CheckQuorum(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
-        return ringGroupAcks > ringGroup.NToSelect / 2;
-    }
-
     void ProcessReplicaAck(TVector<ui32>& ringGroupAcks, TActorId ackedReplica, TVector<bool>& ringGroupQuorums) const {
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
@@ -722,7 +722,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 for (const auto& replica : ring.Replicas) {
                     if (replica == ackedReplica) {
                         ++ringGroupAcks[ringGroupIndex];
-                        if (CheckQuorum(ringGroup, ringGroupAcks[ringGroupIndex])) {
+                        if (IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex])) {
                             ringGroupQuorums[ringGroupIndex] = true;
                         }
                         break;
@@ -736,7 +736,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
         for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
-            ringGroupQuorums[ringGroupIndex] = Ignore(ringGroup) || CheckQuorum(ringGroup, ringGroupAcks[ringGroupIndex]);
+            ringGroupQuorums[ringGroupIndex] = ShouldIgnore(ringGroup) || IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex]);
         }
         ProcessReplicaAck(ringGroupAcks, ackedReplica, ringGroupQuorums);
         return Count(ringGroupQuorums, false) == 0;

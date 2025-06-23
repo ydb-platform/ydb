@@ -60,6 +60,7 @@
                                                 "PlanNodeId": 9,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV1",
                                                         "KeyColumns": [
                                                             "RegionID"
                                                         ],
@@ -163,6 +164,8 @@
                                                                                 "PlanNodeId": 3,
                                                                                 "Plans": [
                                                                                     {
+                                                                                        "CTE Name": "TableFullScan_9",
+                                                                                        "HashFunc": "HashV1",
                                                                                         "KeyColumns": [
                                                                                             "RegionID",
                                                                                             "UserID"

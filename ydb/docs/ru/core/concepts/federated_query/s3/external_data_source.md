@@ -164,7 +164,9 @@ WHERE
 
 {% include [!](_includes/format_settings.md) %}
 
-Параметр `file_pattern` можно использовать только в том случае, если `file_path` – путь к каталогу. В строках форматирования можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
+Подробное описание поддерживаемых wildcards для параметра `file_pattern` приведено [выше](#path_format). Параметр `file_pattern` можно использовать только в том случае, если `file_path` – путь к каталогу.
+
+В строках форматирования для даты и времени можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
 
 {% include [!](_includes/date_formats.md) %}
 

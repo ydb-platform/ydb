@@ -6,18 +6,18 @@
 
 ```mermaid
 sequenceDiagram
-    actor user as Пользователь
-    participant node as Узел YDB
-    participant auth as Источник пользователей
+    actor user as User
+    participant node as YDB Node
+    participant auth as User Authentication Domain
 
-    user->>node: Запрос с аутентификационным токеном
-    node->>auth: Проверить аутентификационный токен
-    auth->>node: Токен проверен
+    user->>node: Request with an authentication token
+    node->>auth: Validate authentication token
+    auth->>node: Token is valid
 
     activate node
-    node->>node: Создать токен пользователя
-    user->>node: Запрос с аутентификационным токеном
-    node->>node: Проверить аутентификационный токен с помощью токена пользователя в кеше
+    node->>node: Create and cache user token
+    user->>node: Request with an authentication token
+    node->>node: Validate authentication token with the cached user token
     deactivate node
 ```
 
@@ -33,7 +33,7 @@ sequenceDiagram
 
     {% note warning %}
 
-    Если сторонняя система получила токен пользователя на узле {{ ydb-short-name }}, посылает запросы на тот же узел чаще, чем истекает интервал `life_time` и по-какой-то причине не обновляет токен пользователя (выставлено слишком большое значение `refresh_time` или не доступна система аутентификации), {{ ydb-short-name }} удалит токен пользователя только по истечении срока `expire_time`. До этого времени сторонняя система будет пользоваться правами, которые имелись на момент создания или последнего обновления токена пользователя и не определит изменения в аккаунте пользователя.
+    Если сторонняя система получила токен пользователя на узле {{ ydb-short-name }} и посылает запросы на тот же узел чаще, чем истекает интервал `life_time`, {{ ydb-short-name }} гарантированно определит изменения в аккаунте пользователя только по истечении срока `expire_time`.
 
     В данном случае под изменениями понимаются удаление аккаунта локального или внешнего пользователя или изменения в принадлежности аккаунта к [группам пользователей](./authorization.md#group).
 
@@ -54,21 +54,21 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    actor user as Пользователь
-    participant node as Узел YDB
-    participant cache as Кеш токенов
+    actor user as User
+    participant node as YDB Node
+    participant cache as Token Cache
 
-    node->>cache: Создать токен пользователя
+    node->>cache: Create user token
     activate cache
-    Note right of node: Начало периода life_time
+    Note right of node: life_time period started
 
-    user->>node: Запрос с аутентификационным токеном
-    node->>cache: Проверить аутентификационный токен
-    cache-->>node: Токен проверен
-    Note right of node: Период life_time перезапущен
+    user->>node: Request with an authentication token
+    node->>cache: Validate authentication token
+    cache-->>node: Token validated
+    Note right of node: life_time period restarted
 
-    alt Период life_time закончен
-    node->>cache: Удалить токен пользователя из кеша
+    alt life_time period elapsed
+    node->>cache: Delete user token from cache
     deactivate cache
     end
 ```

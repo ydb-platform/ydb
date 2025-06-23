@@ -27,7 +27,7 @@ WITH (option = value[, ...])
       * `USER` — имя пользователя.
       * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
 
-  * `CONSUMER` — имя консьюмера топика источника. Если имя не задано, то консьюмер будет добавлен топику автоматически.
+  * `CONSUMER` — имя существующего консьюмера топика источника. Если имя не задано, то консьюмер будет добавлен топику автоматически. 
 
 ## Примеры {#examples}
 
@@ -40,6 +40,15 @@ WITH (option = value[, ...])
 Создание экземпляра трансфера из топика `example_topic` базы данных `/Root/another_database` в таблицу `example_table` текущей базы данных:
 
 ```yql
+CREATE TABLE example_table (
+    partition Uint32 NOT NULL,
+    offset Uint64 NOT NULL,
+    message Utf8,
+    PRIMARY KEY (partition, offset)
+);
+
+CREATE TOPIC example_topic;
+
 $transformation_lambda = ($msg) -> {
     return [
         <|
@@ -58,6 +67,14 @@ WITH (
 );
 ```
 
+У сообщения [топика](topic.md) доступны следующие поля:
+* `_data` - тело сообщения
+* `_message_group_id` - идентификатор группы сообщений
+* `_offset` - смещение сообщения
+* `_partition`- номер партиции сообщения
+* `_producer_id` - идентификатор источника
+* `_seq_no`- порядковые номера сообщений
+
 Создание экземпляра трансфера с явным указанием имени консьюмера `existing_consumer_of_topic`:
 
 ```yql
@@ -70,6 +87,31 @@ WITH (
 );
 ```
 
+Пример обработки сообщения в формате JSON
+
+```
+// example message:
+// {
+//   "update": {
+//     "operation":"value_1"
+//   },
+//   "key": [
+//     "id_1",
+//     "2019-01-01T15:30:00.000000Z"
+//   ]
+// }
+
+$transformation_lambda = ($msg) -> {
+    $json = CAST($msg._data AS JSON);
+    return [
+        <|
+            timestamp: DateTime::MakeDatetime(DateTime::ParseIso8601(CAST(Yson::ConvertToString($json.key[1]) AS Utf8))),
+            object_id: CAST(Yson::ConvertToString($json.key[0]) AS Utf8),
+            operation: CAST(Yson::ConvertToString($json.update.operation) AS Utf8)
+        |>
+    ];
+};
+```
 
 
 ## См. также

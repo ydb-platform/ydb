@@ -27,24 +27,30 @@ The export feature is available only for objects of the following types:
 
 To run the command to export data to S3 storage, specify the [S3 connection parameters](../auth-s3.md). Since data is exported by the YDB server asynchronously, the specified endpoint must be available to establish a connection on the server side.
 
-### List of exported items {#items}
+### Exported schema objects {#objects}
 
-`--destination-prefix PREFIX`: Destination prefix for export into the bucket. Required for encrypted exports.
+`--root-path PATH`: Root directory for the objects being exported; defaults to the database root if not provided.
 
-`--root-path PATH`: Root folder for the objects being exported; defaults to the database root if not provided.
+`--destination-prefix PREFIX`: Destination prefix in the S3 bucket.
 
-`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times to export multiple items. If no `--item` or `--include` parameters are specified, the entire root path will be exported. `STRING` is specified in the `<property>=<value>,...` format with the following properties:
-
-- `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
-- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items. It can be generated automatically from the name of the exported object. For encrypted exports, specifying an explicit destination path is not recommended to anonymize exported object names.
-
-`--include PATH`: Object paths relative to the root path that are included in the export. Specify this parameter multiple times for different paths, or provide a single comma-separated list of values. If no `--item` or `--include` parameters are specified, the entire root path will be exported.
+`--include PATH`: Schema objects to be included in the export. Directories are traversed recursively. Paths are relative to the 'root-path'. You may provide a comma-separated list of values and/or specify this parameter multiple times to include several objects. If not specified, all non-system objects in the 'root-path' are exported.
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
 
-`--encryption-algorithm ALGORITHM`: Encryption algorithm (only for encrypted exports). Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`.
+{% cut "Alternate syntax" %}
 
-`--encryption-key-file PATH`: File path containing the encryption key (only for encrypted exports).
+There's an alternate syntax to specify the list of exported objects, supported for backward compatibility.
+
+`--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
+
+- `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
+- `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items.
+
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
+
+The exports made using the alternate syntax will not contain a list of objects as part of the backup, so some features may not be available for them (like encryption), and imports are possible only using the corresponding alternate syntax of import.
+
+{% endcut %}
 
 ### Additional parameters {#aux}
 
@@ -53,6 +59,8 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 | `--description STRING` | Operation text description saved to the history of operations. |
 | `--retries NUM` | Number of export retries to be made by the server.<br/>Defaults to `10`. |
 | `--compression STRING` | Compress exported data.<br/>If the default compression level is used for the [Zstandard](https://en.wikipedia.org/wiki/Zstandard) algorithm, data can be compressed by 5-10 times. Compressing data uses the CPU and may affect the speed of performing other DB operations.<br/>Possible values:<br/><ul><li>`zstd`: Compression using the Zstandard algorithm with the default compression level (`3`).</li><li>`zstd-N`: Compression using the Zstandard algorithm, where `N` stands for the compression level (`1` — `22`).</li></ul> |
+| `--encryption-algorithm ALGORITHM` | Encryption algorithm (only for encrypted exports). Supported values: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`. |
+| `--encryption-key-file PATH` | File path containing the encryption key (only for encrypted exports) |
 | `--format STRING` | Result format.<br/>Possible values:<br/><ul><li>`pretty`: Human-readable format (default).</li><li>`proto-json-base64`: [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |
 
 ## Running the export command {#exec}

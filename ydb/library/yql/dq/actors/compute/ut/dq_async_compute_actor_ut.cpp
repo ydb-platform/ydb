@@ -404,21 +404,25 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         ActorSystem.EnableScheduleForActor(asyncCA, true);
         ui32 seqNo = 0;
         ui32 val = 0;
-        for (ui32 packet = 0; packet < packets; ++packet) {
+        for (ui32 packet = 1; packet <= packets; ++packet) {
+            bool isFinal = packet == packets;
+            bool noAck = (packet % 2) == 0; // set noAck on even packets
+
             PushRow(CreateRow(++val), dqOutputChannel);
             PushRow(CreateRow(++val), dqOutputChannel);
             PushRow(CreateRow(++val), dqOutputChannel);
             if (doWatermark) {
                 NDqProto::TWatermark watermark;
-                watermark.SetTimestampUs(1000 * packet);
+                watermark.SetTimestampUs((ui64)1'000'000 * packet);
                 dqOutputChannel->Push(std::move(watermark));
             }
-            if (packet + 1 == packets) {
+            if (isFinal) {
                 dqOutputChannel->Finish();
             }
 
             auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
             evInputChannelData->Record.SetSeqNo(++seqNo);
+            evInputChannelData->Record.SetNoAck(noAck);
             auto& chData = *evInputChannelData->Record.MutableChannelData();
             if (TDqSerializedBatch serializedBatch; dqOutputChannel->Pop(serializedBatch)) {
                 *chData.MutableData() = serializedBatch.Proto;
@@ -434,7 +438,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             chData.SetFinished(dqOutputChannel->IsFinished());
             LOG_D("Sending " << packet << "/" << packets << " "  << chData);
             ActorSystem.Send(asyncCA, SrcEdgeActor, evInputChannelData.Release());
-            if (packet + 1 == packets || waitIntermediateAcks) {
+            if ((isFinal || waitIntermediateAcks) && !noAck) {
                 WaitForChannelDataAck(InputChannelId, seqNo);
             }
         }
@@ -466,7 +470,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
         for (bool waitIntermediateAcks: { false, true }) {
             for (bool doWatermark: { false, true }) {
-                for (ui32 packets: { 1, 2, 3 }) {
+                for (ui32 packets: { 1, 2, 3, 4, 5 }) {
                     BasicTests(packets, doWatermark, waitIntermediateAcks);
                 }
             }

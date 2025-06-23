@@ -268,6 +268,7 @@ private:
                     }
                 }
                 // Create new message for first part;
+
                 partResp->AddResult()->CopyFrom(readResult.GetResult(i));
             } else { // Glue next part to prevous otherwise
                 if(partResp->ResultSize() == 0) {

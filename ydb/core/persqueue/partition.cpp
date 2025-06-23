@@ -457,6 +457,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
+
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
@@ -1913,6 +1914,12 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     auto& response = ev->Get()->Record;
 
+    if (response.HasCookie() && (response.GetCookie() == ERequestCookie::CompactificationWrite)) {
+        if (Compacter) {
+            Compacter->ProcessResponse(ev);
+        }
+    }
+
     //check correctness of response
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         PQ_LOG_ERROR("OnWrite topic '" << TopicName() << "' partition " << Partition
@@ -2989,11 +2996,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     if (Config.GetEnableCompactification()) {
-        if (!Compacter) {
-            ui64 readQuota = AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TotalPartitionWriteSpeed : std::numeric_limits<ui64>::max();
-            Compacter = MakeHolder<TPartitionCompaction>(0, 1000, 2000, this, readQuota); // ToDo
-        }
-        Compacter->TryCompactionIfPossible();
+        CreateCompacter();
     } else {
         Compacter.Reset();
     }

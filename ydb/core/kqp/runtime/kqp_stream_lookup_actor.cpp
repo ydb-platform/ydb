@@ -281,7 +281,6 @@ private:
 
         if (ResolveShardsInProgress) {
             finished = false;
-            batch.clear();
             return 0;
         }
 

@@ -103,9 +103,6 @@ struct TRange : public TOperation {
         if (Key.empty())
             return "key is not provided";
 
-        if (!RangeEnd.empty() && Endless != RangeEnd && RangeEnd < Key)
-            return "invalid range end";
-
         return {};
     }
 

@@ -9,7 +9,7 @@ Release date: 2025.
 #### Functionality
 
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for consistent [asynchronous replication](./concepts/async-replication.md).
-* Added support for the parameterized Decimal type.
+* Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md#numeric).
 * Added support for [auto-partitioning topics for row-oriented tables in CDC](./concepts/cdc.md#topic-partitions). This mode is enabled by setting the `enable_topic_autopartitioning_for_cdc` flag in the [cluster configuration](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Added](https://github.com/ydb-platform/ydb/pull/8264) the ability to [alter the retention period of CDC topics](./concepts/cdc.md#topic-settings) using the `ALTER TOPIC` expression.
 * [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the `DEBEZIUM_JSON` format for CDC](./concepts/cdc.md#debezium-json-record-structure), which can be enabled by setting the `enable_changefeed_debezium_json_format` flag.
@@ -37,7 +37,7 @@ Release date: 2025.
   * `enable_strict_user_management` enables strict checks for local users.
   * `enable_database_admin` enables database administrator functions.
   * `enable_data_erasure` [enables](https://github.com/ydb-platform/ydb/pull/14460) a procedure that repeatedly overwrites deleted data to minimize the risk of recovering the deleted information when directly accessing block devices via operating system functions.
- 
+
 #### Backward incompatible changes
 
 *  If you are using [Temporary over DB](https://github.com/yandex/temporal-over-ydb ), update its version before updating YDB to avoid errors in query execution.

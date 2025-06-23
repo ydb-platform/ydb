@@ -22,7 +22,7 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
         }
         t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
         if (schedulableTask) {
-            schedulableTask->DecreaseExtraUsage(start - TMonotonic::Now());
+            schedulableTask->DecreaseExtraUsage(TMonotonic::Now() - start);
         }
         results.emplace_back(t.GetResult(start, TMonotonic::Now()));
     }

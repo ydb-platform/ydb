@@ -90,6 +90,9 @@ NSnapshot::TPool* TPool::TakeSnapshot() const {
     Counters.Usage->Set(BurstUsage);
     Counters.Throttle->Set(BurstThrottle);
 
+    Counters.InFlightExtra->Set(UsageExtra * 1'000'000);
+    Counters.UsageExtra->Set(BurstUsageExtra);
+
     for (const auto& child : Children) {
         newPool->AddQuery(std::shared_ptr<NSnapshot::TQuery>(std::dynamic_pointer_cast<TQuery>(child)->TakeSnapshot()));
     }

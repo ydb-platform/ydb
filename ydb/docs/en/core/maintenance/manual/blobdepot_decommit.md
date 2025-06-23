@@ -29,14 +29,14 @@ dstool -e ... --direct group decommit --group-ids 2181038080 --database=/Root/db
 
 Command line parameters:
 
-* `--group-ids` GROUP_ID GROUP_ID list of groups for which decommissioning can be performed.
-* `--database=DB` specify the tenant in which decommissioning should be done.
-* `--hive-id=N` explicitly specify the number of the Hive tablet that will manage this blob depot; you cannot specify the Hive identifier of the tenant that owns the pools with decommissioned groups, because this Hive may store its data on top of a group managed by the blob depot, which will lead to a circular dependency; it is recommended to specify the root Hive.
-* `--log-channel-sp=POOL_NAME` name of the pool where channel 0 of the blob depot tablet will be placed.
-* `--snapshot-channel-sp=POOL_NAME` name of the pool where channel 1 of the blob depot tablet will be placed; if not specified, the value from --log-channel-sp is used.
-* `--data-channel-sp=POOL_NAME[*COUNT]` name of the pool where data channels are placed; if the COUNT parameter is specified (after the asterisk), COUNT data channels are created in the specified pool.
+* `--group-ids` GROUP_ID — GROUP_ID list of groups for which decommissioning can be performed.
+* `--database=DB` — specify the tenant in which decommissioning should be done.
+* `--hive-id=N` — explicitly specify the number of the Hive tablet that will manage this blob depot; you cannot specify the Hive identifier of the tenant that owns the pools with decommissioned groups, because this Hive may store its data on top of a group managed by the blob depot, which will lead to a circular dependency; it is recommended to specify the root Hive.
+* `--log-channel-sp=POOL_NAME` — name of the pool where channel 0 of the blob depot tablet will be placed.
+* `--snapshot-channel-sp=POOL_NAME` — name of the pool where channel 1 of the blob depot tablet will be placed; if not specified, the value from `--log-channel-sp` is used.
+* `--data-channel-sp=POOL_NAME[*COUNT]` — name of the pool where data channels are placed; if the `COUNT` parameter is specified (after the asterisk), `COUNT` data channels are created in the specified pool.
 
-If neither --log-channel-sp, nor --snapshot-channel-sp, nor --data-channel-sp are specified, then the storage pool to which the decommissioned group belongs is automatically found, and the zero and first channels of the blob depot are created in it, as well as N data channels, where N is the number of remaining physical groups in this pool.
+If neither `--log-channel-sp`, nor `--snapshot-channel-sp`, nor `--data-channel-sp` are specified, then the storage pool to which the decommissioned group belongs is automatically found, and the zero and first channels of the blob depot are created in it, as well as N data channels, where N is the number of remaining physical groups in this pool.
 
 ## How to Check that Everything is Running {#decommit-check-running}
 

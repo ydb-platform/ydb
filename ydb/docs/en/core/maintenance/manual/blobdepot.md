@@ -28,23 +28,23 @@ dstool -e ... --direct group virtual create --name vg1 vg2 --hive-id=72057594037
 
 Command line parameters:
 
-* `--name` unique name for the virtual group (or several virtual groups with similar parameters)
-* `--hive-id=N` number of the Hive tablet that will manage this blob depot; you must specify the Hive of the tenant within which the blob depot is launched
-* `--storage-pool-name=POOL_NAME` name of the Storage Pool within which the blob depot needs to be created
-* `--storage-pool-id=BOX:POOL` alternative to `--storage-pool-name`, where you can specify an explicit numeric pool identifier
-* `--log-channel-sp=POOL_NAME` name of the pool where channel 0 of the blob depot tablet will be placed
-* `--snapshot-channel-sp=POOL_NAME` name of the pool where channel 0 of the blob depot tablet will be placed; if not specified, the value from --log-channel-sp is used
-* `--data-channel-sp=POOL_NAME[*COUNT]` name of the pool where data channels are placed; if the COUNT parameter is specified (after the asterisk), COUNT data channels are created in the specified pool; it is recommended to create a large number of data channels for blob depot in virtual group mode (64..250) to most efficiently use storage
-* `--wait wait` for blob depot creation to complete; if this option is not specified, the command terminates immediately after responding to the blob depot creation request, without waiting for the creation and launch of the tablets themselves
+* `--name` — unique name for the virtual group (or several virtual groups with similar parameters)
+* `--hive-id=N` — number of the Hive tablet that will manage this blob depot; you must specify the Hive of the tenant within which the blob depot is launched
+* `--storage-pool-name=POOL_NAME` — name of the Storage Pool within which the blob depot needs to be created
+* `--storage-pool-id=BOX:POOL` — alternative to `--storage-pool-name`, where you can specify an explicit numeric pool identifier
+* `--log-channel-sp=POOL_NAME` — name of the pool where channel 0 of the blob depot tablet will be placed
+* `--snapshot-channel-sp=POOL_NAME` — name of the pool where channel 0 of the blob depot tablet will be placed; if not specified, the value from --log-channel-sp is used
+* `--data-channel-sp=POOL_NAME[*COUNT]` — name of the pool where data channels are placed; if the COUNT parameter is specified (after the asterisk), COUNT data channels are created in the specified pool; it is recommended to create a large number of data channels for blob depot in virtual group mode (64..250) to most efficiently use storage
+* `--wait wait` — for blob depot creation to complete; if this option is not specified, the command terminates immediately after responding to the blob depot creation request, without waiting for the creation and launch of the tablets themselves
 
-### How to Check that Everything is Running {#vg-check-running}
+### How to Check that the Virtual Group is Running {#vg-check-running}
 
 You can view the result of virtual group creation in the following ways:
 
 * via the BS_CONTROLLER monitoring page
 * via the `dstool group list --virtual-groups-only` command
 
-In both cases, creation should be controlled through the VirtualGroupName field, which should match what was passed in the --name parameter. If the `dstool group virtual create` command completed successfully, the virtual group unconditionally appears in the group list, but the VirtualGroupState field can take one of the following values:
+In both cases, creation should be controlled through the `VirtualGroupName` field, which should match what was passed in the `--name` parameter. If the `dstool group virtual create` command completed successfully, the virtual group unconditionally appears in the group list, but the `VirtualGroupState` field can take one of the following values:
 
 * `NEW` — group is waiting for initialization (tablet creation through Hive, its configuration and launch is in progress)
 * `WORKING` — group is created and working, ready to execute user requests
@@ -167,7 +167,7 @@ The TotalStoredTrashSize and InFlightTrashSize metrics are formed from this tabl
 
 ![barriers tab](_assets/blobdepot-barriers.png "barriers tab")
 
-The barriers table contains information about client barriers that were passed to the blob depot. It consists of columns "tablet id" (tablet number), "channel" (channel number for which the barrier is written), as well as barrier values: "soft" and "hard". The value has the format gen:counter => collect_gen:collect_step, where gen is the tablet generation number in which this barrier was set, counter is the sequential number of the garbage collection command, collect_gen:collect_step is the barrier value (all blobs whose generation and step within the generation are less than or equal to the specified barrier are deleted).
+The barriers table contains information about client barriers that were passed to the blob depot. It consists of columns "tablet id" (tablet number), "channel" (channel number for which the barrier is written), as well as barrier values: "soft" and "hard". The value has the format `gen:counter => collect_gen:collect_step`, where gen is the tablet generation number in which this barrier was set, counter is the sequential number of the garbage collection command, `collect_gen:collect_step` is the barrier value (all blobs whose generation and step within the generation are less than or equal to the specified barrier are deleted).
 
 #### blocks {#mon-blocks}
 

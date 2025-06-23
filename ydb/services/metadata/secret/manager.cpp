@@ -114,7 +114,6 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
         result.SetColumn(TSecret::TDecoder::OwnerUserId, NInternal::TYDBValue::Utf8(context.GetExternalData().GetUserToken()->GetUserSID()));
     }
     const TString secretName{settings.GetObjectId()};
-    const TString databaseName{ExtractBase(context.GetExternalData().GetDatabase())};
     for (auto&& c : secretName) {
         if (c >= '0' && c <= '9') {
             continue;
@@ -132,6 +131,7 @@ NModifications::TOperationParsingResult TSecretManager::DoBuildPatchFromSettings
     }
 
     const bool requireDbPrefixInSecretName = HasAppData() ? AppData()->FeatureFlags.GetRequireDbPrefixInSecretName() : false;
+    const TStringBuf databaseName{ExtractBase(context.GetExternalData().GetDatabase())};
     if (requireDbPrefixInSecretName && !secretName.StartsWith(databaseName)) {
         return TConclusionStatus::Fail(TStringBuilder{} << "Secret name " << secretName << " must start with database name " << databaseName);
     }

@@ -1,6 +1,6 @@
 # Interactive query execution mode
 
-After executing `{{ ydb-cli }}` command without subcommands, the interactive query execution mode will be launched. The console or terminal will be switched to interactive mode. After that, you can enter queries directly into the console or terminal, and when you enter a newline character, the query is considered completed and it starts to execute. The query text can be either a YQL query or a [special command](#spec-commands).
+After executing `{{ ydb-cli }}` command without subcommands, this launches the interactive query execution mode. The console or terminal will be switched to interactive mode. After that, you can enter queries directly into the console or terminal, and when you enter a newline character, the query is considered completed and it starts to execute. The query text can be either a YQL query or a [special command](#spec-commands).
 
 General format of the command:
 
@@ -23,7 +23,7 @@ Using up and down arrow keys you can navigate through the query history:
 
 ![History](_assets/history.gif)
 
-History is stored locally, as though persists between CLI launches.
+History is stored locally and persists between CLI launches.
 
 A query search function (`CTRL + R`) is also supported:
 
@@ -33,11 +33,11 @@ A query search function (`CTRL + R`) is also supported:
 
 | Hotkey        | Description                                                               |
 |---------------|---------------------------------------------------------------------------|
-| `CTRL + D`    | Allows you to exit interactive mode.                                      |
-| `Up arrow`    | Scrolls through query history toward older queries.                       |
-| `Down arrow`  | Scrolls through query history toward newer queries.                       |
-| `TAB`         | Autocompletes the entered text to a suitable YQL command.                 |
-| `CTRL + R`    | Allows searching for a query in history containing a specified substring. |
+| `CTRL + D`    | Exits interactive mode.                                                   |
+| `Up arrow`    | Shows previous query from history.                                        |
+| `Down arrow`  | Shows next query from history.                                            |
+| `TAB`         | Completes the current word based on YQL syntax.                          |
+| `CTRL + R`    | Searches for a query in history containing a specified substring.         |
 
 ## Special commands {#spec-commands}
 
@@ -45,7 +45,7 @@ Special commands are CLI-specific commands and are not part of the YQL syntax. T
 
 | Command                  | Description                                                                                                                                                                      |
 |--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `SET param = value`      | The `SET` command sets the value of the [internal variable](#internal-vars) `param` to `value`.                                                                                  |
+| `SET param = value`      | Sets the value of the [internal variable](#internal-vars) `param` to `value`.                                                                                                    |
 | `EXPLAIN query-text`     | Outputs the query plan for `query-text`. Equivalent to the command [ydb table query explain](commands/explain-plan.md#explain-plan).                                             |
 | `EXPLAIN AST query-text` | Outputs the query plan for `query-text` along with the [AST](commands/explain-plan.md). Equivalent to the command [ydb table query explain --ast](commands/explain-plan.md#ast). |
 
@@ -57,7 +57,7 @@ Internal variables determine the behavior of commands and are set using the [spe
 |----------|---|
 | `stats`  | The statistics collection mode for subsequent queries.<br/>Acceptable values:<ul><li>`none` (default): Do not collect.</li><li>`basic`: Collect statistics.</li><li>`full`: Collect statistics and query plan.</li></ul> |
 
-### Examples {#examples}
+### Example {#examples}
 
 Executing a query in the `full` statistics collection mode:
 
@@ -115,7 +115,7 @@ ResultSet
 
 ## Auto completion {#auto-completion}
 
-While in interactive mode, auto completion helps with creating a query text showing suggestions of completion of current word based on the YQL syntax.
+Auto completion helps you write queries more efficiently. While typing, it suggests possible completions for the current word based on YQL syntax.
 
 It also searches for schema object names in database where possible.
 
@@ -135,5 +135,5 @@ While typing in interactive mode, a list of hints will appear under the cursor, 
 
 ![Interactive hints](_assets/hints.gif)
 
-It is very handy because usually you don't need to see all the candidates, you just need to see a couple to make sure you are on the right way.
+This feature provides quick guidance without overwhelming you with all possible options, helping you stay on track while writing queries.
 

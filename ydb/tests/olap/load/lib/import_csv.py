@@ -13,8 +13,8 @@ class ImportFileCsvBase(UploadSuiteBase):
     table_name: str = ''
     table_path: str = ''
     iterations: int = 1
-    cpu_cores: float = 0.0  # добавляем атрибут для хранения информации о CPU
-    cpu_time: float = 0.0   # общее время CPU в секундах (user + system)
+    cpu_cores: float = 0.0
+    cpu_time: float = 0.0
 
     def init(self):
         # Create tables
@@ -36,13 +36,12 @@ class ImportFileCsvBase(UploadSuiteBase):
             raise RuntimeError(f'No .csv files found in {import_dir}')
         import_path = os.path.join(import_dir, csv_files[0])
         result = yatest.common.execute(['/usr/bin/time'] + YdbCliHelper.get_cli_command() + ['import', 'file', 'csv', '-p', self.table_path, import_path, '--header'])
-        
-        # Извлекаем информацию о CPU из stderr
+
         stderr_output = result.stderr.decode('utf-8')
         for line in stderr_output.split('\n'):
             if 'CPU' in line:
                 try:
-                    # Парсим строку вида "2018.00user 58.02system 1:19.91elapsed 2597%CPU"
+                    # Parsing a string like "2018.00user 58.02system 1:19.91elapsed 2597%CPU"
                     parts = line.split()
                     user_time = float(parts[0].replace('user', ''))
                     system_time = float(parts[1].replace('system', ''))

@@ -56,6 +56,8 @@ namespace NActors {
             }
         }
 
+        constexpr NDetail::TAsyncAwaiter<T> CoAwaitByValue() &&;
+
     private:
         constexpr explicit async(std::coroutine_handle<NDetail::TAsyncPromise<T>> handle)
             : Handle(handle)
@@ -139,12 +141,41 @@ namespace NActors {
         std::pair<std::coroutine_handle<>, std::coroutine_handle<>> MakeBridgeCoroutines(
             IActor& actor, TActorRunnableItem& item1, TActorRunnableItem& item2);
 
+        // concepts for validating awaiters and awaitables which integrate with actors
+
+        template<class TAwaitable>
+        concept HasActorCoAwait = requires(TAwaitable&& awaitable) {
+            std::forward<TAwaitable>(awaitable).CoAwait();
+        };
+
+        template<class TAwaitable>
+        concept HasActorCoAwaitByValue = requires(TAwaitable&& awaitable) {
+            std::forward<TAwaitable>(awaitable).CoAwaitByValue();
+        };
+
+        template<class TAwaitable>
+        constexpr decltype(auto) GetActorAwaiter(TAwaitable&& awaitable) {
+            if constexpr (requires { std::forward<TAwaitable>(awaitable).CoAwait(); }) {
+                return std::forward<TAwaitable>(awaitable).CoAwait();
+            } else {
+                return std::forward<TAwaitable>(awaitable);
+            }
+        }
+
         template<class TAwaiter, class TPromise = void>
-        concept IsAwaiter = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
+        concept IsActorAwaiter = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
             awaiter.AwaitReady();
             awaiter.AwaitSuspend(h);
             awaiter.AwaitResume();
         };
+
+        template<class TAwaitable, class TPromise = void>
+        concept IsActorAwaitable = (
+            HasActorCoAwait<TAwaitable> ||
+            IsActorAwaiter<TAwaitable, TPromise> && !HasActorCoAwaitByValue<TAwaitable>);
+
+        template<class TAwaitable, class TPromise = void>
+        concept IsActorAwaitableByValue = HasActorCoAwaitByValue<TAwaitable>;
 
         template<class TAwaiter>
         concept HasAwaitReadyNoExcept = requires(TAwaiter& awaiter) {
@@ -201,20 +232,33 @@ namespace NActors {
             { awaiter.AwaitCancel(h) } noexcept;
         };
 
+        // Concepts for validating standard C++ awaiters and awaitables
+
         template<class TAwaitable>
-        concept HasMemberCoAwait = requires(TAwaitable&& awaitable) {
+        concept HasStdMemberCoAwait = requires(TAwaitable&& awaitable) {
             std::forward<TAwaitable>(awaitable).operator co_await();
         };
 
         template<class TAwaitable>
-        concept HasGlobalCoAwait = requires(TAwaitable&& awaitable) {
+        concept HasStdGlobalCoAwait = requires(TAwaitable&& awaitable) {
             operator co_await(std::forward<TAwaitable>(awaitable));
         };
 
         template<class TAwaitable>
-        concept HasCoAwait = (
-            HasMemberCoAwait<TAwaitable> ||
-            HasGlobalCoAwait<TAwaitable>);
+        concept HasStdCoAwait = (
+            HasStdMemberCoAwait<TAwaitable> ||
+            HasStdGlobalCoAwait<TAwaitable>);
+
+        template<class TAwaitable>
+        constexpr decltype(auto) GetStdAwaiter(TAwaitable&& awaitable) {
+            if constexpr (requires { std::forward<TAwaitable>(awaitable).operator co_await(); }) {
+                return std::forward<TAwaitable>(awaitable).operator co_await();
+            } else if constexpr (requires { operator co_await(std::forward<TAwaitable>(awaitable)); }) {
+                return operator co_await(std::forward<TAwaitable>(awaitable));
+            } else {
+                return std::forward<TAwaitable>(awaitable);
+            }
+        }
 
         template<class TAwaiter, class TPromise = void>
         concept IsStdAwaiter = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
@@ -225,7 +269,7 @@ namespace NActors {
 
         template<class TAwaitable, class TPromise = void>
         concept IsStdAwaitable = (
-            HasCoAwait<TAwaitable> ||
+            HasStdCoAwait<TAwaitable> ||
             IsStdAwaiter<TAwaitable, TPromise>);
 
         template<class TAwaiter>
@@ -283,20 +327,6 @@ namespace NActors {
             { awaiter.await_cancel(h) } noexcept;
         };
 
-        /**
-         * Returns an awaiter for the provided awaitable
-         */
-        template<class TAwaitable>
-        inline decltype(auto) GetAwaiter(TAwaitable&& awaitable) {
-            if constexpr (requires { std::forward<TAwaitable>(awaitable).operator co_await(); }) {
-                return std::forward<TAwaitable>(awaitable).operator co_await();
-            } else if constexpr (requires { operator co_await(std::forward<TAwaitable>(awaitable)); }) {
-                return operator co_await(std::forward<TAwaitable>(awaitable));
-            } else {
-                return std::forward<TAwaitable>(awaitable);
-            }
-        }
-
         // Forward declaration, defined below
         class TAwaitCancelCleanup;
 
@@ -307,7 +337,7 @@ namespace NActors {
             friend TAwaitCancelCleanup;
 
         public:
-            TAwaitCancelSource() noexcept = default;
+            constexpr TAwaitCancelSource() noexcept = default;
 
             TAwaitCancelSource(const TAwaitCancelSource&) = delete;
             TAwaitCancelSource& operator=(const TAwaitCancelSource&) = delete;
@@ -319,7 +349,7 @@ namespace NActors {
             template<class TAwaiter>
             [[nodiscard]] TAwaitCancelCleanup SetAwaiter(TAwaiter& awaiter) noexcept;
 
-            std::coroutine_handle<> GetCancellation() const noexcept {
+            constexpr std::coroutine_handle<> GetCancellation() const noexcept {
                 return Cancellation;
             }
 
@@ -354,7 +384,7 @@ namespace NActors {
                 }
             }
 
-            void SetCancellation(std::coroutine_handle<> h) noexcept {
+            constexpr void SetCancellation(std::coroutine_handle<> h) noexcept {
                 Cancellation = h;
             }
 
@@ -434,7 +464,7 @@ namespace NActors {
         }
 
         /**
-         * Awaiter implementation for async<T> values.
+         * Awaiter implementation for async<T>
          */
         template<class T>
         class TAsyncAwaiter : public TActorAwareAwaiter {
@@ -470,7 +500,7 @@ namespace NActors {
         class TAwaiterProxy {
         public:
             template<class... TArgs>
-            explicit TAwaiterProxy(TArgs&&... args)
+            constexpr explicit TAwaiterProxy(TArgs&&... args)
                 : Awaiter{ std::forward<TArgs>(args)... }
             {}
 
@@ -634,7 +664,7 @@ namespace NActors {
 
         public:
             template<class... TArgs>
-            TStdAwaiterProxy(TArgs&&... args)
+            constexpr TStdAwaiterProxy(TArgs&&... args)
                 : Awaiter{ std::forward<TArgs>(args)... }
             {}
 
@@ -738,21 +768,21 @@ namespace NActors {
             struct TCallCleanup {
                 TStdAwaiterProxy* Self;
 
-                ~TCallCleanup() {
+                constexpr ~TCallCleanup() {
                     if (Self) {
                         Self->Cleanup();
                     }
                 }
 
-                void Cancel() noexcept {
+                constexpr void Cancel() noexcept {
                     Self = nullptr;
                 }
             };
 
             template<>
             struct TCallCleanup<false> {
-                TCallCleanup(TStdAwaiterProxy*) noexcept {}
-                void Cancel() noexcept {}
+                constexpr TCallCleanup(TStdAwaiterProxy*) noexcept {}
+                constexpr void Cancel() noexcept {}
             };
 
         private:
@@ -792,67 +822,131 @@ namespace NActors {
         };
 
         /**
+         * Marks awaitable as safe to await by reference even when it only supports awaiting by value
+         */
+        template<IsActorAwaitableByValue TAwaitable>
+        constexpr decltype(auto) SafeByReferenceAwaitable(TAwaitable&& awaitable) {
+            struct TAwaitableByReference {
+                TAwaitable&& Awaitable;
+                constexpr decltype(auto) CoAwait() && {
+                    return std::forward<TAwaitable>(Awaitable).CoAwaitByValue();
+                }
+            };
+            return TAwaitableByReference{ std::forward<TAwaitable>(awaitable) };
+        }
+
+        /**
          * Common bases class for promises, provides await_transform support
          */
         template<class TPromise>
         class TAsyncAwaitTransform {
         public:
             /**
-             * Accepts async<T> by value to only allow co_await of the call itself, not a stored variable.
+             * Transforms actor awaitables which can only we awaited by value
              *
-             * Taking address of async<T> should be safe here, since it has a destructor, and will be allocated as a
-             * temporary by the caller. Temporaries are not destroyed until the full expression (co_await) completes.
+             * Such awaitables usually cannot be moved and hold references to temporaries.
              */
-            template<class T>
-            decltype(auto) await_transform(async<T> c) {
-                return TAsyncAwaiter<T>{std::move(c)};
-            }
-
-            template<class TAwaiter>
-            decltype(auto) await_transform(TAwaiter&& awaiter) noexcept
-                requires (IsAwaiter<TAwaiter, TPromise> && !HasCoAwait<TAwaiter>)
+            template<class TAwaitable>
+            constexpr decltype(auto) await_transform(TAwaitable awaitable)
+                requires (HasActorCoAwaitByValue<TAwaitable>)
             {
-                return TAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
+                // We simply mark it as safe to await by reference (will outlive co_await)
+                // This will call await_transform below and redirect CoAwait to CoAwaitByValue
+                return await_transform(SafeByReferenceAwaitable(std::move(awaitable)));
             }
 
             /**
-             * Transforms standard C++ awaiters into a form that makes sure to resume on the same mailbox
+             * Transforms actor awaitables which have a CoAwait method
+             */
+            template<class TAwaitable>
+            constexpr decltype(auto) await_transform(TAwaitable&& awaitable)
+                requires (
+                    HasActorCoAwait<TAwaitable> &&
+                    !HasActorCoAwaitByValue<TAwaitable>)
+            {
+                // Note: may be a reference
+                using TAwaiter = decltype(GetActorAwaiter(std::forward<TAwaitable>(awaitable)));
+
+                if constexpr (IsActorAwareAwaiter<TAwaiter>) {
+                    // We return the resulting awaiter without any proxies
+                    return GetActorAwaiter(std::forward<TAwaitable>(awaitable));
+                } else {
+                    // Make sure it's not e.g. a standard C++ awaiter or something else
+                    static_assert(IsActorAwaiter<TAwaiter, TPromise>, "CoAwait returns a type that is not an actor awaiter");
+                    // Use implicit conversion to support awaiters that cannot be moved
+                    struct TImplicitConverter {
+                        TAwaitable&& Awaitable;
+                        constexpr operator TAwaiter() const {
+                            return GetActorAwaiter(std::forward<TAwaitable>(awaitable));
+                        }
+                    };
+                    // The wrapped awaiter may or may not be a reference type
+                    return TAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
+                }
+            }
+
+            /**
+             * Transforms actor awaiters without any CoAwait method
              */
             template<class TAwaiter>
-            decltype(auto) await_transform(TAwaiter&& awaiter)
-                requires (IsStdAwaiter<TAwaiter> && !HasCoAwait<TAwaiter>)
+            constexpr decltype(auto) await_transform(TAwaiter&& awaiter)
+                requires (
+                    IsActorAwaiter<TAwaiter, TPromise> &&
+                    !HasActorCoAwait<TAwaiter> &&
+                    !HasActorCoAwaitByValue<TAwaiter>)
             {
-                if constexpr (IsActorAwareAwaiter<TAwaiter>) {
-                    // We return the exact same awaiter reference
-                    return std::forward<TAwaiter>(awaiter);
-                } else {
-                    return TStdAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
-                }
+                // We store awaiter by reference (will outlive co_await when temporary)
+                return TAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
             }
 
             /**
              * Transforms standard C++ awaitables into a form that makes sure to resume on the same mailbox
              */
             template<class TAwaitable>
-            decltype(auto) await_transform(TAwaitable&& awaitable)
-                requires (HasCoAwait<TAwaitable>)
+            constexpr decltype(auto) await_transform(TAwaitable&& awaitable)
+                requires (
+                    HasStdCoAwait<TAwaitable> &&
+                    !IsActorAwaiter<TAwaitable, TPromise> &&
+                    !HasActorCoAwait<TAwaitable> &&
+                    !HasActorCoAwaitByValue<TAwaitable>)
             {
-                using TAwaiter = decltype(GetAwaiter(std::forward<TAwaitable>(awaitable)));
+                using TAwaiter = decltype(GetStdAwaiter(std::forward<TAwaitable>(awaitable)));
                 static_assert(IsStdAwaiter<TAwaiter>, "operator co_await returns a type that is not an awaiter");
 
                 if constexpr (IsActorAwareAwaiter<TAwaiter>) {
-                    // We return the exact same awaitable reference
-                    // The coroutine implementation will call operator co_await when needed
+                    // We return awaitable by reference (temporary will outlive co_await)
+                    // Coroutine implementation will call operator co_await on its own
                     return std::forward<TAwaitable>(awaitable);
                 } else {
                     // We use an implicit conversion to support awaiters that cannot be moved
                     struct TImplicitConverter {
                         TAwaitable&& Awaitable;
-                        operator TAwaiter() const {
-                            return GetAwaiter(std::forward<TAwaitable>(Awaitable));
+                        constexpr operator TAwaiter() const {
+                            return GetStdAwaiter(std::forward<TAwaitable>(Awaitable));
                         }
                     };
+                    // The wrapped awaiter may or may not be a reference type
                     return TStdAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
+                }
+            }
+
+            /**
+             * Transforms standard C++ awaiters into a form that makes sure to resume on the same mailbox
+             */
+            template<class TAwaiter>
+            constexpr decltype(auto) await_transform(TAwaiter&& awaiter)
+                requires (
+                    IsStdAwaiter<TAwaiter> &&
+                    !HasStdCoAwait<TAwaiter> &&
+                    !IsActorAwaiter<TAwaiter> &&
+                    !HasActorCoAwait<TAwaiter> &&
+                    !HasActorCoAwaitByValue<TAwaiter>)
+            {
+                if constexpr (IsActorAwareAwaiter<TAwaiter>) {
+                    // We return awaiter by reference (temporary will outlive co_await)
+                    return std::forward<TAwaiter>(awaiter);
+                } else {
+                    return TStdAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
                 }
             }
         };
@@ -1139,6 +1233,11 @@ namespace NActors {
         };
 
     } // namespace NDetail
+
+    template<class T>
+    constexpr NDetail::TAsyncAwaiter<T> async<T>::CoAwaitByValue() && {
+        return NDetail::TAsyncAwaiter<T>(std::move(*this));
+    }
 
 } // namespace NActors
 

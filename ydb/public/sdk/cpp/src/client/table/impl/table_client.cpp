@@ -1017,7 +1017,7 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
     };
 
     if (settings.Arena_) {
-        Connections_->RunDeferredOnArena<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
+        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
             request,
             extractor,
             &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,

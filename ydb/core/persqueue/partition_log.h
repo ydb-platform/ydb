@@ -18,4 +18,8 @@ inline TString LogPrefix() { return {}; }
 
 #define Y_ABORT_UNLESS_S(expr, msg) Y_ABORT_UNLESS(expr, "%s", (TStringBuilder() << msg).data())
 
+#define PQ_LOG_TX_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << stream)
+#define PQ_LOG_TX_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << stream)
+#define PQ_LOG_TX_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << stream)
+
 } // namespace NKikimr::NPQ

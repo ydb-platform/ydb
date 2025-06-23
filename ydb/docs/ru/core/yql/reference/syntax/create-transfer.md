@@ -27,17 +27,11 @@ WITH (option = value[, ...])
       * `USER` — имя пользователя.
       * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
 
-  * `CONSUMER` — имя существующего консьюмера топика источника. Если имя не задано, то консьюмер будет добавлен топику автоматически. 
+  * `CONSUMER` — имя консьюмера топика источника. Если имя задано, то в топике уже должен [существовать](alter-topic.md#add-consumer) консьюмер с указанным именем, и трансфер начнет обрабатывать сообщения начиная с первого незакоммиченного сообщения в топике. Если имя не задано, то консьюмер будет добавлен топику автоматически, и трансфер начнет обрабатывать сообщения начиная с первого хранящегося сообщения в топике.
 
 ## Примеры {#examples}
 
-{% note tip %}
-
-Перед созданием трансфера [создайте](create-object-type-secret.md) секрет с аутентификационными данными для подключения.
-
-{% endnote %}
-
-Создание экземпляра трансфера из топика `example_topic` базы данных `/Root/another_database` в таблицу `example_table` текущей базы данных:
+Создание экземпляра трансфера из топика `example_topic` в таблицу `example_table` текущей базы данных:
 
 ```yql
 CREATE TABLE example_table (
@@ -61,28 +55,52 @@ $transformation_lambda = ($msg) -> {
 
 CREATE TRANSFER example_transfer
     FROM example_topic TO example_table USING $transformation_lambda
+);
+
+```
+
+Создание экземпляра трансфера из топика `example_topic` базы данных `/Root/another_database` в таблицу `example_table` текущей базы данных. Перед созданием трансфера необходимо в текущей базе создать таблицу в которую будут записываться данные; в базе данных `/Root/another_database` создать топик, из которого будут обрабатываться сообщения:
+
+{% note tip %}
+
+Перед созданием трансфера [создайте](create-object-type-secret.md) секрет с аутентификационными данными для подключения.
+
+{% endnote %}
+
+```
+$transformation_lambda = ($msg) -> {
+    return [
+        <|
+            partition:CAST($msg._partition AS Uint32),
+            offset:CAST($msg._offset AS Uint32),
+            message:CAST($msg._data AS Utf8)
+        |>
+    ];
+};
+
+CREATE TRANSFER example_transfer
+    FROM example_topic TO example_table USING $transformation_lambda
 WITH (
     CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
     TOKEN_SECRET_NAME = 'my_secret'
 );
 ```
 
-У сообщения [топика](topic.md) доступны следующие поля:
-* `_data` - тело сообщения
-* `_message_group_id` - идентификатор группы сообщений
-* `_offset` - смещение сообщения
-* `_partition`- номер партиции сообщения
-* `_producer_id` - идентификатор источника
-* `_seq_no`- порядковые номера сообщений
-
 Создание экземпляра трансфера с явным указанием имени консьюмера `existing_consumer_of_topic`:
 
 ```yql
+$transformation_lambda = ($msg) -> {
+    return [
+        <|
+            partition:CAST($msg._partition AS Uint32),
+            offset:CAST($msg._offset AS Uint32),
+            message:CAST($msg._data AS Utf8)
+        |>
+    ];
+};
 CREATE TRANSFER example_transfer
     FROM example_topic TO example_table USING $transformation_lambda
 WITH (
-    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
-    TOKEN_SECRET_NAME = 'my_secret',
     CONSUMER = 'existing_consumer_of_topic'
 );
 ```
@@ -111,6 +129,9 @@ $transformation_lambda = ($msg) -> {
         |>
     ];
 };
+
+CREATE TRANSFER example_transfer
+    FROM example_topic TO example_table USING $transformation_lambda;
 ```
 
 

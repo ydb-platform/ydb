@@ -45,7 +45,8 @@ private:
 public:
     explicit TEvRemovePortion(const TPortionInfo::TConstPtr& portion, TActorId owner)
         : Portion(portion)
-        , Owner(owner) {
+        , Owner(owner)
+    {
     }
 };
 

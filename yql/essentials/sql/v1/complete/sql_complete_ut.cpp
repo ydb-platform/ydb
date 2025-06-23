@@ -10,6 +10,7 @@
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/complete/name/service/cluster/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/impatient/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
@@ -131,8 +132,13 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
         TVector<INameService::TPtr> children = {
             MakeStaticNameService(std::move(names), frequency),
-            MakeSchemaNameService(MakeSimpleSchema(MakeStaticSimpleSchema(clustersJson))),
-            MakeClusterNameService(MakeStaticClusterDiscovery(std::move(clusters))),
+            MakeImpatientNameService(
+                MakeSchemaNameService(
+                    MakeSimpleSchema(
+                        MakeStaticSimpleSchema(clustersJson)))),
+            MakeImpatientNameService(
+                MakeClusterNameService(
+                    MakeStaticClusterDiscovery(std::move(clusters)))),
         };
         INameService::TPtr service = MakeUnionNameService(
             std::move(children), MakeDefaultRanking(frequency));
@@ -1411,10 +1417,6 @@ JOIN yt:$cluster_name.test;
             TVector<TCandidate> aliceExpected = {{TableName, "`alice`"}};
             TVector<TCandidate> petyaExpected = {{TableName, "`petya`"}};
 
-            // Cache is empty
-            UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), empty);
-            UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), empty);
-
             // Updates in backround
             UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT * FROM "), aliceExpected);
             UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT * FROM "), petyaExpected);
@@ -1422,10 +1424,6 @@ JOIN yt:$cluster_name.test;
         {
             TVector<TCandidate> aliceExpected = {{ColumnName, "alice"}};
             TVector<TCandidate> petyaExpected = {{ColumnName, "petya"}};
-
-            // Cache is empty
-            UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT a# FROM alice"), empty);
-            UNIT_ASSERT_VALUES_EQUAL(Complete(petyaEngine, "SELECT p# FROM petya"), empty);
 
             // Updates in backround
             UNIT_ASSERT_VALUES_EQUAL(Complete(aliceEngine, "SELECT a# FROM alice"), aliceExpected);

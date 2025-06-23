@@ -24,7 +24,8 @@ private:
 public:
     TCollector(const TInternalPathId pathId, const ui64 maxSize, const NActors::TActorId& actorId)
         : TBase(pathId)
-        , TabletActorId(actorId) {
+        , TabletActorId(actorId)
+    {
         AccessorsCache = std::make_shared<TSharedMetadataAccessorCache>(maxSize);
     }
 };

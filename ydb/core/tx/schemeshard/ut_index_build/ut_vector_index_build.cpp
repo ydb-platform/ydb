@@ -707,6 +707,17 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         // Write data directly into shards
         const ui32 K = 4;
+        const ui32 tableRows = 200;
+        const ui64 tableRowBytes = 9; // key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 tableBytes = tableRows * tableRowBytes;
+        const ui64 shardRows = 50;
+        const ui64 tableShardBytes = shardRows * tableRowBytes;
+        const ui64 buildRowBytes = 17; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes), embedding:String (5 bytes)
+        const ui64 buildBytes = tableRows * buildRowBytes;
+        const ui64 buildShardBytes = shardRows * buildRowBytes;
+        const ui64 postingRowBytes = 12; // parent:Uint64 (8 bytes), key:Uint32 (4 bytes)
+        const ui64 postingBytes = tableRows * postingRowBytes;
+        const ui64 levelRowBytes = 21; // parent:Uint64 (8 bytes), id:Uint64 (8 bytes), embedding:String (5 bytes)
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
@@ -716,6 +727,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             return true;
         });
         TString previousBillId = "0-0-0-0";
+        TMeteringStats billedStats = TMeteringStatsCalculator::Zero();
+        TMeteringStats expectedBillingStats = TMeteringStatsCalculator::Zero();
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto&) {
             return true;
@@ -742,23 +755,35 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        // SAMPLE reads table once, no writes:
+        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows);
+        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes);
+        // upload SAMPLE writes K level rows, no reads:
+        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + K);
+        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + K * levelRowBytes);
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 130 (ReadTable: 128, BulkUpsert: 2)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 0 UploadBytes: 0 ReadRows: 0 ReadBytes: 0 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
-            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
             auto expectedBill = TBillRecord()
-                .Id("109-72075186233409549-2-0-0-0-0-4-200-84-1800")
+                .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
         }
         if (doRestarts) {
@@ -767,30 +792,44 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 130 (ReadTable: 128, BulkUpsert: 2)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
         }
 
         reshuffleBlocker.Unblock();
         runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
+        // shard RESHUFFLE reads and writes once:
+        TMeteringStats shardReshuffleBillingStats;
+        shardReshuffleBillingStats.SetUploadRows(shardRows);
+        shardReshuffleBillingStats.SetUploadBytes(buildShardBytes);
+        shardReshuffleBillingStats.SetReadRows(shardRows);
+        shardReshuffleBillingStats.SetReadBytes(tableShardBytes);
+        TMeteringStatsCalculator::AddTo(expectedBillingStats, shardReshuffleBillingStats);
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 4 UploadBytes: 84 ReadRows: 200 ReadBytes: 1800 }");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ UploadRows: 50 UploadBytes: 850 ReadRows: 50 ReadBytes: 450 }</td>"); // shard 1 stats
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 155 (ReadTable: 128, BulkUpsert: 27)");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ " + shardReshuffleBillingStats.ShortDebugString());
         }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
-            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
             auto expectedBill = TBillRecord()
-                .Id("109-72075186233409549-2-4-200-84-1800-54-250-934-2250")
+                .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(153, TInstant::Seconds(10), TInstant::Seconds(20)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
         }
         if (doRestarts) {
@@ -799,14 +838,20 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 155 (ReadTable: 128, BulkUpsert: 27)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 54 UploadBytes: 934 ReadRows: 250 ReadBytes: 2250 }");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ UploadRows: 50 UploadBytes: 850 ReadRows: 50 ReadBytes: 450 }</td>"); // shard 1 stats
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + billedStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>{ " + shardReshuffleBillingStats.ShortDebugString());
         }
 
         reshuffleBlocker.Stop().Unblock();
-
+        // RESHUFFLE reads and writes table once:
+        TMeteringStatsCalculator::SubFrom(expectedBillingStats, shardReshuffleBillingStats); // already added
+        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows);
+        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + buildBytes);
+        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows);
+        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes);
+    
         if (doRestarts) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
             RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
@@ -814,28 +859,46 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
-
+        // KMEANS writes build table once and forms K * K level rows:
+        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows + K * K);
+        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + postingBytes + K * K * levelRowBytes);
+        // KMEANS reads build table five times (SAMPLE + KMEANS * 3 + UPLOAD):
+        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 5);
+        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  buildBytes * 5);
+        {
+            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
+            Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 338 (ReadTable: 128, BulkUpsert: 210)");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + expectedBillingStats.ShortDebugString());
+        }
         runtime.WaitFor("metering", [&]{ return meteringBlocker.size(); });
         {
-            // id format: [billed uploadRows-readRows-uploadBytes-readBytes] [processed uploadRows-readRows-uploadBytes-readBytes]
+            auto newBillId = TStringBuilder()
+                << expectedBillingStats.GetUploadRows() << "-" << expectedBillingStats.GetReadRows() << "-"
+                << expectedBillingStats.GetUploadBytes() << "-" << expectedBillingStats.GetReadBytes();
+            auto expectedId = TStringBuilder()
+                << "109-72075186233409549-2-" << previousBillId << "-" << newBillId;
             auto expectedBill = TBillRecord()
+                .Id(expectedId)
                 .CloudId("CLOUD_ID_VAL").FolderId("FOLDER_ID_VAL").ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(311, TInstant::Seconds(20), TInstant::Seconds(20)));
-            expectedBill.Id("109-72075186233409549-2-54-250-934-2250-420-1400-6220-20600");
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
-            meteringBlocker.Stop().Unblock();
+            previousBillId = newBillId;
+            billedStats = expectedBillingStats;
+            meteringBlocker.Unblock();
         }
         if (doRestarts) {
             RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
         }
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
-            Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Processed: { UploadRows: 420 UploadBytes: 6220 ReadRows: 1400 ReadBytes: 20600 }");
+            Cout << "BuildIndex 6 " << buildIndexHtml << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: { " + expectedBillingStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Request Units: 338 (ReadTable: 128, BulkUpsert: 210)");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "Billed: { UploadRows: 420 UploadBytes: 6220 ReadRows: 1400 ReadBytes: 20600 }");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: { " + expectedBillingStats.ShortDebugString());
         }
     }
 

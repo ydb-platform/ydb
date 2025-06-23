@@ -76,29 +76,6 @@ void TDataShardUserDb::UpsertIncrease(
     IncreaseUpdateCounters(key, ops);
 }
 
-void DeleteSomeOpsByTagIds(TStackVec<NTable::TTag> IdsToDelete, TStackVec<NIceDb::TUpdateOp> &ops)
-{
-    std::sort(IdsToDelete.begin(), IdsToDelete.end());
-    std::sort(ops.begin(), ops.end(), [](const NIceDb::TUpdateOp a, const NIceDb::TUpdateOp b) {
-                                                                            return a.Tag < b.Tag;
-                                                                    });
-
-    Y_ENSURE(IdsToDelete.size() != 0);
-    
-    int newSize = ops.size();
-    int index = (int)IdsToDelete.size() - 1;
-    for (int i = (int)ops.size() - 1; i >= 0; i--) {
-        while (index >= 0 && ops[i].Tag < IdsToDelete[index]) {
-            index--;
-        }
-        if (index >= 0 && ops[i].Tag == IdsToDelete[index]) {
-            std::swap(ops[i], ops[--newSize]);
-        }
-    }
-
-    ops.resize(newSize);
-}
-
 void TDataShardUserDb::ChangeOptsDefaultColumnsFilledLogic(
     NTable::ERowOp op,
     const TTableId& tableId,

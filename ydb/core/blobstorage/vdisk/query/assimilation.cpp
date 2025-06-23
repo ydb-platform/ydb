@@ -16,9 +16,11 @@ namespace NKikimr {
         std::optional<TKeyLogoBlob> SkipBlobsUpTo;
         ui64 LastRawBlobId[3] = {0, 0, 0};
         size_t RecordSize;
+        size_t RecordItems = 0;
 
         static constexpr TDuration MaxQuantumTime = TDuration::MilliSeconds(10);
         static constexpr size_t MaxResultSize = 5'000'000; // may overshoot a little
+        static constexpr size_t MaxResultItems = 10'000;
 
     public:
         TAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId)
@@ -32,7 +34,9 @@ namespace NKikimr {
             }
             if (record.HasSkipBarriersUpTo()) {
                 const auto& r = record.GetSkipBarriersUpTo();
-                SkipBarriersUpTo.emplace(r.GetTabletId(), r.GetChannel(), Max<ui32>(), Max<ui32>(), true);
+                const bool reverse = record.GetReverse();
+                const ui32 filler = reverse ? 0 : Max<ui32>();
+                SkipBarriersUpTo.emplace(r.GetTabletId(), r.GetChannel(), filler, filler, !reverse);
             }
             if (record.HasSkipBlobsUpTo()) {
                 SkipBlobsUpTo.emplace(LogoBlobIDFromLogoBlobID(record.GetSkipBlobsUpTo()));
@@ -47,35 +51,55 @@ namespace NKikimr {
             Quantum();
         }
 
+        template<bool IsForward>
+        bool DoIterate(THPTimer& timer) {
+            bool success = true;
+            success = success && Iterate<TKeyBlock, TMemRecBlock, IsForward>(&Snap.BlocksSnap, SkipBlocksUpTo, timer);
+            success = success && Iterate<TKeyBarrier, TMemRecBarrier, IsForward>(&Snap.BarriersSnap, SkipBarriersUpTo, timer);
+            success = success && Iterate<TKeyLogoBlob, TMemRecLogoBlob, IsForward>(&Snap.LogoBlobsSnap, SkipBlobsUpTo, timer);
+            return success;
+        }
+
         void Quantum() {
             THPTimer timer;
-            bool success = true;
-            success = success && Iterate<TKeyBlock, TMemRecBlock>(&Snap.BlocksSnap, SkipBlocksUpTo, timer);
-            success = success && Iterate<TKeyBarrier, TMemRecBarrier>(&Snap.BarriersSnap, SkipBarriersUpTo, timer);
-            success = success && Iterate<TKeyLogoBlob, TMemRecLogoBlob>(&Snap.LogoBlobsSnap, SkipBlobsUpTo, timer);
+            const auto& record = Ev->Get()->Record;
+            const bool success = record.GetReverse()
+                ? DoIterate<false>(timer)
+                : DoIterate<true>(timer);
             if (success) {
                 SendResultAndDie();
             }
         }
 
-        template<typename TKey, typename TMemRec>
+        template<typename TKey, typename TMemRec, bool IsForward>
         class TIterWrapper {
-            typename TLevelIndexSnapshot<TKey, TMemRec>::TIndexForwardIterator Iter;
+            using TLevelIndexSnapshot = NKikimr::TLevelIndexSnapshot<TKey, TMemRec>;
+
+            using TIter = TIndexBaseIterator<TKey, TMemRec, IsForward>;
+
+            TIter Iter;
             std::optional<TKey>& SkipUpTo;
             ui32 NumItemsProcessed = 0;
 
         public:
-            TIterWrapper(const TLevelIndexSnapshot<TKey, TMemRec> *snap, const THullCtxPtr& hullCtx, std::optional<TKey>& skipUpTo)
+            TIterWrapper(const TLevelIndexSnapshot *snap, const THullCtxPtr& hullCtx, std::optional<TKey>& skipUpTo)
                 : Iter(hullCtx, snap)
                 , SkipUpTo(skipUpTo)
             {
-                if (SkipUpTo) {
-                    Iter.Seek(*SkipUpTo);
-                    if (Iter.Valid() && Iter.GetCurKey() == *SkipUpTo) {
-                        Iter.Next();
+                if constexpr (IsForward) {
+                    if (SkipUpTo) {
+                        Iter.Seek(*SkipUpTo);
+                        if (Iter.Valid() && Iter.GetCurKey() == *SkipUpTo) {
+                            Iter.MergeAndAdvance();
+                        }
+                    } else {
+                        Iter.SeekToFirst();
                     }
                 } else {
-                    Iter.SeekToFirst();
+                    Iter.Seek(SkipUpTo.value_or(TKey::Inf())); // seek to the end when SkipUpTo is empty
+                    if (SkipUpTo && Iter.Valid() && Iter.GetCurKey() == *SkipUpTo) {
+                        Iter.MergeAndAdvance();
+                    }
                 }
             }
 
@@ -86,7 +110,7 @@ namespace NKikimr {
             void Next() {
                 SkipUpTo = Iter.GetCurKey();
                 ++NumItemsProcessed;
-                Iter.Next();
+                Iter.MergeAndAdvance();
             }
 
             bool NeedConstraintCheck() {
@@ -99,11 +123,12 @@ namespace NKikimr {
             }
         };
 
-        using TBlockIter = TIterWrapper<TKeyBlock, TMemRecBlock>;
-        using TBarrierIter = TIterWrapper<TKeyBarrier, TMemRecBarrier>;
-        using TBlobIter = TIterWrapper<TKeyLogoBlob, TMemRecLogoBlob>;
+        template<bool IsForward> using TBlockIter = TIterWrapper<TKeyBlock, TMemRecBlock, IsForward>;
+        template<bool IsForward> using TBarrierIter = TIterWrapper<TKeyBarrier, TMemRecBarrier, IsForward>;
+        template<bool IsForward> using TBlobIter = TIterWrapper<TKeyLogoBlob, TMemRecLogoBlob, IsForward>;
 
-        void Process(TBlockIter& iter) {
+        template<bool IsForward>
+        void Process(TBlockIter<IsForward>& iter) {
             const TKeyBlock& key = iter;
             const TMemRecBlock& memRec = iter;
 
@@ -117,11 +142,13 @@ namespace NKikimr {
                 memRec.BlockedGeneration);
             len += CountMessage(NKikimrBlobStorage::TEvVAssimilateResult::kBlocksFieldNumber, len);
             RecordSize += len;
+            ++RecordItems;
 
             return iter.Next();
         }
 
-        void Process(TBarrierIter& iter) {
+        template<bool IsForward>
+        void Process(TBarrierIter<IsForward>& iter) {
             const TKeyBarrier key = iter;
 
             auto *pb = Result->Record.AddBarriers();
@@ -134,11 +161,16 @@ namespace NKikimr {
                 if (next.TabletId != key.TabletId || next.Channel != key.Channel) {
                     break;
                 } else if (memRec.Ingress.IsQuorum(Snap.HullCtx->IngressCache.Get())) {
+                    const bool hadBefore = next.Hard ? pb->HasHard() : pb->HasSoft();
                     auto *value = next.Hard ? pb->MutableHard() : pb->MutableSoft();
-                    value->SetRecordGeneration(next.Gen);
-                    value->SetPerGenerationCounter(next.GenCounter);
-                    value->SetCollectGeneration(memRec.CollectGen);
-                    value->SetCollectStep(memRec.CollectStep);
+                    if (IsForward || !hadBefore ||
+                            std::make_tuple(value->GetRecordGeneration(), value->GetPerGenerationCounter()) <
+                            std::make_tuple(next.Gen, next.GenCounter)) {
+                        value->SetRecordGeneration(next.Gen);
+                        value->SetPerGenerationCounter(next.GenCounter);
+                        value->SetCollectGeneration(memRec.CollectGen);
+                        value->SetCollectStep(memRec.CollectStep);
+                    }
                 }
             }
 
@@ -158,9 +190,11 @@ namespace NKikimr {
 
             len += CountMessage(NKikimrBlobStorage::TEvVAssimilateResult::kBarriersFieldNumber, len);
             RecordSize += len;
+            ++RecordItems;
         }
 
-        void Process(TBlobIter& iter) {
+        template<bool IsForward>
+        void Process(TBlobIter<IsForward>& iter) {
             const TKeyLogoBlob& key = iter;
             const TMemRecLogoBlob& memRec = iter;
             auto *pb = Result->Record.AddBlobs();
@@ -173,7 +207,9 @@ namespace NKikimr {
 
 #define DIFF(INDEX, NAME) \
             if (raw[INDEX] != LastRawBlobId[INDEX]) { \
-                const ui64 delta = raw[INDEX] - LastRawBlobId[INDEX]; \
+                const ui64 a = raw[INDEX]; \
+                const ui64 b = LastRawBlobId[INDEX]; \
+                const ui64 delta = IsForward ? a - b : b - a; \
                 if (delta >> 49) { /* it's gonna be 8 bytes or more on the wire */ \
                     pb->SetRaw##NAME(raw[INDEX]); \
                     len += CountFixed64(T::kRaw##NAME##FieldNumber); \
@@ -194,14 +230,15 @@ namespace NKikimr {
             len += CountUnsigned(T::kIngressFieldNumber, pb->GetIngress());
             len += CountMessage(NKikimrBlobStorage::TEvVAssimilateResult::kBlobsFieldNumber, len);
             RecordSize += len;
+            ++RecordItems;
 
             return iter.Next();
         }
 
-        template<typename TKey, typename TMemRec>
+        template<typename TKey, typename TMemRec, bool IsForward>
         bool Iterate(const TLevelIndexSnapshot<TKey, TMemRec> *snap, std::optional<TKey>& skipUpTo, THPTimer& timer) {
-            for (TIterWrapper<TKey, TMemRec> iter(snap, Snap.HullCtx, skipUpTo); iter; ) {
-                if (RecordSize >= MaxResultSize) {
+            for (TIterWrapper<TKey, TMemRec, IsForward> iter(snap, Snap.HullCtx, skipUpTo); iter; ) {
+                if (RecordSize >= MaxResultSize || RecordItems >= MaxResultItems) {
                     SendResultAndDie();
                     return false;
                 }

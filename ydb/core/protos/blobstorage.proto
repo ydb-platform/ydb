@@ -540,6 +540,7 @@ message TEvVAssimilate {
     optional NKikimrProto.TLogoBlobID SkipBlobsUpTo = 12; // the same behaviour
 
     optional bool IgnoreDecommitState = 13 [default = false]; // do not check if VDisk belongs to a being-decommitted group
+    optional bool Reverse = 14 [default = false]; // generate records in reverse order
 }
 
 message TEvVAssimilateResult {

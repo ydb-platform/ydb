@@ -68,13 +68,13 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, false> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, false> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, false> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, false> OptShuffleElimination;
     NCommon::TConfSetting<bool, false> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, false> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, false> UseBlockReader;
-
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, false> CostBasedOptimization;
 
@@ -102,6 +102,7 @@ struct TKikimrSettings {
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapPushdownProjections() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasMaxSequentialReadsInFlight() const;

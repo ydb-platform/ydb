@@ -663,7 +663,7 @@ public:
                 std::vector <std::pair<ui64, TOwnedTableRange>> partitions;
                 if (joinKey.size() < Settings.KeyColumns.size()) {
                     // build prefix range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf])
-                    std::vector <TCell> fromCells(Settings.KeyColumns.size());
+                    std::vector <TCell> fromCells(Settings.KeyColumns.size() - joinKey.size());
                     fromCells.insert(fromCells.begin(), joinKey.begin(), joinKey.end());
                     bool fromInclusive = true;
                     bool toInclusive = false;

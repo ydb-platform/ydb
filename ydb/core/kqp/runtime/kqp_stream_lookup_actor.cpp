@@ -279,10 +279,11 @@ private:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
 
-        //if (/* resolve in progress */) {
-        //    batch.clear();
-        //    return 0;
-        //}
+        if (ResolveShardsInProgress) {
+            finished = false;
+            batch.clear();
+            return 0;
+        }
 
         auto replyResultStats = StreamLookupWorker->ReplyResult(batch, freeSpace);
         ReadRowsCount += replyResultStats.ReadRowsCount;
@@ -349,7 +350,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        ResoleShardsInProgress = false;
+        ResolveShardsInProgress = false;
         CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
         if (ev->Get()->Request->ErrorCount > 0) {
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
@@ -366,6 +367,8 @@ private:
         Partitioning = resultSet[0].KeyDescription->Partitioning;
 
         ProcessInputRows();
+
+        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -534,7 +537,7 @@ private:
         if (!Partitioning) {
             LookupActorStateSpan.EndError("timeout exceeded");
             CA_LOG_D("Retry attempt to resolve shards for table: " << StreamLookupWorker->GetTablePath());
-            ResoleShardsInProgress = false;
+            ResolveShardsInProgress = false;
             ResolveTableShards();
         }
     }
@@ -675,7 +678,7 @@ private:
     }
 
     void ResolveTableShards() {
-        if (ResoleShardsInProgress) {
+        if (ResolveShardsInProgress) {
             return;
         }
 
@@ -685,7 +688,7 @@ private:
         }
 
         CA_LOG_D("Resolve shards for table: " << StreamLookupWorker->GetTablePath());
-        ResoleShardsInProgress = true;
+        ResolveShardsInProgress = true;
 
         Partitioning.reset();
 
@@ -761,7 +764,7 @@ private:
     ui64 ReadId = 0;
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
-    bool ResoleShardsInProgress = false;
+    bool ResolveShardsInProgress = false;
 
     // stats
     ui64 ReadRowsCount = 0;

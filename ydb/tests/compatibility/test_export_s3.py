@@ -18,7 +18,8 @@ class TestExportS3(MixedClusterFixture):
     def setup(self):
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
-        self.prefix = "/Root/prefix" 
+        self.prefix = "tables"
+        self.prefix_topics = "topics"
         self.s3_config = self.setup_s3()
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
         self.settings = (
@@ -31,7 +32,7 @@ class TestExportS3(MixedClusterFixture):
 
         yield from self.setup_cluster(
             extra_feature_flags={
-                # "enable_export_auto_dropping": True
+                "enable_export_auto_dropping": True
             }
         )
 
@@ -67,11 +68,10 @@ class TestExportS3(MixedClusterFixture):
             with pool.checkout() as session:
                 for num in range(1, 6):
                     # Tables
-                    table_name = f"{self.prefix}/sample_table_{num}"
+                    table_name = f"/Root/{self.prefix}/sample_table_{num}"
                     session.execute_scheme(
                         f"create table `{table_name}` (id Uint64, payload Utf8, PRIMARY KEY(id));"
                     )
-                    self.settings = self.settings.with_source_and_destination(table_name, ".")
 
                     query = f"""INSERT INTO `{table_name}` (id, payload) VALUES
                         (1, 'Payload 1 for table {num}'),
@@ -82,16 +82,16 @@ class TestExportS3(MixedClusterFixture):
                     session.transaction().execute(
                         query, commit_tx=True
                     )
+                    self.settings = self.settings.with_source_and_destination(table_name, table_name)
 
                     # Topics
-                    topic_name = f"{self.prefix}/sample_topic_{num}"
+                    topic_name = f"/Root/{self.prefix_topics}/sample_topic_{num}"
                     session.execute_scheme(
                         f"CREATE TOPIC `{topic_name}` ("
                         f"CONSUMER consumerA_{num}, "
                         f"CONSUMER consumerB_{num}"
                         f");"
                     )
-                    self.settings = self.settings.with_source_and_destination(topic_name, ".")
 
         self.client = ExportClient(self.driver)
         result_export = self.client.export_to_s3(self.settings)
@@ -109,14 +109,14 @@ class TestExportS3(MixedClusterFixture):
         keys_expected = set()
         for num in range(1, 6):
             # Tables
-            table_name = f"sample_table_{num}"
+            table_name = f"Root/{self.prefix}/sample_table_{num}"
             keys_expected.add(table_name + "/data_00.csv")
             keys_expected.add(table_name + "/metadata.json")
             keys_expected.add(table_name + "/scheme.pb")
 
             # Topics
-            topic_name = f"sample_topic_{num}"
-            keys_expected.add(topic_name + "/create_topic.pb")
+            # Topics are not necessarily exported, because in early versions, the export/import of topics is not supported.
+            # The test only checks that the export is successful for tables
 
         bucket = s3_resource.Bucket(s3_bucket)
         keys = set()

@@ -16,7 +16,6 @@ PEERDIR(
     ydb/core/blobstorage/pdisk/mock
     ydb/core/blobstorage/vdisk
     ydb/core/blobstorage/vdisk/common
-    ydb/core/testlib/basics
     ydb/core/tx/scheme_board
     # ydb/library/yql/public/udf/service/stub
     ydb/library/actors/core

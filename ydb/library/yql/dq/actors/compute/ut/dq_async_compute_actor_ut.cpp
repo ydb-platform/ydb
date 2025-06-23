@@ -4,6 +4,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_channels.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 #include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
@@ -27,13 +28,8 @@ using namespace NActors;
 namespace NYql::NDq {
 
 namespace {
-    static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
-#define LOGV(MSG) do { \
-    if (TESTS_VERBOSE) { \
-        Cerr << MSG; \
-    } \
-} while(0)
-}
+static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
+#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
 
 struct TActorSystem: NActors::TTestActorRuntimeBase {
     TActorSystem()
@@ -93,6 +89,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     NDqProto::EDataTransportVersion TransportVersion;
     TStructType* RowType = nullptr;
     TMultiType* WideRowType = nullptr;
+    TString LogPrefix;
 
     TAsyncCATestFixture(
             NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0,
@@ -222,8 +219,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         // IsPersistent
         // InMemory
         // EnableSpilling
-        TLogFunc logFunc = [](const TString& msg) {
-            LOGV(msg << Endl);
+        TLogFunc logFunc = [this](const TString& msg) {
+            LOG_D(msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
         return CreateDqOutputChannel(channelId, ThisStageId,
@@ -284,7 +281,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         memoryLimits.MemoryQuotaManager = std::make_shared<TDummyMemoryQuotaManager>();
         auto actor = CreateDqAsyncComputeActor(
                 EdgeActor, // executerId,
-                {}, // TTxId& txId,
+                LogPrefix,
                 &task, // NYql::NDqProto::TDqTask* task,
                 {}, // IDqAsyncIoFactory::TPtr asyncIoFactory,
                 &*FunctionRegistry,
@@ -326,7 +323,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
     bool ReceiveData(auto&& cb, auto dqInputChannel) {
         auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor});
-        LOGV("Got " << ev->Get()->Record.DebugString() << Endl);
+        LOG_D("Got " << ev->Get()->Record.DebugString());
         TDqSerializedBatch sbatch;
         sbatch.Proto = ev->Get()->Record.GetChannelData().GetData();
         dqInputChannel->Push(std::move(sbatch));
@@ -336,8 +333,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TUnboxedValueBatch batch;
         while (dqInputChannel->Pop(batch)) {
             if (IsWide) {
-                if (!batch.ForEachRowWide([cb](const NUdf::TUnboxedValue row[], ui32 width) {
-                    LOGV("WideRow:");
+                if (!batch.ForEachRowWide([this, cb](const NUdf::TUnboxedValue row[], ui32 width) {
+                    LOG_D("WideRow:");
                     if (row) {
                         UNIT_ASSERT_EQUAL(width, Columns);
                         for(ui32 col = 0; col < width; ++col) {
@@ -347,7 +344,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                             }
                         }
                     } else {
-                        LOGV("null");
+                        LOG_D("null");
                         UNIT_ASSERT(false);
                     }
                     return true;
@@ -355,8 +352,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     return false;
                 }
             } else {
-                if (!batch.ForEachRow([cb](const NUdf::TUnboxedValue& row) {
-                    LOGV("Row:");
+                if (!batch.ForEachRow([this, cb](const NUdf::TUnboxedValue& row) {
+                    LOG_D("Row:");
                     if (row) {
                         for(ui32 col = 0; col < Columns; ++col) {
                             const auto& item = row.GetElement(col);
@@ -365,10 +362,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                             }
                         }
                     } else {
-                        LOGV("null");
+                        LOG_D("null");
                         UNIT_ASSERT(false);
                     }
-                    LOGV(Endl);
                     return true;
                 })) {
                     return false;
@@ -381,17 +377,21 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     void WaitForChannelDataAck(auto channelId, auto seqNo) {
         for (;;) {
             auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelDataAck>({SrcEdgeActor});
-            LOGV("Got ack " << ev->Get()->Record << Endl);
+            LOG_D("Got ack " << ev->Get()->Record);
             UNIT_ASSERT_EQUAL(ev->Get()->Record.GetChannelId(), channelId);
             if (ev->Get()->Record.GetSeqNo() == seqNo) {
                 break;
             }
-            LOGV("...but waiting for " << seqNo << Endl);
+            LOG_D("...but waiting for " << seqNo);
         }
     }
 
     void BasicTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
-        LOGV("Test for: packets=" << packets << " doWatermark=" << doWatermark << " waitIntermediateAcks=" << waitIntermediateAcks << Endl);
+        LogPrefix = TStringBuilder() << "Test for:"
+           << " packets=" << packets
+           << " doWatermark=" << doWatermark
+           << " waitIntermediateAcks=" << waitIntermediateAcks
+           << " ";
         NDqProto::TDqTask task;
         GenerateProgram(task);
         auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
@@ -429,7 +429,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             }
             chData.SetChannelId(InputChannelId);
             chData.SetFinished(dqOutputChannel->IsFinished());
-            LOGV("Sending " << (packet + 1) << "/" << packets << " "  << chData << Endl);
+            LOG_D("Sending " << packet << "/" << packets << " "  << chData);
             ActorSystem.Send(asyncCA, SrcEdgeActor, evInputChannelData.Release());
             if (packet + 1 == packets || waitIntermediateAcks) {
                 WaitForChannelDataAck(InputChannelId, seqNo);
@@ -438,12 +438,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
         TMap<ui32, ui32> receivedData;
         while (ReceiveData(
-                [&receivedData](const NUdf::TUnboxedValue& val, ui32 column) {
-                    LOGV(' ');
+                [this, &receivedData](const NUdf::TUnboxedValue& val, ui32 column) {
                     UNIT_ASSERT_EQUAL(column, 0);
                     UNIT_ASSERT(!!val);
                     UNIT_ASSERT(val.IsEmbedded());
-                    LOGV(val.Get<ui32>());
+                    LOG_D(val.Get<ui32>());
                     ++receivedData[val.Get<ui32>()];
                     return true;
                 },
@@ -455,6 +454,8 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 };
+
+} //namespace anonymous
 
 Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TAsyncCATestFixture) { }

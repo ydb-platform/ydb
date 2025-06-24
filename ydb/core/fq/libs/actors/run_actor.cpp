@@ -2177,12 +2177,13 @@ private:
         html << "<tr><td>Disposition</td><td>"  << Params.StreamingDisposition                                 << "</td></tr>";
         html << "<tr><td>Status</td><td>"       << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)   << "</td></tr>";
         html << "<tr><td>Finishing</td><td>"    << Finishing   << "</td></tr>";
-        html << "<tr><td>Consumers are deleted</td><td>"        << ConsumersAreDeleted << "</td></tr>";
-        html << "<tr><td>Rate limiter enabled</td><td>"         << Params.Config.GetRateLimiter().GetEnabled() << "</td></tr>";
-        html << "<tr><td>Rate limiter creator id</td><td>"      << RateLimiterResourceCreatorId << "</td></tr>";
-        html << "<tr><td>Rate limiter deleter id</td><td>"      << RateLimiterResourceDeleterId << "</td></tr>";
-        html << "<tr><td>Finalizing status is written</td><td>" << FinalizingStatusIsWritten << "</td></tr>";
-        html << "<tr><td>QueryResponseArrived</td><td>"         << QueryResponseArrived << "</td></tr>";
+        html << "<tr><td>Consumers are deleted</td><td>"         << ConsumersAreDeleted << "</td></tr>";
+        html << "<tr><td>Rate limiter enabled</td><td>"          << Params.Config.GetRateLimiter().GetEnabled() << "</td></tr>";
+        html << "<tr><td>RateLimiterResourceCreator ID</td><td>" << RateLimiterResourceCreatorId << "</td></tr>";
+        html << "<tr><td>RateLimiterResourceDeleter ID</td><td>" << RateLimiterResourceDeleterId << "</td></tr>";
+        html << "<tr><td>FinalizingStatusIsWritten</td><td>"     << FinalizingStatusIsWritten << "</td></tr>";
+        html << "<tr><td>QueryResponseArrived</td><td>"          << QueryResponseArrived << "</td></tr>";
+        html << "<tr><td>PendingUpdateStatisticsPing</td><td>"   << PendingUpdateStatisticsPing << "</td></tr>";
         html << "</tbody></table>";
 
         if (Params.Connections.size()) {

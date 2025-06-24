@@ -1141,6 +1141,34 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
     }
 
+    Y_UNIT_TEST(ColumnsAtSubquery) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TString query = R"(
+                SELECT #
+                FROM (SELECT * FROM example.`/people`) AS ep
+                JOIN (SELECT room AS Room, time FROM example.`/yql/tutorial`) AS et ON 1 = 1
+            )";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "et.Room"},
+                {ColumnName, "et.time"},
+                {ColumnName, "ep.Age"},
+                {ColumnName, "ep.Name"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
+        }
+        {
+            TString query = "SELECT # FROM (SELECT 1 AS x)";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "x"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, query), expected);
+        }
+    }
+
     Y_UNIT_TEST(Typing) {
         const auto queryUtf16 = TUtf16String::FromUtf8(
             "SELECT \n"

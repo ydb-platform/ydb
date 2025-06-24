@@ -30,6 +30,7 @@ struct TSettings {
     ui32 FullCompactionUntilLevel = 0;
     ui64 FullCompactionMaxBytes = -1;
     bool CompactNextLevelEdges = false;
+    ui64 NodePortionsCountLimit = 1000000;
 
     NJson::TJsonValue SettingsJson;
 
@@ -444,7 +445,7 @@ class TOptimizerPlanner : public IOptimizerPlanner, private TSettings {
 public:
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
             const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const TSettings& settings = {})
-        : TBase(pathId)
+        : TBase(pathId, settings.NodePortionsCountLimit)
         , TSettings(settings)
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
@@ -710,11 +711,17 @@ private:
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse tiling compaction optimizer from proto")("description", status.GetErrorDescription());
             return false;
         }
+        Settings.NodePortionsCountLimit = GetNodePortionsCountLimit();
         return true;
     }
 
     TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override {
-        return Settings.DeserializeFromJson(jsonInfo);
+        auto conclusion = Settings.DeserializeFromJson(jsonInfo);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        Settings.NodePortionsCountLimit = GetNodePortionsCountLimit();
+        return TConclusionStatus::Success();
     }
 
     bool DoApplyToCurrentObject(IOptimizerPlanner& current) const override {

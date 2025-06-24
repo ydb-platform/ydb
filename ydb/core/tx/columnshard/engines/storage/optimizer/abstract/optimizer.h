@@ -126,6 +126,7 @@ public:
     IOptimizerPlanner(const TInternalPathId pathId, const ui32 nodePortionsCountLimit)
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit) {
+        Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit);
     }
     bool IsOverloaded() const {
         if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {

@@ -11,9 +11,10 @@ from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 
 from ydb.export import ExportClient
 from ydb.export import ExportToS3Settings
+from ydb.import_client import ImportClient, ImportFromS3Settings
 
 
-class TestExportS3(MixedClusterFixture):
+class TestExportImportS3(MixedClusterFixture):
     @pytest.fixture(autouse=True)
     def setup(self):
         output_path = yatest.common.test_output_path()
@@ -60,10 +61,8 @@ class TestExportS3(MixedClusterFixture):
             self.output_f.write(content + "\n")
             result = json.loads(content)
             return result
-
-    def test_export(self):
-        s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
-
+    
+    def _create_items(self):
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for num in range(1, 6):
@@ -92,7 +91,9 @@ class TestExportS3(MixedClusterFixture):
                         f"CONSUMER consumerB_{num}"
                         f");"
                     )
-
+    
+    def _export_check(self):
+        s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
         self.client = ExportClient(self.driver)
         result_export = self.client.export_to_s3(self.settings)
 
@@ -124,3 +125,43 @@ class TestExportS3(MixedClusterFixture):
             keys.add(x.key)
 
         assert keys_expected <= keys
+    
+    def _import_check(self):
+        s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
+        imported_prefix = "imported"
+        
+        import_settings = (
+            ImportFromS3Settings()
+            .with_endpoint(s3_endpoint)
+            .with_access_key(s3_access_key)
+            .with_secret_key(s3_secret_key)
+            .with_bucket(s3_bucket)
+        )
+        for num in range(1, 6):
+            table_name = f"Root/{self.prefix}/sample_table_{num}"
+            imported_table_name = f"/Root/{imported_prefix}/sample_table_{num}"
+            import_settings = import_settings.with_source_and_destination(table_name, imported_table_name)
+
+        import_client = ImportClient(self.driver)
+        result_import = import_client.import_from_s3(import_settings)
+        import_id = result_import.id
+        progress_import = result_import.progress.name
+        assert progress_import in ["PREPARING", "DONE"]
+        while progress_import != "DONE":
+            progress_import = import_client.get_import_from_s3_operation(import_id).progress.name
+        assert progress_import == "DONE"
+
+        # Проверяем, что импортированные таблицы действительно созданы
+        with ydb.SessionPool(self.driver, size=1) as pool:
+            with pool.checkout() as session:
+                for num in range(1, 6):
+                    imported_table_name = f"/Root/{imported_prefix}/sample_table_{num}"
+                    desc = session.describe_table(imported_table_name)
+                    assert desc is not None, f"Table {imported_table_name} not found after import"
+        
+    def test_full_pipeline(self):
+        self._create_items()
+        self._export_check()
+        self._import_check()
+
+        

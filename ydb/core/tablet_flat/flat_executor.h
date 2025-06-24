@@ -14,8 +14,8 @@
 #include "flat_exec_commit.h"
 #include "flat_executor_misc.h"
 #include "flat_executor_compaction_logic.h"
-#include "flat_executor_data_cleanup_logic.h"
 #include "flat_executor_gclogic.h"
+#include "flat_executor_vacuum_logic.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
 #include "flat_fwd_sieve.h"
@@ -467,7 +467,7 @@ class TExecutor
     THolder<TExecutorGCLogic> GcLogic;
     THolder<TCompactionLogic> CompactionLogic;
     THolder<TExecutorBorrowLogic> BorrowLogic;
-    THolder<TDataCleanupLogic> DataCleanupLogic;
+    THolder<TVacuumLogic> VacuumLogic;
 
     TLoadBlobQueue PendingBlobQueue;
 
@@ -683,7 +683,7 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
-    void CleanupData(ui64 dataCleanupGeneration) override;
+    void StartVacuum(ui64 vacuumGeneration) override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

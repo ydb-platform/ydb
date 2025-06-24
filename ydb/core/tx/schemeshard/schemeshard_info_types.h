@@ -23,7 +23,6 @@
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
-#include <ydb/core/control/lib/static_control_board_impl.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/blockstore_config.pb.h>

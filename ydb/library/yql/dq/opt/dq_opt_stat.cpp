@@ -562,6 +562,11 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TTypeAnnotationC
 
     resStats->Labels = std::make_shared<TVector<TString>>();
     resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
+
+    if (auto maybeMapJoin = TMaybeNode<TDqPhyMapJoin>(inputNode.Raw())) {
+        resStats->SortingOrderings = leftStats->SortingOrderings;
+    }
+
     typeCtx->SetStats(join.Raw(), resStats);
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for DqJoin: " << resStats->ToString();
 }

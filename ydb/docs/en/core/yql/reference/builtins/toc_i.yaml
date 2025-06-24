@@ -1,0 +1,13 @@
+items:
+- { name: Overview,                        href: index.md }
+- { name: Basic,                      href: basic.md }
+- { name: Aggregate,                   href: aggregation.md }
+- { name: Window,                      href: window.md,            when: feature_window_functions }
+- { name: For lists,       href: list.md }
+- { name: For dictionaries,      href: dict.md }
+- { name: For structures,    href: struct.md }
+- { name: For types,          href: types.md }
+- { name: For code generation, href: codegen.md,           when: feature_codegen }
+- { name: For JSON,            href: json.md }
+- name: C++ libraries
+  include: { mode: link, path: ../udf/list/toc_i.yaml }

@@ -11,7 +11,6 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
-#include <ydb/core/util/aws.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/library/actors/core/av_bootstrapped.h>
@@ -19,6 +18,8 @@
 #include <util/system/hostname.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/testing/hook/hook.h>
+
+#include <aws/core/Aws.h>
 
 namespace NKikimr {
 
@@ -34,12 +35,14 @@ enum class EInitialEviction {
 
 namespace {
 
+Aws::SDKOptions Options;
+
 Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-    NKikimr::InitAwsAPI();
+    Aws::InitAPI(Options);
 }
 
 Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-    NKikimr::ShutdownAwsAPI();
+    Aws::ShutdownAPI(Options);
 }
 
 static const std::vector<NArrow::NTest::TTestColumn> testYdbSchema = TTestSchema::YdbSchema();

@@ -1,4 +1,4 @@
-### When Postgres is not enough: performance evaluation of PostgreSQL vs. Distributed DBMSs {#2024-pub-medium-postgresql}
+## When Postgres is not enough: performance evaluation of PostgreSQL vs. Distributed DBMSs {#2024-pub-medium-postgresql}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 
@@ -6,7 +6,7 @@
 
 The [research](https://blog.ydb.tech/when-postgres-is-not-enough-performance-evaluation-of-postgresql-vs-distributed-dbmss-23bf39db2d31) presented is the result of our joint effort and close collaboration with [Evgeny Efimkin](https://www.linkedin.com/in/evgeny-efimkin-4061a893/), an expert in PostgreSQL who doesn’t work on YDB.
 
-### How we switched to Java 21 virtual threads and got a deadlock in TPC-C for PostgreSQL {#2024-pub-medium-java-21}
+## How we switched to Java 21 virtual threads and got a deadlock in TPC-C for PostgreSQL {#2024-pub-medium-java-21}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

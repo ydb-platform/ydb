@@ -297,7 +297,6 @@ public:
         const TPartitionId& partition,
         TActorId tabletActor,
         ui64 tabletId,
-        bool isLocalDc,
         const TTabletCountersBase& counters
     );
 
@@ -332,8 +331,8 @@ protected:
     }
 
 private:
+    bool GetAccountQuotingEnabled(const NKikimrPQ::TPQConfig& pqConfig) const;
     bool QuotingEnabled;
-    bool AccountQuotingEnabled;
     THolder<TAccountQuoterHolder> AccountQuotaTracker;
 };
 

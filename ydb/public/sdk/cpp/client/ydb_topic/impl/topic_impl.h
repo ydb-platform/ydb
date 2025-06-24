@@ -323,6 +323,9 @@ public:
         request.set_partition_id(partitionId);
         request.set_consumer(consumerName);
         request.set_offset(offset);
+        if (settings.ReadSessionId_) {
+            request.set_read_session_id(*settings.ReadSessionId_);
+        }
 
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>(
             std::move(request),

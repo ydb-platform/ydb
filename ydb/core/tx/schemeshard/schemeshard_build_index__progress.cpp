@@ -194,7 +194,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuil
 private:
     TIndexBuildId BuildId;
 
-    TDeque<std::tuple<TTabletId, ui64, THolder<IEventBase>>> ToTabletSend;
+    TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
 public:
     explicit TTxProgress(TSelf* self, TIndexBuildId id)
@@ -206,10 +206,8 @@ public:
         Y_ABORT_UNLESS(Self->IndexBuilds.contains(BuildId));
         TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(BuildId);
 
-        LOG_I("TTxBuildProgress: Resume"
-              << ": id# " << BuildId);
-        LOG_D("TTxBuildProgress: Resume"
-              << ": " << *buildInfo);
+        LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo->State);
+        LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo->State << " " << *buildInfo);
 
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
@@ -263,6 +261,7 @@ public:
                 buildInfo->DoneShards.clear();
                 buildInfo->InProgressShards.clear();
 
+                ToTabletSend.clear();
                 Self->IndexBuildPipes.CloseAll(BuildId, ctx);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Cancellation_Applying);
@@ -283,6 +282,9 @@ public:
                 && buildInfo->DoneShards.empty()
                 && buildInfo->InProgressShards.empty())
             {
+                ToTabletSend.clear();
+                Self->IndexBuildPipes.CloseAll(BuildId, ctx);
+
                 for (const auto& item: buildInfo->Shards) {
                     const TIndexBuildInfo::TShardStatus& shardStatus = item.second;
                     switch (shardStatus.Status) {
@@ -374,16 +376,18 @@ public:
                 ev->Record.SetSeqNoGeneration(Self->Generation());
                 ev->Record.SetSeqNoRound(++shardStatus.SeqNoRound);
 
-                LOG_D("TTxBuildProgress: TEvBuildIndexCreateRequest"
+                LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest"
                       << ": " << ev->Record.ShortDebugString());
 
-                ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+                ToTabletSend.emplace(shardId, std::move(ev));
             }
 
             if (buildInfo->InProgressShards.empty() && buildInfo->ToUploadShards.empty()
-                && buildInfo->DoneShards.size() == buildInfo->Shards.size()) {
+                && buildInfo->DoneShards.size() == buildInfo->Shards.size())
+            {
                 // all done
-                Y_ABORT_UNLESS(0 == Self->IndexBuildPipes.CloseAll(BuildId, ctx));
+                ToTabletSend.clear();
+                Self->IndexBuildPipes.CloseAll(BuildId, ctx);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::Applying);
                 Progress(BuildId);
@@ -507,8 +511,8 @@ public:
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        for (auto& x: ToTabletSend) {
-            Self->IndexBuildPipes.Create(BuildId, std::get<0>(x), std::move(std::get<2>(x)), ctx);
+        for (auto& [shardId, ev]: ToTabletSend) {
+            Self->IndexBuildPipes.Send(BuildId, shardId, std::move(ev), ctx);
         }
         ToTabletSend.clear();
     }
@@ -620,7 +624,7 @@ public:
         const auto& tabletId = PipeRetry.TabletId;
         const auto& shardIdx = Self->GetShardIdx(tabletId);
 
-        LOG_I("TTxReply : PipeRetry"
+        LOG_N("TTxReply : PipeRetry"
               << ", buildIndexId# " << buildId
               << ", tabletId# " << tabletId
               << ", shardIdx# " << shardIdx);
@@ -999,8 +1003,8 @@ public:
               << ", BuildIndexId: " << buildInfo->Id
               << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
               << ", error: " << buildInfo->Issue
-              << ", replyTo: " << buildInfo->CreateSender.ToString());
-        LOG_D("Message:\n" << responseEv->Record.ShortDebugString());
+              << ", replyTo: " << buildInfo->CreateSender.ToString()
+              << ", message: " << responseEv->Record.ShortDebugString());
 
         Send(buildInfo->CreateSender, std::move(responseEv), 0, buildInfo->SenderCookie);
     }

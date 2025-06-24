@@ -3,12 +3,16 @@
 В этом разделе описана основная информация про работу с внешней базой данных [Greenplum](https://greenplum.org). Поскольку Greenplum основан на [PostgreSQL](postgresql.md), интеграции с ними работают похожим образом, а некоторые ссылки ниже могут вести на документацию PostgreSQL.
 
 Для работы с внешней базой данных Greenplum необходимо выполнить следующие шаги:
+
 1. Создать [секрет](../datamodel/secrets.md), содержащий пароль для подключения к базе данных.
-    ```sql
+
+    ```yql
     CREATE OBJECT greenplum_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
     ```
-1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. В параметр `LOCATION` нужно передать сетевой адрес [мастер-ноды](https://greenplum.org/introduction-to-greenplum-architecture/) Greenplum. При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. 
-    ```sql
+
+1. Создать [внешний источник данных](../datamodel/external_data_source.md), описывающий определённую базу данных в составе кластера Greenplum. В параметр `LOCATION` нужно передать сетевой адрес [мастер-ноды](https://greenplum.org/introduction-to-greenplum-architecture/) Greenplum. При чтении по умолчанию используется [пространство имен](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_namespace.html) `public`, но это значение можно изменить с помощью опционального параметра `SCHEMA`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`.
+
+    ```yql
     CREATE EXTERNAL DATA SOURCE greenplum_datasource WITH (
         SOURCE_TYPE="Greenplum",
         LOCATION="<host>:<port>",
@@ -20,17 +24,20 @@
         SCHEMA="<schema>"
     );
     ```
+
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к базе данных.
 
-## Синтаксис запросов { #query }
+## Синтаксис запросов {#query}
+
 Для работы с Greenplum используется следующая форма SQL-запроса:
 
-```sql
+```yql
 SELECT * FROM greenplum_datasource.<table_name>
 ```
 
 где:
+
 - `greenplum_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
@@ -42,9 +49,19 @@ SELECT * FROM greenplum_datasource.<table_name>
 1. {% include [!](_includes/datetime_limits.md) %}
 1. {% include [!](_includes/predicate_pushdown.md) %}
 
+    |Тип данных {{ ydb-short-name }}|
+    |----|
+    |`Bool`|
+    |`Int8`|
+    |`Int16`|
+    |`Int32`|
+    |`Int64`|
+    |`Float`|
+    |`Double`|
+
 ## Поддерживаемые типы данных
 
-В базе данных Greenplum признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для каждой колонки реализуется в виде атрибута `attnotnull` в системном каталоге [pg_attribute](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_attribute.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы Greenplum по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](https://ydb.tech/docs/ru/yql/reference/types/optional) типы.
+В базе данных Greenplum признак опциональности значений колонки (разрешено или запрещено колонке содержать значения `NULL`) не является частью системы типов данных. Ограничение (constraint) `NOT NULL` для каждой колонки реализуется в виде атрибута `attnotnull` в системном каталоге [pg_attribute](https://docs.vmware.com/en/VMware-Greenplum/6/greenplum-database/ref_guide-system_catalogs-pg_attribute.html), то есть на уровне метаданных таблицы. Следовательно, все базовые типы Greenplum по умолчанию могут содержать значения `NULL`, и в системе типов {{ ydb-full-name }} они должны отображаться в [опциональные](../../yql/reference/types/optional.md) типы.
 
 Ниже приведена таблица соответствия типов Greenplum и {{ ydb-short-name }}. Все остальные типы данных, за исключением перечисленных, не поддерживаются.
 

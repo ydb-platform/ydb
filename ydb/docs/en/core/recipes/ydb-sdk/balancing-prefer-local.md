@@ -1,7 +1,5 @@
 # Prefer the nearest data center
 
-{% include [work in progress message](_includes/addition.md) %}
-
 Below are examples of the code for setting the "prefer the nearest data center" balancing algorithm option in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
@@ -43,6 +41,7 @@ Below are examples of the code for setting the "prefer the nearest data center" 
    Client load balancing in the {{ ydb-short-name }} `database/sql` driver is performed only when establishing a new connection (in `database/sql` terms), which is a {{ ydb-short-name }} session on a specific node. Once the session is created, all queries in this session are passed to the node where the session was created. Queries in the same {{ ydb-short-name }} session are not balanced between different {{ ydb-short-name }} nodes.
 
    Example of the code for setting the "prefer the nearest data center" balancing algorithm option:
+
    ```go
    package main
 

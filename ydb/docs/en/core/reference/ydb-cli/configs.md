@@ -40,6 +40,7 @@
 ## Scenarios
 
 ### Update the main cluster configuration
+
  ```bash
 # Fetch the cluster configuration
 {{ ydb-cli }} admin config fetch > dynconfig.yaml
@@ -48,19 +49,27 @@ vim dynconfig.yaml
 # Apply the configuration dynconfig.yaml to the cluster
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
 ```
+
 Similarly, in one line:
+
 ```bash
 {{ ydb-cli }} admin config fetch | yq '.config.actor_system_config.scheduler.resolution = 128' | {{ ydb-cli }} admin config replace -f -
 ```
+
 Command output:
-```
+
+```text
 OK
 ```
+
 ### View the configuration for a specific set of labels
+
 ```bash
 {{ ydb-cli }} admin config resolve --remote --label tenant=/Root/db1 --label canary=true
 ```
+
 Command output:
+
 ```yaml
 ---
 label_sets:
@@ -75,10 +84,13 @@ config:
 ```
 
 ### View the configuration for a specific node
+
 ```bash
 {{ ydb-cli }} admin config resolve --remote --node-id <node_id>
 ```
+
 Command output:
+
 ```yaml
 ---
 label_sets:
@@ -93,20 +105,26 @@ config:
 ```
 
 ### Save all configurations locally
+
 ```bash
 {{ ydb-cli }} admin config fetch --all --output-directory <configs_dir>
 ls <configs_dir>
 ```
+
 Command output:
-```
+
+```text
 dynconfig.yaml volatile_1.yaml volatile_3.yaml
 ```
 
 ### View all configurations locally
+
 ```bash
 {{ ydb-cli }} admin config fetch --all
 ```
+
 Command output:
+
 ```yaml
 ---
 metadata:
@@ -138,10 +156,13 @@ selectors:
 ```
 
 ### View the final configuration for a specific node from the locally saved original configuration
+
 ```bash
 {{ ydb-cli }} admin config resolve -k <configs_dir> --node-id <node_id>
 ```
+
 Command output:
+
 ```yaml
 ---
 label_sets:

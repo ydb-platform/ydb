@@ -40,7 +40,7 @@ Command {
 ydbd -s <endpoint> admin bs config invoke --proto-file ReadHostConfig.txt
 ```
 
-Insert the obtained config into the protobuf below and edit the **PDiskConfig/ExpectedSlotCount** field value in it.
+Insert the obtained config into the protobuf below and edit the `PDiskConfig/ExpectedSlotCount` field value in it.
 
 ```proto
 Command {

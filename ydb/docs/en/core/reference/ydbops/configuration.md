@@ -2,7 +2,6 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-
 `ydbops` can be run by specifying all the necessary command line arguments on the command invocation. However, it has two features that allow to avoid repeating the commonly used arguments:
 
 - [Config file](#config-file)
@@ -20,6 +19,7 @@ Default configuration file location follows the same convention as {{ ydb-short-
 Certain command line options can be written in the configuration file instead of being specified directly in the `ydbops` invocation.
 
 ### Examples
+
 Calling the `ydbops restart` command without a profile:
 
 ```bash
@@ -63,7 +63,7 @@ The configuration file needs to be created and edited manually.
 Here is an example of a configuration file with all possible options that can be specified and example values (most likely, they will not all be needed at the same time):
 
 ```yaml
-# a special key `current-profile` can be specified to 
+# a special key `current-profile` can be specified to
 # be used as the default active profile in the CLI invocation
 current-profile: my-profile
 
@@ -87,7 +87,7 @@ my-profile:
 
 ## Environment variables {#environment-variables}
 
-Alternatively, there is an option to specify several environment variables instead of passing command-line arguments or using [config files](#config-files).
+Alternatively, there is an option to specify several environment variables instead of passing command-line arguments or using [config files](#config-file).
 
 For an explanation of which options take precedence, please invoke `ydbops --help`.
 

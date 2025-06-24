@@ -166,6 +166,7 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             pgwire_port=None,
+            kafka_api_port=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -429,6 +430,13 @@ class KikimrConfigGenerator(object):
 
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
+
+        if kafka_api_port is not None:
+            kafka_proxy_config = dict()
+            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config["listening_port"] = kafka_api_port
+
+            self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
     @property
     def pdisks_info(self):

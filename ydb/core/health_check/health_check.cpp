@@ -1112,20 +1112,28 @@ public:
         auto nodeId = ev->Get()->NodeId;
         switch (eventId) {
             case NNodeWhiteboard::TEvWhiteboard::EvSystemStateRequest:
-                NodeSystemState.erase(nodeId);
-                NodeSystemState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+                if (!NodeSystemState[nodeId].IsDone()) {
+                    NodeSystemState.erase(nodeId);
+                    NodeSystemState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>(nodeId, {-1});
+                }
                 break;
             case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateRequest:
-                NodeVDiskState.erase(nodeId);
-                NodeVDiskState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                if (!NodeVDiskState[nodeId].IsDone()) {
+                    NodeVDiskState.erase(nodeId);
+                    NodeVDiskState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                }
                 break;
             case NNodeWhiteboard::TEvWhiteboard::EvPDiskStateRequest:
-                NodePDiskState.erase(nodeId);
-                NodePDiskState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                if (!NodePDiskState[nodeId].IsDone()) {
+                    NodePDiskState.erase(nodeId);
+                    NodePDiskState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                }
                 break;
             case NNodeWhiteboard::TEvWhiteboard::EvBSGroupStateRequest:
-                NodeBSGroupState.erase(nodeId);
-                NodeBSGroupState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                if (!NodeBSGroupState[nodeId].IsDone()) {
+                    NodeBSGroupState.erase(nodeId);
+                    NodeBSGroupState[nodeId] = RequestNodeWhiteboard<NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                }
                 break;
             default:
                 RequestDone("unsupported event scheduled");

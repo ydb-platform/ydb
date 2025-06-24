@@ -1,26 +1,26 @@
-# App in Go
+# Example app in Go
 
-This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic) that uses the {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk/v3).
+<!-- markdownlint-disable blanks-around-fences -->
+
+This page provides a detailed description of the code for a [test app](https://github.com/ydb-platform/ydb-go-examples/tree/master/basic) that uses the {{ ydb-short-name }} [Go SDK](https://github.com/ydb-platform/ydb-go-sdk).
 
 ## Downloading and starting {#download}
 
-The following execution scenario is based on [git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install). Be sure to install the [YDB Go SDK](../../../reference/ydb-sdk/install.md).
+The following execution scenario is based on [Git](https://git-scm.com/downloads) and [Go](https://go.dev/doc/install). Make sure to install the [YDB Go SDK](../../../reference/ydb-sdk/install.md).
 
-Create a working directory and use it to run from the command line the command to clone the GitHub repository:
+Create a working directory and use it to run the following command from the command line to clone the GitHub repository:
 
 ```bash
 git clone https://github.com/ydb-platform/ydb-go-examples/
 ```
 
-Next, from the same working directory, run the command to start the test app. The command will differ depending on the database to connect to.
+Next, from the same working directory, run the following command to start the test app:
 
 {% include [run_options.md](_includes/run_options.md) %}
 
-
-
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-To work with `YDB` in `Go`, import the `ydb-go-sdk` driver package:
+To work with {{ ydb-short-name }} in `Go`, import the `ydb-go-sdk` driver package:
 
 ```go
 import (
@@ -65,11 +65,9 @@ if err != nil {
 defer db.Close(ctx)
 ```
 
-The `db` object is an input point for working with `YDB` services.
-To work with the table service, use the `db.Table()` client.
-The client of the table service provides an `API` for making queries to tables.
-The most popular method is `db.Table().Do(ctx, op)`. It implements session creation in the background and the repeat attempts to execute the custom `op` operation where the created session is passed to the user's code.
-The session has an exhaustive `API` that lets you perform `DDL`, `DML`, `DQL`, and `TCL` requests.
+The `db` object serves as the entry point for working with {{ ydb-short-name }} services. To interact with the table service, use the `db.Table()` client. This client provides an `API` for making queries to tables. The most commonly used method is `db.Table().Do(ctx, op)`, which handles session creation in the background and retries executing the specified `op` operation, passing the created session to the user's code.
+
+The session has a comprehensive `API` that allows you to perform `DDL`, `DML`, `DQL`, and `TCL` requests.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
@@ -227,13 +225,13 @@ err = c.Do(ctx,
         return err
       }
       for res.NextRow() {
-        // named.OptionalOrDefault enables you to "deploy" optional
+        // named.OptionalWithDefault enables you to "deploy" optional
         // results or use the default type value in Go
         err = res.ScanNamed(
           named.Required("series_id", &seriesID),
-          named.OptionalOrDefault("season_id", &seasonID),
-          named.OptionalOrDefault("title", &title),
-          named.OptionalOrDefault("first_aired", &date),
+          named.OptionalWithDefault("season_id", &seasonID),
+          named.OptionalWithDefault("title", &title),
+          named.OptionalWithDefault("first_aired", &date),
         )
         if err != nil {
           return err

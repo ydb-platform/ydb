@@ -406,60 +406,9 @@ void TTableLocks::RemoveWriteLock(TLockInfo* lock) {
 
 // TLockLocker
 
-namespace {
-
-    static constexpr ui64 DefaultLockLimit() {
-        // Valgrind and sanitizers are too slow
-        // Some tests cannot exhaust default limit in under 5 minutes
-        return NValgrind::PlainOrUnderValgrind(
-                    NSan::PlainOrUnderSanitizer(
-                        20000,
-                        1000),
-                    1000);
-    }
-
-    static constexpr ui64 DefaultLockRangesLimit() {
-        return 50000;
-    }
-
-    static constexpr ui64 DefaultTotalRangesLimit() {
-        return 1000000;
-    }
-
-    static std::atomic<ui64> g_LockLimit{ DefaultLockLimit() };
-    static std::atomic<ui64> g_LockRangesLimit{ DefaultLockRangesLimit() };
-    static std::atomic<ui64> g_TotalRangesLimit{ DefaultTotalRangesLimit() };
-
-} // namespace
-
-ui64 TLockLocker::LockLimit() {
-    return g_LockLimit.load(std::memory_order_relaxed);
-}
-
-ui64 TLockLocker::LockRangesLimit() {
-    return g_LockRangesLimit.load(std::memory_order_relaxed);
-}
-
-ui64 TLockLocker::TotalRangesLimit() {
-    return g_TotalRangesLimit.load(std::memory_order_relaxed);
-}
-
-void TLockLocker::SetLockLimit(ui64 newLimit) {
-    g_LockLimit.store(newLimit, std::memory_order_relaxed);
-}
-
-void TLockLocker::SetLockRangesLimit(ui64 newLimit) {
-    g_LockRangesLimit.store(newLimit, std::memory_order_relaxed);
-}
-
-void TLockLocker::SetTotalRangesLimit(ui64 newLimit) {
-    g_TotalRangesLimit.store(newLimit, std::memory_order_relaxed);
-}
-
 void TLockLocker::AddPointLock(const TLockInfo::TPtr& lock, const TPointKey& key) {
     if (lock->AddPoint(key)) {
         key.Table->AddPointLock(key, lock.Get());
-        LocksWithRanges.PushBack(lock.Get());
     } else {
         key.Table->AddShardLock(lock.Get());
     }
@@ -468,27 +417,21 @@ void TLockLocker::AddPointLock(const TLockInfo::TPtr& lock, const TPointKey& key
 void TLockLocker::AddRangeLock(const TLockInfo::TPtr& lock, const TRangeKey& key) {
     if (lock->AddRange(key)) {
         key.Table->AddRangeLock(key, lock.Get());
-        LocksWithRanges.PushBack(lock.Get());
     } else {
         key.Table->AddShardLock(lock.Get());
     }
 }
 
-void TLockLocker::MakeShardLock(TLockInfo* lock) {
+void TLockLocker::AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) {
     if (!lock->IsShardLock()) {
         for (const TPathId& tableId : lock->GetReadTables()) {
-            Tables.at(tableId)->RemoveRangeLock(lock);
+            Tables.at(tableId)->RemoveRangeLock(lock.Get());
         }
         lock->MakeShardLock();
-        LocksWithRanges.Remove(lock);
         for (const TPathId& tableId : lock->GetReadTables()) {
-            Tables.at(tableId)->AddShardLock(lock);
+            Tables.at(tableId)->AddShardLock(lock.Get());
         }
     }
-}
-
-void TLockLocker::AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) {
-    MakeShardLock(lock.Get());
     for (auto& table : readTables) {
         const TPathId& tableId = table.GetTableId();
         Y_ABORT_UNLESS(Tables.at(tableId).Get() == &table);
@@ -580,9 +523,6 @@ void TLockLocker::RemoveBrokenRanges() {
 TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId, ui32 lockNodeId) {
     auto it = Locks.find(lockId);
     if (it != Locks.end()) {
-        if (it->second->IsInList<TLockInfoRangesListTag>()) {
-            LocksWithRanges.PushBack(it->second.Get());
-        }
         if (it->second->IsInList<TLockInfoExpireListTag>()) {
             ExpireQueue.PushBack(it->second.Get());
         }
@@ -655,7 +595,6 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId, ILocksDb* db) {
         for (const TPathId& tableId : txLock->GetWriteTables()) {
             Tables.at(tableId)->RemoveWriteLock(txLock.Get());
         }
-        LocksWithRanges.Remove(txLock.Get());
         txLock->CleanupConflicts();
         Locks.erase(it);
 
@@ -699,7 +638,6 @@ void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     Y_ABORT_UNLESS(Tables.empty());
     Locks.clear();
     ShardLocks.clear();
-    LocksWithRanges.Clear();
     ExpireQueue.Clear();
     BrokenLocks.Clear();
     BrokenPersistentLocks.Clear();
@@ -709,41 +647,21 @@ void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
     PendingSubscribeLocks.clear();
 }
 
-bool TLockLocker::ForceShardLock(
-    const TLockInfo::TPtr& lock,
-    const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables,
-    ui64 newRanges)
-{
-    if (lock->NumPoints() + lock->NumRanges() + newRanges > LockRangesLimit()) {
-        // Lock has too many ranges, will never fit in
-        return true;
-    }
-
-    for (auto& table : readTables) {
-        while (table.RangeCount() + newRanges > TotalRangesLimit()) {
-            if (LocksWithRanges.Empty()) {
-                // Too many new ranges (e.g. TotalRangesLimit < LockRangesLimit)
-                return true;
-            }
-
-            // Try to reduce the number of ranges until new ranges fit in
-            TLockInfo* next = LocksWithRanges.PopFront();
-            if (next == lock.Get()) {
-                bool wasLast = LocksWithRanges.Empty();
-                LocksWithRanges.PushBack(next);
-                if (wasLast) {
-                    return true;
-                }
-                // We want to handle the newest lock last
-                continue;
-            }
-
-            // Reduce the number of ranges by making the oldest lock into a shard lock
-            MakeShardLock(next);
-            Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
+bool TLockLocker::ForceShardLock(const TPathId& tableId) const {
+    auto it = Tables.find(tableId);
+    if (it != Tables.end()) {
+        if (it->second->RangeCount() > LockLimit()) {
+            return true;
         }
     }
+    return false;
+}
 
+bool TLockLocker::ForceShardLock(const TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables) const {
+    for (auto& table : readTables) {
+        if (table.RangeCount() > LockLimit())
+            return true;
+    }
     return false;
 }
 
@@ -857,6 +775,8 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         return TVector<TLock>();
     }
 
+    bool shardLock = Locker.ForceShardLock(Update->ReadTables);
+
     TLockInfo::TPtr lock;
     ui64 counter = TLock::ErrorNotSet;
 
@@ -875,12 +795,6 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         } else if (lock->IsBroken()) {
             counter = TLock::ErrorBroken;
         } else {
-            bool shardLock = (
-                lock->IsShardLock() ||
-                Locker.ForceShardLock(
-                    lock,
-                    Update->ReadTables,
-                    Update->PointLocks.size() + Update->RangeLocks.size()));
             if (shardLock) {
                 Locker.AddShardLock(lock, Update->ReadTables);
                 Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);

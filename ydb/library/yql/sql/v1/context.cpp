@@ -78,14 +78,12 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
                    const NSQLTranslation::TSQLHints& hints,
-                   TIssues& issues,
-                   const TString& query)
+                   TIssues& issues)
     : ClusterMapping(settings.ClusterMapping)
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , SQLHints(hints)
     , Settings(settings)
-    , Query(query)
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)

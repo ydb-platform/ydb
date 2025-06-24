@@ -151,6 +151,22 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     .Index().Build("0")
                     .Build()
                 .Done();
+        } else if (NDq::IsDqPureExpr(input.Cast())) {
+            input = Build<TDqCnUnionAll>(ctx, pos)
+                .Output()
+                    .Stage<TDqStage>()
+                        .Inputs().Build()
+                        .Program()
+                            .Args({})
+                            .Body<TCoToFlow>()
+                                .Input(input.Cast())
+                                .Build()
+                            .Build()
+                        .Settings().Build()
+                    .Build()
+                    .Index().Build("0")
+                    .Build()
+                .Done();
         }
 
         auto inputExpr = Build<TCoExtractMembers>(ctx, pos)
@@ -173,6 +189,10 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     return buildReturningRows(del.Input().Cast(), MakeColumnsList(tableDesc.Metadata->KeyColumnNames, ctx, node.Pos()), returning.Columns());
                 }
             }
+
+            if (item.Maybe<TKqlTableEffect>()) {
+                return node;
+            }
         }
     }
 
@@ -181,6 +201,10 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
     if (auto del = returning.Update().Maybe<TKqlDeleteRows>()) {
         return buildReturningRows(del.Input().Cast(), MakeColumnsList(tableDesc.Metadata->KeyColumnNames, ctx, node.Pos()), returning.Columns());
+    }
+
+    if (returning.Update().Maybe<TKqlTableEffect>()) {
+        return node;
     }
 
     TExprNode::TPtr result = returning.Update().Ptr();

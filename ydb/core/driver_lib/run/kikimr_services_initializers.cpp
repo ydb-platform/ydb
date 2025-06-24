@@ -155,7 +155,6 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 
-#include <ydb/core/util/aws.h>
 #include <ydb/core/util/failure_injection.h>
 #include <ydb/core/util/memory_tracker.h>
 #include <ydb/core/util/sig.h>
@@ -245,17 +244,32 @@
 
 #include <util/system/hostname.h>
 
-namespace NKikimr::NKikimrServicesInitializers {
+#ifndef KIKIMR_DISABLE_S3_OPS
+#include <aws/core/Aws.h>
+#endif
 
+namespace {
+
+#ifndef KIKIMR_DISABLE_S3_OPS
 struct TAwsApiGuard {
     TAwsApiGuard() {
-        InitAwsAPI();
+        Aws::InitAPI(Options);
     }
 
     ~TAwsApiGuard() {
-        ShutdownAwsAPI();
+        Aws::ShutdownAPI(Options);
     }
+
+private:
+    Aws::SDKOptions Options;
 };
+#endif
+
+}
+
+namespace NKikimr {
+
+namespace NKikimrServicesInitializers {
 
 ui32 TFederatedQueryInitializer::IcPort = 0;
 
@@ -2870,6 +2884,7 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
+#ifndef KIKIMR_DISABLE_S3_OPS
 TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
     : GlobalObjects(globalObjects)
 {
@@ -2880,5 +2895,7 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
+#endif
 
-} // namespace NKikimr::NKikimrServicesInitializers
+} // namespace NKikimrServicesInitializers
+} // namespace NKikimr

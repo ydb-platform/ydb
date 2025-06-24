@@ -21,7 +21,7 @@ Thus, {{ ydb-short-name }} server major version is a combination of the first tw
 
 ### Compatibility {#server-compatibility}
 
-{{ ydb-short-name }} maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the YDB server executable. You may refer the [Updating {{ ydb-short-name }}](../devops/manual/upgrade.md) article to learn more about the cluster upgrade procedure.
+{{ ydb-short-name }} maintains compatibility between major versions to ensure a cluster can operate while its nodes run two adjacent major versions of the {{ ydb-short-name }} server executable. You may refer the [Updating {{ ydb-short-name }}](../devops/manual/upgrade.md) article to learn more about the cluster upgrade procedure.
 
 Given the above compatibility target, major releases go in pairs: odd numbered releases add new functionality switched off by feature flags, and even numbered releases enable that functionality by default.
 
@@ -41,11 +41,11 @@ Release testing is iterative. Each iteration starts by assigning a tag to a comm
 
 A tag can be considered to be either "candidate" or "stable". Initially, the first tag is created in the release branch right after its creation. This tag is considered as "candidate".
 
-During a testing iteration, code from release branches undergoes an extensive testing including deployment on [UAT](https://en.wikipedia.org/wiki/Acceptance_testing), prestable, and production environments of companies using YDB. To perform such testing, YDB code from a GitHub release tag is imported into the corporate context of a given user, following its internal policies and standards. Then it's built, deployed to the necessary environments, and thoroughly tested.
+During a testing iteration, code from release branches undergoes an extensive testing including deployment on [UAT](https://en.wikipedia.org/wiki/Acceptance_testing), prestable, and production environments of companies using {{ ydb-short-name }}. To perform such testing, {{ ydb-short-name }} code from a GitHub release tag is imported into the corporate context of a given user, following its internal policies and standards. Then it's built, deployed to the necessary environments, and thoroughly tested.
 
 {% include [corp_release_testing.md](_includes/corp_release_testing.md) %}
 
-Based on a list of uncovered problems, the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) decides if the current minor release can be promoted to be called "stable", or a new testing iteration must be started over with a new minor release tag. In fact, as soon as a critical problem is discovered during testing, developers fix it in the `main` branch, and backport changes to the release branch right away. So, by the time testing iteration finishes, there will be a new tag and a new testing iteration if there are some new commits on top of the current tag.
+Based on a list of uncovered problems, the [{{ ydb-short-name }} Release team](https://github.com/orgs/ydb-platform/teams/release) decides if the current minor release can be promoted to be called "stable", or a new testing iteration must be started over with a new minor release tag. In fact, as soon as a critical problem is discovered during testing, developers fix it in the `main` branch, and backport changes to the release branch right away. So, by the time testing iteration finishes, there will be a new tag and a new testing iteration if there are some new commits on top of the current tag.
 
 ### Stable release {#server-stable}
 
@@ -77,4 +77,4 @@ Tags for {{ ydb-short-name }} CLI are assigned on the `main` branch by a member 
 
 ### Stable release {#cli-stable}
 
-To declare a {{ ydb-short-name }} CLI tag as stable, a member of the [YDB Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the [release notes](../changelog-cli.md), and publishes the release on the [GitHub Releases](https://github.com/ydb-platform/ydb/releases) and [Downloads](../downloads/index.md#ydb-cli) pages.
+To declare a {{ ydb-short-name }} CLI tag as stable, a member of the [{{ ydb-short-name }} Release team](https://github.com/orgs/ydb-platform/teams/release) prepares the [release notes](../changelog-cli.md), and publishes the release on the [GitHub Releases](https://github.com/ydb-platform/ydb/releases) and [Downloads](../downloads/index.md#ydb-cli) pages.

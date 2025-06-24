@@ -1,0 +1,1 @@
+In the example above, Apache Flink 1.20 is used with the [Flink DataStream connector](https://nightlies.apache.org/flink/flink-docs-release-1.20/docs/connectors/datastream/kafka/) for Kafka.

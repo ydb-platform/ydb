@@ -20,20 +20,26 @@
 ## Параметры подкоманды {#options}
 
 #|
-|| **Имя** | **Описание** ||
+|| Имя | Описание ||
 ||`--timeout` | Время, в течение которого должна быть выполнена операция на сервере.||
 ||`-t`, `--type` | Тип запроса.
 Возможные значения:
+
 * `data` — YQL-запрос, содержащий [DML]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Manipulation_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Manipulation_Language){% endif %} операции, допускает как изменение данных в базе, так и получение нескольких выборок с ограничением в 1000 строк в каждой выборке.
 * `scan` — YQL-запрос типа [скан](../../concepts/scan_query.md), допускает только чтение данных из базы, может вернуть только одну выборку, но без ограничения на количество записей в ней. Алгоритм исполнения запроса типа `scan` на сервере более сложный по сравнению с `data`, поэтому в отсутствие требований по возврату более 1000 строк эффективнее использовать тип запроса `data`.
 * `scheme` — YQL-запрос, содержащий [DDL]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Definition_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Definition_Language){% endif %} операции.
+
 Значение по умолчанию — `data`.||
 ||`--stats` | Режим сбора статистики.
 Возможные значения:
+
 * `none` — не собирать;
 * `basic` — собирать по основным событиям;
 * `full` — собирать по всем событиям.
-Значение по умолчанию — `none`.||
+
+Значение по умолчанию — `none`.
+
+||
 ||`-s` | Включить сбор статистики в режиме `basic`.||
 ||`--tx-mode` | [Режим транзакций](../../concepts/transactions.md#modes) (для запросов типа `data`).
 Возможные значения:<li>`serializable-rw` — результат успешно выполненных параллельных транзакций эквивалентен определенному последовательному порядку их выполнения;<li>`online-ro` — каждое из чтений в транзакции читает последние на момент своего выполнения данные;<li>`stale-ro`  — чтения данных в транзакции возвращают результаты с возможным отставанием от актуальных (доли секунды).Значение по умолчанию — `serializable-rw`.||
@@ -70,6 +76,7 @@
 ```
 
 ### Заполнение таблиц данными {#examples-upsert}
+
 ```bash
 {{ ydb-cli }} -p quickstart table query execute \
   -q '
@@ -95,8 +102,8 @@ UPSERT INTO episodes (series_id, season_id, episode_id, title, air_date) VALUES
 
 ```bash
 {{ ydb-cli }} -p quickstart table query execute -q '
-    SELECT season_id, episode_id, title 
-    FROM episodes 
+    SELECT season_id, episode_id, title
+    FROM episodes
     WHERE series_id = 1
   '
 ```

@@ -913,6 +913,7 @@ private:
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
     ui64 BlobQuotaSize = 0;
+    bool NeedDeletePartition = false;
 
     // Wait topic quota metrics
     ui64 TotalPartitionWriteSpeed = 0;

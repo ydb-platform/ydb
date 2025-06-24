@@ -4,7 +4,7 @@ With [Change Data Capture](../concepts/cdc.md) (CDC), you can track changes in t
 
 ## Enabling and disabling CDC {#add-drop}
 
-CDC is represented as a data schema object: a changefeed that can be added to a table or deleted from them using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table.md#changefeed) directives of the YQL `ALTER TABLE` statement.
+CDC is represented as a data schema object: a changefeed that can be added to a table or deleted from them using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) directives of the YQL `ALTER TABLE` statement.
 
 ## Reading data from a topic {#read}
 
@@ -14,11 +14,11 @@ You can read data using an [SDK](../reference/ydb-sdk/index.md) or the [{{ ydb-s
 path/to/table/changefeed_name
 ```
 
-> For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks as follows:
->
-> ```text
-> my/table/updates_feed
-> ```
+For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks as follows:
+
+```text
+my/table/updates_feed
+```
 
 Before reading data, add a [consumer](../concepts/topic.md#consumer). Below is a sample command that adds a consumer named `my_consumer` to the `updates_feed` changefeed of the `table` table in the `my` directory:
 
@@ -44,7 +44,7 @@ When writing data to a table with CDC enabled, there are additional overheads fo
 
 * Making records and saving them to a changefeed.
 * Storing records in a changefeed.
-* In some [modes](../yql/reference/syntax/alter_table.md#changefeed-options) (such as `OLD_IMAGE` and `NEW_AND_OLD_IMAGES`), data needs to be pre-fetched even if a user query doesn't require this.
+* In some [modes](../yql/reference/syntax/alter_table/changefeed.md) (such as `OLD_IMAGE` and `NEW_AND_OLD_IMAGES`), data needs to be pre-fetched even if a user query doesn't require this.
 
 As a result, queries may take longer to execute and size limits for stored data may be exceeded.
 
@@ -59,7 +59,7 @@ As a load generator, you can use the feature of [emulating an online store](../r
 1. [Initialize](../reference/ydb-cli/commands/workload/stock#init) a test.
 1. Add a changefeed:
 
-   ```sql
+```yql
    ALTER TABLE `orders` ADD CHANGEFEED `updates` WITH (
        FORMAT = 'JSON',
        MODE = 'UPDATES'

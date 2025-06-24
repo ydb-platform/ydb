@@ -9,17 +9,3 @@ A specific case of predicate pushdown, where filtering expressions specified aft
 |Comparison conditions `=`, `<>`, `<`, `<=`, `>`, `>=` with other columns or constants|`WHERE column3 > column4 OR column5 <= 10`|
 
 Supported data types for filter pushdown:
-
-|{{ ydb-short-name }} Data Type|
-|----|
-|`Bool`|
-|`Int8`|
-|`Uint8`|
-|`Int16`|
-|`Uint16`|
-|`Int32`|
-|`Uint32`|
-|`Int64`|
-|`Uint64`|
-|`Float`|
-|`Double`|

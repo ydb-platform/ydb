@@ -1,0 +1,12 @@
+items:
+- name: Quick start
+  href: quickstart.md
+- name: Using with Maven
+  href: maven.md
+- name: Authentication modes
+  href: authentication.md
+- name: Properties
+  href: properties.md
+- name: Building
+  href: building.md
+

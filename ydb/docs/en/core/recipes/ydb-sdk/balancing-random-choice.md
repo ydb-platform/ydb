@@ -1,7 +1,5 @@
 # Random choice
 
-{% include [work in progress message](_includes/addition.md) %}
-
 The {{ ydb-short-name }} SDK uses the `random_choice` algorithm by default.
 
 Below are examples of the code for forced setting of the "random choice" balancing algorithm in different {{ ydb-short-name }} SDKs.
@@ -43,6 +41,7 @@ Below are examples of the code for forced setting of the "random choice" balanci
    Client load balancing in the {{ ydb-short-name }} `database/sql` driver is performed only when establishing a new connection (in `database/sql` terms), which is a {{ ydb-short-name }} session on a specific node. Once the session is created, all queries in this session are passed to the node where the session was created. Queries in the same {{ ydb-short-name }} session are not balanced between different {{ ydb-short-name }} nodes.
 
    Example of the code for setting the "random choice" balancing algorithm:
+
    ```go
    package main
 

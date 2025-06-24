@@ -2,7 +2,7 @@
 
 Set up GCP CLI:
 
-1. Activate [Compute Engine API](https://console.cloud.google.com/apis/api/compute.googleapis.com/metrics) and [Cloud DNS API](https://console.cloud.google. com/apis/api/dns.googleapis.com/metrics).
+1. Activate [Compute Engine API](https://console.cloud.google.com/apis/api/compute.googleapis.com/metrics) and [Cloud DNS API](https://console.cloud.google.com/apis/api/dns.googleapis.com/metrics).
 2. Download and install GCP CLI by following [these instructions](https://cloud.google.com/sdk/docs/install).
 3. Go to the `.../google-cloud-sdk/bin` subdirectory and run the `./gcloud compute regions list` command to get a list of available regions.
 4. Run the command `./gcloud auth application-default login` to configure the connection profile.

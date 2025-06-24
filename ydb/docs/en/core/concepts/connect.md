@@ -16,7 +16,7 @@ Examples:
 
 ## Database path {#database}
 
-Database path (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. Has the [format]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Path_(computing)){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Путь_к_файлу){% endif %} and uses the `/` character as separator. It always starts with a `/`.
+Database path (`database`) is a string that defines where the queried database is located in the {{ ydb-short-name }} cluster. Has the [format](https://en.wikipedia.org/wiki/Path_(computing)) and uses the `/` character as separator. It always starts with a `/`.
 
 A {{ ydb-short-name }} cluster may have multiple databases deployed, with their paths determined by the cluster configuration. Like the endpoint, `database` for cloud databases is displayed in the management console on the desired database page, and can also be obtained via the CLI of the cloud provider.
 
@@ -35,8 +35,21 @@ Examples:
 * `/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr` is a {{ yandex-cloud }} database with `etn01q3ko8sh271beftr` as ID deployed in the `b1g8skpbljhs03malf3s` cloud in the `ru-central1` region.
 * `/local` is the default database for custom deployment [using Docker](../quickstart.md).
 
+## Connection string {#connection_string}
+
+A connection string is a URL-formatted string that specifies the endpoint and path to a database using the following syntax:
+
+`<endpoint>?database=<database>`
+
+Examples:
+
+- `grpc://localhost:7135?database=/local`
+- `grpcs://ydb.serverless.yandexcloud.net:2135?database=/ru-central1/b1g8skpblkos03malf3s/etn01q5ko6sh271beftr`
+
+Using a connection string is an alternative to specifying the endpoint and database path separately and can be used in tools that support this method.
+
 ## A root certificate for TLS {#tls-cert}
 
-When using an encrypted protocol ([gRPC over TLS](https://grpc.io/docs/guides/auth/), or gRPCS), a network connection can only be continued if the client is sure that it receives a response from the genuine server that it is trying to connect to, rather than someone in-between intercepting its request on the network. This is assured by verifications through a [chain of trust]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Chain_of_trust){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Цепочка_доверия){% endif %}, for which you need to install a root certificate on your client.
+When using an encrypted protocol ([gRPC over TLS](https://grpc.io/docs/guides/auth/), or gRPCS), a network connection can only be continued if the client is sure that it receives a response from the genuine server that it is trying to connect to, rather than someone in-between intercepting its request on the network. This is assured by verifications through a [chain of trust](https://en.wikipedia.org/wiki/Chain_of_trust), for which you need to install a root certificate on your client.
 
 The OS that the client runs on already include a set of root certificates from the world's major certification authorities. However, the {{ ydb-short-name }} cluster owner can use its own CA that is not associated with any of the global ones, which is often the case in corporate environments, and is almost always used for self-deployment of clusters with connection encryption support. In this case, the cluster owner must somehow transfer its root certificate for use on the client side. This certificate may be installed in the operating system's certificate store where the client runs (manually by a user or by a corporate OS administration team) or built into the client itself (as is the case for {{ yandex-cloud }} in {{ ydb-short-name }} CLI and SDK).

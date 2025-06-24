@@ -354,6 +354,7 @@ class StabilityCluster:
             print(f'    {node}: {minidumps_search_results[node]}')
 
     def start_nemesis(self):
+        self.prepare_cluster_yaml()
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command(DICT_OF_SERVICES['nemesis']['start_command'], raise_on_error=True)
 
@@ -512,10 +513,12 @@ class StabilityCluster:
     def cleanup(self, mode='all'):
         for node in self.kikimr_cluster.nodes.values():
             if mode in ['all', 'dumps']:
-                node.ssh_command('sudo rm -rf /coredumps/*', raise_on_error=False)
+                node.ssh_command('sudo find /coredumps/ -type f -exec rm -f {} +', raise_on_error=False)
+                node.ssh_command('sudo find /Berkanavt/kikim*/minidumps/ -type f -exec rm -f {} +', raise_on_error=False)
+                node.ssh_command('sudo find /Berkanavt/kikimr/bin/versions/ -type f -exec rm -f {} +', raise_on_error=False)
             if mode in ['all', 'logs']:
-                node.ssh_command('sudo find /Berkanavt/kikimr*/logs/kikimr* -type f -exec rm -f {} +', raise_on_error=False)
-                node.ssh_command('sudo rm -rf /Berkanavt/nemesis/log/*', raise_on_error=False)
+                node.ssh_command('sudo find /Berkanavt/kikim*/logs/kikimr* -type f -exec rm -f {} +', raise_on_error=False)
+                node.ssh_command('sudo find /Berkanavt/nemesis/log/ -type f -exec rm -f {} +', raise_on_error=False)
         if mode in ['all', 'logs']:
             self.kikimr_cluster.cleanup_logs()
 
@@ -549,6 +552,10 @@ class StabilityCluster:
                     node_artifact_path
                 )
                 node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
+        self.prepare_cluster_yaml()
+
+    def prepare_cluster_yaml(self):
+        for node in self.kikimr_cluster.nodes.values():
             node.copy_file_or_dir(
                 self.slice_directory,
                 '/Berkanavt/kikimr/cfg/cluster.yaml'

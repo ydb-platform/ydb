@@ -71,6 +71,9 @@ private:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
+            // Bridge
+            hFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
+
         default:
             LOG_E("Unexpected event"
                 << ": type# " << ev->GetTypeRewrite()
@@ -112,6 +115,10 @@ private:
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev);
     void Handle(TEvents::TEvUndelivered::TPtr& ev);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+
+    // Bridge
+    void RequestBridgeInfo();
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev);
 
 private:
     const TActorId Client;
@@ -197,11 +204,24 @@ void TInfoCollector::Bootstrap() {
     Become(&TThis::StateWork);
 }
 
+THashMap<ui32, ui32> FlipPileMap(const auto pileMap) {
+    THashMap<ui32, ui32> result;
+    for (ui32 i = 0; i < pileMap->size(); ++i) {
+        for (ui32 j : pileMap->at(i)) {
+            result.emplace(j, i);
+        }
+    }
+    return result;
+}
+
 void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     RequestBaseConfig();
     RequestBootstrapConfig();
     RequestStateStorageConfig();
+    RequestBridgeInfo();
 
+    const auto& pileMap = ev->Get()->PileMap;
+    Info->NodeIdToPileId = FlipPileMap(pileMap);
     for (const auto& node : ev->Get()->Nodes) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());
         SendNodeRequests(node.NodeId);
@@ -509,6 +529,15 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     Info->ClearNode(nodeId);
     NodeEvents[nodeId].clear();
     MaybeReplyAndDie();
+}
+
+void TInfoCollector::RequestBridgeInfo() {
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(true));
+}
+
+void TInfoCollector::Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev) {
+    const auto& bridgeInfo = ev->Get()->BridgeInfo;
+    Info->BridgeInfo = bridgeInfo;
 }
 
 IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout) {

@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 //             auto selectQuery = TString(R"(
 //                 SELECT MAX(timestamp) AS timestamp FROM `/Root/olapStore/olapTable`
 //             )");
-// 
+//
 //             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 //             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
 //             UNIT_ASSERT_GT(GetTimestamp(rows[0].at(DEFAULT_COLUMN_NAME)), TInstant::Now() - TDuration::Days(100));
@@ -330,17 +330,20 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
-        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        const auto& kikimr = testHelper.GetKikimr();
+        NYdb::NTable::TTableClient tableClient = kikimr.GetTableClient();
 
         olapHelper.CreateTestOlapTable();
+        const auto describeResult = kikimr.GetTestClient().Describe(
+            kikimr.GetTestServer().GetRuntime(), "Root/olapStore/olapTable");
+        const auto tablePathId = NColumnShard::TSchemeShardLocalPathId::FromRawValue(describeResult.GetPathId());
+
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
         THashSet<NColumnShard::TInternalPathId> pathsToLock;
         for (const auto& [_, pathIdTranslator]: csController->GetActiveTablets()) {
-            for (size_t i = 0; i != 6; ++i) {
-                if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(NColumnShard::TSchemeShardLocalPathId::FromRawValue(i))) {
-                    pathsToLock.insert(*internalPathId);
-                }
+            if (auto internalPathId = pathIdTranslator->ResolveInternalPathId(tablePathId)) {
+                pathsToLock.insert(*internalPathId);
             }
         };
 
@@ -413,13 +416,13 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& putController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
-        
-        
+
+
         olapHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
         tieringHelper.WriteSampleData();
         putController->WaitCompactions(TDuration::Seconds(5));
-    
+
         putController->SetExternalStorageUnavailable(true);
         testHelper.SetTiering(DEFAULT_TABLE_NAME,
                               DEFAULT_TIER_NAME,

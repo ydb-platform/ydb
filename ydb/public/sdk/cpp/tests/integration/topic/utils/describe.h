@@ -7,10 +7,10 @@
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
-void DescribeTopic(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation);
+void DescribeTopicTest(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation);
 
-void DescribeConsumer(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation);
+void DescribeConsumerTest(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation);
 
-void DescribePartition(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation);
+void DescribePartitionTest(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation);
 
 }

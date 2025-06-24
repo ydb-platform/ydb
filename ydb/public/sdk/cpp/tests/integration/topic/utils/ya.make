@@ -4,8 +4,8 @@ SRCS(
     describe.cpp
     local_partition.cpp
     managed_executor.cpp
+    setup.cpp
     trace.cpp
-    setup.h
 )
 
 PEERDIR(

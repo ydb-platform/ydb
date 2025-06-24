@@ -13,9 +13,9 @@ TEST_F(Describe, TEST_NAME(Basic)) {
     TTopicClient client(MakeDriver());
 
     try {
-        DescribeTopic(*this, client, false, false, false);
-        DescribeConsumer(*this, client, false, false, false);
-        DescribePartition(*this, client, false, false, false);
+        DescribeTopicTest(*this, client, false, false, false);
+        DescribeConsumerTest(*this, client, false, false, false);
+        DescribePartitionTest(*this, client, false, false, false);
     } catch (const yexception& e) {
         ASSERT_TRUE(false) << e.what();
     }
@@ -29,9 +29,9 @@ TEST_F(Describe, TEST_NAME(Statistics)) {
 
     // Get empty description
     try {
-        DescribeTopic(*this, client, true, false, false);
-        DescribeConsumer(*this, client, true, false, false);
-        DescribePartition(*this, client, true, false, false);
+        DescribeTopicTest(*this, client, true, false, false);
+        DescribeConsumerTest(*this, client, true, false, false);
+        DescribePartitionTest(*this, client, true, false, false);
     } catch (const yexception& e) {
         ASSERT_TRUE(false) << e.what();
     }
@@ -102,9 +102,9 @@ TEST_F(Describe, TEST_NAME(Statistics)) {
 
     // Get non-empty description
     try {
-        DescribeTopic(*this, client, true, true, false);
-        DescribeConsumer(*this, client, true, true, false);
-        DescribePartition(*this, client, true, true, false);
+        DescribeTopicTest(*this, client, true, true, false);
+        DescribeConsumerTest(*this, client, true, true, false);
+        DescribePartitionTest(*this, client, true, true, false);
     } catch (const yexception& e) {
         ASSERT_TRUE(false) << e.what();
     }
@@ -114,9 +114,9 @@ TEST_F(Describe, TEST_NAME(Location)) {
     TTopicClient client(MakeDriver());
 
     try {
-        DescribeTopic(*this, client, false, false, true);
-        DescribeConsumer(*this, client, false, false, true);
-        DescribePartition(*this, client, false, false, true);
+        DescribeTopicTest(*this, client, false, false, true);
+        DescribeConsumerTest(*this, client, false, false, true);
+        DescribePartitionTest(*this, client, false, false, true);
     } catch (const yexception& e) {
         ASSERT_TRUE(false) << e.what();
     }

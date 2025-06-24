@@ -924,12 +924,12 @@ TEST_F(DirectReadWithClient, ManyMessages) {
     so the server sends multiple DirectReadResponses.
     */
 
-    DropTopic(GetTopicPath());
+    DropTopic(TEST_TOPIC);
 
     constexpr std::size_t partitionCount = 2;
     std::size_t messageCount = 100;
     std::size_t totalMessageCount = partitionCount * messageCount;
-    CreateTopic(GetTopicPath(), GetConsumerName(), partitionCount);
+    CreateTopic(TEST_TOPIC, TEST_CONSUMER, partitionCount);
     TTopicClient client{MakeDriver()};
 
     std::string message(950_KB, 'x');

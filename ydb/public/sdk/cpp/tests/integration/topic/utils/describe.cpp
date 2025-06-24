@@ -3,7 +3,7 @@
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
-void DescribeTopic(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation) {
+void DescribeTopicTest(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation) {
     TDescribeTopicSettings settings;
     settings.IncludeStats(requireStats);
     settings.IncludeLocation(requireLocation);
@@ -45,7 +45,7 @@ void DescribeTopic(ITopicTestSetup& setup, TTopicClient& client, bool requireSta
     }
 }
 
-void DescribeConsumer(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation){
+void DescribeConsumerTest(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation){
     TDescribeConsumerSettings settings;
     settings.IncludeStats(requireStats);
     settings.IncludeLocation(requireLocation);
@@ -99,7 +99,7 @@ void DescribeConsumer(ITopicTestSetup& setup, TTopicClient& client, bool require
     }
 }
 
-void DescribePartition(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation) {
+void DescribePartitionTest(ITopicTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation) {
     TDescribePartitionSettings settings;
     settings.IncludeStats(requireStats);
     settings.IncludeLocation(requireLocation);

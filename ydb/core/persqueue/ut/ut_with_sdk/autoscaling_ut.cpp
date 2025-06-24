@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_oldSDK(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         writeSession2->Write(Msg("message_2.2", 7));
 
         auto writeSettings4 = TWriteSessionSettings()
-                        .Path(setup.GetTopicPath())
+                        .Path(TEST_TOPIC)
                         .DeduplicationEnabled(false)
                         .PartitionId(1);
         auto writeSession4 = client.CreateSimpleBlockingWriteSession(writeSettings4);
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionMerge_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 2, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ReadEmptyPartitions(SdkVersion sdk, bool autoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoPartitioningSupport = autoscaleAwareSDK });
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ReadNotEmptyPartitions(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk, .AutoCommit = false, .AutoPartitioningSupport = false });
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
         auto readSession = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = SdkVersion::Topic, .AutoCommit = false, .AutoPartitioningSupport = true });
@@ -511,7 +511,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void PartitionSplit_ManySession(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -551,7 +551,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(PartitionSplit_ManySession_existed_AutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -856,18 +856,18 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 .Strategy(EAutoPartitioningStrategy::ScaleUp)
                 .EndConfigureAutoPartitioningSettings()
             .EndConfigurePartitioningSettings();
-        client.CreateTopic(setup.GetTopicPath(), createSettings).Wait();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, setup.GetTopicPath(), false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, setup.GetTopicPath(), false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
             Sleep(TDuration::Seconds(5));
-            auto describe = client.DescribeTopic(setup.GetTopicPath()).GetValueSync();
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
         }
 
@@ -877,12 +877,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
             UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
             Sleep(TDuration::Seconds(15));
-            auto describe = client.DescribeTopic(setup.GetTopicPath()).GetValueSync();
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, setup.GetTopicPath(), false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, setup.GetTopicPath(), false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -890,7 +890,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
             UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
             Sleep(TDuration::Seconds(5));
-            auto describe2 = client.DescribeTopic(setup.GetTopicPath()).GetValueSync();
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
         }
     }
@@ -904,7 +904,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             .BeginConfigurePartitioningSettings()
             .MinActivePartitions(1)
             .EndConfigurePartitioningSettings();
-        client.CreateTopic(setup.GetTopicPath(), createSettings).Wait();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
 
         TAlterTopicSettings alterSettings;
         alterSettings
@@ -918,18 +918,18 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                     .Strategy(EAutoPartitioningStrategy::ScaleUp)
                 .EndAlterAutoPartitioningSettings()
             .EndAlterTopicPartitioningSettings();
-        client.AlterTopic(setup.GetTopicPath(), alterSettings).Wait();
+        client.AlterTopic(TEST_TOPIC, alterSettings).Wait();
 
         auto msg = TString(1_MB, 'a');
 
-        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, setup.GetTopicPath(), false);
-        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, setup.GetTopicPath(), false);
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TString{TEST_TOPIC}, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
             Sleep(TDuration::Seconds(5));
-            auto describe = client.DescribeTopic(setup.GetTopicPath()).GetValueSync();
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
         }
 
@@ -939,12 +939,12 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
             UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
             Sleep(TDuration::Seconds(5));
-            auto describe = client.DescribeTopic(setup.GetTopicPath()).GetValueSync();
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
         }
 
-        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, setup.GetTopicPath(), false);
-        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, setup.GetTopicPath(), false);
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TString{TEST_TOPIC}, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TString{TEST_TOPIC}, false);
 
         {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
@@ -952,7 +952,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
             UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
             Sleep(TDuration::Seconds(5));
-            auto describe2 = client.DescribeTopic(setup.GetTopicPath()).GetValueSync();
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
         }
     }
@@ -1190,7 +1190,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 1, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
 
@@ -1230,7 +1230,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(ReBalancingAfterSplit_sessionsWithPartition) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopicWithAutoscale(setup.GetTopicPath(), setup.GetConsumerName(), 2, 100);
+        setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
 

@@ -10,29 +10,24 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
 #define TEST_CASE_NAME (this->Name_)
 
-
-inline static const std::string TEST_TOPIC = "test-topic";
-inline static const std::string TEST_CONSUMER = "test-consumer";
-
 class TTopicSdkTestSetup : public ITopicTestSetup {
 public:
     TTopicSdkTestSetup(const std::string& testCaseName, const NKikimr::Tests::TServerSettings& settings = MakeServerSettings(), bool createTopic = true);
 
-    void CreateTopic(const std::optional<std::string>& path = std::nullopt,
-                     const std::optional<std::string>& consumer = std::nullopt,
+    void CreateTopic(const std::string& name = TEST_TOPIC,
+                     const std::string& consumer = TEST_CONSUMER,
                      std::size_t partitionCount = 1,
                      std::optional<std::size_t> maxPartitionCount = std::nullopt,
                      const TDuration retention = TDuration::Hours(1),
                      bool important = false) override;
 
-    void CreateTopicWithAutoscale(const std::optional<std::string>& path = std::nullopt,
-                                  const std::optional<std::string>& consumer = std::nullopt,
+    void CreateTopicWithAutoscale(const std::string& name = TEST_TOPIC,
+                                  const std::string& consumer = TEST_CONSUMER,
                                   std::size_t partitionCount = 1,
                                   std::optional<std::size_t> maxPartitionCount = std::nullopt);
 
-    TTopicDescription DescribeTopic(const std::optional<std::string>& path = std::nullopt);
-    TConsumerDescription DescribeConsumer(const std::optional<std::string>& path = std::nullopt,
-                                          const std::optional<std::string>& consumer = std::nullopt);
+    TConsumerDescription DescribeConsumer(const std::string& name = TEST_TOPIC,
+                                          const std::string& consumer = TEST_CONSUMER);
 
     void Write(const std::string& message, std::uint32_t partitionId = 0,
                const std::optional<std::string> producer = std::nullopt,
@@ -54,14 +49,13 @@ public:
                    std::size_t partitionId, std::size_t offset,
                    std::optional<std::string> sessionId = std::nullopt);
 
-    std::string GetEndpoint() const;
-    std::string GetTopicPath() const override;
-    std::string GetConsumerName() const override;
-    std::string GetTopicParent() const;
-    std::string GetDatabase() const;
+    std::string GetEndpoint() const override;
+    std::string GetDatabase() const override;
 
     std::vector<std::uint32_t> GetNodeIds() override;
     std::uint16_t GetPort() const override;
+
+    TDriverConfig MakeDriverConfig() const override;
 
     ::NPersQueue::TTestServer& GetServer();
     NActors::TTestActorRuntime& GetRuntime();
@@ -70,16 +64,10 @@ public:
     TTopicClient MakeClient() const;
     NYdb::NTable::TTableClient MakeTableClient() const;
 
-    TDriver MakeDriver() const;
-    TDriver MakeDriver(const TDriverConfig& config) const;
-
-    TDriverConfig MakeDriverConfig() const override;
     static NKikimr::Tests::TServerSettings MakeServerSettings();
 
 private:
     std::string Database_;
-    std::string TopicPath_;
-    std::string ConsumerName_;
 
     ::NPersQueue::TTestServer Server_;
 

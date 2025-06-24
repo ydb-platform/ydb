@@ -32,17 +32,17 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
     Y_UNIT_TEST(DescribeConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(setup.GetTopicPath(), setup.GetConsumerName(), 1);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
 
         auto describe = [&]() {
-            return setup.DescribeConsumer(setup.GetTopicPath(), setup.GetConsumerName());
+            return setup.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER);
         };
 
         auto write = [&](size_t seqNo) {
             TTopicClient client(setup.MakeDriver());
 
             TWriteSessionSettings settings;
-            settings.Path(setup.GetTopicPath());
+            settings.Path(TEST_TOPIC);
             settings.PartitionId(0);
             settings.DeduplicationEnabled(false);
             auto session = client.CreateSimpleBlockingWriteSession(settings);
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         // Check describe for empty topic
         {
             auto d = describe();
-            UNIT_ASSERT_STRINGS_EQUAL(setup.GetConsumerName(), d.GetConsumer().GetConsumerName());
+            UNIT_ASSERT_STRINGS_EQUAL(TEST_CONSUMER, d.GetConsumer().GetConsumerName());
             UNIT_ASSERT_VALUES_EQUAL(1, d.GetPartitions().size());
             auto& p = d.GetPartitions()[0];
             UNIT_ASSERT_VALUES_EQUAL(0, p.GetPartitionId());
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         // Check describe for topic which contains messages, but consumer hasn`t read
         {
             auto d = describe();
-            UNIT_ASSERT_STRINGS_EQUAL(setup.GetConsumerName(), d.GetConsumer().GetConsumerName());
+            UNIT_ASSERT_STRINGS_EQUAL(TEST_CONSUMER, d.GetConsumer().GetConsumerName());
             UNIT_ASSERT_VALUES_EQUAL(1, d.GetPartitions().size());
             auto& p = d.GetPartitions()[0];
             UNIT_ASSERT_VALUES_EQUAL(0, p.GetPartitionId());
@@ -96,12 +96,12 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetLastReadOffset());
         }
 
-        UNIT_ASSERT(setup.Commit(setup.GetTopicPath(), setup.GetConsumerName(), 0, 1).IsSuccess());
+        UNIT_ASSERT(setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1).IsSuccess());
 
         // Check describe for topic whis contains messages, has commited offset but hasn`t read (restart tablet for example)
         {
             auto d = describe();
-            UNIT_ASSERT_STRINGS_EQUAL(setup.GetConsumerName(), d.GetConsumer().GetConsumerName());
+            UNIT_ASSERT_STRINGS_EQUAL(TEST_CONSUMER, d.GetConsumer().GetConsumerName());
             UNIT_ASSERT_VALUES_EQUAL(1, d.GetPartitions().size());
             auto& p = d.GetPartitions()[0];
             UNIT_ASSERT_VALUES_EQUAL(0, p.GetPartitionId());
@@ -120,8 +120,8 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         {
             TTopicClient client(setup.MakeDriver());
             TReadSessionSettings settings;
-            settings.ConsumerName(setup.GetConsumerName());
-            settings.AppendTopics(TTopicReadSettings().Path(setup.GetTopicPath()));
+            settings.ConsumerName(TEST_CONSUMER);
+            settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC));
 
             auto session = client.CreateReadSession(settings);
 
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         // Check describe for topic wich contains messages, has commited offset of first message and read second message
         {
             auto d = describe();
-            UNIT_ASSERT_STRINGS_EQUAL(setup.GetConsumerName(), d.GetConsumer().GetConsumerName());
+            UNIT_ASSERT_STRINGS_EQUAL(TEST_CONSUMER, d.GetConsumer().GetConsumerName());
             UNIT_ASSERT_VALUES_EQUAL(1, d.GetPartitions().size());
             auto& p = d.GetPartitions()[0];
             UNIT_ASSERT_VALUES_EQUAL(0, p.GetPartitionId());

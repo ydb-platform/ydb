@@ -167,8 +167,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
 
         TWriteSessionSettings writeSettings;
-        writeSettings.Path(setup.GetTopicPath()).MessageGroupId(setup.GetConsumerName());
-        writeSettings.Path(setup.GetTopicPath()).ProducerId(setup.GetConsumerName());
+        writeSettings.Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
+        writeSettings.Path(setup.GetTopicPath()).ProducerId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(ECodec::RAW);
         IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);

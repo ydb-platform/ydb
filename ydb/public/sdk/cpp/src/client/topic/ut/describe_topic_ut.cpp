@@ -16,7 +16,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
             settings.IncludeStats(requireStats);
             settings.IncludeLocation(requireLocation);
 
-            DescribeTopic(setup, client, requireStats, requireNonEmptyStats, requireLocation);
+            DescribeTopicTest(setup, client, requireStats, requireNonEmptyStats, requireLocation);
 
             setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
 
@@ -65,7 +65,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
             settings.IncludeStats(requireStats);
             settings.IncludeLocation(requireLocation);
 
-            DescribeConsumer(setup, client, requireStats, requireNonEmptyStats, requireLocation);
+            DescribeConsumerTest(setup, client, requireStats, requireNonEmptyStats, requireLocation);
 
             setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
 
@@ -98,7 +98,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
             std::int64_t testPartitionId = 0;
 
-            DescribePartition(setup, client, requireStats, requireNonEmptyStats, requireLocation);
+            DescribePartitionTest(setup, client, requireStats, requireNonEmptyStats, requireLocation);
 
             setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
 

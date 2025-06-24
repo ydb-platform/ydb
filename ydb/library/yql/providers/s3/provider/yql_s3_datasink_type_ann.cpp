@@ -438,9 +438,14 @@ private:
                         return nullptr;
                     }
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Missed key column."));
+                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Missed key column '" << key->Content() << "' for partitioned by."));
                     return nullptr;
                 }
+            }
+
+            if (structType->GetSize() <= keysCount) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Write schema contains no columns except partitioning columns."));
+                return nullptr;
             }
 
             TTypeAnnotationNode::TListType itemTypes(keysCount + 1U, ctx.MakeType<TDataExprType>(EDataSlot::Utf8));

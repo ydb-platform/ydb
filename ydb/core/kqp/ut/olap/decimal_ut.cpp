@@ -272,6 +272,28 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         check(tester22);
         check(tester35);
     }
+
+    Y_UNIT_TEST(TestDecimal239) {
+        TDecimalTestCase tester239(15, 10);
+        tester239.PrepareTable1();
+
+        auto insert = [](TDecimalTestCase& tester) {
+            TTestHelper::TUpdatesBuilder inserter = tester.Inserter();
+            inserter.AddRow().Add(5).Add(5).AddNull();
+            inserter.AddRow().Add(6).Add(6).AddNull();
+            tester.Upsert(inserter);            
+        };
+
+        auto check = [](const TDecimalTestCase& tester) {
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is NULL order by id", "[[#;5;[5]];[#;6;[6]]]");
+
+            tester.CheckQuery("SELECT * FROM `/Root/Table1` WHERE dec is not NULL order by id",
+                "[[[\"3.14\"];1;[4]];[[\"8.16\"];2;[3]];[[\"8.492\"];3;[2]];[[\"12.46\"];4;[1]]]");
+        };
+
+        insert(tester239);
+        check(tester239);
+    }
 }
 
 }   // namespace NKqp

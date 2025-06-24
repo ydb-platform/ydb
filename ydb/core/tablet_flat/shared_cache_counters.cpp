@@ -1,0 +1,64 @@
+#include "shared_cache_counters.h"
+#include "shared_sausagecache.h"
+
+namespace NKikimr::NSharedCache {
+
+TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+    : Counters(counters)
+    // lru cache counters:
+    , FreshBytes(counters->GetCounter("fresh"))
+    , StagingBytes(counters->GetCounter("staging"))
+    , WarmBytes(counters->GetCounter("warm"))
+    // page counters:
+    , MemLimitBytes(counters->GetCounter("MemLimitBytes"))
+    , ConfigLimitBytes(counters->GetCounter("ConfigLimitBytes"))
+    , ActivePages(counters->GetCounter("ActivePages"))
+    , ActiveBytes(counters->GetCounter("ActiveBytes"))
+    , ActiveLimitBytes(counters->GetCounter("ActiveLimitBytes"))
+    , PassivePages(counters->GetCounter("PassivePages"))
+    , PassiveBytes(counters->GetCounter("PassiveBytes"))
+    , RequestedPages(counters->GetCounter("RequestedPages", true))
+    , RequestedBytes(counters->GetCounter("RequestedBytes", true))
+    , CacheHitPages(counters->GetCounter("CacheHitPages", true))
+    , CacheHitBytes(counters->GetCounter("CacheHitBytes", true))
+    , CacheMissPages(counters->GetCounter("CacheMissPages", true))
+    , CacheMissBytes(counters->GetCounter("CacheMissBytes", true))
+    , LoadInFlyPages(counters->GetCounter("LoadInFlyPages"))
+    , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
+    // page collection counters:
+    , PageCollections(counters->GetCounter("PageCollections"))
+    , Owners(counters->GetCounter("Owners"))
+    , PageCollectionOwners(counters->GetCounter("PageCollectionOwners"))
+    // request counters:
+    , PendingRequests(counters->GetCounter("PendingRequests"))
+    , SucceedRequests(counters->GetCounter("SucceedRequests", true))
+    , FailedRequests(counters->GetCounter("FailedRequests", true))
+{ }
+
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolicySize(TReplacementPolicy policy) {
+    return Counters->GetCounter(TStringBuilder() << "ReplacementPolicySize/" << policy);
+}
+
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActivePagesTier(ui32 tier) {
+    switch (tier) {
+    case RegularCacheTier:
+        return Counters->GetCounter("TierRegularCacheActivePages");
+    case TryInMemoryCacheTier:
+        return Counters->GetCounter("TierTryKeepInMemoryActivePages");
+    default:
+        return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActivePages");
+    }
+}
+
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActiveBytesTier(ui32 tier) {
+    switch (tier) {
+    case RegularCacheTier:
+        return Counters->GetCounter("TierRegularCacheActiveBytes");
+    case TryInMemoryCacheTier:
+        return Counters->GetCounter("TierTryKeepInMemoryActiveBytes");
+    default:
+        return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActiveBytes");
+    }
+}
+
+} // namespace NKikimr::NSharedCache

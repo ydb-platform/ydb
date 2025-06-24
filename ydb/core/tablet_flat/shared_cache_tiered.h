@@ -1,21 +1,14 @@
 #pragma once
 
+#include "shared_cache_counters.h"
 #include "shared_cache_switchable.h"
 
 namespace NKikimr::NSharedCache {
 
-    struct ITieredCacheCounters {
-        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-
-        virtual ~ITieredCacheCounters() = default;
-
-        virtual TCounterPtr ActivePagesTier(ui32 tier) = 0;
-        virtual TCounterPtr ActiveBytesTier(ui32 tier) = 0;
-    };
-
     template <typename TPage, typename TPageTraits>
     class TTieredCache {
         using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+        using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
         static constexpr ui32 MaxTiersCount = 3;
         static_assert(MaxTiersCount < (1 << 2));
@@ -29,10 +22,11 @@ namespace NKikimr::NSharedCache {
 
     public:
         template <typename TCacheBuilder>
-        TTieredCache(ui64 limit, TCacheBuilder createCache, TCounterPtr sizeCounter, ui32 numberOfTiers, ITieredCacheCounters& cacheCounters)
+        TTieredCache(ui64 limit, TCacheBuilder createCache, ui32 numberOfTiers, TReplacementPolicy policy, TSharedPageCacheCounters& cacheCounters)
             : CacheTiers(::Reserve(numberOfTiers))
         {
             Y_ENSURE(numberOfTiers > 0 && numberOfTiers <= MaxTiersCount);
+            TCounterPtr sizeCounter = cacheCounters.ReplacementPolicySize(policy);
             for (ui32 tier = 1; tier <= numberOfTiers; ++tier) {
                 ui64 tierLimit = tier == DefaultTier ? limit : 0;
                 CacheTiers.emplace_back(

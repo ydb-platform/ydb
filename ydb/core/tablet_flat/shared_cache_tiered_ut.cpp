@@ -11,28 +11,6 @@ using namespace NKikimr::NSharedCache::NTest;
 
 Y_UNIT_TEST_SUITE(TieredCache) {
 
-    class TTieredTestCounters : public ITieredCacheCounters {
-    public:
-        TTieredTestCounters(ui32 numberOfTiers) {
-            for (auto _ : xrange(numberOfTiers)) {
-                ActivePagesCounters.push_back(MakeIntrusive<NMonitoring::TCounterForPtr>());
-                ActiveBytesCounters.push_back(MakeIntrusive<NMonitoring::TCounterForPtr>());
-            }
-        }
-
-        TCounterPtr ActivePagesTier(ui32 tier) override {
-            return ActivePagesCounters[tier - 1];
-        }
-
-        TCounterPtr ActiveBytesTier(ui32 tier) override {
-            return ActiveBytesCounters[tier - 1];
-        }
-    
-    private:
-        TVector<TCounterPtr> ActivePagesCounters;
-        TVector<TCounterPtr> ActiveBytesCounters;
-    };
-
     TVector<ui32> Touch(auto& cache, TPage& page, ui32 tier) {
         auto evicted = cache.Touch(&page, tier);
         TVector<ui32> result;
@@ -80,8 +58,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     }
 
     Y_UNIT_TEST(Touch) {
-        TCounterPtr sizeCounter = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TTieredTestCounters counters(2);
+        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
 
         TVector<TSimpleCache*> caches;
         auto makeCache = [&caches]() {
@@ -90,7 +67,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
             return cacheHolder;
         };
 
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, sizeCounter, 2, counters);
+        TTieredCache<TPage, TPageTraits> cache(10, makeCache, 2, NKikimrSharedCache::S3FIFO, counters);
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
 
         TPage page1{1, 2};
@@ -157,8 +134,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     }
 
     Y_UNIT_TEST(Touch3Tiers) {
-        TCounterPtr sizeCounter = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TTieredTestCounters counters(3);
+        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
 
         TVector<TSimpleCache*> caches;
         auto makeCache = [&caches]() {
@@ -167,7 +143,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
             return cacheHolder;
         };
 
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, sizeCounter, 3, counters);
+        TTieredCache<TPage, TPageTraits> cache(10, makeCache, 3, NKikimrSharedCache::S3FIFO, counters);
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 3);
 
         TPage page1{1, 1};
@@ -208,8 +184,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     }
 
     Y_UNIT_TEST(Move) {
-        TCounterPtr sizeCounter = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TTieredTestCounters counters(2);
+        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
 
         TVector<TSimpleCache*> caches;
         auto makeCache = [&caches]() {
@@ -218,7 +193,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
             return cacheHolder;
         };
 
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, sizeCounter, 2, counters);
+        TTieredCache<TPage, TPageTraits> cache(10, makeCache, 2, NKikimrSharedCache::S3FIFO, counters);
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
 
         TPage page1{1, 1};
@@ -283,8 +258,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     }
 
     Y_UNIT_TEST(Erase) {
-        TCounterPtr sizeCounter = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TTieredTestCounters counters(2);
+        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
 
         TVector<TSimpleCache*> caches;
         auto makeCache = [&caches]() {
@@ -293,7 +267,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
             return cacheHolder;
         };
 
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, sizeCounter, 2, counters);
+        TTieredCache<TPage, TPageTraits> cache(10, makeCache, 2, NKikimrSharedCache::S3FIFO, counters);
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
 
         TPage page1{1, 1};
@@ -341,8 +315,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     }
 
     Y_UNIT_TEST(EvictNext) {
-        TCounterPtr sizeCounter = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TTieredTestCounters counters(2);
+        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
 
         TVector<TSimpleCache*> caches;
         auto makeCache = [&caches]() {
@@ -351,7 +324,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
             return cacheHolder;
         };
 
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, sizeCounter, 2, counters);
+        TTieredCache<TPage, TPageTraits> cache(10, makeCache, 2, NKikimrSharedCache::S3FIFO, counters);
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
 
         TPage page1{1, 1};
@@ -404,8 +377,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     }
 
     Y_UNIT_TEST(UpdateLimit) {
-        TCounterPtr sizeCounter = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TTieredTestCounters counters(2);
+        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
 
         TVector<TSimpleCache*> caches;
         auto makeCache = [&caches]() {
@@ -414,7 +386,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
             return cacheHolder;
         };
 
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, sizeCounter, 2, counters);
+        TTieredCache<TPage, TPageTraits> cache(10, makeCache, 2, NKikimrSharedCache::S3FIFO, counters);
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
 
         TPage page1{1, 1};
@@ -509,9 +481,8 @@ Y_UNIT_TEST_SUITE(TieredCache) {
     }
 
     Y_UNIT_TEST(Switch) {
-        TCounterPtr sizeCounter1 = MakeIntrusive<NMonitoring::TCounterForPtr>();
         TCounterPtr sizeCounter2 = MakeIntrusive<NMonitoring::TCounterForPtr>();
-        TTieredTestCounters counters(2);
+        TSharedPageCacheCounters counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
 
         TVector<TSimpleCache*> caches;
         auto makeCache = [&caches]() {
@@ -520,7 +491,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
             return cacheHolder;
         };
 
-        TTieredCache<TPage, TPageTraits> cache(10, makeCache, sizeCounter1, 2, counters);
+        TTieredCache<TPage, TPageTraits> cache(10, makeCache, 2, NKikimrSharedCache::S3FIFO, counters);
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 2);
 
         TPage page1{1, 1};
@@ -532,7 +503,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
 
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Tier 1: {1 1b}, {3 3b}; Tier 2: {2 2b}");
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(1)->Val() + counters.ActiveBytesTier(2)->Val(), cache.GetSize());
-        UNIT_ASSERT_VALUES_EQUAL(sizeCounter1->Val(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(counters.ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 6);
         UNIT_ASSERT_VALUES_EQUAL(sizeCounter2->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(1)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(2)->Val(), 2);
@@ -543,7 +514,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
         UNIT_ASSERT_VALUES_EQUAL(caches.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Tier 1: {1 1b}, {3 3b}; ; Tier 2: {2 2b}; ");
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(1)->Val() + counters.ActiveBytesTier(2)->Val(), cache.GetSize());
-        UNIT_ASSERT_VALUES_EQUAL(sizeCounter1->Val(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(counters.ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 6);
         UNIT_ASSERT_VALUES_EQUAL(sizeCounter2->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(1)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(2)->Val(), 2);
@@ -557,7 +528,7 @@ Y_UNIT_TEST_SUITE(TieredCache) {
         UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page4, 2), TVector<ui32>{});
         UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), "Tier 1: {1 1b}, {3 3b}; Tier 2: {4 4b}, {2 2b}");
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(1)->Val() + counters.ActiveBytesTier(2)->Val(), cache.GetSize());
-        UNIT_ASSERT_VALUES_EQUAL(sizeCounter1->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sizeCounter2->Val(), 10);
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(1)->Val(), 4);
         UNIT_ASSERT_VALUES_EQUAL(counters.ActiveBytesTier(2)->Val(), 6);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "shared_cache_tiered.h"
+#include "shared_cache_counters.h"
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/util/cache_cache.h>
@@ -14,52 +14,6 @@ enum ECacheTiers {
 };
 
 using TSharedCacheConfig = NKikimrSharedCache::TSharedCacheConfig;
-
-struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheCounters>, public ITieredCacheCounters {
-    using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-    using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
-
-    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-
-    // lru cache counters:
-    const TCounterPtr FreshBytes;
-    const TCounterPtr StagingBytes;
-    const TCounterPtr WarmBytes;
-
-    // page counters:
-    const TCounterPtr MemLimitBytes;
-    const TCounterPtr ConfigLimitBytes;
-    const TCounterPtr ActivePages;
-    const TCounterPtr ActiveBytes;
-    const TCounterPtr ActiveLimitBytes;
-    const TCounterPtr PassivePages;
-    const TCounterPtr PassiveBytes;
-    const TCounterPtr RequestedPages;
-    const TCounterPtr RequestedBytes;
-    const TCounterPtr CacheHitPages;
-    const TCounterPtr CacheHitBytes;
-    const TCounterPtr CacheMissPages;
-    const TCounterPtr CacheMissBytes;
-    const TCounterPtr LoadInFlyPages;
-    const TCounterPtr LoadInFlyBytes;
-
-    // page collection counters:
-    const TCounterPtr PageCollections;
-    const TCounterPtr Owners;
-    const TCounterPtr PageCollectionOwners;
-
-    // request counters:
-    const TCounterPtr PendingRequests;
-    const TCounterPtr SucceedRequests;
-    const TCounterPtr FailedRequests;
-
-    explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
-
-    TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);
-
-    TCounterPtr ActivePagesTier(ui32 tier) override;
-    TCounterPtr ActiveBytesTier(ui32 tier) override;
-};
 
 IActor* CreateSharedPageCache(
     const TSharedCacheConfig& config,

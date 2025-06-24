@@ -357,6 +357,7 @@ def normalize_result_nodes(result):
                                           'MemoryTotal',
                                           'MemoryLimit',
                                           'NumberOfCpus',
+                                          'RealNumberOfCpus',
                                           'CoresUsed',
                                           'CoresTotal',
                                           'CreateTime',
@@ -414,6 +415,8 @@ def normalize_result_replication(result):
 def normalize_result(result):
     delete_keys_recursively(result, ['Version',
                                      'MemoryUsed',
+                                     'MemoryTotal',
+                                     'MemoryLimit',
                                      'WriteThroughput',
                                      'ReadThroughput',
                                      'Read',

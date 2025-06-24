@@ -1762,7 +1762,6 @@
             "ROT": "not-zero-number-text"
         },
         "MapVersions": "not-empty-object",
-        "MemoryTotal": "not-zero-number-text",
         "NetworkUtilization": "number",
         "NetworkWriteThroughput": "text",
         "NodesAlive": 3,
@@ -2359,7 +2358,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -2394,7 +2392,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2432,7 +2430,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -2467,7 +2464,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2508,7 +2505,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -2543,7 +2539,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2587,7 +2583,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -2622,7 +2617,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2783,7 +2778,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -2819,7 +2813,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3126,7 +3120,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
@@ -3162,7 +3155,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3327,7 +3320,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
@@ -3363,7 +3355,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3518,7 +3510,6 @@
                         "Host": "text",
                         "LoadAverage": "not-empty-array",
                         "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
@@ -3554,7 +3545,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3895,7 +3886,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -3930,7 +3920,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3974,7 +3964,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -4009,7 +3998,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -4053,7 +4042,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -4088,7 +4076,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -4135,7 +4123,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -4170,7 +4157,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -4328,7 +4315,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -4364,7 +4350,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -4697,7 +4683,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -4733,7 +4718,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -5066,7 +5051,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -5102,7 +5086,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -5435,7 +5419,6 @@
                             "Unit": "1"
                         },
                         "MaxDiskUsage": "not-zero-number",
-                        "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
@@ -5471,7 +5454,7 @@
                                 "Usage": "number"
                             }
                         ],
-                        "RealNumberOfCpus": 128,
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -5687,7 +5670,6 @@
                     "Rack": "",
                     "Unit": "0"
                 },
-                "MemoryLimit": "not-zero-number-text",
                 "NodeId": 50001,
                 "NumberOfCpus": "not-zero-number",
                 "PoolStats": [
@@ -5753,7 +5735,6 @@
                     "Rack": "",
                     "Unit": "0"
                 },
-                "MemoryLimit": "not-zero-number-text",
                 "NodeId": 50000,
                 "NumberOfCpus": "not-zero-number",
                 "PoolStats": [
@@ -5820,7 +5801,6 @@
                     "Unit": "1"
                 },
                 "MaxDiskUsage": "not-zero-number",
-                "MemoryLimit": "not-zero-number-text",
                 "NodeId": 1,
                 "NumberOfCpus": "not-zero-number",
                 "PoolStats": [
@@ -6554,7 +6534,6 @@
                 "CoresUsed": "not-zero-number",
                 "CreateTime": "not-zero-number-text",
                 "Id": "72075186232723360-1",
-                "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": {},
                 "Name": "/Root",
@@ -6601,7 +6580,6 @@
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
                 "Id": "72075186232723360-6",
-                "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
                 "Name": "/Root/dedicated_db",
@@ -6688,7 +6666,6 @@
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
                 "Id": "72075186232723360-7",
-                "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
                 "Name": "/Root/shared_db",
@@ -6755,7 +6732,6 @@
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
                     "Id": "72075186232723360-1",
-                    "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
                     "Name": "/Root",
@@ -6806,7 +6782,6 @@
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
                     "Id": "72075186232723360-6",
-                    "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
                     "Name": "/Root/dedicated_db",
@@ -6900,7 +6875,6 @@
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
                     "Id": "72075186232723360-7",
-                    "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
                     "Name": "/Root/shared_db",

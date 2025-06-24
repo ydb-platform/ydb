@@ -861,7 +861,7 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
     TTypeAnnotationContext& typesCtx)
 {
     Y_UNUSED(typesCtx);
-    if (!(kqpCtx.Config->HasOptEnableOlapPushdown() && kqpCtx.Config->HasOptEnableOlapPushdownProjections())) {
+    if (!(kqpCtx.Config->HasOptEnableOlapPushdown() && kqpCtx.Config->GetEnableOlapPushdownProjections())) {
         return node;
     }
 

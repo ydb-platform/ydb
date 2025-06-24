@@ -329,6 +329,8 @@ private:
 
         bool enableTempTablesForUser = TableServiceConfig.GetEnableTempTablesForUser();
 
+        bool enableOlapPushdownProjections = TableServiceConfig.GetEnableOlapPushdownProjections();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -366,7 +368,7 @@ private:
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
             TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
             TableServiceConfig.GetEnableTempTablesForUser() != enableTempTablesForUser
-        )
+            TableServiceConfig.GetEnableOlapPushdownProjections() != enableOlapPushdownProjections)
         {
 
             QueryCache->Clear();

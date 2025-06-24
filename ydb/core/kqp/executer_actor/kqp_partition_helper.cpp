@@ -940,7 +940,6 @@ THashMap<ui64, TShardInfo> TPartitionPruner::Prune(const NKqpProto::TKqpReadRang
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
             ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
-
         TVector<TPartitionWithRange> readPartitions;
 
         if (Config.BatchOperationRange) {
@@ -1001,6 +1000,8 @@ THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto
     isFullScan = IsFullRange(keyColumnTypes, range);
 
     TTableRange tableRange = range.ToTableRange();
+    TVector<TPartitionWithRange> readPartitions;
+
     if (Config.BatchOperationRange) {
         isFullScan = false;
         auto intersection = IntersectRanges(tableRange, Config.BatchOperationRange->ToTableRange(), keyColumnTypes);
@@ -1050,6 +1051,7 @@ THashMap<ui64, TShardInfo> TPartitionPruner::PrunePartitionsImpl(const NKqpProto
         TTableRange tableRange = std::holds_alternative<TSerializedCellVec>(range)
             ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
+        TVector<TPartitionWithRange> readPartitions;
 
         if (Config.BatchOperationRange) {
             isFullScan = false;

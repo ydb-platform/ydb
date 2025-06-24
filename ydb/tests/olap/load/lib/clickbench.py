@@ -41,13 +41,21 @@ class TestClickbench(LoadSuiteBase):
         if fail_count > 0:
             pytest.fail(f'{fail_count} verification queries failed')
 
+    def _test_impl(self, query_name):
+        self.run_workload_test(self.path, query_name=query_name)
+
     @pytest.mark.parametrize('query_name', QUERY_NAMES)
     def test_clickbench(self, query_name):
-        self.run_workload_test(self.path, query_name=query_name)
+        self._test_impl(query_name)
 
 
 class TestClickbenchPg(TestClickbench):
     query_syntax = 'pg'
+
+    def _test_impl(self, query_name):
+        if query_name in {'Query18', 'Query28', 'Query39'}:
+            pytest.xfail('https://github.com/ydb-platform/ydb/issues/8630')
+        self.run_workload_test(self.path, query_name=query_name)
 
 
 class ClickbenchParallelBase(LoadSuiteParallel):

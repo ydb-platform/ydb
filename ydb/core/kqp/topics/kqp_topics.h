@@ -164,6 +164,7 @@ public:
     bool ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results,
                                     Ydb::StatusIds_StatusCode& status,
                                     TString& message);
+    void CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results);
 
     void BuildTopicTxs(TTopicOperationTransactions &txs);
 

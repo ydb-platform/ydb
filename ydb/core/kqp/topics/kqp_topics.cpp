@@ -273,6 +273,8 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
     if (Topic_.Empty()) {
         Topic_ = rhs.Topic_;
         Partition_ = rhs.Partition_;
+    }
+    if (TabletId_.Empty()) {
         TabletId_ = rhs.TabletId_;
     }
 
@@ -523,8 +525,6 @@ bool TTopicOperations::ProcessSchemeCacheNavigate(const NSchemeCache::TSchemeCac
                     p->second.SetTabletId(partition.GetTabletId());
                 }
             }
-
-            CachedNavigateResult_[path] = result;
         } else {
             builder << "Topic '" << JoinPath(result.Path) << "' is missing";
 
@@ -569,6 +569,20 @@ bool TTopicOperations::HasThisPartitionAlreadyBeenAdded(const TString& topicPath
     }
 
     return false;
+}
+
+void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCacheNavigate::TResultSet& results)
+{
+    for (const auto& result : results) {
+        if (result.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+            continue;
+        }
+        if (!result.PQGroupInfo) {
+            continue;
+        }
+        TString path = CanonizePath(result.Path);
+        CachedNavigateResult_[path] = result;
+    }
 }
 
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)

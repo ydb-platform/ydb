@@ -222,9 +222,6 @@ public:
             << "ActorId: " << SelfId() << ", "
             << "ActorState: " << CurrentStateFuncName() << ", ";
         if (Y_LIKELY(QueryState)) {
-            if (QueryState->HasTxControl()) {
-                result << " TxId: " << QueryState->GetTxControl().tx_id() << ", ";
-            }
             result << "TraceId: " << QueryState->UserRequestContext->TraceId << ", ";
         }
         return result;

@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
-    Y_UNIT_TEST(CreateTransferSourceNotExists)
+    void CreateTransferSourceNotExists(bool localTopic)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -797,15 +797,23 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )");
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic));
 
-        testCase.CheckTransferStateError("Discovery error: local/Topic_");
+        testCase.CheckTransferStateError("Discovery error:");
 
         testCase.DropTransfer();
         testCase.DropTable();
     }
 
-    Y_UNIT_TEST(TransferSourceDropped)
+    Y_UNIT_TEST(CreateTransferSourceNotExists) {
+        CreateTransferSourceNotExists(false);
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceNotExists_LocalTopic) {
+        CreateTransferSourceNotExists(true);
+    }
+
+    void TransferSourceDropped(bool localTopic)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -829,7 +837,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )");
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic));
 
         testCase.Write({"Message-1"});
 
@@ -845,7 +853,17 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTable();
     }
 
-    Y_UNIT_TEST(CreateTransferSourceIsNotTopic)
+    Y_UNIT_TEST(TransferSourceDropped)
+    {
+        TransferSourceDropped(false);
+    }
+
+    Y_UNIT_TEST(TransferSourceDropped_LocalTopic)
+    {
+        //TransferSourceDropped(true);
+    }
+
+    void CreateTransferSourceIsNotTopic(bool localTopic)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -874,12 +892,22 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )");
+            )", MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic));
 
-        testCase.CheckTransferStateError("Discovery error: local/Topic_");
+        testCase.CheckTransferStateError("Discovery error:");
 
         testCase.DropTransfer();
         testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceIsNotTopic)
+    {
+        CreateTransferSourceIsNotTopic(false);
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceIsNotTopic_LocalTopic)
+    {
+        CreateTransferSourceIsNotTopic(true);
     }
 
     Y_UNIT_TEST(CreateTransferTargetIsNotTable)

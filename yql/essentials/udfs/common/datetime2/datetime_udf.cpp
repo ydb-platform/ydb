@@ -3339,6 +3339,22 @@ private:
                 return false;
             }
 
+            // FIXME: The condition below is required to untie the
+            // Gordian knot with the upgrade, when two MiniKQL
+            // runtimes with different versions are being used.
+            // See YQL-19967 for more info.
+            if (MKQL_RUNTIME_VERSION < 51U && typesOnly && name == "Parse") {
+                auto resourceType = builder.Resource(TMResourceName);
+                auto optionalResourceType = builder.Optional()->Item(resourceType).Build();
+
+                builder.Args()->Add<char*>().Flags(ICallablePayload::TArgumentFlags::AutoMap)
+                    .Add(builder.Optional()->Item<ui16>())
+                    .Done()
+                    .OptionalArgs(1);
+                builder.RunConfig<char*>().Returns(optionalResourceType);
+                return true;
+            }
+
             builder.OptionalArgs(1).Args()->Add<char*>()
                 .template Add<TOptional<ui16>>();
             builder.Returns(

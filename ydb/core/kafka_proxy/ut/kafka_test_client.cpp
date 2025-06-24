@@ -145,10 +145,10 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     return WriteAndRead<TProduceResponseData>(header, request);
 }
 
-TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition, 
-                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages, 
-                                                            ui32 baseSequence, 
-                                                            const std::optional<TProducerInstanceId>& producerInstanceId, 
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartition& topicPartition,
+                                                            const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                                                            ui32 baseSequence,
+                                                            const std::optional<TProducerInstanceId>& producerInstanceId,
                                                             const std::optional<TString>& transactionalId) {
     TKafkaRecordBatch batch;
     batch.BaseSequence = baseSequence;
@@ -684,7 +684,7 @@ void TKafkaTestClient::AuthenticateToKafka() {
         auto msg = ApiVersions();
 
         UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 19u);
     }
 
     {

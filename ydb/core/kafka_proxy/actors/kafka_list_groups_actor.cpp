@@ -52,6 +52,7 @@ void TKafkaListGroupsActor::StartKqpSession(const TActorContext& ctx) {
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);
         }
+        TBase::Die(ctx);
 }
 
 NYdb::TParams TKafkaListGroupsActor::BuildSelectParams() {

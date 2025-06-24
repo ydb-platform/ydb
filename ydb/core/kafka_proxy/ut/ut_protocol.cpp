@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 19u);
         }
 
         // authenticate
@@ -1213,7 +1213,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = clientA.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 19u);
         }
 
         {
@@ -1470,7 +1470,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             {
                 auto msg = clientA.ApiVersions();
                 UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+                UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 19u);
             }
             {
                 auto msg = clientA.SaslHandshake();
@@ -2403,7 +2403,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 19u);
         }
 
         {
@@ -2442,7 +2442,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 18u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 19u);
         }
 
         {

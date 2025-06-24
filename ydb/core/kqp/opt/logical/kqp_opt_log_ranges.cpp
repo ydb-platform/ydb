@@ -20,7 +20,7 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
         return {};
     }
 
-    if (kqpCtx.IsScanQuery() || node.Maybe<TKqlLookupIndexBase>())  {
+    if (kqpCtx.IsScanQuery())  {
         return {};
     }
 

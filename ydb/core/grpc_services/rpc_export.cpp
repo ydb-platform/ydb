@@ -50,13 +50,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     static bool IsItemSupportedInExport(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
-        if (kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
-            return true;
+        switch (kind) {
+            case NSchemeCache::TSchemeCacheNavigate::KindTable:
+            case NSchemeCache::TSchemeCacheNavigate::KindTopic:
+                return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindView:
+                return AppData()->FeatureFlags.GetEnableViewExport();
+            default:
+                return false;
         }
-        if (kind == NSchemeCache::TSchemeCacheNavigate::KindView) {
-            return AppData()->FeatureFlags.GetEnableViewExport();
-        }
-        return false;
     }
 
     static bool IsLikeDirectory(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
@@ -257,6 +259,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, TStringBuilder() << "Item \""
                         << path << "\" not found in export items list");
                 }
+                it->second.Resolved = true;
                 const NSchemeCache::TSchemeCacheNavigate::EKind kind = entry.Kind;
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
@@ -269,7 +272,6 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                             << path << "\" is not supported in export");
                     }
                 }
-                it->second.Resolved = true;
             }
         } else if (Stage == EStage::ExpandDirectories) {
             const TString canonizedDatabasePath = CanonizePath(this->GetDatabaseName());

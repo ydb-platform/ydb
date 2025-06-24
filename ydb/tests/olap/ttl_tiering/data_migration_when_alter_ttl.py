@@ -206,5 +206,5 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         # Wait until buckets are empty
         assert self.wait_for(
             lambda: not bucket_is_not_empty(self.bucket1) and not bucket_is_not_empty(self.bucket2),
-            30
+            60
         ), "Buckets are not empty"

@@ -537,7 +537,7 @@ public:
             return;
         }
 
-        QueryState->AddOffsetsToTransaction();
+        QueryState->FillTopicOperations();
 
         auto navigate = QueryState->BuildSchemeCacheNavigate();
 
@@ -1181,7 +1181,12 @@ public:
         if (Settings.TableService.GetEnableOltpSink() && isBatchQuery) {
             if (!Settings.TableService.GetEnableBatchUpdates()) {
                 ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                        "Batch updates and deletes are disabled at current time.");
+                    "BATCH operations are disabled by EnableBatchUpdates flag.");
+            }
+
+            if (QueryState->TxCtx->HasOlapTable) {
+                ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                    "BATCH operations are not supported for column tables at the current time.");
             }
 
             ExecutePartitioned(tx);
@@ -1495,7 +1500,7 @@ public:
 
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
-            RequestCounters, Settings.TableService,
+            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService),
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
@@ -1539,6 +1544,7 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
+        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService);
         TKqpPartitionedExecuterSettings settings{
             .LiteralRequest = std::move(literalRequest),
             .PhysicalRequest = std::move(physicalRequest),
@@ -1551,7 +1557,7 @@ public:
                 ? QueryState->UserToken
                 : TIntrusiveConstPtr<NACLib::TUserToken>(),
             .RequestCounters = RequestCounters,
-            .TableServiceConfig = Settings.TableService,
+            .ExecuterConfig = executerConfig,
             .AsyncIoFactory = AsyncIoFactory,
             .PreparedQuery = QueryState
                 ? QueryState->PreparedQuery
@@ -2070,7 +2076,7 @@ public:
         }
 
         if (replyTopicOperations) {
-            if (HasTopicWriteId()) {
+            if (HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
                 auto* w = response->MutableTopicOperations();
                 auto* writeId = w->MutableWriteId();
                 writeId->SetNodeId(SelfId().NodeId());
@@ -2851,7 +2857,7 @@ private:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
         } else {
             ReplySuccess();
@@ -2873,7 +2879,11 @@ private:
         return QueryState->TxCtx->TopicOperations.HasWriteOperations();
     }
 
-    bool HasTopicWriteId() const {
+    bool HasKafkaApiWriteOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasKafkaOperations() && QueryState->TxCtx->TopicOperations.HasWriteOperations();
+    }
+
+    bool HasTopicApiWriteOperations() const {
         return QueryState->TxCtx->TopicOperations.HasWriteId();
     }
 

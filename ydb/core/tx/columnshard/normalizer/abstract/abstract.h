@@ -60,7 +60,7 @@ enum class ENormalizerSequentialId : ui32 {
     DeprecatedPortionsMetadata,
     CleanGranuleId,
     DeprecatedEmptyPortionsCleaner,
-    CleanInsertionDedup,
+    DeprecatedCleanInsertionDedup,
     GCCountersNormalizer,
     DeprecatedRestorePortionFromChunks,
     SyncPortionFromChunks,

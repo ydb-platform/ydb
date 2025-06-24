@@ -672,7 +672,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
     }
 
     inline bool ValidateTimezoneId(ui16 timezoneId) {
-        const auto& zones = NUdf::GetTimezones();
+        const auto& zones = NTi::GetTimezones();
         return timezoneId < zones.size() && !zones[timezoneId].empty();
     }
 
@@ -1615,10 +1615,10 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             Y_UNUSED(valueBuilder);
             auto timezoneId = GetTimezoneId<TMResourceName>(item);
-            if (timezoneId >= NUdf::GetTimezones().size()) {
+            if (timezoneId >= NTi::GetTimezones().size()) {
                 sink(TBlockItem{});
             } else {
-                sink(TBlockItem{NUdf::GetTimezones()[timezoneId]});
+                sink(TBlockItem{NTi::GetTimezones()[timezoneId]});
             }
         }
     };
@@ -1626,7 +1626,7 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
 template<const char* TResourceName>
 TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedValuePod& arg) {
     const ui16 tzId = GetTimezoneId<TResourceName>(arg);
-    const auto& tzNames = NUdf::GetTimezones();
+    const auto& tzNames = NTi::GetTimezones();
     if (tzId >= tzNames.size()) {
         return TUnboxedValuePod();
     }
@@ -2933,7 +2933,7 @@ private:
                     case 'Z':
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                             const auto timezoneId = GetTimezoneId<TM64ResourceName>(value);
-                            const auto tzName = NUdf::GetTimezones()[timezoneId];
+                            const auto tzName = NTi::GetTimezones()[timezoneId];
                             std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
                             return tzName.size();
                         });
@@ -3100,13 +3100,13 @@ private:
         std::vector<std::function<bool(std::string_view::const_iterator& it, size_t, TUnboxedValuePod&, const IDateBuilder&)>> Scanners_;
 
         struct TDataScanner {
-            const std::string_view Data_;
+            const std::string_view Data;
 
             bool operator()(std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) const {
-                if (limit < Data_.size() || !std::equal(Data_.begin(), Data_.end(), it)) {
+                if (limit < Data.size() || !std::equal(Data.begin(), Data.end(), it)) {
                     return false;
                 }
-                std::advance(it, Data_.size());
+                std::advance(it, Data.size());
                 return true;
             }
         };

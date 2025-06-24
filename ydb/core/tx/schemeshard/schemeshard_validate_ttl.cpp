@@ -19,8 +19,8 @@ static inline NScheme::TTypeInfo GetType(const TTableInfo::TColumn& col) {
 }
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
-    const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
-    const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
+    const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
+    const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr)
 {
@@ -39,10 +39,10 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 
         const TTableInfo::TColumn* column = nullptr;
         const ui32 colId = it->second;
-        if (alterColumns.contains(colId)) {
-            column = &alterColumns.at(colId);
-        } else if (sourceColumns.contains(colId)) {
-            column = &sourceColumns.at(colId);
+        if (auto x = alterColumns.find(colId); x != alterColumns.end()) {
+            column = &x->second;
+        } else if (auto x = sourceColumns.find(colId); x != sourceColumns.end()) {
+            column = &x->second;
         } else {
             Y_ABORT_UNLESS("Unknown column");
         }

@@ -2,81 +2,25 @@
 import pytest
 import yatest
 import os
-import time
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.param_constants import kikimr_driver_path
-from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 from decimal import Decimal
 
 
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
-current_binary_path = kikimr_driver_path()
-
-all_binary_combinations = [
-    [[last_stable_binary_path], [current_binary_path]],
-    [[last_stable_binary_path], [last_stable_binary_path, current_binary_path]],
-    [[current_binary_path], [last_stable_binary_path]],
-    [[current_binary_path], [current_binary_path]],
-]
-all_binary_combinations_ids = [
-    "last_stable_to_current",
-    "last_stable_to_current_mixed",
-    "current_to_last_stable",
-    "current_to_current",
-]
-
-
-class TestCompatibility(object):
-    @pytest.fixture(autouse=True, params=all_binary_combinations, ids=all_binary_combinations_ids)
-    def setup(self, request):
-        self.all_binary_paths = request.param
-        self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
-            binary_paths=self.all_binary_paths[0],
-            use_in_memory_pdisks=False,
-
+class TestCompatibility(RestartToAnotherVersionFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        output_path = yatest.common.test_output_path()
+        self.output_f = open(os.path.join(output_path, "out.log"), "w")
+        yield from self.setup_cluster(
             extra_feature_flags={
-                "suppress_compatibility_check": True,
                 # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
                 },
             column_shard_config={
                 'disabled_on_scheme_shard': False,
-            },
+            }
         )
-
-        self.cluster = KiKiMR(self.config)
-        self.cluster.start()
-        self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
-        output_path = yatest.common.test_output_path()
-        self.output_f = open(os.path.join(output_path, "out.log"), "w")
-
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait()
-        yield
-        self.cluster.stop()
-
-    def change_cluster_version(self, new_binary_paths):
-        self.config.set_binary_paths(new_binary_paths)
-        self.cluster.update_configurator_and_restart(self.config)
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait()
-        # TODO: remove sleep
-        # without sleep there are errors like
-        # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
-        time.sleep(60)
 
     def execute_scan_query(self, query_body):
         query = ydb.ScanQuery(query_body, {})
@@ -139,13 +83,17 @@ class TestCompatibility(object):
 
         create_table(self, store_type)
         upsert_and_check_sum(self)
-        self.change_cluster_version(self.all_binary_paths[1])
+        self.change_cluster_version()
         assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 200, 'Expected 200 rows after update version'
         upsert_and_check_sum(self, iteration_count=2, start_index=100)
         assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
 
-    @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test_tpch1(self, store_type):
+    @pytest.mark.parametrize("store_type, date_args", [
+        pytest.param("row",    ["--datetime"], id="row"),
+        pytest.param("column", ["--datetime"], id="column"),
+        pytest.param("column", []            , id="column-date64")
+    ])
+    def test_tpch1(self, store_type, date_args):
         result_json_path = os.path.join(yatest.common.test_output_path(), "result.json")
         query_output_path = os.path.join(yatest.common.test_output_path(), "query_output.json")
         init_command = [
@@ -160,9 +108,9 @@ class TestCompatibility(object):
             "tpch",
             "init",
             "--store={}".format(store_type),
-            "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
             "--partition-size=25",
-        ]
+        ] + date_args  # use 32 bit dates instead of 64 (not supported in 24-4)]
+
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -215,6 +163,6 @@ class TestCompatibility(object):
         yatest.common.execute(init_command, wait=True, stdout=self.output_f)
         yatest.common.execute(import_command, wait=True, stdout=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f)
-        self.change_cluster_version(self.all_binary_paths[1])
+        self.change_cluster_version()
         yatest.common.execute(run_command, wait=True, stdout=self.output_f)
         yatest.common.execute(clean_command, wait=True, stdout=self.output_f)

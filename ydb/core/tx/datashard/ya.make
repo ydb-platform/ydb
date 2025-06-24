@@ -102,8 +102,6 @@ SRCS(
     datashard_kqp_compute.h
     datashard_kqp_delete_rows.cpp
     datashard_kqp_effects.cpp
-    datashard_kqp_lookup_table.cpp
-    datashard_kqp_read_table.cpp
     datashard_kqp_upsert_rows.cpp
     datashard_loans.cpp
     datashard_locks_db.cpp
@@ -221,6 +219,7 @@ SRCS(
     build_index/local_kmeans.cpp
     build_index/sample_k.cpp
     build_index/secondary_index.cpp
+    build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
 )
 
@@ -253,9 +252,6 @@ PEERDIR(
     library/cpp/monlib/service/pages
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
-    library/cpp/dot_product
-    library/cpp/l1_distance
-    library/cpp/l2_distance
     ydb/core/actorlib_impl
     ydb/core/backup/common
     ydb/core/base
@@ -267,6 +263,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
@@ -285,6 +282,7 @@ PEERDIR(
     ydb/services/lib/sharding
     ydb/library/chunks_limiter
     yql/essentials/types/uuid
+    ydb/core/io_formats/cell_maker
 )
 
 YQL_LAST_ABI_VERSION()

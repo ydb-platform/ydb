@@ -691,9 +691,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
             const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns);
+            auto merger =
+                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns, std::nullopt);
             for (auto&& i : batches) {
-                merger->AddSource(i, nullptr);
+                merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
             merger->DrainAll(builder);
             sorted = builder.Finalize();
@@ -718,9 +719,9 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
             const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns);
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns, std::nullopt);
             for (auto&& i : batches) {
-                merger->AddSource(i, nullptr);
+                merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Reversed(0));
             }
             merger->DrainAll(builder);
             sorted = builder.Finalize();
@@ -744,9 +745,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = {"snap"};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns);
+            auto merger =
+                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns, std::nullopt);
             for (auto&& i : batches) {
-                merger->AddSource(i, nullptr);
+                merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
             merger->DrainAll(builder);
             sorted = builder.Finalize();
@@ -761,6 +763,96 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT_VALUES_EQUAL(counts[1], 200);
         UNIT_ASSERT_VALUES_EQUAL(counts[2], 200);
         UNIT_ASSERT_VALUES_EQUAL(counts[3], 400);
+    }
+
+    Y_UNIT_TEST(MaxVersionFilter) {
+        std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
+        UNIT_ASSERT(CheckSorted1000(batch));
+
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        batches.push_back(AddSnapColumn(batch->Slice(0, 400), 0));
+        batches.push_back(AddSnapColumn(batch->Slice(200, 400), 1));
+        batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
+        batches.push_back(AddSnapColumn(batch->Slice(600, 400), 3));
+
+        std::shared_ptr<arrow::RecordBatch> maxVersion =
+            arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
+        maxVersion = AddSnapColumn(maxVersion, 1);
+        NArrow::NMerger::TCursor maxVersionCursor(arrow::Table::FromRecordBatches({ maxVersion }).ValueOrDie(), 0, { "snap" });
+
+        std::shared_ptr<arrow::RecordBatch> sorted;
+        {
+            NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
+            const std::vector<std::string> vColumns = { "snap" };
+            auto merger =
+                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns, maxVersionCursor);
+            for (auto&& i : batches) {
+                merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
+            }
+            merger->DrainAll(builder);
+            sorted = builder.Finalize();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 600);
+        UNIT_ASSERT(CheckSorted1000(sorted));
+        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema()));
+
+        auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
+        UNIT_ASSERT_VALUES_EQUAL(counts[0], 200);
+        UNIT_ASSERT_VALUES_EQUAL(counts[1], 400);
+    }
+
+    Y_UNIT_TEST(EqualKeysVersionFilter) {
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batchesByKey(3);
+        for (ui64 i = 0; i < batchesByKey.size(); ++i) {
+            batchesByKey[i] = arrow::RecordBatch::Make(
+                std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
+            batchesByKey[i] = batchesByKey[i]
+                                  ->AddColumn(batchesByKey[i]->num_columns(), "key", NArrow::MakeUI64Array(i, batchesByKey[i]->num_rows()))
+                                  .ValueOrDie();
+        }
+
+        std::shared_ptr<arrow::Schema> sortingSchema = std::make_shared<arrow::Schema>(*batchesByKey.front()->schema());
+
+        std::shared_ptr<arrow::RecordBatch> maxVersion =
+            arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
+        maxVersion = AddSnapColumn(maxVersion, 1);
+        NArrow::NMerger::TCursor maxVersionCursor(arrow::Table::FromRecordBatches({ maxVersion }).ValueOrDie(), 0, { "snap" });
+
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        batches.push_back(AddSnapColumn(batchesByKey[0], 1));
+        batches.push_back(AddSnapColumn(batchesByKey[1], 1));
+        batches.push_back(AddSnapColumn(batchesByKey[1], 1));
+        batches.push_back(AddSnapColumn(batchesByKey[2], 1));
+        batches.push_back(AddSnapColumn(batchesByKey[2], 2));
+
+        std::shared_ptr<arrow::RecordBatch> sorted;
+        {
+            NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
+            const std::vector<std::string> vColumns = { "snap" };
+            auto merger =
+                std::make_shared<NArrow::NMerger::TMergePartialStream>(sortingSchema, batches[0]->schema(), false, vColumns, maxVersionCursor);
+            for (auto&& i : batches) {
+                merger->AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
+            }
+            merger->DrainAll(builder);
+            sorted = builder.Finalize();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(sorted->num_rows(), 3);
+        UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batches[0]->schema()));
+
+        {
+            auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("key")));
+            UNIT_ASSERT_VALUES_EQUAL(counts[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counts[1], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counts[2], 1);
+        }
+
+        {
+            auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
+            UNIT_ASSERT_VALUES_EQUAL(counts[1], 3);
+        }
     }
 }
 

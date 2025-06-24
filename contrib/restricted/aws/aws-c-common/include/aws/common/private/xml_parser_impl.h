@@ -14,6 +14,7 @@ struct aws_xml_node {
     struct aws_array_list attributes;
     struct aws_byte_cursor doc_at_body;
     bool processed;
+    bool is_empty;
 };
 
 struct aws_xml_parser {

@@ -61,6 +61,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TBackupCollectionState = std::pair<TPathId, TBackupCollectionInfo::TPtr>;
     TStack<TBackupCollectionState> BackupCollections;
 
+    using TSysViewState = std::pair<TPathId, TSysViewInfo::TPtr>;
+    TStack<TSysViewState> SysViews;
+
 public:
     ~TMemoryChanges() = default;
 
@@ -101,6 +104,9 @@ public:
     void GrabResourcePool(TSchemeShard* ss, const TPathId& pathId);
 
     void GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId);
+
+    void GrabNewSysView(TSchemeShard* ss, const TPathId& pathId);
+    void GrabSysView(TSchemeShard* ss, const TPathId& pathId);
 
     void UnDo(TSchemeShard* ss);
 };

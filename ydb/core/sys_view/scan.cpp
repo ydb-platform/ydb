@@ -33,6 +33,57 @@
 namespace NKikimr {
 namespace NSysView {
 
+namespace {
+    using NKikimrSysView::ESysViewType;
+
+    const THashMap<TStringBuf, ESysViewType> SYS_VIEW_TYPES_MAP = {
+        {PartitionStatsName, ESysViewType::EPartitionStats},
+        {NodesName, ESysViewType::ENodes},
+
+        {TopQueriesByDuration1MinuteName, ESysViewType::ETopQueriesByDurationOneMinute},
+        {TopQueriesByDuration1HourName, ESysViewType::ETopQueriesByDurationOneHour},
+        {TopQueriesByReadBytes1MinuteName, ESysViewType::ETopQueriesByReadBytesOneMinute},
+        {TopQueriesByReadBytes1HourName, ESysViewType::ETopQueriesByReadBytesOneHour},
+        {TopQueriesByCpuTime1MinuteName, ESysViewType::ETopQueriesByCpuTimeOneMinute},
+        {TopQueriesByCpuTime1HourName, ESysViewType::ETopQueriesByCpuTimeOneHour},
+        {TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute},
+        {TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour},
+
+        {QuerySessions, ESysViewType::EQuerySessions},
+
+        {PDisksName, ESysViewType::EPDisks},
+        {VSlotsName, ESysViewType::EVSlots},
+        {GroupsName, ESysViewType::EGroups},
+        {StoragePoolsName, ESysViewType::EStoragePools},
+        {StorageStatsName, ESysViewType::EStorageStats},
+
+        {TabletsName, ESysViewType::ETablets},
+
+        {QueryMetricsName, ESysViewType::EQueryMetricsOneMinute},
+
+        {TopPartitionsByCpu1MinuteName, ESysViewType::ETopPartitionsByCpuOneMinute},
+        {TopPartitionsByCpu1HourName, ESysViewType::ETopPartitionsByCpuOneHour},
+        {TopPartitionsByTli1MinuteName, ESysViewType::ETopPartitionsByTliOneMinute},
+        {TopPartitionsByTli1HourName, ESysViewType::ETopPartitionsByTliOneHour},
+
+        {PgTablesName, ESysViewType::EPgTables},
+        {InformationSchemaTablesName, ESysViewType::EInformationSchemaTables},
+        {PgClassName, ESysViewType::EPgClass},
+
+        {ResourcePoolClassifiersName, ESysViewType::EResourcePoolClassifiers},
+        {ResourcePoolsName, ESysViewType::EResourcePools},
+
+        {NAuth::UsersName, ESysViewType::EAuthUsers},
+        {NAuth::GroupsName, ESysViewType::EAuthGroups},
+        {NAuth::GroupMembersName, ESysViewType::EAuthGroupMembers},
+        {NAuth::OwnersName, ESysViewType::EAuthOwners},
+        {NAuth::PermissionsName, ESysViewType::EAuthPermissions},
+        {NAuth::EffectivePermissionsName, ESysViewType::EAuthEffectivePermissions},
+
+        {ShowCreateName, ESysViewType::EShowCreate}
+    };
+}
+
 class TSysViewRangesReader : public TActor<TSysViewRangesReader> {
 public:
     using TBase = TActor<TSysViewRangesReader>;
@@ -42,6 +93,7 @@ public:
         ui32 scanId,
         const TTableId& tableId,
         const TString& tablePath,
+        const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
         TVector<TSerializedTableRange> ranges,
         const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
@@ -52,6 +104,7 @@ public:
         , ScanId(scanId)
         , TableId(tableId)
         , TablePath(tablePath)
+        , SysViewInfo(sysViewInfo)
         , Ranges(std::move(ranges))
         , Columns(columns.begin(), columns.end())
         , UserToken(std::move(userToken))
@@ -90,7 +143,7 @@ public:
         if (!ScanActorId) {
             if (CurrentRange < Ranges.size()) {
                 auto actor = CreateSystemViewScan(
-                    SelfId(), ScanId, TableId, TablePath, Ranges[CurrentRange].ToTableRange(),
+                    SelfId(), ScanId, TableId, TablePath, SysViewInfo, Ranges[CurrentRange].ToTableRange(),
                     Columns, UserToken, Database, Reverse);
                 ScanActorId = Register(actor.Release());
                 CurrentRange += 1;
@@ -152,6 +205,7 @@ private:
     ui32 ScanId;
     TTableId TableId;
     TString TablePath;
+    const TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
     TVector<TSerializedTableRange> Ranges;
     TVector<NMiniKQL::TKqpComputeContextBase::TColumn> Columns;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -167,6 +221,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
     ui32 scanId,
     const TTableId& tableId,
     const TString& tablePath,
+    const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     TVector<TSerializedTableRange> ranges,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
@@ -174,9 +229,11 @@ THolder<NActors::IActor> CreateSystemViewScan(
     bool reverse
 ) {
     if (ranges.size() == 1) {
-        return CreateSystemViewScan(ownerId, scanId, tableId, tablePath, ranges[0].ToTableRange(), columns, std::move(userToken), database, reverse);
+        return CreateSystemViewScan(ownerId, scanId, tableId, tablePath, sysViewInfo, ranges[0].ToTableRange(),
+                                    columns, std::move(userToken), database, reverse);
     } else {
-        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, tableId, tablePath, ranges, columns, std::move(userToken), database, reverse);
+        return MakeHolder<TSysViewRangesReader>(ownerId, scanId, tableId, tablePath, sysViewInfo, ranges,
+                                                columns, std::move(userToken), database, reverse);
     }
 }
 
@@ -185,121 +242,87 @@ THolder<NActors::IActor> CreateSystemViewScan(
     ui32 scanId,
     const TTableId& tableId,
     const TString& tablePath,
+    const TMaybe<NKikimrSysView::TSysViewDescription>& sysViewInfo,
     const TTableRange& tableRange,
     const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
     bool reverse
 ) {
-    if (tableId.SysViewInfo == PartitionStatsName) {
-        return CreatePartitionStatsScan(ownerId, scanId, tableId, tableRange, columns);
+    NKikimrSysView::TSysViewDescription sysViewDescription;
+    if (sysViewInfo) {
+        sysViewDescription = *sysViewInfo;
+    } else {
+        auto typesIt = SYS_VIEW_TYPES_MAP.find(tableId.SysViewInfo);
+        Y_ABORT_UNLESS(typesIt != SYS_VIEW_TYPES_MAP.end());
+        sysViewDescription.SetType(typesIt->second);
+        *sysViewDescription.MutableSourceObject() = tableId.PathId.ToProto();
     }
 
-    if (tableId.SysViewInfo == NodesName) {
-        return CreateNodesScan(ownerId, scanId, tableId, tableRange, columns);
+    switch (sysViewDescription.GetType()) {
+    case ESysViewType::EPartitionStats:
+        return CreatePartitionStatsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::ENodes:
+        return CreateNodesScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EQuerySessions:
+        return CreateSessionsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::ETopQueriesByDurationOneMinute:
+    case ESysViewType::ETopQueriesByDurationOneHour:
+    case ESysViewType::ETopQueriesByReadBytesOneMinute:
+    case ESysViewType::ETopQueriesByReadBytesOneHour:
+    case ESysViewType::ETopQueriesByCpuTimeOneMinute:
+    case ESysViewType::ETopQueriesByCpuTimeOneHour:
+    case ESysViewType::ETopQueriesByRequestUnitsOneMinute:
+    case ESysViewType::ETopQueriesByRequestUnitsOneHour:
+        return CreateQueryStatsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EPDisks:
+        return CreatePDisksScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EVSlots:
+        return CreateVSlotsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EGroups:
+        return CreateGroupsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EStoragePools:
+        return CreateStoragePoolsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EStorageStats:
+        return CreateStorageStatsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::ETablets:
+         return CreateTabletsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EQueryMetricsOneMinute:
+        return CreateQueryMetricsScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::ETopPartitionsByCpuOneMinute:
+    case ESysViewType::ETopPartitionsByCpuOneHour:
+        return CreateTopPartitionsByCpuScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::ETopPartitionsByTliOneMinute:
+    case ESysViewType::ETopPartitionsByTliOneHour:
+        return CreateTopPartitionsByTliScan(ownerId, scanId, sysViewDescription, tableRange, columns);
+    case ESysViewType::EPgTables:
+        return CreatePgTablesScan(ownerId, scanId, sysViewDescription, tablePath, tableRange, columns);
+    case ESysViewType::EInformationSchemaTables:
+        return CreateInformationSchemaTablesScan(ownerId, scanId, sysViewDescription, tablePath, tableRange, columns);
+    case ESysViewType::EPgClass:
+        return CreatePgClassScan(ownerId, scanId, sysViewDescription, tablePath, tableRange, columns);
+    case ESysViewType::EResourcePoolClassifiers:
+        return CreateResourcePoolClassifiersScan(ownerId, scanId, sysViewDescription, tableRange, columns,
+                                                 std::move(userToken), database, reverse);
+    case ESysViewType::EResourcePools:
+        return CreateResourcePoolsScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken), database, reverse);
+    case ESysViewType::EAuthUsers:
+        return NAuth::CreateUsersScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+    case ESysViewType::EAuthGroups:
+        return NAuth::CreateGroupsScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+    case ESysViewType::EAuthGroupMembers:
+        return NAuth::CreateGroupMembersScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+    case ESysViewType::EAuthOwners:
+        return NAuth::CreateOwnersScan(ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+    case ESysViewType::EAuthPermissions:
+    case ESysViewType::EAuthEffectivePermissions:
+        return NAuth::CreatePermissionsScan(sysViewDescription.GetType() == ESysViewType::EAuthEffectivePermissions,
+                                            ownerId, scanId, sysViewDescription, tableRange, columns, std::move(userToken));
+    case ESysViewType::EShowCreate:
+        return CreateShowCreate(ownerId, scanId, sysViewDescription, tableRange, columns, database, std::move(userToken));
+    default:
+        return {};
     }
-
-    if (tableId.SysViewInfo == QuerySessions) {
-        return CreateSessionsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == TopQueriesByDuration1MinuteName ||
-        tableId.SysViewInfo == TopQueriesByDuration1HourName ||
-        tableId.SysViewInfo == TopQueriesByReadBytes1MinuteName ||
-        tableId.SysViewInfo == TopQueriesByReadBytes1HourName ||
-        tableId.SysViewInfo == TopQueriesByCpuTime1MinuteName ||
-        tableId.SysViewInfo == TopQueriesByCpuTime1HourName ||
-        tableId.SysViewInfo == TopQueriesByRequestUnits1MinuteName ||
-        tableId.SysViewInfo == TopQueriesByRequestUnits1HourName)
-    {
-        return CreateQueryStatsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == PDisksName) {
-        return CreatePDisksScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == VSlotsName) {
-        return CreateVSlotsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == GroupsName) {
-        return CreateGroupsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == StoragePoolsName) {
-        return CreateStoragePoolsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == StorageStatsName) {
-        return CreateStorageStatsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == TabletsName) {
-        return CreateTabletsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == QueryMetricsName) {
-        return CreateQueryMetricsScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == TopPartitionsByCpu1MinuteName ||
-        tableId.SysViewInfo == TopPartitionsByCpu1HourName)
-    {
-        return CreateTopPartitionsByCpuScan(ownerId, scanId, tableId, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == TopPartitionsByTli1MinuteName ||
-        tableId.SysViewInfo == TopPartitionsByTli1HourName)
-    {
-        return CreateTopPartitionsByTliScan(ownerId, scanId, tableId, tableRange, columns);
-    }    
-    
-    if (tableId.SysViewInfo == PgTablesName) {
-        return CreatePgTablesScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == InformationSchemaTablesName) {
-        return CreateInformationSchemaTablesScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == PgClassName) {
-        return CreatePgClassScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
-    }
-
-    if (tableId.SysViewInfo == ResourcePoolClassifiersName) {
-        return CreateResourcePoolClassifiersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), database, reverse);
-    }
-
-    if (tableId.SysViewInfo == ResourcePoolsName) {
-        return CreateResourcePoolsScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), database, reverse);
-    }
-
-    {
-        using namespace NAuth;
-        if (tableId.SysViewInfo == UsersName) {
-            return CreateUsersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
-        }
-        if (tableId.SysViewInfo == NAuth::GroupsName) {
-            return NAuth::CreateGroupsScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
-        }
-        if (tableId.SysViewInfo == GroupMembersName) {
-            return NAuth::CreateGroupMembersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
-        }
-        if (tableId.SysViewInfo == OwnersName) {
-            return NAuth::CreateOwnersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
-        }
-        if (tableId.SysViewInfo == PermissionsName || tableId.SysViewInfo == EffectivePermissionsName) {
-            return NAuth::CreatePermissionsScan(tableId.SysViewInfo == EffectivePermissionsName,
-                ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
-        }
-    }
-
-    if (tableId.SysViewInfo == ShowCreateName) {
-        return CreateShowCreate(ownerId, scanId, tableId, tableRange, columns, database, std::move(userToken));
-    }
-
-    return {};
 }
 
 } // NSysView

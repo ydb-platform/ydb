@@ -39,4 +39,24 @@ namespace NSQLComplete {
         return index;
     }
 
+    const TVector<TStringBuf> FilteredByPrefix(
+        const TString& prefix,
+        const TNameIndex& index Y_LIFETIME_BOUND,
+        auto normalize) {
+        TNameIndexEntry normalized = {
+            .Normalized = normalize(prefix),
+            .Original = "",
+        };
+
+        auto range = std::ranges::equal_range(
+            std::begin(index), std::end(index),
+            normalized, NameIndexCompareLimit(normalized.Normalized.size()));
+
+        TVector<TStringBuf> filtered;
+        for (const TNameIndexEntry& entry : range) {
+            filtered.emplace_back(TStringBuf(entry.Original));
+        }
+        return filtered;
+    }
+
 } // namespace NSQLComplete

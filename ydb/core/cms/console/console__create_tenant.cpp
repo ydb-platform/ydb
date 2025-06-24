@@ -65,6 +65,8 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
+        auto &peer = Request->Get()->Record.GetPeerName();
+
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxCreateTenant: "
                     << Request->Get()->Record.ShortDebugString());
 
@@ -121,7 +123,7 @@ public:
             attrNames.insert(key);
         }
 
-        Tenant = new TTenant(path, TTenant::CREATING_POOLS, token);
+        Tenant = new TTenant(path, TTenant::CREATING_POOLS, token, peer);
 
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();

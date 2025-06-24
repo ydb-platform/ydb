@@ -169,20 +169,9 @@ const TLoggingCategory* TLogger::GetCategory() const
     return Category_;
 }
 
-bool TLogger::IsLevelEnabledHeavy(ELogLevel level) const
+void TLogger::UpdateCategory() const
 {
-    // Note that we managed to reach this point, i.e. level >= MinLevel_,
-    // which implies that MinLevel_ != ELogLevel::Maximum, so this logger was not
-    // default constructed, thus it has non-trivial category.
-    YT_ASSERT(Category_);
-
-    if (Category_->CurrentVersion != Category_->ActualVersion->load(std::memory_order::relaxed)) {
-        LogManager_->UpdateCategory(const_cast<TLoggingCategory*>(Category_));
-    }
-
-    return
-        level >= Category_->MinPlainTextLevel &&
-        level >= ThreadMinLogLevel();
+    LogManager_->UpdateCategory(const_cast<TLoggingCategory*>(Category_));
 }
 
 bool TLogger::GetAbortOnAlert() const

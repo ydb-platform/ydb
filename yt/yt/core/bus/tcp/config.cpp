@@ -157,12 +157,6 @@ void TBusConfig::Register(TRegistrar registrar)
         .Default(EEncryptionMode::Optional);
     registrar.Parameter("verification_mode", &TThis::VerificationMode)
         .Default(EVerificationMode::None);
-    registrar.Parameter("ca", &TThis::CA)
-        .Default();
-    registrar.Parameter("cert_chain", &TThis::CertificateChain)
-        .Default();
-    registrar.Parameter("private_key", &TThis::PrivateKey)
-        .Default();
     registrar.Parameter("cipher_list", &TThis::CipherList)
         .Default();
     registrar.Parameter("load_certs_from_bus_certs_directory", &TThis::LoadCertsFromBusCertsDirectory)
@@ -175,7 +169,7 @@ void TBusConfig::Register(TRegistrar registrar)
 
 void TBusDynamicConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("need_reject_connection_on_memory_overcommit", &TThis::NeedRejectConnectionOnMemoryOvercommit)
+    registrar.Parameter("reject_connection_on_memory_overcommit", &TThis::RejectConnectionOnMemoryOvercommit)
         .Default(false);
 }
 

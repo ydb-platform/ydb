@@ -105,8 +105,6 @@ void TExecContextBase::MakeUserFiles(const TUserDataTable& userDataBlocks) {
 }
 
 void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns, const TYtSettings::TConstPtr& settings) {
-    const TString tmpFolder = GetTablesTmpFolder(*settings);
-
     NYT::TNode extraSysColumnsNode;
     for (auto sys: extraSysColumns) {
         extraSysColumnsNode.Add(sys);
@@ -120,6 +118,7 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
             YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR) <<
                 "Operation input from remote cluster " << tableInfo->Cluster.Quote() << " is not allowed on cluster " << Cluster_.Quote();
         }
+        const TString tmpFolder = GetTablesTmpFolder(*settings, tableInfo->Cluster);
         NYT::TRichYPath richYPath(NYql::TransformPath(tmpFolder, tableInfo->Name, true, Session_->UserName_));
         if (tableInfo->Cluster != Cluster_) {
             richYPath.Cluster(Clusters_->GetYtName(tableInfo->Cluster));
@@ -179,6 +178,7 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
                 if (forcePathColumns && pathInfo.Table->RowSpec && !pathInfo.HasColumns()) {
                     pathInfo.SetColumns(columns);
                 }
+                const TString tmpFolder = GetTablesTmpFolder(*settings, pathCluster);
                 auto name = NYql::TransformPath(tmpFolder, pathInfo.Table->Name, pathInfo.Table->IsTemp, Session_->UserName_);
                 NYT::TRichYPath richYPath;
                 if (localChainTest || (pathInfo.Table->IsTemp && !pathInfo.Table->IsAnonymous)) {
@@ -244,7 +244,7 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
 }
 
 void TExecContextBase::SetOutput(TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash) {
-    const TString tmpFolder = GetTablesTmpFolder(*settings);
+    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_);
     const auto nativeYtTypeCompatibility = settings->NativeYtTypeCompatibility.Get(Cluster_).GetOrElse(NTCF_LEGACY);
     const bool rowSpecCompactForm = settings->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
     const bool optimizeForScan = settings->OptimizeFor.Get(Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
@@ -282,7 +282,7 @@ void TExecContextBase::SetOutput(TYtOutSection output, const TYtSettings::TConst
 }
 
 void TExecContextBase::SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings) {
-    const TString tmpFolder = GetTablesTmpFolder(*settings);
+    const TString tmpFolder = GetTablesTmpFolder(*settings, Cluster_);
     YQL_ENSURE(!outTable.Cluster || outTable.Cluster == Cluster_);
     TString outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(Session_->RandomProvider_->GenGuid());
     TString outTablePath = NYql::TransformPath(tmpFolder, outTableName, true, Session_->UserName_);
@@ -404,7 +404,7 @@ TTransactionCache::TEntry::TPtr TExecContextBase::GetOrCreateEntry(const TYtSett
             "Accessing YT cluster " << Cluster_.Quote() << " without OAuth token is not allowed";
     }
 
-    return Session_->TxCache_.GetOrCreateEntry(YtServer_, token, impersonationUser, [s = Session_]() { return s->CreateSpecWithDesc(); }, settings, Metrics);
+    return Session_->TxCache_.GetOrCreateEntry(Cluster_, YtServer_, token, impersonationUser, [s = Session_]() { return s->CreateSpecWithDesc(); }, settings, Metrics);
 }
 
 TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput) {

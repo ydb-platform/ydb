@@ -146,7 +146,7 @@ The YQL query runs as many times as many parameter value sets received on `stdin
 A rule for separating parameter sets from one another (framing) complements the `stdin` format specified by the `--stdin-format` option:
 
 | Name | Description |
----|---
+| --- | --- |
 | `--stdin-format` | Defines the `stdin` framing. <br/>Available options:<ul><li>`no-framing` (default): No framing, `stdin` expects a single set of parameters, and the YQL query is executed only once when the `stdin` stream is closed.</li><li>`newline-delimited`: A newline character marks the end of one set of parameter values on `stdin`, separating it from the next one. The YQL query is executed each time a newline character is read from `stdin`.</li></ul> |
 
 {% note warning %}

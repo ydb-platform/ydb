@@ -352,13 +352,13 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[9 ].Get<float >(), row.Float32);
             UNIT_ASSERT_EQUAL(container[10].Get<double>(), row.Float64);
             auto tmpString = container[11];
-            UNIT_ASSERT_EQUAL(TString(tmpString.AsStringRef().Data()), row.String);
+            UNIT_ASSERT_EQUAL(TString(tmpString.AsStringRef()), row.String);
             auto tmpUtf8 = container[12];
-            UNIT_ASSERT_EQUAL(TString(tmpUtf8.AsStringRef().Data()), row.Utf8);
+            UNIT_ASSERT_EQUAL(TString(tmpUtf8.AsStringRef()), row.Utf8);
             auto tmpJson = container[13];
-            UNIT_ASSERT_EQUAL(TString(tmpJson.AsStringRef().Data()), row.Json);
+            UNIT_ASSERT_EQUAL(TString(tmpJson.AsStringRef()), row.Json);
             auto tmpYson = container[14];
-            UNIT_ASSERT_EQUAL(TString(tmpYson.AsStringRef().Data()), row.Yson);
+            UNIT_ASSERT_EQUAL(TString(tmpYson.AsStringRef()), row.Yson);
             UNIT_ASSERT_EQUAL(container[15].Get<i32 >(), row.Date     );
             UNIT_ASSERT_EQUAL(container[16].Get<i64 >(), row.Datetime );
             UNIT_ASSERT_EQUAL(container[17].Get<i64 >(), row.Timestamp);

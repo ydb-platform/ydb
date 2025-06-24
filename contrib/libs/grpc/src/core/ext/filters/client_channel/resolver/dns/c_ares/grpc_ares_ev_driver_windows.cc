@@ -286,7 +286,7 @@ class GrpcPolledFdWindows {
     // c-ares overloads this recv_from virtual socket function to receive
     // data on both UDP and TCP sockets, and from is nullptr for TCP.
     if (from != nullptr) {
-      GPR_ASSERT(*from_len <= recv_from_source_addr_len_);
+      GPR_ASSERT(*from_len >= recv_from_source_addr_len_);
       memcpy(from, &recv_from_source_addr_, recv_from_source_addr_len_);
       *from_len = recv_from_source_addr_len_;
     }

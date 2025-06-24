@@ -63,6 +63,8 @@ namespace NYdb::NBackup {
 static constexpr size_t IO_BUFFER_SIZE = 2 << 20; // 2 MiB
 static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
+static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
+static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -528,10 +530,12 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
     return result.GetTopicDescription();
 }
 
-void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
-    auto desc = DescribeTable(driver, tablePath);
-
+void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
+        if (changefeedDesc.GetAttributes().contains(ATTR_ASYNC_REPLICATION)) {
+            // this changefeed is managed by ASYNC REPLICATION and does not need backing up separately
+            continue;
+        }
         TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
 
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
@@ -551,16 +555,39 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
-    const auto fullPath = JoinDatabasePath(schemaOnly ? dbPrefix : backupPrefix, path);
+    const auto originalTablePath = JoinDatabasePath(dbPrefix, path);
+    const auto originalTableDesc = DescribeTable(driver, originalTablePath);
+    if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
+        replicaAttribute != originalTableDesc.GetAttributes().end()
+        && replicaAttribute->second == "true"
+    ) {
+        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table");
+        // remove the backup folder
+        TVector<TString> children;
+        folderPath.ListNames(children);
+        if (children.size() == 1 && children.front() == NDump::NFiles::Incomplete().FileName) {
+            // to do: stop blindly creating the folder path in the first place
+            folderPath.ForceDelete();
+        }
+        return;
+    }
+
+    const auto copyTablePath = JoinDatabasePath(backupPrefix, path);
+    TMaybe<NTable::TTableDescription> copyTableDesc;
+    if (!schemaOnly) {
+        copyTableDesc = DescribeTable(driver, copyTablePath);
+    }
+
+    const auto& fullPath = schemaOnly ? originalTablePath : copyTablePath;
+    const auto& desc = schemaOnly ? originalTableDesc : *copyTableDesc;
 
     LOG_I("Backup table " << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
 
-    auto desc = DescribeTable(driver, fullPath);
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
 
-    BackupChangefeeds(driver, JoinDatabasePath(dbPrefix, path), folderPath);
-    BackupPermissions(driver, dbPrefix, path, folderPath);
+    BackupChangefeeds(driver, originalTablePath, folderPath, originalTableDesc);
+    BackupPermissions(driver, originalTablePath, folderPath);
 
     if (!schemaOnly) {
         ReadTable(driver, desc, fullPath, folderPath, ordered);
@@ -694,15 +721,6 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
 
 namespace {
 
-NReplication::TReplicationDescription DescribeReplication(TDriver driver, const TString& path) {
-    NReplication::TReplicationClient client(driver);
-    auto status = NConsoleClient::RetryFunction([&]() {
-        return client.DescribeReplication(path).ExtractValueSync();
-    });
-    VerifyStatus(status, "describe async replication");
-    return status.GetReplicationDescription();
-}
-
 TString BuildConnectionString(const NReplication::TConnectionParams& params) {
     return TStringBuilder()
         << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
@@ -754,7 +772,9 @@ TString BuildCreateReplicationQuery(
             opts.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(params.GetStaticCredentials().PasswordSecretName)));
             break;
         case NReplication::TConnectionParams::ECredentials::OAuth:
-            opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(params.GetOAuthCredentials().TokenSecretName)));
+            if (const auto& secret = params.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
+                opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
+            }
             break;
     }
 
@@ -784,28 +804,16 @@ void BackupReplication(
 
     LOG_I("Backup async replication " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto desc = DescribeReplication(driver, dbPath);
-    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), desc);
+    NReplication::TReplicationClient replicationClient(driver);
+    TMaybe<NReplication::TReplicationDescription> desc;
+    VerifyStatus(NDump::DescribeReplication(replicationClient, dbPath, desc), "describe replication");
+    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
 namespace {
-
-Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TDriver driver, const TString& path) {
-    NTable::TTableClient client(driver);
-    Ydb::Table::DescribeExternalDataSourceResult description;
-    auto status = client.RetryOperationSync([&](NTable::TSession session) {
-        auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
-        if (result.IsSuccess()) {
-            description = TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());
-        }
-        return result;
-    });
-    VerifyStatus(status, "describe external data source");
-    return description;
-}
 
 std::string ToString(std::string_view key, std::string_view value) {
     // indented to follow the default YQL formatting
@@ -844,7 +852,9 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    auto description = DescribeExternalDataSource(driver, dbPath);
+    Ydb::Table::DescribeExternalDataSourceResult description;
+    NTable::TTableClient client(driver);
+    VerifyStatus(NDump::DescribeExternalDataSource(client, dbPath, description), "describe external data source");
     CanonizeForBackup(description);
     const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
 

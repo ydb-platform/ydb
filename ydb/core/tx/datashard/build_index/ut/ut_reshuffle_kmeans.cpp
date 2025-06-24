@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         VectorIndexSettings settings;
         settings.set_vector_dimension(2);
-        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
         settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
         *rec.MutableSettings() = settings;
 
@@ -59,11 +59,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         rec.SetParent(0);
         rec.SetChild(1);
 
-        rec.AddClusters("something");
+        rec.AddClusters("abc");
 
         rec.SetEmbeddingColumn("embedding");
 
-        rec.SetPostingName(kPostingTable);
+        rec.SetOutputName(kPostingTable);
 
         setupRequest(rec);
 
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
 
-                rec.SetPostingName(kPostingTable);
+                rec.SetOutputName(kPostingTable);
             };
             fill(ev1);
             fill(ev2);
@@ -145,6 +145,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
 
         auto posting = ReadShardedTable(server, kPostingTable);
+        Cerr << "Posting:" << Endl;
+        Cerr << posting << Endl;
         return std::move(posting);
     }
 
@@ -241,11 +243,15 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearClusters();
-        }, "{ <main>: Error: Should be requested at least single cluster }");
+        }, "{ <main>: Error: Should be requested for at least one cluster }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
+            request.ClearClusters();
+            request.AddClusters("something");
+        }, "{ <main>: Error: Clusters have invalid format }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
-            request.ClearPostingName();
-        }, "{ <main>: Error: Empty posting table name }");
+            request.ClearOutputName();
+        }, "{ <main>: Error: Empty output table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.SetEmbeddingColumn("some");
@@ -258,7 +264,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.ClearClusters();
             request.SetEmbeddingColumn("some");
-        }, "[ { <main>: Error: Should be requested at least single cluster } { <main>: Error: Unknown embedding column: some } ]");
+        }, "[ { <main>: Error: Unknown embedding column: some } { <main>: Error: Should be requested for at least one cluster } ]");
     }
 
     Y_UNIT_TEST(MainToPosting) {
@@ -305,13 +311,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 "11\3",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
-                                             NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
-                                             VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, data = four\n"
-                                              "__ydb_parent = 1, key = 5, data = five\n"
-                                              "__ydb_parent = 2, key = 1, data = one\n"
-                                              "__ydb_parent = 2, key = 2, data = two\n"
-                                              "__ydb_parent = 2, key = 3, data = three\n");
+                                            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+                                            VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
+                                            "__ydb_parent = 9223372036854775809, key = 5, data = five\n"
+                                            "__ydb_parent = 9223372036854775810, key = 1, data = one\n"
+                                            "__ydb_parent = 9223372036854775810, key = 2, data = two\n"
+                                            "__ydb_parent = 9223372036854775810, key = 3, data = three\n");
             recreate();
         }
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
@@ -320,13 +326,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 "mm\3",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
-                                             NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
-                                             VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
-                                              "__ydb_parent = 1, key = 2, data = two\n"
-                                              "__ydb_parent = 1, key = 3, data = three\n"
-                                              "__ydb_parent = 2, key = 4, data = four\n"
-                                              "__ydb_parent = 2, key = 5, data = five\n");
+                                            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+                                            VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
+                                            "__ydb_parent = 9223372036854775809, key = 2, data = two\n"
+                                            "__ydb_parent = 9223372036854775809, key = 3, data = three\n"
+                                            "__ydb_parent = 9223372036854775810, key = 4, data = four\n"
+                                            "__ydb_parent = 9223372036854775810, key = 5, data = five\n");
             recreate();
         }
         for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
@@ -336,13 +342,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 "II\3",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
-                                             NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
-                                             VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, data = one\n"
-                                              "__ydb_parent = 1, key = 2, data = two\n"
-                                              "__ydb_parent = 1, key = 3, data = three\n"
-                                              "__ydb_parent = 1, key = 4, data = four\n"
-                                              "__ydb_parent = 1, key = 5, data = five\n");
+                                            NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
+                                            VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775809, key = 1, data = one\n"
+                                            "__ydb_parent = 9223372036854775809, key = 2, data = two\n"
+                                            "__ydb_parent = 9223372036854775809, key = 3, data = three\n"
+                                            "__ydb_parent = 9223372036854775809, key = 4, data = four\n"
+                                            "__ydb_parent = 9223372036854775809, key = 5, data = five\n");
             recreate();
         }
     }
@@ -479,13 +485,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 "11\3",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
-                                             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
-                                             VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 4, data = four\n"
-                                              "__ydb_parent = 41, key = 5, data = five\n"
-                                              "__ydb_parent = 42, key = 1, data = one\n"
-                                              "__ydb_parent = 42, key = 2, data = two\n"
-                                              "__ydb_parent = 42, key = 3, data = three\n");
+                                            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+                                            VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
+                                            "__ydb_parent = 9223372036854775849, key = 5, data = five\n"
+                                            "__ydb_parent = 9223372036854775850, key = 1, data = one\n"
+                                            "__ydb_parent = 9223372036854775850, key = 2, data = two\n"
+                                            "__ydb_parent = 9223372036854775850, key = 3, data = three\n");
             recreate();
         }
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
@@ -494,13 +500,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 "mm\3",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
-                                             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
-                                             VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
-                                              "__ydb_parent = 41, key = 2, data = two\n"
-                                              "__ydb_parent = 41, key = 3, data = three\n"
-                                              "__ydb_parent = 42, key = 4, data = four\n"
-                                              "__ydb_parent = 42, key = 5, data = five\n");
+                                            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+                                            VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
+                                            "__ydb_parent = 9223372036854775849, key = 2, data = two\n"
+                                            "__ydb_parent = 9223372036854775849, key = 3, data = three\n"
+                                            "__ydb_parent = 9223372036854775850, key = 4, data = four\n"
+                                            "__ydb_parent = 9223372036854775850, key = 5, data = five\n");
             recreate();
         }
         for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
@@ -510,13 +516,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 "II\3",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
-                                             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
-                                             VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, data = one\n"
-                                              "__ydb_parent = 41, key = 2, data = two\n"
-                                              "__ydb_parent = 41, key = 3, data = three\n"
-                                              "__ydb_parent = 41, key = 4, data = four\n"
-                                              "__ydb_parent = 41, key = 5, data = five\n");
+                                            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+                                            VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 9223372036854775849, key = 1, data = one\n"
+                                            "__ydb_parent = 9223372036854775849, key = 2, data = two\n"
+                                            "__ydb_parent = 9223372036854775849, key = 3, data = three\n"
+                                            "__ydb_parent = 9223372036854775849, key = 4, data = four\n"
+                                            "__ydb_parent = 9223372036854775849, key = 5, data = five\n");
             recreate();
         }
     }

@@ -2,7 +2,7 @@ GO_LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(v1.36.5)
+VERSION(v1.36.6)
 
 SRCS(
     methods.go
@@ -13,7 +13,7 @@ SRCS(
     value.go
     value_equal.go
     value_union.go
-    value_unsafe_go121.go
+    value_unsafe.go
 )
 
 END()

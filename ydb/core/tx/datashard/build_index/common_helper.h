@@ -1,10 +1,13 @@
 #pragma once
 
+#include <ydb/core/tx/datashard/buffer_data.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/datashard/scan_common.h>
+#include <ydb/core/tx/datashard/upload_stats.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NDataShard {
+using namespace NTableIndex;
 
 #define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 #define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
@@ -52,7 +55,7 @@ public:
         }
         
         UploadRows += Uploading.Buffer.GetRows();
-        UploadBytes += Uploading.Buffer.GetBytes();
+        UploadBytes += Uploading.Buffer.GetRowCellBytes();
         Uploading.Buffer.Clear();
         RetryCount = 0;
 
@@ -67,7 +70,7 @@ public:
     {
         bool hasReachedLimit = false;
         for (auto& [_, dst] : Destinations) {
-            if (HasReachedLimits(dst.Buffer, ScanSettings)) {
+            if (dst.Buffer.HasReachedLimits(ScanSettings)) {
                 hasReachedLimit = true;
                 break;
             }
@@ -87,7 +90,7 @@ public:
 
         hasReachedLimit = false;
         for (auto& [_, dst] : Destinations) {
-            if (HasReachedLimits(dst.Buffer, ScanSettings)) {
+            if (dst.Buffer.HasReachedLimits(ScanSettings)) {
                 hasReachedLimit = true;
                 break;
             }
@@ -126,8 +129,13 @@ public:
         return true;
     }
 
+    void AddIssue(const std::exception& exc) {
+        UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
+            << "Scan failed " << exc.what()));
+    }
+
     template<typename TResponse> 
-    void Finish(TResponse& response, NTable::EAbort abort) {
+    void Finish(TResponse& response, NTable::EStatus status) {
         if (UploaderId) {
             TlsActivationContext->Send(new IEventHandle(UploaderId, TActorId(), new TEvents::TEvPoison));
             UploaderId = {};
@@ -135,18 +143,20 @@ public:
 
         response.SetUploadRows(UploadRows);
         response.SetUploadBytes(UploadBytes);
-        if (abort != NTable::EAbort::None) {
+        if (status == NTable::EStatus::Exception) {
+            response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        } else if (status != NTable::EStatus::Done) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
             if (UploadStatus.IsNone()) {
                 UploadStatus.Issues.AddIssue(NYql::TIssue("Shard or requested range is empty"));
             }
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         } else {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
         }
+
+        NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
     }
 
     const TUploadStatus& GetUploadStatus() const {
@@ -165,7 +175,7 @@ public:
         TStringBuilder result;
 
         if (Uploading) {
-            result << "UploadTable: " << Uploading.Table << " UploadBuf size: " << Uploading.Buffer.Size() << " RetryCount: " << RetryCount;
+            result << "UploadTable: " << Uploading.Table << " UploadBuf size: " << Uploading.Buffer.GetBufferBytes() << " RetryCount: " << RetryCount;
         }
 
         return result;
@@ -178,7 +188,7 @@ private:
             return true;
         }
 
-        if (!destination.Buffer.IsEmpty() && (!byLimit || HasReachedLimits(destination.Buffer, ScanSettings))) {
+        if (!destination.Buffer.IsEmpty() && (!byLimit || destination.Buffer.HasReachedLimits(ScanSettings))) {
             Uploading.Table = destination.Table;
             Uploading.Types = destination.Types; 
             destination.Buffer.FlushTo(Uploading.Buffer);
@@ -192,13 +202,15 @@ private:
     void StartUploadRowsInternal() {
         LOG_D("TBatchRowsUploader StartUploadRowsInternal " << Debug());
 
-        Y_ASSERT(Uploading);
-        Y_ASSERT(!Uploading.Buffer.IsEmpty());
-        Y_ASSERT(!UploaderId);
-        Y_ASSERT(Owner);
+        Y_ENSURE(Uploading);
+        Y_ENSURE(!Uploading.Buffer.IsEmpty());
+        Y_ENSURE(!UploaderId);
+        Y_ENSURE(Owner);
         auto actor = NTxProxy::CreateUploadRowsInternal(
             Owner, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
-            NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
+            NTxProxy::EUploadRowsMode::WriteToTableShadow,
+            true /*writeToPrivateTable*/,
+            true /*writeToIndexImplTable*/);
 
         UploaderId = TlsActivationContext->Register(actor);
     }
@@ -238,6 +250,29 @@ inline void StartScan(TDataShard* dataShard, TAutoPtr<NTable::IScan>&& scan, ui6
     scanOpts.SetResourceBroker("build_index", 10);
     const auto scanId = dataShard->QueueScan(tableId, std::move(scan), 0, scanOpts);
     scanManager.Set(id, seqNo).push_back(scanId);
+}
+
+template<typename TResponse> 
+inline void FailScan(ui64 scanId, ui64 tabletId, TActorId sender, TScanRecord::TSeqNo seqNo, const std::exception& exc, const TString& logScanType)
+{
+    LOG_E("Unhandled exception " << logScanType << " TabletId: " << tabletId 
+        << " " << TypeName(exc) << ": " << exc.what() << Endl
+        << TBackTrace::FromCurrentException().PrintToString());
+
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true)->Inc();
+
+    auto response = MakeHolder<TResponse>();
+    response->Record.SetId(scanId);
+    response->Record.SetTabletId(tabletId);
+    response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
+    response->Record.SetRequestSeqNoRound(seqNo.Round);
+    response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+
+    auto issue = response->Record.AddIssues();
+    issue->set_severity(NYql::TSeverityIds::S_ERROR);
+    issue->set_message(TStringBuilder() << "Scan failed " << exc.what());
+
+    TlsActivationContext->Send(new IEventHandle(sender, TActorId(), response.Release()));
 }
 
 }

@@ -27,7 +27,7 @@ protected:
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 
-    bool OnUnhandledException(const std::exception&) override;
+    bool OnUnhandledException(const std::exception& exc) override;
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);

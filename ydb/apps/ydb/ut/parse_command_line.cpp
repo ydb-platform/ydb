@@ -1,9 +1,13 @@
 #include "run_ydb.h"
 
+#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/public/api/client/yc_public/iam/iam_token_service.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers/test_token_exchange_server.h>
 
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -18,6 +22,7 @@
 #include <thread>
 
 using namespace fmt::literals;
+using namespace yandex::cloud::iam::v1;
 
 const TString TEST_DATABASE = "/test_database";
 
@@ -87,6 +92,7 @@ public:
         } else {
             CheckNoClientMetadata(context, "x-ydb-auth-ticket");
         }
+        CheckAuthContext(context);
         Ydb::Scheme::ListDirectoryResult res;
         auto* self = res.mutable_self();
         self->set_name(TEST_DATABASE);
@@ -106,6 +112,18 @@ public:
         }
     }
 
+    void CheckAuthContext(grpc::ServerContext* context) {
+        std::shared_ptr<const grpc::AuthContext> authContext = context->auth_context();
+        auto certs = authContext->FindPropertyValues("x509_pem_cert");
+        if (ExpectedClientCert) {
+            CHECK_EXP(!certs.empty(), "Expected client certificate, but not found");
+            TString cert = certs.front().data();
+            CHECK_EXP(cert == ExpectedClientCert, "Expected client certificate \"" << ExpectedClientCert << "\", but found: \"" << cert << "\"");
+        } else {
+            CHECK_EXP(certs.empty(), "Expected no client certificate, but found " << certs.size());
+        }
+    }
+
     void CheckNoClientMetadata(grpc::ServerContext* context, const TString& name) {
         auto [begin, end] = context->client_metadata().equal_range(name);
         CHECK_EXP(begin == end, "Expected no " << name << ", but found");
@@ -116,10 +134,15 @@ public:
     }
 
     void ClearExpectations() {
-        Token = {};
+        ExpectedClientCert = Token = {};
+    }
+
+    void ExpectClientCert(const TString& cert) {
+        ExpectedClientCert = cert;
     }
 
     TString Token;
+    TString ExpectedClientCert;
 };
 
 class TAuthImpl : public Ydb::Auth::V1::AuthService::Service, public TChecker {
@@ -155,6 +178,40 @@ public:
     TString Token;
 };
 
+class TIamTokenServiceImpl : public IamTokenService::Service, public TChecker {
+public:
+    grpc::Status Create(grpc::ServerContext* context, const CreateIamTokenRequest* request, CreateIamTokenResponse* response) override {
+        Y_UNUSED(context);
+        Y_UNUSED(request);
+        // We don't test here the quality of credentials provider itself,
+        // but test that YDB CLI correctly chooses the credentials provider
+        ++Calls;
+        response->set_iam_token(Token);
+        return grpc::Status();
+    }
+
+    void SetToken(const TString& token) {
+        Token = token;
+    }
+
+    void ExpectCall() {
+        ++ExpectedCalls;
+    }
+
+    void CheckExpectations() {
+        CHECK_EXP(Calls == ExpectedCalls, "Expected " << ExpectedCalls << " calls, but got " << Calls);
+        TChecker::CheckExpectations();
+    }
+
+    void ClearExpectations() {
+        Calls = ExpectedCalls = 0;
+    }
+
+    size_t Calls = 0;
+    size_t ExpectedCalls = 0;
+    TString Token;
+};
+
 class TCliTestFixture : public NUnitTest::TBaseFixture {
 public:
     TCliTestFixture()
@@ -168,7 +225,11 @@ public:
     }
 
     TString GetEndpoint() const {
-        return TStringBuilder() << "grpc://" << Address << ":" << Port;
+        return TStringBuilder() << ConnectSchema << "://" << Address << ":" << Port;
+    }
+
+    TString GetAddress() const {
+        return TStringBuilder() << Address << ":" << Port;
     }
 
     TString GetDatabase() const {
@@ -179,14 +240,82 @@ public:
         return TStringBuilder() << Address << ":" << Port;
     }
 
+    void GenerateCerts() {
+        if (RootCAFile) {
+            return;
+        }
+
+        using namespace NKikimr;
+        const TCertAndKey ca = GenerateCA(TProps::AsCA());
+        const TCertAndKey serverCert = GenerateSignedCert(ca, TProps::AsServer());
+        const TCertAndKey clientCert = GenerateSignedCert(ca, TProps::AsClient());
+        RootCA = ca.Certificate;
+        RootCAFile = EnvFile(RootCA, "root_ca.pem");
+        ServerCert = serverCert.Certificate;
+        ServerCertFile = EnvFile(ServerCert, "server_cert.pem");
+        ServerKey = serverCert.PrivateKey;
+        ServerKeyFile = EnvFile(ServerKey, "server_key.pem");
+        ClientCert = clientCert.Certificate;
+        ClientCertFile = EnvFile(ClientCert, "client_cert.pem");
+        ClientKey = clientCert.PrivateKey;
+        ClientKeyFile = EnvFile(ClientKey, "client_key.pem");
+        ClientKeyPassword = "test_password";
+        ClientKeyPasswordFile = EnvFile(ClientKeyPassword, "client_key_password.txt");
+        ClientKeyWithPassword = clientCert.GetKeyWithPassword(ClientKeyPassword);
+        ClientKeyWithPasswordFile = EnvFile(ClientKeyWithPassword, "client_key_with_password.pem");
+
+        const TCertAndKey wrongCa = GenerateCA(TProps::AsCA());
+        WrongRootCA = wrongCa.Certificate;
+        WrongRootCAFile = EnvFile(WrongRootCA, "root_ca.pem");
+    }
+
+#define DECL_CERT_GETTER(name) \
+    TString name;              \
+    TString Get##name() {      \
+        GenerateCerts();       \
+        return name;           \
+    }
+
+    DECL_CERT_GETTER(RootCAFile);
+    DECL_CERT_GETTER(RootCA);
+    DECL_CERT_GETTER(WrongRootCAFile);
+    DECL_CERT_GETTER(WrongRootCA);
+    DECL_CERT_GETTER(ServerCertFile);
+    DECL_CERT_GETTER(ServerCert);
+    DECL_CERT_GETTER(ServerKeyFile);
+    DECL_CERT_GETTER(ServerKey);
+    DECL_CERT_GETTER(ClientCertFile);
+    DECL_CERT_GETTER(ClientCert);
+    DECL_CERT_GETTER(ClientKeyFile);
+    DECL_CERT_GETTER(ClientKey);
+    DECL_CERT_GETTER(ClientKeyWithPasswordFile);
+    DECL_CERT_GETTER(ClientKeyWithPassword);
+    DECL_CERT_GETTER(ClientKeyPasswordFile);
+    DECL_CERT_GETTER(ClientKeyPassword);
+
+    void MakeSslServerCredentials() {
+        ConnectSchema = "grpcs";
+        grpc::SslServerCredentialsOptions sslOps;
+        sslOps.pem_root_certs = GetRootCA();
+        auto& certPair = sslOps.pem_key_cert_pairs.emplace_back();
+        certPair.private_key = GetServerKey();
+        certPair.cert_chain = GetServerCert();
+        sslOps.client_certificate_request = GRPC_SSL_REQUEST_CLIENT_CERTIFICATE_AND_VERIFY;
+        ServerCredentials = grpc::SslServerCredentials(sslOps);
+    }
+
     void Start() {
         TStringBuilder address;
         address << "0.0.0.0:" << Port;
         grpc::ServerBuilder builder;
-        builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+        if (!ServerCredentials) {
+            ServerCredentials = grpc::InsecureServerCredentials();
+        }
+        builder.AddListeningPort(address, ServerCredentials);
         builder.RegisterService(&Discovery);
         builder.RegisterService(&Scheme);
         builder.RegisterService(&Auth);
+        builder.RegisterService(&IamTokenService);
         Server = builder.BuildAndStart();
         ServerThread = std::thread([this]{
             Server->Wait();
@@ -220,6 +349,10 @@ public:
         Scheme.ExpectToken(token);
     }
 
+    void ExpectClientCert() {
+        Scheme.ExpectClientCert(GetClientCert());
+    }
+
     void ExpectUserAndPassword(const TString& user, const TString& password, const TString& token) {
         Auth.ExpectUserAndPassword(user, password);
         Auth.SetToken(token);
@@ -233,18 +366,20 @@ public:
     void CheckExpectations() {
         Auth.CheckExpectations();
         Scheme.CheckExpectations();
+        IamTokenService.CheckExpectations();
     }
 
-    void RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
+    TString RunCli(TList<TString> args, const THashMap<TString, TString>& env = {}, const TString& profileFileContent = {}) {
         Auth.ClearFailures();
         Scheme.ClearFailures();
+        IamTokenService.ClearFailures();
 
         if (profileFileContent) {
             TString profileFile = EnvFile(profileFileContent, "profile.yaml");
             args.emplace_front(profileFile);
             args.emplace_front("--profile-file");
         }
-        RunYdb(
+        TString output = RunYdb(
             args,
             {},
             true,
@@ -257,19 +392,39 @@ public:
         ExpectedExitCode = 0;
         Scheme.ClearExpectations();
         Auth.ClearExpectations();
+        IamTokenService.ClearExpectations();
+        return output;
+    }
+
+    TIamTokenServiceImpl& GetIamTokenService() {
+        return IamTokenService;
     }
 
 private:
     TPortManager PortManager;
+    TString ConnectSchema = "grpc";
     TString Address = "localhost";
     ui16 Port = 0;
     TDiscoveryImpl Discovery;
     TAuthImpl Auth;
     TSchemeImpl Scheme;
+    TIamTokenServiceImpl IamTokenService;
     std::unique_ptr<grpc::Server> Server;
     std::thread ServerThread;
     int ExpectedExitCode = 0;
     std::list<TTempFile> EnvFiles;
+
+    std::shared_ptr<grpc::ServerCredentials> ServerCredentials;
+};
+
+class TCliTestFixtureWithSsl : public TCliTestFixture {
+public:
+    TCliTestFixtureWithSsl() = default;
+
+    void SetUp(NUnitTest::TTestContext&) override {
+        MakeSslServerCredentials();
+        Start();
+    }
 };
 
 Y_UNIT_TEST_SUITE(ParseOptionsTest) {
@@ -767,5 +922,534 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {"YDB_USER", "wrong-user"},
             {"YDB_PASSWORD", "wrong-password"},
         });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFile, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        // But fail with wrong untrusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetWrongRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        // No trusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFileFromEnv, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+        });
+
+        // But fail with wrong untrusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetWrongRootCAFile()},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFileFromProfile, TCliTestFixtureWithSsl) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-p", "active_test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFile, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "--client-cert-file", GetClientCertFile(),
+            "--client-cert-key-file", GetClientKeyFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "--client-cert-file", GetClientCertFile(),
+            "--client-cert-key-file", GetClientKeyWithPasswordFile(),
+            "--client-cert-key-password-file", GetClientKeyPasswordFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFromEnv, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+        });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+            {"YDB_CLIENT_CERT_KEY_PASSWORD", GetClientKeyPassword()},
+        });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+            {"YDB_CLIENT_CERT_KEY_PASSWORD_FILE", GetClientKeyPasswordFile()},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFileFromProfile, TCliTestFixtureWithSsl) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                client-cert-file: {client_cert_file}
+                client-cert-key-file: {client_cert_key_file}
+            test_profile_with_client_cert_password:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                client-cert-file: {client_cert_file}
+                client-cert-key-file: {client_cert_key_with_password_file}
+                client-cert-key-password-file: {client_cert_key_password_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile(),
+        "client_cert_file"_a = GetClientCertFile(),
+        "client_cert_key_file"_a = GetClientKeyFile(),
+        "client_cert_key_with_password_file"_a = GetClientKeyWithPasswordFile(),
+        "client_cert_key_password_file"_a = GetClientKeyPasswordFile()
+        );
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+
+        ExpectToken("token2");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "-p", "test_profile_with_client_cert_password",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token2"},
+            },
+            profile
+        );
+
+        ExpectToken("token3");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "-p", "active_test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token3"},
+            },
+            profile
+        );
+    }
+
+    Y_UNIT_TEST_F(PrintConnectionParams, TCliTestFixtureWithSsl) {
+        {
+            TString output = RunCli(
+                {
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "--ca-file", GetRootCAFile(),
+                    "--client-cert-file", GetClientCertFile(),
+                    "--client-cert-key-file", GetClientKeyFile(),
+                    "config", "info",
+                },
+                {}
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyFile() << Endl);
+        }
+
+        {
+            TString output = RunCli(
+                {
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "config", "info",
+                },
+                {
+                    {"YDB_CA_FILE", GetRootCAFile()},
+                    {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+                    {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+                }
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyFile() << Endl);
+        }
+
+        {
+            TString profile = fmt::format(R"yaml(
+            profiles:
+                active_test_profile:
+                    endpoint: {endpoint}
+                    database: {database}
+                    ca-file: {ca_file}
+                    client-cert-file: {client_cert_file}
+                    client-cert-key-file: {client_cert_key_with_password_file}
+                    client-cert-key-password-file: {client_cert_key_password_file}
+            active_profile: active_test_profile
+            )yaml",
+            "endpoint"_a = GetEndpoint(),
+            "database"_a = GetDatabase(),
+            "ca_file"_a = GetRootCAFile(),
+            "client_cert_file"_a = GetClientCertFile(),
+            "client_cert_key_with_password_file"_a = GetClientKeyWithPasswordFile(),
+            "client_cert_key_password_file"_a = GetClientKeyPasswordFile()
+            );
+
+            TString output = RunCli(
+                {
+                    "config", "info",
+                },
+                {},
+                profile
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyWithPasswordFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-password-file: " << GetClientKeyPasswordFile() << Endl);
+
+            output = RunCli(
+                {
+                    "-p", "active_test_profile",
+                    "config", "info",
+                },
+                {},
+                profile
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyWithPasswordFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-password-file: " << GetClientKeyPasswordFile() << Endl);
+        }
+    }
+
+    Y_UNIT_TEST_F(SaKeyFile, TCliTestFixtureWithSsl) {
+        TStringBuilder saKeyContent;
+        NJson::TJsonWriter saKeyParamsWriter(&saKeyContent.Out, true);
+        saKeyParamsWriter.OpenMap();
+        saKeyParamsWriter.Write("id", "test-id");
+        saKeyParamsWriter.Write("user_account_id", "test-user-id");
+        saKeyParamsWriter.Write("public_key", GetClientCert()); // We need any certificate/key here
+        saKeyParamsWriter.Write("private_key", GetClientKey());
+        saKeyParamsWriter.CloseMap();
+        saKeyParamsWriter.Flush();
+
+        const TString saKeyFile = EnvFile(saKeyContent, "sa_key.json");
+
+        GetIamTokenService().SetToken("test-iam-token");
+        GetIamTokenService().ExpectCall();
+        ExpectToken("test-iam-token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--ca-file", GetRootCAFile(),
+                "--sa-key-file", saKeyFile,
+                "--iam-endpoint", GetIamEndpoint(),
+                "scheme", "ls",
+            },
+            {}
+        );
+
+        GetIamTokenService().SetToken("test-iam-token-2");
+        GetIamTokenService().ExpectCall();
+        ExpectToken("test-iam-token-2");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--ca-file", GetRootCAFile(),
+                "--sa-key-file", saKeyFile,
+                "--iam-endpoint", GetIamEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_CA_FILE", GetRootCAFile()},
+                {"SA_KEY_FILE", saKeyFile},
+            }
+        );
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                iam-endpoint: {iam_endpoint}
+                authentication:
+                    method: sa-key-file
+                    data: {sa_key_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile(),
+        "sa_key_file"_a = saKeyFile,
+        "iam_endpoint"_a = GetIamEndpoint()
+        );
+
+        GetIamTokenService().SetToken("test-iam-token-3");
+        GetIamTokenService().ExpectCall();
+        ExpectToken("test-iam-token-3");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+
+        TString output = RunCli(
+            {
+                "config", "info",
+            },
+            {},
+            profile
+        );
+        UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "sa-key-file: " << saKeyFile << Endl);
+    }
+
+    Y_UNIT_TEST_F(Oauth2KeyFile, TCliTestFixture) {
+        TStringBuilder oauth2KeyContent;
+        NJson::TJsonWriter oauth2KeyParamsWriter(&oauth2KeyContent.Out, true);
+        oauth2KeyParamsWriter.OpenMap();
+        oauth2KeyParamsWriter.Write("grant-type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        oauth2KeyParamsWriter.Write("requested-token-type", "urn:ietf:params:oauth:token-type:access_token");
+        oauth2KeyParamsWriter.WriteKey("subject-credentials");
+        oauth2KeyParamsWriter.OpenMap();
+        oauth2KeyParamsWriter.Write("type", "fixed");
+        oauth2KeyParamsWriter.Write("token", "fixed_test_token");
+        oauth2KeyParamsWriter.Write("token-type", "test_token_type");
+        oauth2KeyParamsWriter.CloseMap();
+        oauth2KeyParamsWriter.CloseMap();
+        oauth2KeyParamsWriter.Flush();
+
+        const TString oauth2KeyFile = EnvFile(oauth2KeyContent, "oauth2_key.json");
+
+        TTestTokenExchangeServer oauth2Server;
+        oauth2Server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        oauth2Server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+        oauth2Server.Check.ExpectedInputParams.emplace("subject_token", "fixed_test_token");
+        oauth2Server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
+        oauth2Server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": 42})";
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--oauth2-key-file", oauth2KeyFile,
+                "--iam-endpoint", oauth2Server.GetEndpoint(),
+                "scheme", "ls",
+            },
+            {}
+        );
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--iam-endpoint", oauth2Server.GetEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_OAUTH2_KEY_FILE", oauth2KeyFile},
+            }
+        );
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                iam-endpoint: {iam_endpoint}
+                authentication:
+                    method: oauth2-key-file
+                    data: {oauth2_key_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "oauth2_key_file"_a = oauth2KeyFile,
+        "iam_endpoint"_a = oauth2Server.GetEndpoint()
+        );
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+
+        TString output = RunCli(
+            {
+                "config", "info",
+            },
+            {},
+            profile
+        );
+        UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "oauth2-key-file: " << oauth2KeyFile << Endl);
     }
 }

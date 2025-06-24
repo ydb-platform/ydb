@@ -4,6 +4,10 @@ SRCS(
     accessor.cpp
 )
 
+CFLAGS(
+    GLOBAL -DYDB_SDK_INTERNAL_CLIENTS
+)
+
 PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/grpc/draft

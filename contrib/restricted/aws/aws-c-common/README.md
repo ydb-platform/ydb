@@ -99,6 +99,8 @@ returning control to the caller, if you have an error to raise, use the `aws_rai
 * For APIs returning an allocated instance of an object, return the memory on success, and `NULL` on failure. Before
 returning control to the caller, if you have an error to raise, use the `aws_raise_error()` function.
 
+See [error-handling.md](docs/error-handling.md) for a longer tutorial.
+
 #### Log Subjects & Error Codes
 The logging & error handling infrastructure is designed to support multiple libraries. For this to work, AWS maintained libraries
 have pre-slotted log subjects & error codes for each library. The currently allocated ranges are:
@@ -122,7 +124,8 @@ have pre-slotted log subjects & error codes for each library. The currently allo
 | [0x3800, 0x3C00) | aws-c-s3 |
 | [0x3C00, 0x4000) | aws-c-sdkutils |
 | [0x4000, 0x4400) | aws-crt-kotlin |
-| [0x4400, 0x4800) | (reserved for future project) |
+| [0x4400, 0x4800) | aws-crt-swift |
+| [0x4800, 0x4C00) | (reserved for future project) |
 
 Each library should begin its error and log subject values at the beginning of its range and follow in sequence (don't skip codes). Upon
 adding an AWS maintained library, a new enum range must be approved and added to the above table.
@@ -228,11 +231,17 @@ Example:
     AWS_COMMON_API
  void aws_module_destroy(aws_module_t *module);
 
-* Avoid c-strings, and don't write code that depends on `NULL` terminators. Expose `struct aws_byte_buf` APIs
-and let the user figure it out.
+* Avoid c-strings, and don't write code that depends on `NULL` terminators.
+    * Pass strings via `struct aws_byte_cursor`. This is a non-owning view type. Pass it by value. Strings passed this way do not need a `NULL` terminator.
+    * Only pass `const char *` when thinly wrapping an OS function that *requires* a `NULL` terminator.
+    * Store const strings as `struct aws_string *`
+    * Store mutable string buffers as `struct aws_byte_buf`
+
 * There is only one valid character encoding-- UTF-8. Try not to ever need to care about character encodings, but
 where you do, the working assumption should always be UTF-8 unless it's something we don't get a choice in (e.g. a protocol
 explicitly mandates a character set).
+* If a function has many arguments, or any optional arguments use an options-struct.
+* If a variable is time-related, always include the unit of time in its name (e.g. `timeout_ms`).
 * If you are adding/using a compiler specific keyword, macro, or intrinsic, hide it behind a platform independent macro
 definition. This mainly applies to header files. Obviously, if you are writing a file that will only be built on a certain
 platform, you have more liberty on this.

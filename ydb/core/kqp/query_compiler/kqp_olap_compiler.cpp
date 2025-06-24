@@ -1,7 +1,6 @@
 #include "kqp_olap_compiler.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -51,8 +50,6 @@ public:
             YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second);
             MaxColumnId = std::max(MaxColumnId, columnMeta.Id);
         }
-
-        Program.SetVersion(NKikimr::NSsa::RuntimeVersion);
     }
 
     ui32 GetColumnId(const std::string& name) const {
@@ -128,6 +125,7 @@ public:
             const auto& rightCleanType = RemoveOptionality(*rightItemType);
             resultItemType = CommonType<true>(pos, &leftCleanType, &rightCleanType, ExprContext);
         }
+        YQL_ENSURE(resultItemType);
 
         if ((ETypeAnnotationKind::Optional == leftItemType->GetKind() && !optionalityFromRight) || ETypeAnnotationKind::Optional == rightItemType->GetKind()) {
             resultItemType = ExprContext.MakeType<TOptionalExprType>(resultItemType);
@@ -205,7 +203,9 @@ public:
     bool CheckYqlCompatibleArgType(const TExprBase& expression) const {
         if (const auto maybe = expression.Maybe<TCoAtom>()) {
             if (const auto type = GetColumnTypeByName(maybe.Cast().Value()); type->GetKind() == ETypeAnnotationKind::Data) {
-                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()); !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType))) {
+                if (const auto info = GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot());
+                    !(info.Features & (NUdf::EDataTypeFeatures::StringType | NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::DateType |
+                                       NUdf::EDataTypeFeatures::TimeIntervalType))) {
                     return false;
                 }
             }
@@ -236,6 +236,19 @@ public:
         }
         return type;
     }
+
+    void AddColumnNameForProjectionKernelId(const std::string &columnName, ui32 id) {
+        KqpColumnNameToProjectionId.emplace(columnName, id);
+    }
+
+    bool GetProjectionKernelIdForColumn(const std::string &columnName, ui32 &id) {
+        if (KqpColumnNameToProjectionId.contains(columnName)) {
+            id = KqpColumnNameToProjectionId[columnName];
+            return true;
+        }
+        return false;
+    }
+
 private:
     const TTypeAnnotationNode* GetColumnTypeByName(const std::string_view &name) const {
         auto *rowItemType = GetSeqItemType(Row.Ptr()->GetTypeAnn());
@@ -256,6 +269,7 @@ private:
     TExprContext& ExprContext;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> YqlKernelsFuncRegistry;
     std::unique_ptr<TKernelRequestBuilder> YqlKernelRequestBuilder;
+    THashMap<std::string, ui32> KqpColumnNameToProjectionId;
 };
 
 std::unordered_map<std::string, EAggFunctionType> TKqpOlapCompileContext::AggFuncTypesMap = {
@@ -297,7 +311,8 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
         ssaValue->MutableConstant()->SetInt16(FromString<i16>(nodeValue));
     } else if (value.Maybe<TCoInt32>() || value.Maybe<TCoDate32>()) {
         ssaValue->MutableConstant()->SetInt32(FromString<i32>(nodeValue));
-    } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>()) {
+    } else if (value.Maybe<TCoInt64>() || value.Maybe<TCoInterval64>() || value.Maybe<TCoDatetime64>() || value.Maybe<TCoTimestamp64>() ||
+               value.Maybe<TCoInterval>()) {
         ssaValue->MutableConstant()->SetInt64(FromString<i64>(nodeValue));
     } else if (value.Maybe<TCoUint8>()) {
         ssaValue->MutableConstant()->SetUint8(FromString<ui8>(nodeValue));
@@ -308,9 +323,11 @@ ui64 ConvertValueToColumn(const TCoDataCtor& value, TKqpOlapCompileContext& ctx)
     } else if (value.Maybe<TCoUint64>()) {
         ssaValue->MutableConstant()->SetUint64(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoTimestamp>()) {
-        ssaValue->MutableConstant()->SetTimestamp(FromString<ui64>(nodeValue));
+        ssaValue->MutableConstant()->SetUint64(FromString<ui64>(nodeValue));
     } else if (value.Maybe<TCoDate>()) {
-        ssaValue->MutableConstant()->SetTimestamp(FromString<ui16>(nodeValue));
+        ssaValue->MutableConstant()->SetUint16(FromString<ui16>(nodeValue));
+    } else if (value.Maybe<TCoDatetime>()) {
+        ssaValue->MutableConstant()->SetUint32(FromString<ui32>(nodeValue));
     } else {
         YQL_ENSURE(false, "Unsupported content: " << value.Ref().Content());
     }
@@ -592,18 +609,18 @@ const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& c
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
     std::vector<ui64> ids;
     TTypeAnnotationNode::TListType argTypes;
-    ids.reserve(apply.Columns().Size());
-    argTypes.reserve(apply.Columns().Size());
-    for (const auto& member : apply.Columns()) {
-        const auto arg = GetOrCreateColumnIdAndType(member, ctx);
-        ids.emplace_back(arg.Id);
-        argTypes.emplace_back(arg.Type);
-    }
-
-    for(const auto& param: apply.Parameters()) {
-        const auto& arg = GetOrCreateColumnIdAndType(param, ctx);
-        ids.emplace_back(arg.Id);
-        argTypes.emplace_back(arg.Type);
+    ids.reserve(apply.Args().Size());
+    argTypes.reserve(apply.Args().Size());
+    for (const auto& arg : apply.Args()) {
+        if (const auto& column = arg.Maybe<TKqpOlapApplyColumnArg>()) {
+            const auto ssaCol = GetOrCreateColumnIdAndType(column.Cast().ColumnName(), ctx);
+            ids.emplace_back(ssaCol.Id);
+            argTypes.emplace_back(ssaCol.Type);
+        } else {
+            const auto& ssaCol = GetOrCreateColumnIdAndType(arg, ctx);
+            ids.emplace_back(ssaCol.Id);
+            argTypes.emplace_back(ssaCol.Type);
+        }
     }
 
     auto *const command = ctx.CreateAssignCmd();
@@ -611,6 +628,7 @@ TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCom
     const auto idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
+    function->SetKernelName(apply.KernelName().StringValue());
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
     return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
 }
@@ -931,6 +949,15 @@ void CompileAggregates(const TKqpOlapAgg& aggNode, TKqpOlapCompileContext& ctx) 
     }
 }
 
+void CompileProjections(const TKqpOlapProjections& projectionsNode, TKqpOlapCompileContext& ctx) {
+    auto projections = projectionsNode.Projections();
+    for (const auto& child : projections) {
+        auto projection = child.Cast<TKqpOlapProjection>();
+        auto generatedColumnIdAndType = GetOrCreateColumnIdAndType(projection.OlapOperation(), ctx);
+        ctx.AddColumnNameForProjectionKernelId(std::string(projection.ColumnName()), generatedColumnIdAndType.Id);
+    }
+}
+
 void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
     auto resultColNames = ctx.GetResultColNames();
     if (resultColNames.empty()) {
@@ -939,8 +966,10 @@ void CompileFinalProjection(TKqpOlapCompileContext& ctx) {
 
     auto* projection = ctx.CreateProjection();
     for (auto colName : resultColNames) {
-        auto colId = ctx.GetColumnId(colName);
-
+        ui32 colId;
+        if (!ctx.GetProjectionKernelIdForColumn(colName, colId)) {
+            colId = ctx.GetColumnId(colName);
+        }
         auto* projCol = projection->AddColumns();
         projCol->SetId(colId);
     }
@@ -965,6 +994,8 @@ void CompileOlapProgramImpl(TExprBase operation, TKqpOlapCompileContext& ctx) {
             CompileFilter(maybeFilter.Cast(), ctx);
         } else if (auto maybeAgg = operation.Maybe<TKqpOlapAgg>()) {
             CompileAggregates(maybeAgg.Cast(), ctx);
+        } else if (auto maybeProjections = operation.Maybe<TKqpOlapProjections>()) {
+            CompileProjections(maybeProjections.Cast(), ctx);
         }
         return;
     }

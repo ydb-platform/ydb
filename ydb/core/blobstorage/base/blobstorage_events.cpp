@@ -3,13 +3,13 @@
 
 namespace NKikimr {
 
-    TEvNodeWardenStorageConfig::TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
-            const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled)
-        : Config(std::make_unique<NKikimrBlobStorage::TStorageConfig>(config))
-        , ProposedConfig(proposedConfig
-            ? std::make_unique<NKikimrBlobStorage::TStorageConfig>(*proposedConfig)
-            : nullptr)
+    TEvNodeWardenStorageConfig::TEvNodeWardenStorageConfig(std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config,
+            std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> proposedConfig, bool selfManagementEnabled,
+            TBridgeInfo::TPtr bridgeInfo)
+        : Config(std::move(config))
+        , ProposedConfig(std::move(proposedConfig))
         , SelfManagementEnabled(selfManagementEnabled)
+        , BridgeInfo(std::move(bridgeInfo))
     {}
 
     TEvNodeWardenStorageConfig::~TEvNodeWardenStorageConfig()

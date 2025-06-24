@@ -5,100 +5,177 @@
 #include "select.h"
 #include "variator.h"
 
-namespace NKikimr::NKqp {
+namespace NKikimr::NKqp::Variator {
+namespace {
+    using TCommandFactory = std::function<std::shared_ptr<ICommand>()>;
 
-std::shared_ptr<ICommand> TScriptVariator::BuildCommand(TString command) {
-    if (command.StartsWith("BULK_UPSERT:")) {
-        command = command.substr(12);
-        auto result = std::make_shared<TBulkUpsertCommand>();
-        AFL_VERIFY(result->DeserializeFromString(command));
-        return result;
-    } else if (command.StartsWith("SCHEMA:")) {
-        command = command.substr(7);
-        return std::make_shared<TSchemaCommand>(command);
-    } else if (command.StartsWith("DATA:")) {
-        command = command.substr(5);
-        return std::make_shared<TDataCommand>(command);
-    } else if (command.StartsWith("READ:")) {
-        auto result = std::make_shared<TSelectCommand>();
-        AFL_VERIFY(result->DeserializeFromString(command));
-        return result;
-    } else if (command.StartsWith("WAIT_COMPACTION")) {
-        return std::make_shared<TWaitCompactionCommand>();
-    } else if (command.StartsWith("STOP_COMPACTION")) {
-        return std::make_shared<TStopCompactionCommand>();
-    } else if (command.StartsWith("ONE_COMPACTION")) {
-        return std::make_shared<TOneCompactionCommand>();
-    } else if (command.StartsWith("ONE_ACTUALIZATION")) {
-        return std::make_shared<TOneActualizationCommand>();
-    } else {
-        AFL_VERIFY(false)("command", command);
+    const std::unordered_map<TString, TCommandFactory> CommandFactories = {
+        {"BULK_UPSERT", []() { return std::make_shared<TBulkUpsertCommand>(); }},
+        {"SCHEMA", []() { return std::make_shared<TSchemaCommand>(); }},
+        {"DATA", []() { return std::make_shared<TDataCommand>(); }},
+        {"READ", []() { return std::make_shared<TSelectCommand>(); }},
+        {"WAIT_COMPACTION", []() { return std::make_shared<TWaitCompactionCommand>(); }},
+        {"STOP_COMPACTION", []() { return std::make_shared<TStopCompactionCommand>(); }},
+        {"ONE_COMPACTION", []() { return std::make_shared<TOneCompactionCommand>(); }},
+        {"ONE_ACTUALIZATION", []() { return std::make_shared<TOneActualizationCommand>(); }}
+    };
+
+    std::pair<TString, TString> ParseCommandString(const TString& command) {
+        TString cleanCommand = Strip(command);
+
+        size_t pos = cleanCommand.find(':');
+        if (pos == TString::npos) {
+            return {cleanCommand, TString()};
+        }
+
+        return {Strip(cleanCommand.substr(0, pos)), Strip(cleanCommand.substr(pos + 1))};
+    }
+}
+
+std::shared_ptr<ICommand> BuildCommand(const TString& command) {
+    const auto [commandName, arguments] = ParseCommandString(command);
+
+    auto it = CommandFactories.find(commandName);
+    if (it == CommandFactories.end()) {
+        AFL_VERIFY(false)("Unknown command", command)("commandName", commandName);
         return nullptr;
     }
-}
 
-void TScriptVariator::BuildScripts(const std::vector<std::vector<std::shared_ptr<ICommand>>>& commands, const ui32 currentLayer,
-    std::vector<std::shared_ptr<ICommand>>& currentScript, std::vector<TScriptExecutor>& scripts) {
-    if (currentLayer == commands.size()) {
-        scripts.emplace_back(currentScript);
-        return;
-    }
-    for (auto&& i : commands[currentLayer]) {
-        currentScript.emplace_back(i);
-        BuildScripts(commands, currentLayer + 1, currentScript, scripts);
-        currentScript.pop_back();
-    }
-}
+    auto result = it->second();
 
-void TScriptVariator::BuildVariantsImpl(const std::vector<std::vector<TString>>& chunks, const ui32 currentLayer,
-    std::vector<TString>& currentCommand, std::vector<TString>& results) {
-    if (currentLayer == chunks.size()) {
-        results.emplace_back(JoinSeq("", currentCommand));
-        return;
+    if (!arguments.empty()) {
+        result->DeserializeFromString(arguments).Validate();
     }
-    for (auto&& i : chunks[currentLayer]) {
-        currentCommand.emplace_back(i);
-        BuildVariantsImpl(chunks, currentLayer + 1, currentCommand, results);
-        currentCommand.pop_back();
-    }
-}
 
-std::vector<TString> TScriptVariator::BuildVariants(const TString& command) {
-    auto chunks = StringSplitter(command).SplitByString("$$").ToList<TString>();
-    std::vector<std::vector<TString>> chunksVariants;
-    for (ui32 i = 0; i < chunks.size(); ++i) {
-        if (i % 2 == 0) {
-            chunksVariants.emplace_back(std::vector<TString>({ chunks[i] }));
-        } else {
-            chunksVariants.emplace_back(StringSplitter(chunks[i]).SplitBySet("|").ToList<TString>());
-        }
-    }
-    std::vector<TString> result;
-    std::vector<TString> currentCommand;
-    BuildVariantsImpl(chunksVariants, 0, currentCommand, result);
     return result;
 }
 
-TScriptVariator::TScriptVariator(const TString& script) {
-    auto lines = StringSplitter(script).SplitByString("\n").ToList<TString>();
-    lines.erase(std::remove_if(lines.begin(), lines.end(),
-                    [](const TString& l) {
-                        return Strip(l).StartsWith("#");
-                    }),
-        lines.end());
-    auto commands = StringSplitter(JoinSeq("\n", lines)).SplitByString("------").ToList<TString>();
-    std::vector<std::vector<std::shared_ptr<ICommand>>> commandsDescription;
-    for (auto&& i : commands) {
-        auto& cVariants = commandsDescription.emplace_back();
-        i = Strip(i);
-        std::vector<TString> variants = BuildVariants(i);
-        for (auto&& v : variants) {
-            cVariants.emplace_back(BuildCommand(v));
+void BuildScripts(
+    const std::vector<std::vector<std::tuple<TString, TString>>>& commands,
+    const ui32 currentLayer,
+    Script& currentScript,
+    std::vector<TString>& currentVariant,
+    std::vector<std::tuple<Script, Varinat>>& scripts
+) {
+    if (currentLayer == commands.size()) {
+        scripts.emplace_back(currentScript, JoinSeq(",", currentVariant));
+        return;
+    }
+
+    for (const auto& [command, variant] : commands[currentLayer]) {
+        if (!variant.empty()) {
+            currentVariant.push_back(variant);
+        }
+
+        currentScript.push_back(command);
+        BuildScripts(commands, currentLayer + 1, currentScript, currentVariant, scripts);
+        currentScript.pop_back();
+
+        if (!variant.empty()) {
+            currentVariant.pop_back();
         }
     }
-    std::vector<TScriptExecutor> scripts;
-    std::vector<std::shared_ptr<ICommand>> scriptCommands;
-    BuildScripts(commandsDescription, 0, scriptCommands, Scripts);
 }
 
-}   // namespace NKikimr::NKqp
+void BuildVariantsImpl(
+    const std::vector<std::vector<TString>>& chunks,
+    const ui32 currentLayer,
+    std::vector<TString>& currentCommand,
+    std::vector<TString>& currentVariant,
+    std::vector<std::tuple<TString, TString>>& results
+) {
+    if (currentLayer == chunks.size()) {
+        results.emplace_back(JoinSeq("", currentCommand), JoinSeq(",", currentVariant));
+        return;
+    }
+
+    const auto& chunkVariants = chunks[currentLayer];
+    const bool hasMultipleVariants = chunkVariants.size() > 1;
+
+    for (const auto& chunk : chunkVariants) {
+        if (hasMultipleVariants) {
+            currentVariant.push_back(chunk);
+        }
+
+        currentCommand.push_back(chunk);
+        BuildVariantsImpl(chunks, currentLayer + 1, currentCommand, currentVariant, results);
+        currentCommand.pop_back();
+
+        if (hasMultipleVariants) {
+            currentVariant.pop_back();
+        }
+    }
+}
+
+std::vector<std::tuple<TString, TString>> BuildVariants(const TString& command) {
+    auto chunks = StringSplitter(command).SplitByString("$$").ToList<TString>();
+    std::vector<std::vector<TString>> chunksVariants;
+    chunksVariants.reserve(chunks.size());
+
+    for (ui32 i = 0; i < chunks.size(); ++i) {
+        if (i % 2 == 0) {
+            chunksVariants.push_back({chunks[i]});
+        } else {
+            chunksVariants.push_back(
+                StringSplitter(chunks[i]).SplitBySet("|").ToList<TString>()
+            );
+        }
+    }
+
+    std::vector<std::tuple<TString, TString>> result;
+    std::vector<TString> currentCommand;
+    std::vector<TString> currentVariant;
+
+    BuildVariantsImpl(chunksVariants, 0, currentCommand, currentVariant, result);
+    return result;
+}
+
+std::vector<std::tuple<Script, Varinat>> ScriptVariants(const TString& script) {
+    auto commands = SingleScript(script);
+
+    std::vector<std::vector<std::tuple<TString, TString>>> commandsDescription;
+    commandsDescription.reserve(commands.size());
+
+    for (auto& cmd : commands) {
+        cmd = Strip(cmd);
+        commandsDescription.push_back(BuildVariants(cmd));
+    }
+
+    std::vector<std::tuple<Script, Varinat>> result;
+    Script currentScript;
+    std::vector<TString> currentVariant;
+
+    BuildScripts(commandsDescription, 0, currentScript, currentVariant, result);
+    return result;
+}
+
+Script SingleScript(const TString& script) {
+    auto lines = StringSplitter(script).SplitByString("\n").ToList<TString>();
+
+    lines.erase(
+        std::remove_if(lines.begin(), lines.end(),
+            [](const TString& line) {
+                return Strip(line).StartsWith("#");
+            }),
+        lines.end()
+    );
+
+    return StringSplitter(JoinSeq("\n", lines)).SplitByString("------").ToList<TString>();
+}
+
+TScriptExecutor ToExecutor(const Script& script) {
+    std::vector<std::shared_ptr<ICommand>> result;
+    result.reserve(script.size());
+
+    for (const auto& command : script) {
+        result.push_back(BuildCommand(command));
+    }
+
+    return TScriptExecutor(result);
+}
+
+TString ToString(const Script& script) {
+    return JoinSeq("\n------\n", script);
+}
+
+}  // namespace NKikimr::NKqp::Variator

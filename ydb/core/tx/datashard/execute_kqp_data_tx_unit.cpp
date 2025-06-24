@@ -350,7 +350,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         // Note: any transaction (e.g. immediate or non-volatile) may decide to commit as volatile due to dependencies
         // Such transactions would have no participants and become immediately committed
         auto commitTxIds = dataTx->GetVolatileCommitTxIds();
-        if (commitTxIds) {
+        if (commitTxIds || isArbiter) {
             TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
             DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                 txId,
@@ -362,6 +362,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
                 dataTx->GetVolatileCommitOrdered(),
                 isArbiter,
                 txc);
+        } else {
+            awaitingDecisions.clear();
         }
 
         if (dataTx->GetPerformedUserReads()) {
@@ -383,6 +385,10 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         // Note: may erase persistent locks, must be after we persist volatile tx
         AddLocksToResult(op, ctx);
+
+        if (!guardLocks.LockTxId) {
+            writeVersion.ToProto(op->Result()->Record.MutableCommitVersion());
+        }
 
         if (auto changes = std::move(dataTx->GetCollectedChanges())) {
             op->ChangeRecords() = std::move(changes);

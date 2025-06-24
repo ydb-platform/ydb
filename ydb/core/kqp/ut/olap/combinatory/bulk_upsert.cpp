@@ -7,34 +7,38 @@
 
 namespace NKikimr::NKqp {
 
-bool TBulkUpsertCommand::DeserializeFromString(const TString& info) {
-    auto lines = StringSplitter(info).SplitBySet("\n").SkipEmpty().ToList<TString>();
-    if (lines.size() < 2 || lines.size() > 3) {
-        return false;
+TConclusionStatus TBulkUpsertCommand::DoExecute(TKikimrRunner& kikimr) {
+    if (ArrowBatch->num_rows() < PartsCount) {
+        return TConclusionStatus::Fail(
+            "not enough records(" + ::ToString(ArrowBatch->num_rows()) + ") for split in " + ::ToString(PartsCount) + " chunks");
     }
-    TableName = Strip(lines[0]);
-    ArrowBatch = Base64Decode(Strip(lines[1]));
-    AFL_VERIFY(!!ArrowBatch);
-    if (lines.size() == 3) {
-        if (!Ydb::StatusIds_StatusCode_Parse(Strip(lines[2]), &ExpectedCode)) {
-            return false;
-        }
-        //                if (lines[2] == "SUCCESS") {
-        //                } else if (lines[2] = "INTERNAL_ERROR") {
-        //                    ExpectedCode = Ydb::StatusIds::INTERNAL_ERROR;
-        //                } else if (lines[2] == "BAD_REQUEST") {
-        //                    ExpectedCode = Ydb::StatusIds::BAD_REQUEST;
-        //                } else {
-        //                    return false;
-        //                }
+    ui32 cursor = 0;
+    for (ui32 i = 0; i < PartsCount; ++i) {
+        const ui32 size = (i + 1 != PartsCount) ? (ArrowBatch->num_rows() / PartsCount) : (ArrowBatch->num_rows() - cursor);
+        TLocalHelper lHelper(kikimr);
+        lHelper.SendDataViaActorSystem(TableName, ArrowBatch->Slice(cursor, size), ExpectedCode);
+        cursor += size;
     }
-    return true;
+    AFL_VERIFY(cursor == ArrowBatch->num_rows());
+    return TConclusionStatus::Success();
 }
 
-TConclusionStatus TBulkUpsertCommand::DoExecute(TKikimrRunner& kikimr) {
-    TLocalHelper lHelper(kikimr);
-    lHelper.SendDataViaActorSystem(
-        TableName, NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(ArrowBatch)), ExpectedCode);
+TConclusionStatus TBulkUpsertCommand::DoDeserializeProperties(const TPropertiesCollection& props) {
+    if (props.GetFreeArgumentsCount() != 2) {
+        return TConclusionStatus::Fail("incorrect free arguments count for BULK_UPSERTcommand");
+    }
+    TableName = props.GetFreeArgumentVerified(0);
+    ArrowBatch = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(Base64Decode(props.GetFreeArgumentVerified(1))));
+    if (auto value = props.GetOptional("EXPECT_STATUS")) {
+        if (!Ydb::StatusIds_StatusCode_Parse(*value, &ExpectedCode)) {
+            return TConclusionStatus::Fail("cannot parse EXPECT_STATUS from " + *value);
+        }
+    }
+    if (auto value = props.GetOptional("PARTS_COUNT")) {
+        if (!TryFromString<ui32>(*value, PartsCount)) {
+            return TConclusionStatus::Fail("cannot parse PARTS_COUNT from " + *value);
+        }
+    }
     return TConclusionStatus::Success();
 }
 

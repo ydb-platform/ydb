@@ -105,7 +105,7 @@ inline void FillOperationSpec(NYT::TOperationSpecBase<TDerived>& spec, const TEx
 template <class TDerived, class TExecParamsPtr>
 inline void FillUserOperationSpec(NYT::TUserOperationSpecBase<TDerived>& spec, const TExecParamsPtr& execCtx) {
     FillOperationSpec(spec, execCtx);
-    if (auto val = execCtx->Options_.Config()->CoreDumpPath.Get()) {
+    if (auto val = execCtx->Options_.Config()->CoreDumpPath.Get(execCtx->Cluster_)) {
         spec.CoreTablePath(*val);
     }
 }

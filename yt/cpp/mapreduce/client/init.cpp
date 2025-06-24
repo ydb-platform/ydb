@@ -42,7 +42,7 @@ namespace {
 
 void WriteVersionToLog()
 {
-    YT_LOG_INFO("Wrapper version: %v",
+    YT_LOG_DEBUG("Wrapper version: %v",
         TProcessState::Get()->ClientVersion);
 }
 

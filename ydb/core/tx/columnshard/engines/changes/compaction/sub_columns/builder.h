@@ -23,7 +23,6 @@ private:
     const TDictStats ResultColumnStats;
     const TChunkMergeContext& Context;
     std::shared_ptr<TOthersData::TBuilderWithStats> OthersBuilder;
-    ui32 TotalRecordsCount = 0;
     ui32 RecordIndex = 0;
     ui32 SumValuesSize = 0;
     const TSettings Settings;
@@ -86,7 +85,7 @@ private:
     };
 
     std::vector<TGeneralAccessorBuilder> ColumnBuilders;
-    std::vector<std::vector<std::shared_ptr<TSubColumnsArray>>> Results;
+    std::vector<std::shared_ptr<TSubColumnsArray>> Result;
 
     void FlushData();
 
@@ -100,11 +99,10 @@ public:
         , OthersBuilder(TOthersData::MakeMergedBuilder())
         , Settings(settings)
         , Remapper(remapper) {
-        Results.emplace_back();
         Initialize();
     }
 
-    std::vector<TColumnPortionResult> Finish(const TColumnMergeContext& cmContext);
+    TColumnPortionResult Finish(const TColumnMergeContext& cmContext);
 
     void StartRecord() {
     }

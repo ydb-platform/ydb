@@ -35,7 +35,7 @@ from ydb.tools.cfg.templates import (
     kikimr_cfg_for_static_node_new_style,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class StaticConfigGenerator(object):
@@ -340,6 +340,10 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("column_shard_config")
 
     @property
+    def data_shard_config(self):
+        return self.__cluster_details.get_service("data_shard_config")
+
+    @property
     def hive_config(self):
         return self.__proto_config("hive", config_pb2.THiveConfig, self.__cluster_details.get_service("hive_config"))
 
@@ -495,6 +499,9 @@ class StaticConfigGenerator(object):
         if self.column_shard_config:
             normalized_config["column_shard_config"] = self.column_shard_config
 
+        if self.data_shard_config:
+            normalized_config["data_shard_config"] = self.data_shard_config
+
         if self.__cluster_details.client_certificate_authorization is not None:
             normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization
 
@@ -506,6 +513,9 @@ class StaticConfigGenerator(object):
 
         if self.__cluster_details.memory_controller_config is not None:
             normalized_config["memory_controller_config"] = self.__cluster_details.memory_controller_config
+
+        if self.__cluster_details.kafka_proxy_config is not None:
+            normalized_config["kafka_proxy_config"] = self.__cluster_details.kafka_proxy_config
 
         if self.__cluster_details.s3_proxy_resolver_config is not None:
             normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
@@ -1140,7 +1150,7 @@ class StaticConfigGenerator(object):
         if domains_config is None:
             self.__generate_domains_from_old_domains_key()
         else:
-            self.__generate_domains_from_proto(domains_config)
+            self.__generate_domains_from_proto(domains_config, self.__cluster_details.domains_config_as_dict)
 
     def __generate_default_pool_with_kind(self, pool_kind):
         pool = config_pb2.TDomainsConfig.TStoragePoolType()
@@ -1160,7 +1170,8 @@ class StaticConfigGenerator(object):
             'rotencrypted': blobstorage_base3_pb2.EPDiskType.ROT,
         }
 
-        property.Type = diskTypeToProto[pool_kind]
+        if pool_kind in diskTypeToProto:
+            property.Type = diskTypeToProto[pool_kind]
 
         pool.PoolConfig.CopyFrom(pool_config)
         return pool
@@ -1174,7 +1185,32 @@ class StaticConfigGenerator(object):
             [self.__tablet_types.TX_ALLOCATOR.tablet_id_for(i) for i in range(int(allocators))]
         )
 
-    def __generate_domains_from_proto(self, domains_config):
+    def __check_pool_configs(self, domain, domains_config_dict):
+        for pool in domain.StoragePoolTypes:
+            # Empirical check: if a pool has 'encrypted' in its name it probably should be encrypted
+            if 'encrypted' in pool.Kind and pool.PoolConfig.EncryptionMode != 1:
+                # Special case for migration purposes: if `encryption_mode: 0` is present in pool config,
+                # we should still allow it even if the naming contains `encrypted`. We have to rely on yaml config
+                # because there is no way in proto message to distinguish between missing and undefined keys
+                encryption_mode_0 = False
+                for storage_pool_type in domains_config_dict['domain'][0]['storage_pool_types']:
+                    if storage_pool_type['kind'] == pool.Kind and 'encryption_mode' in storage_pool_type['pool_config']:
+                        encryption_mode_0 = True
+                        break
+
+                if not encryption_mode_0:
+                    raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`. Either specify the value (0 or 1) or rename the pool")
+
+            # Check disk type is specified for every pool
+            type_defined = False
+            for filterElement in pool.PoolConfig.PDiskFilter:
+                if filterElement.Property and filterElement.Property[0].Type:
+                    type_defined = True
+
+            if not type_defined:
+                logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand")
+
+    def __generate_domains_from_proto(self, domains_config, domains_config_dict):
         domains = domains_config.Domain
         if len(domains) > 1:
             raise ValueError('Multiple domains specified: len(domains_config.domain) > 1. This is unsupported')
@@ -1194,6 +1230,8 @@ class StaticConfigGenerator(object):
                 defaultPool = self.__generate_default_pool_with_kind(pool.Kind)
                 defaultPool.MergeFrom(pool)
                 pool.CopyFrom(defaultPool)
+
+        self.__check_pool_configs(domain, domains_config_dict)
 
         if not domain.DomainId:
             domain.DomainId = 1

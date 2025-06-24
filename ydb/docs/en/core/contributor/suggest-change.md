@@ -15,13 +15,15 @@ You need to have a GitHub account to suggest any changes to the {{ ydb-short-nam
 * If you have personal keys and use skotty as ssh-agent:
   * Add keys to skotty with command [ssh-add](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent?platform=mac#adding-your-ssh-key-to-the-ssh-agent)
   * Edit `~/.skotty/config.yaml` file by adding a section:
+
     ```yaml
     keys_order:
         - added
         - insecure
         - legacy
         - secure
-    ``` 
+    ```
+
 * If you have a yubikey, you can use the legacy key from the yubikey:
 
   * Let's assume you have already configured yubikey (or configure yubikey locally)

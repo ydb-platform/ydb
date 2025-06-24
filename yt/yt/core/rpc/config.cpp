@@ -332,7 +332,11 @@ void TDispatcherConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
         .Default(TDuration::MilliSeconds(10));
+    registrar.Parameter("default_request_timeout", &TThis::DefaultRequestTimeout)
+        .Default(TDuration::Hours(24));
     registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
+        .Default(false);
+    registrar.Parameter("alert_on_unset_request_timeout", &TThis::AlertOnUnsetRequestTimeout)
         .Default(false);
     registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
         .Default(true);
@@ -344,7 +348,9 @@ TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(const TDispatcherDynamicCon
     UpdateYsonStructField(mergedConfig->HeavyPoolSize, dynamicConfig->HeavyPoolSize);
     UpdateYsonStructField(mergedConfig->CompressionPoolSize, dynamicConfig->CompressionPoolSize);
     UpdateYsonStructField(mergedConfig->HeavyPoolPollingPeriod, dynamicConfig->HeavyPoolPollingPeriod);
+    UpdateYsonStructField(mergedConfig->DefaultRequestTimeout, dynamicConfig->DefaultRequestTimeout);
     UpdateYsonStructField(mergedConfig->AlertOnMissingRequestInfo, dynamicConfig->AlertOnMissingRequestInfo);
+    UpdateYsonStructField(mergedConfig->AlertOnUnsetRequestTimeout, dynamicConfig->AlertOnUnsetRequestTimeout);
     UpdateYsonStructField(mergedConfig->SendTracingBaggage, dynamicConfig->SendTracingBaggage);
     mergedConfig->Postprocess();
     return mergedConfig;
@@ -366,6 +372,68 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
         .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TServiceMethod::Register(TRegistrar registrar)
+{
+    registrar.Parameter("service", &TThis::Service)
+        .Default();
+    registrar.Parameter("method", &TThis::Method)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TServiceMethodConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("service", &TThis::Service)
+        .Default();
+    registrar.Parameter("method", &TThis::Method)
+        .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
+    registrar.Parameter("waiting_timeout_fraction", &TThis::WaitingTimeoutFraction)
+        .Default(0.5);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerConfigBase::Register(TRegistrar registrar)
+{
+    registrar.Parameter("methods_to_throttle", &TThis::MethodsToThrottle)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerMeanWaitTimeConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("mean_wait_time_threshold", &TThis::MeanWaitTimeThreshold)
+        .Default(TDuration::MilliSeconds(20));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerBacklogQueueFillFractionConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("backlog_queue_fill_fraction_threshold", &TThis::BacklogQueueFillFractionThreshold)
+        .Default(0.9);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadControllerConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enabled", &TThis::Enabled)
+        .Default(false);
+    registrar.Parameter("trackers", &TThis::Trackers)
+        .Default();
+    registrar.Parameter("methods", &TThis::Methods)
+        .Default();
+    registrar.Parameter("load_adjusting_period", &TThis::LoadAdjustingPeriod)
+        .Default(TDuration::MilliSeconds(100));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -249,7 +249,6 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
         auto result = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 1, 1,
             r1.StartPartitionSessionEvents.back().GetPartitionSession()->GetReadSessionId());
         UNIT_ASSERT(!result.IsSuccess());
-
         UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 0));
         UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 1));
         UNIT_ASSERT_VALUES_EQUAL(0, GetCommittedOffset(setup, 2));

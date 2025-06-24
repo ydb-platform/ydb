@@ -8,20 +8,20 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 
 | Type | Description | Notes |
 | ----- | ----- | ----- |
-| `Bool` | Boolean value. |
-| `Int8` | A signed integer.<br/>Acceptable values: from -2<sup>7</sup> to 2<sup>7</sup>–1. |
-| `Int16` | A signed integer.<br/>Acceptable values: from –2<sup>15</sup> to 2<sup>15</sup>–1. |
-| `Int32` | A signed integer.<br/>Acceptable values: from –2<sup>31</sup> to 2<sup>31</sup>–1. |
-| `Int64` | A signed integer.<br/>Acceptable values: from –2<sup>63</sup> to 2<sup>63</sup>–1. |
-| `Uint8` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>8</sup>–1. |
-| `Uint16` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>16</sup>–1. |
-| `Uint32` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>32</sup>–1. |
-| `Uint64` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>64</sup>–1. |
+| `Bool` | Boolean value. | — |
+| `Int8` | A signed integer.<br/>Acceptable values: from -2<sup>7</sup> to 2<sup>7</sup>–1. | — |
+| `Int16` | A signed integer.<br/>Acceptable values: from –2<sup>15</sup> to 2<sup>15</sup>–1. | — |
+| `Int32` | A signed integer.<br/>Acceptable values: from –2<sup>31</sup> to 2<sup>31</sup>–1. | — |
+| `Int64` | A signed integer.<br/>Acceptable values: from –2<sup>63</sup> to 2<sup>63</sup>–1. | — |
+| `Uint8` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>8</sup>–1. | — |
+| `Uint16` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>16</sup>–1. | — |
+| `Uint32` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>32</sup>–1. | — |
+| `Uint64` | An unsigned integer.<br/>Acceptable values: from 0 to 2<sup>64</sup>–1. | — |
 | `Float` | A real number with variable precision, 4 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key{% endif %} |
 | `Double` | A real number with variable precision, 8 bytes in size. | {% if feature_map_tables %}Can't be used in the primary key{% endif %} |
-| `Decimal` | A real number with the specified precision, up to 35 decimal digits | {% if feature_map_tables %}When used in table columns, the precision is fixed: Decimal(22,9){% endif %} |
+| `Decimal(precision, scale)` | A real number with the specified precision, 16 bytes in size. Precision is the maximum total number of decimal digits stored and can range from 1 to 35. Scale is the maximum number of decimal digits stored to the right of the decimal point and can range from 0 to the precision value. | — |
 {% if feature_map_tables %}
-|`DyNumber` | A binary representation of a real number with an accuracy of up to 38 digits.<br/>Acceptable values: positive numbers from 1×10<sup>-130</sup> up to 1×10<sup>126</sup>–1, negative numbers from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup>, and 0.<br/>Compatible with the `Number` type in AWS DynamoDB. It's not recommended for {{ backend_name_lower }}-native applications. | |
+|`DyNumber` | A binary representation of a real number with an accuracy of up to 38 digits.<br/>Acceptable values: positive numbers from 1×10<sup>-130</sup> up to 1×10<sup>126</sup>–1, negative numbers from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup>, and 0.<br/>Compatible with the `Number` type in AWS DynamoDB. It's not recommended for {{ backend_name_lower }}-native applications. | — |
 {% endif %}
 
 
@@ -29,12 +29,12 @@ The terms "simple", "primitive", and "elementary" data types are used synonymous
 
 | Type | Description | Notes |
 | ----- | ----- | ----- |
-| `String` | A string that can contain any binary data |
-| `Utf8` | Text encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) |
+| `String` | A string that can contain any binary data | — |
+| `Utf8` | Text encoded in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) | — |
 | `Json` | [JSON](https://en.wikipedia.org/wiki/JSON) represented as text | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `JsonDocument` | [JSON](https://en.wikipedia.org/wiki/JSON) in an indexed binary representation | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
 | `Yson` | [YSON](../udf/list/yson.md) in a textual or binary representation. | Doesn't support matching{% if feature_map_tables %}, can't be used in the primary key{% endif %} |
-| `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) |
+| `Uuid` | Universally unique identifier [UUID](https://tools.ietf.org/html/rfc4122) | — |
 
 {% note info "Cell size restrictions" %}
 
@@ -99,28 +99,35 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 
 #### Casting to numeric types
 
-| Type | Bool | Int | Uint | Float | Double | Decimal |
-| --- | --- | --- | --- | --- | --- | --- |
-| **Bool** | — | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | No | Yes | No |
-| **INT** | Yes<sup>2</sup> | — | Yes<sup>3</sup> | Yes | Yes | Yes |
-| **Uint** | Yes<sup>2</sup> | Yes | — | Yes | Yes | Yes |
-| **Float** | Yes<sup>2</sup> | Yes | Yes | — | Yes | No |
-| **Double** | Yes<sup>2</sup> | Yes | Yes | Yes | — | No |
-| **Decimal** | No | Yes | Yes | Yes | Yes | — |
-| **String** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Utf8** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Json** | No | No | No | No | No | No |
-| **Yson** | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> |
-| **Uuid** | No | No | No | No | No | No |
-| **Date** | No | Yes | Yes | Yes | Yes | No | Yes |
-| **Datetime** | No | Yes | Yes | Yes | Yes | No |
-| **Timestamp** | No | Yes | Yes | Yes | Yes | No |
-| **Interval** | No | Yes | Yes | Yes | Yes | No |
+| Type          | Bool            | Int8            | Int16           | Int32           | Int64           | Uint8             | Uint16            | Uint32            | Uint64            | Float           | Double          | Decimal |
+|---------------|-----------------|-----------------|-----------------|-----------------|-----------------|-------------------|-------------------|-------------------|-------------------|-----------------|-----------------|---------|
+| **Bool**      | —               | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup>   | Yes<sup>1</sup>   | Yes<sup>1</sup>   | Yes<sup>1</sup>   | Yes<sup>1</sup> | Yes<sup>1</sup> | No      |
+| **Int8**      | Yes<sup>2</sup> | —               | Yes             | Yes             | Yes             | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Int16**     | Yes<sup>2</sup> | Yes<sup>4</sup> | —               | Yes             | Yes             | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Int32**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | —               | Yes             | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Int64**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | —               | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Uint8**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes             | Yes             | Yes             | —                 | Yes               | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Uint16**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes             | Yes<sup>4</sup>   | —                 | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Uint32**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes<sup>4</sup>   | Yes<sup>4</sup>   | —                 | Yes               | Yes             | Yes             | Yes     |
+| **Uint64**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes<sup>4</sup>   | —                 | Yes             | Yes             | Yes     |
+| **Float**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | —               | Yes             | No      |
+| **Double**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes             | —               | No      |
+| **Decimal**   | No              | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | —       |
+| **String**    | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Utf8**      | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Json**      | No              | No              | No              | No              | No              | No                | No                | No                | No                | No              | No              | No      |
+| **Yson**      | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup> | Yes<sup>5</sup> | No      |
+| **Uuid**      | No              | No              | No              | No              | No              | No                | No                | No                | No                | No              | No              | No      |
+| **Date**      | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes             | Yes<sup>4</sup>   | Yes               | Yes               | Yes               | Yes             | Yes             | No      |
+| **Datetime**  | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes               | Yes               | Yes             | Yes             | No      |
+| **Timestamp** | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes               | Yes             | Yes             | No      |
+| **Interval**  | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes             | Yes             | No      |
 
 <sup>1</sup> `True` is converted to `1` and `False` to `0`.
 <sup>2</sup> Any value other than `0` is converted to `True`, `0` is converted to `False`.
-<sup>3</sup> Possible only in the case of a non-negative value.
-<sup>4</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
+<sup>3</sup> Possible only in case of a non-negative value.
+<sup>4</sup> Possible only within the valid range.
+<sup>5</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 
 #### Converting to date and time data types
 
@@ -140,7 +147,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Date** | — | Yes | Yes | No |
 | **Datetime** | Yes | — | Yes | No |
 | **Timestamp** | Yes | Yes | — | No |
-| **Interval** | No | No | No | — | — |
+| **Interval** | No | No | No | — |
 
 #### Conversion to other data types
 

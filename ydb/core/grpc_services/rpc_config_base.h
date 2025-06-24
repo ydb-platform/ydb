@@ -187,6 +187,9 @@ protected:
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             self->FillDistconfQuery(*ev);
             self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());
+        } else if (RequireSelfManagement) {
+            self->Reply(Ydb::StatusIds::BAD_REQUEST, "operating self-management is required to fulfill this request",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
         } else { // classic BSC
             CreatePipe();
         }
@@ -409,6 +412,9 @@ private:
     EState State = EState::UNKNOWN;
     TActorId BSCPipeClient;
     ui32 InterfaceVersion = 0;
+
+protected:
+    bool RequireSelfManagement = false;
 };
 
 } // namespace NKikimr::NGRpcService

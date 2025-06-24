@@ -62,7 +62,7 @@ TRuntimeNode TLambdaBuilder::BuildLambda(const IMkqlCallableCompiler& compiler, 
 TRuntimeNode TLambdaBuilder::TransformAndOptimizeProgram(NKikimr::NMiniKQL::TRuntimeNode root,
     TCallableVisitFuncProvider funcProvider) {
     TExploringNodeVisitor explorer;
-    explorer.Walk(root.GetNode(), GetTypeEnvironment());
+    explorer.Walk(root.GetNode(), GetTypeEnvironment().GetNodeStack());
     bool wereChanges = false;
     TRuntimeNode program = SinglePassVisitCallables(root, explorer, funcProvider, GetTypeEnvironment(), true, wereChanges);
     program = LiteralPropagationOptimization(program, GetTypeEnvironment(), true);
@@ -196,7 +196,7 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
                 entryPoints[index] = tupleNodes->GetValue(1 + index).GetNode();
             }
         }
-        explorer.Walk(root.GetNode(), GetTypeEnvironment());
+        explorer.Walk(root.GetNode(), GetTypeEnvironment().GetNodeStack());
         auto pattern = MakeComputationPattern(explorer, root, entryPoints, patternOpts);
         for (const auto& node : explorer.GetNodes()) {
             node->SetCookie(0);
@@ -224,8 +224,8 @@ TRuntimeNode TLambdaBuilder::Deserialize(const TString& code) {
 
 std::pair<TString, size_t> TLambdaBuilder::Serialize(TRuntimeNode rootNode) {
     TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), GetTypeEnvironment());
-    TString code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment());
+    explorer.Walk(rootNode.GetNode(), GetTypeEnvironment().GetNodeStack());
+    TString code = SerializeRuntimeNode(explorer, rootNode, GetTypeEnvironment().GetNodeStack());
     size_t nodes = explorer.GetNodes().size();
     return std::make_pair(code, nodes);
 }

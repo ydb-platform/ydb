@@ -199,6 +199,8 @@ QueryServiceConfig {
   AvailableExternalDataSources: "Solomon"
   AvailableExternalDataSources: "Redis"
   AvailableExternalDataSources: "Prometheus"
+  AvailableExternalDataSources: "OpenSearch"
+  AllExternalDataSourcesAreAvailable: true
   Generic {
     Connector {
         Endpoint {

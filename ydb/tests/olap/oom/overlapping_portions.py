@@ -23,7 +23,7 @@ class TestOverlappingPortions(object):
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
             column_shard_config={"compaction_enabled": False},
-            grouped_memory_limiter_config={
+            scan_grouped_memory_limiter_config={
                 "enabled": True,
                 "memory_limit": 100 * 1024 * 1024,
                 "hard_memory_limit": 100 * 1024 * 1024,

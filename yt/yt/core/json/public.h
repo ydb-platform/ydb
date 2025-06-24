@@ -13,9 +13,6 @@ DECLARE_REFCOUNTED_STRUCT(TJsonFormatConfig)
 struct IJsonConsumer;
 struct IJsonWriter;
 
-// YSON with attributes is represented in JSON with additional nested objects. It leads to doubled nesting levels.
-constexpr int NestingLevelLimit = NYson::NewNestingLevelLimit * 2;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NJson

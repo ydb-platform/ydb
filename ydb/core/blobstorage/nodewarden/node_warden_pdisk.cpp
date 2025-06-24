@@ -298,7 +298,7 @@ namespace NKikimr::NStorage {
 
         const ui64 cookie = NextConfigCookie++;
         SendToController(std::move(ev), cookie);
-        ConfigInFlight.emplace(cookie, [=](TEvBlobStorage::TEvControllerConfigResponse *ev) {
+        ConfigInFlight.emplace(cookie, [=, this](TEvBlobStorage::TEvControllerConfigResponse *ev) {
             if (auto node = PDiskRestartRequests.extract(requestCookie)) {
                 if (!ev || !ev->Record.GetResponse().GetSuccess()) {
                     OnUnableToRestartPDisk(node.mapped(), ev ? ev->Record.GetResponse().GetErrorDescription() : "BSC disconnected");

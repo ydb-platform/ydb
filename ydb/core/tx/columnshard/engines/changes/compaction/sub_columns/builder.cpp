@@ -6,21 +6,18 @@
 
 namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
-std::vector<TColumnPortionResult> TMergedBuilder::Finish(const TColumnMergeContext& cmContext) {
+TColumnPortionResult TMergedBuilder::Finish(const TColumnMergeContext& cmContext) {
     if (RecordIndex) {
         FlushData();
     }
     std::vector<TColumnPortionResult> portions;
-    for (auto&& i : Results) {
-        IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TSubColumnsArray, NArrow::NAccessor::NSubColumns::TConstructor> pColumn(
-            NArrow::NAccessor::NSubColumns::TConstructor(), cmContext.GetColumnId());
-        AFL_VERIFY(i.size());
-        for (auto&& p : i) {
-            pColumn.AddChunk(p, cmContext);
-        }
-        portions.emplace_back(std::move(pColumn));
+    IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TSubColumnsArray, NArrow::NAccessor::NSubColumns::TConstructor> pColumn(
+        NArrow::NAccessor::NSubColumns::TConstructor(), cmContext.GetColumnId());
+    AFL_VERIFY(Result.size());
+    for (auto&& p : Result) {
+        pColumn.AddChunk(p, cmContext);
     }
-    return std::move(portions);
+    return std::move(pColumn);
 }
 
 void TMergedBuilder::FlushData() {
@@ -37,7 +34,7 @@ void TMergedBuilder::FlushData() {
     }
     auto stats = statsBuilder.Finish();
     TColumnsData cData(stats, std::make_shared<NArrow::TGeneralContainer>(stats.BuildColumnsSchema()->fields(), std::move(arrays)));
-    Results.back().emplace_back(
+    Result.emplace_back(
         std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex, Settings));
     Initialize();
 }
@@ -69,13 +66,8 @@ void TMergedBuilder::Initialize() {
 
 void TMergedBuilder::FinishRecord() {
     Y_UNUSED(Context);
-    ++TotalRecordsCount;
     ++RecordIndex;
-    if (TotalRecordsCount == Context.GetPortionRowsCountLimit()) {
-        TotalRecordsCount = 0;
-        FlushData();
-        Results.emplace_back();
-    } else if (SumValuesSize >= Settings.GetChunkMemoryLimit()) {
+    if (SumValuesSize >= Settings.GetChunkMemoryLimit()) {
         FlushData();
     }
 }

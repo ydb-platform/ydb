@@ -192,6 +192,53 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
     }
 }
 
+namespace {
+    bool StdinHasData(bool verbose) {
+#if defined(_win32_)
+        // Too complex case for Windows
+        return false;
+#else
+        // fd_set to store a set of descriptor set.
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 0; // No timeout, instant check
+
+        // Check if stdin is available for reading
+        int selectResult = select(STDIN_FILENO + 1, &read_fds, NULL, NULL, &timeout);
+        if (selectResult == 0) {
+            if (verbose) {
+                Cerr << "stdin is not available" << Endl;
+            }
+            return false;
+        }
+
+        // Trying to read 1 symbol from stdin
+        char buffer[1];
+        ssize_t result = read(fileno(stdin), buffer, sizeof(buffer));
+        if (result == -1) {
+            if (verbose) {
+                Cerr << "Error reading from stdin. Error: " << strerror(errno) << Endl;
+            }
+        } else if (result == 0) {
+            if (verbose) {
+                Cerr << "No data from stdin" << Endl;
+            }
+        } else {
+            if (verbose) {
+                Cerr << "stdin has data, returning first symbol '" << buffer[0] << "' back..." << Endl;
+            }
+            ungetc(buffer[0], stdin);
+            return true;
+        }
+        return false;
+#endif
+    }
+}
+
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     // Deprecated options with defaults:
     if (!DeprecatedSkipRows.empty()) {
@@ -253,10 +300,12 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         }
     }
 
+    bool verbose = config.IsVerbose();
+
     if (InputFiles.empty()) {
-        if (!IsStdinInteractive() && !ReadingSomethingFromStdin) {
+        if (!IsStdinInteractive() && !ReadingSomethingFromStdin && StdinHasData(verbose)) {
             // By default reading params from stdin
-            SetParamsInputFromStdin();
+            SetParamsInputFromStdin(verbose);
         }
     } else {
         auto& file = InputFiles[0];
@@ -265,10 +314,10 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
                 throw TMisuseException() << "Path to input file is \"-\", meaning that parameter value[s] should be read "
                     "from stdin. This is only available in non-interactive mode";
             }
-            SetParamsInputFromStdin();
+            SetParamsInputFromStdin(verbose);
         } else {
             if (IsStdinInteractive() || ReadingSomethingFromStdin) {
-                SetParamsInputFromFile(file);
+                SetParamsInputFromFile(file, verbose);
             } else {
                 throw TMisuseException() << "Path to input file is \"" << file << "\", meaning that parameter value[s]"
                     " should be read from file. This is only available in interactive mode. Can't read parameters both"
@@ -320,21 +369,27 @@ void TCommandWithParameters::SetParamsInput(IInputStream* input) {
     }
 }
 
-void TCommandWithParameters::SetParamsInputFromStdin() {
+void TCommandWithParameters::SetParamsInputFromStdin(bool verbose) {
     if (ReadingSomethingFromStdin) {
         throw TMisuseException() << "Can't read both parameters and query text from stdinput";
     }
     ReadingSomethingFromStdin = true;
     SetParamsInput(&Cin);
+    if (verbose) {
+        Cerr << "Reading parameters from stdin" << Endl;
+    }
 }
 
-void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
+void TCommandWithParameters::SetParamsInputFromFile(TString& file, bool verbose) {
     TFsPath fsPath = GetExistingFsPath(file, "input file");
     InputFileHolder = MakeHolder<TFileInput>(fsPath);
     SetParamsInput(InputFileHolder.Get());
+    if (verbose) {
+        Cerr << "Reading parameters from file \"" << file << '\"' << Endl;
+    }
 }
 
-void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString& queryText) {
+void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString& queryText, bool verbose) {
     if (SyntaxType == NQuery::ESyntax::Pg) {
         ParamTypes.clear();
         return;
@@ -343,9 +398,15 @@ void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString
     auto types = TYqlParamParser::GetParamTypes(queryText);
     if (types.has_value()) {
         ParamTypes = *types;
+        if (verbose) {
+            Cerr << "Successfully retrieved parameter types from query text locally" << Endl;
+        }
         return;
     }
 
+    if (verbose) {
+        Cerr << "Failed to retrieve parameter types from query text locally. Executing ExplainYqlScript..." << Endl;
+    }
     // Fallback to ExplainYql
     NScripting::TScriptingClient client(driver);
     auto explainSettings = NScripting::TExplainYqlRequestSettings()
@@ -360,11 +421,12 @@ void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString
     ParamTypes = result.GetParameterTypes();
 }
 
-bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder) {
+bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText,
+        THolder<TParamsBuilder>& paramBuilder, bool verbose) {
     paramBuilder = MakeHolder<TParamsBuilder>();
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
-        InitParamTypes(driver, queryText);
+        InitParamTypes(driver, queryText, verbose);
 
         if (!InputParamStream) {
             AddParams(*paramBuilder);

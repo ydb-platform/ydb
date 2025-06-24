@@ -82,7 +82,6 @@ class Daemon(object):
     def update_command(self, new_command):
         new_command_tuple = tuple(new_command)
         if self.__command != new_command_tuple:
-            self.logger.info(f"Updating daemon command to {new_command_tuple}")
             self.__command = new_command_tuple
 
     def __open_output_files(self):

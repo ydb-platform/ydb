@@ -12,34 +12,8 @@
 
 namespace NSQLHighlight {
 
+    using NSQLTranslationV1::Merged;
     using NSQLTranslationV1::TRegexPattern;
-
-    TRegexPattern Merged(TVector<TRegexPattern> patterns) {
-        Y_ENSURE(!patterns.empty());
-
-        const TRegexPattern& sample = patterns.back();
-        Y_ENSURE(AllOf(patterns, [&](const TRegexPattern& pattern) {
-            return std::tie(pattern.After, pattern.IsCaseInsensitive) ==
-                   std::tie(sample.After, sample.IsCaseInsensitive);
-        }));
-
-        Sort(patterns, [](const TRegexPattern& lhs, const TRegexPattern& rhs) {
-            return lhs.Body.length() > rhs.Body.length();
-        });
-
-        TStringBuilder body;
-        for (const auto& pattern : patterns) {
-            body << "(" << pattern.Body << ")|";
-        }
-        Y_ENSURE(body.back() == '|');
-        body.pop_back();
-
-        return TRegexPattern{
-            .Body = std::move(body),
-            .After = sample.After,
-            .IsCaseInsensitive = sample.IsCaseInsensitive,
-        };
-    }
 
     struct Syntax {
         const NSQLReflect::TLexerGrammar* Grammar;
@@ -81,7 +55,7 @@ namespace NSQLHighlight {
 
         TUnit unit = {.Kind = EUnitKind::Keyword};
         for (const auto& keyword : s.Grammar->KeywordNames) {
-            const TStringBuf content = TLexerGrammar::KeywordBlock(keyword);
+            const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
             unit.Patterns.push_back(CaseInsensitive(content));
         }
 

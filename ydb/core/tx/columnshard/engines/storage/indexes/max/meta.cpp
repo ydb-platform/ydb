@@ -1,6 +1,7 @@
 #include "meta.h"
 
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 
 #include <ydb/library/formats/arrow/scalar/serialization.h>
@@ -10,7 +11,7 @@
 
 namespace NKikimr::NOlap::NIndexes::NMax {
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::shared_ptr<arrow::Scalar> result;
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {
@@ -23,7 +24,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
             }
         }
     }
-    return NArrow::NScalar::TSerializer::SerializePayloadToString(result).DetachResult();
+    const TString indexData = NArrow::NScalar::TSerializer::SerializePayloadToString(result).DetachResult();
+    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
 std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(

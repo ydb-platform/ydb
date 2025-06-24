@@ -4,7 +4,7 @@
 
 #include <yt/yt/core/bus/tcp/public.h>
 
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 namespace NYT::NRpc::NBus {
 

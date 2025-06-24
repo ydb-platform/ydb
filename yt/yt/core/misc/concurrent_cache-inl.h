@@ -74,10 +74,9 @@ TConcurrentCache<T>::TConcurrentCache(size_t capacity, IMemoryUsageTrackerPtr tr
     , Capacity_(capacity)
     , Head_(New<TLookupTable>(
         capacity,
-        TMemoryUsageTrackerGuard::TryAcquire(
+        TMemoryUsageTrackerGuard::Acquire(
             MemoryUsageTracker_,
-            TLookupTable::GetByteSize(capacity))
-            .ValueOrThrow()))
+            TLookupTable::GetByteSize(capacity))))
 {
     YT_VERIFY(capacity > 0);
 }

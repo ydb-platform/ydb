@@ -4,7 +4,7 @@ namespace NYT::NRpc::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToHttpContentType(EMessageFormat format)
+std::string ToHttpContentType(EMessageFormat format)
 {
     switch (format) {
         case EMessageFormat::Protobuf:

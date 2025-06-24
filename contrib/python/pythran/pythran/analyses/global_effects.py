@@ -46,15 +46,14 @@ def save_global_effects(module):
 for module in MODULES.values():
     save_global_effects(module)
 
-class GlobalEffects(ModuleAnalysis):
+class GlobalEffectsHelper(ModuleAnalysis[Aliases, GlobalDeclarations, Intrinsics]):
 
     """Add a flag on each function that updates a global variable."""
 
+    ResultType = DiGraph
     def __init__(self):
-        self.result = DiGraph()
+        super().__init__()
         self.node_to_functioneffect = dict()
-        super(GlobalEffects, self).__init__(Aliases, GlobalDeclarations,
-                                            Intrinsics)
 
     def prepare(self, node):
         """
@@ -63,7 +62,7 @@ class GlobalEffects(ModuleAnalysis):
         Initialisation done for Pythonic functions and default value set for
         user defined functions.
         """
-        super(GlobalEffects, self).prepare(node)
+        super().prepare(node)
 
         for i in self.intrinsics:
             fe = IntrinsicGlobalEffects[i]
@@ -77,19 +76,6 @@ class GlobalEffects(ModuleAnalysis):
 
         self.node_to_functioneffect[intrinsic.UnboundValue] = \
             FunctionEffect(intrinsic.UnboundValue)
-
-    def run(self, node):
-        result = super(GlobalEffects, self).run(node)
-        keep_going = True
-        while keep_going:
-            keep_going = False
-            for function in result:
-                if function.global_effect:
-                    for pred in self.result.predecessors(function):
-                        if not pred.global_effect:
-                            keep_going = pred.global_effect = True
-        self.result = {f.func for f in result if f.global_effect}
-        return self.result
 
     def visit_FunctionDef(self, node):
         self.current_function = self.node_to_functioneffect[node]
@@ -125,3 +111,22 @@ class GlobalEffects(ModuleAnalysis):
             func_alias = self.node_to_functioneffect[func_alias]
             self.result.add_edge(self.current_function, func_alias)
         self.generic_visit(node)
+
+
+class GlobalEffects(ModuleAnalysis[GlobalEffectsHelper]):
+
+    """Add a flag on each function that updates a global variable."""
+
+    ResultType = dict
+
+    def visit_Module(self, node):
+        result = self.global_effects_helper
+        keep_going = True
+        while keep_going:
+            keep_going = False
+            for function in result:
+                if function.global_effect:
+                    for pred in result.predecessors(function):
+                        if not pred.global_effect:
+                            keep_going = pred.global_effect = True
+        self.result = {f.func for f in result if f.global_effect}

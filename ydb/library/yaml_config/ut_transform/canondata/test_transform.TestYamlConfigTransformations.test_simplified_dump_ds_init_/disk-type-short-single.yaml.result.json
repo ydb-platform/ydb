@@ -1,0 +1,33 @@
+{
+  "Command":
+    [
+      {
+        "DefineHostConfig":
+          {
+            "Nvme":
+              [
+                "disk1",
+                "disk2"
+              ],
+            "ItemConfigGeneration":18446744073709551615
+          }
+      },
+      {
+        "DefineBox":
+          {
+            "BoxId":1,
+            "Host":
+              [
+                {
+                  "Key":
+                    {
+                      "Fqdn":"fqdn",
+                      "IcPort":19001,
+                      "NodeId":1
+                    }
+                }
+              ]
+          }
+      }
+    ]
+}

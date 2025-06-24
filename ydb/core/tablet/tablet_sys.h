@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/set.h>
@@ -27,13 +28,11 @@ class TTablet : public TActor<TTablet> {
         ui32 KnownStep;
         TActorId CurrentLeader;
 
-        ui32 SignatureSz;
-        TArrayHolder<ui64> Signature;
+        TEvStateStorage::TSignature Signature;
 
         TStateStorageInfo()
             : KnownGeneration(0)
             , KnownStep(0)
-            , SignatureSz(0)
         {}
 
         void Update(const TEvStateStorage::TEvInfo *msg) {
@@ -51,13 +50,6 @@ class TTablet : public TActor<TTablet> {
             } else {
                 // happens?
             }
-        }
-
-        void MergeSignature(ui64 *sig, ui32 sigsz) {
-            Y_ABORT_UNLESS(sigsz == SignatureSz);
-            for (ui32 i = 0; i != sigsz; ++i)
-                if (const ui64 x = sig[i])
-                    Signature[i] = x;
         }
     } StateStorageInfo;
 
@@ -229,7 +221,15 @@ class TTablet : public TActor<TTablet> {
     ui32 DiscoveredLastBlocked;
     ui32 GcInFly;
     ui32 GcInFlyStep;
+    ui32 GcConfirmedStep;
     ui32 GcNextStep;
+
+    // retry failed GC logic
+    ui32 GcTryCounter;
+    TBackoffTimer GcBackoffTimer;
+    bool GcPendingRetry;
+    ui32 GcFailCount;
+
     TEvTablet::TEvGcForStepAckRequest::TPtr GcForStepAckRequest;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
@@ -326,6 +326,7 @@ class TTablet : public TActor<TTablet> {
     void Handle(TEvTablet::TEvPreCommit::TPtr &ev);
 
     void Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev);
+    void Handle(TEvTabletBase::TEvLogGcRetry::TPtr& ev);
 
     void Handle(TEvTablet::TEvConfirmLeader::TPtr &ev);
     void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
@@ -342,6 +343,7 @@ class TTablet : public TActor<TTablet> {
     void DoSyncToFollower(TMap<TActorId, TLeaderInfo>::iterator followerIt);
 
     void GcLogChannel(ui32 step);
+    void RetryGcRequests();
 
     bool ProgressCommitQueue();
     void ProgressFollowerQueue();
@@ -550,6 +552,7 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             hFunc(TEvBlobStorage::TEvGetBlockResult, Handle);
             hFunc(TEvTablet::TEvGcForStepAckRequest, Handle);
+            sFunc(TEvTabletBase::TEvLogGcRetry, RetryGcRequests);
         }
     }
 

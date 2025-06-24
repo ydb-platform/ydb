@@ -7,7 +7,9 @@ from ydb.tools.cfg.utils import write_to_file
 
 from ydb.tools.cfg.templates import (
     dynamic_cfg_new_style,
+    dynamic_cfg_new_style_v2,
     kikimr_cfg_for_static_node_new_style,
+    kikimr_cfg_for_static_node_new_style_v2,
 )
 
 # Remove specified keys
@@ -25,8 +27,8 @@ class YamlConfig(object):
         try:
             with open(yaml_config_path, 'r') as f:
                 self.__yaml_config = yaml.safe_load(f)
-        except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:
-            raise "Invalid yaml config: {}".format(e)
+        except (yaml.YAMLError, yaml.scanner.ScannerError, yaml.parser.ParserError) as e:  # type: ignore
+            raise ValueError(f"Invalid yaml config: {e}")
 
     @property
     def dynamic_simple(self):
@@ -59,31 +61,23 @@ class YamlConfigurator(object):
             self,
             cluster_path: os.PathLike,
             out_dir: os.PathLike,
-            bin_path: os.PathLike,
-            compressed_bin_path: os.PathLike,
             config_path: os.PathLike):
         # walle provider is not used
         # use config_path instad of cluster_path
-        self.cluster_description = cluster_description.ClusterDetails(config_path, None)
 
-        with open(cluster_path, 'r') as f:
-            _domains = yaml.safe_load(f)
-            self.cluster_description.domains = _domains.get('domains', [])
-
-        self.__static_cfg = out_dir
-        # might be needed in the future to do something locally using the ydbd binary
-        self.__kikimr_bin_file = bin_path
-        self.__kikimr_compressed_bin_file = compressed_bin_path
+        self.__static_cfg = str(out_dir)
         with open(config_path, 'r') as f:
             self.static = f.read()
 
-    @property
-    def kikimr_bin(self):
-        return self.bin_path
+        self.cluster_description = cluster_description.ClusterDetails(config_path)
+
+        with open(cluster_path, 'r') as f:
+            _domains = cluster_description.safe_load_no_duplicates(f.read())
+            self.cluster_description.domains = _domains.get('domains', [])
 
     @property
-    def kikimr_compressed_bin(self):
-        return self.compressed_bin_path
+    def v2(self):
+        return 'metadata' in self.static_dict
 
     @property
     def static(self):
@@ -93,12 +87,16 @@ class YamlConfigurator(object):
     def static_dict(self):
         return self.__static_dict
 
+    @property
+    def static_yaml(self):
+        return yaml.dump(self.__static_dict)
+
     @static.setter
     def static(self, value):
         try:
             self.__static_dict = yaml.safe_load(value)
-        except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:
-            raise "Invalid yaml config: {}".format(e)
+        except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:  # type: ignore
+            raise ValueError(f"Invalid yaml config: {e}")
 
         self.__static = value
 
@@ -114,8 +112,8 @@ class YamlConfigurator(object):
     def dynamic(self, value):
         try:
             self.__dynamic_dict = yaml.safe_load(value)
-        except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:
-            raise "Invalid yaml config: {}".format(e)
+        except (yaml.scanner.ScannerError, yaml.parser.ParserError) as e:  # type: ignore
+            raise ValueError(f"Invalid yaml config: {e}")
 
         self.__dynamic = value
 
@@ -134,14 +132,20 @@ class YamlConfigurator(object):
 
     @property
     def hosts_names(self):
+        if self.v2:
+            return [host['host'] for host in self.static_dict.get('config', {}).get('hosts', [])]
         return [host['host'] for host in self.static_dict.get('hosts', [])]
 
     @property
     def kikimr_cfg(self):
+        if self.v2:
+            return kikimr_cfg_for_static_node_new_style_v2()
         return kikimr_cfg_for_static_node_new_style()
 
     @property
     def dynamic_cfg(self):
+        if self.v2:
+            return dynamic_cfg_new_style_v2()
         return dynamic_cfg_new_style()
 
     def create_static_cfg(self) -> str:
@@ -166,4 +170,24 @@ class YamlConfigurator(object):
             self.dynamic_cfg
         )
 
+        return self.__static_cfg
+
+    def create_v2_cfg(self) -> str:
+        if not self.v2:
+            raise ValueError("Static config is not in v2 format")
+
+        write_to_file(
+            os.path.join(self.__static_cfg, 'config.yaml'),
+            self.static
+        )
+
+        write_to_file(
+            os.path.join(self.__static_cfg, 'kikimr.cfg'),
+            self.kikimr_cfg
+        )
+
+        write_to_file(
+            os.path.join(self.__static_cfg, 'dynamic_server.cfg'),
+            self.dynamic_cfg
+        )
         return self.__static_cfg

@@ -17,9 +17,9 @@
 namespace NKikimr::NArrow::NAccessor {
 
 TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
-    const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings) {
+    const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings, const std::shared_ptr<arrow::DataType>& columnType) {
     AFL_VERIFY(sourceArray);
-    NSubColumns::TDataBuilder builder(sourceArray->GetDataType(), settings);
+    NSubColumns::TDataBuilder builder(columnType, settings);
     IChunkedArray::TReader reader(sourceArray);
     std::vector<std::shared_ptr<arrow::Array>> storage;
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
@@ -40,6 +40,7 @@ TSubColumnsArray::TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type,
     , ColumnsData(NSubColumns::TColumnsData::BuildEmpty(recordsCount))
     , OthersData(NSubColumns::TOthersData::BuildEmpty())
     , Settings(settings) {
+    AFL_VERIFY(type->id() == arrow::binary()->id())("type", type->ToString())("error", "currently supported JsonDocument only");
 }
 
 TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others,
@@ -48,6 +49,7 @@ TSubColumnsArray::TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColu
     , ColumnsData(std::move(columns))
     , OthersData(std::move(others))
     , Settings(settings) {
+    AFL_VERIFY(type->id() == arrow::binary()->id())("type", type->ToString())("error", "currently supported JsonDocument only");
 }
 
 TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& externalInfo) const {
@@ -255,7 +257,7 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
     return NArrow::FinishBuilder(std::move(builder));
 }
 
-std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+std::shared_ptr<arrow::ChunkedArray> TSubColumnsArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
     auto chunk = BuildBJsonArray(context);
     if (chunk->length()) {
         return std::make_shared<arrow::ChunkedArray>(chunk);

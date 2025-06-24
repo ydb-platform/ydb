@@ -42,6 +42,7 @@ std::string_view StatsModeToString(const EStatsMode statsMode);
 enum class EExecStatus {
     Unspecified = 0,
     Starting = 10,
+    Running = 15,
     Aborted = 20,
     Canceled = 30,
     Completed = 40,
@@ -124,15 +125,21 @@ class TResultSetMeta {
 public:
     TResultSetMeta() = default;
 
-    explicit TResultSetMeta(const std::vector<TColumn>& columns)
+    explicit TResultSetMeta(const std::vector<TColumn>& columns, uint64_t rowsCount = 0, bool finished = false)
         : Columns(columns)
+        , RowsCount(rowsCount)
+        , Finished(finished)
     {}
 
-    explicit TResultSetMeta(std::vector<TColumn>&& columns)
+    explicit TResultSetMeta(std::vector<TColumn>&& columns, uint64_t rowsCount = 0, bool finished = false)
         : Columns(std::move(columns))
+        , RowsCount(rowsCount)
+        , Finished(finished)
     {}
 
     std::vector<TColumn> Columns;
+    uint64_t RowsCount = 0;
+    bool Finished = false;
 };
 
 class TScriptExecutionOperation : public TOperation {

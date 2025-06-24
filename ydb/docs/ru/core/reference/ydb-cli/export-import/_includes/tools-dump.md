@@ -12,7 +12,7 @@
 
 {% include [dump-options.md](./dump-options.md) %}
 
-[Конфигурация кластера](../../../../maintenance/manual/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin cluster config fetch`.
+[Конфигурация кластера](../../../../devops/configuration-management/configuration-v2/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin cluster config fetch`.
 
 ## База данных
 
@@ -26,7 +26,7 @@
 
 {% include [dump-options.md](./dump-options.md) %}
 
-[Конфигурация базы данных](../../../../maintenance/manual/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin database config fetch`.
+[Конфигурация базы данных](../../../../devops/configuration-management/configuration-v2/config-overview.md) выгружается отдельно с помощью команды `{{ ydb-cli }} admin database config fetch`.
 
 ## Объекты схемы данных
 

@@ -42,7 +42,16 @@ struct TClientOptions
     static TClientOptions FromServiceTicketAuth(NAuth::IServiceTicketAuthPtr ticketAuth);
     static TClientOptions FromUserTicket(std::string userTicket);
 
-    // More fields are going to be added in the process of working on YT-24245
+    //! The cluster to which requests should be routed.
+    /*!
+     *  Multiproxy mode should be enabled on server side to use this option.
+     *
+     *  RPC proxies support multiproxy mode, which allows using a proxy from one cluster to send requests to another cluster.
+     *
+     *  Depending on the configuration on server side this mode may apply only to certain requests or be disabled completely.
+     *  Consult your cluster administrators for details.
+     */
+    std::optional<std::string> MultiproxyTargetCluster;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

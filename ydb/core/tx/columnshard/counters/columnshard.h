@@ -2,18 +2,27 @@
 #include "initialization.h"
 #include "tx_progress.h"
 
-#include <ydb/library/signals/owner.h>
-
-#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 #include <ydb/core/tx/data_events/common/signals_flow.h>
+
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NColumnShard {
 
+enum class EOverloadStatus {
+    ShardTxInFly /* "shard_tx" */ = 0,
+    ShardWritesInFly /* "shard_writes" */,
+    ShardWritesSizeInFly /* "shard_writes_size" */,
+    OverloadMetadata /* "overload_metadata" */,
+    Disk /* "disk" */,
+    None /* "none" */,
+    OverloadCompaction /* "overload_compaction" */
+};
+
 enum class EWriteFailReason {
-    Disabled /* "disabled" */,
+    Disabled /* "disabled" */ = 0,
     PutBlob /* "put_blob" */,
     LongTxDuplication /* "long_tx_duplication" */,
     NoTable /* "no_table" */,
@@ -84,8 +93,6 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadCompactionBytes;
@@ -117,11 +124,18 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WaitingOverloads;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WriteOverloadCount;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WriteOverloadBytes;
 
 public:
     const std::shared_ptr<TWriteCounters> WritingCounters;
     const TCSInitialization Initialization;
     TTxProgressCounters TxProgress;
+
+    void OnWaitingOverload(const EOverloadStatus status) const;
+
+    void OnWriteOverload(const EOverloadStatus status, const ui32 size) const;
 
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);
@@ -178,11 +192,6 @@ public:
     void OnSplitCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {
         SplitCompactionGranuleBytes->SetValue(bytes);
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
-    }
-
-    void OnWriteOverloadInsertTable(const ui64 size) const {
-        OverloadInsertTableBytes->Add(size);
-        OverloadInsertTableCount->Add(1);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {

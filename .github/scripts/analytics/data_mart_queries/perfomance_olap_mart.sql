@@ -8,7 +8,7 @@ $all_suites = (
             Suite, 
             ListSort(AGG_LIST_DISTINCT(Test)) AS Tests
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp
+        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
         GROUP BY Suite 
     ) 
     FLATTEN LIST BY Tests AS Test
@@ -28,7 +28,7 @@ $launch_times = (
             ROW_NUMBER() OVER (PARTITION BY Db, Version ORDER BY Min(RunId) ASC) AS Run_number_in_version,
             ROW_NUMBER() OVER (PARTITION BY Db, Branch ORDER BY Min(RunId) DESC) AS Run_number_in_branch_desc
         FROM `perfomance/olap/tests_results`
-        WHERE Timestamp >= $start_timestamp
+        WHERE Timestamp >= $start_timestamp and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'))
         GROUP BY
             Db,
             Unicode::SplitToList(JSON_VALUE(Info, "$.cluster.version"), '.')[0] As Branch,
@@ -60,7 +60,7 @@ $all_tests_raw =
             )
         ) AS Color
     FROM `perfomance/olap/tests_results` AS tests_results
-    WHERE Timestamp >= $start_timestamp;
+    WHERE Timestamp >= $start_timestamp  and (Suite != 'ExternalA1' or not StartsWith(Test, 'Query'));
 
 SELECT 
     Db,

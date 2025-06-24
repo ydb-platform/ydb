@@ -4,6 +4,7 @@
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
 #include "data_accessor/actor.h"
+#include "data_accessor/shared_metadata_accessor_cache_actor.h"
 #include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
@@ -36,7 +37,11 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationInsertionWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
-    ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
+    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataAccessorCache()){
+        ctx.Send(DataAccessorsControlActorId, new NOlap::NDataAccessorControl::TEvClearCache(SelfId()));
+    } else {
+        ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
+    }
     if (!!OperationsManager) {
         OperationsManager->StopWriting();
     }
@@ -119,12 +124,18 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
+    SpaceWatcherId = RegisterWithSameMailbox(SpaceWatcher);
     Limits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
-    DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataAccessorCache()){
+        DataAccessorsControlActorId = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(ctx.SelfID.NodeId());
+    } else {
+        DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    }
+
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
@@ -288,19 +299,6 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, cons
     EnqueueBackgroundActivities(true);
 }
 
-void TColumnShard::UpdateInsertTableCounters() {
-    auto& prepared = InsertTable->GetCountersPrepared();
-    auto& committed = InsertTable->GetCountersCommitted();
-
-    Counters.GetTabletCounters()->SetCounter(COUNTER_PREPARED_RECORDS, prepared.Rows);
-    Counters.GetTabletCounters()->SetCounter(COUNTER_PREPARED_BYTES, prepared.Bytes);
-    Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
-    Counters.GetTabletCounters()->SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
-
-    LOG_S_TRACE("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows << " records, committed: " << committed.Bytes << " in "
-                                          << committed.Rows << " records at tablet " << TabletID());
-}
-
 void TColumnShard::UpdateIndexCounters() {
     if (!TablesManager.HasPrimaryIndex()) {
         return;
@@ -357,11 +355,7 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  LongTxWrites.size() * (sizeof(TInsertWriteId) + sizeof(TLongTxWriteInfo)) +
-                  LongTxWritesByUniqueId.size() * (sizeof(TULID) + sizeof(void*)) +
-                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*)) +
-                  Counters.GetTabletCounters()->GetValue(COUNTER_PREPARED_RECORDS) * sizeof(NOlap::TInsertedData) +
-                  Counters.GetTabletCounters()->GetValue(COUNTER_COMMITTED_RECORDS) * sizeof(NOlap::TInsertedData);
+                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*));
     memory += TablesManager.GetMemoryUsage();
     return memory;
 }
@@ -410,10 +404,11 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
     TTableStatsBuilder tableStatsBuilder(Counters, Executor());
 
     LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
-    for (const auto& [pathId, _] : tables) {
+    for (const auto& [internalPathId, table] : tables) {
+        const auto& schemeShardLocalPathId = table.GetPathId().SchemeShardLocalPathId;
         auto* periodicTableStats = ev->Record.AddTables();
         periodicTableStats->SetDatashardId(TabletID());
-        periodicTableStats->SetTableLocalId(pathId.GetRawValue());
+        periodicTableStats->SetTableLocalId(schemeShardLocalPathId.GetRawValue());
 
         periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());
@@ -425,9 +420,9 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
             resourceMetrics->Fill(*periodicTableStats->MutableTabletMetrics());
         }
 
-        tableStatsBuilder.FillTableStats(pathId, *(periodicTableStats->MutableTableStats()));
+        tableStatsBuilder.FillTableStats(internalPathId, *(periodicTableStats->MutableTableStats()));
 
-        LOG_S_TRACE("Add stats for table, tableLocalID=" << pathId);
+        LOG_S_TRACE("Add stats for table, tableLocalID=" << schemeShardLocalPathId);
     }
 }
 

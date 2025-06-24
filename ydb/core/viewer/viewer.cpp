@@ -83,24 +83,6 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
-                .RelPath = "viewer/json/capabilities", // temporary handling of old paths
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
-            });
-            mon->RegisterActorPage({
-                .RelPath = "viewer/whoami",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
-            });
-            mon->RegisterActorPage({
-                .RelPath = "viewer/json/whoami", // temporary handling of old paths
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .UseAuth = false,
-            });
-            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),
@@ -302,6 +284,8 @@ public:
                 forceRetryPossible = true;
             } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
                 bscError = TStringBuilder() << "Calling this operation may result in data loss for " << GetGroupList(groups);
+            } else if (lastStatus.GetErrorDescription().find("failed to allocate group: no group options") != TString::npos) {
+                bscError = "Failed to allocate group";
             }
         }
         if (bscError.empty()) {

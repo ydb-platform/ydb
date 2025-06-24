@@ -25,7 +25,8 @@ protected:
         return TBase::CheckSameColumnsForModification(newMeta);
     }
 
-    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+        TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));

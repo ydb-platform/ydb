@@ -35,7 +35,7 @@
 
 namespace NYql {
 
-static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec"};
+static const THashSet<TStringBuf> UNSUPPORTED_YT_PRAGMAS = {"maxrowweight",  "layerpaths", "dockerimage", "operationspec", "networkproject"};
 static const THashSet<TStringBuf> POOL_TREES_WHITELIST = {"physical",  "cloud", "cloud_default"};
 
 using namespace NNodes;
@@ -395,7 +395,7 @@ public:
                     return false;
                 }
 
-                if (pragma == "pooltrees") {
+                if (pragma == "pooltrees" && node.ChildrenSize() >= 5) {
                     auto pools = NPrivate::GetDefaultParser<TVector<TString>>()(TString{node.Child(4)->Content()});
                     for (const auto& pool : pools) {
                         if (!POOL_TREES_WHITELIST.contains(pool)) {
@@ -889,7 +889,7 @@ public:
             if (res.ExternalTransactionId) {
                 param("external_tx", *res.ExternalTransactionId);
             }
-        } else if (auto externalTx = State_->Configuration->ExternalTx.Get().GetOrElse(TGUID())) {
+        } else if (auto externalTx = State_->Configuration->ExternalTx.Get(cluster).GetOrElse(TGUID())) {
             param("external_tx", GetGuidAsString(externalTx));
         }
         TString tokenName;

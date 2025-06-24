@@ -284,7 +284,7 @@ private:
         Xsum = 0;
         iXsum = 0;
         Wsum = 0;
-        ApplyTo<TShareNode>(group, [=] (TShareNode* node) {
+        ApplyTo<TShareNode>(group, [=, this] (TShareNode* node) {
             TCtx& ctx = node->Ctx<TCtx>();
             ctx.Update(gctx, AveragingLength);
             Xsum += ctx.x;

@@ -6,53 +6,17 @@ import yatest
 import os
 import json
 import sys
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.param_constants import kikimr_driver_path
-from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 
 
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
-current_binary_path = kikimr_driver_path()
-
-all_binary_combinations = [
-    [current_binary_path],
-    [last_stable_binary_path],
-    [current_binary_path, last_stable_binary_path],
-]
-all_binary_combinations_ids = [
-    "current",
-    "last_stable",
-    "current_and_last_stable",
-]
-
-
-class TestExportS3(object):
-    @pytest.fixture(autouse=True, params=all_binary_combinations, ids=all_binary_combinations_ids)
-    def setup(self, request):
-        self.all_binary_paths = request.param
-        self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
-            binary_paths=self.all_binary_paths,
-        )
-
-        self.cluster = KiKiMR(self.config)
-        self.cluster.start()
-        self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+class TestExportS3(MixedClusterFixture):
+    @pytest.fixture(autouse=True)
+    def setup(self):
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
         self.s3_config = self.setup_s3()
-
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait()
-        yield
-        self.cluster.stop()
+        yield from self.setup_cluster()
 
     @staticmethod
     def setup_s3():

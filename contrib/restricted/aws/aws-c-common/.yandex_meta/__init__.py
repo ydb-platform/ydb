@@ -99,6 +99,9 @@ aws_c_common = CMakeNinjaNixProject(
     disable_includes=[
         "legacy/ittnotify.h",
     ],
+    platform_dispatchers=[
+        "generated/include/aws/common/config.h",
+    ],
     install_targets=["aws-c-common"],
     post_install=post_install,
 )

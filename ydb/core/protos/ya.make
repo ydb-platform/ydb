@@ -29,6 +29,7 @@ SRCS(
     blockstore_config.proto
     bootstrap.proto
     bootstrapper.proto
+    bridge.proto
     change_exchange.proto
     channel_purpose.proto
     cms.proto
@@ -129,6 +130,7 @@ SRCS(
     stream.proto
     subdomains.proto
     sys_view.proto
+    sys_view_types.proto
     table_service_config.proto
     table_stats.proto
     tablet.proto

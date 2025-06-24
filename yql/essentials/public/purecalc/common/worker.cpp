@@ -45,25 +45,26 @@ TWorkerGraph::TWorkerGraph(
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
     TMaybe<ui64> deterministicTimeProviderSeed,
-    TLangVersion langver
+    TLangVersion langver,
+    bool insideEvaluation
 )
-    : ScopedAlloc_(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
-    , Env_(ScopedAlloc_)
-    , FuncRegistry_(funcRegistry)
-    , RandomProvider_(CreateDefaultRandomProvider())
-    , TimeProvider_(deterministicTimeProviderSeed ?
+    : ScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
+    , Env(ScopedAlloc)
+    , FuncRegistry(funcRegistry)
+    , RandomProvider(CreateDefaultRandomProvider())
+    , TimeProvider(deterministicTimeProviderSeed ?
         CreateDeterministicTimeProvider(*deterministicTimeProviderSeed) :
         CreateDefaultTimeProvider())
-    , LLVMSettings_(LLVMSettings)
-    , NativeYtTypeFlags_(nativeYtTypeFlags)
+    , LLVMSettings(LLVMSettings)
+    , NativeYtTypeFlags(nativeYtTypeFlags)
 {
     // Build the root MKQL node
     NCommon::TMemoizedTypesMap typeMemoization;
     NKikimr::NMiniKQL::TRuntimeNode rootNode;
     if (exprRoot) {
-        rootNode = CompileMkql(exprRoot, exprCtx, FuncRegistry_, Env_, userData, &typeMemoization);
+        rootNode = CompileMkql(exprRoot, exprCtx, FuncRegistry, Env, userData, &typeMemoization);
     } else {
-        rootNode = NKikimr::NMiniKQL::DeserializeRuntimeNode(serializedProgram, Env_);
+        rootNode = NKikimr::NMiniKQL::DeserializeRuntimeNode(serializedProgram, Env);
     }
 
     // Prepare container for input nodes
@@ -72,13 +73,13 @@ TWorkerGraph::TWorkerGraph(
 
     YQL_ENSURE(inputTypes.size() == originalInputTypes.size());
 
-    SelfNodes_.resize(inputsCount, nullptr);
+    SelfNodes.resize(inputsCount, nullptr);
 
-    YQL_ENSURE(SelfNodes_.size() == inputsCount);
+    YQL_ENSURE(SelfNodes.size() == inputsCount);
 
     // Setup struct types
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env_, FuncRegistry_, false, langver);
+    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env, FuncRegistry, false, langver);
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder, typeMemoization));
         const auto* originalType = type;
@@ -88,16 +89,16 @@ TWorkerGraph::TWorkerGraph(
             originalType = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *originalInputTypes[i], pgmBuilder, typeMemoization));
         }
 
-        InputTypes_.push_back(type);
-        OriginalInputTypes_.push_back(originalType);
-        RawInputTypes_.push_back(rawType);
+        InputTypes.push_back(type);
+        OriginalInputTypes.push_back(originalType);
+        RawInputTypes.push_back(rawType);
     }
 
     if (outputType) {
-        OutputType_ = NCommon::BuildType(TPositionHandle(), *outputType, pgmBuilder, typeMemoization);
+        OutputType = NCommon::BuildType(TPositionHandle(), *outputType, pgmBuilder, typeMemoization);
     }
     if (rawOutputType) {
-        RawOutputType_ = NCommon::BuildType(TPositionHandle(), *rawOutputType, pgmBuilder, typeMemoization);
+        RawOutputType = NCommon::BuildType(TPositionHandle(), *rawOutputType, pgmBuilder, typeMemoization);
     }
 
     if (!exprRoot) {
@@ -109,25 +110,25 @@ TWorkerGraph::TWorkerGraph(
         } else {
             ythrow TCompileError("", "") << "unexpected mkql output type " << NKikimr::NMiniKQL::TType::KindAsStr(outMkqlType->GetKind());
         }
-        if (OutputType_) {
-            if (!OutputType_->IsSameType(*outMkqlType)) {
+        if (OutputType) {
+            if (!OutputType->IsSameType(*outMkqlType)) {
                 ythrow TCompileError("", "") << "precompiled program output type doesn't match the output schema";
             }
         } else {
-            OutputType_ = outMkqlType;
-            RawOutputType_ = outMkqlType;
+            OutputType = outMkqlType;
+            RawOutputType = outMkqlType;
         }
     }
 
     // Compile computation pattern
 
     const THashSet<NKikimr::NMiniKQL::TInternName> selfCallableNames = {
-        Env_.InternName(PurecalcInputCallableName),
-        Env_.InternName(PurecalcBlockInputCallableName)
+        Env.InternName(PurecalcInputCallableName),
+        Env.InternName(PurecalcBlockInputCallableName)
     };
 
     NKikimr::NMiniKQL::TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), Env_);
+    explorer.Walk(rootNode.GetNode(), Env.GetNodeStack());
 
     auto compositeNodeFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(
         {NKikimr::NMiniKQL::GetYqlFactory(), NYql::GetPgFactory()}
@@ -137,11 +138,15 @@ TWorkerGraph::TWorkerGraph(
         NKikimr::NMiniKQL::TCallable& callable, const NKikimr::NMiniKQL::TComputationNodeFactoryContext& ctx
         ) -> NKikimr::NMiniKQL::IComputationNode* {
         if (selfCallableNames.contains(callable.GetType()->GetNameStr())) {
+            if (insideEvaluation) {
+                throw TErrorException(0) << "Inputs aren't available during evaluation";
+            }
+
             YQL_ENSURE(callable.GetInputsCount() == 1, "Self takes exactly 1 argument");
             const auto inputIndex = AS_VALUE(NKikimr::NMiniKQL::TDataLiteral, callable.GetInput(0))->AsValue().Get<ui32>();
             YQL_ENSURE(inputIndex < inputsCount, "Self index is out of range");
-            YQL_ENSURE(!SelfNodes_[inputIndex], "Self can be called at most once with each index");
-            return SelfNodes_[inputIndex] = new NKikimr::NMiniKQL::TExternalComputationNode(ctx.Mutables);
+            YQL_ENSURE(!SelfNodes[inputIndex], "Self can be called at most once with each index");
+            return SelfNodes[inputIndex] = new NKikimr::NMiniKQL::TExternalComputationNode(ctx.Mutables);
         }
         else {
             return compositeNodeFactory(callable, ctx);
@@ -149,8 +154,8 @@ TWorkerGraph::TWorkerGraph(
     };
 
     NKikimr::NMiniKQL::TComputationPatternOpts computationPatternOpts(
-        ScopedAlloc_.Ref(),
-        Env_,
+        ScopedAlloc.Ref(),
+        Env,
         nodeFactory,
         &funcRegistry,
         NKikimr::NUdf::EValidateMode::None,
@@ -163,25 +168,25 @@ TWorkerGraph::TWorkerGraph(
         nullptr,
         langver);
 
-    ComputationPattern_ = NKikimr::NMiniKQL::MakeComputationPattern(
+    ComputationPattern = NKikimr::NMiniKQL::MakeComputationPattern(
         explorer,
         rootNode,
         { rootNode.GetNode() },
         computationPatternOpts);
 
-    ComputationGraph_ = ComputationPattern_->Clone(
-        computationPatternOpts.ToComputationOptions(*RandomProvider_, *TimeProvider_));
+    ComputationGraph = ComputationPattern->Clone(
+        computationPatternOpts.ToComputationOptions(*RandomProvider, *TimeProvider));
 
-    ComputationGraph_->Prepare();
+    ComputationGraph->Prepare();
 
     // Scoped alloc acquires itself on construction. We need to release it before returning control to user.
     // Note that scoped alloc releases itself on destruction so it is no problem if the above code throws.
-    ScopedAlloc_.Release();
+    ScopedAlloc.Release();
 }
 
 TWorkerGraph::~TWorkerGraph() {
     // Remember, we've released scoped alloc in constructor? Now, we need to acquire it back before destroying.
-    ScopedAlloc_.Acquire();
+    ScopedAlloc.Acquire();
 }
 
 template <typename TBase>
@@ -206,18 +211,18 @@ TWorker<TBase>::TWorker(
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
          inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver)
+         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver, false)
 {
 }
 
 template <typename TBase>
 inline ui32 TWorker<TBase>::GetInputsCount() const {
-    return Graph_.InputTypes_.size();
+    return Graph_.InputTypes.size();
 }
 
 template <typename TBase>
 inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetInputType(ui32 inputIndex, bool original) const {
-    const auto& container = original ? Graph_.OriginalInputTypes_ : Graph_.InputTypes_;
+    const auto& container = original ? Graph_.OriginalInputTypes : Graph_.InputTypes;
 
     YQL_ENSURE(inputIndex < container.size(), "invalid input index (" << inputIndex << ") in GetInputType call");
 
@@ -226,7 +231,7 @@ inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetInputType(ui32 i
 
 template <typename TBase>
 inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetInputType(bool original) const {
-    const auto& container = original ? Graph_.OriginalInputTypes_ : Graph_.InputTypes_;
+    const auto& container = original ? Graph_.OriginalInputTypes : Graph_.InputTypes;
 
     YQL_ENSURE(container.size() == 1, "GetInputType() can be used only for single-input programs");
 
@@ -235,26 +240,26 @@ inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetInputType(bool o
 
 template <typename TBase>
 inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetRawInputType(ui32 inputIndex) const {
-    const auto& container = Graph_.RawInputTypes_;
+    const auto& container = Graph_.RawInputTypes;
     YQL_ENSURE(inputIndex < container.size(), "invalid input index (" << inputIndex << ") in GetInputType call");
     return container[inputIndex];
 }
 
 template <typename TBase>
 inline const NKikimr::NMiniKQL::TStructType* TWorker<TBase>::GetRawInputType() const {
-    const auto& container = Graph_.RawInputTypes_;
+    const auto& container = Graph_.RawInputTypes;
     YQL_ENSURE(container.size() == 1, "GetInputType() can be used only for single-input programs");
     return container[0];
 }
 
 template <typename TBase>
 inline const NKikimr::NMiniKQL::TType* TWorker<TBase>::GetOutputType() const {
-    return Graph_.OutputType_;
+    return Graph_.OutputType;
 }
 
 template <typename TBase>
 inline const NKikimr::NMiniKQL::TType* TWorker<TBase>::GetRawOutputType() const {
-    return Graph_.RawOutputType_;
+    return Graph_.RawOutputType;
 }
 
 template <typename TBase>
@@ -301,39 +306,39 @@ NYT::TNode TWorker<TBase>::MakeFullOutputSchema() const {
 
 template <typename TBase>
 inline NKikimr::NMiniKQL::TScopedAlloc& TWorker<TBase>::GetScopedAlloc() {
-    return Graph_.ScopedAlloc_;
+    return Graph_.ScopedAlloc;
 }
 
 template <typename TBase>
 inline NKikimr::NMiniKQL::IComputationGraph& TWorker<TBase>::GetGraph() {
-    return *Graph_.ComputationGraph_;
+    return *Graph_.ComputationGraph;
 }
 
 template <typename TBase>
 inline const NKikimr::NMiniKQL::IFunctionRegistry&
 TWorker<TBase>::GetFunctionRegistry() const {
-    return Graph_.FuncRegistry_;
+    return Graph_.FuncRegistry;
 }
 
 template <typename TBase>
 inline NKikimr::NMiniKQL::TTypeEnvironment&
 TWorker<TBase>::GetTypeEnvironment() {
-    return Graph_.Env_;
+    return Graph_.Env;
 }
 
 template <typename TBase>
 inline const TString& TWorker<TBase>::GetLLVMSettings() const {
-    return Graph_.LLVMSettings_;
+    return Graph_.LLVMSettings;
 }
 
 template <typename TBase>
 inline ui64 TWorker<TBase>::GetNativeYtTypeFlags() const {
-    return Graph_.NativeYtTypeFlags_;
+    return Graph_.NativeYtTypeFlags;
 }
 
 template <typename TBase>
 ITimeProvider* TWorker<TBase>::GetTimeProvider() const {
-    return Graph_.TimeProvider_.Get();
+    return Graph_.TimeProvider.Get();
 }
 
 template <typename TBase>
@@ -347,13 +352,13 @@ void TWorker<TBase>::Release() {
 
 template <typename TBase>
 void TWorker<TBase>::Invalidate() {
-    auto& ctx = Graph_.ComputationGraph_->GetContext();
-    for (const auto* selfNode : Graph_.SelfNodes_) {
+    auto& ctx = Graph_.ComputationGraph->GetContext();
+    for (const auto* selfNode : Graph_.SelfNodes) {
         if (selfNode) {
             selfNode->InvalidateValue(ctx);
         }
     }
-    Graph_.ComputationGraph_->InvalidateCaches();
+    Graph_.ComputationGraph->InvalidateCaches();
 }
 
 TPullStreamWorker::~TPullStreamWorker() {
@@ -362,7 +367,7 @@ TPullStreamWorker::~TPullStreamWorker() {
 }
 
 void TPullStreamWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inputIndex) {
-    const auto inputsCount = Graph_.SelfNodes_.size();
+    const auto inputsCount = Graph_.SelfNodes.size();
 
     if (Y_UNLIKELY(inputIndex >= inputsCount)) {
         ythrow yexception() << "invalid input index (" << inputIndex << ") in SetInput call";
@@ -376,17 +381,17 @@ void TPullStreamWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inpu
         ythrow yexception() << "input value for #" << inputIndex << " input is already set";
     }
 
-    auto selfNode = Graph_.SelfNodes_[inputIndex];
+    auto selfNode = Graph_.SelfNodes[inputIndex];
 
     if (selfNode) {
         YQL_ENSURE(value);
-        selfNode->SetValue(Graph_.ComputationGraph_->GetContext(), std::move(value));
+        selfNode->SetValue(Graph_.ComputationGraph->GetContext(), std::move(value));
     }
 
     HasInput_[inputIndex] = true;
 
     if (CheckAllInputsSet()) {
-        Output_ = Graph_.ComputationGraph_->GetValue();
+        Output_ = Graph_.ComputationGraph->GetValue();
     }
 }
 
@@ -401,9 +406,9 @@ NKikimr::NUdf::TUnboxedValue& TPullStreamWorker::GetOutput() {
 void TPullStreamWorker::Release() {
     with_lock(GetScopedAlloc()) {
         Output_ = NKikimr::NUdf::TUnboxedValue::Invalid();
-        for (auto selfNode: Graph_.SelfNodes_) {
+        for (auto selfNode: Graph_.SelfNodes) {
             if (selfNode) {
-                selfNode->SetValue(Graph_.ComputationGraph_->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
+                selfNode->SetValue(Graph_.ComputationGraph->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
             }
         }
     }
@@ -418,7 +423,7 @@ TPullListWorker::~TPullListWorker() {
 }
 
 void TPullListWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inputIndex) {
-    const auto inputsCount = Graph_.SelfNodes_.size();
+    const auto inputsCount = Graph_.SelfNodes.size();
 
     if (Y_UNLIKELY(inputIndex >= inputsCount)) {
         ythrow yexception() << "invalid input index (" << inputIndex << ") in SetInput call";
@@ -432,17 +437,17 @@ void TPullListWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inputI
         ythrow yexception() << "input value for #" << inputIndex << " input is already set";
     }
 
-    auto selfNode = Graph_.SelfNodes_[inputIndex];
+    auto selfNode = Graph_.SelfNodes[inputIndex];
 
     if (selfNode) {
         YQL_ENSURE(value);
-        selfNode->SetValue(Graph_.ComputationGraph_->GetContext(), std::move(value));
+        selfNode->SetValue(Graph_.ComputationGraph->GetContext(), std::move(value));
     }
 
     HasInput_[inputIndex] = true;
 
     if (CheckAllInputsSet()) {
-        Output_ = Graph_.ComputationGraph_->GetValue();
+        Output_ = Graph_.ComputationGraph->GetValue();
         ResetOutputIterator();
     }
 }
@@ -476,9 +481,9 @@ void TPullListWorker::Release() {
         Output_ = NKikimr::NUdf::TUnboxedValue::Invalid();
         OutputIterator_ = NKikimr::NUdf::TUnboxedValue::Invalid();
 
-        for (auto selfNode: Graph_.SelfNodes_) {
+        for (auto selfNode: Graph_.SelfNodes) {
             if (selfNode) {
-                selfNode->SetValue(Graph_.ComputationGraph_->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
+                selfNode->SetValue(Graph_.ComputationGraph->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
             }
         }
     }
@@ -528,7 +533,7 @@ namespace {
 }
 
 void TPushStreamWorker::FeedToConsumer() {
-    auto value = Graph_.ComputationGraph_->GetValue();
+    auto value = Graph_.ComputationGraph->GetValue();
 
     for (;;) {
         NKikimr::NUdf::TUnboxedValue item;
@@ -543,11 +548,11 @@ void TPushStreamWorker::FeedToConsumer() {
 }
 
 NYql::NUdf::IBoxedValue* TPushStreamWorker::GetPushStream() const {
-    auto& ctx = Graph_.ComputationGraph_->GetContext();
+    auto& ctx = Graph_.ComputationGraph->GetContext();
     NUdf::TUnboxedValue pushStream = SelfNode_->GetValue(ctx);
 
     if (Y_UNLIKELY(pushStream.IsInvalid())) {
-        SelfNode_->SetValue(ctx, Graph_.ComputationGraph_->GetHolderFactory().Create<TPushStream>());
+        SelfNode_->SetValue(ctx, Graph_.ComputationGraph->GetHolderFactory().Create<TPushStream>());
         pushStream = SelfNode_->GetValue(ctx);
     }
 
@@ -556,7 +561,7 @@ NYql::NUdf::IBoxedValue* TPushStreamWorker::GetPushStream() const {
 
 void TPushStreamWorker::SetConsumer(THolder<IConsumer<const NKikimr::NUdf::TUnboxedValue*>> consumer) {
     auto guard = Guard(GetScopedAlloc());
-    const auto inputsCount = Graph_.SelfNodes_.size();
+    const auto inputsCount = Graph_.SelfNodes.size();
 
     YQL_ENSURE(inputsCount < 2, "push stream mode doesn't support several inputs");
     YQL_ENSURE(!Consumer_, "consumer is already set");
@@ -564,13 +569,13 @@ void TPushStreamWorker::SetConsumer(THolder<IConsumer<const NKikimr::NUdf::TUnbo
     Consumer_ = std::move(consumer);
 
     if (inputsCount == 1) {
-        SelfNode_ = Graph_.SelfNodes_[0];
+        SelfNode_ = Graph_.SelfNodes[0];
     }
 
     if (SelfNode_) {
         SelfNode_->SetValue(
-            Graph_.ComputationGraph_->GetContext(),
-            Graph_.ComputationGraph_->GetHolderFactory().Create<TPushStream>());
+            Graph_.ComputationGraph->GetContext(),
+            Graph_.ComputationGraph->GetHolderFactory().Create<TPushStream>());
     }
 
     FeedToConsumer();
@@ -606,7 +611,7 @@ void TPushStreamWorker::Release() {
     with_lock(GetScopedAlloc()) {
         Consumer_.Destroy();
         if (SelfNode_) {
-            SelfNode_->SetValue(Graph_.ComputationGraph_->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
+            SelfNode_->SetValue(Graph_.ComputationGraph->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
         }
         SelfNode_ = nullptr;
     }

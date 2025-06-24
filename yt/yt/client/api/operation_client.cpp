@@ -94,7 +94,7 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .DontSerializeDefault();
 }
 
-TString EncodeNewToken(TListJobsOptions&& options, int jobCount)
+std::string EncodeNewToken(TListJobsOptions&& options, int jobCount)
 {
     options.Offset += jobCount;
     options.ContinuationToken.reset();
@@ -106,7 +106,7 @@ TString EncodeNewToken(TListJobsOptions&& options, int jobCount)
     return Base64Encode(optionsYson.ToString());
 }
 
-TListJobsOptions DecodeListJobsOptionsFromToken(const TString& continuationToken)
+TListJobsOptions DecodeListJobsOptionsFromToken(const std::string& continuationToken)
 {
     auto optionsYson = TYsonString(Base64StrictDecode(continuationToken));
     return ConvertTo<TListJobsContinuationToken>(optionsYson);
@@ -314,6 +314,7 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("archive_features", job.ArchiveFeatures)
             .OptionalItem("operation_incarnation", job.OperationIncarnation)
             .OptionalItem("allocation_id", job.AllocationId)
+            .OptionalItem("gang_rank", job.GangRank)
         .EndMap();
 }
 
@@ -327,6 +328,17 @@ void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer)
             .Item("event_index").Value(traceEvent.EventIndex)
             .Item("event").Value(traceEvent.Event)
             .Item("event_time").Value(traceEvent.EventTime.MicroSeconds())
+        .EndMap();
+}
+
+void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer) {
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("timestamp").Value(operationEvent.Timestamp)
+            .Item("event_type").Value(operationEvent.EventType)
+            .OptionalItem("incarnation", operationEvent.Incarnation)
+            .OptionalItem("incarnation_switch_reason", operationEvent.IncarnationSwitchReason)
+            .OptionalItem("incarnation_switch_info", operationEvent.IncarnationSwitchInfo)
         .EndMap();
 }
 

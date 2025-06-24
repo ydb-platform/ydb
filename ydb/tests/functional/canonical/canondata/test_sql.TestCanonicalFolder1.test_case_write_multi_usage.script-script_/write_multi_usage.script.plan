@@ -217,19 +217,19 @@
                 "Plans": [
                     {
                         "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Upsert",
+                                "Path": "/local/base_write_multi_usage_script_script/Temp",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_write_multi_usage_script_script/Temp"
+                            }
+                        ],
                         "PlanNodeId": 7,
                         "Plans": [
                             {
-                                "Node Type": "Stage-Sink",
-                                "Operators": [
-                                    {
-                                        "Inputs": [],
-                                        "Name": "Upsert",
-                                        "Path": "/local/base_write_multi_usage_script_script/Temp",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_write_multi_usage_script_script/Temp"
-                                    }
-                                ],
+                                "Node Type": "Stage",
                                 "PlanNodeId": 6,
                                 "Plans": [
                                     {
@@ -268,38 +268,40 @@
                                             }
                                         ]
                                     }
-                                ],
-                                "Tables": [
-                                    "base_write_multi_usage_script_script/Temp"
                                 ]
                             }
+                        ],
+                        "Tables": [
+                            "base_write_multi_usage_script_script/Temp"
                         ]
                     },
                     {
                         "Node Type": "Sink",
+                        "Operators": [
+                            {
+                                "Inputs": [],
+                                "Name": "Delete",
+                                "Path": "/local/base_write_multi_usage_script_script/Input1",
+                                "SinkType": "KqpTableSink",
+                                "Table": "base_write_multi_usage_script_script/Input1"
+                            }
+                        ],
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "Node Type": "ConstantExpr",
                                 "Operators": [
                                     {
                                         "Inputs": [],
                                         "Iterator": "[{Group: 1,Name: ToString}]",
                                         "Name": "Iterator"
-                                    },
-                                    {
-                                        "Inputs": [],
-                                        "Name": "Delete",
-                                        "Path": "/local/base_write_multi_usage_script_script/Input1",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_write_multi_usage_script_script/Input1"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_write_multi_usage_script_script/Input1"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_write_multi_usage_script_script/Input1"
                         ]
                     }
                 ],

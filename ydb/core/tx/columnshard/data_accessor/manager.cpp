@@ -10,11 +10,14 @@ void TLocalManager::DrainQueue() {
     std::optional<TInternalPathId> lastPathId;
     IGranuleDataAccessor* lastDataAccessor = nullptr;
     TPositiveControlInteger countToFlight;
-    while (PortionsAskInFlight + countToFlight < NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk() &&
-           PortionsAsk.size()) {
-        THashMap<TInternalPathId, std::vector<TPortionInfo::TConstPtr>> portionsToAsk;
-        while (PortionsAskInFlight + countToFlight < 1000 && PortionsAsk.size()) {
+    const ui32 inFlightLimit = NYDBTest::TControllers::GetColumnShardController()->GetLimitForPortionsMetadataAsk();
+    while (PortionsAskInFlight + countToFlight < inFlightLimit && PortionsAsk.size()) {
+        THashMap<TInternalPathId, TPortionsByConsumer> portionsToAsk;
+        ui32 packPortionsCount = 0;
+        while (PortionsAskInFlight + countToFlight < inFlightLimit && packPortionsCount < std::min<ui32>(inFlightLimit, 1000) &&
+               PortionsAsk.size()) {
             auto p = PortionsAsk.front().ExtractPortion();
+            const TString consumerId = PortionsAsk.front().GetConsumerId();
             PortionsAsk.pop_front();
             if (!lastPathId || *lastPathId != p->GetPathId()) {
                 lastPathId = p->GetPathId();
@@ -46,7 +49,8 @@ void TLocalManager::DrainQueue() {
                 if (!toAsk) {
                     RequestsByPortion.erase(it);
                 } else {
-                    portionsToAsk[p->GetPathId()].emplace_back(p);
+                    portionsToAsk[p->GetPathId()].UpsertConsumer(consumerId).AddPortion(p);
+                    ++packPortionsCount;
                     ++countToFlight;
                 }
             }
@@ -54,7 +58,7 @@ void TLocalManager::DrainQueue() {
         for (auto&& i : portionsToAsk) {
             auto it = Managers.find(i.first);
             AFL_VERIFY(it != Managers.end());
-            auto dataAnalyzed = it->second->AnalyzeData(i.second, "ANALYZE");
+            auto dataAnalyzed = it->second->AnalyzeData(i.second);
             for (auto&& accessor : dataAnalyzed.GetCachedAccessors()) {
                 auto it = RequestsByPortion.find(accessor.GetPortionInfo().GetPortionId());
                 AFL_VERIFY(it != RequestsByPortion.end());
@@ -67,9 +71,11 @@ void TLocalManager::DrainQueue() {
                 RequestsByPortion.erase(it);
                 --countToFlight;
             }
-            if (dataAnalyzed.GetPortionsToAsk().size()) {
-                Counters.ResultAskDirectly->Add(dataAnalyzed.GetPortionsToAsk().size());
-                it->second->AskData(dataAnalyzed.GetPortionsToAsk(), AccessorCallback, "ANALYZE");
+            if (!dataAnalyzed.GetPortionsToAsk().IsEmpty()) {
+                THashMap<TInternalPathId, TPortionsByConsumer> portionsToAskImpl;
+                Counters.ResultAskDirectly->Add(dataAnalyzed.GetPortionsToAsk().GetPortionsCount());
+                portionsToAskImpl.emplace(i.first, dataAnalyzed.DetachPortionsToAsk());
+                it->second->AskData(std::move(portionsToAskImpl), AccessorCallback);
             }
         }
     }
@@ -86,7 +92,7 @@ void TLocalManager::DoAskData(const std::shared_ptr<TDataAccessorsRequest>& requ
             auto itRequest = RequestsByPortion.find(i->GetPortionId());
             if (itRequest == RequestsByPortion.end()) {
                 AFL_VERIFY(RequestsByPortion.emplace(i->GetPortionId(), std::vector<std::shared_ptr<TDataAccessorsRequest>>({request})).second);
-                PortionsAsk.emplace_back(i, request->GetAbortionFlag());
+                PortionsAsk.emplace_back(i, request->GetAbortionFlag(), request->GetConsumer());
                 Counters.AskNew->Add(1);
             } else {
                 itRequest->second.emplace_back(request);

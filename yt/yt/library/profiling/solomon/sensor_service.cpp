@@ -12,14 +12,18 @@
 #include <yt/yt/core/ytree/virtual.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 namespace NYT::NProfiling {
 
 using namespace NConcurrency;
 using namespace NYTree;
 
+using NYT::ToProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = SolomonLogger;
+constinit const auto Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -90,7 +94,7 @@ private:
             options.ExportSummaryAsMax);
 
         if (!options.Name) {
-            response->set_value(BuildYsonStringFluently().Entity().ToString());
+            response->set_value(ToProto(BuildYsonStringFluently().Entity()));
             context->Reply();
             return;
         }

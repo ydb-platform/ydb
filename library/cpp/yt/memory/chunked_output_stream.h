@@ -22,7 +22,7 @@ class TChunkedOutputStream
 public:
     explicit TChunkedOutputStream(
         TRefCountedTypeCookie tagCookie = GetRefCountedTypeCookie<TDefaultChunkedOutputStreamTag>(),
-        IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker(),
+        ISimpleMemoryUsageTrackerPtr memoryUsageTracker = GetNullSimpleMemoryUsageTracker(),
         size_t initialReserveSize = 4_KB,
         size_t maxReserveSize = 64_KB);
 
@@ -48,9 +48,9 @@ public:
     void Advance(size_t size);
 
 private:
-    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+    const ISimpleMemoryUsageTrackerPtr MemoryUsageTracker_;
 
-    TMemoryUsageTrackerGuard CurrentChunkMemoryUsageGuard_;
+    TSimpleMemoryUsageTrackerGuard CurrentChunkMemoryUsageGuard_;
     size_t MaxReserveSize_;
     size_t CurrentReserveSize_;
 
@@ -58,7 +58,6 @@ private:
 
     TBlob CurrentChunk_;
     std::vector<TSharedRef> FinishedChunks_;
-
 
     void ReserveNewChunk(size_t spaceRequired);
 

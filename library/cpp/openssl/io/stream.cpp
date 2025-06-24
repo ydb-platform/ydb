@@ -4,7 +4,6 @@
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 
-#include <library/cpp/openssl/init/init.h>
 #include <library/cpp/openssl/method/io.h>
 #include <library/cpp/resource/resource.h>
 
@@ -18,12 +17,6 @@ using TOptions = TOpenSslClientIO::TOptions;
 
 namespace {
     struct TSslIO;
-
-    struct TSslInitOnDemand {
-        inline TSslInitOnDemand() {
-            InitOpenSSL();
-        }
-    };
 
     int GetLastSslError() noexcept {
         return ERR_peek_last_error();
@@ -121,7 +114,7 @@ namespace {
         IOutputStream* Out;
     };
 
-    struct TSslIO: public TSslInitOnDemand, public TOptions {
+    struct TSslIO: public TOptions {
         inline TSslIO(IInputStream* in, IOutputStream* out, const TOptions& opts)
             : TOptions(opts)
             , Io(in, out)

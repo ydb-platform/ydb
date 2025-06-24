@@ -291,11 +291,11 @@ $yson = @@{y = true; x = 5.5}@@y;
 SELECT Yson::LookupBool($yson, "z"); --- null
 SELECT Yson::LookupBool($yson, "y"); --- true
 
-SELECT Yson::LookupInt64($yson, "x"); --- Error
+-- SELECT Yson::LookupInt64($yson, "x"); --- Error
 SELECT Yson::LookupInt64($yson, "x", Yson::Options(false as Strict)); --- null
 SELECT Yson::LookupInt64($yson, "x", Yson::Options(true as AutoConvert)); --- 5
 
-SELECT Yson::ConvertToBoolDict($yson); --- Error
+-- SELECT Yson::ConvertToBoolDict($yson); --- Error
 SELECT Yson::ConvertToBoolDict($yson, Yson::Options(false as Strict)); --- { "y": true }
 SELECT Yson::ConvertToDoubleDict($yson, Yson::Options(false as Strict)); --- { "x": 5.5 }
 ```

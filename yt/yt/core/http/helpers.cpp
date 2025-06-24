@@ -27,7 +27,7 @@
 
 namespace NYT::NHttp {
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 using namespace NJson;
 using namespace NYson;
@@ -78,7 +78,7 @@ TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers)
     if (errorHeader) {
         errorJson = *errorHeader;
     } else {
-        static const TString BodySource("body");
+        static const std::string BodySource("body");
         source = BodySource;
         errorJson = ToString(rsp->ReadAll());
     }

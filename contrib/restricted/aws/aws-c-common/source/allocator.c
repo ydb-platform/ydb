@@ -207,7 +207,7 @@ void *aws_mem_calloc(struct aws_allocator *allocator, size_t num, size_t size) {
     return mem;
 }
 
-#define AWS_ALIGN_ROUND_UP(value, alignment) (((value) + ((alignment)-1)) & ~((alignment)-1))
+#define AWS_ALIGN_ROUND_UP(value, alignment) (((value) + ((alignment) - 1)) & ~((alignment) - 1))
 
 void *aws_mem_acquire_many(struct aws_allocator *allocator, size_t count, ...) {
 

@@ -1,16 +1,16 @@
 ## AWS C MQTT
 
-C99 implementation of the MQTT 3.1.1 specification.
+C99 implementation of the MQTT 3.1.1 and MQTT 5 specifications.
 
 ## License
 
-This library is licensed under the Apache 2.0 License. 
+This library is licensed under the Apache 2.0 License.
 
 ## Usage
 
 ### Building
 
-CMake 3.1+ is required to build.
+CMake 3.9+ is required to build.
 
 `<install-path>` must be an absolute path in the following instructions.
 
@@ -203,6 +203,6 @@ the wire. For QoS 1, as soon as PUBACK comes back. For QoS 2, PUBCOMP. `topic` a
 ```c
 int aws_mqtt_client_connection_ping(struct aws_mqtt_client_connection *connection);
 ```
-Sends a PINGREQ packet to the server. 
+Sends a PINGREQ packet to the server.
 
 [aws-c-io]: https://github.com/awslabs/aws-c-io

@@ -180,38 +180,39 @@ namespace NPDisk {
     static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TActorId (&replicas)[N])
     {
         auto info = MakeIntrusive<TStateStorageInfo>();
-        info->NToSelect = N;
-        info->Rings.resize(N);
+        info->RingGroups.resize(1);
+        auto& group = info->RingGroups.back();
+        group.NToSelect = N;
+        group.Rings.resize(N);
         for (size_t i = 0; i < N; ++i) {
-            info->Rings[i].Replicas.push_back(replicas[i]);
+            group.Rings[i].Replicas.push_back(replicas[i]);
         }
 
         return info;
     }
 
     static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TActorId> &replicas, ui32 NToSelect, ui32 nrings, ui32 ringSize)
-    {   
+    {
         Y_ABORT_UNLESS(replicas.size() >= nrings * ringSize);
         Y_ABORT_UNLESS(NToSelect <= nrings);
 
         auto info = MakeIntrusive<TStateStorageInfo>();
-        info->NToSelect = NToSelect;
-        info->Rings.resize(nrings);
-            
+        info->RingGroups.resize(1);
+        auto& group = info->RingGroups.back();
+        group.NToSelect = NToSelect;
+        group.Rings.resize(nrings);
+
         ui32 inode = 0;
         for (size_t i = 0; i < nrings; ++i) {
             for (size_t j = 0; j < ringSize; ++j) {
-                info->Rings[i].Replicas.push_back(replicas[inode++]);
+                group.Rings[i].Replicas.push_back(replicas[inode++]);
             }
         }
 
         return info;
     }
 
-    static TActorId MakeBoardReplicaID(
-        const ui32 node,
-        const ui32 replicaIndex
-    ) {
+    TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex) {
         char x[12] = { 's', 's', 'b' };
         x[3] = (char)1;
         memcpy(x + 5, &replicaIndex, sizeof(ui32));
@@ -220,10 +221,10 @@ namespace NPDisk {
 
     void SetupCustomStateStorage(
         TTestActorRuntime &runtime,
-        ui32 NToSelect, 
-        ui32 nrings, 
+        ui32 NToSelect,
+        ui32 nrings,
         ui32 ringSize)
-    {   
+    {
         TVector<TActorId> ssreplicas;
         for (size_t i = 0; i < nrings * ringSize; ++i) {
             ssreplicas.push_back(MakeStateStorageReplicaID(runtime.GetNodeId(i), i));
@@ -245,7 +246,7 @@ namespace NPDisk {
         auto sbInfo = GenerateStateStorageInfo(sbreplicas, NToSelect, nrings, ringSize);
         auto bInfo = GenerateStateStorageInfo(breplicas, NToSelect, nrings, ringSize);
 
-        
+
         for (ui32 ssIndex = 0; ssIndex < nrings * ringSize; ++ssIndex) {
             runtime.AddLocalService(ssreplicas[ssIndex],
                 TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), ssIndex), TMailboxType::Revolving, 0), ssIndex);
@@ -261,7 +262,7 @@ namespace NPDisk {
         }
     }
 
-    
+
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex, bool firstNode)
     {
         const TActorId ssreplicas[3] = {

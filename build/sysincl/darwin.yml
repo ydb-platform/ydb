@@ -126,6 +126,7 @@
   - os/proc.h
   - os/signpost.h
   - os/trace.h
+  - os/trace_base.h
   - panel.h
   - pthread/introspection.h
   - pthread/qos.h
@@ -220,6 +221,7 @@
   - CoreText/CTFontManager.h
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
+  - CoreWLAN/CoreWLAN.h
   - DeviceCheck/DCAppAttestService.h
   - Files.h
   - Foundation/Foundation.h

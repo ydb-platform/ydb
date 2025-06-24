@@ -1339,11 +1339,11 @@ public:
 
                         if (settings.IsBatch) {
                             TKiDataSink dataSink(node->Child(1));
-                            auto tableDesc = SessionCtx->Tables().EnsureTableExists(
-                                TString(dataSink.Cluster()),
-                                key.GetTablePath(), node->Pos(), ctx);
-
-                            settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
+                            if (auto* tableDesc = SessionCtx->Tables().EnsureTableExists(TString(dataSink.Cluster()),
+                                key.GetTablePath(), node->Pos(), ctx))
+                            {
+                                settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
+                            }
                         }
 
                         return Build<TKiUpdateTable>(ctx, node->Pos())
@@ -1380,11 +1380,11 @@ public:
                     if (settings.Filter) {
                         if (settings.IsBatch) {
                             TKiDataSink dataSink(node->Child(1));
-                            auto tableDesc = SessionCtx->Tables().EnsureTableExists(
-                                TString(dataSink.Cluster()),
-                                key.GetTablePath(), node->Pos(), ctx);
-
-                            settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
+                            if (auto* tableDesc = SessionCtx->Tables().EnsureTableExists(TString(dataSink.Cluster()),
+                                key.GetTablePath(), node->Pos(), ctx))
+                            {
+                                settings.Filter = RewriteBatchFilter(std::move(settings.Filter.Cast()), *tableDesc, ctx);
+                            }
                         }
 
                         return Build<TKiDeleteTable>(ctx, node->Pos())

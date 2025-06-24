@@ -719,6 +719,11 @@
                 "ColumnId": 12,
                 "ColumnName": "DrainSeqNo",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "BridgePileId",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -736,7 +741,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1125,6 +1131,11 @@
                 "ColumnId": 102,
                 "ColumnName": "MaximumNetwork",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "UsageImpact",
+                "ColumnType": "Double"
             }
         ],
         "ColumnsDropped": [],
@@ -1136,7 +1147,8 @@
                     2,
                     101,
                     3,
-                    102
+                    102,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

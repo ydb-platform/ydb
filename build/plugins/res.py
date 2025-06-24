@@ -1,6 +1,5 @@
 import json
 import os
-import six
 from _common import rootrel_arc_src, ugly_conftest_exception
 import ymake
 
@@ -122,7 +121,7 @@ def on_ya_conf_json(unit, conf_file):
             yield name, bottle["formula"]
 
     for bottle_name, formula in _iter_bottles(conf):
-        if isinstance(formula, six.string_types):
+        if isinstance(formula, str):
             if formula.startswith(valid_dirs):
                 abs_path = unit.resolve('$S/' + formula)
                 if os.path.exists(abs_path):

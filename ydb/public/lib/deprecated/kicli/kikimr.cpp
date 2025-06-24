@@ -256,6 +256,9 @@ public:
         case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:
+            if (const auto timeout = GRpcClient->GetConfig().Timeout; timeout != TDuration::Max()) {
+                static_cast<NMsgBusProxy::TBusConsoleRequest*>(request.Get())->Record.SetTimeoutMs(timeout.MilliSeconds());
+            }
             return ExecuteGRpcRequest<NMsgBusProxy::TBusConsoleRequest, NMsgBusProxy::TBusConsoleResponse>(&NGRpcProxy::TGRpcClient::ConsoleRequest, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_RESOLVE_NODE:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusResolveNode, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::ResolveNode, promise, request);

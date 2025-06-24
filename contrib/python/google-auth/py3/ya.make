@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.39.0)
+VERSION(2.40.3)
 
 LICENSE(Apache-2.0)
 
@@ -39,6 +39,7 @@ PY_SRCS(
     google/auth/_refresh_worker.py
     google/auth/_service_account_info.py
     google/auth/aio/__init__.py
+    google/auth/aio/_helpers.py
     google/auth/aio/credentials.py
     google/auth/aio/transport/__init__.py
     google/auth/aio/transport/aiohttp.py

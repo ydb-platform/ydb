@@ -433,20 +433,19 @@ TTransactionCache::TEntry::TPtr TTransactionCache::TryGetEntry(const TString& se
     return {};
 }
 
-TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& server, const TString& token,
+TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token,
     const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics)
 {
     TEntry::TPtr createdEntry = nullptr;
-    NYT::TTransactionId externalTx = config->ExternalTx.Get().GetOrElse(TGUID());
+    NYT::TTransactionId externalTx = config->ExternalTx.Get(cluster).GetOrElse(TGUID());
     with_lock(Lock_) {
         auto it = TxMap_.find(server);
         if (it != TxMap_.end()) {
             return it->second;
         }
 
-        TString tmpFolder = GetTablesTmpFolder(*config);
-
         createdEntry = MakeIntrusive<TEntry>();
+        createdEntry->Cluster = cluster;
         createdEntry->Server = server;
         auto createClientOptions = TCreateClientOptions().Token(token);
         if (impersonationUser) {
@@ -467,6 +466,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         }
         createdEntry->CacheTx = createdEntry->Client;
         createdEntry->CacheTtl = config->QueryCacheTtl.Get().GetOrElse(TDuration::Days(7));
+        const TString tmpFolder = GetTablesTmpFolder(*config, cluster);
         if (!tmpFolder.empty()) {
             auto fullTmpFolder = AddPathPrefix(tmpFolder, NYT::TConfig::Get()->Prefix);
             bool existsGlobally = createdEntry->Client->Exists(fullTmpFolder);
@@ -485,9 +485,9 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         TxMap_.emplace(server, createdEntry);
     }
     if (externalTx) {
-        YQL_CLOG(INFO, ProviderYt) << "Attached to external tx " << GetGuidAsString(externalTx);
+        YQL_CLOG(INFO, ProviderYt) << "Attached to external tx " << GetGuidAsString(externalTx) << " on cluster " << cluster;
     }
-    YQL_CLOG(INFO, ProviderYt) << "Created tx " << GetGuidAsString(createdEntry->Tx->GetId()) << " on " << server;
+    YQL_CLOG(INFO, ProviderYt) << "Created tx " << GetGuidAsString(createdEntry->Tx->GetId()) << " on " << server << " cluster " << cluster;
     return createdEntry;
 }
 

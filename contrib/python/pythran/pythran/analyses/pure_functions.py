@@ -7,13 +7,10 @@ from pythran.analyses.global_effects import GlobalEffects
 from pythran.passmanager import ModuleAnalysis
 
 
-class PureFunctions(ModuleAnalysis):
+class PureFunctions(ModuleAnalysis[ArgumentEffects, GlobalEffects]):
     '''Yields the set of pure functions'''
 
-    def __init__(self):
-        self.result = set()
-        super(PureFunctions, self).__init__(ArgumentEffects, GlobalEffects)
-
+    ResultType = set
 
     def prepare(self, node):
         super(PureFunctions, self).prepare(node)

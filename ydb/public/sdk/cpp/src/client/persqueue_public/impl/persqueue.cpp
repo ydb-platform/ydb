@@ -48,7 +48,7 @@ TCredentials::TCredentials(const Ydb::PersQueue::V1::Credentials& settings)
             break;
         }
         default: {
-            ythrow yexception() << "unsupported credentials type " << ::NPersQueue::ObfuscateString(ToString(Credentials_));
+            ythrow yexception() << "unsupported credentials type " << ::NPersQueue::ObfuscateString(Credentials_.ShortDebugString());
         }
     }
 }

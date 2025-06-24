@@ -287,8 +287,11 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
     }
 
     AFL_VERIFY(HasIndex());
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(record.GetTable().GetPathId());
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId);
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
-    auto spg = index.GetGranuleOptional(TInternalPathId::FromRawValue(record.GetTable().GetPathId().GetLocalId()));
+    auto spg = index.GetGranuleOptional(*internalPathId);
     AFL_VERIFY(spg);
 
     std::set<ui32> columnTagsRequested;

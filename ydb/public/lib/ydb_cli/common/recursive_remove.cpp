@@ -261,7 +261,7 @@ TStatus RemovePathRecursive(
         case NYdb::NScheme::ESchemeEntryType::Directory:
             return RemoveDirectoryRecursive(driver, path, settings);
         default:
-            return RemovePathRecursive(driver, entity.GetEntry(), settings);
+            return RemovePathRecursive(driver, entry, settings);
     }
 }
 
@@ -275,7 +275,7 @@ namespace NInternal {
         NCoordination::TClient& coordinationClient,
         const TRemoveDirectoryRecursiveSettings& settings
     ) {
-        return [&](const TSchemeEntry& entry) {
+        return [&, settings](const TSchemeEntry& entry) {
             return Remove(schemeClient, tableClient, topicClient, queryClient, coordinationClient, entry.Type, TString(entry.Name), settings.Prompt_, settings);
         };
     }

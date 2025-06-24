@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(ReplicationSpace) {
                 .GroupId = groupId,
                 .TotalSize = dataSize,
                 .BlobSize = blobSize,
-                .DelayBetweenPuts = TDuration::Seconds(1),
+                .DelayBetweenBatches = TDuration::Seconds(1),
                 .Erasure = erasure,
                 .CookieStrategy = TTestCtxBase::TDataProfile::ECookieStrategy::WithSamePlacement,
             });

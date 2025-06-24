@@ -7,7 +7,7 @@
 #include <aws/common/logging.h>
 #include <aws/common/math.h>
 #include <aws/common/private/dlloads.h>
-#include <aws/common/private/json_impl.h>
+#include <aws/common/private/external_module_impl.h>
 #include <aws/common/private/thread_shared.h>
 
 #include <stdarg.h>
@@ -80,7 +80,7 @@ void aws_secure_zero(void *pBuf, size_t bufsize) {
 #endif     // #else not windows
 }
 
-#define AWS_DEFINE_ERROR_INFO_COMMON(C, ES) [(C)-0x0000] = AWS_DEFINE_ERROR_INFO(C, ES, "aws-c-common")
+#define AWS_DEFINE_ERROR_INFO_COMMON(C, ES) [(C) - 0x0000] = AWS_DEFINE_ERROR_INFO(C, ES, "aws-c-common")
 /* clang-format off */
 static struct aws_error_info errors[] = {
     AWS_DEFINE_ERROR_INFO_COMMON(
@@ -274,6 +274,12 @@ static struct aws_error_info errors[] = {
     AWS_DEFINE_ERROR_INFO_COMMON(
         AWS_ERROR_FILE_WRITE_FAILURE,
         "Failed writing to file."),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_INVALID_CBOR,
+        "Malformed cbor data."),
+    AWS_DEFINE_ERROR_INFO_COMMON(
+        AWS_ERROR_CBOR_UNEXPECTED_TYPE,
+        "Unexpected cbor type encountered."),
 };
 /* clang-format on */
 
@@ -297,6 +303,8 @@ static struct aws_log_subject_info s_common_log_subject_infos[] = {
     DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_IO, "common-io", "Common IO utilities"),
     DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_BUS, "bus", "Message bus"),
     DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_TEST, "test", "Unit/integration testing"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_JSON_PARSER, "json-parser", "Subject for json parser specific logging"),
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_CBOR, "cbor", "Subject for CBOR encode and decode"),
 };
 
 static struct aws_log_subject_info_list s_common_log_subject_list = {
@@ -315,6 +323,7 @@ void aws_common_library_init(struct aws_allocator *allocator) {
         aws_register_log_subject_info_list(&s_common_log_subject_list);
         aws_thread_initialize_thread_management();
         aws_json_module_init(allocator);
+        aws_cbor_module_init(allocator);
 
 /* NUMA is funky and we can't rely on libnuma.so being available. We also don't want to take a hard dependency on it,
  * try and load it if we can. */
@@ -349,26 +358,32 @@ void aws_common_library_init(struct aws_allocator *allocator) {
             } else {
                 AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_available() failed to load");
             }
-
-            *(void **)(&g_numa_num_configured_nodes_ptr) = dlsym(g_libnuma_handle, "numa_num_configured_nodes");
-            if (g_numa_num_configured_nodes_ptr) {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_configured_nodes() loaded");
+            if (g_numa_available_ptr() == -1) {
+                AWS_LOGF_INFO(
+                    AWS_LS_COMMON_GENERAL,
+                    "static: numa_available() returns -1, numa functions are not available. Skip loading the other "
+                    "numa functions.");
             } else {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_configured_nodes() failed to load");
-            }
+                *(void **)(&g_numa_num_configured_nodes_ptr) = dlsym(g_libnuma_handle, "numa_num_configured_nodes");
+                if (g_numa_num_configured_nodes_ptr) {
+                    AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_configured_nodes() loaded");
+                } else {
+                    AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_configured_nodes() failed to load");
+                }
 
-            *(void **)(&g_numa_num_possible_cpus_ptr) = dlsym(g_libnuma_handle, "numa_num_possible_cpus");
-            if (g_numa_num_possible_cpus_ptr) {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_possible_cpus() loaded");
-            } else {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_possible_cpus() failed to load");
-            }
+                *(void **)(&g_numa_num_possible_cpus_ptr) = dlsym(g_libnuma_handle, "numa_num_possible_cpus");
+                if (g_numa_num_possible_cpus_ptr) {
+                    AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_possible_cpus() loaded");
+                } else {
+                    AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_num_possible_cpus() failed to load");
+                }
 
-            *(void **)(&g_numa_node_of_cpu_ptr) = dlsym(g_libnuma_handle, "numa_node_of_cpu");
-            if (g_numa_node_of_cpu_ptr) {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_node_of_cpu() loaded");
-            } else {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_node_of_cpu() failed to load");
+                *(void **)(&g_numa_node_of_cpu_ptr) = dlsym(g_libnuma_handle, "numa_node_of_cpu");
+                if (g_numa_node_of_cpu_ptr) {
+                    AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_node_of_cpu() loaded");
+                } else {
+                    AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: numa_node_of_cpu() failed to load");
+                }
             }
 
         } else {
@@ -385,6 +400,7 @@ void aws_common_library_clean_up(void) {
         aws_unregister_error_info(&s_list);
         aws_unregister_log_subject_info_list(&s_common_log_subject_list);
         aws_json_module_cleanup();
+        aws_cbor_module_cleanup();
 #ifdef AWS_OS_LINUX
         if (g_libnuma_handle) {
             dlclose(g_libnuma_handle);

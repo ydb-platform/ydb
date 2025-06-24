@@ -100,7 +100,7 @@ public:
         , Position(pos)
         , CallableType(callableType)
     {
-        Stateless = false;
+        Stateless_ = false;
     }
 
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final {
@@ -150,7 +150,7 @@ public:
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valType, ArgNodes.size());
-        const auto args = *Stateless || ctx.AlwaysInline ?
+        const auto args = *Stateless_ || ctx.AlwaysInline ?
             new AllocaInst(arrayType, 0U, "args", &ctx.Func->getEntryBlock().back()):
             new AllocaInst(arrayType, 0U, "args", block);
 

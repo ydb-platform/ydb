@@ -109,6 +109,38 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
     return false;
 }
 
+bool CheckAccess(const TString& table, const TString& token, const NSchemeCache::TSchemeCacheNavigate* resolveResult, TString& errorMessage) {
+    if (token.empty())
+        return true;
+
+    NACLib::TUserToken userToken(token);
+    const ui32 access = NACLib::EAccessRights::UpdateRow;
+    if (!resolveResult) {
+        TStringStream explanation;
+        explanation << "Access denied for " << userToken.GetUserSID()
+                    << " table '" << table
+                    << "' has not been resolved yet";
+
+        errorMessage = explanation.Str();
+        return false;
+    }
+    for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
+        if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
+            && entry.SecurityObject != nullptr
+            && !entry.SecurityObject->CheckAccess(access, userToken))
+        {
+            TStringStream explanation;
+            explanation << "Access denied for " << userToken.GetUserSID()
+                        << " with access " << NACLib::AccessRightsToString(access)
+                        << " to table '" << table << "'";
+
+            errorMessage = explanation.Str();
+            return false;
+        }
+    }
+    return true;
+}
+
 }
 
 using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
@@ -176,36 +208,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetSerializedToken().empty())
-            return true;
-
-        NACLib::TUserToken userToken(Request->GetSerializedToken());
-        const ui32 access = NACLib::EAccessRights::UpdateRow;
-        auto resolveResult = GetResolveNameResult();
-        if (!resolveResult) {
-            TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << GetProtoRequest(Request.get())->table()
-                        << "' has not been resolved yet";
-
-            errorMessage = explanation.Str();
-            return false;
-        }
-        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
-            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
-                && entry.SecurityObject != nullptr
-                && !entry.SecurityObject->CheckAccess(access, userToken))
-            {
-                TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
-
-                errorMessage = explanation.Str();
-                return false;
-            }
-        }
-        return true;
+        return ::NKikimr::NGRpcService::CheckAccess(GetTable(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
     }
 
     TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
@@ -277,6 +280,27 @@ private:
     bool ExtractBatch(TString& errorMessage) override {
         Batch = RowsToBatch(AllRows, errorMessage);
         return Batch.get();
+    }
+
+    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
+                                                    TString& errorMessage)
+    {
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
+        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
+        const auto startStatus = batchBuilder.Start(YdbSchema);
+        if (!startStatus.ok()) {
+            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
+            return {};
+        }
+
+        for (const auto& kv : rows) {
+            const TSerializedCellVec& key = kv.first;
+            const TSerializedCellVec value(kv.second);
+
+            batchBuilder.AddRow(key.GetCells(), value.GetCells());
+        }
+
+        return batchBuilder.FlushBatch(false);
     }
 
 private:
@@ -364,36 +388,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetSerializedToken().empty())
-            return true;
-
-        NACLib::TUserToken userToken(Request->GetSerializedToken());
-        const ui32 access = NACLib::EAccessRights::UpdateRow;
-        auto resolveResult = GetResolveNameResult();
-        if (!resolveResult) {
-            TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << GetProtoRequest(Request.get())->table()
-                        << "' has not been resolved yet";
-
-            errorMessage = explanation.Str();
-            return false;
-        }
-        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
-            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
-                && entry.SecurityObject != nullptr
-                && !entry.SecurityObject->CheckAccess(access, userToken))
-            {
-                TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
-
-                errorMessage = explanation.Str();
-                return false;
-            }
-        }
-        return true;
+        return ::NKikimr::NGRpcService::CheckAccess(GetTable(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
     }
 
     TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
@@ -428,6 +423,23 @@ private:
         Y_ABORT_UNLESS(Batch);
         Rows = BatchToRows(Batch, errorMessage);
         return errorMessage.empty();
+    }
+
+    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                                TString& errorMessage) {
+        Y_ABORT_UNLESS(batch);
+        TVector<std::pair<TSerializedCellVec, TString>> out;
+        out.reserve(batch->num_rows());
+
+        ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
+        TRowWriter writer(out, keySize);
+        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer, IsInfinityInJsonAllowed());
+        if (!batchConverter.Process(*batch, errorMessage)) {
+            return {};
+        }
+
+        RuCost = writer.GetRuCost();
+        return out;
     }
 
     bool ExtractBatch(TString& errorMessage) override {

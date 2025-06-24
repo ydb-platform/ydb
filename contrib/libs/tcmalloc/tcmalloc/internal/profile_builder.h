@@ -25,7 +25,7 @@
 #include <memory>
 #include <string>
 
-// #include "tcmalloc/internal/profile.pb.h"
+#include "tcmalloc/internal/profile.pb.h"
 #include "absl/container/btree_map.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"

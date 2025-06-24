@@ -4,8 +4,9 @@
 
 #include "abstract/collector.h"
 
-#include <ydb/services/bg_tasks/abstract/interface.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/services/bg_tasks/abstract/interface.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
@@ -84,21 +85,21 @@ class TActorAccessorsManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
     const NActors::TActorId ActorId;
-    std::shared_ptr<NDataAccessorControl::IAccessorCallback> AccessorsCallback;
+    std::shared_ptr<NDataAccessorControl::IAccessorCallbackWithOwner> AccessorsCallback;
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAskServiceDataAccessors>(request));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAskServiceDataAccessors>(request, GetTabletActorId()));
     }
     virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(std::move(controller), update));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(std::move(controller), update, GetTabletActorId()));
     }
     virtual void DoUnregisterController(const TInternalPathId pathId) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvUnregisterController>(pathId));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvUnregisterController>(pathId, GetTabletActorId()));
     }
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(accessor));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAddPortion>(accessor, GetTabletActorId()));
     }
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRemovePortion>(portion));
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRemovePortion>(portion, GetTabletActorId()));
     }
 
 public:
@@ -122,11 +123,14 @@ private:
     private:
         TPortionInfo::TConstPtr Portion;
         YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
+        YDB_READONLY_DEF(TString, ConsumerId);
 
     public:
-        TPortionToAsk(const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag)
+        TPortionToAsk(
+            const TPortionInfo::TConstPtr& portion, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TString& consumerId)
             : Portion(portion)
-            , AbortionFlag(abortionFlag) {
+            , AbortionFlag(abortionFlag)
+            , ConsumerId(consumerId) {
         }
 
         TPortionInfo::TConstPtr ExtractPortion() {

@@ -1,4 +1,3 @@
-import six
 import hashlib
 import base64
 
@@ -36,7 +35,7 @@ def cache_by_second_arg(func):
 
 
 def pathid(path):
-    return six.ensure_str(base64.b32encode(hashlib.md5(six.ensure_binary(path)).digest()).lower().strip(b'='))
+    return base64.b32encode(hashlib.md5(path.encode('utf-8')).digest()).lower().strip(b'=').decode('utf-8')
 
 
 def listid(items):

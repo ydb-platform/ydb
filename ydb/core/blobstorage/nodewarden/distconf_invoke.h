@@ -8,10 +8,13 @@ namespace NKikimr::NStorage {
         TDistributedConfigKeeper* const Self;
         const std::weak_ptr<TLifetimeToken> LifetimeToken;
         const std::weak_ptr<TScepter> Scepter;
+        const ui64 ScepterCounter;
         std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>> Event;
         const TActorId Sender;
         const ui64 Cookie;
         const TActorId RequestSessionId;
+
+        bool IsScepterlessOperation = false;
 
         TActorId ParentId;
         ui32 WaitingReplyFromNode = 0;
@@ -29,6 +32,7 @@ namespace NKikimr::NStorage {
         TInvokeRequestHandlerActor(TDistributedConfigKeeper *self, std::unique_ptr<TEventHandle<TEvNodeConfigInvokeOnRoot>>&& ev);
 
         void Bootstrap(TActorId parentId);
+        bool IsScepterExpired() const;
 
         void Handle(TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
@@ -83,6 +87,8 @@ namespace NKikimr::NStorage {
         // State Storage operation
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
+        void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
+        void GetStateStorageConfig();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation
@@ -103,7 +109,7 @@ namespace NKikimr::NStorage {
             OTHER,
         } ControllerOp = EControllerOp::UNSET;
 
-        void FetchStorageConfig(bool manual, bool fetchMain, bool fetchStorage);
+        void FetchStorageConfig(bool fetchMain, bool fetchStorage, bool addExplicitMgmtSections, bool addV1);
         void ReplaceStorageConfig(const TQuery::TReplaceStorageConfig& request);
         void ReplaceStorageConfigResume(const std::optional<TString>& storageConfigYaml, ui64 expectedMainYamlVersion,
                 ui64 expectedStorageYamlVersion, bool enablingDistconf);
@@ -115,6 +121,13 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvControllerDistconfResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev);
         void BootstrapCluster(const TString& selfAssemblyUUID);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Bridge mode
+
+        void SwitchBridgeClusterState(const NKikimrBridge::TClusterState& newClusterState);
+        NKikimrBlobStorage::TStorageConfig GetSwitchBridgeNewConfig(const NKikimrBridge::TClusterState& newClusterState);
+        bool CheckSwitchBridgeCommand();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration proposition

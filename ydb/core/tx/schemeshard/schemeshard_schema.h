@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -853,6 +854,25 @@ struct Schema : NIceDb::Schema {
         struct DatabaseQuotas : Column<9, NScheme::NTypeIds::String> {};
         struct AuditSettings : Column<10, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<11, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
+        // Scheme limits. Must be kept in sync with the scheme limits from the SubDomains table.
+        struct DepthLimit : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct PathsLimit : Column<13, NScheme::NTypeIds::Uint64> {};
+        struct ChildrenLimit : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct ShardsLimit : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct PathShardsLimit : Column<16, NScheme::NTypeIds::Uint64> {};
+        struct TableColumnsLimit : Column<17, NScheme::NTypeIds::Uint64> {};
+        struct TableColumnNameLengthLimit : Column<18, NScheme::NTypeIds::Uint64> {};
+        struct TableKeyColumnsLimit : Column<19, NScheme::NTypeIds::Uint64> {};
+        struct TableIndicesLimit : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct AclByteSizeLimit : Column<21, NScheme::NTypeIds::Uint64> {};
+        struct ConsistentCopyingTargetsLimit : Column<22, NScheme::NTypeIds::Uint64> {};
+        struct PathElementLength : Column<23, NScheme::NTypeIds::Uint64> {};
+        struct ExtraPathSymbolsAllowed : Column<24, NScheme::NTypeIds::Utf8> {};
+        struct PQPartitionsLimit : Column<25, NScheme::NTypeIds::Uint64> {};
+        struct TableCdcStreamsLimit : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct ExportsLimit : Column<27, NScheme::NTypeIds::Uint64> {};
+        struct ImportsLimit : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct ColumnTableColumnsLimit : Column<29, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -866,7 +886,25 @@ struct Schema : NIceDb::Schema {
             DeclaredSchemeQuotas,
             DatabaseQuotas,
             AuditSettings,
-            ServerlessComputeResourcesMode
+            ServerlessComputeResourcesMode,
+            DepthLimit,
+            PathsLimit,
+            ChildrenLimit,
+            ShardsLimit,
+            PathShardsLimit,
+            TableColumnsLimit,
+            TableColumnNameLengthLimit,
+            TableKeyColumnsLimit,
+            TableIndicesLimit,
+            AclByteSizeLimit,
+            ConsistentCopyingTargetsLimit,
+            PathElementLength,
+            ExtraPathSymbolsAllowed,
+            PQPartitionsLimit,
+            TableCdcStreamsLimit,
+            ExportsLimit,
+            ImportsLimit,
+            ColumnTableColumnsLimit
         >;
     };
 
@@ -1358,6 +1396,8 @@ struct Schema : NIceDb::Schema {
 
         struct /*Upload*/ RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
         struct /*Upload*/ BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
+        using UploadRowsBilled = RowsBilled;
+        using UploadBytesBilled = BytesBilled;
 
         struct BuildKind : Column<30, NScheme::NTypeIds::Uint32> {};
 
@@ -1495,6 +1535,8 @@ struct Schema : NIceDb::Schema {
 
         struct /*Upload*/ RowsProcessed : Column<9, NScheme::NTypeIds::Uint64> {};
         struct /*Upload*/ BytesProcessed : Column<10, NScheme::NTypeIds::Uint64> {};
+        using UploadRowsProcessed = RowsProcessed;
+        using UploadBytesProcessed = BytesProcessed;
 
         struct ReadRowsProcessed : Column<11, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<12, NScheme::NTypeIds::Uint64> {};
@@ -1590,6 +1632,7 @@ struct Schema : NIceDb::Schema {
         struct DstPathName : Column<3, NScheme::NTypeIds::Utf8> {};
         struct DstPathOwnerId : Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct DstPathLocalId : Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        // Table scheme
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
         struct CreationQuery : Column<13, NScheme::NTypeIds::Utf8> {};
         // NKikimrSchemeOp::TModifyScheme serialized as string
@@ -1597,6 +1640,7 @@ struct Schema : NIceDb::Schema {
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
         struct Metadata : Column<12, NScheme::NTypeIds::String> {};
         struct Changefeeds : Column<15, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TImportTableChangefeeds; };
+        struct Topic : Column<20, NScheme::NTypeIds::String> {};
 
         struct State : Column<7, NScheme::NTypeIds::Byte> {};
         struct WaitTxId : Column<8, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
@@ -1627,7 +1671,8 @@ struct Schema : NIceDb::Schema {
             Issue,
             SrcPrefix,
             EncryptionIV,
-            SrcPath
+            SrcPath,
+            Topic
         >;
     };
 
@@ -1725,6 +1770,7 @@ struct Schema : NIceDb::Schema {
         struct VirtualTimestamps : Column<7, NScheme::NTypeIds::Bool> {};
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1736,7 +1782,8 @@ struct Schema : NIceDb::Schema {
             Format,
             VirtualTimestamps,
             AwsRegion,
-            ResolvedTimestampsIntervalMs
+            ResolvedTimestampsIntervalMs,
+            SchemaChanges
         >;
     };
 
@@ -1750,6 +1797,7 @@ struct Schema : NIceDb::Schema {
         struct VirtualTimestamps : Column<7, NScheme::NTypeIds::Bool> {};
         struct AwsRegion : Column<8, NScheme::NTypeIds::Utf8> {};
         struct ResolvedTimestampsIntervalMs : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct SchemaChanges: Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
         using TColumns = TableColumns<
@@ -1761,7 +1809,8 @@ struct Schema : NIceDb::Schema {
             Format,
             VirtualTimestamps,
             AwsRegion,
-            ResolvedTimestampsIntervalMs
+            ResolvedTimestampsIntervalMs,
+            SchemaChanges
         >;
     };
 
@@ -2028,6 +2077,28 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SysView : Table<119> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SysViewType : Column<3, NScheme::NTypeIds::Uint32> { using Type = NKikimrSysView::ESysViewType; };
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, SysViewType>;
+    };
+
+    // Header table for the overall incremental restore operation
+    struct IncrementalRestoreOperations : Table<120> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+
+        struct Operation : Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<
+            Id,
+            Operation
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2144,7 +2215,9 @@ struct Schema : NIceDb::Schema {
         DataErasureGenerations,
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
-        WaitingDataErasureShards
+        WaitingDataErasureShards,
+        SysView,
+        IncrementalRestoreOperations
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

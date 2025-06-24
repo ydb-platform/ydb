@@ -45,7 +45,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
             .SetPriority(NActors::NLog::PRI_DEBUG)
@@ -55,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         while (csController->GetCompactionStartedCounter().Val() == 0) {
-            Cout << "Wait indexation..." << Endl;
+            Cout << "Wait compaction..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
         while (!Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount() ||
@@ -64,7 +67,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                  << csController->GetIndexWriteControllerBrokeCount().Val() << Endl;
             Sleep(TDuration::Seconds(2));
         }
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         const auto startInstant = TMonotonic::Now();
         while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize() &&
@@ -80,7 +82,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
         csController->SetIndexWriteControllerEnabled(false);
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -94,9 +95,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
         TTypedLocalHelper("Utf8", kikimr).ExecuteSchemeQuery("DROP TABLE `/Root/olapStore/olapTable`;");
-        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
-        csController->WaitIndexation(TDuration::Seconds(5));
         csController->WaitCompactions(TDuration::Seconds(5));
     }
 
@@ -104,13 +103,15 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NOlap::TWaitCompactionController>();
         csController->SetSmallSizeDetector(1000000);
         csController->SetIndexWriteControllerEnabled(false);
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1000));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(100));
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::GC);
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->ResetWriteCounters();
 
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
             .SetPriority(NActors::NLog::PRI_DEBUG)
@@ -121,7 +122,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
 
         while (csController->GetCompactionStartedCounter().Val() == 0) {
-            Cout << "Wait indexation..." << Endl;
+            Cout << "Wait compaction..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
         while (Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetWritesCount() < 20 ||
@@ -130,7 +131,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
                  << csController->GetIndexWriteControllerBrokeCount().Val() << Endl;
             Sleep(TDuration::Seconds(2));
         }
-        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(5));
         AFL_VERIFY(Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize());
@@ -195,13 +195,15 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(MultiWriteInTime) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", kikimr);
         helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
         auto writeSession = helper.StartWriting("/Root/olapStore/olapTable");
         writeSession.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
@@ -250,13 +252,14 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableColumnShardConfig()->SetWritingBufferDurationMs(15000);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         TTypedLocalHelper helper("Utf8", "Utf8", kikimr);
         helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         auto writeGuard = helper.StartWriting("/Root/olapStore/olapTable");
         writeGuard.FillTable("field", NArrow::NConstruction::TStringPoolFiller(1, 1, "aaa", 1), 0, 800000);
         Sleep(TDuration::Seconds(1));
@@ -313,9 +316,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
-        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_BLOBS }, "CS")
             .SetPriority(NActors::NLog::PRI_DEBUG)
@@ -337,7 +342,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
         }
 
         while (csController->GetCompactionStartedCounter().Val() == 0) {
-            Cerr << "Wait indexation..." << Endl;
+            Cerr << "Wait compaction..." << Endl;
             Sleep(TDuration::Seconds(2));
         }
         {

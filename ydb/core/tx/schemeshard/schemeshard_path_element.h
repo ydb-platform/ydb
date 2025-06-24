@@ -136,6 +136,7 @@ public:
     bool IsExternalDataSource() const;
     bool IsIncrementalBackupTable() const;
     bool IsView() const;
+    bool IsSysView() const;
     bool IsTemporary() const;
     bool IsResourcePool() const;
     bool IsBackupCollection() const;

@@ -40,6 +40,8 @@ using namespace NBackupRestoreTraits;
 struct TChangefeedExportDescriptions {
     const Ydb::Table::ChangefeedDescription ChangefeedDescription;
     const Ydb::Topic::DescribeTopicResult Topic;
+    TString Name;
+    TString Prefix;
 };
 
 class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
@@ -241,12 +243,15 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         PutPermissions(Permissions.GetRef());
     }
 
-    void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedName) {
-        PutMessage(changefeed, Settings.GetChangefeedKey(changefeedName), ChangefeedChecksum, &TThis::StateUploadChangefeed, Settings.EncryptionSettings.GetChangefeedIV());
-    }
-
-    const TString& GetCurrentChangefeedName() const {
-        return Changefeeds.at(IndexExportedChangefeed).ChangefeedDescription.Getname();
+    void PutChangefeedDescription(ui64 changefeedIndex) {
+        const auto& desc = Changefeeds[changefeedIndex];
+        PutMessage(
+            desc.ChangefeedDescription,
+            Settings.GetChangefeedKey(desc.Prefix),
+            ChangefeedChecksum,
+            &TThis::StateUploadChangefeed,
+            Settings.EncryptionSettings.GetChangefeedIV(static_cast<ui32>(changefeedIndex))
+        );
     }
 
     void UploadChangefeed() {
@@ -259,15 +264,22 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             this->Become(&TThis::StateUploadData);
             return;
         }
-        PutChangefeedDescription(Changefeeds[IndexExportedChangefeed].ChangefeedDescription, GetCurrentChangefeedName());
+        PutChangefeedDescription(IndexExportedChangefeed);
     }
 
-    void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedName) {
-        PutMessage(topic, Settings.GetTopicKey(changefeedName), TopicChecksum, &TThis::StateUploadTopic, Settings.EncryptionSettings.GetTopicIV());
+    void PutTopicDescription(ui64 changefeedIndex) {
+        const auto& desc = Changefeeds[changefeedIndex];
+        PutMessage(
+            desc.Topic,
+            Settings.GetTopicKey(desc.Prefix),
+            TopicChecksum,
+            &TThis::StateUploadTopic,
+            Settings.EncryptionSettings.GetChangefeedTopicIV(static_cast<ui32>(changefeedIndex))
+        );
     }
 
     void UploadTopic() {
-        PutTopicDescription(Changefeeds[IndexExportedChangefeed].Topic, GetCurrentChangefeedName());
+        PutTopicDescription(IndexExportedChangefeed);
     }
 
     void UploadMetadata() {
@@ -349,7 +361,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             UploadTopic();
         };
         if (EnableChecksums) {
-            TString checksumKey = ChecksumKey(Settings.GetChangefeedKey(GetCurrentChangefeedName()));
+            const auto& desc = Changefeeds[IndexExportedChangefeed];
+            TString checksumKey = ChecksumKey(Settings.GetChangefeedKey(desc.Prefix));
             UploadChecksum(std::move(ChangefeedChecksum), checksumKey, ChangefeedKeySuffix(false), nextStep);
         } else {
             nextStep();
@@ -372,7 +385,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             UploadChangefeed();
         };
         if (EnableChecksums) {
-            TString checksumKey = ChecksumKey(Settings.GetTopicKey(GetCurrentChangefeedName()));
+            const auto& desc = Changefeeds[IndexExportedChangefeed];
+            TString checksumKey = ChecksumKey(Settings.GetTopicKey(desc.Prefix));
             UploadChecksum(std::move(TopicChecksum), checksumKey, TopicKeySuffix(false), nextStep);
         } else {
             nextStep();
@@ -928,7 +942,13 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    TVector <TChangefeedExportDescriptions> changefeeds;
+    const bool encrypted = Task.HasEncryptionSettings();
+
+    TMetadata metadata;
+    metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
+    metadata.SetEnablePermissions(Task.GetEnablePermissions());
+
+    TVector<TChangefeedExportDescriptions> changefeeds;
     if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
         const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
         const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
@@ -951,16 +971,27 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             topic.clear_self();
             topic.clear_topic_stats();
 
-            changefeeds.emplace_back(changefeed, topic);
+            auto& descr = changefeeds.emplace_back(changefeed, topic);
+            descr.Name = descr.ChangefeedDescription.name();
+            if (encrypted) {
+                // Anonymize changefeed name in export
+                std::stringstream prefix;
+                prefix << std::setfill('0') << std::setw(3) << std::right << (i + 1);
+                descr.Prefix = prefix.str();
+            } else {
+                descr.Prefix = descr.Name;
+            }
+
+            metadata.AddChangefeed(TChangefeedMetadata{
+                .ExportPrefix = descr.Prefix,
+                .Name = descr.Name,
+            });
         }
     }
 
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
-
-    TMetadata metadata;
-    metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
 
     TFullBackupMetadata::TPtr backup = new TFullBackupMetadata{
         .SnapshotVts = TVirtualTimestamp(

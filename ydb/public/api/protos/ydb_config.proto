@@ -114,7 +114,8 @@ message FetchConfigRequest {
     message FetchModeAll {
         // Use this option to somehow transform main config
         // Currently used to automatically derive detached StorageSection from MainConfig
-        //     or vice versa
+        //     or vice versa, and to add some internally-managed sections into config for
+        //     explicit user control
         oneof config_transform {
             // Optionally may be set to explicitly tell "do not transform anything"
             google.protobuf.Empty none = 1;
@@ -130,6 +131,13 @@ message FetchConfigRequest {
             // (MainConfig*, StorageConfig) -> (MainConfig)
             // MainConfig with asterisk means MainConfig with excluded storage-related sections
             google.protobuf.Empty attach_storage_config_section = 3;
+
+            // Fetch will return MainConfig with added blob_storage_config and domains_config sections in order to
+            //    downgrade to configuration v1.
+            google.protobuf.Empty add_blob_storage_and_domains_config = 4;
+
+            // Fetch will return MainConfig/StorageConfig with added blob_storage_config and explicit_* sections
+            google.protobuf.Empty add_explicit_sections = 5;
         }
     }
 

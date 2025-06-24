@@ -8,11 +8,11 @@ namespace NYT {
 
 TChunkedOutputStream::TChunkedOutputStream(
     TRefCountedTypeCookie tagCookie,
-    IMemoryUsageTrackerPtr memoryUsageTracker,
+    ISimpleMemoryUsageTrackerPtr memoryUsageTracker,
     size_t initialReserveSize,
     size_t maxReserveSize)
     : MemoryUsageTracker_(std::move(memoryUsageTracker))
-    , CurrentChunkMemoryUsageGuard_(TMemoryUsageTrackerGuard::Build(MemoryUsageTracker_))
+    , CurrentChunkMemoryUsageGuard_(TSimpleMemoryUsageTrackerGuard::Build(MemoryUsageTracker_))
     , MaxReserveSize_(RoundUpToPage(maxReserveSize))
     , CurrentReserveSize_(RoundUpToPage(initialReserveSize))
     , CurrentChunk_(tagCookie, /*size*/ 0)
@@ -26,7 +26,10 @@ TChunkedOutputStream::TChunkedOutputStream(
 
 std::vector<TSharedRef> TChunkedOutputStream::Finish()
 {
-    FinishedChunks_.push_back(TrackMemory(MemoryUsageTracker_, TSharedRef::FromBlob(std::move(CurrentChunk_))));
+    FinishedChunks_.push_back(TrackMemory(
+        MemoryUsageTracker_,
+        TSharedRef::FromBlob(std::move(CurrentChunk_))));
+
     CurrentChunkMemoryUsageGuard_.Release();
 
     YT_ASSERT(CurrentChunk_.IsEmpty());
@@ -53,7 +56,10 @@ void TChunkedOutputStream::ReserveNewChunk(size_t spaceRequired)
 {
     YT_ASSERT(CurrentChunk_.Size() == CurrentChunk_.Capacity());
     FinishedSize_ += CurrentChunk_.Size();
-    FinishedChunks_.push_back(TrackMemory(MemoryUsageTracker_, TSharedRef::FromBlob(std::move(CurrentChunk_))));
+    FinishedChunks_.push_back(TrackMemory(
+        MemoryUsageTracker_,
+        TSharedRef::FromBlob(std::move(CurrentChunk_))));
+
     CurrentReserveSize_ = std::min(2 * CurrentReserveSize_, MaxReserveSize_);
     CurrentChunk_.Reserve(std::max(RoundUpToPage(spaceRequired), CurrentReserveSize_));
     UpdateCurrentChunkMemoryUsage();
@@ -106,7 +112,9 @@ char* TChunkedOutputStream::Preallocate(size_t size)
     size_t available = CurrentChunk_.Capacity() - CurrentChunk_.Size();
     if (available < size) {
         FinishedSize_ += CurrentChunk_.Size();
-        FinishedChunks_.push_back(TrackMemory(MemoryUsageTracker_, TSharedRef::FromBlob(std::move(CurrentChunk_))));
+        FinishedChunks_.push_back(TrackMemory(
+            MemoryUsageTracker_,
+            TSharedRef::FromBlob(std::move(CurrentChunk_))));
 
         CurrentReserveSize_ = std::min(2 * CurrentReserveSize_, MaxReserveSize_);
 

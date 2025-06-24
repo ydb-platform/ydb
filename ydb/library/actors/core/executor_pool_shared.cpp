@@ -49,6 +49,48 @@ namespace NActors {
         });
     }
 
+    namespace {
+        bool CheckPoolAdjacency(const TPoolManager& poolManager, i16 poolId, i16 adjacentPoolId) {
+            if (poolId == adjacentPoolId) {
+                return true;
+            }
+            Y_ABORT_UNLESS((ui32)poolId < poolManager.PoolInfos.size());
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            return std::find(poolInfo.AdjacentPools.begin(), poolInfo.AdjacentPools.end(), adjacentPoolId) != poolInfo.AdjacentPools.end();
+        }
+
+        bool HasAdjacentPools(const TPoolManager& poolManager, i16 poolId) {
+            Y_ABORT_UNLESS((ui32)poolId < poolManager.PoolInfos.size());
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            return !poolInfo.AdjacentPools.empty();
+        }
+
+        i16 NextAdjacentPool(const TPoolManager& poolManager, i16 poolId, i16 currentPoolId) {
+            if (poolId == currentPoolId) {
+                if (poolManager.PoolInfos[poolId].AdjacentPools.empty()) {
+                    return poolId;
+                }
+                return poolManager.PoolInfos[poolId].AdjacentPools[0];
+            }
+            Y_ABORT_UNLESS((ui32)poolId < poolManager.PoolInfos.size());
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            auto it = std::find(poolInfo.AdjacentPools.begin(), poolInfo.AdjacentPools.end(), currentPoolId);
+            if (it == poolInfo.AdjacentPools.end() || it + 1 == poolInfo.AdjacentPools.end()) {
+                return poolId;
+            }
+            return *(it + 1);
+        }
+
+        std::optional<i16> GetForcedForeignSlots(const TPoolManager& poolManager, i16 poolId) {
+            const auto& poolInfo = poolManager.PoolInfos[poolId];
+            if (poolInfo.ForcedForeignSlots) {
+                return poolInfo.ForcedForeignSlots;
+            }
+            return std::nullopt;
+        }
+
+    }
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TSharedExecutorPool::TSharedExecutorPool(
@@ -119,7 +161,7 @@ namespace NActors {
                 continue;
             }
 
-            if (thread.OwnerPoolId == i) {
+            if (CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, i)) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "ownerPoolId == poolId; ownerPoolId == ", thread.OwnerPoolId, " poolId == ", i);
                 return i;
             }
@@ -163,8 +205,10 @@ namespace NActors {
         auto &thread = Threads[workerId];
         thread.UnsetWork();
         TMailbox *mailbox = nullptr;
+        bool hasAdjacentPools = HasAdjacentPools(PoolManager, thread.OwnerPoolId);
         while (!StopFlag.load(std::memory_order_acquire)) {
-            if (hpnow < thread.SoftDeadlineForPool || thread.CurrentPoolId == thread.OwnerPoolId) {
+            bool adjacentPool = CheckPoolAdjacency(PoolManager, thread.OwnerPoolId, thread.CurrentPoolId);
+            if (hpnow < thread.SoftDeadlineForPool || !hasAdjacentPools && adjacentPool) {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "continue same pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 if (thread.SoftDeadlineForPool == Max<NHPTimer::STime>()) {
                     thread.SoftDeadlineForPool = GetCycleCountFast() + thread.SoftProcessingDurationTs;
@@ -182,6 +226,7 @@ namespace NActors {
                     EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "no mailbox and need to find new pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool);
                     TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
                     if (thread.CurrentPoolId != thread.OwnerPoolId) {
+                        thread.AdjacentPoolId = NextAdjacentPool(PoolManager, thread.OwnerPoolId, thread.AdjacentPoolId);
                         SwitchToPool(thread.OwnerPoolId, hpnow);
                         continue;
                     }
@@ -191,10 +236,11 @@ namespace NActors {
                 EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no mailbox and no need to wait; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
                 return nullptr;
             } else {
-                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "comeback to owner pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool, " hpnow == ", hpnow, " softDeadlineForPool == ", thread.SoftDeadlineForPool);
+                EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "change adjacent pool; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId, " processedActivationsByCurrentPool == ", TlsThreadContext->ProcessedActivationsByCurrentPool, " hpnow == ", hpnow, " softDeadlineForPool == ", thread.SoftDeadlineForPool);
                 TlsThreadContext->ProcessedActivationsByCurrentPool = 0;
-                SwitchToPool(thread.OwnerPoolId, hpnow);
-                // after soft deadline we check owner pool again
+                thread.AdjacentPoolId = NextAdjacentPool(PoolManager, thread.OwnerPoolId, thread.AdjacentPoolId);
+                SwitchToPool(thread.AdjacentPoolId, hpnow);
+                // after soft deadline we check adjacent pool
                 continue;
             }
             bool goToSleep = true;
@@ -309,7 +355,7 @@ namespace NActors {
             Y_ABORT_UNLESS(Threads[i].OwnerPoolId < static_cast<i16>(Pools.size()), "OwnerPoolId is out of range i %" PRIu16 " OwnerPoolId == %" PRIu16, i, Threads[i].OwnerPoolId);
             Y_ABORT_UNLESS(Threads[i].OwnerPoolId >= 0, "OwnerPoolId is out of range i %" PRIu16 " OwnerPoolId == %" PRIu16, i, Threads[i].OwnerPoolId);
             EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::ExecutorPool, "create thread ", i, " OwnerPoolId == ", Threads[i].OwnerPoolId);
-            Threads[i].Thread.reset(    
+            Threads[i].Thread.reset(
                 new TExecutorThread(
                     i,
                     actorSystem,
@@ -492,8 +538,6 @@ namespace NActors {
         return false;
     }
 
-
-    
     void TSharedExecutorPool::FillForeignThreadsAllowed(std::vector<i16>& foreignThreadsAllowed) const {
         foreignThreadsAllowed.resize(PoolManager.PoolInfos.size());
         for (ui64 i = 0; i < foreignThreadsAllowed.size(); ++i) {
@@ -523,6 +567,9 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::SetForeignThreadSlots(i16 poolId, i16 slots) {
+        if (auto forcedSlots = GetForcedForeignSlots(PoolManager, poolId)) {
+            return;
+        }
         i16 current = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire);
         if (current == slots) {
             return;

@@ -33,7 +33,7 @@ protected:
         // Recurse into children
         TEnergy Eg_stack = Eg;
         Eg = 0;
-        ApplyTo<const TShareNode>(group, [=] (const TShareNode* node) {
+        ApplyTo<const TShareNode>(group, [=, this] (const TShareNode* node) {
             Eg += node->E();
         });
         group->AcceptInChildren(this);

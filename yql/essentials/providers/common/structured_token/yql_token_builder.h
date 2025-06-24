@@ -25,7 +25,7 @@ public:
     TString ToJson() const;
 
 private:
-    TStructuredToken Data;
+    TStructuredToken Data_;
 };
 
 class TStructuredTokenParser {
@@ -45,7 +45,7 @@ public:
     TStructuredTokenBuilder ToBuilder() const;
 
 private:
-    const TStructuredToken Data;
+    const TStructuredToken Data_;
 };
 
 TStructuredTokenParser CreateStructuredTokenParser(const TString& content);

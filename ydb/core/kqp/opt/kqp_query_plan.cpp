@@ -244,8 +244,8 @@ public:
                 planNode.TypeName = "Effect";
                 Visit(TExprBase(stage), planNode);
             } else if (stageBase.Outputs()) { // Sink
+                AFL_ENSURE(stageBase.Outputs().Cast().Size() == 1);
                 auto& planNode = AddPlanNode(phaseNode);
-                planNode.TypeName = "Sink";
                 Visit(TExprBase(stage), planNode);
             }
         }
@@ -506,6 +506,13 @@ private:
                 } else {
                     keyColumns.AppendValue(TString(column.Value()));
                 }
+            }
+
+            auto& hashFunc = planNode.NodeInfo["HashFunc"];
+            if (hashShuffle.HashFunc().IsValid()) {
+                hashFunc = hashShuffle.HashFunc().Cast().StringValue();
+            } else {
+                hashFunc = "HashV1";
             }
         } else if (auto merge = connection.Maybe<TDqCnMerge>()) {
             planNode.TypeName = "Merge";
@@ -960,7 +967,8 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), stagePlanNode);
+                        AFL_ENSURE(outputs.Cast().Size() == 1);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
                     }
                 }
             }
@@ -1178,6 +1186,8 @@ private:
                     return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
                 }
             }
+        } else if (auto olapApply = TMaybeNode<TKqpOlapApply>(node)) {
+            return NPlanUtils::ExtractPredicate(olapApply.Cast().Lambda()).Body;
         }
 
         for (const auto& child: node->Children()) {
@@ -2258,7 +2268,13 @@ struct TQueryPlanReconstructor {
             result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
 
             if (plan.GetMapSafe().at("Node Type") == "HashShuffle") {
-                result["Node Type"] = TStringBuilder{} << "HashShuffle (KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ")";
+                    TStringBuilder stringBuilder;
+                    stringBuilder << "HashShuffle (" <<
+                        "KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ", " <<
+                        "HashFunc: "   << plan.GetMapSafe().at("HashFunc")
+                    << ")";
+
+                result["Node Type"] = stringBuilder;
             }
 
             if (plan.GetMapSafe().contains("CTE Name")) {

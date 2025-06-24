@@ -544,7 +544,6 @@ public:
     }
 
     void AddOffsetsToTransaction() {
-        LOG_I("begin request for TopicOperations");
         YQL_ENSURE(QueryState);
         if (!PrepareQueryTransaction()) {
             return;
@@ -555,7 +554,6 @@ public:
         if (!AreAllTheTopicsAndPartitionsKnown()) {
             auto navigate = QueryState->BuildSchemeCacheNavigate();
             Become(&TKqpSessionActor::ExecuteState);
-            LOG_I("begin request for SchemeNavigate");
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
             return;
         }
@@ -571,10 +569,7 @@ public:
             return;
         }
 
-        LOG_I("end request for TopicOperations");
         ReplySuccess();
-
-        LOG_I("after ReplySuccess");
     }
 
     void CompileQuery() {
@@ -2780,10 +2775,8 @@ private:
     }
 
     void ProcessTopicOps(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        LOG_I("end request for SchemeNavigate");
         YQL_ENSURE(ev->Get()->Request);
         if (ev->Get()->Request->Cookie < QueryId) {
-            LOG_I("unexpected return #2");
             return;
         }
 
@@ -2808,21 +2801,18 @@ private:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
-            LOG_I("begin request for WriteId");
-            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
-        } else {
-            LOG_I("end request for TopicOperations");
-            ReplySuccess();
+        QueryState->TxCtx->TopicOperations.CacheSchemeCacheNavigate(response->ResultSet);
 
-            LOG_I("after ReplySuccess");
+        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
+            return;
         }
+
+        ReplySuccess();
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_I("end request for WriteId");
         if (CurrentStateFunc() != &TThis::ExecuteState || ev->Cookie < QueryId) {
-            LOG_I("unexpected return #1");
             return;
         }
 
@@ -2831,11 +2821,7 @@ private:
 
         SetTopicWriteId(NLongTxService::TLockHandle(ev->Get()->TxId, TActivationContext::ActorSystem()));
 
-        LOG_I("end request for TopicOperations");
         ReplySuccess();
-
-        LOG_I("current state: " << CurrentStateFuncName());
-        LOG_I("after ReplySuccess");
     }
 
     bool HasTopicWriteOperations() const {

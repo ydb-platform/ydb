@@ -934,10 +934,11 @@ public:
             }
         );
 
-        auto shufflingsFsm = MakeSimpleShared<TOrderingsStateMachine>(InterestingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
-        // auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
+        YQL_CLOG(TRACE, CoreDq) << InterestingOrderingsCollector.FDStorage.ToString();
 
-        TSimpleSharedPtr<TOrderingsStateMachine> sortingsFsm;
+        auto shufflingsFsm = MakeSimpleShared<TOrderingsStateMachine>(InterestingOrderingsCollector.FDStorage, TOrdering::EType::EShuffle);
+        auto sortingsFsm = MakeSimpleShared<TOrderingsStateMachine>(std::move(InterestingOrderingsCollector.FDStorage), TOrdering::EType::ESorting);
+
         LogReport(shufflingsFsm, sortingsFsm);
 
         return std::make_tuple(std::move(shufflingsFsm), std::move(sortingsFsm));
@@ -1025,17 +1026,17 @@ private:
                     sortingsOrderingIdxes.push_back(std::move(idx));
                 }
             } else {
+                if (stats->ShuffledByColumns) {
+                    auto shuffling = TShuffling(stats->ShuffledByColumns->Data).SetNatural();
+                    TString idx = ToString(FDStorage.AddShuffling(shuffling, nullptr));
+                    shufflingOrderingIdxes.push_back(std::move(idx));
+                }
+
                 if (stats->KeyColumns) {
                     auto sortedBy = stats->KeyColumns->ToJoinColumns("");
                     auto sorting = TSorting(sortedBy, GetDirs(sortedBy.size()));
                     TString idx = ToString(FDStorage.AddSorting(sorting, nullptr));
                     sortingsOrderingIdxes.push_back(std::move(idx));
-                }
-
-                if (stats->ShuffledByColumns) {
-                    auto shuffling = TShuffling(stats->ShuffledByColumns->Data).SetNatural();
-                    TString idx = ToString(FDStorage.AddShuffling(shuffling, nullptr));
-                    shufflingOrderingIdxes.push_back(std::move(idx));
                 }
             }
 

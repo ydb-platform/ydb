@@ -374,8 +374,7 @@ void TFDStorage::ApplyNaturalOrderings() {
     InterestingOrderings.erase(
         std::unique(
             InterestingOrderings.begin(),
-            InterestingOrderings.end(),
-            [](const TOrdering& lhs, const TOrdering& rhs){ return lhs.Items == rhs.Items; }
+            InterestingOrderings.end()
         ),
         InterestingOrderings.end()
     );

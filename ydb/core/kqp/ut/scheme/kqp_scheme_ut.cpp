@@ -1159,7 +1159,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithPartitionSize(true);
     }
 
-    Y_UNIT_TEST_TWIN(RenameTable, СolumnTable) {
+    Y_UNIT_TEST_TWIN(RenameTable, ColumnTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1172,8 +1172,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value String,
                 PRIMARY KEY (Key)
             )
-            )") 
-            + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
+            )")
+            + (ColumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -1212,7 +1212,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value String,
                 PRIMARY KEY (Key)
             )
-            )" + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
+            )" + (ColumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -3617,7 +3617,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "unsupported index type to build");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "building global unique index is disabled");
         }
     }
 
@@ -3648,7 +3648,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ));
             auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::BAD_REQUEST, op.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "unsupported index type to build");
+            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "building global unique index is disabled");
         }
     }
 

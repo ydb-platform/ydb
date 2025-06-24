@@ -3,7 +3,6 @@ import pytest
 from .conftest import LoadSuiteBase, LoadSuiteParallel
 from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper, CheckCanonicalPolicy
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 
 
@@ -12,7 +11,7 @@ QUERY_NAMES = [f'Query{query_num:02d}' for query_num in range(0, 43)]
 
 class TestClickbench(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.Clickbench
-    path = get_external_param('table-path-clickbench', YdbCluster.get_tables_path('clickbench/hits'))
+    path = get_external_param('table-path-clickbench', 'clickbench/hits')
 
     @classmethod
     def do_setup_class(cls):
@@ -66,7 +65,7 @@ class ClickbenchParallelBase(LoadSuiteParallel):
         return QUERY_NAMES
 
     def get_path() -> str:
-        return get_external_param('table-path-clickbench', YdbCluster.get_tables_path('clickbench/hits'))
+        return get_external_param('table-path-clickbench', 'clickbench/hits')
 
     @classmethod
     def do_setup_class(cls):

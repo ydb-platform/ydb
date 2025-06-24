@@ -25,7 +25,7 @@
 {%-                 set all_sets = all_sets + current_target.resource_sets -%}
 {%-             endif -%}
 {#-             Output is relative in export_root -#}
-{%-             set out_set = all_sets|selectattr('realdir', 'in', export_root + "/" + bindir) -%}
+{%-             set out_set = all_sets|selectattr('realdir', 'startsWith', export_root)|selectattr('realdir', 'in', export_root + "/" + bindir) -%}
 {%-             if out_set|length -%}
 {%-                 set out_set = out_set|first -%}
 {%-                 set out_dir = out_set.dir -%}

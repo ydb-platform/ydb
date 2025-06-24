@@ -553,7 +553,7 @@ class StabilityCluster:
                 )
                 node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
         self.prepare_cluster_yaml()
-        
+
     def prepare_cluster_yaml(self):
         for node in self.kikimr_cluster.nodes.values():
             node.copy_file_or_dir(

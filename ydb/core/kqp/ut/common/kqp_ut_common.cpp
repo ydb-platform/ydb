@@ -1,6 +1,7 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
@@ -139,6 +140,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
         ServerSettings->SetEnableOlapCompression(true);
     }
+    ServerSettings->Controls = settings.Controls;
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);
@@ -153,7 +155,15 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     }
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
-    Server->EnableGRpc(grpcPort);
+
+    if (settings.GrpcServerOptions) {
+        auto options = settings.GrpcServerOptions;
+        options->SetPort(grpcPort);
+        options->SetHost("localhost");
+        Server->EnableGRpc(*options);
+    } else {
+        Server->EnableGRpc(grpcPort);
+    }
 
     RunCall([this, domain = settings.DomainRoot] {
         this->Server->SetupDefaultProfiles();
@@ -1396,7 +1406,7 @@ void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const 
     );
     auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-};  
+};
 
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
@@ -1556,7 +1566,7 @@ void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, 
         const TString selectPartitionStats(Q_(Sprintf(R"(
             SELECT *
             FROM `/Root/.sys/partition_stats`
-            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'   
+            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'
         )", (checkFollower ? "!=" : "="), tableName.c_str())));
 
         auto result = session.ExecuteDataQuery(selectPartitionStats, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1574,7 +1584,35 @@ void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, 
             Y_FAIL("!readsExpected, but there are read stats for %s", tableName.c_str());
         }
     }
-    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());    
+    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());
+}
+
+TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
+    auto response = Navigate(*server->GetRuntime(), sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    return response->ResultSet.at(0).TableId;
+}
+
+NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+    Tests::TServer* server, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+{
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    request->Record.SetCompactBorrowed(compactBorrowed);
+    runtime->SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime->GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+    return ev->Get()->Record;
+}
+
+void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed) {
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(server, sender, path);
+    auto tableId = ResolveTableId(server, sender, path);
+    for (auto shard : shards) {
+        CompactTable(server, shard, tableId, compactBorrowed);
+    }
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {

@@ -1000,6 +1000,10 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
         except Exception:
             text = str(text)
     
+    # Проверка наличия важных маркеров в исходном логе
+    has_verify_info = bool(re.search(r'VERIFY|verify', text, re.IGNORECASE))
+    has_critical_info = bool(re.search(r'CRITICAL ERROR|FATAL ERROR|PANIC', text, re.IGNORECASE))
+    
     # УЛУЧШЕННАЯ ЛОГИКА: Обрабатываем экранированные строки типа std_err:b'...'
     decoded_text = text
     
@@ -1291,11 +1295,131 @@ def extract_meaningful_error_info(text, max_length=1000, log_url=None):
             return f"No meaningful error found. [View full log]({log_url})"
         return "No meaningful error found"
     
+    # Проверка сохранения важной информации после базовой обработки
+    verify_preserved = has_verify_info and bool(re.search(r'VERIFY|verify', result, re.IGNORECASE))
+    critical_preserved = has_critical_info and bool(re.search(r'CRITICAL ERROR|FATAL ERROR|PANIC', result, re.IGNORECASE))
+    
+    # Фолбек на AI обработку, если потеряна важная информация
+    if (has_verify_info and not verify_preserved) or (has_critical_info and not critical_preserved):
+        logging.warning(f"Important information lost in basic processing. Falling back to AI processing.")
+        
+        # Используем AI для обработки лога, если потеряна важная информация
+        try:
+            ai_processed_error = process_single_log_with_ai(text, max_length)
+            
+            # Проверяем, сохранил ли AI важную информацию
+            ai_verify_preserved = has_verify_info and bool(re.search(r'VERIFY|verify', ai_processed_error, re.IGNORECASE))
+            ai_critical_preserved = has_critical_info and bool(re.search(r'CRITICAL ERROR|FATAL ERROR|PANIC', ai_processed_error, re.IGNORECASE))
+            
+            if (ai_verify_preserved or not has_verify_info) and (ai_critical_preserved or not has_critical_info):
+                logging.info("AI processing successfully preserved important information.")
+                result = ai_processed_error
+            else:
+                logging.warning("AI processing also lost important information. Using combined approach.")
+                # Если AI тоже потерял информацию, комбинируем результаты
+                result = f"{ai_processed_error}\n\nAdditional context: {result[:max_length // 2]}"
+        except Exception as e:
+            logging.error(f"Error during AI fallback processing: {e}")
+            # В случае ошибки при обработке AI, используем базовую обработку
+    
     # ВСЕГДА добавляем ссылку на лог в конце для валидации
     if log_url:
         result = result.strip() + f"\n[View full log]({log_url})"
     
     return result.strip()
+
+
+def process_single_log_with_ai(log_text, max_length=1000):
+    """
+    Обрабатывает отдельный лог с помощью AI для извлечения наиболее важной информации.
+    Особое внимание уделяется сохранению VERIFY информации и критических ошибок.
+    """
+    # Проверяем наличие важных маркеров
+    has_verify_info = bool(re.search(r'VERIFY|verify', log_text, re.IGNORECASE))
+    has_critical_info = bool(re.search(r'CRITICAL ERROR|FATAL ERROR|PANIC', log_text, re.IGNORECASE))
+    
+    # Если есть VERIFY или критические ошибки, извлекаем эти строки для включения в промпт
+    important_lines = []
+    if has_verify_info or has_critical_info:
+        for line in log_text.split('\n'):
+            if 'VERIFY failed' in line or 'requirement' in line and 'failed' in line:
+                important_lines.append(line.strip())
+            elif any(marker in line for marker in ['CRITICAL ERROR', 'FATAL ERROR', 'PANIC']):
+                important_lines.append(line.strip())
+            if len(important_lines) >= 10:  # Ограничиваем количество строк
+                break
+    
+    # Ограничиваем размер лога для обработки AI
+    log_for_ai = log_text
+    if len(log_text) > 15000:
+        # Если есть важные строки, добавляем их в начало сокращенного лога
+        if important_lines:
+            important_section = "\n".join(important_lines)
+            # Берем начало лога + важные строки + конец лога
+            log_for_ai = log_text[:7000] + "\n\n### IMPORTANT LINES ###\n" + important_section + "\n\n" + log_text[-7000:]
+        else:
+            log_for_ai = log_text[:15000]  # Берем только первые 15K символов для AI
+    
+    # Улучшенный промпт с акцентом на сохранение VERIFY информации
+    prompt = """
+    Extract the most important error information from this log. 
+    Focus on preserving VERIFY information, critical errors, and error causes.
+    
+    🔥 CRITICAL: If the log contains "VERIFY failed" or "requirement" with "failed", ALWAYS include 
+    the FULL VERIFY information with ALL numbers and details in your response.
+    
+    Provide a concise summary (max 1000 characters) that includes:
+    1. The main error message
+    2. Any VERIFY information - MUST INCLUDE FULL DETAILS (numbers, requirements, etc.)
+    3. Root cause if identifiable
+    4. Context (where the error occurred)
+    
+    EXAMPLES OF GOOD RESPONSES:
+    - "VERIFY failed (Z): Allocated: 41981872, Freed: 41975776, Peak: 6726904. VerifyDebug(): requirement GetUsage() == 0 failed. Daemon failed with message: Unexpectedly finished before stop."
+    - "Function 'DateTime2.Format' type mismatch: expected Type (Callable) with DateTime2.TM64, actual Type (Callable) with DateTime2.TM"
+    
+    Log:
+    """
+    
+    try:
+        # Вызываем AI для обработки лога
+        response = call_single_ai_request(prompt, {"log": log_for_ai})
+        
+        # Обрабатываем ответ AI
+        if response and isinstance(response, str):
+            # Проверяем, сохранил ли AI важную информацию
+            ai_verify_preserved = has_verify_info and bool(re.search(r'VERIFY|verify', response, re.IGNORECASE))
+            ai_critical_preserved = has_critical_info and bool(re.search(r'CRITICAL ERROR|FATAL ERROR|PANIC', response, re.IGNORECASE))
+            
+            # Если AI не сохранил важную информацию, добавляем ее принудительно
+            if has_verify_info and not ai_verify_preserved and important_lines:
+                verify_lines = [line for line in important_lines if 'VERIFY' in line or ('requirement' in line and 'failed' in line)]
+                if verify_lines:
+                    verify_info = " ".join(verify_lines)
+                    response = f"{response}\n\nVERIFY information: {verify_info}"
+                    logging.info(f"Added missing VERIFY information to AI response")
+            
+            # Ограничиваем длину ответа
+            if len(response) > max_length:
+                response = response[:max_length]
+            
+            return response.strip()
+        else:
+            logging.warning("AI returned invalid response format")
+            
+            # Если AI не сработал, но есть важная информация, возвращаем ее напрямую
+            if important_lines:
+                return "Critical information: " + " ".join(important_lines)
+            
+            return extract_error_essence(log_text, max_length)
+    except Exception as e:
+        logging.error(f"Error calling AI for log processing: {e}")
+        
+        # В случае ошибки, если есть важная информация, возвращаем ее напрямую
+        if important_lines:
+            return "Critical information: " + " ".join(important_lines)
+        
+        return extract_error_essence(log_text, max_length)
 
 
 def smart_compress_data_for_ai(data, target_token_limit=180000):
@@ -1572,8 +1696,8 @@ def process_error_batch_with_ai(batch_data):
         if isinstance(data, dict):
             original_log = data.get('original_log', '')
             basic_processing = data.get('basic_processing', '')
-            has_verify_original = 'VERIFY failed' in original_log
-            has_verify_basic = 'VERIFY failed' in basic_processing
+            has_verify_original = 'VERIFY' in original_log
+            has_verify_basic = 'VERIFY' in basic_processing
             
             logging.debug(f"  📋 {key}: original_log длина={len(original_log)}, VERIFY={'✅' if has_verify_original else '❌'}")
             logging.debug(f"  📋 {key}: basic_processing длина={len(basic_processing)}, VERIFY={'✅' if has_verify_basic else '❌'}")
@@ -1657,7 +1781,7 @@ def process_error_batch_with_ai(batch_data):
             # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ результата AI
             logging.debug(f"🤖 AI результат успешно распарсен, ключей: {len(ai_result)}")
             for key, result in ai_result.items():
-                has_verify_result = 'VERIFY failed' in result if result else False
+                has_verify_result = 'VERIFY' in result if result else False
                 logging.debug(f"  📤 {key}: длина={len(result) if result else 0}, VERIFY={'✅' if has_verify_result else '❌'}")
                 
                 if has_verify_result:
@@ -1744,8 +1868,8 @@ def smart_error_extraction_with_cache(test_data):
             basic_result = extract_meaningful_error_info(log_content, max_length=1500, log_url=log_url)
             
             # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ для VERIFY ошибок
-            has_verify_in_log = 'VERIFY failed' in log_content
-            has_verify_in_basic = 'VERIFY failed' in basic_result
+            has_verify_in_log = 'VERIFY' in log_content
+            has_verify_in_basic = 'VERIFY' in basic_result
             if has_verify_in_log:
                 logging.info(f"🔍 VERIFY DEBUGGING - Лог {test_name} ({status}):")
                 logging.info(f"  📋 Исходный лог содержит VERIFY: ✅")
@@ -1772,8 +1896,8 @@ def smart_error_extraction_with_cache(test_data):
                 
                 # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ данных для AI
                 if has_verify_in_log:
-                    has_verify_in_ai_original = 'VERIFY failed' in ai_data["log_0"]['original_log']
-                    has_verify_in_ai_basic = 'VERIFY failed' in ai_data["log_0"]['basic_processing']
+                    has_verify_in_ai_original = 'VERIFY' in ai_data["log_0"]['original_log']
+                    has_verify_in_ai_basic = 'VERIFY' in ai_data["log_0"]['basic_processing']
                     logging.info(f"  📤 AI данные - original_log содержит VERIFY: {'✅' if has_verify_in_ai_original else '❌'}")
                     logging.info(f"  📤 AI данные - basic_processing содержит VERIFY: {'✅' if has_verify_in_ai_basic else '❌'}")
                     
@@ -1795,7 +1919,7 @@ def smart_error_extraction_with_cache(test_data):
                     
                     # ДЕТАЛЬНОЕ ЛОГИРОВАНИЕ результата AI
                     if has_verify_in_log:
-                        has_verify_in_ai_result = 'VERIFY failed' in final_result
+                        has_verify_in_ai_result = 'VERIFY' in final_result
                         logging.info(f"  📤 AI результат содержит VERIFY: {'✅' if has_verify_in_ai_result else '❌'}")
                         logging.info(f"  📋 AI результат: {final_result[:300]}...")
                         
@@ -1805,8 +1929,8 @@ def smart_error_extraction_with_cache(test_data):
                             logging.warning(f"  🔍 Анализ проблемы:")
                             logging.warning(f"    - Исходный лог имел VERIFY: ✅")
                             logging.warning(f"    - Базовая обработка имела VERIFY: {'✅' if has_verify_in_basic else '❌'}")
-                            logging.warning(f"    - AI original_log имел VERIFY: {'✅' if 'VERIFY failed' in ai_data['log_0']['original_log'] else '❌'}")
-                            logging.warning(f"    - AI basic_processing имел VERIFY: {'✅' if 'VERIFY failed' in ai_data['log_0']['basic_processing'] else '❌'}")
+                            logging.warning(f"    - AI original_log имел VERIFY: {'✅' if 'VERIFY' in ai_data['log_0']['original_log'] else '❌'}")
+                            logging.warning(f"    - AI basic_processing имел VERIFY: {'✅' if 'VERIFY' in ai_data['log_0']['basic_processing'] else '❌'}")
                             logging.warning(f"    - AI результат имеет VERIFY: ❌")
                         else:
                             logging.info(f"  ✅ AI ПРАВИЛЬНО СОХРАНИЛ VERIFY ИНФОРМАЦИЮ")
@@ -1840,7 +1964,7 @@ def smart_error_extraction_with_cache(test_data):
             
             # ФИНАЛЬНАЯ ПРОВЕРКА для VERIFY ошибок
             if has_verify_in_log:
-                has_verify_in_final = 'VERIFY failed' in final_result
+                has_verify_in_final = 'VERIFY' in final_result
                 logging.info(f"  🎯 ИТОГОВЫЙ РЕЗУЛЬТАТ для VERIFY: {'✅ Сохранено' if has_verify_in_final else '❌ Потеряно'}")
                 if not has_verify_in_final:
                     logging.error(f"  💥 КРИТИЧЕСКАЯ ПРОБЛЕМА: VERIFY информация потеряна в финальном результате!")
@@ -2243,7 +2367,7 @@ def generate_enhanced_version_report_with_compatibility(version_data, ai_ready_d
                     key_error = 'Multiple daemon failures with unexpected termination'
                     
             # MEMORY VERIFICATION ошибки (высокий приоритет)
-            elif 'verify failed' in error_desc_lower:
+            elif 'verify' in error_desc_lower:
                 error_type = 'Memory Verification Errors (VERIFY)'
                 # Извлекаем конкретные детали VERIFY
                 verify_match = re.search(r'verify failed.*?allocated:.*?\d+.*?freed:.*?\d+.*?peak:.*?\d+', meaningful_error, re.IGNORECASE | re.DOTALL)
@@ -3508,8 +3632,8 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
         report_content += f"""## 📈❌ Регрессии ({len(regressions)})
 *Тесты, которые проходили в {version_a}, но падают в {version_b}*
 
-| Тест | Было ({version_a}) | Стало ({version_b}) | Контекст | Ошибка |
-|------|-------------------|---------------------|----------|--------|
+| Тест | Было ({version_a}) | Стало ({version_b}) | Контекст | Error Pattern | Ошибка |
+|------|-------------------|---------------------|----------|---------|--------|
 """
         
         # Сортируем регрессии по имени теста
@@ -3524,8 +3648,14 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             common_prefix = ''
         
         for reg in sorted_regressions:
+            # Форматируем ошибку для отображения
             error_formatted = format_error_for_html_table(
                 reg['error_description'], max_length=300, log_url=reg['log_url']
+            )
+            
+            # Получаем паттерн ошибки
+            error_pattern = format_error_pattern_for_table(
+                reg['error_description'], log_url=reg['log_url']
             )
             
             # Опционально сокращаем путь для лучшей читаемости
@@ -3534,7 +3664,7 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             else:
                 display_name = reg['test_name']
                 
-            report_content += f"| {display_name} | ✅ {reg['version_a_status']} | ❌ {reg['version_b_status']} | {reg['test_context']} | {error_formatted} |\n"
+            report_content += f"| {display_name} | ✅ {reg['version_a_status']} | ❌ {reg['version_b_status']} | {reg['test_context']} | {error_pattern} | {error_formatted} |\n"
     
     # Секция улучшений
     if improvements:
@@ -3542,8 +3672,8 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
 ## 📉✅ Улучшения ({len(improvements)})
 *Тесты, которые падали в {version_a}, но проходят в {version_b}*
 
-| Тест | Было ({version_a}) | Стало ({version_b}) | Контекст | Предыдущая ошибка |
-|------|-------------------|---------------------|----------|-------------------|
+| Тест | Было ({version_a}) | Стало ({version_b}) | Контекст | Error Pattern | Предыдущая ошибка |
+|------|-------------------|---------------------|----------|---------|-------------------|
 """
         
         # Сортируем улучшения по имени теста
@@ -3558,8 +3688,14 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             common_prefix = ''
         
         for imp in sorted_improvements:
+            # Форматируем ошибку для отображения
             error_formatted = format_error_for_html_table(
                 imp['error_description'], max_length=300, log_url=imp['log_url']
+            )
+            
+            # Получаем паттерн ошибки
+            error_pattern = format_error_pattern_for_table(
+                imp['error_description'], log_url=imp['log_url']
             )
             
             # Опционально сокращаем путь для лучшей читаемости
@@ -3568,7 +3704,7 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             else:
                 display_name = imp['test_name']
                 
-            report_content += f"| {display_name} | ❌ {imp['version_a_status']} | ✅ {imp['version_b_status']} | {imp['test_context']} | {error_formatted} |\n"
+            report_content += f"| {display_name} | ❌ {imp['version_a_status']} | ✅ {imp['version_b_status']} | {imp['test_context']} | {error_pattern} | {error_formatted} |\n"
     
     # Секция тестов совместимости
     if compatibility_tests:
@@ -3631,8 +3767,8 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
 ## 🔄 Общие падения ({len(common_failures)})
 *Тесты, которые падают в обеих версиях*
 
-| Тест | {version_a} | {version_b} | Контекст | Ошибка в {version_b} |
-|------|-------------|-------------|----------|---------------------|
+| Тест | {version_a} | {version_b} | Контекст | Error Pattern | Ошибка в {version_b} |
+|------|-------------|-------------|----------|---------|---------------------|
 """
         
         # Сортируем общие падения по имени теста
@@ -3648,8 +3784,14 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
         
         # Показываем все общие падения (убираем ограничение в 10)
         for common in sorted_common_failures:
+            # Форматируем ошибку для отображения
             error_formatted = format_error_for_html_table(
                 common['error_description'], max_length=200, log_url=common['log_url']
+            )
+            
+            # Получаем паттерн ошибки
+            error_pattern = format_error_pattern_for_table(
+                common['error_description'], log_url=common['log_url']
             )
             
             # Опционально сокращаем путь для лучшей читаемости
@@ -3658,7 +3800,7 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             else:
                 display_name = common['test_name']
                 
-            report_content += f"| {display_name} | ❌ {common['version_a_status']} | ❌ {common['version_b_status']} | {common['test_context']} | {error_formatted} |\n"
+            report_content += f"| {display_name} | ❌ {common['version_a_status']} | ❌ {common['version_b_status']} | {common['test_context']} | {error_pattern} | {error_formatted} |\n"
     
     # Секция пропущенных тестов (skipped)
     if skipped_tests:
@@ -3772,28 +3914,30 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
 ## ➕ Тесты только в {version_a} ({len(only_in_a)})
 *Тесты, которые есть в {version_a}, но отсутствуют в {version_b}*
 
-| Тест | Статус | Контекст | Ошибка |
-|------|--------|----------|--------|
+| Тест | Статус | Контекст | Error Pattern | Ошибка |
+|------|--------|----------|---------|--------|
 """
         
-        # Сортируем тесты по имени для лучшей читаемости
-        sorted_tests = sorted(only_in_a, key=lambda x: x['test_name'])
+        # Сортируем тесты только в version_a по имени
+        sorted_only_in_a = sorted(only_in_a, key=lambda x: x['test_name'])
         
         # Находим общий префикс путей для возможного сокращения
-        if len(sorted_tests) > 0:
-            common_prefix = os.path.commonprefix([t['test_name'] for t in sorted_tests])
-            # Если общий префикс заканчивается на '/', сохраняем его, иначе обрезаем до последнего '/'
+        if len(sorted_only_in_a) > 0:
+            common_prefix = os.path.commonprefix([t['test_name'] for t in sorted_only_in_a])
             if not common_prefix.endswith('/'):
                 common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
         else:
             common_prefix = ''
         
-        # Показываем все тесты только в A
-        for test in sorted_tests:
-            error_formatted = format_error_pattern_for_table(
+        for test in sorted_only_in_a:
+            error_formatted = format_error_for_html_table(
+                test['error_description'], max_length=200, log_url=test['log_url']
+            ) if test['error_description'] and test['status'] in ['failure', 'mute'] else 'N/A'
+            
+            # Получаем паттерн ошибки
+            error_pattern = format_error_pattern_for_table(
                 test['error_description'], log_url=test['log_url']
-            ) if test['error_description'] else 'N/A'
-            status_emoji = '✅' if test['status'] == 'passed' else '❌'
+            ) if test['error_description'] and test['status'] in ['failure', 'mute'] else 'N/A'
             
             # Опционально сокращаем путь для лучшей читаемости
             if len(common_prefix) > 10:  # Если есть значимый общий префикс
@@ -3801,7 +3945,7 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             else:
                 display_name = test['test_name']
                 
-            report_content += f"| {display_name} | {status_emoji} {test['status']} | {test['test_context']} | {error_formatted} |\n"
+            report_content += f"| {display_name} | {test['status']} | {test['test_context']} | {error_pattern} | {error_formatted} |\n"
     
     # Секция тестов только в version_b
     if only_in_b:
@@ -3809,28 +3953,30 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
 ## ➖ Тесты только в {version_b} ({len(only_in_b)})
 *Тесты, которые есть в {version_b}, но отсутствуют в {version_a}*
 
-| Тест | Статус | Контекст | Ошибка |
-|------|--------|----------|--------|
+| Тест | Статус | Контекст | Error Pattern | Ошибка |
+|------|--------|----------|---------|--------|
 """
         
-        # Сортируем тесты по имени для лучшей читаемости
-        sorted_tests = sorted(only_in_b, key=lambda x: x['test_name'])
+        # Сортируем тесты только в version_b по имени
+        sorted_only_in_b = sorted(only_in_b, key=lambda x: x['test_name'])
         
         # Находим общий префикс путей для возможного сокращения
-        if len(sorted_tests) > 0:
-            common_prefix = os.path.commonprefix([t['test_name'] for t in sorted_tests])
-            # Если общий префикс заканчивается на '/', сохраняем его, иначе обрезаем до последнего '/'
+        if len(sorted_only_in_b) > 0:
+            common_prefix = os.path.commonprefix([t['test_name'] for t in sorted_only_in_b])
             if not common_prefix.endswith('/'):
                 common_prefix = common_prefix.rsplit('/', 1)[0] + '/' if '/' in common_prefix else ''
         else:
             common_prefix = ''
         
-        # Показываем все тесты только в B
-        for test in sorted_tests:
-            error_formatted = format_error_pattern_for_table(
+        for test in sorted_only_in_b:
+            error_formatted = format_error_for_html_table(
+                test['error_description'], max_length=200, log_url=test['log_url']
+            ) if test['error_description'] and test['status'] in ['failure', 'mute'] else 'N/A'
+            
+            # Получаем паттерн ошибки
+            error_pattern = format_error_pattern_for_table(
                 test['error_description'], log_url=test['log_url']
-            ) if test['error_description'] else 'N/A'
-            status_emoji = '✅' if test['status'] == 'passed' else '❌'
+            ) if test['error_description'] and test['status'] in ['failure', 'mute'] else 'N/A'
             
             # Опционально сокращаем путь для лучшей читаемости
             if len(common_prefix) > 10:  # Если есть значимый общий префикс
@@ -3838,7 +3984,7 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             else:
                 display_name = test['test_name']
                 
-            report_content += f"| {display_name} | {status_emoji} {test['status']} | {test['test_context']} | {error_formatted} |\n"
+            report_content += f"| {display_name} | {test['status']} | {test['test_context']} | {error_pattern} | {error_formatted} |\n"
     
     # Секция тестов без изменений (только если есть изменения для контраста)
     if unchanged_tests and (regressions or improvements or only_in_a or only_in_b):
@@ -3911,12 +4057,12 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
         error_types = {}
         for reg in regressions:
             error_desc = reg['error_description'].lower()
-            if 'daemon failed' in error_desc or 'severaldaemonerrors' in error_desc:
-                error_types.setdefault('Daemon crashes', []).append(reg['test_name'])
+            if 'verify' in error_desc:
+                error_types.setdefault('VERIFY', []).append(reg['test_name'])
             elif 'memory limit' in error_desc or 'mkql memory' in error_desc:
                 error_types.setdefault('Memory issues', []).append(reg['test_name'])
-            elif 'verify failed' in error_desc:
-                error_types.setdefault('Memory verification', []).append(reg['test_name'])
+            elif 'daemon failed' in error_desc or 'severaldaemonerrors' in error_desc:
+                error_types.setdefault('Daemon crashes', []).append(reg['test_name'])
             elif 'type mismatch' in error_desc:
                 error_types.setdefault('Type compatibility', []).append(reg['test_name'])
             else:
@@ -3954,7 +4100,7 @@ def generate_single_version_comparison(version_a, version_b, grouped_data, outpu
             report_content += f"- ❌ **ТЕХНИЧЕСКИЙ ДОЛГ**: {failed_unchanged} тестов стабильно падают в обеих версиях\n"
     
     if skipped_tests:
-        report_content += f"- ⏩ **ПРОПУЩЕНО**: {len(skipped_tests)} тестов не выполнялись (skipped) в одной или обеих версиях\n"
+        report_content += f"- ⏩ **Пропущенные тесты** | {len(skipped_tests)} |\n"
     
     if not_run_recently:
         report_content += f"- ⏰ **УСТАРЕВШИЕ ДАННЫЕ**: {len(not_run_recently)} тестов не запускались более 24 часов\n"
@@ -3999,8 +4145,8 @@ def format_error_pattern_for_table(error_description, log_url=None):
         
         if 'severaldaemonerrors:' in error_lower or 'daemon failed with message:' in error_lower:
             pattern = '🔴 Daemon Crash'
-        elif 'verify failed' in error_lower or 'verifydebug' in error_lower:
-            pattern = '🔍 Memory Verification Failed'
+        elif 'verify' in error_lower or 'verifydebug' in error_lower:
+            pattern = '🔍 VERIFY'
         elif 'mkql memory limit exceeded' in error_lower:
             pattern = '💾 Memory Limit Exceeded'
         elif 'function' in error_lower and 'type mismatch' in error_lower:
@@ -4066,6 +4212,8 @@ def normalize_test_name_for_comparison(test_name):
     test_tpch1[restart_24-4_to_25-1-column-date64] -> test_tpch1[restart_VERSION_A_to_VERSION_B-column-date64]
     test_simple_queue[mixed_current_and_25-1-column] -> test_simple_queue[mixed_current_and_VERSION-column]
     test_simple_queue[mixed_current_and_stable-25-1-2-column] -> test_simple_queue[mixed_current_and_VERSION-column]
+    test_example[mixed_25-1] -> test_example[mixed_VERSION]
+    test_example[mixed_stable-25-1-2] -> test_example[mixed_VERSION]
     """
     if not test_name or '[' not in test_name:
         return test_name
@@ -4099,16 +4247,33 @@ def normalize_test_name_for_comparison(test_name):
         params
     )
     
-    # 3. Паттерн rolling_VERSION (для test_batch_update)
-    # Примеры: rolling_25-1-1_to_current -> rolling_VERSION
-    # Здесь может быть _to_ паттерн или просто версия
+    # 3. Паттерн mixed_VERSION (для test_example и др.)
+    # Примеры: mixed_25-1 -> mixed_VERSION, mixed_stable-25-1-2 -> mixed_VERSION
     params = re.sub(
-        r'rolling_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current)(?:_to_(?:stable-)?(?:\d+-\d+(?:-\d+)*|current))?)',
-        r'rolling_VERSION',
+        r'mixed_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current))(?!_and_)(.*)',
+        r'mixed_VERSION\2',
         params
     )
     
-    # 4. Общий паттерн для оставшихся версий
+    # 4. Паттерн mixed_VERSION_and_VERSION (для тестов совместимости)
+    # Примеры: mixed_25-1_and_24-4 -> mixed_VERSION_and_VERSION
+    # Примеры: mixed_stable-25-1-2_and_stable-24-4 -> mixed_VERSION_and_VERSION
+    params = re.sub(
+        r'mixed_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current))_and_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current))(.*)',
+        r'mixed_VERSION_and_VERSION\3',
+        params
+    )
+    
+    # 5. Паттерн rolling_VERSION (для test_batch_update)
+    # Примеры: rolling_25-1-1_to_current -> rolling_VERSION
+    # Здесь может быть _to_ паттерн или просто версия
+    params = re.sub(
+        r'rolling_((?:stable-)?(?:\d+-\d+(?:-\d+)*|current)(?:_to_(?:stable-)?(?:\d+-\d+(?:-\d+)*|current))?)(.*)',
+        r'rolling_VERSION\2',
+        params
+    )
+    
+    # 6. Общий паттерн для оставшихся версий
     # Заменяем отдельно стоящие версии вида X-Y, X-Y-Z, stable-X-Y, stable-X-Y-Z, current
     params = re.sub(
         r'\b(?:stable-)?(?:\d+-\d+(?:-\d+)?|current)\b',

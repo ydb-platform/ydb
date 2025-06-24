@@ -204,8 +204,14 @@ void TInfoCollector::Bootstrap() {
     Become(&TThis::StateWork);
 }
 
-THashMap<ui32, ui32> FlipPileMap(const auto pileMap) {
+using TPileMap = std::vector<std::vector<ui32>>;
+
+THashMap<ui32, ui32> FlipPileMap(const std::shared_ptr<const TPileMap> pileMap) {
     THashMap<ui32, ui32> result;
+
+    if (!pileMap)
+        return result;
+
     for (ui32 i = 0; i < pileMap->size(); ++i) {
         for (ui32 j : pileMap->at(i)) {
             result.emplace(j, i);
@@ -537,7 +543,8 @@ void TInfoCollector::RequestBridgeInfo() {
 
 void TInfoCollector::Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev) {
     const auto& bridgeInfo = ev->Get()->BridgeInfo;
-    Info->Piles = bridgeInfo->Piles;
+    if (bridgeInfo)
+        Info->Piles = bridgeInfo->Piles;
 }
 
 IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout) {

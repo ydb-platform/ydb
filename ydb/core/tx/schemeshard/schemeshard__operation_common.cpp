@@ -1,5 +1,5 @@
-#include "schemeshard__operation_common.h"
 #include "schemeshard__data_erasure_manager.h"
+#include "schemeshard__operation_common.h"
 
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>

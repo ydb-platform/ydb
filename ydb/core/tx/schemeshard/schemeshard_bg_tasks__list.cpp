@@ -1,6 +1,7 @@
+#include "schemeshard_impl.h"
+
 #include "olap/bg_tasks/events/global.h"
 #include "olap/bg_tasks/transactions/tasks_list.h"
-#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 

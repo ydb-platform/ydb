@@ -1,6 +1,5 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

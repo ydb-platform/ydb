@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/protos/backup.pb.h>
+
 #include <ydb/public/api/protos/draft/ydb_backup.pb.h>
 
 namespace NKikimr {

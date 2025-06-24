@@ -16,9 +16,9 @@
 
 #include <library/cpp/json/json_reader.h>
 
-#include <util/string/subst.h>
-
 #include <google/protobuf/text_format.h>
+
+#include <util/string/subst.h>
 
 #include <algorithm>
 

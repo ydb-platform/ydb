@@ -46,12 +46,12 @@
 
 #include <ydb/services/lib/sharding/sharding.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <util/generic/guid.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
 #include <util/generic/vector.h>
-
-#include <google/protobuf/util/message_differencer.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

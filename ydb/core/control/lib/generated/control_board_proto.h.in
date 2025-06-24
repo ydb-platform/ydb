@@ -59,9 +59,6 @@ public:
 protected:
     // Should not be called in registration only in params handling
     THashMap<TString, TIntrusivePtr<TControl>> GetAllAvailableControls() const;
-#if 0
-    THashMap<TString, TIntrusivePtr<TControl>> GetConfigControls() const;
-#endif
 
 public:
 {%- for control_class in root_control_classes %}

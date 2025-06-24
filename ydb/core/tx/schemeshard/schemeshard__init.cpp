@@ -5144,6 +5144,58 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read incremental restore operations
+        {
+            auto rowset = db.Table<Schema::IncrementalRestoreOperations>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TTxId txId = rowset.GetValue<Schema::IncrementalRestoreOperations::Id>();
+                TString serializedOp = rowset.GetValue<Schema::IncrementalRestoreOperations::Operation>();
+
+                NKikimrSchemeOp::TLongIncrementalRestoreOp op;
+                Y_ABORT_UNLESS(op.ParseFromString(serializedOp));
+
+                TOperationId opId(txId, 0);
+                Self->LongIncrementalRestoreOps[opId] = op;
+
+                // Restore table path states based on the operation
+                if (op.HasBackupCollectionPathId()) {
+                    TPathId backupCollectionPathId = TPathId(
+                        op.GetBackupCollectionPathId().GetOwnerId(),
+                        op.GetBackupCollectionPathId().GetLocalId()
+                    );
+
+                    // Set target tables to EPathStateIncomingIncrementalRestore
+                    for (const auto& tablePath : op.GetTablePathList()) {
+                        TPath resolvedPath = TPath::Resolve(tablePath, Self);
+                        if (resolvedPath.IsResolved() && Self->PathsById.contains(resolvedPath.Base()->PathId)) {
+                            auto targetPathElement = Self->PathsById.at(resolvedPath.Base()->PathId);
+                            targetPathElement->PathState = TPathElement::EPathState::EPathStateIncomingIncrementalRestore;
+                        }
+                    }
+
+                    // Set source backup collection to EPathStateOutgoingIncrementalRestore if it exists locally
+                    if (Self->PathsById.contains(backupCollectionPathId)) {
+                        auto sourcePath = Self->PathsById.at(backupCollectionPathId);
+                        sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+                    }
+                }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit loaded LongIncrementalRestoreOp"
+                        << ", txId: " << txId
+                        << ", operationId: " << opId
+                        << ", at schemeshard: " << Self->TabletID());
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         CollectObjectsToClean();
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);

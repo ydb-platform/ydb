@@ -2043,10 +2043,14 @@ TExprBase DqBuildBlockHashJoin(const TDqJoin& join, TExprContext& ctx) {
             .Build()
         .Done();
 
-    // Convert back from blocks
-    auto wideResult = Build<TCoWideFromBlocks>(ctx, join.Pos())
-        .Input(blockHashJoin)
-        .Done();
+    // Convert back from blocks to flow
+    auto flowResult = ctx.Builder(join.Pos())
+        .Callable("ToFlow")
+            .Callable(0, "WideFromBlocks")
+                .Add(0, blockHashJoin.Ptr())
+            .Seal()
+        .Seal()
+        .Build();
 
     // Convert back to structured format 
     std::vector<TString> fullColNames;
@@ -2059,7 +2063,7 @@ TExprBase DqBuildBlockHashJoin(const TDqJoin& join, TExprContext& ctx) {
 
     auto result = ctx.Builder(join.Pos())
         .Callable("NarrowMap")
-            .Add(0, wideResult.Ptr())
+            .Add(0, flowResult)
             .Lambda(1)
                 .Params("output", fullColNames.size())
                 .Callable("AsStruct")

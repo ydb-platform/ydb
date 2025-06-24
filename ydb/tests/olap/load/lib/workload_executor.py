@@ -430,7 +430,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Получаем бинарный файл
             with allure.step('Get workload binary'):
-                binary_files = [yatest.common.binary_path(os.getenv(self.workload_env_var,'ydb/tests/stress/' + self.workload_binary_name + '/' + self.workload_binary_name))]
+                binary_files = [yatest.common.binary_path(os.getenv(self.workload_env_var, 'ydb/tests/stress/' + self.workload_binary_name + '/' + self.workload_binary_name))]
                 allure.attach(f"Environment variable: {self.workload_env_var}", 'Binary Configuration', attachment_type=allure.attachment_type.TEXT)
                 allure.attach(f"Binary path: {binary_files[0]}", 'Binary Path', attachment_type=allure.attachment_type.TEXT)
                 logging.info(f"Binary path resolved: {binary_files[0]}")

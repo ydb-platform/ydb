@@ -128,7 +128,7 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
     NYdb::TStatus status(NYdb::EStatus::NOT_FOUND, std::move(issues));
     Ydb::Table::DescribeTableResult desc ;
 
-    Send(ev->Sender, new TEvYdbProxy::TEvDescribeTableResponse(std::move(status), std::move(desc), settings));
+    Send(ev->Sender, new TEvYdbProxy::TEvDescribeTableResponse(std::move(status), std::move(desc), settings), 0, ev->Cookie);
 }
 
 STATEFN(TLocalProxyActor::StateWork) {

@@ -117,8 +117,8 @@ private:
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
         for (auto&& i : add) {
             auto it = RequestedObjects.find(i.first);
+            Cache.Insert(i.first, i.second);
             if (it != RequestedObjects.end()) {
-                Cache.Insert(i.first, i.second);
                 for (auto&& r : it->second) {
                     if (r->AddResult(i.first, i.second)) {
                         RequestsInProgress.erase(r->GetRequestId());
@@ -139,19 +139,20 @@ private:
     void RemoveObjects(THashSet<TAddress>&& remove, const bool isAdditional, const TMonotonic now) {
         for (auto&& i : remove) {
             auto it = RequestedObjects.find(i);
-            AFL_VERIFY(it != RequestedObjects.end());
-            for (auto&& r : it->second) {
-                if (r->AddRemoved(i)) {
-                    RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(now - r->GetCreated());
-                    if (isAdditional) {
-                        Counters->RemovedObjectInfo->Inc();
-                    } else {
-                        Counters->NoExistsObject->Inc();
+            if (it != RequestedObjects.end()) {
+                for (auto&& r : it->second) {
+                    if (r->AddRemoved(i)) {
+                        RequestsInProgress.erase(r->GetRequestId());
+                        Counters->OnRequestFinished(now - r->GetCreated());
+                        if (isAdditional) {
+                            Counters->RemovedObjectInfo->Inc();
+                        } else {
+                            Counters->NoExistsObject->Inc();
+                        }
                     }
                 }
+                RequestedObjects.erase(it);
             }
-            RequestedObjects.erase(it);
         }
     }
 

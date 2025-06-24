@@ -193,6 +193,10 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
+    TInstant StartWaitInput;
+    TDuration WaitInputTime;
+    TInstant StartWaitOutput;
+    TDuration WaitOutputTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

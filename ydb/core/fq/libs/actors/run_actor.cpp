@@ -857,6 +857,8 @@ private:
             ProcessQuery();
         } else if (ev->Cookie == SetLoadFromCheckpointModeCookie) {
             Send(ControlId, new TEvCheckpointCoordinator::TEvRunGraph());
+        } else if (ev->Cookie == UpdateStatisticsCookie) {
+            PendingUpdateStatisticsPing = false;
         }
     }
 
@@ -940,7 +942,7 @@ private:
 
     void Handle(TEvDqStats::TPtr& ev) {
 
-        if (!CollectBasic()) {
+        if (!CollectBasic() || PendingUpdateStatisticsPing) {
             return;
         }
 
@@ -971,7 +973,8 @@ private:
                     request.set_statistics(statistics);
                 }
             }
-            Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
+            Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateStatisticsCookie);
+            PendingUpdateStatisticsPing = true;
         }
     }
 
@@ -2360,6 +2363,8 @@ private:
     ui64 EffectApplicatorFinished = 0;
     TSet<TString> S3Prefixes;
 
+    bool PendingUpdateStatisticsPing = false;
+
     // Cookies for pings
     enum : ui64 {
         SaveQueryInfoCookie = 1,
@@ -2367,6 +2372,7 @@ private:
         SaveFinalizingStatusCookie,
         SetLoadFromCheckpointModeCookie,
         RaiseTransientIssuesCookie,
+        UpdateStatisticsCookie
     };
 };
 

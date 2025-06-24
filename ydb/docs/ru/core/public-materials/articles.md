@@ -6,25 +6,7 @@
 {% include [tags_list](./_includes/tags_list.md) %}
 
 
-{% list tabs %}
-
-- 2025
-
-  {% include [Habr](./_includes/publications/2025/Habr.md) %}
-
-- 2024
-
-  {% include [Habr](./_includes/publications/2024/Habr.md) %}
-
-- 2023
-
-  {% include [OSP](./_includes/publications/2023/osp.md) %}
-
-- 2021
-
-  {% include [Habr](./_includes/publications/2021/Habr.md) %}
-
-  {% include [OSP](./_includes/publications/2021/osp.md) %}
-
-{% endlist %}
-
+- [{#T}](publications/2025.md)
+- [{#T}](publications/2024.md)
+- [{#T}](publications/2023.md)
+- [{#T}](publications/2021.md)

@@ -2,8 +2,11 @@
 
 #include <yql/essentials/sql/v1/complete/syntax/grammar.h>
 #include <yql/essentials/sql/v1/complete/text/word.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/static/schema.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/dummy.h>
 #include <yql/essentials/sql/v1/complete/name/service/binding/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/column/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
@@ -61,7 +64,13 @@ namespace NSQLComplete {
             }
 
             TVector<INameService::TPtr> children;
+
             children.emplace_back(MakeBindingNameService(std::move(global.Names)));
+
+            if (!context.Binding && global.Column) {
+                children.emplace_back(MakeColumnNameService(std::move(global.Column->Columns)));
+            }
+
             if (!context.Binding) {
                 children.emplace_back(Names_);
             }
@@ -300,7 +309,11 @@ namespace NSQLComplete {
                 }
 
                 if constexpr (std::is_base_of_v<TColumnName, T>) {
-                    const TString& alias = aliasByTable.at(name.Table);
+                    TString alias = name.Table.Path;
+                    if (auto it = aliasByTable.find(name.Table); it != end(aliasByTable)) {
+                        alias = it->second;
+                    }
+
                     if (context.Column->Table.empty() && !alias.empty()) {
                         name.Indentifier.prepend('.');
                         name.Indentifier.prepend(alias);

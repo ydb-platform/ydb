@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    batch_operations_helpers.cpp
+    kqp_batch_op_helpers.cpp
 )
 
 PEERDIR(

@@ -48,7 +48,7 @@ TVector<TSerializedPointOrRange> FillReadRanges(const TVector<NScheme::TTypeInfo
     const NKqpProto::TKqpPhyOpReadRanges& readRange, const TStageInfo& stageInfo,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 
-TMaybe<TTableRange> IntersectRanges(const TTableRange& range1, const TTableRange& range2, TConstArrayRef<NScheme::TTypeInfo> cellTypes);
+TMaybe<TSerializedTableRange> IntersectRanges(const TTableRange& range1, const TTableRange& range2, TConstArrayRef<NScheme::TTypeInfo> cellTypes);
 
 std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
@@ -61,7 +61,7 @@ TPhysicalShardReadSettings ExtractReadSettings(
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
 struct TPartitionPrunerConfig {
-    TMaybe<TTableRange> BatchOperationRange;
+    TMaybe<TSerializedTableRange> BatchOperationRange;
 };
 
 class TPartitionPruner {
@@ -73,6 +73,19 @@ public:
     THashMap<ui64, TShardInfo> Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
 
     THashMap<ui64, TShardInfo> PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
+
+private:
+    THashMap<ui64, TShardInfo> PrunePartitionsImpl(const NKqpProto::TKqpPhyOpReadRange& readRange, const TStageInfo& stageInfo,
+        const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan);
+
+    THashMap<ui64, TShardInfo> PrunePartitionsImpl(const NKqpProto::TKqpPhyOpReadRanges& readRanges, const TStageInfo& stageInfo,
+        const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan);
+
+    THashMap<ui64, TShardInfo> PrunePartitionsImpl(const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
+        const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan);
+
+    THashMap<ui64, TShardInfo> PrunePartitionsImpl(const NKqpProto::TKqpPhyOpLookup& lookup,
+        const TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv, bool& isFullScan);
 
 private:
     const NMiniKQL::THolderFactory* HolderFactory;

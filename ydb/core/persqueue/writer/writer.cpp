@@ -282,7 +282,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         DEBUG("End of the request to KQP for the WriteId. " <<
               "SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId <<
-              " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
+              " Status: " << ev->Get()->Record.GetYdbStatus());
 
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
@@ -430,7 +430,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         DEBUG("End of a request to KQP to save PartitionId. " <<
               "SessionId: " << Opts.SessionId <<
               " TxId: " << Opts.TxId <<
-              " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
+              " Status: " << ev->Get()->Record.GetYdbStatus());
 
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {

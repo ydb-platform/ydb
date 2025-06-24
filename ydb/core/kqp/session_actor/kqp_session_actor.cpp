@@ -532,10 +532,9 @@ public:
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
-        const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperations();
+        const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
         for (const auto& topic : operations.GetTopics()) {
-            auto path = CanonizePath(NPersQueue::GetFullTopicPath(TlsActivationContext->AsActorContext(),
-                                                                  QueryState->GetDatabase(), topic.path()));
+            auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
 
             for (const auto& partition : topic.partitions()) {
                 if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, partition.partition_id())) {

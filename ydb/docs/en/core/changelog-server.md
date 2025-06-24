@@ -40,7 +40,7 @@ Release date: 2025.
 
 #### Backward incompatible changes
 
-* If you are using [temporal over YDB](https://github.com/yandex/temporal-over-ydb), update its version before updating YDB to avoid errors in query execution.
+* If you are using [temporal over YDB](https://github.com/yandex/temporal-over-ydb), update it to version [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) before updating YDB to the current version to avoid errors in query execution.
 
 #### Performance
 

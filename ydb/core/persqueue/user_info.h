@@ -177,7 +177,7 @@ struct TUserInfo: public TUserInfoBase {
         const std::optional<TString>& committedMetadata = std::nullopt
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
-                        readFromTimestamp, partitionSession, pipeClient}
+                        readFromTimestamp, partitionSession, pipeClient, committedMetadata}
         , WriteTimestamp(TAppData::TimeProvider->Now())
         , CreateTimestamp(TAppData::TimeProvider->Now())
         , ReadTimestamp(TAppData::TimeProvider->Now())

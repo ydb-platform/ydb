@@ -244,7 +244,7 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
 
     TString TopicName;
     EKafkaErrors Status;
-    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
+    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, PartitionConsumerOffset>>> PartitionIdToOffsets;
 };
 
 struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse>

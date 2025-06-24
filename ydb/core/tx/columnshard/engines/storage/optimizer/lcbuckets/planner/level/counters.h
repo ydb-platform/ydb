@@ -29,8 +29,7 @@ private:
 
 public:
     TGlobalCounters()
-        : TBase("LeveledCompactionOptimizer")
-        , NodePortionsCount(TBase::GetValue("Node/Portions/Count")) {
+        : TBase("LeveledCompactionOptimizer") {
         for (ui32 i = 0; i <= 10; ++i) {
             Levels.emplace_back(std::make_shared<TLevelAgents>(i, *this));
         }

@@ -1,9 +1,12 @@
 #pragma once
+#include "counters.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -232,6 +235,10 @@ private:
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
+    ui32 GetNodePortionsCountLimit() const {
+        return NodePortionsCountLimit;
+    }
+
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
         auto result = TFactory::MakeHolder("lc-buckets");
         AFL_VERIFY(!!result);

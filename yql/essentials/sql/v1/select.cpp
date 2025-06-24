@@ -2807,11 +2807,12 @@ TSourcePtr BuildSelectCore(
         having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), forceWithout, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
-class TUnion: public IRealSource {
+class TSelectOp: public IRealSource {
 public:
-    TUnion(TPosition pos, TVector<TSourcePtr>&& sources, bool quantifierAll, const TWriteSettings& settings)
+    TSelectOp(TPosition pos, TVector<TSourcePtr>&& sources, const TString& op, bool quantifierAll, const TWriteSettings& settings)
         : IRealSource(pos)
         , Sources_(std::move(sources))
+        , Operator_(op)
         , QuantifierAll_(quantifierAll)
         , Settings_(settings)
     {
@@ -2847,16 +2848,30 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        TPtr res;
-        if (QuantifierAll_) {
-            if (ctx.EmitUnionMerge) {
-                res = ctx.PositionalUnionAll ? Y("UnionMergePositional") : Y("UnionMerge");
-            } else {
-                res = ctx.PositionalUnionAll ? Y("UnionAllPositional") : Y("UnionAll");
-            }
+        TString op;
+
+        if (Operator_ == "union") {
+            op = "Union";
+        } else if (Operator_ == "intersect") {
+            op = "Intersect";
+        } else if (Operator_ == "except") {
+            op = "Except";
         } else {
-            res = ctx.PositionalUnionAll ? Y("UnionPositional") : Y("Union");
+            Y_ABORT("Invalid operator: %s", Operator_.c_str());
         }
+
+        if (QuantifierAll_) {
+            if (Operator_ != "union" || !ctx.EmitUnionMerge) {
+                op += "All";
+            } else {
+                op += "Merge";
+            }
+        }
+        if (ctx.PositionalUnionAll) {
+            op += "Positional";
+        }
+
+        TPtr res = Y(op);
 
         for (auto& s: Sources_) {
             auto input = s->Build(ctx);
@@ -2879,7 +2894,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return MakeIntrusive<TUnion>(Pos_, CloneContainer(Sources_), QuantifierAll_, Settings_);
+        return MakeIntrusive<TSelectOp>(Pos_, CloneContainer(Sources_), Operator_, QuantifierAll_, Settings_);
     }
 
     bool IsSelect() const override {
@@ -2896,17 +2911,19 @@ public:
 
 private:
     TVector<TSourcePtr> Sources_;
+    const TString Operator_;
     bool QuantifierAll_;
     const TWriteSettings Settings_;
 };
 
-TSourcePtr BuildUnion(
+TSourcePtr BuildSelectOp(
     TPosition pos,
     TVector<TSourcePtr>&& sources,
+    const TString& op,
     bool quantifierAll,
     const TWriteSettings& settings
 ) {
-    return new TUnion(pos, std::move(sources), quantifierAll, settings);
+    return new TSelectOp(pos, std::move(sources), op, quantifierAll, settings);
 }
 
 class TOverWindowSource: public IProxySource {

@@ -105,6 +105,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , CaFactory_(args.CaFactory_)
     , BlockTrackingMode(args.BlockTrackingMode)
     , ArrayBufferMinFillPercentage(args.ArrayBufferMinFillPercentage)
+    , BufferPageAllocSize(args.BufferPageAllocSize)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
 {
     Y_UNUSED(MkqlMemoryLimit);
@@ -486,6 +487,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     if (ArrayBufferMinFillPercentage) {
         taskDesc->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
+    }
+
+    if (BufferPageAllocSize) {
+        taskDesc->SetBufferPageAllocSize(*BufferPageAllocSize);
     }
 
     auto startResult = CaFactory_->CreateKqpComputeActor({

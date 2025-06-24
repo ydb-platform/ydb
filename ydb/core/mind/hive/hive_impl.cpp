@@ -696,6 +696,9 @@ void THive::Cleanup() {
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest());
 
+    const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+    Send(wardenId, new TEvents::TEvUnsubscribe());
+
     while (!SubActors.empty()) {
         SubActors.front()->Cleanup();
     }
@@ -715,6 +718,12 @@ void THive::Cleanup() {
     if (ResponsivenessPinger) {
         ResponsivenessPinger->Detach(TlsActivationContext->ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;
+    }
+}
+
+void THive::MaybeLoadEverything() {
+    if (!NodesInfo.empty() && HaveStorageConfig && CurrentStateFunc() == &TThis::StateInit) {
+        Execute(CreateLoadEverything());
     }
 }
 
@@ -809,7 +818,7 @@ void THive::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
             DataCenters[dataCenterId]; // just create entry in hash map
         }
     }
-    Execute(CreateLoadEverything());
+    MaybeLoadEverything();
 }
 
 void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode> event) {
@@ -2932,6 +2941,14 @@ void THive::ProcessPendingResumeTablet() {
     }
 }
 
+bool THive::IsAllowedPile(TBridgePileId pile) const {
+    if (BridgeInfo->BeingPromotedPile) {
+        return BridgeInfo->BeingPromotedPile->BridgePileId == pile;
+    } else {
+        return BridgeInfo->PrimaryPile->BridgePileId == pile;
+    }
+}
+
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -3125,6 +3142,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
         hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
         hFunc(TEvPrivate::TEvUpdateFollowers, Handle);
+        hFunc(TEvNodeWardenStorageConfig, Handle);
     }
 }
 
@@ -3138,6 +3156,7 @@ STFUNC(THive::StateInit) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
         hFunc(TEvPrivate::TEvProcessBootQueue, HandleInit);
         hFunc(TEvPrivate::TEvProcessTabletBalancer, HandleInit);
+        hFunc(TEvNodeWardenStorageConfig, Handle);
         hFunc(TEvPrivate::TEvUpdateDataCenterFollowers, HandleInit);
         // We subscribe to config updates before hive is fully loaded
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
@@ -3234,6 +3253,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvUpdateFollowers::EventType, EnqueueIncomingEvent);
+        fFunc(TEvNodeWardenStorageConfig::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3574,6 +3594,13 @@ void THive::HandleInit(TEvPrivate::TEvUpdateDataCenterFollowers::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
     Execute(CreateProcessUpdateFollowers());
+}
+
+void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+    BLOG_D("Handle TEvNodeWardenStorageConfig");
+    BridgeInfo = ev->Get()->BridgeInfo;
+    HaveStorageConfig = true;
+    MaybeLoadEverything();
 }
 
 void THive::MakeScaleRecommendation() {

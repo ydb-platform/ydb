@@ -175,7 +175,7 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     FETCH_CONFIG(board, StateStorageBoard)
     FETCH_CONFIG(schemeBoard, SchemeBoard)
     
-    STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
+    STLOG(PRI_DEBUG, BS_NODE, NW55, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig->GetStateStorageConfig()),
         (NewStateStorageInfo, *stateStorageInfo),
         (CurrentStateStorageInfo, StateStorageInfo.Get()),

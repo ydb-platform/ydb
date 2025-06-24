@@ -3433,6 +3433,40 @@ TExprNode::TPtr PullAssumeColumnOrderOverEquiJoin(const TExprNode::TPtr& node, T
     return node;
 }
 
+bool IsDropAnyOverEquiJoinInputsEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char flag[] = "DropAnyOverEquiJoinInputs";
+    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+}
+
+TExprNode::TPtr DropAnyOverEquiJoinInputs(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (!IsDropAnyOverEquiJoinInputsEnabled(optCtx.Types)) {
+        return node;
+    }
+
+    size_t inputsCount = node->ChildrenSize() - 2;
+
+    TJoinLabels labels;
+    for (size_t inputIndex = 0; inputIndex < inputsCount; inputIndex++) {
+        const auto& list = node->Child(inputIndex)->Head();
+        auto unique = list.GetConstraint<TUniqueConstraintNode>();
+        auto distinct = list.GetConstraint<TDistinctConstraintNode>();
+        YQL_ENSURE(!labels.Add(
+            ctx,
+            node->Child(inputIndex)->Tail(),
+            GetSeqItemType(*list.GetTypeAnn()).Cast<TStructExprType>(),
+            unique,
+            distinct
+        ));
+    }
+
+    auto joinTree = node->ChildPtr(inputsCount);
+    auto joinKeyByLabel = CollectEquiJoinKeyColumnsByLabel(*joinTree);
+
+    auto newJoinTree = DropAnyOverJoinInputs(joinTree, labels, joinKeyByLabel, ctx);
+    return newJoinTree != joinTree ? ctx.ChangeChild(*node, inputsCount, std::move(newJoinTree)): node;
+}
+
 TExprNode::TPtr FoldParseAfterSerialize(const TExprNode::TPtr& node, const TStringBuf parseUdfName, const THashSet<TStringBuf>& serializeUdfNames) {
     auto apply = TExprBase(node).Cast<TCoApply>();
 
@@ -5340,6 +5374,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return ctx.NewCallable(node->Pos(), "SqlAggregateAll", { ctx.NewCallable(node->Pos(), "UnionAll", node->ChildrenList()) });
     };
 
+    map["IntersectAll"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "intersect_all", ctx);
+    };
+    map["Intersect"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "intersect", ctx);
+    };
+
+    map["ExceptAll"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "except_all", ctx);
+    };
+    map["Except"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        YQL_CLOG(DEBUG, Core) << node->Content();
+        return CombineSetItems(node->Pos(), node->Child(0), node->Child(1), "except", ctx);
+    };
+
     map["Aggregate"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoAggregate self(node);
         if (self.Keys().Size() == 0 && !HasPayload(self)) {
@@ -5454,6 +5506,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         ret = PullAssumeColumnOrderOverEquiJoin(node, ctx, optCtx);
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "Pull AssumeColumnOrder over EquiJoin";
+            return ret;
+        }
+
+        ret = DropAnyOverEquiJoinInputs(node, ctx, optCtx);
+        if (ret != node) {
+            YQL_CLOG(DEBUG, Core) << "Drop unnecessary Any over EquiJoin inputs";
             return ret;
         }
 
@@ -6684,7 +6742,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["UnionAllPositional"] = map["UnionMergePositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["UnionAllPositional"] = \
+    map["UnionMergePositional"] = \
+    map["IntersectPositional"] = \
+    map["IntersectAllPositional"] = \
+    map["ExceptPositional"] = \
+    map["ExceptAllPositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
         if (node->ChildrenSize() == 1) {
             return node->HeadPtr();
@@ -6697,7 +6760,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             columnOrders.push_back(*childColumnOrder);
         }
 
-        return ExpandPositionalUnionAll(*node, columnOrders, node->ChildrenList(), ctx, optCtx);
+        return ExpandPositionalSelectOp(*node, columnOrders, node->ChildrenList(), ctx, optCtx);
     };
 
     map["UnionPositional"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {

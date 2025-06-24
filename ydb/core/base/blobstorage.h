@@ -927,6 +927,7 @@ struct TEvBlobStorage {
         EvNodeWardenQueryCacheResult,
         EvNodeWardenUnsubscribeFromCache,
         EvNodeWardenNotifyConfigMismatch,
+        EvNodeWardenUpdateConfigFromPeer,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -2504,18 +2505,23 @@ struct TEvBlobStorage {
         std::optional<ui64> SkipBlocksUpTo;
         std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
         std::optional<TLogoBlobID> SkipBlobsUpTo;
+        bool IgnoreDecommitState;
+        bool Reverse;
 
         TEvAssimilate(TCloneEventPolicy, const TEvAssimilate& origin)
             : SkipBlocksUpTo(origin.SkipBlocksUpTo)
             , SkipBarriersUpTo(origin.SkipBarriersUpTo)
             , SkipBlobsUpTo(origin.SkipBlobsUpTo)
+            , Reverse(origin.Reverse)
         {}
 
         TEvAssimilate(std::optional<ui64> skipBlocksUpTo, std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo,
-                std::optional<TLogoBlobID> skipBlobsUpTo)
+                std::optional<TLogoBlobID> skipBlobsUpTo, bool ignoreDecommitState, bool reverse)
             : SkipBlocksUpTo(skipBlocksUpTo)
             , SkipBarriersUpTo(skipBarriersUpTo)
             , SkipBlobsUpTo(skipBlobsUpTo)
+            , IgnoreDecommitState(ignoreDecommitState)
+            , Reverse(reverse)
         {}
 
         TString Print(bool /*isFull*/) const {
@@ -2524,17 +2530,16 @@ struct TEvBlobStorage {
 
         TString ToString() const {
             TStringStream str;
-            str << "TEvAssimilate {";
-            const char *prefix = "";
+            str << "TEvAssimilate {Reverse# " << Reverse;
             if (SkipBlocksUpTo) {
-                str << std::exchange(prefix, " ") << "SkipBlocksUpTo# " << *SkipBlocksUpTo;
+                str << " SkipBlocksUpTo# " << *SkipBlocksUpTo;
             }
             if (SkipBarriersUpTo) {
-                str << std::exchange(prefix, " " ) << "SkipBarriersUpTo# " << std::get<0>(*SkipBarriersUpTo)
-                    << ":" << int(std::get<1>(*SkipBarriersUpTo));
+                auto& [tabletId, channel] = *SkipBarriersUpTo;
+                str << " SkipBarriersUpTo# " << tabletId << ':' << channel;
             }
             if (SkipBlobsUpTo) {
-                str << std::exchange(prefix, " " ) << "SkipBlobsUpTo# ";
+                str << " SkipBlobsUpTo# ";
                 SkipBlobsUpTo->Out(str);
             }
             str << "}";

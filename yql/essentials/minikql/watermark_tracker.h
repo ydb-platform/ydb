@@ -16,9 +16,9 @@ private:
     std::optional<ui64> CalcLastWatermark();
 
 private:
-    ui64 NextEventWithWatermark = 0;
-    const ui64 Delay;
-    const ui64 Granularity;
+    ui64 NextEventWithWatermark_ = 0;
+    const ui64 Delay_;
+    const ui64 Granularity_;
 };
 
 } // NMiniKQL

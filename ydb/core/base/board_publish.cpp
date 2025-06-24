@@ -31,7 +31,7 @@ class TBoardReplicaPublishActor : public TActorBootstrapped<TBoardReplicaPublish
     ui64 Round;
 
     void Cleanup() {
-        Send(Replica, new TEvStateStorage::TEvReplicaBoardCleanup());
+        Send(Replica, new TEvStateStorage::TEvReplicaBoardCleanup(ClusterStateGeneration, ClusterStateGuid));
         if (Replica.NodeId() != SelfId().NodeId())
             Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe());
         PassAway();

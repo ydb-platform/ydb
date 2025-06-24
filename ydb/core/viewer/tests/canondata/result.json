@@ -148,7 +148,6 @@
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
-                "size_bytes": "not-zero-number-text",
                 "type": "DATABASE"
             }
         },
@@ -255,7 +254,6 @@
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
-                "size_bytes": "not-zero-number-text",
                 "type": "DATABASE"
             }
         },
@@ -353,7 +351,6 @@
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
-                "size_bytes": "not-zero-number-text",
                 "type": "DATABASE"
             }
         }
@@ -895,6 +892,49 @@
             "StartOffset": 0,
             "Truncated": false
         },
+        "response_last_offset": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
         "response_metadata": {
             "EndOffset": 21,
             "Messages": [
@@ -936,80 +976,6 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
                     "StorageSize": 38,
-                    "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
-                }
-            ],
-            "StartOffset": 0,
-            "Truncated": false
-        },
-        "response_truncated": {
-            "EndOffset": 21,
-            "Messages": [
-                {
-                    "Codec": 1,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "Y29tcHI=",
-                    "Offset": 20,
-                    "OriginalSize": 20,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 21,
-                    "StorageSize": 38,
-                    "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
-                }
-            ],
-            "StartOffset": 0,
-            "Truncated": true
-        },
-        "response_last_offset": {
-            "EndOffset": 21,
-            "Messages": [
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0w",
-                    "Offset": 0,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 1,
-                    "StorageSize": 9,
-                    "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0x",
-                    "Offset": 1,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 2,
-                    "StorageSize": 9,
-                    "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0y",
-                    "Offset": 2,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 3,
-                    "StorageSize": 9,
-                    "TimestampDiff": "number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0z",
-                    "Offset": 3,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 4,
-                    "StorageSize": 9,
                     "TimestampDiff": "number",
                     "WriteTimestamp": "not-zero-number"
                 }
@@ -1083,6 +1049,25 @@
             ],
             "StartOffset": 0,
             "Truncated": false
+        },
+        "response_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
         }
     },
     "test.test_transfer_describe": {
@@ -2484,6 +2469,26 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root",
@@ -2560,26 +2565,6 @@
                     },
                     "ShardsInside": "0",
                     "ShardsLimit": "200000",
-                    "SchemeLimits": {
-                        "MaxTableKeyColumns": "30",
-                        "MaxTableCdcStreams": "5",
-                        "MaxDepth": "32",
-                        "MaxColumnTableColumns": "10000",
-                        "MaxShardsInPath": "35000",
-                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
-                        "MaxTableColumns": "200",
-                        "MaxTableIndices": "20",
-                        "MaxPathElementLength": "255",
-                        "MaxTableColumnNameLength": "255",
-                        "MaxImports": "10",
-                        "MaxPaths": "10000",
-                        "MaxChildrenInDir": "100000",
-                        "MaxConsistentCopyTargets": "10000",
-                        "MaxAclBytesSize": "10240",
-                        "MaxShards": "200000",
-                        "MaxExports": "10",
-                        "MaxPQPartitions": "1000000"
-                    },
                     "StoragePools": [
                         {
                             "Kind": "hdd",
@@ -2685,32 +2670,32 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/dedicated_db"
                     },
                     "ShardsInside": "11",
                     "ShardsLimit": "200000",
-                    "SchemeLimits": {
-                        "MaxTableKeyColumns": "30",
-                        "MaxTableCdcStreams": "5",
-                        "MaxDepth": "32",
-                        "MaxColumnTableColumns": "10000",
-                        "MaxShardsInPath": "35000",
-                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
-                        "MaxTableColumns": "200",
-                        "MaxTableIndices": "20",
-                        "MaxPathElementLength": "255",
-                        "MaxTableColumnNameLength": "255",
-                        "MaxImports": "10",
-                        "MaxPaths": "10000",
-                        "MaxChildrenInDir": "100000",
-                        "MaxConsistentCopyTargets": "10000",
-                        "MaxAclBytesSize": "10240",
-                        "MaxShards": "200000",
-                        "MaxExports": "10",
-                        "MaxPQPartitions": "1000000"
-                    },
                     "StoragePools": [
                         {
                             "Kind": "hdd",
@@ -2797,6 +2782,26 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/serverless_db"
@@ -2804,26 +2809,6 @@
                     "ServerlessComputeResourcesMode": 1,
                     "ShardsInside": "7",
                     "ShardsLimit": "200000",
-                    "SchemeLimits": {
-                        "MaxTableKeyColumns": "30",
-                        "MaxTableCdcStreams": "5",
-                        "MaxDepth": "32",
-                        "MaxColumnTableColumns": "10000",
-                        "MaxShardsInPath": "35000",
-                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
-                        "MaxTableColumns": "200",
-                        "MaxTableIndices": "20",
-                        "MaxPathElementLength": "255",
-                        "MaxTableColumnNameLength": "255",
-                        "MaxImports": "10",
-                        "MaxPaths": "10000",
-                        "MaxChildrenInDir": "100000",
-                        "MaxConsistentCopyTargets": "10000",
-                        "MaxAclBytesSize": "10240",
-                        "MaxShards": "200000",
-                        "MaxExports": "10",
-                        "MaxPQPartitions": "1000000"
-                    },
                     "SharedHive": "72075186224038889",
                     "StoragePools": [
                         {
@@ -2929,32 +2914,32 @@
                         "PathId": "not-zero-number-text",
                         "SchemeShard": "72057594046678944"
                     },
+                    "SchemeLimits": {
+                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
+                        "MaxAclBytesSize": "10240",
+                        "MaxChildrenInDir": "100000",
+                        "MaxColumnTableColumns": "10000",
+                        "MaxConsistentCopyTargets": "10000",
+                        "MaxDepth": "32",
+                        "MaxExports": "10",
+                        "MaxImports": "10",
+                        "MaxPQPartitions": "1000000",
+                        "MaxPathElementLength": "255",
+                        "MaxPaths": "10000",
+                        "MaxShards": "200000",
+                        "MaxShardsInPath": "35000",
+                        "MaxTableCdcStreams": "5",
+                        "MaxTableColumnNameLength": "255",
+                        "MaxTableColumns": "200",
+                        "MaxTableIndices": "20",
+                        "MaxTableKeyColumns": "30"
+                    },
                     "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/shared_db"
                     },
                     "ShardsInside": "11",
                     "ShardsLimit": "200000",
-                    "SchemeLimits": {
-                        "MaxTableKeyColumns": "30",
-                        "MaxTableCdcStreams": "5",
-                        "MaxDepth": "32",
-                        "MaxColumnTableColumns": "10000",
-                        "MaxShardsInPath": "35000",
-                        "ExtraPathSymbolsAllowed": "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~",
-                        "MaxTableColumns": "200",
-                        "MaxTableIndices": "20",
-                        "MaxPathElementLength": "255",
-                        "MaxTableColumnNameLength": "255",
-                        "MaxImports": "10",
-                        "MaxPaths": "10000",
-                        "MaxChildrenInDir": "100000",
-                        "MaxConsistentCopyTargets": "10000",
-                        "MaxAclBytesSize": "10240",
-                        "MaxShards": "200000",
-                        "MaxExports": "10",
-                        "MaxPQPartitions": "1000000"
-                    },
                     "StoragePools": [
                         {
                             "Kind": "hdd",
@@ -3026,8 +3011,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3095,8 +3078,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -3107,8 +3089,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/dedicated_db",
                     "NodeId": 50000,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3174,8 +3154,7 @@
                             "/Root/dedicated_db"
                         ],
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -3186,8 +3165,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/shared_db",
                     "NodeId": 50001,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3253,8 +3230,7 @@
                             "/Root/shared_db"
                         ],
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "Problems": [
@@ -3268,8 +3244,6 @@
             "FoundNodes": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/shared_db",
                     "NodeId": 50001,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -3335,8 +3309,7 @@
                             "/Root/shared_db"
                         ],
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -4330,8 +4303,6 @@
             "MaximumDisksPerNode": "1",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "DiskSpaceUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -4403,8 +4374,6 @@
                     "UptimeSeconds": "number"
                 },
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/shared_db",
                     "NodeId": 50001,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -4474,8 +4443,6 @@
                     "UptimeSeconds": "number"
                 },
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root/dedicated_db",
                     "NodeId": 50000,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5256,8 +5223,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
-                    "Database": "/Root",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5325,8 +5290,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -5338,7 +5302,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5406,8 +5369,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"
@@ -5419,7 +5381,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5487,8 +5448,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "Problems": [
@@ -5503,7 +5463,6 @@
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
-                    "CpuUsage": "not-zero-number",
                     "NodeId": 1,
                     "SystemState": {
                         "ChangeTime": "not-zero-number-text",
@@ -5571,8 +5530,7 @@
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "TotalSessions": "number"
-                    },
-                    "UptimeSeconds": "number"
+                    }
                 }
             ],
             "TotalNodes": "1"

@@ -8,13 +8,13 @@ using namespace NYql;
 using namespace NYql::NPureCalc;
 
 TLoggingOptions::TLoggingOptions()
-    : LogLevel_(ELogPriority::TLOG_ERR)
+    : LogLevel(ELogPriority::TLOG_ERR)
     , LogDestination(&Clog)
 {
 }
 
 TLoggingOptions& TLoggingOptions::SetLogLevel(ELogPriority logLevel) {
-    LogLevel_ = logLevel;
+    LogLevel = logLevel;
     return *this;
 }
 
@@ -24,8 +24,8 @@ TLoggingOptions& TLoggingOptions::SetLogDestination(IOutputStream* logDestinatio
 }
 
 TProgramFactoryOptions::TProgramFactoryOptions()
-    : UdfsDir_("")
-    , UserData_()
+    : UdfsDir("")
+    , UserData()
     , LLVMSettings("OFF")
     , BlockEngineSettings("disable")
     , ExprOutputStream(nullptr)
@@ -44,12 +44,12 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetLanguageVersion(TLangVersion 
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::SetUDFsDir(TStringBuf dir) {
-    UdfsDir_ = dir;
+    UdfsDir = dir;
     return *this;
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::AddLibrary(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
-    auto& ref = UserData_.emplace_back();
+    auto& ref = UserData.emplace_back();
 
     ref.Type = NUserData::EType::LIBRARY;
     ref.Disposition = disposition;
@@ -60,7 +60,7 @@ TProgramFactoryOptions& TProgramFactoryOptions::AddLibrary(NUserData::EDispositi
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::AddFile(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
-    auto& ref = UserData_.emplace_back();
+    auto& ref = UserData.emplace_back();
 
     ref.Type = NUserData::EType::FILE;
     ref.Disposition = disposition;
@@ -71,7 +71,7 @@ TProgramFactoryOptions& TProgramFactoryOptions::AddFile(NUserData::EDisposition 
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::AddUDF(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
-    auto& ref = UserData_.emplace_back();
+    auto& ref = UserData.emplace_back();
 
     ref.Type = NUserData::EType::UDF;
     ref.Disposition = disposition;

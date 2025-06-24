@@ -212,6 +212,27 @@ TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& 
     return result;
 }
 
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansRequest& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
+TString ToShortDebugString(const NKikimrTxDataShard::TEvRecomputeKMeansResponse& record) {
+    auto copy = record;
+    TStringBuilder result;
+    // clusters are not human readable and can be large like 100Kb+
+    copy.ClearClusters();
+    copy.ClearClusterSizes();
+    result << copy.ShortDebugString();
+    result << " Clusters: " << record.ClustersSize();
+    return result;
+}
+
 TString ToShortDebugString(const NKikimrTxDataShard::TEvSampleKResponse& record) {
     auto copy = record;
     TStringBuilder result;

@@ -40,7 +40,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             if (it == LockFeatures.end()) {
                 it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
             }
-            it->second.MutableWriteOperations().emplace_back(operation);
+            it->second.AddWriteOperation(operation);
             LastWriteId = std::max(LastWriteId, operation->GetWriteId());
             if (!rowset.Next()) {
                 return false;
@@ -202,7 +202,7 @@ void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 
 void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const ui64 /*txId*/) {
 }
 
-TWriteOperation::TPtr TOperationsManager::RegisterOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TPtr TOperationsManager::CreateWriteOperation(const TUnifiedPathId& pathId, const ui64 lockId, const ui64 cookie,
     const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType) {
     auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(),
@@ -210,8 +210,7 @@ TWriteOperation::TPtr TOperationsManager::RegisterOperation(const TUnifiedPathId
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "register_operation")("operation_id", operation->GetWriteId())(
         "last", LastWriteId);
     AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
-    GetLockVerified(operation->GetLockId()).MutableWriteOperations().emplace_back(operation);
-    GetLockVerified(operation->GetLockId()).AddWrite();
+    GetLockVerified(operation->GetLockId()).AddWriteOperation(operation);
     return operation;
 }
 
@@ -289,7 +288,7 @@ void TOperationsManager::AddEventForLock(
     if (auto txEvent = writer->BuildEvent()) {
         NOlap::NTxInteractions::TTxEventContainer container(lockId, txEvent);
         container.AddToInteraction(InteractionsContext);
-        txLock.MutableEvents().emplace_back(std::move(container));
+        txLock.AddTxEvent(std::move(container));
     }
 }
 

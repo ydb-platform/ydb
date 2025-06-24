@@ -126,4 +126,27 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
         }
     }
 
+    Y_UNIT_TEST(Join) {
+        IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+        {
+            TString query = R"(
+                SELECT #
+                FROM q.a AS x, p.b, c
+                JOIN p.d AS y ON x.key = y.key
+            )";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {
+                .Tables = {
+                    TAliased<TTableId>("", {"", "c"}),
+                    TAliased<TTableId>("", {"p", "b"}),
+                    TAliased<TTableId>("x", {"q", "a"}),
+                    TAliased<TTableId>("y", {"p", "d"}),
+                },
+            };
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+    }
+
 } // Y_UNIT_TEST_SUITE(GlobalAnalysisTests)

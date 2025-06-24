@@ -70,7 +70,8 @@ public:
         , Database(std::move(settings.Database))
         , UserToken(std::move(settings.UserToken))
         , RequestCounters(std::move(settings.RequestCounters))
-        , TableServiceConfig(std::move(settings.TableServiceConfig))
+        , TableServiceConfig(std::move(settings.ExecuterConfig.TableServiceConfig))
+        , MutableExecuterConfig(std::move(settings.ExecuterConfig.MutableConfig))
         , UserRequestContext(std::move(settings.UserRequestContext))
         , StatementResultIndex(std::move(settings.StatementResultIndex))
         , AsyncIoFactory(std::move(std::move(settings.AsyncIoFactory)))
@@ -466,14 +467,15 @@ private:
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
-
+ 
         TPartitionPrunerConfig prunerConfig{
             .BatchOperationRange=NBatchOperations::MakePartitionRange(partInfo->BeginRange, partInfo->EndRange, KeyIds.size())
         };
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
+        const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
-            TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
+            executerConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings));
         auto exId = RegisterWithSameMailbox(executerActor);
 
@@ -697,6 +699,8 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr RequestCounters;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
+    TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
+
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     ui32 StatementResultIndex;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;

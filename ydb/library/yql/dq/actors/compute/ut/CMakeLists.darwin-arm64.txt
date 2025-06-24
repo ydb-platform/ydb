@@ -29,13 +29,23 @@ target_link_libraries(ydb-library-yql-dq-actors-compute-ut PUBLIC
   cpp-testing-unittest_main
   dq-actors-compute
   cpp-testing-unittest
-  yql-public-ydb_issue
-  yql-dq-actors
-  library-actors-wilson
   library-actors-testlib
+  library-actors-wilson
+  ydb-library-services
+  yql-dq-actors
+  dq-actors-task_runner
+  yql-dq-comp_nodes
+  yql-dq-tasks
+  yql-dq-transform
+  providers-dq-task_runner
+  yql-public-ydb_issue
+  essentials-minikql-comp_nodes
+  minikql-comp_nodes-no_llvm
+  essentials-minikql-computation
+  essentials-minikql-invoke_builtins
+  providers-common-comp_nodes
   udf-service-stub
   essentials-sql-pg_dummy
-  minikql-comp_nodes-no_llvm
 )
 
 target_allocator(ydb-library-yql-dq-actors-compute-ut
@@ -51,6 +61,7 @@ target_link_options(ydb-library-yql-dq-actors-compute-ut PRIVATE
 )
 
 target_sources(ydb-library-yql-dq-actors-compute-ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_async_compute_actor_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_compute_actor_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_compute_actor_async_input_helper_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/compute/ut/dq_compute_issues_buffer_ut.cpp

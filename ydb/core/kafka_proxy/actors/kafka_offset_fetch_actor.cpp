@@ -93,7 +93,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         Y_UNUSED(tabletInfo);
         Y_UNUSED(ctx);
         for (auto& partResult : ev->Get()->Record.GetPartResult()) {
-            std::unordered_map<TString, ui32> consumerToOffset;
+            std::unordered_map<TString, TEvKafka::PartitionConsumerOffset> consumerToOffset;
             for (auto& consumerResult : partResult.GetConsumerResult()) {
                 if (consumerResult.GetErrorCode() == NPersQueue::NErrorCode::OK) {
                     std::optional<TString> committedMetadata = consumerResult.HasCommittedMetadata() ?
@@ -161,8 +161,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         const TActorId Requester;
         const TString OriginalTopicName;
         const TString UserSID;
-        std::unordered_map<ui32, ui32> PartitionIdToOffset {};
-        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, ui32>>>();
+        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>>();
 };
 
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message) {
@@ -184,10 +183,15 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                     TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
                     partition.PartitionIndex = requestPartition;
                     if (partitionsToOffsets.get() != nullptr
-                            && partitionsToOffsets->contains(requestPartition)
-                            && (*partitionsToOffsets)[requestPartition].contains(requestGroup.GroupId.value())) {
-                        partition.CommittedOffset = (*partitionsToOffsets)[requestPartition][requestGroup.GroupId.value()];
-                        partition.ErrorCode = NONE_ERROR;
+                            && partitionsToOffsets->contains(requestPartition)) {
+                        auto groupPartitionToOffset = (*partitionsToOffsets)[requestPartition].find(requestGroup.GroupId.value());
+                        if (groupPartitionToOffset != (*partitionsToOffsets)[requestPartition].end()) {
+                            partition.CommittedOffset = groupPartitionToOffset->second.Offset;
+                            partition.Metadata = groupPartitionToOffset->second.Metadata;
+                            partition.ErrorCode = NONE_ERROR;
+                        } else {
+                            partition.ErrorCode = RESOURCE_NOT_FOUND;
+                        }
                     } else {
                         partition.ErrorCode = RESOURCE_NOT_FOUND;
                     }
@@ -213,6 +217,7 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                 NKafka::TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition partition;
                 partition.CommittedOffset = sourcePartition.CommittedOffset;
                 partition.PartitionIndex = sourcePartition.PartitionIndex;
+                partition.Metadata = sourcePartition.Metadata;
                 partition.ErrorCode = sourcePartition.ErrorCode;
                 topic.Partitions.push_back(partition);
             }

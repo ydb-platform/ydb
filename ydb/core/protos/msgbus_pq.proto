@@ -70,6 +70,7 @@ message TPersQueuePartitionRequest {
 
         optional bool MirrorerRequest = 10 [default = false];
         optional bool Strict = 11 [default = false];
+        optional string CommittedMetadata = 12; // optional
     }
 
     message TCmdGetClientOffset {

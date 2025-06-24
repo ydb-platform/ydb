@@ -178,7 +178,6 @@ struct TUserInfo: public TUserInfoBase {
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
                         readFromTimestamp, partitionSession, pipeClient, committedMetadata}
-        , ActualTimestamps(false)
         , WriteTimestamp(TAppData::TimeProvider->Now())
         , CreateTimestamp(TAppData::TimeProvider->Now())
         , ReadTimestamp(TAppData::TimeProvider->Now())

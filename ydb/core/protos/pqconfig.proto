@@ -851,6 +851,7 @@ message TStatusResponse {
         optional uint64 CommitedOffset = 9;
 
         optional bool ReadingFinished = 10;
+        optional string CommittedMetadata = 12;
     }
 
 

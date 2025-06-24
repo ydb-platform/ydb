@@ -8,7 +8,7 @@
 namespace NKikimr::NKqp {
 
 TString ScriptExecutionOperationFromExecutionId(const TString& executionId);
-TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId);
-TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId);
+TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId, TString& error);
+TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId, TString& error);
 
 } // namespace NKikimr::NKqp

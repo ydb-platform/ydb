@@ -10,7 +10,7 @@ DB system views contain:
 * [Top queries by certain characteristics](#top-queries).
 * [Query details](#query-metrics).
 * [History of overloaded partitions](#top-overload-partitions).
-* [Access control entities](#auth).
+* [Information about users, groups, and access rights](#auth).
 
 {% note info %}
 
@@ -303,9 +303,9 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
 
-## Access control entities {#auth}
+## Users, groups, and access rights {#auth}
 
-The following system views store data for analyzing various [access control entities](../security/authorization.md).
+The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.
 
 ### Auth users
 
@@ -319,11 +319,11 @@ Table structure:
 |--------|-------------|
 | `Sid` | [SID](../concepts/glossary.md#sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
-| `IsLockedOut` | Automatically locked out due to exceeding failed login attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `IsLockedOut` | Indicates that this user is automatically locked out due to exceeding the number of failed authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
-| `LastSuccessfulAttemptAt` | Timestamp of the last successful login attempt.<br />Type: `Timestamp`. |
-| `LastFailedAttemptAt` | Timestamp of the last failed login attempt.<br />Type: `Timestamp`. |
-| `FailedAttemptCount` | Number of failed login attempts.<br />Type: `Uint32`. |
+| `LastSuccessfulAttemptAt` | Timestamp of the last successful authentication attempt.<br />Type: `Timestamp`. |
+| `LastFailedAttemptAt` | Timestamp of the last failed authentication attempt.<br />Type: `Timestamp`. |
+| `FailedAttemptCount` | Number of failed authentication attempts.<br />Type: `Uint32`. |
 | `PasswordHash` | JSON string containing password hash, salt, and hash algorithm.<br />Type: `Utf8`. |
 
 ### Auth groups
@@ -349,7 +349,7 @@ Table structure:
 | Column | Description |
 |--------|-------------|
 | `GroupSid` | SID of the group.<br />Type: `Utf8`.<br />Key: `0`. |
-| `MemberSid` | SID of the group member.<br />Type: `Utf8`.<br />Key: `1`. |
+| `MemberSid` | SID of the group member. This can be either the SID of a user or the SID of a group.<br />Type: `Utf8`.<br />Key: `1`. |
 
 ### Auth permissions
 
@@ -360,7 +360,7 @@ Contains two views:
 * `auth_permissions`: Directly assigned access rights.
 * `auth_effective_permissions`: Effective access rights, accounting for [inheritance](../concepts/glossary.md#access-right-inheritance).
 
-A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
+In this view, the user sees only those [access objects](../concepts/glossary.md#access-object) for which they have the `ydb.granular.describe_schema` permission.
 
 Table structure:
 
@@ -372,7 +372,7 @@ Table structure:
 
 #### Example queries
 
-All the directly assigned permissions for the table located at the path `my_table`:
+Retrieving explicitly granted permissions on the access object - table `my_table`:
 
 ```yql
 SELECT *
@@ -380,7 +380,7 @@ FROM `.sys/auth_permissions`
 WHERE Path = "my_table"
 ```
 
-All the effective permissions for the table located at the path `my_table`, including inherited permissions:
+Retrieving effective permissions on the access object - table `my_table`:
 
 ```yql
 SELECT *
@@ -388,7 +388,7 @@ FROM `.sys/auth_effective_permissions`
 WHERE Path = "my_table"
 ```
 
-All permissions directly assigned to the user identified as `user3`:
+Retrieving the permissions granted to the user `user3`:
 
 ```yql
 SELECT *
@@ -400,7 +400,7 @@ WHERE Sid = "user3"
 
 The `auth_owners` view lists details of [access objects](../concepts/glossary.md#access-object) [ownership](../concepts/glossary.md#access-owner).
 
-A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
+In this view, the user sees only those [access objects](../concepts/glossary.md#access-object) for which they have the `ydb.granular.describe_schema` permission.
 
 Table structure:
 

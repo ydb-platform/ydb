@@ -86,6 +86,7 @@ target_sources(clicommands PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_readwrite_scenario.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_admin.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_benchmark.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_bridge.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_cluster.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_debug.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_dynamic_config.cpp

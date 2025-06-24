@@ -76,6 +76,10 @@ class YdbCluster:
         return subpath if subpath else cls._tables_path
 
     @classmethod
+    def get_full_tables_path(cls, subpath: str = '') -> str:
+        return f'/{cls.ydb_database}/{cls.get_tables_path(subpath)}'
+
+    @classmethod
     def get_monitoring_urls(cls) -> list[YdbCluster.MonitoringUrl]:
         def _process_url(url: str) -> YdbCluster.MonitoringUrl:
             spl = url.split('::', 2)
@@ -212,8 +216,8 @@ class YdbCluster:
         return cls.get_ydb_driver().scheme_client.describe_path(path)
 
     @classmethod
-    def _get_tables(cls, path):
-        full_path = f'/{cls.ydb_database}/{path}'
+    def get_tables(cls, path):
+        full_path = cls.get_full_tables_path(path)
         LOGGER.info(f'get_tables {full_path}')
         result = []
         self_descr = cls._describe_path_impl(full_path)
@@ -326,10 +330,10 @@ class YdbCluster:
                 errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
             paths_to_balance = []
             if isinstance(balanced_paths, str):
-                paths_to_balance += cls._get_tables(balanced_paths)
+                paths_to_balance += cls.get_tables(balanced_paths)
             elif isinstance(balanced_paths, list):
                 for path in balanced_paths:
-                    paths_to_balance += cls._get_tables(path)
+                    paths_to_balance += cls.get_tables(path)
             for p in paths_to_balance:
                 table_nodes = cls.get_cluster_nodes(p)
                 min = None

@@ -41,7 +41,7 @@
 
 #### Изменения с потерей обратной совместимости
 
-* Если вы используете [temporal over YDB](https://github.com/yandex/temporal-over-ydb), обновите его версию перед обновление YDB, чтобы избежать ошибок в выполнении запросов.
+* Если вы используете [temporal over YDB](https://github.com/yandex/temporal-over-ydb), обновите его на версию [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) перед обновление YDB на текущую версию, чтобы избежать ошибок в выполнении запросов.
 
 #### Производительность
 

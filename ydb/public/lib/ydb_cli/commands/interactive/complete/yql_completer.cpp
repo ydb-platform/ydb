@@ -7,6 +7,7 @@
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/name/cache/local/cache.h>
 #include <yql/essentials/sql/v1/complete/name/object/simple/cached/schema.h>
+#include <yql/essentials/sql/v1/complete/name/service/impatient/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
@@ -163,25 +164,33 @@ namespace NYdb::NConsoleClient {
 
         auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
 
-        TVector<NSQLComplete::INameService::TPtr> services = {
-            NSQLComplete::MakeStaticNameService(
-                NSQLComplete::LoadDefaultNameSet(), ranking),
+        auto statics = NSQLComplete::MakeStaticNameService(NSQLComplete::LoadDefaultNameSet(), ranking);
 
+        auto schema =
             NSQLComplete::MakeSchemaNameService(
                 NSQLComplete::MakeSimpleSchema(
                     NSQLComplete::MakeCachedSimpleSchema(
                         MakeSchemaCaches(),
                         /* zone = */ "",
-                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose)))),
-        };
+                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose))));
 
-        auto service = NSQLComplete::MakeUnionNameService(std::move(services), std::move(ranking));
+        auto heavy = NSQLComplete::MakeUnionNameService(
+            {
+                statics,
+                schema,
+            }, ranking);
+
+        auto light = NSQLComplete::MakeUnionNameService(
+            {
+                statics,
+                NSQLComplete::MakeImpatientNameService(schema),
+            }, ranking);
 
         auto config = NSQLComplete::MakeYDBConfiguration();
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
-            /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, service, config),
-            /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, service, config),
+            /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, heavy, config),
+            /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, light, config),
             std::move(color)));
     }
 

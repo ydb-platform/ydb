@@ -319,7 +319,7 @@ Table structure:
 |--------|-------------|
 | `Sid` | [SID](../concepts/glossary.md#sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
-| `IsLockedOut` | Indicates that this user is automatically locked out due to exceeding the number of failed authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `IsLockedOut` | Indicates that user has been automatically deactivated due to exceeding the threshold for unsuccessful authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
 | `LastSuccessfulAttemptAt` | Timestamp of the last successful authentication attempt.<br />Type: `Timestamp`. |
 | `LastFailedAttemptAt` | Timestamp of the last failed authentication attempt.<br />Type: `Timestamp`. |
@@ -355,7 +355,7 @@ Table structure:
 
 The auth permissions views list assigned [access rights](../concepts/glossary.md#access-right).
 
-Contains two views:
+There are two views:
 
 * `auth_permissions`: Directly assigned access rights.
 * `auth_effective_permissions`: Effective access rights, accounting for [inheritance](../concepts/glossary.md#access-right-inheritance).

@@ -2522,8 +2522,10 @@ TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& 
     auto status = IsWideSequenceBlockType(*rootType) ? TOperationProgress::EOpBlockStatus::Full : TOperationProgress::EOpBlockStatus::None;
     bool stop = false;
     VisitExpr(*pRoot, [&](const TExprNode& node) {
-        if (stop || node.IsLambda()) {
+        if (stop || node.IsArguments()) {
             return false;
+        } else if (node.IsLambda()) {
+            return true;
         }
 
         const TTypeAnnotationNode* nodeType = node.GetTypeAnn();

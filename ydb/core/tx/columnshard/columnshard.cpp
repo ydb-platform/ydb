@@ -4,7 +4,6 @@
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
 #include "data_accessor/actor.h"
-#include "data_accessor/shared_metadata_accessor_cache_actor.h"
 #include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
@@ -37,11 +36,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationInsertionWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
-    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataAccessorCache()){
-        ctx.Send(DataAccessorsControlActorId, new NOlap::NDataAccessorControl::TEvClearCache(SelfId()));
-    } else {
-        ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
-    }
+    ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
     if (!!OperationsManager) {
         OperationsManager->StopWriting();
     }
@@ -90,7 +85,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
-    ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
+    ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup()); 
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
@@ -130,12 +125,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
-    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataAccessorCache()){
-        DataAccessorsControlActorId = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(ctx.SelfID.NodeId());
-    } else {
-        DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
-    }
-
+    DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();

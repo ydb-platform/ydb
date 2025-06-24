@@ -146,7 +146,6 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
@@ -1144,18 +1143,6 @@ void TSharedCacheInitializer::InitializeServices(
     auto* actor = NSharedCache::CreateSharedPageCache(config, appData->Counters);
     setup->LocalServices.emplace_back(NSharedCache::MakeSharedPageCacheId(0),
         TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId));
-}
-
-TSharedMetadataAccessorCacheInitializer::TSharedMetadataAccessorCacheInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{}
-
-void TSharedMetadataAccessorCacheInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const TAppData *appData) {
-    if (appData->FeatureFlags.GetEnableSharedMetadataAccessorCache()) {
-        auto* actor = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
-        setup->LocalServices.emplace_back(NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(NodeId),
-            TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
-    }
 }
 
 // TBlobCacheInitializer
@@ -2871,7 +2858,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
                 TMailboxType::HTSwap, appData->UserPoolId)
         );
-
+        
         setup->LocalServices.emplace_back(
             NKafka::MakeTransactionsServiceID(NodeId),
             TActorSetupCmd(NKafka::CreateTransactionsCoordinator(),

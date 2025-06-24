@@ -1,8 +1,6 @@
 #pragma once
-
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <library/cpp/cache/cache.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IAccessorCallback {
@@ -11,31 +9,12 @@ public:
     virtual ~IAccessorCallback() = default;
 };
 
-class IAccessorCallbackWithOwner {
-public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors, const TActorId& owner) = 0;
-    virtual ~IAccessorCallbackWithOwner() = default;
-};
-
-class TCallbackWrapper: public IAccessorCallback {
-    const std::shared_ptr<IAccessorCallbackWithOwner> Callback;
-    TActorId Owner;
-public:
-    TCallbackWrapper(const std::shared_ptr<IAccessorCallbackWithOwner>& callback, const TActorId& owner)
-        : Callback(callback), Owner(owner)
-    {}
-
-    void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override {
-        Callback->OnAccessorsFetched(move(accessors), Owner);
-    }
-};
-
-class TActorAccessorsCallback: public IAccessorCallbackWithOwner {
+class TActorAccessorsCallback: public IAccessorCallback {
 private:
     const NActors::TActorId ActorId;
 
 public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors, const TActorId& owner) override;
+    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override;
     TActorAccessorsCallback(const NActors::TActorId& actorId)
         : ActorId(actorId) {
     }
@@ -98,25 +77,14 @@ public:
 };
 
 class IGranuleDataAccessor {
-public:
-    struct TMetadataSizeProvider {
-        size_t operator()(const TPortionDataAccessor& data) const {
-            return data.GetMetadataSize();
-        }
-    };
-
-    using TSharedMetadataAccessorCache = TLRUCache<std::tuple<TActorId, TInternalPathId, ui64>, TPortionDataAccessor, TNoopDelete, IGranuleDataAccessor::TMetadataSizeProvider>;
 private:
     const TInternalPathId PathId;
 
     virtual void DoAskData(THashMap<TInternalPathId, TPortionsByConsumer>&& portions, const std::shared_ptr<IAccessorCallback>& callback) = 0;
     virtual TDataCategorized DoAnalyzeData(const TPortionsByConsumer& portions) = 0;
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) = 0;
-    virtual void DoSetCache(std::shared_ptr<TSharedMetadataAccessorCache>) = 0;
-    virtual void DoSetOwner(const TActorId& owner) = 0;
 
 public:
-
     virtual ~IGranuleDataAccessor() = default;
 
     TInternalPathId GetPathId() const {
@@ -131,12 +99,6 @@ public:
     TDataCategorized AnalyzeData(const TPortionsByConsumer& portions);
     void ModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
         return DoModifyPortions(add, remove);
-    }
-    void SetCache(std::shared_ptr<TSharedMetadataAccessorCache> cache) {
-        DoSetCache(cache);
-    }
-    void SetOwner(const TActorId& owner) {
-        DoSetOwner(owner);
     }
 };
 

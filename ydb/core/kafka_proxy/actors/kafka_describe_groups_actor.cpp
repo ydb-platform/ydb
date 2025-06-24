@@ -61,6 +61,7 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
         PendingResponses--;
         if (KqpCookieToGroupId.find(ev->Cookie) != KqpCookieToGroupId.end()) {
             KAFKA_LOG_W("Recieved an unknown cookie. Dying.");
+            SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, "Incorrect cookie number");
             Die(ctx);
         }
         GroupIdToDescription[KqpCookieToGroupId[ev->Cookie]].ErrorCode = EKafkaErrors::INVALID_REQUEST;

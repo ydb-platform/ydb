@@ -35,6 +35,10 @@ using TSslPtr = std::unique_ptr<SSL, TSslDeleter>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TString GetFingerprintSHA256(const TX509Ptr& certificate);
+
+////////////////////////////////////////////////////////////////////////////////
+
 DECLARE_REFCOUNTED_STRUCT(TSslContextImpl)
 
 using TCertificatePathResolver = std::function<TString(const TString&)>;

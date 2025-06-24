@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             TVector<ui32> columnIds = {1, 2, 3, 4, 7, 8, 9, 5, 6}; // key and numerical columns
             ui32 defaultFilledColumns = 2;
             
-            TVector<TCell> increments = {
+            TVector<TCell> cells = {
                 TCell::Make(ui64(1)),    // key = 1
                 TCell::Make(ui8(22)),
                 TCell::Make(ui16(33)),
@@ -147,8 +147,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(i8(-66)),
             };
 
-            auto result = Upsert(runtime, sender, shard, tableId, txId, 
-                                    NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, defaultFilledColumns);
+            auto result = UpsertWithDefaultValues(runtime, sender, shard, tableId, txId, 
+                                    NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, defaultFilledColumns);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         }
         
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 2, 3};
             ui32 defaultFilledColumns = 9;
-            TVector<TCell> increments = {
+            TVector<TCell> cells = {
                 TCell::Make(ui64(1)),    // key = 1
                 TCell::Make(ui32(944)),
                 TCell::Make(ui64(955)),
@@ -216,8 +216,8 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(ui16(933))
             };
             
-            auto result = Upsert(runtime, sender, shard, tableId, txId, 
-                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            auto result = UpsertWithDefaultValues(runtime, sender, shard, tableId, txId, 
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
     }

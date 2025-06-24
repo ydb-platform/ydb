@@ -130,16 +130,12 @@ void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
     for (auto&& i : SelectorConstructors) {
         *proto.MutableLCBuckets()->AddSelectors() = i.SerializeToProto();
     }
-    proto.MutableLCBuckets()->SetNodePortionsCountLimit(NodePortionsCountLimit);
 }
 
 bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
     if (!proto.HasLCBuckets()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse lc-buckets optimizer from proto")("proto", proto.DebugString());
         return false;
-    }
-    if (proto.GetLCBuckets().HasNodePortionsCountLimit()) {
-        NodePortionsCountLimit = proto.GetLCBuckets().GetNodePortionsCountLimit();
     }
     for (auto&& i : proto.GetLCBuckets().GetLevels()) {
         TLevelConstructorContainer lContainer;
@@ -161,13 +157,6 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
 }
 
 TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
-    if (jsonInfo.Has("node_portions_count_limit")) {
-        const auto& jsonValue = jsonInfo["node_portions_count_limit"];
-        if (!jsonValue.IsUInteger()) {
-            return TConclusionStatus::Fail("incorrect node_portions_count_limit value have to be unsigned int");
-        }
-        NodePortionsCountLimit = jsonValue.GetUInteger();
-    }
     std::set<TString> selectorNames;
     if (jsonInfo.Has("selectors")) {
         if (!jsonInfo["selectors"].IsArray()) {

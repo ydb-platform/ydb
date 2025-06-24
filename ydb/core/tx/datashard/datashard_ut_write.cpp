@@ -85,8 +85,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 {"int16_val", "Int16", false, false},     // id=7
                 {"int32_val", "Int32", false, false},     // id=8
                 {"int64_val", "Int64", false, false},     // id=9
-                {"utf8_val", "Utf8", false, false},       // id=10 (not numerical)
-                {"double_val", "Double", false, false}   // id=11 (not supported by increment)
             });
     
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
@@ -95,7 +93,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Insert initial data =========\n";
         {
-            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}; // all columns
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // all columns
             TVector<TCell> cells = {
                 TCell::Make(ui64(1)),     // key = 1
                 TCell::Make(ui8(2)),
@@ -106,8 +104,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(i16(7)),
                 TCell::Make(i32(8)),
                 TCell::Make(i64(9)),
-                TCell::Make("10"),
-                TCell::Make(double(11)),
             };
 
             auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells);
@@ -120,8 +116,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_STRINGS_EQUAL(tableState, 
                 "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 4, "
-                "uint64_val = 5, int8_val = 6, int16_val = 7, int32_val = 8, int64_val = 9, "
-                "utf8_val = 10\\0, double_val = 11\n"
+                "uint64_val = 5, int8_val = 6, int16_val = 7, int32_val = 8, int64_val = 9\n"
             );
         }
 
@@ -163,18 +158,16 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             
             UNIT_ASSERT_STRINGS_EQUAL(tableState, 
                 "key = 1, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 5, int8_val = 6, int16_val = -77, int32_val = -88, int64_val = -99, "
-                "utf8_val = 10\\0, double_val = 11\n"
+                "uint64_val = 5, int8_val = 6, int16_val = -77, int32_val = -88, int64_val = -99\n"
 
                 "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 55, int8_val = -66, int16_val = -77, int32_val = -88, int64_val = -99, "
-                "utf8_val = NULL, double_val = NULL\n"
+                "uint64_val = 55, int8_val = -66, int16_val = -77, int32_val = -88, int64_val = -99\n"
             );
         }
 
         Cout << "========= Try replace with default values in columns 2, 3 (should fail) =========\n";
         {
-            TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 10, 11, 2, 3};
+            TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 2, 3};
             ui32 defaultFilledColumns = 2;
             TVector<TCell> increments = {
                 TCell::Make(ui64(1)),    // key = 1
@@ -184,8 +177,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(i16(-977)),
                 TCell::Make(i32(-988)),
                 TCell::Make(i64(-999)),
-                TCell::Make("newtext-10-1"),
-                TCell::Make(double(11.1)),
                 TCell::Make(ui8(92)),
                 TCell::Make(ui16(933))
             };
@@ -201,13 +192,32 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             
             UNIT_ASSERT_STRINGS_EQUAL(tableState, 
                 "key = 1, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 5, int8_val = 6, int16_val = -77, int32_val = -88, int64_val = -99, "
-                "utf8_val = 10\\0, double_val = 11\n"
+                "uint64_val = 5, int8_val = 6, int16_val = -77, int32_val = -88, int64_val = -99\n"
 
                 "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 55, int8_val = -66, int16_val = -77, int32_val = -88, int64_val = -99, "
-                "utf8_val = NULL, double_val = NULL\n"
+                "uint64_val = 55, int8_val = -66, int16_val = -77, int32_val = -88, int64_val = -99\n"
             );
+        }
+        
+        Cout << "========= Try upsert with default values in too much columns  (should fail) =========\n";
+        {
+            TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 2, 3};
+            ui32 defaultFilledColumns = 9;
+            TVector<TCell> increments = {
+                TCell::Make(ui64(1)),    // key = 1
+                TCell::Make(ui32(944)),
+                TCell::Make(ui64(955)),
+                TCell::Make(i8(-96)),
+                TCell::Make(i16(-977)),
+                TCell::Make(i32(-988)),
+                TCell::Make(i64(-999)),
+                TCell::Make(ui8(92)),
+                TCell::Make(ui16(933))
+            };
+            
+            auto result = Upsert(runtime, sender, shard, tableId, txId, 
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
     }
 

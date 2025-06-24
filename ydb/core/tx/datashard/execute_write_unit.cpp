@@ -179,7 +179,7 @@ public:
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
-        const ui32 defaultFilledColumnsCnt = validatedOperation.GetDefaultFilledColumnsCnt();
+        const ui32 DefaultFilledColumnCount = validatedOperation.GetDefaultFilledColumnCount();
 
         // Main update cycle
 
@@ -190,7 +190,7 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnsCnt);
+                    userDb.UpsertRow(fullTableId, key, ops, DefaultFilledColumnCount);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {

@@ -22,6 +22,7 @@ target_link_libraries(name-object-simple PUBLIC
   contrib-libs-cxxsupp
   yutil
   complete-name-object
+  library-cpp-case_insensitive_string
 )
 
 target_sources(name-object-simple PRIVATE

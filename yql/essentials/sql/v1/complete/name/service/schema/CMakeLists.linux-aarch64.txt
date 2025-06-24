@@ -21,6 +21,7 @@ target_link_libraries(name-service-schema PUBLIC
   yutil
   complete-name-object
   complete-name-service
+  library-cpp-iterator
 )
 
 target_sources(name-service-schema PRIVATE

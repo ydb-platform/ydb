@@ -21,6 +21,7 @@ target_link_libraries(name-service-cluster PUBLIC
   yutil
   complete-name-cluster
   complete-name-service
+  library-cpp-case_insensitive_string
 )
 
 target_sources(name-service-cluster PRIVATE

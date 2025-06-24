@@ -1,6 +1,6 @@
 # Interactive query execution mode
 
-After executing `{{ ydb-cli }}` command without subcommands, this launches the interactive query execution mode. The console or terminal will be switched to interactive mode. After that, you can enter queries directly into the console or terminal, and when you enter a newline character, the query is considered completed and it starts to execute. The query text can be either a YQL query or a [special command](#spec-commands).
+Executing `{{ ydb-cli }}` command without subcommands launches the interactive query execution mode. The console or terminal will be switched to the interactive mode. After that, you can enter queries directly into the console or terminal. When you enter a newline character, the query is considered completed and it starts to execute. The query text can be either a YQL query or a [special command](#spec-commands).
 
 General format of the command:
 
@@ -10,17 +10,45 @@ General format of the command:
 
 * `global options` — [global parameters](commands/global-options.md).
 
+Example usage:
+
+![Example](_assets/general-example.gif)
+
 ## Features {#features}
 
-* [Query history](#query-history).
-* Syntax highlighting based on YQL grammar.
-* [Hotkeys](#hotkeys).
-* [Special commands](#spec-commands).
-* [Auto completion](#auto-completion).
+* [Syntax highlighting](#syntax-highlighting)
+* [Hotkeys](#hotkeys)
+* [Query history](#query-history)
+* [Auto completion](#auto-completion)
+* [Special commands](#spec-commands)
+
+### Syntax highlighting {#syntax-highlighting}
+
+![Syntax highlighting](_assets/highlighting.jpg)
+
+Interactive mode supports YQL syntax highlighting, which helps to better understand query structure. Different colors are used for the following groups of elements:
+
+* YQL keywords (SELECT, FROM, WHERE, INSERT, UPDATE and others)
+* Table and column names
+* String literals (text in quotes)
+* Numeric literals
+* Operators (=, <, >, +, - and others)
+* Special characters (brackets, commas, dots)
+* Comments
+
+## Hotkeys {#hotkeys}
+
+| Hotkey        | Description                                                               |
+|---------------|---------------------------------------------------------------------------|
+| `Up arrow`    | Shows previous query from history.                                        |
+| `Down arrow`  | Shows next query from history.                                            |
+| `TAB`         | Completes the current word based on YQL syntax.                          |
+| `CTRL + R`    | Searches for a query in history containing a specified substring.         |
+| `CTRL + D`    | Exits interactive mode.                                                   |
 
 ### Query history {#query-history}
 
-Using up and down arrow keys you can navigate through the query history:
+You can navigate through the query history using up and down arrow keys:
 
 ![History](_assets/history.gif)
 
@@ -30,19 +58,34 @@ A query search function (`CTRL + R`) is also supported:
 
 ![Search](_assets/history-search.gif)
 
-## Hotkeys {#hotkeys}
+## Auto completion {#auto-completion}
 
-| Hotkey        | Description                                                               |
-|---------------|---------------------------------------------------------------------------|
-| `CTRL + D`    | Exits interactive mode.                                                   |
-| `Up arrow`    | Shows previous query from history.                                        |
-| `Down arrow`  | Shows next query from history.                                            |
-| `TAB`         | Completes the current word based on YQL syntax.                          |
-| `CTRL + R`    | Searches for a query in history containing a specified substring.         |
+Auto completion helps you write queries more efficiently. While typing, it suggests possible completions for the current word based on YQL syntax.
+
+It also searches for schema object names in database where possible.
+
+There are two types of suggestions: auto completion by pressing `TAB` key and interactive hints.
+
+### Auto completion by pressing `TAB` key {#auto-completion-tab}
+
+While in interactive mode, pressing `TAB` key will show a list of suggestions of completion of current word according to the YQL syntax.
+
+![Auto completion](_assets/candidates.gif)
+
+If there is only one available option, pressing TAB will automatically complete the current word.
+If all available options share a common prefix, pressing TAB will automatically insert it.
+
+### Interactive Hints {#interactive-hints}
+
+While typing in interactive mode, a list of hints will appear under the cursor, showing first 4 suggestions of completion of current word according to the YQL grammar.
+
+![Interactive hints](_assets/hints.gif)
+
+This feature provides quick guidance without overwhelming you with all possible options, helping you stay on track while writing queries.
 
 ## Special commands {#spec-commands}
 
-Special commands are CLI-specific commands and are not part of the YQL syntax. They are intended for performing various functions that cannot be accomplished through a YQL query.
+Special commands are CLI-specific commands and are not part of the YQL syntax. Their purpose is to perform various functions that cannot be accomplished through a YQL query.
 
 | Command                  | Description                                                                                                                                                                      |
 |--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -113,28 +156,3 @@ ResultSet
          TotalDurationMs: 0
          TotalOutputRows: 1
 ```
-
-## Auto completion {#auto-completion}
-
-Auto completion helps you write queries more efficiently. While typing, it suggests possible completions for the current word based on YQL syntax.
-
-It also searches for schema object names in database where possible.
-
-There are two types of suggestions: auto completion by pressing `TAB` key and interactive hints.
-
-### Auto completion by pressing `TAB` key {#auto-completion-tab}
-
-While in interactive mode, pressing `TAB` key will show a list of suggestions of completion of current word according to the YQL syntax.
-
-![Auto completion](_assets/candidates.gif)
-
-If there is only one suggestion available, pressing TAB will complete current word to it.
-
-### Interactive Hints {#interactive-hints}
-
-While typing in interactive mode, a list of hints will appear under the cursor, showing first 4 suggestions of completion of current word according to the YQL grammar.
-
-![Interactive hints](_assets/hints.gif)
-
-This feature provides quick guidance without overwhelming you with all possible options, helping you stay on track while writing queries.
-

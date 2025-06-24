@@ -237,7 +237,7 @@ private:
                 buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
                 break;
             } else {
-                explain = "unsupported index type to build";
+                explain = "building global unique index is disabled";
                 return false;
             }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {

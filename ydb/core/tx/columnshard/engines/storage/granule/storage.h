@@ -152,7 +152,6 @@ public:
         if (!it->second->IsErasable()) {
             return false;
         }
-        DataAccessorsManager->UnregisterController(pathId);
         Tables.erase(it);
         return true;
     }

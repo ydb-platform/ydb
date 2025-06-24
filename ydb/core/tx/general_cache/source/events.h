@@ -61,18 +61,29 @@ struct TEvents {
 
     class TEvAdditionalObjectsInfo: public NActors::TEventLocal<TEvAdditionalObjectsInfo, EvAdditionalObjectsInfo> {
     private:
-        bool ObjectsExtracted = false;
-        THashMap<TAddress, TObject> Objects;
+        bool AddObjectsExtracted = false;
+        THashMap<TAddress, TObject> AddObjects;
+
+        bool RemoveObjectsExtracted = false;
+        THashSet<TAddress> RemoveObjects;
 
     public:
-        THashMap<TAddress, TObject> ExtractObjects() {
-            AFL_VERIFY(!ObjectsExtracted);
-            ObjectsExtracted = true;
-            return std::move(Objects);
+        THashMap<TAddress, TObject> ExtractAddObjects() {
+            AFL_VERIFY(!AddObjectsExtracted);
+            AddObjectsExtracted = true;
+            return std::move(AddObjects);
         }
 
-        TEvAdditionalObjectsInfo(THashMap<TAddress, TObject>&& objects)
-            : Objects(std::move(objects)) {
+        THashSet<TAddress> ExtractRemoveObjects() {
+            AFL_VERIFY(!RemoveObjectsExtracted);
+            RemoveObjectsExtracted = true;
+            return std::move(RemoveObjects);
+        }
+
+        TEvAdditionalObjectsInfo(THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove)
+            : AddObjects(std::move(add))
+            , RemoveObjects(std::move(remove))
+        {
         }
     };
 };

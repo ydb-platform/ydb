@@ -114,6 +114,47 @@ private:
         Counters->CacheSizeBytes->Set(Cache.TotalSize());
     }
 
+    void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
+        for (auto&& i : add) {
+            auto it = RequestedObjects.find(i.first);
+            if (it != RequestedObjects.end()) {
+                Cache.Insert(i.first, i.second);
+                for (auto&& r : it->second) {
+                    if (r->AddResult(i.first, i.second)) {
+                        RequestsInProgress.erase(r->GetRequestId());
+                        Counters->OnRequestFinished(now - r->GetCreated());
+                        if (isAdditional) {
+                            Counters->AdditionalObjectInfo->Inc();
+                        } else {
+                            Counters->FetchedObject->Inc();
+                        }
+                    }
+
+                }
+                RequestedObjects.erase(it);
+            }
+        }
+    }
+
+    void RemoveObjects(THashSet<TAddress>&& remove, const bool isAdditional, const TMonotonic now) {
+        for (auto&& i : remove) {
+            auto it = RequestedObjects.find(i);
+            AFL_VERIFY(it != RequestedObjects.end());
+            for (auto&& r : it->second) {
+                if (r->AddRemoved(i)) {
+                    RequestsInProgress.erase(r->GetRequestId());
+                    Counters->OnRequestFinished(now - r->GetCreated());
+                    if (isAdditional) {
+                        Counters->RemovedObjectInfo->Inc();
+                    } else {
+                        Counters->NoExistsObject->Inc();
+                    }
+                }
+            }
+            RequestedObjects.erase(it);
+        }
+    }
+
 public:
     TManager(const NPublic::TConfig& config, const NActors::TActorId& ownerActorId,
         const std::shared_ptr<TManagerCounters>& counters)
@@ -153,54 +194,20 @@ public:
         DrainQueue();
     }
 
-    void OnAdditionalObjectsInfo(THashMap<TAddress, TObject>&& objects) {
+    void OnAdditionalObjectsInfo(THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "objects_info");
         const TMonotonic now = TMonotonic::Now();
-        for (auto&& i : objects) {
-            auto it = RequestedObjects.find(i.first);
-            if (it != RequestedObjects.end()) {
-                Cache.Insert(i.first, i.second);
-                for (auto&& r : it->second) {
-                    if (r->AddResult(i.first, i.second)) {
-                        RequestsInProgress.erase(r->GetRequestId());
-                        Counters->OnRequestFinished(now - r->GetCreated());
-                        Counters->AdditionalObjectInfo->Inc();
-                    }
-                }
-                RequestedObjects.erase(it);
-            }
-        }
+        AddObjects(std::move(add), true, now);
+        RemoveObjects(std::move(remove), true, now);
         DrainQueue();
     }
 
     void OnRequestResult(THashMap<TAddress, TObject>&& objects, THashSet<TAddress>&& removed, THashMap<TAddress, TString>&& failed) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "on_result");
         const TMonotonic now = TMonotonic::Now();
-        for (auto&& i : objects) {
-            auto it = RequestedObjects.find(i.first);
-            AFL_VERIFY(it != RequestedObjects.end());
-            Cache.Insert(i.first, i.second);
-            for (auto&& r : it->second) {
-                if (r->AddResult(i.first, i.second)) {
-                    RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(now - r->GetCreated());
-                    Counters->FetchedObject->Inc();
-                }
-            }
-            RequestedObjects.erase(it);
-        }
-        for (auto&& i : removed) {
-            auto it = RequestedObjects.find(i);
-            AFL_VERIFY(it != RequestedObjects.end());
-            for (auto&& r : it->second) {
-                if (r->AddRemoved(i)) {
-                    RequestsInProgress.erase(r->GetRequestId());
-                    Counters->OnRequestFinished(now - r->GetCreated());
-                    Counters->NoExistsObject->Inc();
-                }
-            }
-            RequestedObjects.erase(it);
-        }
+        AddObjects(std::move(objects), false, now);
+        RemoveObjects(std::move(removed), false, now);
+
         for (auto&& i : failed) {
             auto it = RequestedObjects.find(i.first);
             AFL_VERIFY(it != RequestedObjects.end());

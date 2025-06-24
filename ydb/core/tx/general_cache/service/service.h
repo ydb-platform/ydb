@@ -30,7 +30,7 @@ private:
         Manager->OnRequestResult(ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors());
     }
     void HandleMain(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo::TPtr& ev) {
-        Manager->OnAdditionalObjectsInfo(ev->Get()->ExtractObjects());
+        Manager->OnAdditionalObjectsInfo(ev->Get()->ExtractAddObjects(), ev->Get()->ExtractRemoveObjects());
     }
 
 public:

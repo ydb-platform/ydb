@@ -5,6 +5,7 @@ RECURSE(
     backup
     benchmarks_init
     blobstorage
+    bridge
     canonical
     clickbench
     cms

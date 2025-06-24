@@ -56,6 +56,20 @@ namespace NSQLComplete {
 
         class TInferenceVisitor: public SQLv1Antlr4BaseVisitor {
         public:
+            std::any visitJoin_source(SQLv1::Join_sourceContext* ctx) override {
+                TColumnContext united;
+                for (SQLv1::Flatten_sourceContext* ctx : ctx->flatten_source()) {
+                    std::any any = visit(ctx);
+                    if (!any.has_value()) {
+                        continue;
+                    }
+
+                    TColumnContext child = std::move(std::any_cast<TColumnContext>(any));
+                    united = United(std::move(united), std::move(child));
+                }
+                return united;
+            }
+
             std::any visitNamed_single_source(SQLv1::Named_single_sourceContext* ctx) override {
                 SQLv1::Single_sourceContext* singleSource = ctx->single_source();
                 if (singleSource == nullptr) {
@@ -106,6 +120,13 @@ namespace NSQLComplete {
                 }
 
                 return context;
+            }
+
+            static TColumnContext United(TColumnContext&& lhs, TColumnContext&& rhs) {
+                lhs.Tables.reserve(lhs.Tables.size() + rhs.Tables.size());
+                std::move(rhs.Tables.begin(), rhs.Tables.end(), std::back_inserter(lhs.Tables));
+                SortUnique(lhs.Tables);
+                return lhs;
             }
         };
 

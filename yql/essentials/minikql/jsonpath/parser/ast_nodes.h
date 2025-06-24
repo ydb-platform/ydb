@@ -80,7 +80,7 @@ public:
     virtual ~TAstNode() = default;
 
 private:
-    TPosition Pos;
+    TPosition Pos_;
 };
 
 using TAstNodePtr = TIntrusivePtr<TAstNode>;
@@ -98,8 +98,8 @@ public:
     EReturnType GetReturnType() const override;
 
 private:
-    TAstNodePtr Expr;
-    EJsonPathMode Mode;
+    TAstNodePtr Expr_;
+    EJsonPathMode Mode_;
 };
 
 class TContextObjectNode : public TAstNode {
@@ -118,7 +118,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TString Name;
+    TString Name_;
 };
 
 class TLastArrayIndexNode : public TAstNode {
@@ -137,7 +137,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    double Value;
+    double Value_;
 };
 
 class TMemberAccessNode : public TAstNode {
@@ -151,8 +151,8 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TString Member;
-    TAstNodePtr Input;
+    TString Member_;
+    TAstNodePtr Input_;
 };
 
 class TWildcardMemberAccessNode : public TAstNode {
@@ -164,7 +164,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TAstNodePtr Input;
+    TAstNodePtr Input_;
 };
 
 class TArrayAccessNode : public TAstNode {
@@ -183,8 +183,8 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TVector<TSubscript> Subscripts;
-    TAstNodePtr Input;
+    TVector<TSubscript> Subscripts_;
+    TAstNodePtr Input_;
 };
 
 class TWildcardArrayAccessNode : public TAstNode {
@@ -196,7 +196,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TAstNodePtr Input;
+    TAstNodePtr Input_;
 };
 
 enum class EUnaryOperation {
@@ -218,8 +218,8 @@ public:
     EReturnType GetReturnType() const override;
 
 private:
-    EUnaryOperation Operation;
-    TAstNodePtr Expr;
+    EUnaryOperation Operation_;
+    TAstNodePtr Expr_;
 };
 
 enum class EBinaryOperation {
@@ -253,9 +253,9 @@ public:
     EReturnType GetReturnType() const override;
 
 private:
-    EBinaryOperation Operation;
-    TAstNodePtr LeftExpr;
-    TAstNodePtr RightExpr;
+    EBinaryOperation Operation_;
+    TAstNodePtr LeftExpr_;
+    TAstNodePtr RightExpr_;
 };
 
 class TBooleanLiteralNode : public TAstNode {
@@ -267,7 +267,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    bool Value;
+    bool Value_;
 };
 
 class TNullLiteralNode : public TAstNode {
@@ -286,7 +286,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TString Value;
+    TString Value_;
 };
 
 class TFilterObjectNode : public TAstNode {
@@ -307,8 +307,8 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TAstNodePtr Predicate;
-    TAstNodePtr Input;
+    TAstNodePtr Predicate_;
+    TAstNodePtr Input_;
 };
 
 enum class EMethodType {
@@ -332,8 +332,8 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    EMethodType Type;
-    TAstNodePtr Input;
+    EMethodType Type_;
+    TAstNodePtr Input_;
 };
 
 class TStartsWithPredicateNode : public TAstNode {
@@ -349,8 +349,8 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TAstNodePtr Input;
-    TAstNodePtr Prefix;
+    TAstNodePtr Input_;
+    TAstNodePtr Prefix_;
 };
 
 class TExistsPredicateNode : public TAstNode {
@@ -364,7 +364,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TAstNodePtr Input;
+    TAstNodePtr Input_;
 };
 
 class TIsUnknownPredicateNode : public TAstNode {
@@ -378,7 +378,7 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TAstNodePtr Input;
+    TAstNodePtr Input_;
 };
 
 class TLikeRegexPredicateNode : public TAstNode {
@@ -394,8 +394,8 @@ public:
     void Accept(IAstNodeVisitor& visitor) const override;
 
 private:
-    TAstNodePtr Input;
-    NReWrapper::IRePtr Regex;
+    TAstNodePtr Input_;
+    NReWrapper::IRePtr Regex_;
 };
 
 }

@@ -90,7 +90,7 @@ public:
         , UserType(userType)
         , WrapDateTimeConvert(wrapDateTimeConvert)
     {
-        this->Stateless = false;
+        this->Stateless_ = false;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -246,7 +246,7 @@ public:
         , WrapDateTimeConvert(wrapDateTimeConvert)
         , UdfIndex(mutables.CurValueIndex++)
     {
-        this->Stateless = false;
+        this->Stateless_ = false;
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {

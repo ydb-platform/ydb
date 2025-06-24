@@ -14,6 +14,7 @@ namespace NSQLComplete {
         TString Cluster;
         TString Path;
 
+        friend bool operator<(const TTableId& lhs, const TTableId& rhs);
         friend bool operator==(const TTableId& lhs, const TTableId& rhs) = default;
     };
 

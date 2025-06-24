@@ -40,16 +40,6 @@ def post_install(self):
         absl.ADDINCL = [subst(include) for include in absl.ADDINCL]
         absl.SRCS = [subst(src) for src in absl.SRCS]
 
-    with self.yamakes["."] as absl:
-        absl.after(
-            "CFLAGS",
-            """
-            IF (Y_ABSL_DONT_USE_DEBUG)
-                CFLAGS(-DY_ABSL_DONT_USE_DEBUG_LIBRARY=1)
-            ENDIF()
-            """,
-        )
-
 
 abseil_cpp = CMakeNinjaNixProject(
     owners=["g:cpp-contrib"],

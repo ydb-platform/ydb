@@ -68,15 +68,15 @@ namespace {
 
     struct TStreamWithYield : public NUdf::TBoxedValue {
         TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index)
-            : Items(items)
-            , YieldPos(yieldPos)
-            , Index(index)
+            : Items_(items)
+            , YieldPos_(yieldPos)
+            , Index_(index)
         {}
 
     private:
-        TUnboxedValueVector Items;
-        ui32 YieldPos;
-        ui32 Index;
+        TUnboxedValueVector Items_;
+        ui32 YieldPos_;
+        ui32 Index_;
 
         ui32 GetTraverseCount() const override {
             return 0;
@@ -92,13 +92,13 @@ namespace {
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
-            if (Index >= Items.size()) {
+            if (Index_ >= Items_.size()) {
                 return NUdf::EFetchStatus::Finish;
             }
-            if (Index == YieldPos) {
+            if (Index_ == YieldPos_) {
                 return NUdf::EFetchStatus::Yield;
             }
-            result = Items[Index++];
+            result = Items_[Index_++];
             return NUdf::EFetchStatus::Ok;
         }
     };

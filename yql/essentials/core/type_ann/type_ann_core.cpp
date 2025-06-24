@@ -13222,9 +13222,13 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["JsonVariables"] = &JsonVariablesWrapper;
         ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
-        ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
-        ExtFunctions["UnionPositional"] = &UnionAllPositionalWrapper;
-        ExtFunctions["UnionMergePositional"] = &UnionAllPositionalWrapper;
+        ExtFunctions["UnionAllPositional"] = &SelectOpPositionalWrapper;
+        ExtFunctions["UnionPositional"] = &SelectOpPositionalWrapper;
+        ExtFunctions["UnionMergePositional"] = &SelectOpPositionalWrapper;
+        ExtFunctions["IntersectAllPositional"] = &SelectOpPositionalWrapper;
+        ExtFunctions["IntersectPositional"] = &SelectOpPositionalWrapper;
+        ExtFunctions["ExceptAllPositional"] = &SelectOpPositionalWrapper;
+        ExtFunctions["ExceptPositional"] = &SelectOpPositionalWrapper;
         ExtFunctions["SafeCast"] = &CastWrapper<false>;
         ExtFunctions["StrictCast"] = &CastWrapper<true>;
         ExtFunctions["Version"] = &VersionWrapper;

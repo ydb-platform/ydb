@@ -20,14 +20,14 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& left = this->Left->GetValue(ctx);
+        const auto& left = this->Left_->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (!left.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(false);
             }
         }
 
-        const auto& right = this->Right->GetValue(ctx);
+        const auto& right = this->Right_->GetValue(ctx);
         if (!IsRightOptional || right) {
             if (!right.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(false);
@@ -47,7 +47,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto left = GetNodeValue(this->Left, ctx, block);
+        const auto left = GetNodeValue(this->Left_, ctx, block);
 
         const auto uvFalse = GetFalse(context);
 
@@ -62,7 +62,7 @@ public:
         BranchInst::Create(done, both, skip, block);
 
         block = both;
-        const auto right = GetNodeValue(this->Right, ctx, block);
+        const auto right = GetNodeValue(this->Right_, ctx, block);
 
         if (IsLeftOptional) {
             const auto andr = BinaryOperator::CreateAnd(left, right, "and", block);
@@ -92,14 +92,14 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& left = this->Left->GetValue(ctx);
+        const auto& left = this->Left_->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (left.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(true);
             }
         }
 
-        const auto& right = this->Right->GetValue(ctx);
+        const auto& right = this->Right_->GetValue(ctx);
         if (!IsRightOptional || right) {
             if (right.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(true);
@@ -119,7 +119,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto left = GetNodeValue(this->Left, ctx, block);
+        const auto left = GetNodeValue(this->Left_, ctx, block);
 
         const auto uvTrue = GetTrue(context);
 
@@ -134,7 +134,7 @@ public:
         BranchInst::Create(done, both, skip, block);
 
         block = both;
-        const auto right = GetNodeValue(this->Right, ctx, block);
+        const auto right = GetNodeValue(this->Right_, ctx, block);
 
         if (IsLeftOptional) {
             const auto andr = BinaryOperator::CreateAnd(left, right, "and", block);
@@ -164,12 +164,12 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& left = this->Left->GetValue(ctx);
+        const auto& left = this->Left_->GetValue(ctx);
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
         }
 
-        const auto& right = this->Right->GetValue(ctx);
+        const auto& right = this->Right_->GetValue(ctx);
         if (IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
         }
@@ -192,14 +192,14 @@ public:
             const auto result = PHINode::Create(valueType, 2, "result", done);
 
             if (IsLeftOptional) {
-                const auto left = GetNodeValue(this->Left, ctx, block);
+                const auto left = GetNodeValue(this->Left_, ctx, block);
 
                 const auto skip = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, left, zero, "skip", block);
                 result->addIncoming(zero, block);
                 BranchInst::Create(done, both, skip, block);
 
                 block = both;
-                const auto right = GetNodeValue(this->Right, ctx, block);
+                const auto right = GetNodeValue(this->Right_, ctx, block);
 
                 if (IsRightOptional) {
                     const auto xorr = BinaryOperator::CreateXor(left, right, "xor", block);
@@ -213,14 +213,14 @@ public:
                     result->addIncoming(full, block);
                 }
             } else if (IsRightOptional) {
-                const auto right = GetNodeValue(this->Right, ctx, block);
+                const auto right = GetNodeValue(this->Right_, ctx, block);
 
                 const auto skip = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, right, zero, "skip", block);
                 result->addIncoming(zero, block);
                 BranchInst::Create(done, both, skip, block);
 
                 block = both;
-                const auto left = GetNodeValue(this->Left, ctx, block);
+                const auto left = GetNodeValue(this->Left_, ctx, block);
 
                 const auto xorr = BinaryOperator::CreateXor(left, right, "xor", block);
                 const auto full = BinaryOperator::CreateOr(xorr, GetFalse(context), "full", block);
@@ -232,8 +232,8 @@ public:
 
             return result;
         } else {
-            const auto left = GetNodeValue(this->Left, ctx, block);
-            const auto right = GetNodeValue(this->Right, ctx, block);
+            const auto left = GetNodeValue(this->Left_, ctx, block);
+            const auto right = GetNodeValue(this->Right_, ctx, block);
 
             const auto xorr = BinaryOperator::CreateXor(left, right, "xor", block);
             const auto full = BinaryOperator::CreateOr(xorr, GetFalse(context), "full", block);

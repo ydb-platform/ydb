@@ -1,5 +1,8 @@
 #include "name_service.h"
 
+#include <library/cpp/threading/future/wait/wait.h>
+#include <library/cpp/iterator/functools.h>
+
 namespace NSQLComplete {
 
     namespace {
@@ -19,24 +22,47 @@ namespace NSQLComplete {
                 }
 
                 if (request.Constraints.Column && !request.Constraints.Column->Tables.empty()) {
-                    Y_ENSURE(request.Constraints.Column->Tables.size() == 1, "Not Implemented");
-                    TTableId table = request.Constraints.Column->Tables[0];
-                    return Schema_
-                        ->Describe({
-                            .TableCluster = table.Cluster,
-                            .TablePath = table.Path,
-                            .ColumnPrefix = request.Prefix,
-                            .ColumnsLimit = request.Limit,
-                        })
-                        .Apply([table = std::move(table)](auto f) {
-                            return ToDescribeNameResponse(std::move(f), std::move(table));
-                        });
+                    return BatchDescribe(
+                        std::move(request.Constraints.Column->Tables),
+                        request.Prefix,
+                        request.Limit);
                 }
 
                 return NThreading::MakeFuture<TNameResponse>({});
             }
 
         private:
+            NThreading::TFuture<TNameResponse> BatchDescribe(
+                TVector<TTableId> tables, TString prefix, ui64 limit) const {
+                TVector<NThreading::TFuture<TDescribeTableResponse>> futures;
+                for (const auto& table : tables) {
+                    TDescribeTableRequest request = {
+                        .TableCluster = table.Cluster,
+                        .TablePath = table.Path,
+                        .ColumnPrefix = prefix,
+                        .ColumnsLimit = limit,
+                    };
+                    futures.emplace_back(Schema_->Describe(request));
+                }
+
+                return NThreading::WaitAll(futures).Apply([tables, futures](auto) mutable {
+                    TNameResponse response;
+
+                    for (auto [table, f] : NFuncTools::Zip(tables, futures)) {
+                        TDescribeTableResponse description = f.ExtractValue();
+                        for (TString& column : description.Columns) {
+                            TColumnName name;
+                            name.Indentifier = std::move(column);
+                            name.Table = table;
+
+                            response.RankedNames.emplace_back(std::move(name));
+                        }
+                    }
+
+                    return response;
+                });
+            }
+
             static TListRequest ToListRequest(TNameRequest request) {
                 return {
                     .Cluster = ClusterName(*request.Constraints.Object),
@@ -96,21 +122,6 @@ namespace NSQLComplete {
                     name = std::move(local);
                 }
                 return name;
-            }
-
-            static TNameResponse ToDescribeNameResponse(
-                NThreading::TFuture<TDescribeTableResponse> f,
-                TTableId table) {
-                TDescribeTableResponse info = f.ExtractValue();
-
-                TNameResponse response;
-                for (TString& column : info.Columns) {
-                    TColumnName name;
-                    name.Indentifier = std::move(column);
-                    name.Table = table;
-                    response.RankedNames.emplace_back(std::move(name));
-                }
-                return response;
             }
 
             ISchema::TPtr Schema_;

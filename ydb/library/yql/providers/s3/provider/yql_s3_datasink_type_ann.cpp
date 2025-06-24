@@ -438,7 +438,7 @@ private:
                         return nullptr;
                     }
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Missed key column '" << key->Content() << "' for partitioned by."));
+                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Missing key column for partitioning: '" << key->Content() << "'. Please ensure the column is included in the schema."));
                     return nullptr;
                 }
             }

@@ -2068,6 +2068,39 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map[TCoMember::CallableName()] = map[TCoNth::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        YQL_ENSURE(optCtx.Types);
+        static const char optName[] = "MemberNthOverFlatMap";
+        if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
+            return node;
+        }
+        if (!optCtx.IsSingleUsage(node->Head())) {
+            return node;
+        }
+        if (auto maybeFlatMap = TMaybeNode<TCoFlatMapBase>(node->HeadPtr())) {
+            auto flatMap = maybeFlatMap.Cast();
+            if (flatMap.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional &&
+                flatMap.Lambda().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional)
+            {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+                return ctx.Builder(node->Pos())
+                    .Callable(flatMap.CallableName())
+                        .Add(0, flatMap.Input().Ptr())
+                        .Lambda(1)
+                            .Param("item")
+                            .Callable(node->Content())
+                                .Apply(0, flatMap.Lambda().Ptr())
+                                    .With(0, "item")
+                                .Seal()
+                                .Add(1, node->Child(1))
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+        }
+        return node;
+    };
 }
 
 }

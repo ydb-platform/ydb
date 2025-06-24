@@ -558,4 +558,8 @@ message TKqpPhyQuery {
     string QueryDiagnostics = 10;
 
     repeated TKqpTableInfo ViewInfos = 11;
+
+    optional bool EnableOltpSink = 12;
+    optional bool EnableOlapSink = 13;
+    optional bool EnableHtapTx = 14;
 }

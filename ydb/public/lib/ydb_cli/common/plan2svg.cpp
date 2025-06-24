@@ -2171,13 +2171,17 @@ void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
     NJson::TJsonValue jsonNode;
     if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
         if (auto* topNode = jsonNode.GetValueByPath(simplified ? "SimplifiedPlan" : "Plan")) {
-            if (auto* subNode = topNode->GetValueByPath("Plans")) {
-                for (auto& plan : subNode->GetArray()) {
-                    if (auto* typeNode = plan.GetValueByPath("Node Type")) {
-                        auto nodeType = typeNode->GetStringSafe();
-                        LoadPlan(nodeType, plan);
-                    }
-                }
+            LoadPlans(*topNode);
+        }
+    }
+}
+
+void TPlanVisualizer::LoadPlans(const NJson::TJsonValue& root) {
+    if (auto* subNode = root.GetValueByPath("Plans")) {
+        for (auto& plan : subNode->GetArray()) {
+            if (auto* typeNode = plan.GetValueByPath("Node Type")) {
+                auto nodeType = typeNode->GetStringSafe();
+                LoadPlan(nodeType, plan);
             }
         }
     }

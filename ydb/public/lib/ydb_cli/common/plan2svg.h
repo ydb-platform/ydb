@@ -315,6 +315,7 @@ class TPlanVisualizer {
 public:
 
     void LoadPlans(const TString& plans, bool simplified = false);
+    void LoadPlans(const NJson::TJsonValue& root);
     void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
     void PostProcessPlans();
     TString PrintSvg();

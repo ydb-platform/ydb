@@ -771,7 +771,7 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
-TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage) {
+TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool useBlockHashJoin, bool buildCollectStage) {
     static const std::set<std::string_view> supportedTypes = {
         "Inner"sv,
         "Left"sv,
@@ -1151,46 +1151,24 @@ TExprBase DqBuildJoinDict(const TDqJoin& join, TExprContext& ctx) {
 
 namespace {
 
-TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& arg, TExprContext& ctx, bool useStream = false) {
-    if (useStream) {
-        // For block hash join, create a wide stream instead of flows
-        return ctx.Builder(arg->Pos())
-                .Callable("WideMap")
-                    .Add(0, std::move(arg))
-                    .Lambda(1)
-                        .Param("item")
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            auto i = 0U;
-                            for (const auto& item : type.GetItems()) {
-                                parent.Callable(i++, "Member")
-                                    .Arg(0, "item")
-                                    .Atom(1, item->GetName())
-                                    .Seal();
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                .Seal().Build();
-    } else {
-        // Original implementation for regular joins
-        return ctx.Builder(arg->Pos())
-                .Callable("ExpandMap")
-                    .Add(0, std::move(arg))
-                    .Lambda(1)
-                        .Param("item")
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            auto i = 0U;
-                            for (const auto& item : type.GetItems()) {
-                                parent.Callable(i++, "Member")
-                                    .Arg(0, "item")
-                                    .Atom(1, item->GetName())
-                                    .Seal();
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                .Seal().Build();
-    }
+TExprNode::TPtr ExpandJoinInput(const TStructExprType& type, TExprNode::TPtr&& arg, TExprContext& ctx) {
+    return ctx.Builder(arg->Pos())
+            .Callable("ExpandMap")
+                .Add(0, std::move(arg))
+                .Lambda(1)
+                    .Param("item")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        auto i = 0U;
+                        for (const auto& item : type.GetItems()) {
+                            parent.Callable(i++, "Member")
+                                .Arg(0, "item")
+                                .Atom(1, item->GetName())
+                                .Seal();
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal().Build();
 }
 
 TExprNode::TPtr SqueezeJoinInputToDict(TExprNode::TPtr&& input, size_t width, const std::vector<ui32>& keys, bool withPayloads, bool multiRow, TExprContext& ctx) {
@@ -2007,17 +1985,34 @@ TExprBase DqBuildBlockHashJoin(const TDqJoin& join, TExprContext& ctx) {
     TCoArgument leftInputArg{ctx.NewArgument(join.LeftInput().Pos(), "_dq_block_join_left")};
     TCoArgument rightInputArg{ctx.NewArgument(join.RightInput().Pos(), "_dq_block_join_right")};
 
-    auto leftWideStream = ExpandJoinInput(*leftStructType, leftInputArg.Ptr(), ctx, true);
-    auto rightWideStream = ExpandJoinInput(*rightStructType, rightInputArg.Ptr(), ctx, true);
+    // Expand to wide flows
+    auto leftWideFlow = ExpandJoinInput(*leftStructType, leftInputArg.Ptr(), ctx);
+    auto rightWideFlow = ExpandJoinInput(*rightStructType, rightInputArg.Ptr(), ctx);
 
-    // Convert wide streams to block format
-    auto leftBlockStream = Build<TCoWideToBlocks>(ctx, join.Pos())
-        .Input(leftWideStream)
-        .Done().Ptr();
+    // Convert wide flows to block format using FromFlow pattern
+    auto leftWideStream = ctx.Builder(join.Pos())
+        .Callable("FromFlow")
+            .Add(0, std::move(leftWideFlow))
+        .Seal()
+        .Build();
+        
+    auto rightWideStream = ctx.Builder(join.Pos())
+        .Callable("FromFlow")
+            .Add(0, std::move(rightWideFlow))
+        .Seal()
+        .Build();
 
-    auto rightBlockStream = Build<TCoWideToBlocks>(ctx, join.Pos())
-        .Input(rightWideStream)
-        .Done().Ptr();
+    auto leftBlockStream = ctx.Builder(join.Pos())
+        .Callable("WideToBlocks")
+            .Add(0, std::move(leftWideStream))
+        .Seal()
+        .Build();
+
+    auto rightBlockStream = ctx.Builder(join.Pos())
+        .Callable("WideToBlocks")
+            .Add(0, std::move(rightWideStream))
+        .Seal()
+        .Build();
 
     // Build left key columns list
     TVector<TCoAtom> leftKeyColumns;

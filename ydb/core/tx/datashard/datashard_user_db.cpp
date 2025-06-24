@@ -103,7 +103,7 @@ void TDataShardUserDb::UpsertRow(
 
         TStackVec<NIceDb::TUpdateOp> extendedOps;
         extendedOps.reserve(newOps.size() + 3);
-        for (const NIceDb::TUpdateOp& op : ops) {
+        for (const NIceDb::TUpdateOp& op : newOps) {
             if (op.Tag == specUpdates.ColIdTablet)
                 specUpdates.ColIdTablet = Max<ui32>();
             else if (op.Tag == specUpdates.ColIdEpoch)

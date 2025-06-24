@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 2, 3};
             ui32 defaultFilledColumns = 2;
-            TVector<TCell> increments = {
+            TVector<TCell> cells = {
                 TCell::Make(ui64(1)),    // key = 1
                 TCell::Make(ui32(944)),
                 TCell::Make(ui64(955)),
@@ -181,8 +181,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 TCell::Make(ui16(933))
             };
             
-            auto result = Replace(runtime, sender, shard, tableId, txId, 
-                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments, defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            auto request = MakeWriteRequest(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, columnIds, cells, defaultFilledColumns);
+            auto result = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            
             UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
 

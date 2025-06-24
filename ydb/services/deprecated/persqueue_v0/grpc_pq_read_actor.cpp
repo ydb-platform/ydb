@@ -1933,7 +1933,8 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
         }
         NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
         commits.push_back(commit);
-        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Database, InternalClientId, Topic->GetPrimaryPath(), commits, readId);
+        auto database = Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database;
+        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(database, InternalClientId, Topic->GetPrimaryPath(), commits, readId);
         Kqps.emplace(readId, kqp);
 
         kqp->SendCreateSessionRequest(ctx);

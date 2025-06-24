@@ -1434,6 +1434,9 @@ public:
     void PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexSampleForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 

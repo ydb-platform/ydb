@@ -1034,28 +1034,7 @@ private:
             // Finalize cluster aggregation and move them to KMeansTreeSample
             NIceDb::TNiceDb db{txc.DB};
             bool lastRound = buildInfo.Clusters->NextRound();
-            const auto & clusters = buildInfo.Clusters->GetClusters();
-            const auto & sizes = buildInfo.Clusters->GetClusterSizes();
-            buildInfo.Sample.Clear();
-            for (ui32 i = 0; i < clusters.size(); i++) {
-                auto sampleRow = TSerializedCellVec::Serialize(TVector<TCell>{TCell(clusters[i])});
-                buildInfo.Sample.Add(i+1, sampleRow);
-                db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, i).Update(
-                    NIceDb::TUpdate<Schema::KMeansTreeSample::Probability>(i+1),
-                    NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sampleRow)
-                );
-                db.Table<Schema::KMeansTreeClusters>().Key(buildInfo.Id, i).Update(
-                    NIceDb::TUpdate<Schema::KMeansTreeClusters::OldSize>(sizes[i]),
-                    NIceDb::TUpdate<Schema::KMeansTreeClusters::Size>(0),
-                    NIceDb::TUpdate<Schema::KMeansTreeClusters::Data>(clusters[i])
-                );
-            }
-            for (ui32 i = clusters.size(); i < 2*buildInfo.KMeans.K; ++i) {
-                db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, i).Delete();
-            }
-            for (ui32 i = clusters.size(); i < buildInfo.KMeans.K; i++) {
-                db.Table<Schema::KMeansTreeClusters>().Key(buildInfo.Id, i).Delete();
-            }
+            Self->PersistBuildIndexClustersToSample(db, buildInfo);
             if (!lastRound) {
                 // Recompute again
                 buildInfo.KMeans.Round++;
@@ -1117,27 +1096,9 @@ private:
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
                 buildInfo.KMeans.Round = 0;
                 // Initialize Clusters
-                buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
-                TVector<TString> clusters;
-                for (const auto& [_, row] : buildInfo.Sample.Rows) {
-                    clusters.push_back(TString(TSerializedCellVec::ExtractCell(row, 0).AsBuf()));
-                }
                 NIceDb::TNiceDb db(txc.DB);
-                for (ui32 i = buildInfo.KMeans.K; i <= 2*buildInfo.KMeans.K; i++) {
-                    db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, i).Delete();
-                }
-                for (ui32 i = 0; i < buildInfo.Sample.Rows.size(); i++) {
-                    db.Table<Schema::KMeansTreeClusters>().Key(buildInfo.Id, i).Update(
-                        NIceDb::TUpdate<Schema::KMeansTreeClusters::OldSize>(0),
-                        NIceDb::TUpdate<Schema::KMeansTreeClusters::Size>(0),
-                        NIceDb::TUpdate<Schema::KMeansTreeClusters::Data>(clusters[i])
-                    );
-                }
-                for (ui32 i = buildInfo.Sample.Rows.size(); i < buildInfo.KMeans.K; i++) {
-                    db.Table<Schema::KMeansTreeClusters>().Key(buildInfo.Id, i).Delete();
-                }
-                bool ok = buildInfo.Clusters->SetClusters(std::move(clusters));
-                Y_ENSURE(ok);
+                buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
+                Self->PersistBuildIndexSampleToClusters(db, buildInfo);
                 buildInfo.Clusters->SetRound(0);
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
@@ -1896,16 +1857,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyRecomputeKMeans: public TTxShardRepl
             }
         }
         buildInfo.Clusters->RecomputeClusters();
-        auto& newClusters = buildInfo.Clusters->GetClusters();
-        auto& newSizes = buildInfo.Clusters->GetNextClusterSizes();
-        for (ui32 i = 0; i < buildInfo.Sample.Rows.size(); i++) {
-            if (newSizes[i] > 0) {
-                db.Table<Schema::KMeansTreeClusters>().Key(buildInfo.Id, i).Update(
-                    NIceDb::TUpdate<Schema::KMeansTreeClusters::Size>(newSizes[i]),
-                    NIceDb::TUpdate<Schema::KMeansTreeClusters::Data>(newClusters[i])
-                );
-            }
-        }
+        Self->PersistBuildIndexClustersUpdate(db, buildInfo);
     }
 
     TBillingStats GetBillingStats() const override {

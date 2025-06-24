@@ -18,8 +18,9 @@
 
 #include <util/string/subst.h>
 
-#include <algorithm>
 #include <google/protobuf/text_format.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 namespace NSchemeShard {

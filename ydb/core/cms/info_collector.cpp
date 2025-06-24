@@ -537,7 +537,7 @@ void TInfoCollector::RequestBridgeInfo() {
 
 void TInfoCollector::Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev) {
     const auto& bridgeInfo = ev->Get()->BridgeInfo;
-    Info->BridgeInfo = bridgeInfo;
+    Info->Piles = bridgeInfo->Piles;
 }
 
 IActor* CreateInfoCollector(const TActorId& client, const TDuration& timeout) {

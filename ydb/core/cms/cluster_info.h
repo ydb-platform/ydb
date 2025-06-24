@@ -1045,7 +1045,7 @@ public:
     TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
     TVector<TStateStorageRingInfoPtr> StateStorageRings;
 
-    NKikimr::TBridgeInfo::TPtr BridgeInfo;
+    std::vector<NKikimr::TBridgeInfo::TPile> Piles;
     THashMap<ui32, ui32> NodeIdToPileId;
 };
 

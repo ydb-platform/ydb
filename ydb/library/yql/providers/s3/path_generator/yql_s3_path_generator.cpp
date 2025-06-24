@@ -430,7 +430,7 @@ private:
             throw yexception() << "Invalid projection scheme: values are required field for " << columnName << " " << type;
         }
         if (!projection.contains("type")) {
-            throw yexception() << "Invalid projection scheme: type are required field for " << columnName << " " << type;
+            throw yexception() << "Invalid projection scheme: type is a required field for " << columnName << " " << type;
         }
         for (const auto& p: projection) {
             if (p.first == "type") {

@@ -103,6 +103,8 @@ namespace NYdb::NConsoleClient {
                     return "View";
                 case NScheme::ESchemeEntryType::ResourcePool:
                     return "ResourcePool";
+                case NScheme::ESchemeEntryType::SysView:
+                    return "SysView";
                 case NScheme::ESchemeEntryType::Unknown:
                 default:
                     return "Unknown";

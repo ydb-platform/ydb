@@ -864,4 +864,95 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
         .Done();
 }
 
+/**
+ * Rewrites a `TDqPhyBlockHashJoin` to use block-based processing with ToBlocks/FromBlocks.
+ *
+ * This function handles the block hash join optimization by:
+ *  - Converting inputs to wide streams
+ *  - Wrapping with ToBlocks for block processing
+ *  - Performing the block hash join
+ *  - Converting back with FromBlocks and structuring the result
+ */
+TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqPhyBlockHashJoin>()) {
+        return node;
+    }
+    const auto blockHashJoin = node.Cast<TDqPhyBlockHashJoin>();
+    const auto pos = blockHashJoin.Pos();
+
+    const auto itemTypeLeft = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
+    const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
+
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
+    std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
+
+    // Expand inputs to wide streams
+    auto leftWideStream = ExpandJoinInput(*itemTypeLeft, ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}), ctx, leftConvertedItems, pos);
+    auto rightWideStream = ExpandJoinInput(*itemTypeRight, ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}), ctx, rightConvertedItems, pos);
+
+    // Convert to block format
+    auto leftBlocks = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Add(0, std::move(leftWideStream))
+        .Seal()
+        .Build();
+
+    auto rightBlocks = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Add(0, std::move(rightWideStream))
+        .Seal()
+        .Build();
+
+    // Build block hash join core
+    auto blockJoinCore = ctx.Builder(pos)
+        .Callable("BlockHashJoinCore")
+            .Add(0, std::move(leftBlocks))
+            .Add(1, std::move(rightBlocks))
+            .Add(2, blockHashJoin.JoinKind().Ptr())
+            .Add(3, blockHashJoin.LeftKeyColumns().Ptr())
+            .Add(4, blockHashJoin.RightKeyColumns().Ptr())
+        .Seal()
+        .Build();
+
+    // Convert back from blocks
+    auto wideResult = ctx.Builder(pos)
+        .Callable("WideFromBlocks")
+            .Add(0, std::move(blockJoinCore))
+        .Seal()
+        .Build();
+
+    // Structure the result
+    std::vector<TString> fullColNames;
+    for (const auto& item : itemTypeLeft->GetItems()) {
+        fullColNames.emplace_back(item->GetName());
+    }
+    for (const auto& item : itemTypeRight->GetItems()) {
+        fullColNames.emplace_back(item->GetName());
+    }
+
+    auto result = ctx.Builder(pos)
+        .Callable("NarrowMap")
+            .Add(0, std::move(wideResult))
+            .Lambda(1)
+                .Params("output", fullColNames.size())
+                .Callable("AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& colName : fullColNames) {
+                            parent.List(i)
+                                .Atom(0, colName)
+                                .Arg(1, "output", i)
+                            .Seal();
+                            i++;
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return TExprBase(result);
+}
+
 } // namespace NYql::NDq

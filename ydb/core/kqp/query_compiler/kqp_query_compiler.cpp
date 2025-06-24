@@ -542,6 +542,10 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
+        queryProto.SetEnableOltpSink(Config->EnableOltpSink);
+        queryProto.SetEnableOlapSink(Config->EnableOlapSink);
+        queryProto.SetEnableHtapTx(Config->EnableHtapTx);
+
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {

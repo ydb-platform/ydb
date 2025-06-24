@@ -115,7 +115,10 @@ public:
     {
         Target = creator;
 
+<<<<<<< HEAD
         YQL_ENSURE(!TxManager || tableServiceConfig.GetEnableOltpSink());
+=======
+>>>>>>> 3a99069cf36 (Fix sink flags (#19985))
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
         if (Request.AcquireLocksTxId || Request.LocksOp == ELocksOp::Commit || Request.LocksOp == ELocksOp::Rollback) {

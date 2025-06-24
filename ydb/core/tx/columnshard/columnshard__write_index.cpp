@@ -6,10 +6,9 @@
 #include "engines/changes/abstract/abstract.h"
 #include "engines/writer/compacted_blob_constructor.h"
 
-#include <ydb/core/tx/limiter/usage/abstract.h>
-#include <ydb/core/tx/limiter/usage/service.h>
-
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/slide_limiter/usage/abstract.h>
+#include <ydb/library/slide_limiter/usage/service.h>
 
 namespace NKikimr::NColumnShard {
 

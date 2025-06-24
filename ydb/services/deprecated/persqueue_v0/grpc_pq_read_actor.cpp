@@ -752,7 +752,6 @@ void TReadSessionActor::SendAuthRequest(const TActorContext& ctx) {
         CreateInitAndAuthActor(ctx);
         return;
     }
-    auto database = Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database;
     Y_ABORT_UNLESS(TopicsList.IsValid);
     TVector<TDiscoveryConverterPtr> topics;
     for(const auto& t : TopicsList.Topics) {
@@ -801,7 +800,6 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
 }
 
 void TReadSessionActor::CreateInitAndAuthActor(const TActorContext& ctx) {
-    auto database = Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database;
     AuthInitActor = ctx.Register(new V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, InternalClientId, Cookie, Session, PqMetaCache, NewSchemeCache, Counters, Token,
             TopicsList, TopicsHandler.GetLocalCluster()
@@ -1090,9 +1088,10 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     auto it = TopicCounters.find(intName);
     Y_ABORT_UNLESS(it != TopicCounters.end());
 
+    auto database = jt->second.DbPath;
     IActor* partitionActor = new TPartitionActor(
             ctx.SelfID, InternalClientId, Cookie, Session, record.GetGeneration(),
-            record.GetStep(), jt->second.FullConverter, Database.empty() ? NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig) : Database, record.GetPartition(), record.GetTabletId(), it->second,
+            record.GetStep(), jt->second.FullConverter, database, record.GetPartition(), record.GetTabletId(), it->second,
             ClientDC, jt->second.PartitionGraph->GetPartition(record.GetPartition())->AllParents
     );
 

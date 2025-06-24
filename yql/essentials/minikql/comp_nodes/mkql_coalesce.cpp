@@ -18,18 +18,18 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        if (auto left = this->Left->GetValue(compCtx)) {
+        if (auto left = this->Left_->GetValue(compCtx)) {
             return left.Release().template GetOptionalValueIf<Unpack>();
         }
 
-        return this->Right->GetValue(compCtx).Release();
+        return this->Right_->GetValue(compCtx).Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto left = GetNodeValue(this->Left, ctx, block);
+        const auto left = GetNodeValue(this->Left_, ctx, block);
 
         const auto null = BasicBlock::Create(context, "null", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -40,7 +40,7 @@ public:
         BranchInst::Create(good, null, IsExists(left, block, context), block);
 
         block = null;
-        const auto right = GetNodeValue(this->Right, ctx, block);
+        const auto right = GetNodeValue(this->Right_, ctx, block);
 
         result->addIncoming(right, block);
         BranchInst::Create(done, block);

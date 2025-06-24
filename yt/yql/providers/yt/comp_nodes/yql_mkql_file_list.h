@@ -23,7 +23,7 @@ public:
         , Spec(spec)
         , HolderFactory(holderFactory)
     {
-        Length = length;
+        Length_ = length;
     }
 
 protected:

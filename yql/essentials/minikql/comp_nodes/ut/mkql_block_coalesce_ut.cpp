@@ -366,6 +366,13 @@ Y_UNIT_TEST(OptionalScalar) {
     TestScalarCoalesceKernel(TMaybe<i32>(), TMaybe<i32>(2), TMaybe<i32>(2));
 }
 
+Y_UNIT_TEST(Tuple) {
+    using TTuple = std::tuple<ui32, ui64, bool>;
+    TestScalarCoalesceKernel(TMaybe<TTuple>({16, 13, false}), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({16, 13, false}));
+    TestScalarCoalesceKernel(TMaybe<TTuple>(), TMaybe<TTuple>({15, 11, true}), TMaybe<TTuple>({15, 11, true}));
+    TestScalarCoalesceKernel(TMaybe<TTuple>(), TTuple{15, 11, true}, TTuple{15, 11, true});
+}
+
 Y_UNIT_TEST(ExternalOptionalScalar) {
     using TDoubleMaybe = TMaybe<TMaybe<i32>>;
     using TSingleMaybe = TMaybe<i32>;

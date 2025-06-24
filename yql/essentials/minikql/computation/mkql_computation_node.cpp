@@ -70,14 +70,14 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
         }
     }
 
-    RssLogger = MakeLogger();
-    RssLoggerComponent = RssLogger->RegisterComponent("TrackRss");
+    RssLogger_ = MakeLogger();
+    RssLoggerComponent_ = RssLogger_->RegisterComponent("TrackRss");
 }
 
 TComputationContext::~TComputationContext() {
 #ifndef NDEBUG
     if (RssCounter) {
-        RssLogger->Log(RssLoggerComponent, NUdf::ELogLevel::Info, TStringBuilder()
+        RssLogger_->Log(RssLoggerComponent_, NUdf::ELogLevel::Info, TStringBuilder()
             << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
             << ", rss=" << TRusage::Get().MaxRss
             << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
@@ -92,20 +92,20 @@ NUdf::TLoggerPtr TComputationContext::MakeLogger() const {
 
 void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
     const auto rss = TRusage::Get().MaxRss;
-    if (!InitRss) {
-        LastRss = InitRss = rss;
+    if (!InitRss_) {
+        LastRss_ = InitRss_ = rss;
     }
 
 #ifndef NDEBUG
     // Print first time and then each 30 seconds
-    bool printUsage = LastPrintUsage == TInstant::Zero()
-        || TInstant::Now() > TDuration::Seconds(30).ToDeadLine(LastPrintUsage);
+    bool printUsage = LastPrintUsage_ == TInstant::Zero()
+        || TInstant::Now() > TDuration::Seconds(30).ToDeadLine(LastPrintUsage_);
 #endif
 
     if (auto peakAlloc = HolderFactory.GetPagePool().GetPeakAllocated()) {
-        if (rss - InitRss > memLimit && rss - LastRss > (memLimit / 4)) {
-            UsageAdjustor = std::max(1.f, float(rss - InitRss) / float(peakAlloc));
-            LastRss = rss;
+        if (rss - InitRss_ > memLimit && rss - LastRss_ > (memLimit / 4)) {
+            UsageAdjustor = std::max(1.f, float(rss - InitRss_) / float(peakAlloc));
+            LastRss_ = rss;
 #ifndef NDEBUG
             printUsage = UsageAdjustor > 1.f;
 #endif
@@ -114,12 +114,12 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 
 #ifndef NDEBUG
     if (printUsage) {
-        RssLogger->Log(RssLoggerComponent, NUdf::ELogLevel::Info, TStringBuilder()
+        RssLogger_->Log(RssLoggerComponent_, NUdf::ELogLevel::Info, TStringBuilder()
             << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed()
             << ", rss=" << rss
             << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
             << ", adjustor=" << UsageAdjustor);
-        LastPrintUsage = TInstant::Now();
+        LastPrintUsage_ = TInstant::Now();
     }
 #endif
 }
@@ -127,11 +127,11 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 class TSimpleSecureParamsProvider : public NUdf::ISecureParamsProvider {
 public:
     TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)
-        : SecureParams(secureParams)
+        : SecureParams_(secureParams)
     {}
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override {
-        auto found = SecureParams.FindPtr(TStringBuf(key));
+        auto found = SecureParams_.FindPtr(TStringBuf(key));
         if (!found) {
             return false;
         }
@@ -141,7 +141,7 @@ public:
     }
 
 private:
-    const THashMap<TString, TString> SecureParams;
+    const THashMap<TString, TString> SecureParams_;
 };
 
 std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams) {

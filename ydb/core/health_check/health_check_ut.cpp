@@ -2050,6 +2050,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();
 
+        // only have local on dynamic nodes
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(1)), sender, new TEvents::TEvPoisonPill()));
+
         server.SetupDynamicLocalService(2, "Root");
         server.StartPQTablets(1);
         server.DestroyDynamicLocalService(2);
@@ -2111,6 +2115,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TTestActorRuntime* runtime = server.GetRuntime();
         runtime->SetLogPriority(NKikimrServices::HIVE, NActors::NLog::PRI_TRACE);
         TActorId sender = runtime->AllocateEdgeActor();
+
+        // only have local on dynamic nodes
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(0)), sender, new TEvents::TEvPoisonPill()));
+        runtime->Send(new IEventHandle(MakeLocalID(runtime->GetNodeId(1)), sender, new TEvents::TEvPoisonPill()));
 
 
         server.SetupDynamicLocalService(2, "Root");

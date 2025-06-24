@@ -1061,6 +1061,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TTester::Setup(runtime);
         runtime.GetAppData().ColumnShardConfig.SetGenerateInternalPathId(generateInternalPathId);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->SetForcedGenerateInternalPathId(generateInternalPathId);
 
         using namespace NTxUT;
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);

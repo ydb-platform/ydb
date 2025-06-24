@@ -318,11 +318,13 @@ public:
 
     public:
         ui32 GroupId;
-        ui64 TotalSize;
+        std::optional<ui64> TotalSize;
+        std::optional<ui32> TotalBlobs;
         ui64 BlobSize;
+        ui32 BatchSize = 1;
         EContentType ContentType = EContentType::Zeros;
 
-        TDuration DelayBetweenPuts = TDuration::Zero();
+        TDuration DelayBetweenBatches = TDuration::Zero();
 
         // must be specified when using ECookieStrategy::WithSamePlacement
         std::optional<TBlobStorageGroupType> Erasure = std::nullopt;
@@ -354,13 +356,23 @@ public:
     };
 
     std::vector<TLogoBlobID> WriteCompressedData(TDataProfile profile) {
+        Y_VERIFY(profile.TotalSize || profile.TotalBlobs);
         std::vector<TLogoBlobID> blobs;
 
         static ui64 cookie = 0;
+        std::vector<TLogoBlobID> batch;
 
-        for (ui64 size = 0; size < profile.TotalSize; size += profile.BlobSize) {
+        ui32 blobsToWrite;
+
+        if (profile.TotalBlobs) {
+            blobsToWrite = *profile.TotalBlobs;
+        } else {
+            blobsToWrite = (*profile.TotalSize / profile.BlobSize) + !!(*profile.TotalSize % profile.BlobSize);
+        }
+
+        for (ui64 i = 0; i < blobsToWrite; ++i) {
             cookie = profile.NextCookie(cookie);
-            blobs.emplace_back(profile.TabletId, profile.Generation, profile.Step, profile.Channel,
+            batch.emplace_back(profile.TabletId, profile.Generation, profile.Step, profile.Channel,
                     profile.BlobSize, cookie);
 
             Env->Runtime->WrapInActorContext(Edge, [&] {
@@ -377,17 +389,24 @@ public:
                         Y_FAIL();
                 }
 
-                SendToBSProxy(Edge, profile.GroupId, new TEvBlobStorage::TEvPut(blobs.back(), data, TInstant::Max()),
+                SendToBSProxy(Edge, profile.GroupId, new TEvBlobStorage::TEvPut(batch.back(), data, TInstant::Max()),
                         NKikimrBlobStorage::TabletLog);
             });
 
-            auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(
-                    Edge, false, TInstant::Max());
-            // Cerr << "Write data " << size << " " << res->Get()->ToString()<< Endl;
-            UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
 
-            if (profile.DelayBetweenPuts != TDuration::Zero()) {
-                Env->Sim(profile.DelayBetweenPuts);
+            if (batch.size() == profile.BatchSize || i == blobsToWrite - 1) {
+                for (ui32 i = 0; i < batch.size(); ++i) {
+                    auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(
+                            Edge, false, TInstant::Max());
+                    UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
+                }
+
+                if (profile.DelayBetweenBatches != TDuration::Zero()) {
+                    Env->Sim(profile.DelayBetweenBatches);
+                }
+
+                blobs.insert(blobs.end(), batch.begin(), batch.end());
+                batch.clear();
             }
         }
         return blobs;

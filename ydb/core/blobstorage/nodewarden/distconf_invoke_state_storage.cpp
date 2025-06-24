@@ -27,18 +27,14 @@ namespace NKikimr::NStorage {
                 (StateStorageConfig, cmd));
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-        if (cmd.HasSchemeBoardConfig()) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "SchemeBoard are not supported");
-            return;   
-        }
         if (!cmd.HasStateStorageConfig() && !cmd.HasStateStorageBoardConfig() && !cmd.HasSchemeBoardConfig()) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration is not defined");
-            return;   
+            return;
         }
         auto process = [&](const char *name, auto buildInfo, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
             if (!(cmd.*hasFunc)()) {
                 return true;
-            } 
+            }
             if (!(config.*configHasFunc)()) {
                 FinishWithError(TResult::ERROR, TStringBuilder() << name << " configuration is not filled in");
                 return false;
@@ -60,7 +56,7 @@ namespace NKikimr::NStorage {
             for (auto& rg : newSSConfig.GetRingGroups()) {
                 if (rg.RingSize() && rg.NodeSize()) {
                     FinishWithError(TResult::ERROR, TStringBuilder() << name << " Ring and Node are defined, use the one of them");
-                    return false; 
+                    return false;
                 }
                 const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
                 if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
@@ -70,11 +66,11 @@ namespace NKikimr::NStorage {
                 for (auto &ring : rg.GetRing()) {
                     if (ring.RingSize() > 0) {
                         FinishWithError(TResult::ERROR, TStringBuilder() << name << " too deep nested ring declaration");
-                        return false;  
+                        return false;
                     }
                     if(ring.HasRingGroupActorIdOffset()) {
                         FinishWithError(TResult::ERROR, TStringBuilder() << name << " RingGroupActorIdOffset should be used in ring group level, not ring");
-                        return false;                       
+                        return false;
                     }
                     if (ring.NodeSize() < 1) {
                         FinishWithError(TResult::ERROR, TStringBuilder() << name << " empty ring");
@@ -100,7 +96,7 @@ namespace NKikimr::NStorage {
                 }
 
                 Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
-                
+
                 for (auto& newGroup : newSSInfo->RingGroups) {
                     if (newGroup.WriteOnly) {
                         continue;
@@ -113,7 +109,7 @@ namespace NKikimr::NStorage {
                         }
                     }
                     if (!found) {
-                        FinishWithError(TResult::ERROR, TStringBuilder() << 
+                        FinishWithError(TResult::ERROR, TStringBuilder() <<
                             "New introduced ring group should be WriteOnly old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
                         return false;
                     }
@@ -130,7 +126,7 @@ namespace NKikimr::NStorage {
                         }
                     }
                     if (!found) {
-                        FinishWithError(TResult::ERROR, TStringBuilder() << 
+                        FinishWithError(TResult::ERROR, TStringBuilder() <<
                             "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
                         return false;
                     }
@@ -148,7 +144,7 @@ namespace NKikimr::NStorage {
             }
             return true;
         };
-        
+
 #define PROCESS(NAME) \
         if (!process(#NAME, &NKikimr::Build##NAME##Info, \
                 &NKikimrBlobStorage::TStateStorageConfig::Has##NAME##Config, \

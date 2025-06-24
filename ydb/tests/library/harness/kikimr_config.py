@@ -173,6 +173,8 @@ class KikimrConfigGenerator(object):
             breakpad_minidumps_script=None,
             explicit_hosts_and_host_configs=False,
             table_service_config=None,  # dict[name]=value
+            bridge_config=None,
+            verbose_memory_limit_exception=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -182,6 +184,7 @@ class KikimrConfigGenerator(object):
         self.use_log_files = use_log_files
         self.use_self_management = use_self_management
         self.simple_config = simple_config
+        self.bridge_config = bridge_config
         self.suppress_version_check = suppress_version_check
         self.explicit_hosts_and_host_configs = explicit_hosts_and_host_configs
         if use_self_management:
@@ -271,6 +274,9 @@ class KikimrConfigGenerator(object):
 
         if "table_service_config" not in self.yaml_config:
             self.yaml_config["table_service_config"] = {}
+
+        if verbose_memory_limit_exception:
+            self.yaml_config["table_service_config"]["resource_manager"]["verbose_memory_limit_exception"] = True
 
         if table_service_config:
             self.yaml_config["table_service_config"].update(table_service_config)
@@ -488,6 +494,9 @@ class KikimrConfigGenerator(object):
             kafka_proxy_config["listening_port"] = kafka_api_port
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
+
+        if bridge_config is not None:
+            self.yaml_config["bridge_config"] = bridge_config
 
         self.full_config = dict()
         if self.explicit_hosts_and_host_configs:
@@ -764,13 +773,15 @@ class KikimrConfigGenerator(object):
                     "drive": drive,
                 }
             )
-            hosts.append(
-                {
-                    "host": "localhost",
-                    "port": self.port_allocator.get_node_port_allocator(node_id).ic_port,
-                    "host_config_id": host_config_id,
-                }
-            )
+            host_dict = {
+                "host": "localhost",
+                "port": self.port_allocator.get_node_port_allocator(node_id).ic_port,
+                "host_config_id": host_config_id,
+            }
+            if self.bridge_config:
+                host_dict["bridge_pile_name"] = self.bridge_config.get("piles", [])[node_id % len(self.bridge_config.get("piles", []))].get("name")
+
+            hosts.append(host_dict)
 
         self.yaml_config["host_configs"] = host_configs
         self.yaml_config["hosts"] = hosts

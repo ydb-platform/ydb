@@ -12,6 +12,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/logger/log.h>
 
 #include <util/string/cast.h>
@@ -168,6 +169,7 @@ private:
 
     void PrintTransactionStatisticsPretty(IOutputStream& os);
     void PrintFinalResultPretty();
+    void PrintFinalResultJson();
 
 private:
     NConsoleClient::TClientCommand::TConfig ConnectionConfig;
@@ -194,6 +196,7 @@ private:
     Clock::time_point WarmupStartTs;
     Clock::time_point WarmupStopDeadline;
 
+    TInstant MeasurementsStartTsWall;
     Clock::time_point MeasurementsStartTs;
     Clock::time_point StopDeadline;
 
@@ -428,6 +431,7 @@ void TPCCRunner::RunSync() {
     LOG_I("Measuring during " << Config.RunDuration);
 
     MeasurementsStartTs = Clock::now();
+    MeasurementsStartTsWall = TInstant::Now();
 
     // reset statistics
     LastStatisticsSnapshot = std::make_unique<TAllStatistics>(PerThreadTerminalStats.size(), MeasurementsStartTs);
@@ -445,7 +449,14 @@ void TPCCRunner::RunSync() {
     LOG_D("Finished measurements");
     Join();
 
-    PrintFinalResultPretty();
+    switch (Config.Format) {
+    case TRunConfig::EFormat::Pretty:
+        PrintFinalResultPretty();
+        break;
+    case TRunConfig::EFormat::Json:
+        PrintFinalResultJson();
+        break;
+    }
 }
 
 void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
@@ -916,6 +927,72 @@ void TPCCRunner::PrintFinalResultPretty() {
 
     std::cout << "* These results are not officially recognized TPC results "
               << "and are not comparable with other TPC-C test results published on the TPC website" << std::endl;
+}
+
+void TPCCRunner::PrintFinalResultJson() {
+    if (MeasurementsStartTs == Clock::time_point{}) {
+        Cout << "{\"error\": \"Stopped before measurements\"}" << Endl;
+        return;
+    }
+
+    auto now = Clock::now();
+    double secondsPassed = duration_cast<std::chrono::duration<double>>(now - MeasurementsStartTs).count();
+
+    CollectStatistics(now);
+    TCalculatedStatusData data = CalculateStatusData(now);
+
+    const auto& newOrderStats = LastStatisticsSnapshot->TotalTerminalStats.GetStats(ETransactionType::NewOrder);
+    auto newOrdersCount = newOrderStats.OK.load(std::memory_order_relaxed);
+
+    NJson::TJsonValue root;
+    root.SetType(NJson::JSON_MAP);
+
+    // Summary section
+
+    NJson::TJsonValue summary;
+    summary.SetType(NJson::JSON_MAP);
+    summary.InsertValue("name", "Total");
+    summary.InsertValue("time_seconds", static_cast<long long>(secondsPassed));
+    summary.InsertValue("measure_start_ts", MeasurementsStartTsWall.Seconds());
+    summary.InsertValue("warehouses", static_cast<long long>(Config.WarehouseCount));
+    summary.InsertValue("new_orders", static_cast<long long>(newOrdersCount));
+    summary.InsertValue("tpmc", data.Tpmc);
+    summary.InsertValue("efficiency", data.Efficiency);
+
+    root.InsertValue("summary", std::move(summary));
+
+    // Transactions section
+
+    NJson::TJsonValue transactions;
+    transactions.SetType(NJson::JSON_MAP);
+
+    for (size_t i = 0; i < GetEnumItemsCount<ETransactionType>(); ++i) {
+        auto type = static_cast<ETransactionType>(i);
+        auto typeStr = ToString(type);
+        const auto& stats = LastStatisticsSnapshot->TotalTerminalStats.GetStats(type);
+        auto ok = stats.OK.load(std::memory_order_relaxed);
+        auto failed = stats.Failed.load(std::memory_order_relaxed);
+
+        NJson::TJsonValue txData;
+        txData.SetType(NJson::JSON_MAP);
+        txData.InsertValue("ok_count", static_cast<long long>(ok));
+        txData.InsertValue("failed_count", static_cast<long long>(failed));
+
+        NJson::TJsonValue percentiles;
+        percentiles.SetType(NJson::JSON_MAP);
+        percentiles.InsertValue("50", stats.LatencyHistogramFullMs.GetValueAtPercentile(50));
+        percentiles.InsertValue("90", stats.LatencyHistogramFullMs.GetValueAtPercentile(90));
+        percentiles.InsertValue("95", stats.LatencyHistogramFullMs.GetValueAtPercentile(95));
+        percentiles.InsertValue("99", stats.LatencyHistogramFullMs.GetValueAtPercentile(99));
+        percentiles.InsertValue("99.9", stats.LatencyHistogramFullMs.GetValueAtPercentile(99.9));
+
+        txData.InsertValue("percentiles", std::move(percentiles));
+        transactions.InsertValue(typeStr, std::move(txData));
+    }
+
+    root.InsertValue("transactions", std::move(transactions));
+
+    NJson::WriteJson(&Cout, &root, false, false, false);
 }
 
 } // anonymous

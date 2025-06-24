@@ -5,13 +5,14 @@ namespace NAsyncTest {
     using namespace NActors;
 
     struct TReturnIntAwaiter {
+        static constexpr bool IsActorAwareAwaiter = true;
         const int Value;
 
-        bool AwaitReady() noexcept { return true; }
-        void AwaitSuspend(std::coroutine_handle<>) noexcept {
-            Y_ABORT("unexpected call to AwaitSuspend");
+        bool await_ready() noexcept { return true; }
+        void await_suspend(std::coroutine_handle<>) noexcept {
+            Y_ABORT("unexpected call to await_suspend");
         }
-        int AwaitResume() noexcept {
+        int await_resume() noexcept {
             return Value;
         }
     };
@@ -29,6 +30,8 @@ namespace NAsyncTest {
     };
 
     struct TThrowAwaiter {
+        static constexpr bool IsActorAwareAwaiter = true;
+
         enum EWhen {
             Ready,
             Suspend,
@@ -36,23 +39,23 @@ namespace NAsyncTest {
         };
         const EWhen When;
 
-        bool AwaitReady() {
+        bool await_ready() {
             if (When == Ready) {
-                throw TTestException() << "AwaitReady";
+                throw TTestException() << "await_ready";
             }
             return false;
         }
 
-        std::coroutine_handle<> AwaitSuspend(std::coroutine_handle<> h) {
+        std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) {
             if (When == Suspend) {
-                throw TTestException() << "AwaitSuspend";
+                throw TTestException() << "await_suspend";
             }
             return h;
         }
 
-        void AwaitResume() {
+        void await_resume() {
             if (When == Resume) {
-                throw TTestException() << "AwaitResume";
+                throw TTestException() << "await_resume";
             }
         }
     };
@@ -180,9 +183,9 @@ namespace NAsyncTest {
 
             auto actor = runtime.StartAsyncActor(state, [&](TAsyncTestActor*) -> async<void> {
                 // Note: we must not suspend in all these cases
-                UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowAwaiter{ TThrowAwaiter::Ready }, TTestException, "AwaitReady");
-                UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowAwaiter{ TThrowAwaiter::Suspend }, TTestException, "AwaitSuspend");
-                UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowAwaiter{ TThrowAwaiter::Resume }, TTestException, "AwaitResume");
+                UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowAwaiter{ TThrowAwaiter::Ready }, TTestException, "await_ready");
+                UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowAwaiter{ TThrowAwaiter::Suspend }, TTestException, "await_suspend");
+                UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowAwaiter{ TThrowAwaiter::Resume }, TTestException, "await_resume");
                 UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowStdAwaiter{ TThrowStdAwaiter::Ready }, TTestException, "await_ready");
                 UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowStdAwaiter{ TThrowStdAwaiter::Suspend }, TTestException, "await_suspend");
                 UNIT_ASSERT_EXCEPTION_CONTAINS(co_await TThrowStdAwaiter{ TThrowStdAwaiter::Resume }, TTestException, "await_resume");

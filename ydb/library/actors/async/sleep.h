@@ -14,6 +14,8 @@ namespace NActors {
             friend TActorRunnableItem::TImpl<TActorSleepAwaiter<TWhen>>;
 
         public:
+            static constexpr bool IsActorAwareAwaiter = true;
+
             explicit TActorSleepAwaiter(TWhen when)
                 : When{ when }
             {}
@@ -26,12 +28,12 @@ namespace NActors {
                 Detach();
             }
 
-            bool AwaitReady() const noexcept {
+            bool await_ready() const noexcept {
                 return false;
             }
 
             template<class TPromise>
-            void AwaitSuspend(std::coroutine_handle<TPromise> parent) {
+            void await_suspend(std::coroutine_handle<TPromise> parent) {
                 IActor& actor = parent.promise().GetActor();
                 Continuation = parent;
                 auto selfId = actor.SelfId();
@@ -51,11 +53,11 @@ namespace NActors {
                 }
             }
 
-            void AwaitResume() noexcept {
+            void await_resume() noexcept {
                 // nothing
             }
 
-            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> c) noexcept {
+            std::coroutine_handle<> await_cancel(std::coroutine_handle<> c) noexcept {
                 if (Detach()) {
                     // Not resumed yet, schedule cancellation instead
                     return c;

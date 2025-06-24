@@ -206,7 +206,7 @@ namespace NActors {
                     return;
                 }
                 State = EState::Running;
-                Coroutine->GetHandle().promise().SetContinuation(this->GetCoroutineHandle(), Sink.GetActor(), *this);
+                Coroutine->GetHandle().promise().SetContinuation(Sink.GetActor(), *this, this->GetCoroutineHandle());
                 Coroutine->GetHandle().resume();
             }
 
@@ -446,24 +446,26 @@ namespace NActors {
     template<class T>
     class [[nodiscard]] TTaskGroup<T>::TWhenReadyAwaiter {
     public:
+        static constexpr bool IsActorAwareAwaiter = true;
+
         TWhenReadyAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
         {}
 
-        bool AwaitReady() const {
+        bool await_ready() const {
             return Sink.HasReady();
         }
 
-        void AwaitSuspend(std::coroutine_handle<> h) {
+        void await_suspend(std::coroutine_handle<> h) {
             Sink.SetAwaiter(h);
         }
 
-        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
+        std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) noexcept {
             Sink.RemoveAwaiter();
             return h;
         }
 
-        void AwaitResume() noexcept {}
+        void await_resume() noexcept {}
 
     private:
         NDetail::TTaskGroupSink<T>& Sink;
@@ -472,24 +474,26 @@ namespace NActors {
     template<class T>
     class [[nodiscard]] TTaskGroup<T>::TNextValueAwaiter {
     public:
+        static constexpr bool IsActorAwareAwaiter = true;
+
         TNextValueAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
         {}
 
-        bool AwaitReady() const {
+        bool await_ready() const {
             return Sink.HasReady();
         }
 
-        void AwaitSuspend(std::coroutine_handle<> h) {
+        void await_suspend(std::coroutine_handle<> h) {
             Sink.SetAwaiter(h);
         }
 
-        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
+        std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) noexcept {
             Sink.RemoveAwaiter();
             return h;
         }
 
-        T AwaitResume() {
+        T await_resume() {
             return Sink.ExtractReadyValue();
         }
 
@@ -500,24 +504,26 @@ namespace NActors {
     template<class T>
     class [[nodiscard]] TTaskGroup<T>::TNextResultAwaiter {
     public:
+        static constexpr bool IsActorAwareAwaiter = true;
+
         TNextResultAwaiter(NDetail::TTaskGroupSink<T>& sink)
             : Sink(sink)
         {}
 
-        bool AwaitReady() const {
+        bool await_ready() const {
             return Sink.HasReady();
         }
 
-        void AwaitSuspend(std::coroutine_handle<> h) {
+        void await_suspend(std::coroutine_handle<> h) {
             Sink.SetAwaiter(h);
         }
 
-        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
+        std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) noexcept {
             Sink.RemoveAwaiter();
             return h;
         }
 
-        TTaskGroupResult<T> AwaitResume() {
+        TTaskGroupResult<T> await_resume() {
             return Sink.ExtractReadyResult();
         }
 

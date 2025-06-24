@@ -6,8 +6,7 @@ namespace NActors {
 
     template<class T, class TDerived>
     class TAsyncDecoratorAwaiter
-        : public NDetail::TActorAwareAwaiter
-        , private NDetail::TAwaitCancelSource
+        : private NDetail::TAwaitCancelSource
         , private NDetail::TSymmetricResumeCallback<TAsyncDecoratorAwaiter<T, TDerived>>
         , private NDetail::TSymmetricCancelCallback<TAsyncDecoratorAwaiter<T, TDerived>, /*Lazy*/ true>
     {
@@ -16,9 +15,11 @@ namespace NActors {
         friend NDetail::TSymmetricCancelCallback<TAsyncDecoratorAwaiter<T, TDerived>, /*Lazy*/ true>;
 
     public:
+        static constexpr bool IsActorAwareAwaiter = true;
+
         template<class TCallback>
         TAsyncDecoratorAwaiter(TCallback&& callback)
-            : Coroutine{ std::forward<TCallback>(callback)() }
+            : Coroutine(std::forward<TCallback>(callback)())
         {}
 
         bool await_ready() noexcept {
@@ -36,12 +37,12 @@ namespace NActors {
             Cancellation = source.GetCancellation();
 
             if (auto h = static_cast<TDerived&>(*this).Bypass()) {
-                Coroutine.GetHandle().promise().SetContinuation(c, actor, source);
+                Coroutine.GetHandle().promise().SetContinuation(actor, source, c);
                 return h;
             }
 
             // We want to hook early in case anything below includes async steps
-            Coroutine.GetHandle().promise().SetContinuation(this->GetResumeHandle(), actor, *this);
+            Coroutine.GetHandle().promise().SetContinuation(actor, *this, this->GetResumeHandle());
 
             if (Cancellation) {
                 // Starting in a cancelled state, call decorator's Cancel to
@@ -218,7 +219,7 @@ namespace NActors {
         }
 
     private:
-        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> h) noexcept {
+        std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) noexcept {
             Cancellation = h;
             return static_cast<TDerived&>(*this).Cancel();
         }

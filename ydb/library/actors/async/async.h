@@ -9,14 +9,9 @@
 namespace NActors {
 
     namespace NDetail {
-
-        template<class T>
-        class TAsyncAwaiter;
-
         template<class T>
         class TAsyncPromise;
-
-    } // namespace NDetail
+    }
 
     /**
      * Used when callee cannot finish and produce the result due to cancellation
@@ -31,11 +26,11 @@ namespace NActors {
      */
     template<class T>
     class [[nodiscard]] async {
-        friend NDetail::TAsyncAwaiter<T>;
         friend NDetail::TAsyncPromise<T>;
 
     public:
         using promise_type = NDetail::TAsyncPromise<T>;
+        using THandle = std::coroutine_handle<promise_type>;
 
         ~async() {
             Destroy();
@@ -45,7 +40,7 @@ namespace NActors {
             return bool(Handle);
         }
 
-        constexpr std::coroutine_handle<NDetail::TAsyncPromise<T>> GetHandle() const noexcept {
+        constexpr THandle GetHandle() const noexcept {
             return Handle;
         }
 
@@ -56,10 +51,38 @@ namespace NActors {
             }
         }
 
-        constexpr NDetail::TAsyncAwaiter<T> CoAwaitByValue() &&;
+        class TAwaiter {
+        public:
+            static constexpr bool IsActorAwareAwaiter = true;
+
+            constexpr bool await_ready() noexcept {
+                return false;
+            }
+
+            template<class TPromise>
+            constexpr std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> caller) noexcept {
+                Handle.promise().SetContinuation(caller);
+                return Handle;
+            }
+
+            T await_resume() {
+                return Handle.promise().ExtractValue();
+            }
+
+        private:
+            constexpr TAwaiter(THandle handle) noexcept : Handle(handle) {}
+            friend async;
+
+        private:
+            THandle Handle;
+        };
+
+        constexpr TAwaiter CoAwaitByValue() && noexcept {
+            return TAwaiter{ Handle };
+        }
 
     private:
-        constexpr explicit async(std::coroutine_handle<NDetail::TAsyncPromise<T>> handle)
+        constexpr explicit async(THandle handle)
             : Handle(handle)
         {}
 
@@ -67,7 +90,7 @@ namespace NActors {
         async& operator=(const async&) = delete;
 
     private:
-        std::coroutine_handle<NDetail::TAsyncPromise<T>> Handle;
+        THandle Handle;
     };
 
     namespace NDetail {
@@ -109,18 +132,15 @@ namespace NActors {
     template<IsAsyncCoroutine T>
     using TAsyncCoroutineResult = typename NDetail::TAsyncCoroutineResultHelper<T>::type;
 
+    /**
+     * Concept matches all types which are marked as IsActorAwareAwaiter
+     */
+    template<class TAwaiter>
+    concept IsActorAwareAwaiter = (
+        std::bool_constant<(TAwaiter::IsActorAwareAwaiter == true)>::value ||
+        requires { typename TAwaiter::IsActorAwareAwaiter; });
+
     namespace NDetail {
-
-        /**
-         * Base class for awaiters which can integrate with actors directly
-         */
-        struct TActorAwareAwaiter {};
-
-        /**
-         * Concept matches all types that subclass TActorAwareAwaiter
-         */
-        template<class TAwaiter>
-        concept IsActorAwareAwaiter = std::is_convertible_v<TAwaiter&, TActorAwareAwaiter&>;
 
         /**
          * Returns a coroutine handle, which would arrange for the specified
@@ -141,91 +161,32 @@ namespace NActors {
         std::pair<std::coroutine_handle<>, std::coroutine_handle<>> MakeBridgeCoroutines(
             IActor& actor, TActorRunnableItem& item1, TActorRunnableItem& item2);
 
-        // concepts for validating awaiters and awaitables which integrate with actors
+        //
+        // Concepts for validating awaitables and awaiters
+        //
 
         template<class TAwaitable>
-        concept HasActorCoAwait = requires(TAwaitable&& awaitable) {
-            std::forward<TAwaitable>(awaitable).CoAwait();
-        };
-
-        template<class TAwaitable>
-        concept HasActorCoAwaitByValue = requires(TAwaitable&& awaitable) {
+        concept HasCoAwaitByValue = requires(TAwaitable&& awaitable) {
             std::forward<TAwaitable>(awaitable).CoAwaitByValue();
         };
 
         template<class TAwaitable>
-        constexpr decltype(auto) GetActorAwaiter(TAwaitable&& awaitable) {
-            if constexpr (requires { std::forward<TAwaitable>(awaitable).CoAwait(); }) {
-                return std::forward<TAwaitable>(awaitable).CoAwait();
-            } else {
-                return std::forward<TAwaitable>(awaitable);
-            }
-        }
-
-        template<class TAwaiter, class TPromise = void>
-        concept IsActorAwaiter = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            awaiter.AwaitReady();
-            awaiter.AwaitSuspend(h);
-            awaiter.AwaitResume();
-        };
-
-        template<class TAwaitable, class TPromise = void>
-        concept IsActorAwaitable = (
-            HasActorCoAwait<TAwaitable> ||
-            IsActorAwaiter<TAwaitable, TPromise> && !HasActorCoAwaitByValue<TAwaitable>);
-
-        template<class TAwaitable, class TPromise = void>
-        concept IsActorAwaitableByValue = HasActorCoAwaitByValue<TAwaitable>;
-
-        template<class TAwaiter>
-        concept HasAwaitReadyNoExcept = requires(TAwaiter& awaiter) {
-            { awaiter.AwaitReady() } noexcept;
-        };
-
-        template<class TAwaiter, class TPromise = void>
-        concept HasAwaitSuspendNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            { awaiter.AwaitSuspend(h) } noexcept;
-        };
-
-        template<class TAwaiter>
-        concept HasAwaitResumeNoExcept = requires(TAwaiter& awaiter) {
-            { awaiter.AwaitResume() } noexcept;
-        };
-
-        template<class TAwaiter>
-        concept HasAwaitCancelled = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            awaiter.AwaitCancelled(h);
-        };
-
-        template<class TAwaiter>
-        concept HasAwaitCancel = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            awaiter.AwaitCancel(h);
-        };
-
-        template<class TAwaiter>
-        concept HasAwaitCancelNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.AwaitCancel(h) } noexcept;
-        };
-
-        // Concepts for validating standard C++ awaiters and awaitables
-
-        template<class TAwaitable>
-        concept HasStdMemberCoAwait = requires(TAwaitable&& awaitable) {
+        concept HasMemberCoAwait = requires(TAwaitable&& awaitable) {
             std::forward<TAwaitable>(awaitable).operator co_await();
         };
 
         template<class TAwaitable>
-        concept HasStdGlobalCoAwait = requires(TAwaitable&& awaitable) {
+        concept HasGlobalCoAwait = requires(TAwaitable&& awaitable) {
             operator co_await(std::forward<TAwaitable>(awaitable));
         };
 
         template<class TAwaitable>
-        concept HasStdCoAwait = (
-            HasStdMemberCoAwait<TAwaitable> ||
-            HasStdGlobalCoAwait<TAwaitable>);
+        concept HasCoAwait = (
+            HasMemberCoAwait<TAwaitable> ||
+            HasGlobalCoAwait<TAwaitable>);
 
         template<class TAwaitable>
-        constexpr decltype(auto) GetStdAwaiter(TAwaitable&& awaitable) {
+        constexpr decltype(auto) GetAwaiter(TAwaitable&& awaitable) {
             if constexpr (requires { std::forward<TAwaitable>(awaitable).operator co_await(); }) {
                 return std::forward<TAwaitable>(awaitable).operator co_await();
             } else if constexpr (requires { operator co_await(std::forward<TAwaitable>(awaitable)); }) {
@@ -235,63 +196,46 @@ namespace NActors {
             }
         }
 
+        template<class TAwaitable>
+        using TGetAwaiterResultType = decltype(GetAwaiter(std::declval<TAwaitable&&>()));
+
         template<class TAwaiter, class TPromise = void>
-        concept IsStdAwaiter = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
+        concept IsAwaiter = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
             awaiter.await_ready();
             awaiter.await_suspend(h);
             awaiter.await_resume();
         };
 
         template<class TAwaitable, class TPromise = void>
-        concept IsStdAwaitable = (
-            HasStdCoAwait<TAwaitable> ||
-            IsStdAwaiter<TAwaitable, TPromise>);
+        concept IsAwaitable = (
+            HasCoAwait<TAwaitable> ||
+            IsAwaiter<TAwaitable, TPromise>);
 
         template<class TAwaiter>
-        concept HasStdAwaitReadyNoExcept = requires(TAwaiter& awaiter) {
+        concept HasAwaitReadyNoExcept = requires(TAwaiter& awaiter) {
             { awaiter.await_ready() } noexcept;
         };
 
         template<class TAwaiter, class TPromise = void>
-        concept HasStdAwaitSuspendNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
+        concept HasAwaitSuspendNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
             { awaiter.await_suspend(h) } noexcept;
         };
 
         template<class TAwaiter>
-        concept HasStdAwaitResumeNoExcept = requires(TAwaiter& awaiter) {
+        concept HasAwaitResumeNoExcept = requires(TAwaiter& awaiter) {
             { awaiter.await_resume() } noexcept;
         };
 
         template<class TAwaiter>
-        concept HasStdAwaitCancelled = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+        concept HasAwaitCancelled = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
             // This is a non-standard extension to standard awaiters
             awaiter.await_cancelled(h);
         };
 
         template<class TAwaiter>
-        concept HasStdAwaitCancel = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+        concept HasAwaitCancel = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
             // This is a non-standard extension to standard awaiters
             awaiter.await_cancel(h);
-        };
-
-        template<class TAwaiter>
-        concept HasStdAwaitCancelVoid = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.await_cancel(h) } -> std::same_as<void>;
-        };
-
-        template<class TAwaiter>
-        concept HasStdAwaitCancelBool = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.await_cancel(h) } -> std::same_as<bool>;
-        };
-
-        template<class TAwaiter>
-        concept HasStdAwaitCancelHandle = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.await_cancel(h) } -> std::convertible_to<std::coroutine_handle<>>;
-        };
-
-        template<class TAwaiter>
-        concept HasStdAwaitCancelNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.await_cancel(h) } noexcept;
         };
 
         // Forward declaration, defined below
@@ -321,28 +265,28 @@ namespace NActors {
             }
 
             /**
-             * Calls the awaiter.AwaitCancel(h) method and transforms various
+             * Calls the awaiter.await_cancel(h) method and transforms various
              * result types into an optional continuation.
              */
             template<class TAwaiter>
             [[nodiscard]] static std::coroutine_handle<> Notify(
                     TAwaiter& awaiter, std::coroutine_handle<> h)
-                noexcept(noexcept(awaiter.AwaitCancel(h)))
+                noexcept(noexcept(awaiter.await_cancel(h)))
             {
-                if constexpr (requires { { awaiter.AwaitCancel(h) } -> std::same_as<void>; }) {
-                    awaiter.AwaitCancel(h);
+                if constexpr (requires { { awaiter.await_cancel(h) } -> std::same_as<void>; }) {
+                    awaiter.await_cancel(h);
                     return nullptr;
-                } else if constexpr (requires { { awaiter.AwaitCancel(h) } -> std::same_as<bool>; }) {
-                    if (awaiter.AwaitCancel(h)) {
+                } else if constexpr (requires { { awaiter.await_cancel(h) } -> std::same_as<bool>; }) {
+                    if (awaiter.await_cancel(h)) {
                         return h;
                     } else {
                         return nullptr;
                     }
                 } else {
                     static_assert(
-                        requires { { awaiter.AwaitCancel(h) } -> std::convertible_to<std::coroutine_handle<>>; },
-                        "AwaitCancel(h) must return void, bool or std::coroutine_handle<>");
-                    return awaiter.AwaitCancel(h);
+                        requires { { awaiter.await_cancel(h) } -> std::convertible_to<std::coroutine_handle<>>; },
+                        "await_cancel(h) must return void, bool or std::coroutine_handle<>");
+                    return awaiter.await_cancel(h);
                 }
             }
 
@@ -422,11 +366,10 @@ namespace NActors {
         };
 
         /**
-         * Subscribe for awaiter.AwaitCancel(h) to be called on Cancel(h)
+         * Subscribe for awaiter.await_cancel(h) to be called on Cancel(h)
          */
         template<class TAwaiter>
         inline TAwaitCancelCleanup TAwaitCancelSource::SetAwaiter(TAwaiter& awaiter) noexcept {
-            static_assert(HasAwaitCancelNoExcept<TAwaiter>, "AwaitCancel must be noexcept");
             Y_DEBUG_ABORT_UNLESS(!CancelFn, "TAwaitCancelSource cannot support more than one awaiter");
             CancelFn = +[](void* ptr, std::coroutine_handle<> h) noexcept {
                 return TAwaitCancelSource::Notify(*reinterpret_cast<TAwaiter*>(ptr), h);
@@ -436,95 +379,9 @@ namespace NActors {
         }
 
         /**
-         * Awaiter implementation for async<T>
-         */
-        template<class T>
-        class TAsyncAwaiter : public TActorAwareAwaiter {
-        public:
-            constexpr explicit TAsyncAwaiter(async<T>&& owner)
-                : Handle(owner.GetHandle())
-            {}
-
-            constexpr bool await_ready() noexcept {
-                return false;
-            }
-
-            template<class TPromise>
-            std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) noexcept {
-                IActor& actor = parent.promise().GetActor();
-                TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
-                Handle.promise().SetContinuation(parent, actor, source);
-                return Handle;
-            }
-
-            T await_resume() {
-                return Handle.promise().ExtractValue();
-            }
-
-        private:
-            std::coroutine_handle<TAsyncPromise<T>> Handle;
-        };
-
-        /**
-         * Helpers for calling AwaitSuspend overloads
-         */
-        struct TActorAwaitSuspendHelper {
-            /**
-             * Calls AwaitSuspend(h) converting the result to a valid std::coroutine_handle<>
-             */
-            template<class TAwaiter, class TPromise = void>
-            [[nodiscard]] static constexpr std::coroutine_handle<> Suspend(
-                    TAwaiter& awaiter, std::coroutine_handle<TPromise> h)
-                noexcept(noexcept(awaiter.AwaitSuspend(h)))
-            {
-                if constexpr (requires { { awaiter.AwaitSuspend(h) } -> std::same_as<void>; }) {
-                    awaiter.AwaitSuspend(h);
-                    return std::noop_coroutine();
-                } else if constexpr (requires { { awaiter.AwaitSuspend(h) } -> std::same_as<bool>; }) {
-                    if (!awaiter.AwaitSuspend(h)) {
-                        return h;
-                    }
-                    return std::noop_coroutine();
-                } else {
-                    static_assert(
-                        requires { { awaiter.AwaitSuspend(h) } -> std::convertible_to<std::coroutine_handle<>>; },
-                        "AwaitSuspend(h) must return void, bool or std::coroutine_handle<>");
-                    return awaiter.AwaitSuspend(h);
-                }
-            }
-
-            /**
-             * Calls AwaitCancelled(unwind) and continues to AwaitSuspend(resume)
-             * when it returns void, false, or nullptr, indicating it wants to
-             * suspend, otherwise returns a valid unwind handle.
-             */
-            template<class TAwaiter, class TPromise = void>
-            [[nodiscard]] static constexpr std::coroutine_handle<> SuspendCancelled(
-                    TAwaiter& awaiter, std::coroutine_handle<TPromise> resume, std::coroutine_handle<> unwind)
-                noexcept(noexcept(awaiter.AwaitCancelled(unwind)) && noexcept(awaiter.AwaitSuspend(resume)))
-            {
-                if constexpr (requires { { awaiter.AwaitCancelled(unwind) } -> std::same_as<void>; }) {
-                    awaiter.AwaitCancelled(unwind);
-                } else if constexpr (requires { { awaiter.AwaitCancelled(unwind) } -> std::same_as<bool>; }) {
-                    if (awaiter.AwaitCancelled(unwind)) {
-                        return unwind;
-                    }
-                } else {
-                    static_assert(
-                        requires { { awaiter.AwaitCancelled(unwind) } -> std::convertible_to<std::coroutine_handle<>>; },
-                        "AwaitCancelled(h) must return void, bool or std::coroutine_handle<>");
-                    if (std::coroutine_handle<> next = awaiter.AwaitCancelled(unwind)) {
-                        return next;
-                    }
-                }
-                return TActorAwaitSuspendHelper::Suspend(awaiter, resume);
-            }
-        };
-
-        /**
          * Helpers for calling await_suspend overloads
          */
-        struct TStdAwaitSuspendHelper {
+        struct TAwaitSuspendHelper {
             /**
              * Calls await_suspend(h) converting the result to a valid std::coroutine_handle<>
              */
@@ -573,7 +430,7 @@ namespace NActors {
                         return next;
                     }
                 }
-                return TStdAwaitSuspendHelper::Suspend(awaiter, resume);
+                return TAwaitSuspendHelper::Suspend(awaiter, resume);
             }
         };
 
@@ -583,9 +440,11 @@ namespace NActors {
         template<class TAwaiter>
         class TAwaiterProxy {
         public:
+            static constexpr bool IsActorAwareAwaiter = true;
+
             template<class... TArgs>
             constexpr explicit TAwaiterProxy(TArgs&&... args)
-                : Awaiter{ std::forward<TArgs>(args)... }
+                : Awaiter(std::forward<TArgs>(args)...)
             {}
 
             TAwaiterProxy(TAwaiterProxy&&) = delete;
@@ -594,7 +453,7 @@ namespace NActors {
             TAwaiterProxy& operator=(const TAwaiterProxy&) = delete;
 
             bool await_ready() noexcept(HasAwaitReadyNoExcept<TAwaiter>) {
-                return Awaiter.AwaitReady();
+                return Awaiter.await_ready();
             }
 
             template<class TPromise>
@@ -603,7 +462,7 @@ namespace NActors {
 
                 if (std::coroutine_handle<> cancellation = source.GetCancellation()) {
                     if constexpr (HasAwaitCancelled<TAwaiter>) {
-                        return TActorAwaitSuspendHelper::SuspendCancelled(Awaiter, parent, cancellation);
+                        return TAwaitSuspendHelper::SuspendCancelled(Awaiter, parent, cancellation);
                     }
 
                     if constexpr (HasAwaitCancel<TAwaiter>) {
@@ -622,7 +481,7 @@ namespace NActors {
                 }
 
                 TCallCleanup callCleanup{ this };
-                std::coroutine_handle<> result = TActorAwaitSuspendHelper::Suspend(Awaiter, parent);
+                std::coroutine_handle<> result = TAwaitSuspendHelper::Suspend(Awaiter, parent);
                 callCleanup.Cancel();
                 return result;
             }
@@ -631,7 +490,7 @@ namespace NActors {
                 if constexpr (HasAwaitCancel<TAwaiter>) {
                     Cleanup();
                 }
-                return Awaiter.AwaitResume();
+                return Awaiter.await_resume();
             }
 
         private:
@@ -702,25 +561,28 @@ namespace NActors {
          * Transparently handles return path and cancellation for standard C++ awaiters
          */
         template<class TAwaiter>
-        class TStdAwaiterProxy final
-            : private TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>
-            , private TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter> || HasStdAwaitCancelled<TAwaiter>>
+        class TThreadSafeAwaiterProxy final
+            : private TActorRunnableItem::TImpl<TThreadSafeAwaiterProxy<TAwaiter>>
+            , private TThreadSafeResumeBridge<TThreadSafeAwaiterProxy<TAwaiter>, HasAwaitCancel<TAwaiter> || HasAwaitCancelled<TAwaiter>>
         {
-            friend TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>;
-            friend TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter> || HasStdAwaitCancelled<TAwaiter>>;
+            friend TAwaitCancelSource;
+            friend TActorRunnableItem::TImpl<TThreadSafeAwaiterProxy<TAwaiter>>;
+            friend TThreadSafeResumeBridge<TThreadSafeAwaiterProxy<TAwaiter>, HasAwaitCancel<TAwaiter> || HasAwaitCancelled<TAwaiter>>;
 
         public:
+            static constexpr bool IsActorAwareAwaiter = true;
+
             template<class... TArgs>
-            constexpr TStdAwaiterProxy(TArgs&&... args)
-                : Awaiter{ std::forward<TArgs>(args)... }
+            constexpr TThreadSafeAwaiterProxy(TArgs&&... args)
+                : Awaiter(std::forward<TArgs>(args)...)
             {}
 
-            TStdAwaiterProxy(TStdAwaiterProxy&&) = delete;
-            TStdAwaiterProxy(const TStdAwaiterProxy&) = delete;
-            TStdAwaiterProxy& operator=(TStdAwaiterProxy&&) = delete;
-            TStdAwaiterProxy& operator=(const TStdAwaiterProxy&) = delete;
+            TThreadSafeAwaiterProxy(TThreadSafeAwaiterProxy&&) = delete;
+            TThreadSafeAwaiterProxy(const TThreadSafeAwaiterProxy&) = delete;
+            TThreadSafeAwaiterProxy& operator=(TThreadSafeAwaiterProxy&&) = delete;
+            TThreadSafeAwaiterProxy& operator=(const TThreadSafeAwaiterProxy&) = delete;
 
-            bool await_ready() noexcept(HasStdAwaitReadyNoExcept<TAwaiter>) {
+            bool await_ready() noexcept(HasAwaitReadyNoExcept<TAwaiter>) {
                 return Awaiter.await_ready();
             }
 
@@ -732,12 +594,12 @@ namespace NActors {
                 Continuation = parent;
 
                 if (auto cancellation = source.GetCancellation()) {
-                    if constexpr (HasStdAwaitCancelled<TAwaiter>) {
+                    if constexpr (HasAwaitCancelled<TAwaiter>) {
                         Bridge = this->CreateResumeBridge(actor, GetResumeItem());
                         TCallDestroyBridge callDestroyBridge{ this };
 
                         std::coroutine_handle<> unwind = this->StartCancellation(cancellation);
-                        std::coroutine_handle<> result = TStdAwaitSuspendHelper::SuspendCancelled(Awaiter, Bridge, unwind);
+                        std::coroutine_handle<> result = TAwaitSuspendHelper::SuspendCancelled(Awaiter, Bridge, unwind);
 
                         if (result == unwind) {
                             // Awaiter unwinds immediately
@@ -755,7 +617,7 @@ namespace NActors {
                         return result;
                     }
 
-                    if constexpr (HasStdAwaitCancel<TAwaiter>) {
+                    if constexpr (HasAwaitCancel<TAwaiter>) {
                         // Awaiter has await_cancel, which means it clearly
                         // supports cancellation, but not await_cancelled, so
                         // it won't be able to unwind after suspending. Avoid
@@ -764,7 +626,7 @@ namespace NActors {
                         return cancellation;
                     }
                 } else {
-                    if constexpr (HasStdAwaitCancel<TAwaiter>) {
+                    if constexpr (HasAwaitCancel<TAwaiter>) {
                         Cleanup = source.SetAwaiter(*this);
                     }
                 }
@@ -774,7 +636,7 @@ namespace NActors {
                 Bridge = this->CreateResumeBridge(actor, GetResumeItem());
                 TCallDestroyBridge callDestroyBridge{ this };
 
-                std::coroutine_handle<> result = TStdAwaitSuspendHelper::Suspend(Awaiter, Bridge);
+                std::coroutine_handle<> result = TAwaitSuspendHelper::Suspend(Awaiter, Bridge);
                 callCleanup.Cancel();
 
                 if (result == Bridge) {
@@ -787,23 +649,23 @@ namespace NActors {
                 return result;
             }
 
-            decltype(auto) await_resume() noexcept(HasStdAwaitResumeNoExcept<TAwaiter>) {
-                if constexpr (HasStdAwaitCancel<TAwaiter>) {
+            decltype(auto) await_resume() noexcept(HasAwaitResumeNoExcept<TAwaiter>) {
+                if constexpr (HasAwaitCancel<TAwaiter>) {
                     Cleanup();
                 }
                 return Awaiter.await_resume();
             }
 
-            decltype(auto) AwaitCancel(std::coroutine_handle<> c) noexcept
-                requires HasStdAwaitCancel<TAwaiter>
+        private:
+            decltype(auto) await_cancel(std::coroutine_handle<> c) noexcept
+                requires HasAwaitCancel<TAwaiter>
             {
-                static_assert(HasStdAwaitCancelNoExcept<TAwaiter>, "await_cancel must be noexcept");
                 return Awaiter.await_cancel(this->StartCancellation(c));
             }
 
         private:
             struct TCallCleanup {
-                TStdAwaiterProxy* Self;
+                TThreadSafeAwaiterProxy* Self;
 
                 constexpr ~TCallCleanup() {
                     if (Self) {
@@ -818,7 +680,7 @@ namespace NActors {
 
         private:
             struct TCallDestroyBridge {
-                TStdAwaiterProxy* Self;
+                TThreadSafeAwaiterProxy* Self;
 
                 ~TCallDestroyBridge() {
                     if (Self) {
@@ -839,7 +701,7 @@ namespace NActors {
         private:
             TActorRunnableItem& GetResumeItem() {
                 // We have multiple TActorRunnableItem base classes
-                TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>& base = *this;
+                TActorRunnableItem::TImpl<TThreadSafeAwaiterProxy<TAwaiter>>& base = *this;
                 return base;
             }
 
@@ -866,133 +728,225 @@ namespace NActors {
         };
 
         /**
-         * Marks awaitable as safe to await by reference even when it only supports awaiting by value
+         * Marks awaitable which has CoAwaitByValue() and which should only be
+         * awaited by value as safe to co_await by reference.
          */
-        template<IsActorAwaitableByValue TAwaitable>
-        constexpr decltype(auto) UnsafeAwaitableByReference(TAwaitable&& awaitable) {
-            struct TAwaitableByReference {
-                TAwaitable&& Awaitable;
-                constexpr decltype(auto) CoAwait() && {
-                    return std::forward<TAwaitable>(Awaitable).CoAwaitByValue();
-                }
-            };
-            return TAwaitableByReference{ std::forward<TAwaitable>(awaitable) };
-        }
+        template<class TAwaitable>
+        class TUnsafeAwaitableByReference {
+        public:
+            constexpr TUnsafeAwaitableByReference(TAwaitable&& awaitable) noexcept
+                : Awaitable(awaitable)
+            {}
+
+            constexpr decltype(auto) operator co_await() && {
+                return std::forward<TAwaitable>(Awaitable).CoAwaitByValue();
+            }
+
+        private:
+            TAwaitable&& Awaitable;
+        };
 
         /**
          * Common bases class for promises, provides await_transform support
          */
-        template<class TPromise>
         class TAsyncAwaitTransform {
         public:
             /**
-             * Transforms actor awaitables which can only we awaited by value
+             * Transforms awaitables which can only be awaited by value
              *
-             * Such awaitables usually cannot be moved and hold references to temporaries.
+             * Such awaitables must have a non-trivial destructor, usually
+             * cannot be moved and might hold references to temporaries created
+             * as part of a co_await expression. Their destructor will be called
+             * after any temporary we return from this method.
              */
             template<class TAwaitable>
-            constexpr decltype(auto) await_transform(TAwaitable awaitable)
-                requires (HasActorCoAwaitByValue<TAwaitable>)
+            static constexpr decltype(auto) await_transform(TAwaitable awaitable)
+                requires (HasCoAwaitByValue<TAwaitable> && !std::is_trivially_destructible_v<TAwaitable>)
             {
-                // We simply mark it as awaitable by reference (will outlive co_await)
-                // This will call await_transform below and redirect CoAwait to CoAwaitByValue
-                return await_transform(UnsafeAwaitableByReference(std::move(awaitable)));
-            }
-
-            /**
-             * Transforms actor awaitables which have a CoAwait method
-             */
-            template<class TAwaitable>
-            constexpr decltype(auto) await_transform(TAwaitable&& awaitable)
-                requires (
-                    HasActorCoAwait<TAwaitable> &&
-                    !HasActorCoAwaitByValue<TAwaitable>)
-            {
-                // Note: may be a reference
-                using TAwaiter = decltype(GetActorAwaiter(std::forward<TAwaitable>(awaitable)));
+                // Note: may be a reference type, even the same reference
+                using TAwaiter = decltype(std::forward<TAwaitable>(awaitable).CoAwaitByValue());
 
                 if constexpr (IsActorAwareAwaiter<TAwaiter>) {
-                    // We return the resulting awaiter without any proxies
-                    return GetActorAwaiter(std::forward<TAwaitable>(awaitable));
+                    if constexpr (HasAwaitCancel<TAwaiter> || HasAwaitCancelled<TAwaiter>) {
+                        // Use implicit conversion to support awaiters that cannot be moved
+                        struct TImplicitConverter {
+                            TAwaitable&& Awaitable;
+                            constexpr operator TAwaiter() const {
+                                return std::forward<TAwaitable>(Awaitable).CoAwaitByValue();
+                            }
+                        };
+                        // We need a proxy which transparently handles special methods
+                        return TAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
+                    } else {
+                        return std::forward<TAwaitable>(awaitable).CoAwaitByValue();
+                    }
                 } else {
-                    // Make sure it's not e.g. a standard C++ awaiter or something else
-                    static_assert(IsActorAwaiter<TAwaiter, TPromise>, "CoAwait returns a type that is not an actor awaiter");
-                    // Use implicit conversion to support awaiters that cannot be moved
+                    static_assert(IsActorAwareAwaiter<TAwaiter>, "Something is strange");
+                    // We use an implicit conversion to support awaiters that cannot be moved
                     struct TImplicitConverter {
                         TAwaitable&& Awaitable;
                         constexpr operator TAwaiter() const {
-                            return GetActorAwaiter(std::forward<TAwaitable>(awaitable));
+                            return std::forward<TAwaitable>(Awaitable).CoAwaitByValue();
                         }
                     };
                     // The wrapped awaiter may or may not be a reference type
-                    return TAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
+                    return TThreadSafeAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
                 }
             }
 
             /**
-             * Transforms actor awaiters without any CoAwait method
-             */
-            template<class TAwaiter>
-            constexpr decltype(auto) await_transform(TAwaiter&& awaiter)
-                requires (
-                    IsActorAwaiter<TAwaiter, TPromise> &&
-                    !HasActorCoAwait<TAwaiter> &&
-                    !HasActorCoAwaitByValue<TAwaiter>)
-            {
-                // We store awaiter by reference (will outlive co_await when temporary)
-                return TAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
-            }
-
-            /**
-             * Transforms standard C++ awaitables into a form that makes sure to resume on the same mailbox
+             * Transforms awaitables which have an operator co_await
              */
             template<class TAwaitable>
-            constexpr decltype(auto) await_transform(TAwaitable&& awaitable)
+            static constexpr decltype(auto) await_transform(TAwaitable&& awaitable)
                 requires (
-                    HasStdCoAwait<TAwaitable> &&
-                    !IsActorAwaiter<TAwaitable, TPromise> &&
-                    !HasActorCoAwait<TAwaitable> &&
-                    !HasActorCoAwaitByValue<TAwaitable>)
+                    HasCoAwait<TAwaitable> &&
+                    !HasCoAwaitByValue<TAwaitable>)
             {
-                using TAwaiter = decltype(GetStdAwaiter(std::forward<TAwaitable>(awaitable)));
-                static_assert(IsStdAwaiter<TAwaiter>, "operator co_await returns a type that is not an awaiter");
+                // Note: may be a reference type, even the same reference
+                using TAwaiter = decltype(GetAwaiter(std::forward<TAwaitable>(awaitable)));
 
                 if constexpr (IsActorAwareAwaiter<TAwaiter>) {
-                    // We return awaitable by reference (temporary will outlive co_await)
-                    // Coroutine implementation will call operator co_await on its own
-                    return std::forward<TAwaitable>(awaitable);
+                    if constexpr (HasAwaitCancel<TAwaiter> || HasAwaitCancelled<TAwaiter>) {
+                        // Use implicit conversion to support awaiters that cannot be moved
+                        struct TImplicitConverter {
+                            TAwaitable&& Awaitable;
+                            constexpr operator TAwaiter() const {
+                                return GetAwaiter(std::forward<TAwaitable>(Awaitable));
+                            }
+                        };
+                        // We need a proxy which transparently handles special methods
+                        return TAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
+                    } else {
+                        // We return the awaitable by reference and without any
+                        // proxies, since coroutine calls operator co_await and
+                        // we must not do that here. Otherwise operator co_await
+                        // might be called twice.
+                        return std::forward<TAwaitable>(awaitable);
+                    }
                 } else {
                     // We use an implicit conversion to support awaiters that cannot be moved
                     struct TImplicitConverter {
                         TAwaitable&& Awaitable;
                         constexpr operator TAwaiter() const {
-                            return GetStdAwaiter(std::forward<TAwaitable>(Awaitable));
+                            return GetAwaiter(std::forward<TAwaitable>(Awaitable));
                         }
                     };
                     // The wrapped awaiter may or may not be a reference type
-                    return TStdAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
+                    return TThreadSafeAwaiterProxy<TAwaiter>{ TImplicitConverter{ std::forward<TAwaitable>(awaitable) } };
                 }
             }
 
             /**
-             * Transforms standard C++ awaiters into a form that makes sure to resume on the same mailbox
+             * Transform single-threaded awaiters integrating with the actor system
              */
             template<class TAwaiter>
-            constexpr decltype(auto) await_transform(TAwaiter&& awaiter)
+            static constexpr decltype(auto) await_transform(TAwaiter&& awaiter)
                 requires (
-                    IsStdAwaiter<TAwaiter> &&
-                    !HasStdCoAwait<TAwaiter> &&
-                    !IsActorAwaiter<TAwaiter> &&
-                    !HasActorCoAwait<TAwaiter> &&
-                    !HasActorCoAwaitByValue<TAwaiter>)
+                    IsActorAwareAwaiter<TAwaiter> &&
+                    !HasCoAwait<TAwaiter> &&
+                    !HasCoAwaitByValue<TAwaiter>)
             {
-                if constexpr (IsActorAwareAwaiter<TAwaiter>) {
+                if constexpr (HasAwaitCancel<TAwaiter> || HasAwaitCancelled<TAwaiter>) {
+                    // We store awaiter by reference (will outlive co_await when temporary)
+                    return TAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
+                } else {
                     // We return awaiter by reference (temporary will outlive co_await)
                     return std::forward<TAwaiter>(awaiter);
-                } else {
-                    return TStdAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
                 }
             }
+
+            /**
+             * Transforms arbitrary awaiters into a form which makes sure to resume on the same mailbox
+             */
+            template<class TAwaiter>
+            static constexpr decltype(auto) await_transform(TAwaiter&& awaiter)
+                requires (
+                    IsAwaiter<TAwaiter> &&
+                    !IsActorAwareAwaiter<TAwaiter> &&
+                    !HasCoAwait<TAwaiter> &&
+                    !HasCoAwaitByValue<TAwaiter>)
+            {
+                return TThreadSafeAwaiterProxy<TAwaiter&&>{ std::forward<TAwaiter>(awaiter) };
+            }
+        };
+
+        // The result of our await_transform for TAwaitable
+        template<class TAwaitable>
+        using TAsyncAwaitTransformResult = decltype(TAsyncAwaitTransform::await_transform(std::declval<TAwaitable&&>()));
+
+        // Will be true for types which transform into an awaitable
+        // Such types need an additional operator co_await call, otherwise the result is an awaiter
+        template<class TAwaitable>
+        concept IsAsyncAwaitTransformResultAwaitable = HasCoAwait<TAsyncAwaitTransformResult<TAwaitable>>;
+
+        // Will be true for types which transform into a reference type
+        // When calling operator co_await such types don't need lifetime extension
+        template<class TAwaitable>
+        concept IsAsyncAwaitTransformResultReference = std::is_reference_v<TAsyncAwaitTransformResult<TAwaitable>>;
+
+        /**
+         * Transforms awaitables into their lifetime-extended awaiters
+         */
+        template<class TAwaitable, bool NeedCoAwait = IsAsyncAwaitTransformResultAwaitable<TAwaitable>>
+        class TAsyncAwaitTransformed {
+        public:
+            // This is either a reference type (direct awaiter with no proxies),
+            // or some value which needs its lifetime extended.
+            using TAwaiter = TAsyncAwaitTransformResult<TAwaitable>;
+
+            TAsyncAwaitTransformed(TAwaitable&& awaitable)
+                : Awaiter(TAsyncAwaitTransform::await_transform(std::forward<TAwaitable>(awaitable)))
+            {}
+
+        public:
+            TAwaiter Awaiter;
+        };
+
+        /**
+         * Transforms awaitables and calls co_await on the result, when the
+         * intermediate transformation between await_transform and co_await is
+         * a reference type. We don't need to store intermediate reference in
+         * that case.
+         */
+        template<IsAsyncAwaitTransformResultReference TAwaitable>
+        class TAsyncAwaitTransformed<TAwaitable, true> {
+        public:
+            // An intermediate (reference) type
+            using TIntermediate = TAsyncAwaitTransformResult<TAwaitable>;
+            // The result of operator co_await (may also be a reference type)
+            using TAwaiter = TGetAwaiterResultType<TIntermediate>;
+
+            TAsyncAwaitTransformed(TAwaitable&& awaitable)
+                : Awaiter(GetAwaiter(TAsyncAwaitTransform::await_transform(std::forward<TAwaitable>(awaitable))))
+            {}
+
+        public:
+            TAwaiter Awaiter;
+        };
+
+        /**
+         * Transforms awaitables and calls co_await on the result, when the
+         * intermediate transformation between await_transform and co_await is
+         * not a reference type. We need to store the intermediate and make
+         * sure its lifetime is greater than the resulting awaiter.
+         */
+        template<class TAwaitable>
+        class TAsyncAwaitTransformed<TAwaitable, true> {
+        public:
+            // An intermediate (non-reference) type
+            using TIntermediate = TAsyncAwaitTransformResult<TAwaitable>;
+            // The result of operator co_await (may be a reference type)
+            using TAwaiter = TGetAwaiterResultType<TIntermediate>;
+
+            TAsyncAwaitTransformed(TAwaitable&& awaitable)
+                : Awaitable(TAsyncAwaitTransform::await_transform(std::forward<TAwaitable>(awaitable)))
+                , Awaiter(GetAwaiter(static_cast<TIntermediate&&>(Awaitable)))
+            {}
+
+        public:
+            TIntermediate Awaitable;
+            TAwaiter Awaiter;
         };
 
         template<class T, template<class> class TAsyncResultType = TAsyncResult>
@@ -1025,10 +979,10 @@ namespace NActors {
         template<class T>
         class TAsyncPromise
             : public TAsyncPromiseResultHandler<T>
-            , public TAsyncAwaitTransform<TAsyncPromise<T>>
+            , public TAsyncAwaitTransform
         {
         public:
-            async<T> get_return_object() noexcept {
+            constexpr async<T> get_return_object() noexcept {
                 return async<T>(std::coroutine_handle<TAsyncPromise<T>>::from_promise(*this));
             }
 
@@ -1036,7 +990,7 @@ namespace NActors {
                 constexpr bool await_ready() noexcept { return false; }
                 constexpr void await_resume() noexcept {}
 
-                std::coroutine_handle<> await_suspend(std::coroutine_handle<TAsyncPromise<T>> self) noexcept {
+                constexpr std::coroutine_handle<> await_suspend(std::coroutine_handle<TAsyncPromise<T>> self) noexcept {
                     return self.promise().Continuation;
                 }
             };
@@ -1056,7 +1010,14 @@ namespace NActors {
                 return Continuation;
             }
 
-            constexpr void SetContinuation(std::coroutine_handle<> c, IActor& actor, TAwaitCancelSource& source) noexcept {
+            template<class TPromise>
+            constexpr void SetContinuation(std::coroutine_handle<TPromise> caller) noexcept {
+                IActor& actor = caller.promise().GetActor();
+                TAwaitCancelSource& source = caller.promise().GetAwaitCancelSource();
+                SetContinuation(actor, source, caller);
+            }
+
+            constexpr void SetContinuation(IActor& actor, TAwaitCancelSource& source, std::coroutine_handle<> c) noexcept {
                 Actor = &actor;
                 Source = &source;
                 Continuation = c;
@@ -1079,7 +1040,7 @@ namespace NActors {
             , private TAwaitCancelSource
             , private TActorRunnableItem::TImpl<TActorAsyncHandlerPromise>
             , private TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>
-            , public TAsyncAwaitTransform<TActorAsyncHandlerPromise>
+            , public TAsyncAwaitTransform
         {
             friend TActorRunnableItem::TImpl<TActorAsyncHandlerPromise>;
             friend TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>;
@@ -1277,11 +1238,6 @@ namespace NActors {
         };
 
     } // namespace NDetail
-
-    template<class T>
-    constexpr NDetail::TAsyncAwaiter<T> async<T>::CoAwaitByValue() && {
-        return NDetail::TAsyncAwaiter<T>(std::move(*this));
-    }
 
 } // namespace NActors
 

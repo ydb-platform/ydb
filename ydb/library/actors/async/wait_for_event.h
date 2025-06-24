@@ -10,6 +10,8 @@ namespace NActors {
         friend TActorEventAwaiter::TImpl<TActorSpecificEventAwaiter<TEvent>>;
 
     public:
+        static constexpr bool IsActorAwareAwaiter = true;
+
         TActorSpecificEventAwaiter(ui64 cookie)
             : Cookie(cookie)
         {}
@@ -22,23 +24,23 @@ namespace NActors {
         }
 
     public:
-        bool AwaitReady() const noexcept {
+        bool await_ready() const noexcept {
             return false;
         }
 
         template<class TPromise>
-        void AwaitSuspend(std::coroutine_handle<TPromise> parent) {
+        void await_suspend(std::coroutine_handle<TPromise> parent) {
             IActor& actor = parent.promise().GetActor();
             actor.RegisterEventAwaiter(Cookie, this);
             Actor = &actor;
             Continuation = parent;
         }
 
-        typename TEvent::TPtr AwaitResume() noexcept {
+        typename TEvent::TPtr await_resume() noexcept {
             return std::move(Result);
         }
 
-        std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> c) noexcept {
+        std::coroutine_handle<> await_cancel(std::coroutine_handle<> c) noexcept {
             // Perform cancellation only when still attached (not resuming)
             if (Detach()) {
                 return c;

@@ -160,15 +160,17 @@ namespace NActors {
             : public TAsyncContinuationAwaiter<T>
         {
         public:
+            static constexpr bool IsActorAwareAwaiter = true;
+
             TAsyncContinuationAwaiterWithCallback(TCallback&& callback)
                 : Callback(std::forward<TCallback>(callback))
             {}
 
-            bool AwaitReady() const noexcept {
+            bool await_ready() const noexcept {
                 return false;
             }
 
-            bool AwaitSuspend(std::coroutine_handle<> continuation) {
+            bool await_suspend(std::coroutine_handle<> continuation) {
                 std::forward<TCallback>(Callback)(this->CreateContinuation());
                 if (!this->Link) {
                     // Resumed from within the callback
@@ -178,14 +180,14 @@ namespace NActors {
                 return true;
             }
 
-            std::coroutine_handle<> AwaitCancel(std::coroutine_handle<> cancellation) noexcept {
+            std::coroutine_handle<> await_cancel(std::coroutine_handle<> cancellation) noexcept {
                 if (this->Detach()) {
                     return cancellation;
                 }
                 return {};
             }
 
-            T AwaitResume() {
+            T await_resume() {
                 return this->Result.ExtractValue();
             }
 

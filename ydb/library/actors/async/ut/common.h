@@ -11,15 +11,17 @@ namespace NAsyncTest {
     class TTestException : public yexception {};
 
     struct TSuspendAwaiter {
+        static constexpr bool IsActorAwareAwaiter = true;
+
         std::coroutine_handle<>* const ResumePtr;
         std::coroutine_handle<>* const CancelPtr;
 
-        bool AwaitReady() noexcept { return false; }
-        void AwaitResume() noexcept {}
-        void AwaitSuspend(std::coroutine_handle<> h) {
+        bool await_ready() noexcept { return false; }
+        void await_resume() noexcept {}
+        void await_suspend(std::coroutine_handle<> h) {
             *ResumePtr = h;
         }
-        void AwaitCancel(std::coroutine_handle<> h) noexcept {
+        void await_cancel(std::coroutine_handle<> h) noexcept {
             *CancelPtr = h;
         }
     };
@@ -39,11 +41,13 @@ namespace NAsyncTest {
     };
 
     struct TSuspendAwaiterWithoutCancel {
+        static constexpr bool IsActorAwareAwaiter = true;
+
         std::coroutine_handle<>* const ResumePtr;
 
-        bool AwaitReady() noexcept { return false; }
-        void AwaitResume() noexcept {}
-        void AwaitSuspend(std::coroutine_handle<> h) {
+        bool await_ready() noexcept { return false; }
+        void await_resume() noexcept {}
+        void await_suspend(std::coroutine_handle<> h) {
             *ResumePtr = h;
         }
     };

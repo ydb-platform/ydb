@@ -90,6 +90,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
+    REGISTER_SETTING(*this, UseBlockHashJoin);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);

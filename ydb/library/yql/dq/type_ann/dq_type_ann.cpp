@@ -581,7 +581,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
     return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabels, *rightStructType,
         rightTableLabels, join.JoinType(), join.JoinKeys(), ctx, isMultiget);
-    }
+}
 
 } // unnamed
 
@@ -1206,6 +1206,84 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 5, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto leftInput = input->Child(TDqPhyBlockHashJoin::idx_LeftInput);
+    auto rightInput = input->Child(TDqPhyBlockHashJoin::idx_RightInput);
+    auto joinKind = input->Child(TDqPhyBlockHashJoin::idx_JoinKind);
+    auto leftKeyColumns = input->Child(TDqPhyBlockHashJoin::idx_LeftKeyColumns);
+    auto rightKeyColumns = input->Child(TDqPhyBlockHashJoin::idx_RightKeyColumns);
+
+    if (!EnsureStreamType(*leftInput, ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureStreamType(*rightInput, ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureAtom(*joinKind, ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureTuple(*leftKeyColumns, ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureTuple(*rightKeyColumns, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto leftStructType = GetSequenceItemType(leftInput->Pos(), leftInput->GetTypeAnn(), false, ctx);
+    auto rightStructType = GetSequenceItemType(rightInput->Pos(), rightInput->GetTypeAnn(), false, ctx);
+
+    if (!leftStructType || !rightStructType) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureStructType(leftInput->Pos(), *leftStructType, ctx)) {
+        return TStatus::Error;
+    }
+    if (!EnsureStructType(rightInput->Pos(), *rightStructType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto leftItems = leftStructType->Cast<TStructExprType>()->GetItems();
+    auto rightItems = rightStructType->Cast<TStructExprType>()->GetItems();
+
+    // Build result type similar to how it's done for regular joins
+    TVector<const TItemExprType*> resultStructItems;
+    
+    auto joinTypeStr = joinKind->Content();
+    bool leftOptional = IsLeftJoinSideOptional(joinTypeStr);
+    bool rightOptional = IsRightJoinSideOptional(joinTypeStr);
+
+    // Add left side columns
+    if (joinTypeStr != "RightOnly" && joinTypeStr != "RightSemi") {
+        for (const auto& item : leftItems) {
+            auto itemType = item->GetItemType();
+            if (leftOptional && !itemType->IsOptionalOrNull()) {
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
+            }
+            resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
+        }
+    }
+
+    // Add right side columns
+    if (joinTypeStr != "LeftOnly" && joinTypeStr != "LeftSemi") {
+        for (const auto& item : rightItems) {
+            auto itemType = item->GetItemType();
+            if (rightOptional && !itemType->IsOptionalOrNull()) {
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
+            }
+            resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
+        }
+    }
+
+    auto resultRowType = ctx.MakeType<TStructExprType>(resultStructItems);
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(resultRowType));
+    return TStatus::Ok;
+}
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -1270,6 +1348,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqPhyGraceJoin::Match(input.Get())) {
                 return AnnotateDqMapOrDictJoin(input, ctx);
+            }
+
+            if (TDqPhyBlockHashJoin::Match(input.Get())) {
+                return AnnotateDqBlockHashJoin(input, ctx);
             }
 
             if (TDqPhyMapJoin::Match(input.Get())) {

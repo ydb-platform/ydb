@@ -792,7 +792,6 @@ namespace NActors {
             NActorsInterconnect::TRdmaHandshakeReadAck rdmaReadAck;
             ReceiveExBlock(MainChannel, rdmaReadAck, "WaitRdmaReadResult");
             ui32 crc = Crc32cExtendMSanCompatible(0, HandShakeMemRegion->GetAddr(), RdmaHandshakeRegionSize); 
-            Cerr << "WaitRdmaReadResult:::   " << rdmaReadAck.GetDigest() << "   " << crc << Endl;
             return rdmaReadAck.GetDigest() == crc;
         }
 
@@ -1389,7 +1388,7 @@ namespace NActors {
 
         NInterconnect::NRdma::ICq::TPtr CreateRdmaCq() {
             const bool success = Send(NInterconnect::NRdma::MakeCqActorId(), new NInterconnect::NRdma::TEvGetCqHandle(RdmaCtx));
-            Y_ABORT_UNLESS(success);
+            Y_ABORT_UNLESS(success, "Cq service is not configured. This is a bug.");
             auto ev = WaitForSpecificEvent<NInterconnect::NRdma::TEvGetCqHandle>("TEvGetCqHandle");
             if (!ev) {
                 LOG_CRIT_IC("ICRDMA", "Unable to get response from CQ actor");

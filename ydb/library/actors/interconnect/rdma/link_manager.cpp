@@ -118,7 +118,6 @@ private:
         // check for duplicates
         for (size_t i = 0; i < CtxMap.size(); ++i) {
             auto ctx = CtxMap[i].second;
-            Cerr << "Found RDMA device: " << ctx->ToString() << Endl;
             ctx->DeviceIndex = i;
 
             if (i > 0) {

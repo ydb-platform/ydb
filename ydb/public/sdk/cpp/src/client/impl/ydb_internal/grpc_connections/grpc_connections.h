@@ -140,9 +140,55 @@ public:
             TRequest,
             TResponse>::TAsyncRequest;
 
+    template<typename TRequest>
+    class TRequestWrapper {
+    public:
+        // Implicit conversion from rvalue reference
+        TRequestWrapper(TRequest&& request) 
+            : Storage_(std::move(request))
+        {}
+
+        // Implicit conversion from pointer. Means that request is allocated on Arena
+        TRequestWrapper(TRequest* request)
+            : Storage_(request)
+        {}
+
+        // Copy constructor
+        TRequestWrapper(const TRequestWrapper& other) = default;
+        
+        // Move constructor
+        TRequestWrapper(TRequestWrapper&& other) = default;
+        
+        // Copy assignment
+        TRequestWrapper& operator=(const TRequestWrapper& other) = default;
+        
+        // Move assignment
+        TRequestWrapper& operator=(TRequestWrapper&& other) = default;
+
+        template<typename TService, typename TResponse>
+        void DoRequest(
+            std::unique_ptr<TServiceConnection<TService>>& serviceConnection,
+            NYdbGrpc::TAdvancedResponseCallback<TResponse>&& responseCbLow,
+            typename NYdbGrpc::TSimpleRequestProcessor<typename TService::Stub, TRequest, TResponse>::TAsyncRequest rpc,
+            const TCallMeta& meta,
+            IQueueClientContext* context) 
+        {
+            if (auto ptr = std::get_if<TRequest*>(&Storage_)) {
+                serviceConnection->DoAdvancedRequest(**ptr, 
+                    std::move(responseCbLow), rpc, meta, context);
+            } else {
+                serviceConnection->DoAdvancedRequest(std::move(std::get<TRequest>(Storage_)), 
+                    std::move(responseCbLow), rpc, meta, context);
+            }
+        }
+
+    private:
+        std::variant<TRequest*, TRequest> Storage_;
+    };
+
     template<typename TService, typename TRequest, typename TResponse>
     void Run(
-        TRequest&& request,
+        TRequestWrapper<TRequest>&& requestWrapper,
         TResponseCb<TResponse>&& userResponseCb,
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
@@ -174,7 +220,8 @@ public:
         }
 
         WithServiceConnection<TService>(
-            [this, request = std::move(request), userResponseCb = std::move(userResponseCb), rpc, requestSettings, context = std::move(context), dbState]
+            [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc, 
+             requestSettings, context = std::move(context), dbState]
             (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
                 if (!status.Ok()) {
                     userResponseCb(
@@ -271,14 +318,13 @@ public:
                         }
                     };
 
-                serviceConnection->DoAdvancedRequest(std::move(request), std::move(responseCbLow), rpc, meta,
-                    context.get());
+                requestWrapper.DoRequest(serviceConnection, std::move(responseCbLow), rpc, meta, context.get());
             }, dbState, requestSettings.PreferredEndpoint, requestSettings.EndpointPolicy);
     }
 
     template<typename TService, typename TRequest, typename TResponse>
     void RunDeferred(
-        TRequest&& request,
+        TRequestWrapper<TRequest>&& requestWrapper,
         TDeferredOperationCb&& userResponseCb,
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
@@ -321,7 +367,7 @@ public:
         };
 
         Run<TService, TRequest, TResponse>(
-            std::move(request),
+            std::move(requestWrapper),
             responseCb,
             rpc,
             dbState,
@@ -357,7 +403,7 @@ public:
 
     template<typename TService, typename TRequest, typename TResponse>
     void RunDeferred(
-        TRequest&& request,
+        TRequestWrapper<TRequest>&& requestWrapper,
         TDeferredResultCb&& userResponseCb,
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
@@ -375,7 +421,7 @@ public:
         };
 
         RunDeferred<TService, TRequest, TResponse>(
-            std::move(request),
+            std::move(requestWrapper),
             operationCb,
             rpc,
             dbState,

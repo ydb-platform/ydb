@@ -153,10 +153,6 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
 }
 
-bool TKikimrSettings::HasOptEnableOlapPushdownProjections() const {
-    return GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled;
-}
-
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
     return GetOptionalFlagValue(OptEnableOlapProvideComputeSharding.Get()) == EOptionalFlag::Enabled;
 }
@@ -196,6 +192,10 @@ void TKikimrConfiguration::SetDefaultEnabledSpillingNodes(const TString& node) {
 
 ui64 TKikimrConfiguration::GetEnabledSpillingNodes() const {
     return EnableSpillingNodes.Get().GetOrElse(DefaultEnableSpillingNodes);
+}
+
+bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownProjections.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownProjections);
 }
 
 }

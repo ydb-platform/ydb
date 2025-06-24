@@ -24,54 +24,28 @@ Forwarding the audit log to the standard error stream (`stderr`) is recommended 
 
 The information about each operation is saved to the audit log as a separate event. Each event includes a set of attributes. Some attributes are common across events, while other attributes are determined by the specific {{ ydb-short-name }} component that generated the event.
 
-<<<<<<< HEAD
 | Attribute | Description |
-|:----|:----|
-| **Common attributes** | |
+|-----------|-------------|
+| **Common attributes** | > |
 | `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br/>Required. |
-| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. |
+| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. |
 | `status` | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul>Required. |
 | `reason` | Error message.<br/>Optional. |
 | `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br/>Optional. |
-| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. |
-| `remote_address` | The IP of the client that delivered the request.<br/>Optional. |
+| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. |
+| `remote_address` | The IP of the client that delivered the request.<br/>Optional. |
 | `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter`, `StatusNameConflict`).<br/>Optional. |
-| **Ownership and permission attributes** | |
+| **Ownership and permission attributes** | > |
 | `new_owner` | The SID of the new owner of the object when ownership is transferred. <br/>Optional. |
 | `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br/>Optional. |
 | `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br/>Optional. |
-| **Custom attributes** | |
-| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. |
-| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. |
-| **Attributes of the SchemeShard component** | |
+| **Custom attributes** | > |
+| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. |
+| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. |
+| **Attributes of the SchemeShard component** | > |
 | `tx_id` | Unique transaction ID. Similarly to `request_id`, this ID can be used to differentiate events related to different operations.<br/>Required. |
 | `database` | Database path (for example, `/my_dir/db`).<br/>Required. |
-| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. |
-=======
-#|
-|| Attribute | Description ||
-|| **Common attributes** | > ||
-|| `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br/>Required. ||
-|| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. ||
-|| `status` | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul>Required. ||
-|| `reason` | Error message.<br/>Optional. ||
-|| `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br/>Optional. ||
-|| `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. ||
-|| `remote_address` | The IP of the client that delivered the request.<br/>Optional. ||
-|| `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter`, `StatusNameConflict`).<br/>Optional. ||
-|| **Ownership and permission attributes** | > ||
-|| `new_owner` | The SID of the new owner of the object when ownership is transferred. <br/>Optional. ||
-|| `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br/>Optional. ||
-|| `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br/>Optional. ||
-|| **Custom attributes** | > ||
-|| `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. ||
-|| `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. ||
-|| **Attributes of the SchemeShard component** | > ||
-|| `tx_id` | Unique transaction ID. Similarly to `request_id`, this ID can be used to differentiate events related to different operations.<br/>Required. ||
-|| `database` | Database path (for example, `/my_dir/db`).<br/>Required. ||
-|| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. ||
-|#
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927))
+| `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. |
 
 ## Enabling audit log {#enabling-audit-log}
 

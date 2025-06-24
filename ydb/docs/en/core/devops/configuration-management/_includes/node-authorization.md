@@ -77,7 +77,7 @@ To enable mandatory database node authorization, the following configuration blo
       - "registerNode@cert"
     ```
 
-    For more information on configuring cluster authentication parameters, see [{#T}](../../../reference/configuration/security_config.md#security-access-levels).
+    For more information on configuring cluster authentication parameters, see [{#T}](../../../reference/configuration/index.md).
 
 3. Update the static configuration files on all cluster nodes manually or using the [Ansible playbook](../../deployment-options/ansible/update-config.md).
 

@@ -30,15 +30,6 @@ Users can deploy [one of the ready-made connectors](../../devops/deployment-opti
 
 | Source | Support |
 |--------|---------|
-<<<<<<< HEAD
-| [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [MySQL](https://www.mysql.com/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-| [S3](https://aws.amazon.com/ru/s3/) | Built into `ydbd` |
-| [{{ydb-short-name}}](https://ydb.tech/) | Via connector [fq-connector-go](../../devops/manual/federated-queries/connector-deployment.md#fq-connector-go) |
-=======
 | [ClickHouse](https://clickhouse.com/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
 | [Greenplum](https://www.greenplum.org/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
 | [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
@@ -46,4 +37,3 @@ Users can deploy [one of the ready-made connectors](../../devops/deployment-opti
 | [PostgreSQL](https://www.postgresql.org/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
 | [S3](https://aws.amazon.com/s3/) | Built into `ydbd` |
 | [{{ydb-short-name}}](https://ydb.tech/) | Via connector [fq-connector-go](../../devops/deployment-options/manual/federated-queries/connector-deployment.md#fq-connector-go) |
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927))

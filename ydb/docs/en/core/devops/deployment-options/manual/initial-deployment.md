@@ -109,8 +109,6 @@ sudo usermod -aG disk ydb
 
 {% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
 
-<<<<<<< HEAD:ydb/docs/en/core/devops/manual/initial-deployment.md
-=======
 To get a list of available block devices on the server, you can use the `lsblk` command. Example output:
 
 ```txt
@@ -130,7 +128,6 @@ The names of block devices depend on the operating system settings provided by t
 - A device sequential identifier (which can be a letter or a number)
 - A partition sequential identifier on the given device (usually a number)
 
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927)):ydb/docs/en/core/devops/deployment-options/manual/initial-deployment.md
 1. Create partitions on the selected disks:
 
   {% note alert %}
@@ -519,11 +516,7 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
       yql -s 'ALTER USER root PASSWORD "passw0rd"'
   ```
 
-<<<<<<< HEAD:ydb/docs/en/core/devops/manual/initial-deployment.md
-  Replace the `passw0rd` value with the required password.
-=======
   Replace the value `passw0rd` with the required password. Save the password in a separate file. Subsequent commands as the root user will be executed using the password passed with the `--password-file <path_to_user_password>` option. Additionally, the password can be saved in the connection profile, as described in the [documentation for {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927)):ydb/docs/en/core/devops/deployment-options/manual/initial-deployment.md
 
 1. Create additional accounts:
 
@@ -541,7 +534,7 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
 
 In the command examples above, `<node.ydb.tech>` is the FQDN of the server running any dynamic node that serves the `/Root/testdb` database.
 
-When running the account creation and group assignment commands, the {{ ydb-short-name }} CLI client will request the `root` user's password. You can avoid multiple password entries by creating a connection profile as described in the [{{ ydb-short-name }} CLI documentation](../../reference/ydb-cli/profile/index.md).
+When running the account creation and group assignment commands, the {{ ydb-short-name }} CLI client will request the `root` user's password. You can avoid multiple password entries by creating a connection profile as described in the [{{ ydb-short-name }} CLI documentation](../../../reference/ydb-cli/profile/index.md).
 
 ## Start Using the Created Database {#try-first-db}
 

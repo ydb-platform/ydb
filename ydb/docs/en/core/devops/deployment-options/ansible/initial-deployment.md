@@ -84,9 +84,6 @@ Next, you need to make the following changes in the `vars` section of the invent
   * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
   * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 
-<<<<<<< HEAD:ydb/docs/en/core/devops/ansible/initial-deployment.md
-#### Optional changes in the inventory files
-=======
 #### Installing fq-connector-go
 
 Installing a [connector](../../../concepts/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
@@ -99,7 +96,6 @@ Installing a [connector](../../../concepts/federated_query/architecture.md#conne
   * `ydb_fq_connector_binary`: local filesystem paths for fq-connector-go executable, [downloaded](https://github.com/ydb-platform/fq-connector-go/releases) or otherwise prepared in advance.
 
 #### Optional Changes in the Inventory Files
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927)):ydb/docs/en/core/devops/deployment-options/ansible/initial-deployment.md
 
 Feel free to change these settings if needed, but it is not necessary in straightforward cases:
 
@@ -198,15 +194,11 @@ The default {{ ydb-short-name }} configuration file already includes almost all 
 
 The rest of the sections and settings in the configuration file can remain unchanged.
 
-<<<<<<< HEAD:ydb/docs/en/core/devops/ansible/initial-deployment.md
-## Deploying the {{ ydb-short-name }} cluster {#erasure-setup}
-=======
 ### fq-connector-go Configuration File
 
 Configuration file for fq-connector-go located in the `/files/fq-connector-go/config.yaml`. In straightforward cases, it can remain unchanged.
 
 ## Deploying the {{ ydb-short-name }} Cluster {#erasure-setup}
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927)):ydb/docs/en/core/devops/deployment-options/ansible/initial-deployment.md
 
 {% note info %}
 

@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 ## Dynamic cluster configuration
-=======
-# Dynamic Cluster Configuration
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927))
 
 Dynamic configuration allows running dynamic [nodes](../../concepts/cluster/common_scheme_ydb#nodes) by configuring them centrally without manually distributing files across the nodes. {{ ydb-short-name }} acts as a configuration management system, providing tools for reliable storage, versioning, and delivery of configurations, as well as a [DSL (Domain Specific Language)](./dynamic-config-selectors.md) for overriding parts of the configuration for specific groups of nodes. The configuration is a YAML document and is an extended version of the static configuration:
 
@@ -138,15 +134,9 @@ vim dynconfig.yaml
 Additional configuration options are described on the [selectors](./dynamic-config-selectors.md) and [temporary configuration](./dynamic-config-volatile-config.md) pages.
 All commands for working with configuration are described in the [{#T}](../../reference/ydb-cli/configs.md) section.
 
-<<<<<<< HEAD
 ### Operation mechanism
 
 #### Configuration update from the administrator's perspective
-=======
-## Operation Mechanism
-
-### Configuration Update from the Administrator's Perspective
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927))
 
 1. The configuration file is uploaded by the user using a [grpc call](https://github.com/ydb-platform/ydb/blob/5251c9ace0a7617c25d50f1aa4d0f13e3d56f985/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.proto#L22) or [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md) to the cluster.
 2. The file is checked for validity, basic constraints, version correctness, cluster name correctness, and the correctness of the configurations obtained after DSL transformation are verified.
@@ -154,11 +144,7 @@ All commands for working with configuration are described in the [{#T}](../../re
 4. The file is reliably stored in the cluster using the Console [tablet](../../concepts/glossary.md#tablet).
 5. File updates are distributed across the cluster nodes.
 
-<<<<<<< HEAD
 #### Configuration update from the cluster node's perspective
-=======
-### Configuration Update from the Cluster Node's perspective
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927))
 
 1. Each node requests the entire configuration at startup.
 2. Upon receiving the configuration, the node [generates the final configuration](./dynamic-config-selectors.md#selectors-resolve) for its set of [labels](./dynamic-config-selectors.md#selectors-intro).
@@ -168,19 +154,11 @@ All commands for working with configuration are described in the [{#T}](../../re
 
 Steps 1 and 2 are performed only for dynamic cluster nodes.
 
-<<<<<<< HEAD
 #### Configuration versioning
 
 This mechanism prevents concurrent configuration modifications and makes updates idempotent. When a modification request is received, the server compares the version of the received modification with the stored one. If the version is one less, the configurations are compared: if they are identical, it means the user is attempting to upload the configuration again, the user receives OK, and the cluster configuration is not updated. If the version matches the current one on the cluster, the configuration is replaced with the new one, and the version field is incremented by one. In all other cases, the user receives an error.
 
 ### Dynamically updated settings {#dynamic-kinds}
-=======
-### Configuration Versioning
-
-This mechanism prevents concurrent configuration modifications and makes updates idempotent. When a modification request is received, the server compares the version of the received modification with the stored one. If the version is one less, the configurations are compared: if they are identical, it means the user is attempting to upload the configuration again, the user receives OK, and the cluster configuration is not updated. If the version matches the current one on the cluster, the configuration is replaced with the new one, and the version field is incremented by one. In all other cases, the user receives an error.
-
-## Dynamically Updated Settings {#dynamic-kinds}
->>>>>>> 7e2446459dc ([docs] translate config v2 and other DevOps-related content (#18927))
 
 Some system settings are updated without restarting nodes. To change them, upload a new configuration and wait for it to propagate across the cluster.
 
@@ -200,4 +178,3 @@ The list may be expanded in the future.
 
 * Using more than 30 different [labels](./dynamic-config-selectors.md) in [selectors](./dynamic-config-selectors.md) can lead to validation delays of several seconds, as {{ ydb-short-name }} needs to check the validity of each possible final configuration. The number of values for a single label has much less impact.
 * Using large files (more than 500KiB for a cluster with 1000 nodes) can lead to increased network traffic in the cluster when updating the configuration. The traffic volume is directly proportional to the number of nodes and the configuration size.
-

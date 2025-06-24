@@ -401,8 +401,7 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
-    Result->WaitOutputTime = WaitOutputTime;
-    Result->WaitInputTime = WaitInputTime;
+    Result->WaitTime = WaitOutputTime - WaitInputTime;
     if (Result->RequestedBytesLimitReached) {
         StartWaitOutput = TInstant::Now();
     }

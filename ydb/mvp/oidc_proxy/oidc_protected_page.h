@@ -1,13 +1,13 @@
 #pragma once
 
+#include "extension_manager.h"
+
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include "oidc_settings.h"
-#include "openid_connect.h"
 
 namespace NMVP::NOIDC {
 
@@ -16,11 +16,12 @@ protected:
     using TBase = NActors::TActorBootstrapped<THandlerSessionServiceCheck>;
 
     const NActors::TActorId Sender;
-    const NHttp::THttpIncomingRequestPtr Request;
+    NHttp::THttpIncomingRequestPtr Request;
     const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     const TCrackedPage ProtectedPage;
 
+    THolder<TExtensionManager> ExtensionManager;
     NHttp::THttpOutgoingResponsePtr StreamResponse;
     NActors::TActorId StreamConnection;
 
@@ -36,6 +37,7 @@ public:
     void HandleDataChunk(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk::TPtr event);
     void HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr event);
     void HandleCancelled();
+    void HandleEnrichmentTimeout();
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -44,6 +46,7 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk, HandleDataChunk);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, HandleCancelled);
             hFunc(NActors::TEvents::TEvUndelivered, HandleUndelivered);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleEnrichmentTimeout);
         }
     }
 
@@ -56,7 +59,6 @@ protected:
 
 private:
     void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response);
-    NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const TString& errorMessage);
 };
 
 } // NMVP::NOIDC

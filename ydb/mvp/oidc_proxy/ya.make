@@ -5,6 +5,11 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 SRCS(
+    cracked_page.cpp
+    extension.cpp
+    extension_final.cpp
+    extension_manager.cpp
+    extension_whoami.cpp
     mvp.cpp
     context.cpp
     oidc_client.cpp
@@ -21,7 +26,6 @@ SRCS(
     oidc_session_create_yandex.cpp
     oidc_session_create_nebius.cpp
     oidc_session_create.cpp
-    oidc_whoami_extended_nebius.cpp
 )
 
 PEERDIR(

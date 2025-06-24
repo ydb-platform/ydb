@@ -1,7 +1,10 @@
+#include "oidc_protected_page.h"
+
+#include "openid_connect.h"
+#include <ydb/mvp/core/mvp_log.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/http/http.h>
-#include <ydb/mvp/core/mvp_log.h>
-#include "oidc_protected_page.h"
 
 namespace NMVP::NOIDC {
 
@@ -13,7 +16,7 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
-    , ProtectedPage(Request->URL.SubStr(1))
+    , ProtectedPage(Request)
 {}
 
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
@@ -22,7 +25,7 @@ void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
         return ReplyAndPassAway(CreateResponseForbiddenHost(Request, ProtectedPage));
     }
     NHttp::THeaders headers(Request->Headers);
-    TStringBuf authHeader = headers.Get(AUTHORIZATION);
+    TStringBuf authHeader = headers.Get(AUTHORIZATION_HEADER);
     if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
         ForwardUserRequest(authHeader);
     } else {
@@ -32,18 +35,18 @@ void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
 
 void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Response != nullptr) {
-        NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
-        BLOG_D("Incoming response for protected resource: " << response->Status);
-        if (NeedSendSecureHttpRequest(response)) {
+        BLOG_D("Incoming response for protected resource: " << event->Get()->Response->Status);
+        if (NeedSendSecureHttpRequest(event->Get()->Response)) {
+            NHttp::THttpIncomingResponsePtr response = std::move(event->Get()->Response);
             return SendSecureHttpRequest(response);
         }
-        TProxiedResponseParams params(Request, response, ProtectedPage, Settings);
-        return ReplyAndPassAway(CreateProxiedResponse(params));
-    } else {
-        static constexpr size_t MAX_LOGGED_SIZE = 1024;
-        BLOG_D("Can not process request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-        return ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(event->Get()->GetError()));
     }
+    ExtensionManager->StartExtensionProcess(Request, event);
+    PassAway();
+}
+
+void THandlerSessionServiceCheck::HandleEnrichmentTimeout() {
+    ExtensionManager->StartExtensionProcess(Request);
 }
 
 void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse::TPtr event) {
@@ -58,7 +61,7 @@ void THandlerSessionServiceCheck::HandleIncompleteProxy(NHttp::TEvHttpProxy::TEv
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
         BLOG_D("Can not process incomplete request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-        ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource("Failed to process streaming response"));
+        ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(Request, "Failed to process streaming response"));
     }
 }
 
@@ -122,25 +125,19 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool
     };
 
     Send(HttpProxyId, requestEvent.release());
+
+    ExtensionManager = MakeHolder<TExtensionManager>(Sender, Settings, ProtectedPage, TString(authHeader));
+    ExtensionManager->ArrangeExtensions(Request);
+    if (ExtensionManager->HasEnrichmentExtension()) {
+        Schedule(TDuration::MilliSeconds(Settings.EnrichmentProcessTimeoutMs), new NActors::TEvents::TEvWakeup());
+    }
 }
 
 void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) {
     NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
     BLOG_D("Try to send request to HTTPS port");
     NHttp::THeadersBuilder headers {request->Headers};
-    ForwardUserRequest(headers.Get(AUTHORIZATION), true);
-}
-
-NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateResponseForNotExistingResponseFromProtectedResource(const TString& errorMessage) {
-    NHttp::THeadersBuilder headers;
-    headers.Set("Content-Type", "text/html");
-    SetCORS(Request, &headers);
-
-    TStringBuilder html;
-    html << "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>";
-    html << "400 Bad Request. Can not process request to protected resource: " << errorMessage;
-    html << "</h1></center></body></html>";
-    return Request->CreateResponse("400", "Bad Request", headers, html);
+    ForwardUserRequest(headers.Get(AUTHORIZATION_HEADER), true);
 }
 
 void THandlerSessionServiceCheck::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {

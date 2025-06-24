@@ -17,6 +17,8 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
     static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
+    static const inline ui32 DEFAULT_ENRICHMENT_PROCESS_TIMEOUT_MS = 10000;
+
     static const TVector<TStringBuf> REQUEST_HEADERS_WHITE_LIST;
     static const TVector<TStringBuf> RESPONSE_HEADERS_WHITE_LIST;
     TString ClientId = DEFAULT_CLIENT_ID;
@@ -26,6 +28,7 @@ struct TOpenIdConnectSettings {
     TString ClientSecret;
     std::vector<TString> AllowedProxyHosts;
     TString WhoamiExtendedInfoEndpoint;
+    ui32 EnrichmentProcessTimeoutMs = DEFAULT_ENRICHMENT_PROCESS_TIMEOUT_MS;
 
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;

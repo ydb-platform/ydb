@@ -38,7 +38,6 @@ private:
     void RequestAuthorizationCode();
     void ForwardUserRequest(TStringBuf authHeader, bool secure = false) override;
     bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const override;
-    bool NeedWhoamiExtention() const;
 };
 
 } // NMVP::NOIDC

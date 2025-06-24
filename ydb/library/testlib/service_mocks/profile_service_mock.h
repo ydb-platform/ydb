@@ -4,8 +4,12 @@
 
 class TProfileServiceMock : public nebius::iam::v1::ProfileService::Service {
 public:
-    THashSet<TString> AllowedTokens = {"good-token"};
-    TString UserAccountId = "useraccount-testjohnsmith";
+    static constexpr TStringBuf VALID_TOKEN = "good-token";
+    static constexpr TStringBuf BAD_TOKEN = "bad-token";
+    static constexpr TStringBuf USER_ACCOUNT_ID = "extended-user-account";
+
+    THashSet<TString> AllowedTokens = { TString("Bearer ") + VALID_TOKEN };
+    TString UserAccountId = TString(USER_ACCOUNT_ID);
 
     grpc::Status Get(
         grpc::ServerContext* context,
@@ -19,6 +23,7 @@ public:
         }
 
         if (!AllowedTokens.contains(token)) {
+            Cerr << "TProfileServiceMock Get: Invalid or missing token: " << token << Endl;
             return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Invalid or missing token");
         }
 
@@ -47,3 +52,10 @@ public:
         return grpc::Status::OK;
     }
 };
+
+std::unique_ptr<grpc::Server> CreateProfileServiceMock(grpc::Service* service, const TString& endpoint) {
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort(endpoint, grpc::InsecureServerCredentials());
+    builder.RegisterService(service);
+    return builder.BuildAndStart();
+}

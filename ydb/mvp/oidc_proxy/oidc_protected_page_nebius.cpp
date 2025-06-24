@@ -1,12 +1,14 @@
-#include <library/cpp/json/json_reader.h>
-#include <ydb/library/actors/http/http.h>
+#include "oidc_protected_page_nebius.h"
+
+#include "context.h"
+#include "openid_connect.h"
+
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
-#include "openid_connect.h"
-#include "context.h"
-#include "oidc_protected_page_nebius.h"
-#include "oidc_whoami_extended_nebius.h"
+
+#include <ydb/library/actors/http/http.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NMVP::NOIDC {
 
@@ -130,33 +132,7 @@ void THandlerSessionServiceCheckNebius::RequestAuthorizationCode() {
     ReplyAndPassAway(std::move(httpResponse));
 }
 
-bool THandlerSessionServiceCheckNebius::NeedWhoamiExtention() const {
-    if (Request->Method == "OPTIONS" || Settings.WhoamiExtendedInfoEndpoint.empty()) {
-        return false;
-    }
-
-    TStringBuf path(ProtectedPage.Url);
-    path = path.Before('?');
-
-    static const TVector<TStringBuf> WHOAMI_PATHS = {
-        "/viewer/json/whoami",
-        "/viewer/whoami"
-    };
-    for (const auto& whoamiPath : WHOAMI_PATHS) {
-        if (path.EndsWith(whoamiPath)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader, bool secure) {
-    if (NeedWhoamiExtention()) {
-        Register(new THandlerWhoamiExtendNebius(Sender, Request, HttpProxyId, Settings, authHeader));
-        BLOG_D("Start Whoami extended info process");
-        return PassAway();
-    }
-
     THandlerSessionServiceCheck::ForwardUserRequest(authHeader, secure);
     Become(&THandlerSessionServiceCheckNebius::StateWork);
 }

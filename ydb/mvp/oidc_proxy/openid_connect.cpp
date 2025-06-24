@@ -26,37 +26,6 @@ NHttp::THttpOutgoingResponsePtr CreateResponseForAjaxRequest(const NHttp::THttpI
     return request->CreateResponse("401", "Unauthorized", headers, body);
 }
 
-TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {
-    TStringBuilder result;
-    size_t n = html.find(findStr);
-    if (n == TStringBuf::npos) {
-        return TString(html);
-    }
-    size_t len = findStr.length() + 1;
-    size_t pos = 0;
-    while (n != TStringBuf::npos) {
-        result << html.SubStr(pos, n + len - pos);
-        if (html[n + len] == '/') {
-            result << "/" << host;
-            if (html[n + len + 1] == '\'' || html[n + len + 1] == '\"') {
-                result << "/internal";
-                n++;
-            }
-        }
-        pos = n + len;
-        n = html.find(findStr, pos);
-    }
-    result << html.SubStr(pos);
-    return result;
-}
-
-TString FixReferenceInHtml(TStringBuf html, TStringBuf host) {
-    TStringBuf findString = "href=";
-    auto result = FixReferenceInHtml(html, host, findString);
-    findString = "src=";
-    return FixReferenceInHtml(result, host, findString);
-}
-
 } // namespace
 
 TRestoreOidcContextResult::TRestoreOidcContextResult(const TStatus& status, const TContext& context)
@@ -135,7 +104,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     if (context.IsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
-    responseHeaders.Set("Location", redirectUrl);
+    responseHeaders.Set(LOCATION_HEADER, redirectUrl);
     return request->CreateResponse("302", "Authorization required", responseHeaders);
 }
 
@@ -293,29 +262,6 @@ TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) 
     return cookieValue;
 }
 
-TCrackedPage::TCrackedPage(TStringBuf url)
-    : Url(url)
-{
-    Parsed = NHttp::CrackURL(Url, Scheme, Host, Uri);
-    if (Parsed) {
-        SchemeValid = Scheme.empty() || Scheme == "http" || Scheme == "https";
-    }
-}
-
-bool TCrackedPage::IsValid() const {
-    return Parsed && SchemeValid;
-}
-
-bool TCrackedPage::CheckRequestedHost(const TOpenIdConnectSettings& settings) const {
-    if (!IsValid()) {
-        return false;
-    }
-    return std::any_of(settings.AllowedProxyHosts.begin(), settings.AllowedProxyHosts.end(),
-        [this](const TString& pattern) {
-            return NKikimr::IsMatchesWildcard(Host, pattern);
-        });
-}
-
 NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {
     auto outRequest = NHttp::THttpOutgoingRequest::CreateRequest(params.Request->Method, params.ProtectedPage.Url);
     NHttp::THeadersBuilder headers(params.Request->Headers);
@@ -327,7 +273,7 @@ NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams&
     outRequest->Set("Accept-Encoding", "deflate");
 
     if (!params.AuthHeader.empty()) {
-        outRequest->Set(AUTHORIZATION, params.AuthHeader);
+        outRequest->Set(AUTHORIZATION_HEADER, params.AuthHeader);
     }
     if (params.Request->HaveBody()) {
         outRequest->SetBody(params.Request->Body);
@@ -337,69 +283,6 @@ NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams&
     }
 
     return outRequest;
-}
-
-NHttp::THeadersBuilder ProxyResponseHeaders(const TProxiedResponseParams& params) {
-    NHttp::THeadersBuilder headers(params.Response->Headers);
-    NHttp::THeadersBuilder outHeaders;
-    static const TVector<TStringBuf> HEADERS_WHITE_LIST = {
-        "Content-Type",
-        "Connection",
-        "X-Worker-Name",
-        "Set-Cookie",
-        "Access-Control-Allow-Origin",
-        "Access-Control-Allow-Credentials",
-        "Access-Control-Allow-Headers",
-        "Access-Control-Allow-Methods",
-        "traceresponse"
-    };
-    for (const auto& header : HEADERS_WHITE_LIST) {
-        if (headers.Has(header)) {
-            outHeaders.Set(header, headers.Get(header));
-        }
-    }
-
-    if (headers.Has(LOCATION)) {
-        outHeaders.Set(LOCATION, GetFixedLocationHeader(params.ProtectedPage, headers.Get(LOCATION)));
-    }
-
-    return outHeaders;
-}
-
-TString ProxyResponseBody(const TProxiedResponseParams& params) {
-    TString outBody = params.OutBody ? params.OutBody : TString(params.Response->Body);
-    NHttp::THeadersBuilder headers(params.Response->Headers);
-    TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
-    if (contentType == "text/html") {
-        return FixReferenceInHtml(outBody, params.Response->GetRequest()->Host);
-    } else {
-        return outBody;
-    }
-}
-
-TString GetFixedLocationHeader(const TCrackedPage& page, TStringBuf location) {
-    if (location.StartsWith("//")) {
-        return TStringBuilder() << '/' << (page.Scheme.empty() ? "" : TString(page.Scheme) + "://") << location.SubStr(2);
-    } else if (location.StartsWith('/')) {
-        return TStringBuilder() << '/'
-                                << (page.Scheme.empty() ? "" : TString(page.Scheme) + "://")
-                                << page.Host << location;
-    } else {
-        TStringBuf locScheme, locHost, locUri;
-        NHttp::CrackURL(location, locScheme, locHost, locUri);
-        if (!locScheme.empty()) {
-            return TStringBuilder() << '/' << location;
-        }
-    }
-    return TString(location);
-}
-
-NHttp::THttpOutgoingResponsePtr CreateProxiedResponse(const TProxiedResponseParams& params) {
-    auto outStatus = params.OutStatus ? params.OutStatus : params.Response->Status;
-    auto outMessage = params.OutMessage ? params.OutMessage : params.Response->Message;
-    auto outHeaders = ProxyResponseHeaders(params);
-    auto outBody = ProxyResponseBody(params);
-    return params.Request->CreateResponse(outStatus, outMessage, outHeaders, outBody);
 }
 
 NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage) {
@@ -413,6 +296,18 @@ NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIn
     html << "</h1></center></body></html>";
 
     return request->CreateResponse("403", "Forbidden", headers, html);
+}
+
+NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage) {
+    NHttp::THeadersBuilder headers;
+    headers.Set("Content-Type", "text/html");
+    SetCORS(request, &headers);
+
+    TStringBuilder html;
+    html << "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>";
+    html << "400 Bad Request. Can not process request to protected resource: " << errorMessage;
+    html << "</h1></center></body></html>";
+    return request->CreateResponse("400", "Bad Request", headers, html);
 }
 
 } // NMVP::NOIDC

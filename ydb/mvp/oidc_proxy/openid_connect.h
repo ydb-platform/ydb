@@ -1,4 +1,6 @@
 #pragma once
+#include "cracked_page.h"
+#include "extension_context.h"
 #include "context.h"
 #include "oidc_settings.h"
 #include <ydb/library/actors/core/events.h>
@@ -17,8 +19,8 @@ struct TOpenIdConnectSettings;
 
 constexpr TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
 constexpr TStringBuf IAM_TOKEN_SCHEME_LOWER = "bearer ";
-constexpr TStringBuf AUTHORIZATION = "Authorization";
-constexpr TStringBuf LOCATION = "Location";
+constexpr TStringBuf AUTHORIZATION_HEADER = "Authorization";
+constexpr TStringBuf LOCATION_HEADER = "Location";
 
 constexpr TStringBuf USER_SID = "UserSID";
 constexpr TStringBuf ORIGINAL_USER_TOKEN = "OriginalUserToken";
@@ -65,19 +67,6 @@ TCheckStateResult CheckState(const TString& state, const TString& key);
 TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 
-struct TCrackedPage {
-    TString Url;
-    TStringBuf Scheme;
-    TStringBuf Host;
-    TStringBuf Uri;
-
-    bool Parsed = false;
-    bool SchemeValid = false;
-
-    explicit TCrackedPage(TStringBuf url);
-    bool IsValid() const;
-    bool CheckRequestedHost(const TOpenIdConnectSettings& settings) const;
-};
 
 struct TProxiedRequestParams {
     const NHttp::THttpIncomingRequestPtr Request;
@@ -87,25 +76,15 @@ struct TProxiedRequestParams {
     const TOpenIdConnectSettings Settings;
 };
 
-struct TProxiedResponseParams {
-    const NHttp::THttpIncomingRequestPtr Request;
-    const NHttp::THttpIncomingResponsePtr Response;
-    TCrackedPage ProtectedPage;
-    const TOpenIdConnectSettings Settings;
-    TString OutStatus;
-    TString OutMessage;
-    TString OutBody;
-};
-
 bool ExtractHttpScheme(const TString& url, TString& outScheme);
 bool IsHostAllowed(const TString& url, const TVector<TString>& allowedHosts);
 
-NHttp::THeadersBuilder ProxyResponseHeaders(const TProxiedResponseParams& params);
-TString ProxyResponseBody(const TProxiedResponseParams& params);
+void SetProxyResponseHeaders(TProxiedResponseParams& params);
+void SetProxyResponseBody(TProxiedResponseParams& params);
 TString GetFixedLocationHeader(const TCrackedPage& page, TStringBuf location);
 NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& param);
-NHttp::THttpOutgoingResponsePtr CreateProxiedResponse(const TProxiedResponseParams& param);
 NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage);
+NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage);
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {
@@ -127,6 +106,7 @@ struct TEvPrivate {
         EvCreateSessionResponse,
         EvErrorResponse,
         EvGetProfileResponse,
+        EvExtensionRequest,
         EvEnd
     };
 
@@ -205,6 +185,14 @@ struct TEvPrivate {
             Message = status.Msg;
             Details = status.Details;
         }
+    };
+
+    struct TEvExtensionRequest : NActors::TEventLocal<TEvExtensionRequest, EvExtensionRequest> {
+        THolder<TExtensionContext> Context;
+
+        TEvExtensionRequest(THolder<TExtensionContext>&& context)
+            : Context(std::move(context))
+        {}
     };
 };
 

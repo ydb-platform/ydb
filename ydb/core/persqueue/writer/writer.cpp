@@ -195,7 +195,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(code); delay.Defined()) {
-            INFO("Repeat the request to KQP in " << *delay);
+            DEBUG("Repeat the request to KQP in " << *delay);
             Schedule(*delay, new TEvents::TEvWakeup());
         }
     }
@@ -227,9 +227,9 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
-        INFO("Start of a request to KQP for a WriteId. " <<
-             "SessionId: " << Opts.SessionId <<
-             " TxId: " << Opts.TxId);
+        DEBUG("Start of a request to KQP for a WriteId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId);
 
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
@@ -246,11 +246,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         }
     }
 
-    void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        INFO("End of the request to KQP for the WriteId. " <<
-             "SessionId: " << Opts.SessionId <<
-             " TxId: " << Opts.TxId <<
-             " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
+    void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& /*ctx*/) {
+        DEBUG("End of the request to KQP for the WriteId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId <<
+              " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
 
         auto& record = ev->Get()->Record.GetRef();
         switch (record.GetYdbStatus()) {
@@ -265,10 +265,9 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
-                    "SessionId: " << Opts.SessionId <<
-                    " TxId: " << Opts.TxId <<
-                    " WriteId: " << WriteId);
+        DEBUG("SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId <<
+              " WriteId: " << WriteId);
 
         GetOwnership();
     }
@@ -386,19 +385,19 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Y_ABORT_UNLESS(HasWriteId());
         Y_ABORT_UNLESS(HasSupportivePartitionId());
 
-        INFO("Start of a request to KQP to save PartitionId. " <<
-             "SessionId: " << Opts.SessionId <<
-             " TxId: " << Opts.TxId);
+        DEBUG("Start of a request to KQP to save PartitionId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId);
 
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
     void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        INFO("End of a request to KQP to save PartitionId. " <<
-             "SessionId: " << Opts.SessionId <<
-             " TxId: " << Opts.TxId <<
-             " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
+        DEBUG("End of a request to KQP to save PartitionId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId <<
+              " Status: " << ev->Get()->Record.GetRef().GetYdbStatus());
 
         auto& record = ev->Get()->Record.GetRef();
         switch (record.GetYdbStatus()) {

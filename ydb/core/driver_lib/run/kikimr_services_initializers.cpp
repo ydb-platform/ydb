@@ -621,12 +621,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (Config.GetInterconnectConfig().GetUseRdma()) {
                 icCommon->RdmaMemPool = CreateDummyMemPool();
                 auto pool = icCommon->RdmaMemPool;
-                setup->RcBufAllocator = std::move([pool](size_t size, size_t headRoom, size_t tailRoom) mutable {
+                setup->RcBufAllocator = [pool](size_t size, size_t headRoom, size_t tailRoom) mutable {
                     auto buf = pool->AllocRcBuf(size + headRoom + tailRoom);
                     buf.TrimFront(size + tailRoom);
                     buf.TrimBack(size);
                     return buf;
-                });
+                };
             }
             icCommon->NameserviceId = nameserviceId;
             icCommon->MonCounters = GetServiceCounters(counters, "interconnect");

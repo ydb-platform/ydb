@@ -12,6 +12,7 @@
 
 namespace NSQLComplete {
 
+    // TODO(YQL-19747): Rename to Identifier
     struct TIndentifier {
         TString Indentifier;
     };

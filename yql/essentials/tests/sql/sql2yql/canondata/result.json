@@ -2351,6 +2351,13 @@
             "uri": "https://{canondata_backend}/1937424/b0b8a9defba63391d95befc1746252b73e2a04d5/resource.tar.gz#test_sql2yql.test_except-except_all_empty_/sql.yql"
         }
     ],
+    "test_sql2yql.test[except-except_all_positional]": [
+        {
+            "checksum": "322270cbab350c622fa2605923bb929c",
+            "size": 5405,
+            "uri": "https://{canondata_backend}/1871102/fab025477ce32c1aee6b4a70e141003f9f388399/resource.tar.gz#test_sql2yql.test_except-except_all_positional_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[except-except_distinct]": [
         {
             "checksum": "a73b03f897702173faee14fdea46dd85",
@@ -2363,6 +2370,13 @@
             "checksum": "601b8022980473e8eafdf9365597cf1e",
             "size": 4154,
             "uri": "https://{canondata_backend}/1937424/b0b8a9defba63391d95befc1746252b73e2a04d5/resource.tar.gz#test_sql2yql.test_except-except_distinct_empty_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[except-except_distinct_positional]": [
+        {
+            "checksum": "7dfe70237345616da8a250f8b1d33939",
+            "size": 5396,
+            "uri": "https://{canondata_backend}/1871102/fab025477ce32c1aee6b4a70e141003f9f388399/resource.tar.gz#test_sql2yql.test_except-except_distinct_positional_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-as_dict_dict_key]": [
@@ -3933,6 +3947,13 @@
             "uri": "https://{canondata_backend}/1903885/654a5e42f38e1d04ebfd6797ed162f790c6451d8/resource.tar.gz#test_sql2yql.test_intersect-intersect_all_empty_/sql.yql"
         }
     ],
+    "test_sql2yql.test[intersect-intersect_all_positional]": [
+        {
+            "checksum": "5cff5e1630c7b1e58b7d951f93ef9c84",
+            "size": 5414,
+            "uri": "https://{canondata_backend}/1942173/41ef0f591d8dd8abf2f8bbf6faf45f1ab3e54c20/resource.tar.gz#test_sql2yql.test_intersect-intersect_all_positional_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[intersect-intersect_distinct]": [
         {
             "checksum": "47b396e6add2c3a8d1e2efc3015a261f",
@@ -3945,6 +3966,13 @@
             "checksum": "8d722656304be05a941f2adfd4f32405",
             "size": 4163,
             "uri": "https://{canondata_backend}/1903885/654a5e42f38e1d04ebfd6797ed162f790c6451d8/resource.tar.gz#test_sql2yql.test_intersect-intersect_distinct_empty_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[intersect-intersect_distinct_positional]": [
+        {
+            "checksum": "1487d8142f572e5226a3f89b11a94073",
+            "size": 5405,
+            "uri": "https://{canondata_backend}/1942173/41ef0f591d8dd8abf2f8bbf6faf45f1ab3e54c20/resource.tar.gz#test_sql2yql.test_intersect-intersect_distinct_positional_/sql.yql"
         }
     ],
     "test_sql2yql.test[join-convert_check_key_mem2]": [
@@ -9281,6 +9309,11 @@
             "uri": "file://test_sql_format.test_except-except_all_empty_/formatted.sql"
         }
     ],
+    "test_sql_format.test[except-except_all_positional]": [
+        {
+            "uri": "file://test_sql_format.test_except-except_all_positional_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[except-except_distinct]": [
         {
             "uri": "file://test_sql_format.test_except-except_distinct_/formatted.sql"
@@ -9289,6 +9322,11 @@
     "test_sql_format.test[except-except_distinct_empty]": [
         {
             "uri": "file://test_sql_format.test_except-except_distinct_empty_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[except-except_distinct_positional]": [
+        {
+            "uri": "file://test_sql_format.test_except-except_distinct_positional_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-as_dict_dict_key]": [
@@ -10411,6 +10449,11 @@
             "uri": "file://test_sql_format.test_intersect-intersect_all_empty_/formatted.sql"
         }
     ],
+    "test_sql_format.test[intersect-intersect_all_positional]": [
+        {
+            "uri": "file://test_sql_format.test_intersect-intersect_all_positional_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[intersect-intersect_distinct]": [
         {
             "uri": "file://test_sql_format.test_intersect-intersect_distinct_/formatted.sql"
@@ -10419,6 +10462,11 @@
     "test_sql_format.test[intersect-intersect_distinct_empty]": [
         {
             "uri": "file://test_sql_format.test_intersect-intersect_distinct_empty_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[intersect-intersect_distinct_positional]": [
+        {
+            "uri": "file://test_sql_format.test_intersect-intersect_distinct_positional_/formatted.sql"
         }
     ],
     "test_sql_format.test[join-convert_check_key_mem2]": [

@@ -79,8 +79,10 @@ namespace NKikimr {
                         if (!DoIntersect(sst, nextLevel.Segs)) {
                             action = ActMoveSsts;
                             Task->MoveSsts.MoveSst(level, level + 1, sst);
-                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                                HullCtx->VCtx->VDiskLogPrefix << " TStrategyPromoteSsts: move sst# " << p.ToString() << " to level " << level + 1);
+                            if (HullCtx->VCtx->ActorSystem) {
+                                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyPromoteSsts: move sst# " << p.ToString() << " to level " << level + 1);
+                            }
                             break;
                         }
                     }

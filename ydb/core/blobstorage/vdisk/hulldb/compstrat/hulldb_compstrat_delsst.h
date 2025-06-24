@@ -67,8 +67,10 @@ namespace NKikimr {
                     TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
                     if (p.Level > 0 && ratio && ratio->CanDeleteSst()) {
                         action = ActDeleteSsts;
-                        LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                            HullCtx->VCtx->VDiskLogPrefix << " TStrategyDelSst going to delete SST# " << p.ToString() << " because of ration# " << ratio->ToString());
+                        if (HullCtx->VCtx->ActorSystem) {
+                            LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                HullCtx->VCtx->VDiskLogPrefix << " TStrategyDelSst going to delete SST# " << p.ToString() << " because of ration# " << ratio->ToString());
+                        }
                         Task->DeleteSsts.DeleteSst(p.Level, p.SstPtr);
                         SstToDelete++;
                     }

@@ -43,6 +43,8 @@ class ImportFileCsvBase(UploadSuiteBase):
 
         result = yatest.common.execute(cmd)
 
+        assert result.returncode == 0, f'Import failed with return code {result.returncode} and stderr: {result.stderr.decode("utf-8")}'
+
         stderr_output = result.stderr.decode('utf-8')
         for line in stderr_output.split('\n'):
             if 'CPU' in line:

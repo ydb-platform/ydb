@@ -42,6 +42,7 @@ class UploadSuiteBase(LoadSuiteBase):
             logging.error(f'Error: {e}')
             result.add_error(str(e))
             result.traceback = e.__traceback__
+            raise e
         result.iterations[0].time = time() - start_time
         self.validate(result)
         self.save_result_additional_info(result)

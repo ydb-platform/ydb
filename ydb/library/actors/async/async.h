@@ -183,21 +183,6 @@ namespace NActors {
         };
 
         template<class TAwaiter, class TPromise = void>
-        concept HasAwaitSuspendVoid = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            { awaiter.AwaitSuspend(h) } -> std::same_as<void>;
-        };
-
-        template<class TAwaiter, class TPromise = void>
-        concept HasAwaitSuspendBool = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            { awaiter.AwaitSuspend(h) } -> std::same_as<bool>;
-        };
-
-        template<class TAwaiter, class TPromise = void>
-        concept HasAwaitSuspendHandle = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            { awaiter.AwaitSuspend(h) } -> std::convertible_to<std::coroutine_handle<>>;
-        };
-
-        template<class TAwaiter, class TPromise = void>
         concept HasAwaitSuspendNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
             { awaiter.AwaitSuspend(h) } noexcept;
         };
@@ -208,23 +193,13 @@ namespace NActors {
         };
 
         template<class TAwaiter>
+        concept HasAwaitCancelled = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+            awaiter.AwaitCancelled(h);
+        };
+
+        template<class TAwaiter>
         concept HasAwaitCancel = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
             awaiter.AwaitCancel(h);
-        };
-
-        template<class TAwaiter>
-        concept HasAwaitCancelVoid = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.AwaitCancel(h) } -> std::same_as<void>;
-        };
-
-        template<class TAwaiter>
-        concept HasAwaitCancelBool = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.AwaitCancel(h) } -> std::same_as<bool>;
-        };
-
-        template<class TAwaiter>
-        concept HasAwaitCancelHandle = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
-            { awaiter.AwaitCancel(h) } -> std::convertible_to<std::coroutine_handle<>>;
         };
 
         template<class TAwaiter>
@@ -278,21 +253,6 @@ namespace NActors {
         };
 
         template<class TAwaiter, class TPromise = void>
-        concept HasStdAwaitSuspendVoid = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            { awaiter.await_suspend(h) } -> std::same_as<void>;
-        };
-
-        template<class TAwaiter, class TPromise = void>
-        concept HasStdAwaitSuspendBool = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            { awaiter.await_suspend(h) } -> std::same_as<bool>;
-        };
-
-        template<class TAwaiter, class TPromise = void>
-        concept HasStdAwaitSuspendHandle = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
-            { awaiter.await_suspend(h) } -> std::convertible_to<std::coroutine_handle<>>;
-        };
-
-        template<class TAwaiter, class TPromise = void>
         concept HasStdAwaitSuspendNoExcept = requires(TAwaiter& awaiter, std::coroutine_handle<TPromise> h) {
             { awaiter.await_suspend(h) } noexcept;
         };
@@ -303,7 +263,14 @@ namespace NActors {
         };
 
         template<class TAwaiter>
+        concept HasStdAwaitCancelled = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+            // This is a non-standard extension to standard awaiters
+            awaiter.await_cancelled(h);
+        };
+
+        template<class TAwaiter>
         concept HasStdAwaitCancel = requires(TAwaiter& awaiter, std::coroutine_handle<> h) {
+            // This is a non-standard extension to standard awaiters
             awaiter.await_cancel(h);
         };
 
@@ -358,18 +325,23 @@ namespace NActors {
              * result types into an optional continuation.
              */
             template<class TAwaiter>
-            [[nodiscard]] static std::coroutine_handle<> Notify(TAwaiter& awaiter, std::coroutine_handle<> h) noexcept {
-                if constexpr (HasAwaitCancelVoid<TAwaiter>) {
+            [[nodiscard]] static std::coroutine_handle<> Notify(
+                    TAwaiter& awaiter, std::coroutine_handle<> h)
+                noexcept(noexcept(awaiter.AwaitCancel(h)))
+            {
+                if constexpr (requires { { awaiter.AwaitCancel(h) } -> std::same_as<void>; }) {
                     awaiter.AwaitCancel(h);
                     return nullptr;
-                } else if constexpr (HasAwaitCancelBool<TAwaiter>) {
+                } else if constexpr (requires { { awaiter.AwaitCancel(h) } -> std::same_as<bool>; }) {
                     if (awaiter.AwaitCancel(h)) {
                         return h;
                     } else {
                         return nullptr;
                     }
                 } else {
-                    static_assert(HasAwaitCancelHandle<TAwaiter>, "AwaitCancel must return void/bool/std::coroutine_handle<>");
+                    static_assert(
+                        requires { { awaiter.AwaitCancel(h) } -> std::convertible_to<std::coroutine_handle<>>; },
+                        "AwaitCancel(h) must return void, bool or std::coroutine_handle<>");
                     return awaiter.AwaitCancel(h);
                 }
             }
@@ -380,7 +352,7 @@ namespace NActors {
                 if (CancelFn) {
                     return CancelFn(CancelFnArg, h);
                 } else {
-                    return {};
+                    return nullptr;
                 }
             }
 
@@ -494,6 +466,118 @@ namespace NActors {
         };
 
         /**
+         * Helpers for calling AwaitSuspend overloads
+         */
+        struct TActorAwaitSuspendHelper {
+            /**
+             * Calls AwaitSuspend(h) converting the result to a valid std::coroutine_handle<>
+             */
+            template<class TAwaiter, class TPromise = void>
+            [[nodiscard]] static constexpr std::coroutine_handle<> Suspend(
+                    TAwaiter& awaiter, std::coroutine_handle<TPromise> h)
+                noexcept(noexcept(awaiter.AwaitSuspend(h)))
+            {
+                if constexpr (requires { { awaiter.AwaitSuspend(h) } -> std::same_as<void>; }) {
+                    awaiter.AwaitSuspend(h);
+                    return std::noop_coroutine();
+                } else if constexpr (requires { { awaiter.AwaitSuspend(h) } -> std::same_as<bool>; }) {
+                    if (!awaiter.AwaitSuspend(h)) {
+                        return h;
+                    }
+                    return std::noop_coroutine();
+                } else {
+                    static_assert(
+                        requires { { awaiter.AwaitSuspend(h) } -> std::convertible_to<std::coroutine_handle<>>; },
+                        "AwaitSuspend(h) must return void, bool or std::coroutine_handle<>");
+                    return awaiter.AwaitSuspend(h);
+                }
+            }
+
+            /**
+             * Calls AwaitCancelled(unwind) and continues to AwaitSuspend(resume)
+             * when it returns void, false, or nullptr, indicating it wants to
+             * suspend, otherwise returns a valid unwind handle.
+             */
+            template<class TAwaiter, class TPromise = void>
+            [[nodiscard]] static constexpr std::coroutine_handle<> SuspendCancelled(
+                    TAwaiter& awaiter, std::coroutine_handle<TPromise> resume, std::coroutine_handle<> unwind)
+                noexcept(noexcept(awaiter.AwaitCancelled(unwind)) && noexcept(awaiter.AwaitSuspend(resume)))
+            {
+                if constexpr (requires { { awaiter.AwaitCancelled(unwind) } -> std::same_as<void>; }) {
+                    awaiter.AwaitCancelled(unwind);
+                } else if constexpr (requires { { awaiter.AwaitCancelled(unwind) } -> std::same_as<bool>; }) {
+                    if (awaiter.AwaitCancelled(unwind)) {
+                        return unwind;
+                    }
+                } else {
+                    static_assert(
+                        requires { { awaiter.AwaitCancelled(unwind) } -> std::convertible_to<std::coroutine_handle<>>; },
+                        "AwaitCancelled(h) must return void, bool or std::coroutine_handle<>");
+                    if (std::coroutine_handle<> next = awaiter.AwaitCancelled(unwind)) {
+                        return next;
+                    }
+                }
+                return TActorAwaitSuspendHelper::Suspend(awaiter, resume);
+            }
+        };
+
+        /**
+         * Helpers for calling await_suspend overloads
+         */
+        struct TStdAwaitSuspendHelper {
+            /**
+             * Calls await_suspend(h) converting the result to a valid std::coroutine_handle<>
+             */
+            template<class TAwaiter, class TPromise = void>
+            [[nodiscard]] static constexpr std::coroutine_handle<> Suspend(
+                    TAwaiter& awaiter, std::coroutine_handle<TPromise> h)
+                noexcept(noexcept(awaiter.await_suspend(h)))
+            {
+                if constexpr (requires { { awaiter.await_suspend(h) } -> std::same_as<void>; }) {
+                    awaiter.await_suspend(h);
+                    return std::noop_coroutine();
+                } else if constexpr (requires { { awaiter.await_suspend(h) } -> std::same_as<bool>; }) {
+                    if (!awaiter.await_suspend(h)) {
+                        return h;
+                    }
+                    return std::noop_coroutine();
+                } else {
+                    static_assert(
+                        requires { { awaiter.await_suspend(h) } -> std::convertible_to<std::coroutine_handle<>>; },
+                        "await_suspend(h) must return void, bool or std::coroutine_handle<>");
+                    return awaiter.await_suspend(h);
+                }
+            }
+
+            /**
+             * Calls await_cancelled(unwind) and continues to await_suspend(resume)
+             * when it returns void, false, or nullptr, indicating it wants to
+             * suspend, otherwise returns a valid unwind handle.
+             */
+            template<class TAwaiter, class TPromise = void>
+            [[nodiscard]] static constexpr std::coroutine_handle<> SuspendCancelled(
+                    TAwaiter& awaiter, std::coroutine_handle<TPromise> resume, std::coroutine_handle<> unwind)
+                noexcept(noexcept(awaiter.await_cancelled(unwind)) && noexcept(awaiter.await_suspend(resume)))
+            {
+                if constexpr (requires { { awaiter.await_cancelled(unwind) } -> std::same_as<void>; }) {
+                    awaiter.await_cancelled(unwind);
+                } else if constexpr (requires { { awaiter.await_cancelled(unwind) } -> std::same_as<bool>; }) {
+                    if (awaiter.await_cancelled(unwind)) {
+                        return unwind;
+                    }
+                } else {
+                    static_assert(
+                        requires { { awaiter.await_cancelled(unwind) } -> std::convertible_to<std::coroutine_handle<>>; },
+                        "await_cancelled(h) must return void, bool or std::coroutine_handle<>");
+                    if (std::coroutine_handle<> next = awaiter.await_cancelled(unwind)) {
+                        return next;
+                    }
+                }
+                return TStdAwaitSuspendHelper::Suspend(awaiter, resume);
+            }
+        };
+
+        /**
          * Transparently handles optional AwaitCancel subscriptions for single-threaded awaiters
          */
         template<class TAwaiter>
@@ -515,20 +599,30 @@ namespace NActors {
 
             template<class TPromise>
             std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) {
-                if constexpr (HasAwaitCancel<TAwaiter>) {
-                    TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
-                    if (auto cancellation = source.GetCancellation()) {
-                        return cancellation;
+                TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
+
+                if (std::coroutine_handle<> cancellation = source.GetCancellation()) {
+                    if constexpr (HasAwaitCancelled<TAwaiter>) {
+                        return TActorAwaitSuspendHelper::SuspendCancelled(Awaiter, parent, cancellation);
                     }
 
-                    Cleanup = source.SetAwaiter(Awaiter);
+                    if constexpr (HasAwaitCancel<TAwaiter>) {
+                        // Awaiter has AwaitCancel, which means it clearly
+                        // supports cancellation, but not AwaitCancelled, so
+                        // it won't be able to unwind after suspending. Avoid
+                        // starting potentially expensive and uncancellable
+                        // async operations.
+                        return cancellation;
+                    }
+                } else {
+                    if constexpr (HasAwaitCancel<TAwaiter>) {
+                        // We want to propagate cancellation to awaiter
+                        Cleanup = source.SetAwaiter(Awaiter);
+                    }
                 }
 
-                // We need cleanup on exceptions only when we subscribe and suspend may throw
-                constexpr bool needCleanup = HasAwaitCancel<TAwaiter> && !HasAwaitSuspendNoExcept<TAwaiter, TPromise>;
-
-                TCallCleanup<needCleanup> callCleanup{ this };
-                std::coroutine_handle<> result = DoSuspend(parent);
+                TCallCleanup callCleanup{ this };
+                std::coroutine_handle<> result = TActorAwaitSuspendHelper::Suspend(Awaiter, parent);
                 callCleanup.Cancel();
                 return result;
             }
@@ -541,38 +635,6 @@ namespace NActors {
             }
 
         private:
-            template<class TPromise>
-            std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> parent)
-                noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
-                requires HasAwaitSuspendVoid<TAwaiter, TPromise>
-            {
-                Awaiter.AwaitSuspend(parent);
-                return std::noop_coroutine();
-            }
-
-            template<class TPromise>
-            std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> parent)
-                noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
-                requires HasAwaitSuspendBool<TAwaiter, TPromise>
-            {
-                bool suspended = Awaiter.AwaitSuspend(parent);
-                if (suspended) {
-                    return std::noop_coroutine();
-                } else {
-                    return parent;
-                }
-            }
-
-            template<class TPromise>
-            std::coroutine_handle<> DoSuspend(std::coroutine_handle<TPromise> parent)
-                noexcept(HasAwaitSuspendNoExcept<TAwaiter, TPromise>)
-                requires HasAwaitSuspendHandle<TAwaiter, TPromise>
-            {
-                return Awaiter.AwaitSuspend(parent);
-            }
-
-        private:
-            template<bool Enabled = true>
             struct TCallCleanup {
                 TAwaiterProxy* Self;
 
@@ -587,19 +649,17 @@ namespace NActors {
                 }
             };
 
-            template<>
-            struct TCallCleanup<false> {
-                constexpr TCallCleanup(TAwaiterProxy*) noexcept {}
-                constexpr void Cancel() noexcept {}
-            };
-
         private:
             TAwaiter Awaiter;
             TAwaitCancelCleanup Cleanup;
         };
 
         template<class TDerived, bool WithCancellation = true>
-        class TThreadSafeResumeBridge {
+        class TThreadSafeResumeBridge
+            : private TActorRunnableItem::TImpl<TThreadSafeResumeBridge<TDerived, WithCancellation>>
+        {
+            friend TActorRunnableItem::TImpl<TThreadSafeResumeBridge<TDerived, WithCancellation>>;
+
         public:
             TThreadSafeResumeBridge() = default;
 
@@ -608,38 +668,25 @@ namespace NActors {
 
         protected:
             std::coroutine_handle<> CreateResumeBridge(IActor& actor, TActorRunnableItem& resume) {
-                auto pr = MakeBridgeCoroutines(actor, resume, CancelledTrampoline);
-                CancelBridge = pr.second;
+                auto pr = MakeBridgeCoroutines(actor, resume, *this);
+                UnwindBridge = pr.second;
                 return pr.first;
             }
 
             std::coroutine_handle<> StartCancellation(std::coroutine_handle<> h) noexcept {
                 Cancellation = h;
-                return CancelBridge;
+                return UnwindBridge;
             }
 
         private:
-            struct TCancelledTrampoline : public TActorRunnableItem::TImpl<TCancelledTrampoline> {
-                TThreadSafeResumeBridge* const Self;
-
-                TCancelledTrampoline(TThreadSafeResumeBridge* self)
-                    : Self(self)
-                {}
-
-                void DoRun(IActor*) noexcept {
-                    Self->OnCancelled();
-                }
-            };
-
-            void OnCancelled() noexcept {
+            void DoRun(IActor*) noexcept {
                 // Note: bridge no longer valid after this call returns
-                Y_ABORT_UNLESS(Cancellation, "Unexpected cancellation without StartCancellation");
-                static_cast<TDerived&>(*this).OnCancelled(Cancellation);
+                Y_ABORT_UNLESS(Cancellation, "Unexpected unwind without StartCancellation");
+                static_cast<TDerived&>(*this).OnUnwind(Cancellation);
             }
 
         private:
-            TCancelledTrampoline CancelledTrampoline{ this };
-            std::coroutine_handle<> CancelBridge;
+            std::coroutine_handle<> UnwindBridge;
             std::coroutine_handle<> Cancellation;
         };
 
@@ -657,10 +704,10 @@ namespace NActors {
         template<class TAwaiter>
         class TStdAwaiterProxy final
             : private TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>
-            , private TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter>>
+            , private TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter> || HasStdAwaitCancelled<TAwaiter>>
         {
             friend TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>;
-            friend TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter>>;
+            friend TThreadSafeResumeBridge<TStdAwaiterProxy<TAwaiter>, HasStdAwaitCancel<TAwaiter> || HasStdAwaitCancelled<TAwaiter>>;
 
         public:
             template<class... TArgs>
@@ -680,35 +727,64 @@ namespace NActors {
             template<class TPromise>
             std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> parent) {
                 IActor& actor = parent.promise().GetActor();
-
-                if constexpr (HasStdAwaitCancel<TAwaiter>) {
-                    TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
-                    if (auto cancellation = source.GetCancellation()) {
-                        return cancellation;
-                    }
-
-                    Cleanup = source.SetAwaiter(*this);
-                }
-
-                TCallCleanup<HasStdAwaitCancel<TAwaiter>> callCleanup{ this };
+                TAwaitCancelSource& source = parent.promise().GetAwaitCancelSource();
 
                 Continuation = parent;
-                Bridge = this->CreateResumeBridge(actor, *this);
 
+                if (auto cancellation = source.GetCancellation()) {
+                    if constexpr (HasStdAwaitCancelled<TAwaiter>) {
+                        Bridge = this->CreateResumeBridge(actor, GetResumeItem());
+                        TCallDestroyBridge callDestroyBridge{ this };
+
+                        std::coroutine_handle<> unwind = this->StartCancellation(cancellation);
+                        std::coroutine_handle<> result = TStdAwaitSuspendHelper::SuspendCancelled(Awaiter, Bridge, unwind);
+
+                        if (result == unwind) {
+                            // Awaiter unwinds immediately
+                            // Unwind directly and avoid bridge scheduling overhead
+                            return cancellation;
+                        }
+
+                        if (result == Bridge) {
+                            // Awaiter resumes immediately
+                            // Resume directly and avoid bridge scheduling overhead
+                            return parent;
+                        }
+
+                        callDestroyBridge.Cancel();
+                        return result;
+                    }
+
+                    if constexpr (HasStdAwaitCancel<TAwaiter>) {
+                        // Awaiter has await_cancel, which means it clearly
+                        // supports cancellation, but not await_cancelled, so
+                        // it won't be able to unwind after suspending. Avoid
+                        // starting potentially expensive and uncancellable
+                        // async operations.
+                        return cancellation;
+                    }
+                } else {
+                    if constexpr (HasStdAwaitCancel<TAwaiter>) {
+                        Cleanup = source.SetAwaiter(*this);
+                    }
+                }
+
+                TCallCleanup callCleanup{ this };
+
+                Bridge = this->CreateResumeBridge(actor, GetResumeItem());
                 TCallDestroyBridge callDestroyBridge{ this };
-                std::coroutine_handle<> result = DoSuspend(Bridge);
-                callDestroyBridge.Cancel();
 
+                std::coroutine_handle<> result = TStdAwaitSuspendHelper::Suspend(Awaiter, Bridge);
                 callCleanup.Cancel();
 
-                // Handle awaiter resuming immediately
-                // Redirect back to parent and avoid bridge overhead
                 if (result == Bridge) {
-                    DestroyBridge();
+                    // Awaiter resumes immediately
+                    // Resume directly and avoid bridge scheduling overhead
                     return parent;
-                } else {
-                    return result;
                 }
+
+                callDestroyBridge.Cancel();
+                return result;
             }
 
             decltype(auto) await_resume() noexcept(HasStdAwaitResumeNoExcept<TAwaiter>) {
@@ -726,45 +802,6 @@ namespace NActors {
             }
 
         private:
-            void OnCancelled(std::coroutine_handle<> c) noexcept
-                requires HasStdAwaitCancel<TAwaiter>
-            {
-                // Note: bridge no longer valid after this call returns
-                Y_ABORT_UNLESS(Bridge, "Unexpected cancellation without a bridge");
-                Bridge = {};
-                c.resume();
-            }
-
-        private:
-            std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
-                noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
-                requires HasStdAwaitSuspendVoid<TAwaiter>
-            {
-                Awaiter.await_suspend(target);
-                return std::noop_coroutine();
-            }
-
-            std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
-                noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
-                requires HasStdAwaitSuspendBool<TAwaiter>
-            {
-                bool suspended = Awaiter.await_suspend(target);
-                if (suspended) {
-                    return std::noop_coroutine();
-                } else {
-                    return target;
-                }
-            }
-
-            std::coroutine_handle<> DoSuspend(std::coroutine_handle<> target)
-                noexcept(HasStdAwaitSuspendNoExcept<TAwaiter>)
-                requires HasStdAwaitSuspendHandle<TAwaiter>
-            {
-                return Awaiter.await_suspend(target);
-            }
-
-        private:
-            template<bool Enabled = true>
             struct TCallCleanup {
                 TStdAwaiterProxy* Self;
 
@@ -777,12 +814,6 @@ namespace NActors {
                 constexpr void Cancel() noexcept {
                     Self = nullptr;
                 }
-            };
-
-            template<>
-            struct TCallCleanup<false> {
-                constexpr TCallCleanup(TStdAwaiterProxy*) noexcept {}
-                constexpr void Cancel() noexcept {}
             };
 
         private:
@@ -802,16 +833,29 @@ namespace NActors {
 
             void DestroyBridge() noexcept {
                 Bridge.destroy();
-                Bridge = {};
+                Bridge = nullptr;
             }
 
         private:
+            TActorRunnableItem& GetResumeItem() {
+                // We have multiple TActorRunnableItem base classes
+                TActorRunnableItem::TImpl<TStdAwaiterProxy<TAwaiter>>& base = *this;
+                return base;
+            }
+
             void DoRun(IActor*) noexcept {
                 // Note: bridge no longer valid after this call returns
                 Y_ABORT_UNLESS(Bridge && Continuation, "Unexpected Run without a bridge or continuation");
-                Bridge = {};
+                Bridge = nullptr;
                 // We may resume recursively
                 Continuation.resume();
+            }
+
+            void OnUnwind(std::coroutine_handle<> unwind) noexcept {
+                // Note: bridge no longer valid after this call returns
+                Y_ABORT_UNLESS(Bridge, "Unexpected unwind without a bridge");
+                Bridge = nullptr;
+                unwind.resume();
             }
 
         private:
@@ -825,7 +869,7 @@ namespace NActors {
          * Marks awaitable as safe to await by reference even when it only supports awaiting by value
          */
         template<IsActorAwaitableByValue TAwaitable>
-        constexpr decltype(auto) SafeByReferenceAwaitable(TAwaitable&& awaitable) {
+        constexpr decltype(auto) UnsafeAwaitableByReference(TAwaitable&& awaitable) {
             struct TAwaitableByReference {
                 TAwaitable&& Awaitable;
                 constexpr decltype(auto) CoAwait() && {
@@ -850,9 +894,9 @@ namespace NActors {
             constexpr decltype(auto) await_transform(TAwaitable awaitable)
                 requires (HasActorCoAwaitByValue<TAwaitable>)
             {
-                // We simply mark it as safe to await by reference (will outlive co_await)
+                // We simply mark it as awaitable by reference (will outlive co_await)
                 // This will call await_transform below and redirect CoAwait to CoAwaitByValue
-                return await_transform(SafeByReferenceAwaitable(std::move(awaitable)));
+                return await_transform(UnsafeAwaitableByReference(std::move(awaitable)));
             }
 
             /**
@@ -1199,7 +1243,7 @@ namespace NActors {
                     // cancellation handle may resume and transition to the
                     // destroy state.
                     Pending.resume();
-                    Pending = {};
+                    Pending = nullptr;
                 }
 
                 switch (State) {

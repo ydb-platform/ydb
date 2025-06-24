@@ -468,7 +468,7 @@ namespace NActors {
     public:
         TImpl() noexcept {
             this->HandleFn = +[](TActorEventAwaiter* self, TAutoPtr<IEventHandle>& ev) -> bool {
-                return static_cast<TDerived&>(*self).DoHandle(ev);
+                return static_cast<TDerived&>(static_cast<TImpl&>(*self)).DoHandle(ev);
             };
         }
 
@@ -507,7 +507,7 @@ namespace NActors {
     public:
         TImpl() noexcept {
             this->RunFn = +[](TActorRunnableItem* self, IActor* actor) noexcept {
-                static_cast<TDerived&>(*self).DoRun(actor);
+                static_cast<TDerived&>(static_cast<TImpl&>(*self)).DoRun(actor);
             };
         }
 

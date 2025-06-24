@@ -1,18 +1,19 @@
 UNITTEST_FOR(ydb/library/yql/dq/actors/compute)
 
-SRCS(
-    dq_async_compute_actor_ut.cpp
-    dq_compute_actor_ut.cpp
-    dq_compute_actor_async_input_helper_ut.cpp
-    dq_compute_issues_buffer_ut.cpp
-)
 IF (NOT OS_WINDOWS)
 SRCS(
-    dq_source_watermark_tracker_ut.cpp
+    dq_async_compute_actor_ut.cpp
 )
 ELSE()
 # TTestActorRuntimeBase(..., true) seems broken on windows
 ENDIF()
+
+SRCS(
+    dq_compute_actor_ut.cpp
+    dq_compute_actor_async_input_helper_ut.cpp
+    dq_compute_issues_buffer_ut.cpp
+    dq_source_watermark_tracker_ut.cpp
+)
 
 PEERDIR(
     library/cpp/testing/unittest

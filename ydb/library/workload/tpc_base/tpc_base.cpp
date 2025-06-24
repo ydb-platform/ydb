@@ -33,43 +33,19 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     SubstGlobal(resourcePrefix, "-", "");
     resourcePrefix.to_lower();
     TVector<TString> queries;
-    if (Params.GetExternalQueriesDir().IsDefined()) {
-        TVector<TString> queriesList;
-        TVector<ui32> queriesNums;
-        Params.GetExternalQueriesDir().ListNames(queriesList);
-        for (TStringBuf q: queriesList) {
-            ui32 num;
-            if (q.SkipPrefix("q") && q.ChopSuffix(".sql") && TryFromString(q, num)) {
-                queriesNums.push_back(num);
-            }
+    NResource::TResources qresources;
+    const auto prefix = resourcePrefix + "queries/" + ToString(Params.GetSyntax()) + "/q";
+    NResource::FindMatch(prefix, &qresources);
+    for (const auto& r: qresources) {
+        ui32 num;
+        TStringBuf q(r.Key);
+        if (!q.SkipPrefix(prefix) || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
+            continue;
         }
-        for (const auto& fname : queriesList) {
-            ui32 num;
-            TStringBuf q(fname);
-            if (!q.SkipPrefix("q") || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
-                continue;
-            }
-            if (queries.size() < num + 1) {
-                queries.resize(num + 1);
-            }
-            TFileInput fInput(Params.GetExternalQueriesDir() / fname);
-            queries[num] = fInput.ReadAll();
+        if (queries.size() < num + 1) {
+            queries.resize(num + 1);
         }
-    } else {
-        NResource::TResources qresources;
-        const auto prefix = resourcePrefix + "queries/" + ToString(Params.GetSyntax()) + "/q";
-        NResource::FindMatch(prefix, &qresources);
-        for (const auto& r: qresources) {
-            ui32 num;
-            TStringBuf q(r.Key);
-            if (!q.SkipPrefix(prefix) || !q.ChopSuffix(".sql") || !TryFromString(q, num)) {
-                continue;
-            }
-            if (queries.size() < num + 1) {
-                queries.resize(num + 1);
-            }
-            queries[num] = r.Data;
-        }
+        queries[num] = r.Data;
     }
     for (auto& query : queries) {
         PatchQuery(query);
@@ -163,16 +139,12 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
     TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
     switch (commandType) {
     case TWorkloadParams::ECommandType::Run:
-        opts.AddLongOption("ext-queries-dir", "Directory with external queries. Naming have to be q[0-N].sql")
-            .StoreResult(&ExternalQueriesDir);
         opts.AddLongOption( "syntax", "Query syntax [" + GetEnumAllNames<EQuerySyntax>() + "].")
             .StoreResult(&Syntax).DefaultValue(Syntax);
         opts.AddLongOption("scale", "Sets the percentage of the benchmark's data size and workload to use, relative to full scale.")
             .DefaultValue(Scale).StoreResult(&Scale);
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
-        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
-            .NoArgument().StoreTrue(&CheckCanonical);
         break;
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")

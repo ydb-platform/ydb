@@ -127,7 +127,7 @@ TString GetTxtLog(TInstant time, const TAuditLogParts& parts) {
 // For each new format, we need to register the audit event conversion function.
 // The size of AuditLogItemBuilders must be larger by one of the maximum value of the NKikimrConfig::TAuditConfig::EFormat enumeration.
 // The first value of AuditLogItemBuilders is a stub for the convenience of indexing by enumeration value.
-static std::vector<TAuditLogItemBuilder> AuditLogItemBuilders = { nullptr, GetJsonLog, GetTxtLog, GetJsonLogCompatibleLog, nullptr };
+static std::vector<TAuditLogItemBuilder> AuditLogItemBuilders = { nullptr, GetJsonLog, GetTxtLog, GetJsonLogCompatibleLog, nullptr, nullptr };
 
 // numbering enumeration starts from one
 static constexpr size_t DefaultAuditLogItemBuilder = static_cast<size_t>(NKikimrConfig::TAuditConfig::JSON);

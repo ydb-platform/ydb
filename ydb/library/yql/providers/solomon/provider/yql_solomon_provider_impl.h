@@ -13,6 +13,7 @@ namespace NYql {
 
 THolder<IGraphTransformer> CreateSolomonIODiscoveryTransformer(TSolomonState::TPtr state);
 THolder<IGraphTransformer> CreateSolomonLoadTableMetadataTransformer(TSolomonState::TPtr state);
+THolder<IGraphTransformer> CreateSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state);
 
 THolder<TVisitorTransformerBase> CreateSolomonDataSourceTypeAnnotationTransformer(TSolomonState::TPtr state);
 THolder<TExecTransformerBase> CreateSolomonDataSourceExecTransformer(TSolomonState::TPtr state);

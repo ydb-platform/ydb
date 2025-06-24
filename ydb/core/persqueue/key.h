@@ -231,6 +231,17 @@ public:
         return Size() == KeySize() + 1;
     }
 
+    TMaybe<char> GetSuffix() const
+    {
+        if (HasSuffix()) {
+            return Data()[KeySize()];
+        }
+        return Nothing();
+    }
+
+    bool IsHead() const;
+    bool IsFastWrite() const;
+
     static constexpr ui32 KeySize() {
         return UnmarkedSize() + 1 + 20 + 1 + 5 + 1 + 10 + 1 + 5;
         //p<partition 10 chars>_<offset 20 chars>_<part number 5 chars>_<count 10 chars>_<internalPartsCount count 5 chars>
@@ -240,6 +251,8 @@ public:
     {
         return Size() == key.Size() && strncmp(Data(), key.Data(), Size()) == 0;
     }
+
+    void SetFastWrite();
 
 private:
     TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)
@@ -304,14 +317,6 @@ private:
         InternalPartsCount = FromString<ui16>(TStringBuf{PtrInternalPartsCount(), 5});
     }
 
-    TMaybe<char> GetSuffix() const
-    {
-        if (HasSuffix()) {
-            return Data()[KeySize()];
-        }
-        return Nothing();
-    }
-
     void SetSuffix(TMaybe<char> suffix)
     {
         Resize(KeySize() + suffix.Defined());
@@ -325,6 +330,12 @@ private:
     ui16 PartNo;
     ui16 InternalPartsCount;
 };
+
+inline
+bool TKey::IsHead() const
+{
+    return HasSuffix() && (Data()[KeySize()] == '|');
+}
 
 inline
 TString GetTxKey(ui64 txId)

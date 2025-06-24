@@ -1028,6 +1028,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 }
 
 ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState, TOperationContext& context) const {
+    TTxState* state = context.SS->FindTx(NextPartId());
     switch (txType) {
     case TTxState::ETxType::TxMkDir:
         return CreateMkDir(NextPartId(), txState);
@@ -1040,7 +1041,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxCreateTable:
         return CreateNewTable(NextPartId(), txState);
     case TTxState::ETxType::TxCopyTable:
-        return CreateCopyTable(NextPartId(), txState);
+        return CreateCopyTable(NextPartId(), txState, state);
     case TTxState::ETxType::TxAlterTable:
         return CreateAlterTable(NextPartId(), txState);
     case TTxState::ETxType::TxSplitTablePartition:
@@ -1267,6 +1268,13 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateNewSysView(NextPartId(), txState);
     case TTxState::ETxType::TxDropSysView:
         return CreateDropSysView(NextPartId(), txState);
+
+    // ChangePathState
+    case TTxState::ETxType::TxChangePathState:
+        return CreateChangePathState(NextPartId(), txState);
+
+    case TTxState::ETxType::TxCreateLongIncrementalRestoreOp:
+        return CreateLongIncrementalRestoreOpControlPlane(NextPartId(), txState);
 
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
@@ -1566,12 +1574,18 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        return {CreateLongIncrementalRestoreOpControlPlane(op.NextPartId(), tx)};
 
     // SysView
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         return {CreateNewSysView(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         return {CreateDropSysView(op.NextPartId(), tx)};
+
+    // ChangePathState
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return CreateChangePathState(op.NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

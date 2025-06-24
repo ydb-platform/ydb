@@ -11,10 +11,14 @@
 #include <library/cpp/yt/system/handle_eintr.h>
 #include <library/cpp/yt/system/exit.h>
 
+#include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/folder/iterator.h>
 #include <util/folder/filelist.h>
 #include <util/string/split.h>
+#include <util/system/env.h>
+#include <util/system/fs.h>
+#include <util/system/maxlen.h>
 #include <util/system/shellcommand.h>
 
 #include <array>
@@ -1168,6 +1172,45 @@ TDeviceId GetDeviceId(const TString& path)
     Y_UNUSED(path);
     YT_UNIMPLEMENTED();
 #endif
+}
+
+std::optional<TString> FindBinaryPath(const TString& binary)
+{
+    if (NFs::Exists(binary)) {
+        return (TFsPath(NFs::CurrentWorkingDirectory()) / binary).GetPath();
+    }
+
+    // If this is an absolute path, stop here.
+    if (binary.empty() || binary[0] == '/') {
+        return std::nullopt;
+    }
+
+    std::array<char, MAX_PATH> buffer;
+
+    auto envPathStr = GetEnv("PATH");
+    TStringBuf envPath(envPathStr);
+    TStringBuf envPathItem;
+
+    while (envPath.NextTok(':', envPathItem)) {
+        if (buffer.size() < 2 + envPathItem.size() + binary.size()) {
+            continue;
+        }
+
+        size_t index = 0;
+        std::copy(envPathItem.begin(), envPathItem.end(), buffer.begin() + index);
+        index += envPathItem.size();
+        buffer[index] = '/';
+        index += 1;
+        std::copy(binary.begin(), binary.end(), buffer.begin() + index);
+        index += binary.size();
+        buffer[index] = 0;
+
+        if (NFs::Exists(buffer.data())) {
+            return TString(buffer.data(), index);
+        }
+    }
+
+    return std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

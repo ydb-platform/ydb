@@ -28,11 +28,14 @@ const std::string AlienCellSynchronizerUserName("alien_cell_synchronizer");
 const std::string QueueAgentUserName("queue_agent");
 const std::string YqlAgentUserName("yql_agent");
 const std::string TabletBalancerUserName("tablet_balancer");
+const std::string PermissionCacheUserName("yt-permission-cache");
+const std::string ReplicatedTableTrackerUserName("yt-replicated-table-tracker");
+const std::string ChunkReplicaCacheUserName("yt-chunk-replica-cache");
 
-const TString EveryoneGroupName("everyone");
-const TString UsersGroupName("users");
-const TString SuperusersGroupName("superusers");
-const TString AdminsGroupName("admins");
+const std::string EveryoneGroupName("everyone");
+const std::string UsersGroupName("users");
+const std::string SuperusersGroupName("superusers");
+const std::string AdminsGroupName("admins");
 
 ////////////////////////////////////////////////////////////////////////////////
 

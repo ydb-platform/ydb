@@ -20,7 +20,9 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenReadMetadata;
     struct TEvNodeConfigInvokeOnRootResult;
     struct TEvNodeWardenQueryBaseConfig;
+    struct TEvNodeWardenNotifyConfigMismatch;
     struct TEvNodeWardenWriteMetadata;
+    struct TEvNodeWardenQueryCacheResult;
 
     constexpr ui32 ProxyConfigurationTimeoutMilliseconds = 200;
     constexpr TDuration BackoffMin = TDuration::MilliSeconds(20);
@@ -556,6 +558,8 @@ namespace NKikimr::NStorage {
         // process group information obtained by one of managed entities
         void Handle(TEvBlobStorage::TEvUpdateGroupInfo::TPtr ev);
 
+        void Handle(TAutoPtr<TEventHandle<TEvNodeWardenQueryCacheResult>> ev);
+
         void HandleGetGroup(TAutoPtr<IEventHandle> ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -637,10 +641,9 @@ namespace NKikimr::NStorage {
         void StartDistributedConfigKeeper();
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
-        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> StorageConfig;
         bool SelfManagementEnabled = false;
-        bool IsPrimary = false;
-        bool IsBeingPromoted = false;
+        TBridgeInfo::TPtr BridgeInfo;
         THashSet<TActorId> StorageConfigSubscribers;
 
         void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
@@ -652,6 +655,8 @@ namespace NKikimr::NStorage {
         void ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss);
 
         void Handle(TEventHandle<TEvNodeWardenQueryBaseConfig>::TPtr ev);
+
+        void Handle(TEventHandle<TEvNodeWardenNotifyConfigMismatch>::TPtr ev);
 
         void Handle(TEventHandle<TEvNodeWardenReadMetadata>::TPtr ev);
         void Handle(TEventHandle<TEvNodeWardenWriteMetadata>::TPtr ev);

@@ -50,6 +50,14 @@ namespace {
 
 } // anonymous
 
+bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+}
+
+bool IsMajorityReached(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
+    return ringGroupAcks > ringGroup.NToSelect / 2;
+}
+
 class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
     void ProcessSync(NInternalEvents::TEvDescribeResult* msg = nullptr, const TPathId& pathId = TPathId()) {
         if (msg == nullptr) {
@@ -481,15 +489,17 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const ui64 pathHash = CityHash64(path);
         const ui64 idHash = pathId.Hash();
 
-        TStateStorageInfo::TSelection selection;
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            TStateStorageInfo::TSelection selection;
 
-        GroupInfo->SelectReplicas(pathHash, &selection);
-        SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
+            GroupInfo->SelectReplicas(pathHash, &selection, ringGroupIndex);
+            SelectionReplicaCache.insert(SelectionReplicaCache.end(), selection.begin(), selection.end());
 
-        GroupInfo->SelectReplicas(idHash, &selection);
-        for (const TActorId& replica : selection) {
-            if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
-                SelectionReplicaCache.emplace_back(replica);
+            GroupInfo->SelectReplicas(idHash, &selection, ringGroupIndex);
+            for (const TActorId& replica : selection) {
+                if (Find(SelectionReplicaCache, replica) == SelectionReplicaCache.end()) {
+                    SelectionReplicaCache.emplace_back(replica);
+                }
             }
         }
 
@@ -696,13 +706,40 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
 
         it->second.AckTo = ev->Sender;
-        it->second.PathAcks.emplace(std::make_pair(pathId, version), 0);
+        it->second.PathAcks.emplace(std::make_pair(pathId, version), TVector<ui32>(GroupInfo->RingGroups.size()));
 
         Update(pathId, isDeletion, ev->Cookie);
 
         if (isDeletion) {
             Descriptions.erase(pathId);
         }
+    }
+
+    void ProcessReplicaAck(TVector<ui32>& ringGroupAcks, TActorId ackedReplica, TVector<bool>& ringGroupQuorums) const {
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
+            for (const auto& ring : ringGroup.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    if (replica == ackedReplica) {
+                        ++ringGroupAcks[ringGroupIndex];
+                        if (IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex])) {
+                            ringGroupQuorums[ringGroupIndex] = true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    bool CheckQuorum(TVector<ui32>& ringGroupAcks, TActorId ackedReplica) const {
+        TVector<bool> ringGroupQuorums(GroupInfo->RingGroups.size(), false);
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
+            ringGroupQuorums[ringGroupIndex] = ShouldIgnore(ringGroup) || IsMajorityReached(ringGroup, ringGroupAcks[ringGroupIndex]);
+        }
+        ProcessReplicaAck(ringGroupAcks, ackedReplica, ringGroupQuorums);
+        return Count(ringGroupQuorums, false) == 0;
     }
 
     void Handle(NSchemeshardEvents::TEvUpdateAck::TPtr& ev) {
@@ -727,7 +764,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            if (++pathIt->second > (GroupInfo->NToSelect / 2)) {
+            TActorId* ackedReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
+            Y_ABORT_UNLESS(ackedReplica != nullptr);
+            if (CheckQuorum(pathIt->second, *ackedReplica)) {
                 SBP_LOG_N("Ack update"
                     << ": ack to# " << it->second.AckTo
                     << ", cookie# " << ev->Cookie
@@ -772,6 +811,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             if (!ReplicaToReplicaPopulator.contains(replica)) {
                 IActor* replicaPopulator = new TReplicaPopulator(SelfId(), replica, Owner, Generation);
                 ReplicaToReplicaPopulator.emplace(replica, Register(replicaPopulator, TMailboxType::ReadAsFilled));
+                ReplicaToReplicaPopulatorBackMap[ReplicaToReplicaPopulator[replica]] = replica;
             }
         }
 
@@ -780,6 +820,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 ++it;
             } else {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, it->second, SelfId(), nullptr, 0));
+                ReplicaToReplicaPopulatorBackMap.erase(it->second);
                 ReplicaToReplicaPopulator.erase(it++);
             }
         }
@@ -820,7 +861,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 pathAck.MutablePathId()->SetLocalPathId(pathIdVersion.first.LocalPathId);
 
                 pathAck.SetVersion(pathIdVersion.second);
-                pathAck.SetAcksCount(acksCount);
+                pathAck.SetAcksCount(Accumulate(acksCount.begin(), acksCount.end(), 0));
             }
 
             if (record.UpdateAcksSize() >= limit) {
@@ -950,12 +991,13 @@ private:
 
     TIntrusiveConstPtr<TStateStorageInfo> GroupInfo;
     THashMap<TActorId, TActorId> ReplicaToReplicaPopulator;
+    THashMap<TActorId, TActorId> ReplicaToReplicaPopulatorBackMap;
 
     TVector<TActorId> SelectionReplicaCache;
 
     struct TUpdateAckInfo {
         TActorId AckTo;
-        TMap<std::pair<TPathId, ui64>, ui32> PathAcks;
+        TMap<std::pair<TPathId, ui64>, TVector<ui32>> PathAcks;
     };
 
     THashMap<ui64, TUpdateAckInfo> UpdateAcks; // ui64 is a cookie

@@ -89,6 +89,10 @@ message TActorSystemConfig {
         optional bool HasSharedThread = 18;
         optional uint32 MaxLocalQueueSize = 20;
         optional uint32 MinLocalQueueSize = 21;
+
+        // Tiny YDB
+        repeated uint32 AdjacentPools = 22;
+        optional uint32 ForcedForeignSlots = 23;
     }
 
     message TScheduler {
@@ -186,6 +190,15 @@ message TDynamicNameserviceConfig {
 
 message TDomainsConfig {
     message TStateStorage {
+        enum EPileState {
+            DISCONNECTED = 0; // this pile is disconnected from primary one
+            NOT_SYNCHRONIZED = 1; // this pile is connected to primary pile, but not yet fully synchronized
+            SYNCHRONIZED = 2; // this pile is connected to primary pile and in sync
+            PRIMARY = 3; // this is the primary pile
+            PROMOTED = 4; // this is the synchronized pile which is being promoted to become primary
+            DEMOTED = 5; // this is currently primary pile which is being demoted
+        }
+
         message TRing {
             optional uint32 NToSelect = 1;
             repeated TRing Ring = 2;
@@ -193,12 +206,19 @@ message TDomainsConfig {
             optional bool UseSingleNodeActorId = 4;
             optional bool UseRingSpecificNodeSelection = 5;
             optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
+            optional bool WriteOnly = 7 [default = false]; // used for ring groups
+            optional uint32 RingGroupActorIdOffset = 8 [default = 0]; // used for ActorId difference for multiple replicas on one node
+            optional uint32 BridgePileId = 9; // bridge pile id for this ring group when bridge mode is enabled
+            optional EPileState PileState = 10; // state for this ring group's pile
         }
 
         optional uint32 SSId = 1 [default = 1];
-        optional TRing Ring = 2;
+        optional TRing Ring = 2; // for compatibility, use RingGroups
         optional uint32 StateStorageVersion = 3 [default = 0];
         repeated uint32 CompatibleVersions = 4;
+        repeated TRing RingGroups = 5;
+        optional uint64 ClusterStateGeneration = 6; // generation from current ClusterState
+        optional fixed64 ClusterStateGuid = 7;
     }
 
     message TStoragePoolType {
@@ -654,6 +674,29 @@ message TConveyorConfig {
     optional double WorkersCountDouble = 5;
 }
 
+message TCompositeConveyorConfig {
+    message TCategory {
+        optional string Name = 1;
+        optional uint64 QueueSizeLimit = 2;
+    }
+
+    message TWorkerPoolCategoryLink {
+        optional string Category = 1;
+        optional double Weight = 2;
+    }
+
+    message TWorkersPool {
+        optional double WorkersCount = 1;
+        optional double DefaultFractionOfThreadsCount = 2;
+        repeated TWorkerPoolCategoryLink Links = 3;
+        optional string Name = 4;
+    }
+
+    optional bool Enabled = 1 [default = true];
+    repeated TWorkersPool WorkerPools = 2;
+    repeated TCategory Categories = 3;
+}
+
 message TPrioritiesQueueConfig {
     optional bool Enabled = 1 [default = true];
     optional uint32 Limit = 2 [default = 32];
@@ -1011,9 +1054,16 @@ message TSqsConfig {
         }
     }
 
+    message TCloudEventsConfig {
+        optional bool EnableCloudEvents = 1 [default = false];
+        optional bool TenantMode = 2 [default = false];
+        optional uint64 RetryTimeoutSeconds = 3;
+    }
+
     optional TYcSearchEventsConfig YcSearchEventsConfig = 66;
     optional TYdbAuthConfig AuthConfig = 67;
     optional uint64 StartLocalLeaderInflightMax = 71 [default = 500];
+    optional TCloudEventsConfig CloudEventsConfig = 73;
 }
 
 message TConfigsDispatcherConfig {
@@ -1116,7 +1166,7 @@ message TQueryServiceConfig {
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
-    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];   
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
 }
 
 // Config describes immediate controls and allows
@@ -1673,10 +1723,11 @@ message TAuditConfig {
     // For each new format, we need to register the audit event conversion function
     // See  ydb/core/audit/audit_log_impl.cpp for details
     enum EFormat {
-        JSON = 1;                // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
-        TXT = 2;                 // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
-        JSON_LOG_COMPATIBLE = 3; // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
-        FORMAT_4 = 4;        // Reserved
+        JSON = 1;                       // Outputs audit log in format: "<time>: {"k1": "v1", "k2": "v2", ...}" where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        TXT = 2;                        // Outputs audit log in format: "<time>: k1=v1, k2=v2, ..." where <time> is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values
+        JSON_LOG_COMPATIBLE = 3;        // Outputs audit log in format: "{"@timestamp": "<ISO 8601 time>", "@log_type": "audit", "k1": "v1", "k2": "v2", ...}" where @timestamp is ISO 8601 format time string, k1, k2, ..., kn - fields of audit log message and v1, v2, ..., vn are their values // Suitable for output both debug log and audit log to the same destination (stderr)
+        FORMAT_4 = 4;                   // Reserved
+        YANDEX_CLOUD_EVENTS = 5;        // Reserved for Yandex.Cloud environment. Defaults to JSON elsewhere
     }
 
     message TStderrBackend {
@@ -1757,6 +1808,11 @@ message THiveConfig {
     enum EHiveBootStrategy {
         HIVE_BOOT_STRATEGY_BALANCED = 0;
         HIVE_BOOT_STRATEGY_FAST = 1;
+    }
+
+    message TBootPriority {
+        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
+        optional double Priority = 2;
     }
 
     optional uint64 MaxTabletsScheduled = 2 [default = 100];
@@ -1843,6 +1899,7 @@ message THiveConfig {
     optional double DryRunTargetTrackingCPU = 84; // percent
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
     optional bool UseTabletUsageEstimate = 86 [default = true];
+    repeated TBootPriority TabletTypeToBootPriority = 87;
 }
 
 message THealthCheckConfig {
@@ -1931,6 +1988,9 @@ message TColumnShardConfig {
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
     optional bool PortionMetaV0Usage = 41 [default = true];
     optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
+    optional bool GenerateInternalPathId = 43 [default = false]; //Be aware! IRREVERSIBLE(if set, can not be unset for a dababase)
+    optional bool ProxyWritingEnabled = 44 [default = true];
+    optional uint64 SharedMetadataAccessorCacheSize = 45 [default = 1073741824]; // 1Gb
 }
 
 message TSchemeShardConfig {
@@ -2263,6 +2323,7 @@ message TMetadataCacheConfig {
 
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
+    optional uint32 DrainTimeoutSeconds = 2;
 }
 
 message TBridgeConfig {
@@ -2354,7 +2415,7 @@ message TAppConfig {
     optional TLimiterConfig CompDiskLimiterConfig = 79;
     optional TMetadataCacheConfig MetadataCacheConfig = 80;
     optional TMemoryControllerConfig MemoryControllerConfig = 81;
-    optional TGroupedMemoryLimiterConfig GroupedMemoryLimiterConfig = 82;
+    optional TGroupedMemoryLimiterConfig ScanGroupedMemoryLimiterConfig = 82;
     optional NKikimrReplication.TReplicationDefaults ReplicationConfig = 83;
     optional TShutdownConfig ShutdownConfig = 84;
     optional TPrioritiesQueueConfig CompPrioritiesConfig = 85;
@@ -2364,6 +2425,7 @@ message TAppConfig {
     optional THealthCheckConfig HealthCheckConfig = 89;
     optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
     optional TBridgeConfig BridgeConfig = 91;
+    optional TGroupedMemoryLimiterConfig CompGroupedMemoryLimiterConfig = 92;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;
@@ -2375,6 +2437,7 @@ message TAppConfig {
     optional NKikimrBlobStorage.TYamlConfig StoredConfigYaml = 105;
     optional string StartupConfigYaml = 107;
     optional string StartupStorageYaml = 108;
+    optional TCompositeConveyorConfig CompositeConveyorConfig = 109;
 }
 
 message TYdbVersion {

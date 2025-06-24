@@ -3,8 +3,8 @@
 namespace antlr4 {
 
     YqlErrorListener::YqlErrorListener(NAST::IErrorCollector* errors, bool* error)
-        : errors(errors)
-        , error(error)
+        : Errors_(errors)
+        , Error_(error)
     {
     }
 
@@ -12,8 +12,8 @@ namespace antlr4 {
         Recognizer* /*recognizer*/, Token* /*offendingSymbol*/,
         size_t line, size_t charPositionInLine,
         const std::string& msg, std::exception_ptr /*e*/) {
-        *error = true;
-        errors->Error(line, charPositionInLine, msg.c_str());
+        *Error_ = true;
+        Errors_->Error(line, charPositionInLine, msg.c_str());
     }
 
 } // namespace antlr4

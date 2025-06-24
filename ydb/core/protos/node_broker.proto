@@ -22,6 +22,7 @@ message TNodeInfo {
     optional NActorsInterconnect.TNodeLocation Location = 6;
     optional uint64 Expire = 7;
     optional string Name = 8;
+    optional uint32 BridgePileId = 9;
 }
 
 message TNodeInfoSchema {
@@ -35,6 +36,7 @@ message TNodeInfoSchema {
     optional NKikimrSubDomains.TDomainKey ServicedSubDomain = 8;
     optional uint32 SlotIndex = 9;
     optional bool AuthorizedByCertificate = 10;
+    optional uint32 BridgePileId = 11;
 }
 
 message TVersionInfo {
@@ -88,6 +90,7 @@ message TRegistrationRequest {
   optional bool FixedNodeId = 6;
   optional string Path = 7;
   optional bool AuthorizedByCertificate = 8;
+  optional string BridgePileName = 9;
 }
 
 message TRegistrationResponse {

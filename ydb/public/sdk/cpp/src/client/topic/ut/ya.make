@@ -40,7 +40,6 @@ SRCS(
     describe_topic_ut.cpp
     local_partition_ut.cpp
     topic_to_table_ut.cpp
-    trace_ut.cpp
 )
 
 RESOURCE(
@@ -49,3 +48,7 @@ RESOURCE(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    with_direct_read_ut
+)

@@ -6,18 +6,10 @@ tasks.withType<JavaCompile> {
     options.release.set({{ jdk_version }})
 }
 
-tasks.withType<JavaExec> {
-     jvmArgs = mutableListOf("--enable-preview")
-}
-
-tasks.withType<Test> {
-    jvmArgs = mutableListOf("--enable-preview")
-    environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
-}
-
 tasks.withType<Javadoc> {
     val javadocOptions = options as CoreJavadocOptions
     javadocOptions.addStringOption("source", "{{ jdk_version }}")
     javadocOptions.addBooleanOption("-enable-preview", true)
 }
+{#- AND SEE ALSO jvm_args.jinja -#}
 {% endif -%}

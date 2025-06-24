@@ -30,7 +30,7 @@ namespace NFlatExecutorSetup {
         Y_UNUSED(ctx);
     }
 
-    void ITablet::ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx)
+    void ITablet::ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx)
     {
         Y_UNUSED(status);
         Y_UNUSED(prod);

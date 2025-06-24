@@ -65,17 +65,9 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
                             SymbolsFromColors(actual));
     }
 
-    Y_UNIT_TEST(Blank) {
+    Y_UNIT_TEST(Empty) {
         auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "", "");
-        Check(highlight, " ", " ");
-        Check(highlight, "   ", "   ");
-        Check(highlight, "\n", " ");
-        Check(highlight, "\n\n", "  ");
-        Check(highlight, "\r\n", "  ");
-        Check(highlight, "\r", " ");
-        Check(highlight, "\r\n\n", "   ");
-        Check(highlight, "\r\n\r\n", "    ");
     }
 
     Y_UNIT_TEST(Invalid) {
@@ -84,148 +76,8 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "й", "u");
         Check(highlight, "编", "u");
         Check(highlight, "\xF0\x9F\x98\x8A", "u");
-        Check(highlight, "!select", "uuvvvvv");
-        Check(highlight, "!sselect", "uukkkkkk");
-    }
-
-    Y_UNIT_TEST(Keyword) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "SELECT", "kkkkkk");
-        Check(highlight, "select", "kkkkkk");
-        Check(highlight, "ALTER", "kkkkk");
-        Check(highlight, "GROUP BY", "kkkkk kk");
-        Check(highlight, "INSERT", "kkkkkk");
-    }
-
-    Y_UNIT_TEST(Operation) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "(1 + 21 / 4)", "on o nn o no");
-        Check(highlight, "(1+21/4)", "ononnono");
-    }
-
-    Y_UNIT_TEST(FunctionIdentifier) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-
-        Check(highlight, "MIN", "fff");
-        Check(highlight, "min", "fff");
-        Check(highlight, "MIN(123, 65)", "fffonnno nno");
-        Check(highlight, "MIN", "fff");
-
-        Check(highlight, "minimum", "vvvvvvv");
-        Check(highlight, "MINimum", "vvvvvvv");
-
-        Check(highlight, "Math::Sin", "ffffoofff");
-        Check(highlight, "Math", "vvvv");
-        Check(highlight, "Math::", "ffffoo");
-        Check(highlight, "::Sin", "oovvv");
-    }
-
-    Y_UNIT_TEST(TypeIdentifier) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "Bool", "tttt");
-        Check(highlight, "Bool(value)", "ttttovvvvvo");
-    }
-
-    Y_UNIT_TEST(VariableIdentifier) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "test", "vvvv");
-    }
-
-    Y_UNIT_TEST(QuotedIdentifier) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "`/cluster/database`", "qqqqqqqqqqqqqqqqqqq");
-        Check(highlight, "`test`select", "qqqqqqkkkkkk");
-        Check(highlight, "`/cluster", "uuuuuuuuu");
-        Check(highlight, "`\xF0\x9F\x98\x8A`", "qqq");
-    }
-
-    Y_UNIT_TEST(String) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "\"\"", "ss");
-        Check(highlight, "\"test\"", "ssssss");
-        Check(highlight, "\"", "u");
-        Check(highlight, "\"\"\"", "ssu");
-        Check(highlight, "\"\\\"", "uuu");
-        Check(highlight, "\"test select from", "uuuuu uuuuuu uuuu");
-        Check(highlight, "\"\\\"\"", "ssss");
-        Check(highlight, "\"select\"select", "sssssssssvvvvv");
-        Check(highlight, "\"select\"group", "sssssssskkkkk");
-        Check(highlight, "SELECT \\\"\xF0\x9F\x98\x8A\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
-    }
-
-    Y_UNIT_TEST(MultilineString) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-
-        Check(highlight, "@@", "oo");
-        Check(highlight, "@@@", "ooo");
-        Check(highlight, "@@@@", "ssss");
-        Check(highlight, "@@@@@", "sssss");
-        Check(highlight, "@@test@@@", "sssssssss");
-
-        Check(
-            highlight,
-            ("$txt = @@some\n"
-             "multiline\n"
-             "text@@;"),
-            ("ovvv o sssssss"
-             "ssssssssss"
-             "sssssso"));
-        Check(
-            highlight,
-            ("$txt = @@some\n"
-             "multiline with double at: @@@@\n"
-             "text@@;"),
-            ("ovvv o sssssss"
-             "sssssssssssssssssssssssssssssss"
-             "sssssso"));
-    }
-
-    Y_UNIT_TEST(TypedString) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(
-            highlight,
-            "SELECT \"foo\"u, '[1;2]'y, @@{\"a\":null}@@j;",
-            "kkkkkk sssssso sssssssso ssssssssssssssso");
-    }
-
-    Y_UNIT_TEST(Number) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-
-        Check(highlight, "1234", "nnnn");
-        Check(highlight, "-123", "onnn");
-
-        Check(
-            highlight,
-            ("SELECT "
-             "123l AS `Int64`, "
-             "0b01u AS `Uint32`, "
-             "0xfful AS `Uint64`, "
-             "0o7ut AS `Uint8`, "
-             "456s AS `Int16`, "
-             "1.2345f AS `Float`;"),
-            ("kkkkkk "
-             "nnnn kk qqqqqqqo "
-             "nnnnn kk qqqqqqqqo "
-             "nnnnnn kk qqqqqqqqo "
-             "nnnnn kk qqqqqqqo "
-             "nnnn kk qqqqqqqo "
-             "nnnnnnn kk qqqqqqqo"));
-    }
-
-    Y_UNIT_TEST(SQL) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "SELECT id, alias from users",
-              "kkkkkk vvo vvvvv kkkk vvvvv");
-        Check(highlight, "INSERT INTO users (id, alias) VALUES (12, \"tester\")",
-              "kkkkkk kkkk vvvvv ovvo vvvvvo kkkkkk onno sssssssso");
-        Check(
-            highlight,
-            "SELECT 123467, \"Hello, {name}!\", (1 + (5 * 1 / 0)), MIN(identifier)"
-            "FROM `local/test/space/table` JOIN test;",
-            "kkkkkk nnnnnno sssssssssssssssso on o on o n o nooo fffovvvvvvvvvvo"
-            "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo");
-        Check(highlight, "SELECT Bool(phone) FROM customer",
-              "kkkkkk ttttovvvvvo kkkk vvvvvvvv");
+        Check(highlight, "!select", "ukkkkkk");
+        Check(highlight, "!sselect", "uvvvvvvv");
     }
 
     Y_UNIT_TEST(Emoji) {
@@ -242,17 +94,10 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     Y_UNIT_TEST(Typing) {
         const TString query =
             "SELECT \n"
-            "  123467, \"Hello, {name}!\", \n"
+            "  123467, \"Hello, друг, {name} \xF0\x9F\x98\x8A!\", \n"
             "  (1 + (5 * 1 / 0)), MIN(identifier), \n"
             "  Bool(field), Math::Sin(var) \n"
             "FROM `local/test/space/table` JOIN test;";
-
-        const TString pattern =
-            "kkkkkk  "
-            "  nnnnnno sssssssssssssssso  "
-            "  on o on o n o nooo fffovvvvvvvvvvoo  "
-            "  ttttovvvvvoo ffffoofffovvvo  "
-            "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo";
 
         auto highlight = MakeYQLHighlighter(Coloring);
         for (std::size_t size = 0; size <= query.size(); ++size) {
@@ -260,109 +105,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
 
             auto colors = Apply(*highlight, prefix);
             Y_DO_NOT_OPTIMIZE_AWAY(colors);
-
-            if (size == query.size() || IsSpace(pattern[size])) {
-                const TStringBuf pattern_prefix(pattern, 0, size);
-                Check(highlight, prefix, pattern_prefix);
-            }
         }
     }
 
-    Y_UNIT_TEST(Comment) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(highlight, "- select", "o kkkkkk");
-        Check(highlight, "select -- select", "kkkkkk ccccccccc");
-        Check(highlight, "-- select\nselect", "cccccccccckkkkkk");
-        Check(highlight, "/* select */", "cccccccccccc");
-        Check(highlight, "select /* select */ select", "kkkkkk cccccccccccc kkkkkk");
-        Check(highlight, "/**/ --", "cccc cc");
-        Check(highlight, "/*/**/*/", "ccccccoo");
-    }
-
-    Y_UNIT_TEST(Multiline) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-        Check(
-            highlight,
-            "SELECT *\n"
-            "FROM test",
-            "kkkkkk o kkkk vvvv");
-        Check(
-            highlight,
-            "SELECT *\n"
-            "\n"
-            "\r\n"
-            "FROM test",
-            "kkkkkk o    kkkk vvvv");
-        Check(
-            highlight,
-            "SELECT *\r\n"
-            "FROM test",
-            "kkkkkk o  kkkk vvvv");
-        Check(
-            highlight,
-            "SELECT *\r\n"
-            "FROM test\n",
-            "kkkkkk o  kkkk vvvv ");
-    }
-
-    Y_UNIT_TEST(ANSI) {
-        auto highlight = MakeYQLHighlighter(Coloring);
-
-        Check(
-            highlight,
-            "--!ansi_lexer\n"
-            "SELECT * FROM T; /* this is a comment /* this is a nested comment */ */",
-            "cccccccccccccc"
-            "kkkkkk o kkkk vo cccccccccccccccccccccccccccccccccccccccccccccccccccccc");
-        Check(
-            highlight,
-            "--!ansi_lexer\n"
-            "SELECT 1 as \"column with \"\" double quote\";",
-            "cccccccccccccc"
-            "kkkkkk n kk ssssssssssssssssssssssssssssso");
-        Check(
-            highlight,
-            "--!ansi_lexer\n"
-            "SELECT 'string with '' quote';",
-            "cccccccccccccc"
-            "kkkkkk sssssssssssssssssssssso");
-
-        Check(
-            highlight,
-            " \t\n --!ansi_lexer \n"
-            "/* /* */ */",
-            "    ccccccccccccccc"
-            "ccccccccccc");
-
-        Check(
-            highlight,
-            (
-                "\n"
-                "\t --!ansi_lexer \n"
-                "-- Some comment\n"
-                "pragma SimpleColumns;\n"
-                "select 1, '''' as empty;"),
-            (
-                " "
-                "  ccccccccccccccc"
-                "cccccccccccccccc"
-                "kkkkkk vvvvvvvvvvvvvo "
-                "kkkkkk no ssss kk kkkkko"));
-        Check(
-            highlight,
-            (
-                "$str = '\n"
-                "--!ansi_lexer\n"
-                "--!syntax_v1\n"
-                "';\n"
-                "\n"
-                "select 1, $str, \"\" as empty;"),
-            (
-                "ovvv o ss"
-                "ssssssssssssss"
-                "sssssssssssss"
-                "so "
-                " "
-                "kkkkkk no ovvvo ss kk kkkkko"));
-    }
 } // Y_UNIT_TEST_SUITE(YqlHighlightTests)

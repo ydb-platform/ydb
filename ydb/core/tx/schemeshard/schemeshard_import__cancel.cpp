@@ -67,7 +67,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 case TImportInfo::EState::Transferring:
                     if (item.WaitTxId != InvalidTxId) {
                         importInfo->State = TImportInfo::EState::Cancellation;
-                        Send(Self->SelfId(), CancelRestorePropose(*importInfo, item.WaitTxId), 0, importInfo->Id);
+                        Send(Self->SelfId(), CancelRestoreTableDataPropose(*importInfo, item.WaitTxId), 0, importInfo->Id);
                     } else if (item.SubState == TImportInfo::TItem::ESubState::Proposed) {
                         importInfo->State = TImportInfo::EState::Cancellation;
                     }

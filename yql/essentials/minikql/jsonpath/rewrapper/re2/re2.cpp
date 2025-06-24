@@ -27,44 +27,44 @@ RE2::Options CreateOptions(const TStringBuf& regex, unsigned int flags) {
 class TRe2 : public IRe {
 public:
     TRe2(const TStringBuf& regex, unsigned int flags)
-        : Regexp(StringPiece(regex.data(), regex.size()), CreateOptions(regex, flags))
+        : Regexp_(StringPiece(regex.data(), regex.size()), CreateOptions(regex, flags))
     {
-        auto re2 = RawRegexp.MutableRe2();
+        auto re2 = RawRegexp_.MutableRe2();
         re2->set_regexp(TString(regex));
         re2->set_flags(flags);
     }
 
     TRe2(const TSerialization& proto)
-        : Regexp(StringPiece(proto.GetRe2().GetRegexp().data(), proto.GetRe2().GetRegexp().size()),
+        : Regexp_(StringPiece(proto.GetRe2().GetRegexp().data(), proto.GetRe2().GetRegexp().size()),
             CreateOptions(proto.GetRe2().GetRegexp(), proto.GetRe2().GetFlags()))
-        , RawRegexp(proto)
+        , RawRegexp_(proto)
     { }
 
     bool Matches(const TStringBuf& text) const override {
         const StringPiece piece(text.data(), text.size());
         RE2::Anchor anchor = RE2::UNANCHORED;
 
-        return Regexp.Match(piece, 0, text.size(), anchor, nullptr, 0);
+        return Regexp_.Match(piece, 0, text.size(), anchor, nullptr, 0);
     }
 
     TString Serialize() const override {
         TString data;
-        auto res = RawRegexp.SerializeToString(&data);
+        auto res = RawRegexp_.SerializeToString(&data);
         Y_ABORT_UNLESS(res);
         return data;
     }
 
     bool Ok(TString* error) const {
-        if (Regexp.ok()) {
+        if (Regexp_.ok()) {
             return true;
         } else {
-            *error = Regexp.error();
+            *error = Regexp_.error();
             return false;
         }
     }
 private:
-    RE2 Regexp;
-    TSerialization RawRegexp;
+    RE2 Regexp_;
+    TSerialization RawRegexp_;
 };
 
 }

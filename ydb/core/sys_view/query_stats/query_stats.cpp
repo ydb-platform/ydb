@@ -17,6 +17,10 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+namespace {
+    using NKikimrSysView::ESysViewType;
+}
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -96,11 +100,12 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         NKikimrSysView::EStatsType statsType,
         ui64 bucketCount, const TDuration& bucketSize)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
         , StatsType(statsType)
         , BucketRange(this->TableRange, bucketSize)
     {
@@ -503,51 +508,46 @@ private:
     NKikimrSysView::TEvGetQueryMetricsRequest Request;
 };
 
-THolder<NActors::IActor> CreateQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+THolder<NActors::IActor> CreateQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    auto viewName = tableId.SysViewInfo;
-
-    if (viewName == TopQueriesByDuration1MinuteName) {
-        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    switch (sysViewInfo.GetType()) {
+    case ESysViewType::ETopQueriesByDurationOneMinute:
+        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_DURATION_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
-
-    } else if (viewName == TopQueriesByDuration1HourName) {
-        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    case ESysViewType::ETopQueriesByDurationOneHour:
+        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_DURATION_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
-
-    } else if (viewName == TopQueriesByReadBytes1MinuteName) {
-        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    case ESysViewType::ETopQueriesByReadBytesOneMinute:
+        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_READ_BYTES_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
-
-    } else if (viewName == TopQueriesByReadBytes1HourName) {
-        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    case ESysViewType::ETopQueriesByReadBytesOneHour:
+        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_READ_BYTES_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
-
-    } else if (viewName == TopQueriesByCpuTime1MinuteName) {
-        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    case ESysViewType::ETopQueriesByCpuTimeOneMinute:
+        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_CPU_TIME_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
-
-    } else if (viewName == TopQueriesByCpuTime1HourName) {
-        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    case ESysViewType::ETopQueriesByCpuTimeOneHour:
+        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_CPU_TIME_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
-    } else if (viewName == TopQueriesByRequestUnits1MinuteName) {
-        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    case ESysViewType::ETopQueriesByRequestUnitsOneMinute:
+        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
-
-    } else if (viewName == TopQueriesByRequestUnits1HourName) {
-        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, tableId, tableRange, columns,
+    case ESysViewType::ETopQueriesByRequestUnitsOneHour:
+        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
+    default:
+        return {};
     }
-    return {};
 }
 
 } // NSysView

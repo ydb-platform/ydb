@@ -182,10 +182,10 @@ private:
     void AddChildNode(TNode* parent, TNode& child);
 
 private:
-    std::vector<TNode*> NodeList;
-    std::vector<TNode*>* Stack = nullptr;
-    bool BuildConsumersMap = false;
-    std::unordered_map<TNode*, TNodesVec> ConsumersMap;
+    std::vector<TNode*> NodeList_;
+    std::vector<TNode*>* Stack_ = nullptr;
+    bool BuildConsumersMap_ = false;
+    std::unordered_map<TNode*, TNodesVec> ConsumersMap_;
 };
 
 class TTypeEnvironment;

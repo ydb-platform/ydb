@@ -182,6 +182,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_req_nodata", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_nodata", true);
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_broken", true);
 }
@@ -3542,6 +3543,10 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     } else if (!msg->Success) {
         if (auto logl = Logger->Log(ELnLev::Error)) {
             logl << NFmt::Do(*this) << " Broken on compaction error";
+        }
+
+        if (msg->Exception) {
+            std::rethrow_exception(msg->Exception);
         }
 
         CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels), /* terminal */ true);

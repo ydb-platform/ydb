@@ -16,4 +16,6 @@ inline TString LogPrefix() { return {}; }
 #define PQ_LOG_ERROR(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << stream)
 #define PQ_LOG_CRIT(stream) LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << stream)
 
+#define Y_ABORT_UNLESS_S(expr, msg) Y_ABORT_UNLESS(expr, "%s", (TStringBuilder() << msg).data())
+
 } // namespace NKikimr::NPQ

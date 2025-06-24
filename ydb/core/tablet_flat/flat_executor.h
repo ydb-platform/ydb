@@ -727,7 +727,7 @@ public:
     TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId);
     ~TExecutor();
 
-    bool OnUnhandledException(const std::exception&) override;
+    bool OnUnhandledException(const std::exception& exc) override;
 
     STFUNC(StateInit);
     STFUNC(StateBoot);

@@ -8,11 +8,13 @@ message THeartbeatRequest {
     uint32 WorkerId = 1;
     string VolatileId = 2;
     repeated TTaskState TaskStates = 3;
+    uint64 AvailableSlots = 4;
 }
 
 message THeartbeatResponse {
     repeated TTask TasksToRun = 1;
     repeated string TaskToDeleteIds = 2;
+    bool NeedToRestart = 3;
 }
 
 message TStartOperationRequest {
@@ -33,6 +35,7 @@ message TStartOperationResponse {
 message TGetOperationResponse {
     EOperationStatus Status = 1;
     repeated TFmrError ErrorMessages = 2;
+    repeated TTableStats TableStats = 3;
 }
 
 message TDeleteOperationResponse {
@@ -47,3 +50,11 @@ message TGetFmrTableInfoResponse {
     TTableStats TableStats = 1;
     repeated TFmrError ErrorMessages = 2;
 }
+
+message TClearSessionRequest {
+    string SessionId = 1;
+}
+
+message TClearSessionResponse {
+    EOperationStatus Status = 1;
+};

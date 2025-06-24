@@ -84,7 +84,7 @@ private:
     const arrow::Datum& Datum_;
 };
 
-template <typename TType, bool rightIsScalar, bool rightIsOptional>
+template <typename TType, bool rightIsScalar, bool rightHasBitmask>
 void CoalesceByOneElement(size_t elements,
                           const ui8* leftBitMask,
                           const ui8* rightBitMask,
@@ -98,7 +98,7 @@ void CoalesceByOneElement(size_t elements,
     for (size_t i = 0; i < elements; i++) {
         if (arrow::BitUtil::GetBit(leftBitMask, i + leftOffset)) {
             out[i + outOffset] = left[i + leftOffset];
-            SetBitTo<rightIsOptional>(outBitMask, i + outOffset, true);
+            SetBitTo<rightHasBitmask>(outBitMask, i + outOffset, true);
         } else {
             if constexpr (rightIsScalar) {
                 out[i + outOffset] = right[0];
@@ -106,9 +106,9 @@ void CoalesceByOneElement(size_t elements,
                 out[i + outOffset] = right[i + rightOffset];
             }
 
-            SetBitTo<rightIsOptional>(outBitMask,
+            SetBitTo<rightHasBitmask>(outBitMask,
                                       i + outOffset,
-                                      GetBit<rightIsScalar, rightIsOptional>(rightBitMask, i + rightOffset));
+                                      GetBit<rightIsScalar, rightHasBitmask>(rightBitMask, i + rightOffset));
         }
     }
 }
@@ -126,7 +126,7 @@ Y_FORCE_INLINE ui8 GetMaskValue(const ui8* mask, size_t offset, size_t bitMaskPo
     }
 }
 
-template <typename TType, bool rightIsScalar, bool rightIsOptional, bool rightIsAlignedAsLeft>
+template <typename TType, bool rightIsScalar, bool rightHasBitmask, bool rightIsAlignedAsLeft>
 void VectorizedCoalesce(const ui8* __restrict leftBitMask,
                         const ui8* __restrict rightBitMask,
                         size_t leftOffset,
@@ -146,7 +146,7 @@ void VectorizedCoalesce(const ui8* __restrict leftBitMask,
          bytesProcessed < truncatedLengthInBytes;
          bytesProcessed += sizeInBytes, elemShift += 8, step += 1) {
         auto currentLeftMask = leftBitMask[leftOffset / 8 + step];
-        if constexpr (rightIsOptional) {
+        if constexpr (rightHasBitmask) {
             // If right is optional, updates the output bit mask.
             // Otherwise, the output bit mask doesn't exist.
             if constexpr (rightIsScalar) {
@@ -172,7 +172,7 @@ void VectorizedCoalesce(const ui8* __restrict leftBitMask,
 // Coalesces data from two inputs based on bit masks, handling either (array, array) or (array, scalar).
 // This function efficiently merges data from 'left' and 'right' into 'out' array using 'left.bitMask()' and 'right.bitMask()'.
 // The function is vectorization friendly, which can significantly improve performance.
-template <typename TType, bool rightIsScalar, bool rightIsOptional>
+template <typename TType, bool rightIsScalar, bool rightHasBitmask>
 void BlendCoalesce(TDatumStorageView<TType> left,
                    TDatumStorageView<TType> right,
                    TDatumStorageView<TType> out,
@@ -180,7 +180,7 @@ void BlendCoalesce(TDatumStorageView<TType> left,
     Y_ENSURE(left.offset() % 8 == out.offset() % 8);
     auto firstElementsToProcess = std::min((8 - left.offset() % 8) % 8, lengthInElements);
     // Process one by one until left mask is aligned by byte.
-    CoalesceByOneElement<TType, rightIsScalar, rightIsOptional>(firstElementsToProcess,
+    CoalesceByOneElement<TType, rightIsScalar, rightHasBitmask>(firstElementsToProcess,
                                                                 left.bitMask(),
                                                                 right.bitMask(),
                                                                 left.offset(),
@@ -194,7 +194,7 @@ void BlendCoalesce(TDatumStorageView<TType> left,
 
     // Process vectorized.
     if (left.offset() % 8 != right.offset() % 8) {
-        VectorizedCoalesce<TType, rightIsScalar, rightIsOptional, false>(left.bitMask(),
+        VectorizedCoalesce<TType, rightIsScalar, rightHasBitmask, false>(left.bitMask(),
                                                                          right.bitMask(),
                                                                          left.offset() + firstElementsToProcess,
                                                                          right.offset() + firstElementsToProcess,
@@ -205,7 +205,7 @@ void BlendCoalesce(TDatumStorageView<TType> left,
                                                                          out.bitMask(),
                                                                          lengthInElements);
     } else {
-        VectorizedCoalesce<TType, rightIsScalar, rightIsOptional, true>(left.bitMask(),
+        VectorizedCoalesce<TType, rightIsScalar, rightHasBitmask, true>(left.bitMask(),
                                                                         right.bitMask(),
                                                                         left.offset() + firstElementsToProcess,
                                                                         right.offset() + firstElementsToProcess,
@@ -218,7 +218,7 @@ void BlendCoalesce(TDatumStorageView<TType> left,
     }
     // Process remaining bits that take less memory than one byte.
     size_t remainingBits = (lengthInElements) % 8;
-    CoalesceByOneElement<TType, rightIsScalar, rightIsOptional>(remainingBits,
+    CoalesceByOneElement<TType, rightIsScalar, rightHasBitmask>(remainingBits,
                                                                 left.bitMask(),
                                                                 right.bitMask(),
                                                                 left.offset() + firstElementsToProcess + lengthInElements - remainingBits,

@@ -48,7 +48,7 @@ public:
 
         const auto valType = Type::getInt128Ty(context);
 
-        const bool useMulAddDiv = Divider > 1;
+        const bool useMulAddDiv = Divider_ > 1;
         const auto name = useMulAddDiv ? "DecimalMulAndDivNormalDivider" : "DecimalMul";
         const auto fnType = useMulAddDiv ?
             FunctionType::get(valType, { valType, valType, valType }, false):
@@ -77,12 +77,12 @@ public:
 
             Value* muldiv;
             if (useMulAddDiv) {
-                muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block), NDecimal::GenConstant(Divider, context) }, "mul_and_div", block);
+                muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block), NDecimal::GenConstant(Divider_, context) }, "mul_and_div", block);
             } else {
                 muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block) }, "mul", block);
             }
 
-            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
+            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(muldiv, context, block);
             const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, muldiv, ConstantInt::get(muldiv->getType(), 0), "plus", block);
 
@@ -98,12 +98,12 @@ public:
         } else {
             Value* muldiv;
             if (useMulAddDiv) {
-                muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block), NDecimal::GenConstant(Divider, context) }, "mul_and_div", block);
+                muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block), NDecimal::GenConstant(Divider_, context) }, "mul_and_div", block);
             } else {
                 muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block) }, "mul", block);
             }
 
-            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
+            const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(muldiv, context, block);
             const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, muldiv, ConstantInt::get(muldiv->getType(), 0), "plus", block);
 
@@ -129,7 +129,7 @@ private:
 template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
 class TDecimalMulIntegralWrapper : public TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalMultiplicator<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalMulIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
-    using NYql::NDecimal::TDecimalMultiplicator<TRight>::Bound;
+    using NYql::NDecimal::TDecimalMultiplicator<TRight>::Bound_;
 
 public:
     TDecimalMulIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision)
@@ -187,7 +187,7 @@ public:
                 static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
             const auto mul = CallInst::Create(func, {GetterForInt128(left, block), cast}, "div", block);
 
-            const auto ok = NDecimal::GenInBounds(mul, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
+            const auto ok = NDecimal::GenInBounds(mul, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(mul, context, block);
             const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, mul, ConstantInt::get(mul->getType(), 0), "plus", block);
 
@@ -206,7 +206,7 @@ public:
                 static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
             const auto mul = CallInst::Create(func, {GetterForInt128(left, block), cast}, "div", block);
 
-            const auto ok = NDecimal::GenInBounds(mul, NDecimal::GenConstant(-Bound, context), NDecimal::GenConstant(+Bound, context), block);
+            const auto ok = NDecimal::GenInBounds(mul, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(mul, context, block);
             const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, mul, ConstantInt::get(mul->getType(), 0), "plus", block);
 

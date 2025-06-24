@@ -22,16 +22,6 @@ public:
     }
 };
 
-class TInsertTableInitializer: public ITxShardInitReader {
-private:
-    using TBase = ITxShardInitReader;
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-
-public:
-    using TBase::TBase;
-};
-
 class TTxControllerInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
@@ -53,15 +43,6 @@ public:
 };
 
 class TStoragesManagerInitializer: public ITxShardInitReader {
-private:
-    using TBase = ITxShardInitReader;
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-
-public:
-    using TBase::TBase;
-};
-class TLongTxInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;

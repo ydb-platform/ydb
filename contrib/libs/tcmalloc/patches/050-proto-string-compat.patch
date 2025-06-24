@@ -1,0 +1,21 @@
+diff --git a/tcmalloc/profile_marshaler.cc b/tcmalloc/profile_marshaler.cc
+index dad14cc..3e008e1 100644
+--- a/tcmalloc/profile_marshaler.cc
++++ b/tcmalloc/profile_marshaler.cc
+@@ -15,6 +15,7 @@
+ #include "tcmalloc/profile_marshaler.h"
+ 
+ #include <string>
++#include <util/generic/string.h>
+ 
+ #include "google/protobuf/io/gzip_stream.h"
+ #include "google/protobuf/io/zero_copy_stream_impl.h"
+@@ -31,7 +32,7 @@ absl::StatusOr<std::string> Marshal(const tcmalloc::Profile& profile) {
+     return converted_or.status();
+   }
+ 
+-  std::string output;
++  TString output;
+   google::protobuf::io::StringOutputStream stream(&output);
+   google::protobuf::io::GzipOutputStream gzip_stream(&stream);
+   if (!(*converted_or)->SerializeToZeroCopyStream(&gzip_stream)) {

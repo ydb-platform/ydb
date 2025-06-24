@@ -57,6 +57,11 @@ TEST_F(TTlsTest, CreateContext)
     // Not that trivial as it seems!
 }
 
+TEST_F(TTlsTest, CreateSslObject)
+{
+    auto ssl = Context->NewSsl();
+}
+
 TEST_F(TTlsTest, CreateListener)
 {
     auto localhost = TNetworkAddress::CreateIPv6Loopback(0);

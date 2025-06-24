@@ -4,8 +4,14 @@ PY3_LIBRARY()
         conftest.py
         clickbench.py
         external.py
+        import_csv.py
         tpcds.py
         tpch.py
+        workload_executor.py
+        workload_simple_queue.py
+        workload_oltp.py
+        upload.py
+
     )
 
     PEERDIR (

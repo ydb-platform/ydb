@@ -172,7 +172,8 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& im
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo.State)),
         NIceDb::TUpdate<Schema::Imports::Issue>(importInfo.Issue),
         NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo.StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds())
+        NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds()),
+        NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size())
     );
 }
 
@@ -194,9 +195,12 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     const auto& item = importInfo.Items.at(itemIdx);
 
     auto record = db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx);
-    record.Update(
-        NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
-    );
+
+    if (item.Table) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Table->SerializeAsString())
+        );
+    }
 
     if (item.Topic) {
         record.Update(

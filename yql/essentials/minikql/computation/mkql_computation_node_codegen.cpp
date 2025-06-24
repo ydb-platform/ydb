@@ -1008,7 +1008,7 @@ TUnboxedImmutableCodegeneratorNode::TUnboxedImmutableCodegeneratorNode(TMemoryUs
 {}
 
 Value* TUnboxedImmutableCodegeneratorNode::CreateGetValue(const TCodegenContext& ctx, BasicBlock*&) const {
-    return ConstantInt::get(Type::getInt128Ty(ctx.Codegen.GetContext()), APInt(128, 2, reinterpret_cast<const uint64_t*>(&UnboxedValue)));
+    return ConstantInt::get(Type::getInt128Ty(ctx.Codegen.GetContext()), APInt(128, 2, reinterpret_cast<const uint64_t*>(&UnboxedValue_)));
 }
 
 TExternalCodegeneratorNode::TExternalCodegeneratorNode(TComputationMutables& mutables, EValueRepresentation kind)
@@ -1123,11 +1123,11 @@ Value* TExternalCodegeneratorNode::CreateGetValue(const TCodegenContext& ctx, Ba
         return LoadIfPointer(temporaryValue, itemType, block);
     }
 
-    MKQL_ENSURE(!Getter, "Wrong LLVM function generation order.");
+    MKQL_ENSURE(!Getter_, "Wrong LLVM function generation order.");
     auto& context = ctx.Codegen.GetContext();
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
     const auto value = new LoadInst(valueType, valuePtr, "value", block);
     return value;
 }
@@ -1139,7 +1139,7 @@ Value* TExternalCodegeneratorNode::CreateRefValue(const TCodegenContext& ctx, Ba
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
     const auto values = ctx.GetMutables();
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
     return valuePtr;
 }
 
@@ -1148,16 +1148,16 @@ void TExternalCodegeneratorNode::CreateSetValue(const TCodegenContext& ctx, Basi
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
     const auto values = ctx.GetMutables();
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
 
 
     if (value->getType()->isPointerTy()) {
-        ValueUnRef(RepresentationKind, valuePtr, ctx, block);
+        ValueUnRef(RepresentationKind_, valuePtr, ctx, block);
         const auto load = new LoadInst(valueType, value, "value", block);
         new StoreInst(load, valuePtr, block);
         new StoreInst(ConstantInt::get(load->getType(), 0), value, block);
     } else {
-        if (EValueRepresentation::Embedded == RepresentationKind) {
+        if (EValueRepresentation::Embedded == RepresentationKind_) {
             new StoreInst(value, valuePtr, block);
         } else {
             const auto load = new LoadInst(valueType, valuePtr, "value", block);
@@ -1168,9 +1168,9 @@ void TExternalCodegeneratorNode::CreateSetValue(const TCodegenContext& ctx, Basi
             BranchInst::Create(skip, refs, equal, block);
 
             block = refs;
-            ValueUnRef(RepresentationKind, valuePtr, ctx, block);
+            ValueUnRef(RepresentationKind_, valuePtr, ctx, block);
             new StoreInst(value, valuePtr, block);
-            ValueAddRef(RepresentationKind, valuePtr, ctx, block);
+            ValueAddRef(RepresentationKind_, valuePtr, ctx, block);
 
             BranchInst::Create(skip, block);
             block = skip;
@@ -1185,16 +1185,16 @@ Value* TExternalCodegeneratorNode::CreateSwapValue(const TCodegenContext& ctx, B
     const auto indexType = Type::getInt32Ty(context);
     const auto valueType = Type::getInt128Ty(context);
     const auto values = ctx.GetMutables();
-    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex)}, "value_ptr", block);
+    const auto valuePtr = GetElementPtrInst::CreateInBounds(valueType, values, {ConstantInt::get(indexType, ValueIndex_)}, "value_ptr", block);
     const auto output = new LoadInst(valueType, valuePtr, "output", block);
-    ValueRelease(RepresentationKind, output, ctx, block);
+    ValueRelease(RepresentationKind_, output, ctx, block);
 
     if (value->getType()->isPointerTy()) {
         const auto load = new LoadInst(valueType, value, "load", block);
         new StoreInst(load, valuePtr, block);
         new StoreInst(ConstantInt::get(load->getType(), 0), value, block);
     } else {
-        ValueAddRef(RepresentationKind, value, ctx, block);
+        ValueAddRef(RepresentationKind_, value, ctx, block);
         new StoreInst(value, valuePtr, block);
     }
 
@@ -1203,7 +1203,7 @@ Value* TExternalCodegeneratorNode::CreateSwapValue(const TCodegenContext& ctx, B
 }
 
 void TExternalCodegeneratorNode::CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const {
-    GenInvalidate(ctx, InvalidationSet, block);
+    GenInvalidate(ctx, InvalidationSet_, block);
 }
 
 void TExternalCodegeneratorNode::SetValueBuilder(TValueBuilder valueBuilder)
@@ -1217,7 +1217,7 @@ void TExternalCodegeneratorNode::SetValueGetterBuilder(TValueGetterBuilder value
 }
 
 void TWideFlowProxyCodegeneratorNode::CreateInvalidate(const TCodegenContext& ctx, BasicBlock*& block) const {
-    GenInvalidate(ctx, InvalidationSet, block);
+    GenInvalidate(ctx, InvalidationSet_, block);
 }
 
 void TWideFlowProxyCodegeneratorNode::SetGenerator(TGenerator&& generator) {

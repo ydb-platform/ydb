@@ -12,7 +12,9 @@ PEERDIR(
 END()
 
 RECURSE(
+    binding
     cluster
+    impatient
     ranking
     schema
     static

@@ -14,10 +14,7 @@ class IsAssigned(NodeAnalysis):
     arguments effects as it is use by value.
     """
 
-    def __init__(self):
-        """ Basic initialiser. """
-        self.result = list()
-        super(IsAssigned, self).__init__()
+    ResultType = list
 
     def visit_Name(self, node):
         """ Stored variable have new value. """

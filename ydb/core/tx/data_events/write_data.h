@@ -37,7 +37,7 @@ public:
 class TWriteMeta: public NColumnShard::TMonitoringObjectsCounter<TWriteMeta>, TNonCopyable {
 private:
     YDB_ACCESSOR(ui64, WriteId, 0);
-    YDB_READONLY_DEF(NColumnShard::TInternalPathId, TableId);
+    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
     YDB_ACCESSOR_DEF(std::optional<ui32>, GranuleShardingVersion);
     YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
@@ -84,14 +84,15 @@ public:
                 return true;
             case EModificationType::Update:
             case EModificationType::Replace:
+            case EModificationType::Increment:
                 return false;
         }
     }
 
-    TWriteMeta(const ui64 writeId, const NColumnShard::TInternalPathId tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
+    TWriteMeta(const ui64 writeId, const NColumnShard::TUnifiedPathId& pathId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
         const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
         : WriteId(writeId)
-        , TableId(tableId)
+        , PathId(pathId)
         , Source(source)
         , GranuleShardingVersion(granuleShardingVersion)
         , Id(writingIdentifier)
@@ -107,11 +108,10 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PrimaryKeySchema);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
     YDB_ACCESSOR_DEF(std::optional<NArrow::TSchemaSubset>, SchemaSubset);
-    YDB_READONLY(bool, WritePortions, false);
 
 public:
     TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
-        const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction, const bool writePortions);
+        const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction);
 
     const NArrow::TSchemaSubset& GetSchemaSubsetVerified() const {
         AFL_VERIFY(SchemaSubset);

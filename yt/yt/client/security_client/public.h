@@ -41,11 +41,14 @@ extern const std::string AlienCellSynchronizerUserName;
 extern const std::string QueueAgentUserName;
 extern const std::string YqlAgentUserName;
 extern const std::string TabletBalancerUserName;
+extern const std::string PermissionCacheUserName;
+extern const std::string ReplicatedTableTrackerUserName;
+extern const std::string ChunkReplicaCacheUserName;
 
-extern const TString EveryoneGroupName;
-extern const TString UsersGroupName;
-extern const TString SuperusersGroupName;
-extern const TString AdminsGroupName;
+extern const std::string EveryoneGroupName;
+extern const std::string UsersGroupName;
+extern const std::string SuperusersGroupName;
+extern const std::string AdminsGroupName;
 extern const std::string ReplicatorUserName;
 extern const std::string OwnerUserName;
 

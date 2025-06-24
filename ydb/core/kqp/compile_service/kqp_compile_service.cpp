@@ -52,7 +52,7 @@ struct TKqpCompileRequest {
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {},
         TMaybe<TQueryAst> queryAst = {},
-        NYql::TExprContext* splitCtx = nullptr,
+        std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
         NYql::TExprNode::TPtr splitExpr = nullptr)
         : Sender(sender)
         , Query(std::move(query))
@@ -70,8 +70,8 @@ struct TKqpCompileRequest {
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
         , QueryAst(std::move(queryAst))
-        , SplitCtx(splitCtx)
-        , SplitExpr(splitExpr)
+        , SplitCtx(std::move(splitCtx))
+        , SplitExpr(std::move(splitExpr))
     {}
 
     TActorId Sender;
@@ -93,7 +93,7 @@ struct TKqpCompileRequest {
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
     TMaybe<TQueryAst> QueryAst;
 
-    NYql::TExprContext* SplitCtx;
+    std::shared_ptr<NYql::TExprContext> SplitCtx;
     NYql::TExprNode::TPtr SplitExpr;
 
     bool FindInCache = true;
@@ -323,6 +323,8 @@ private:
         bool enableOlapScalarApply = TableServiceConfig.GetEnableOlapScalarApply();
         bool enableOlapSubstringPushdown = TableServiceConfig.GetEnableOlapSubstringPushdown();
 
+        bool enableIndexStreamWrite = TableServiceConfig.GetEnableIndexStreamWrite();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -359,8 +361,8 @@ private:
             TableServiceConfig.GetEnableNewRBO() != enableNewRBO ||
             TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
             TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
-            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown
-        )
+            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown ||
+            TableServiceConfig.GetEnableIndexStreamWrite() != enableIndexStreamWrite) 
         {
 
             QueryCache->Clear();

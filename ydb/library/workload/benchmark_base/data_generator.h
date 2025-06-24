@@ -13,18 +13,19 @@ private:
     class TFile : public TSimpleRefCount<TFile> {
     public:
         using TPtr = TIntrusivePtr<TFile>;
-        TFile(TDataGenerator& owner)
-            : Owner(owner)
-        {}
+        TFile(TDataGenerator& owner, const TString& path);
         virtual ~TFile() = default;
         virtual TDataPortionPtr GetPortion() = 0;
 
     protected:
         TDataGenerator& Owner;
+        TString Path;
+        TAdaptiveLock Lock;
     };
     class TCsvFileBase;
     class TTsvFile;
     class TCsvFile;
+    class TParquetFile;
     void AddFile(const TFsPath& path);
 
 private:

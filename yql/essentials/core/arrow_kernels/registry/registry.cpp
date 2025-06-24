@@ -18,7 +18,8 @@ namespace {
 
         void Init(const TString& serialized,
             const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-            const NKikimr::NMiniKQL::TComputationNodeFactory& nodeFactory) {
+            const NKikimr::NMiniKQL::TComputationNodeFactory& nodeFactory,
+            TLangVersion langver) {
             TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(Alloc_);
             Pgm_ = NKikimr::NMiniKQL::DeserializeRuntimeNode(serialized, Env_);
             auto pgmTop = AS_CALLABLE("BlockAsTuple", Pgm_);
@@ -29,7 +30,8 @@ namespace {
 
             Explorer_.Walk(Pgm_.GetNode(), Env_);
             NKikimr::NMiniKQL::TComputationPatternOpts opts(Alloc_.Ref(), Env_, nodeFactory,
-                &functionRegistry, NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", NKikimr::NMiniKQL::EGraphPerProcess::Multi);
+                &functionRegistry, NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF",
+                NKikimr::NMiniKQL::EGraphPerProcess::Multi, nullptr, nullptr, nullptr, nullptr, langver);
             std::vector<NKikimr::NMiniKQL::TNode*> entryPoints;
             if (argsCallable->GetType()->GetName() == "BlockAsTuple") {
                 for (ui32 i = 0; i < argsCallable->GetInputsCount(); ++i) {
@@ -76,9 +78,10 @@ namespace {
 
 std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> LoadKernels(const TString& serialized,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    const NKikimr::NMiniKQL::TComputationNodeFactory& nodeFactory) {
+    const NKikimr::NMiniKQL::TComputationNodeFactory& nodeFactory,
+    TLangVersion langver) {
     auto loader = std::make_shared<TLoader>();
-    loader->Init(serialized, functionRegistry, nodeFactory);
+    loader->Init(serialized, functionRegistry, nodeFactory, langver);
     std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> ret(loader->GetKernelsCount());
     auto deleter = [loader](const arrow::compute::ScalarKernel*) {};
     for (ui32 i = 0; i < ret.size(); ++i) {

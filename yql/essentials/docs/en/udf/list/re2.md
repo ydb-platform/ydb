@@ -16,6 +16,13 @@ The Re2 module supports regular expressions based on [google::RE2](https://githu
 
 By default, the UTF-8 mode is enabled automatically if the regular expression is a valid UTF-8-encoded string, but is not a valid ASCII string. You can manually control the settings of the re2 library, if you pass the result of the `Re2::Options` function as the second argument to other module functions, next to the regular expression.
 
+{% note info "Note" %}
+
+All regular expressions passed to functions must be valid. Otherwise, your query may fail.
+Starting from version [2025.03](../../changelog/2025.03.md#re2-module), such a query will definitely fail.
+
+{% endnote %}
+
 {% note warning %}
 
 Make sure to double all the backslashes in your regular expressions (if they are within a quoted string): standard string literals are treated as C-escaped strings in SQL. You can also format regular expressions as raw strings `@@regexp@@`: double slashes are not needed in this case.
@@ -88,7 +95,7 @@ Notes on Re2::Options from the official [repository](https://github.com/google/r
 | CaseSensitive:Bool? | true | match is case-sensitive (regexp can override with (?i) unless in posix_syntax mode) |
 | DotNl:Bool? | false | let `.` match `\n` (default ) |
 | Literal:Bool? | false | interpret string as literal, not regexp |
-| LogErrors:Bool? | true | log syntax and execution errors to ERROR |
+| LogErrors:Bool? | true | this option is ignored |
 | LongestMatch:Bool? | false | search for longest match, not first match |
 | MaxMem:Uint64? | - | (see below) approx. max memory footprint of RE2 |
 | NeverCapture:Bool? | false | parse all parents as non-capturing |
@@ -119,4 +126,3 @@ SELECT
 ```
 
 In both cases, the word FOO will be found. Using the raw string @@regexp@@ lets you avoid double slashes.
-

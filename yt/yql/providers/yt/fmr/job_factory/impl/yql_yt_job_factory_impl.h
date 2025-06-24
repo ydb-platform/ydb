@@ -13,7 +13,7 @@ struct TJobResult {
 };
 
 struct TFmrJobFactorySettings {
-    ui32 NumThreads = 3;
+    ui64 NumThreads = 10; // TODO - прокинуть в дефолтные настройки
     std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function;
     TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
 };

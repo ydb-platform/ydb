@@ -1,36 +1,46 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
-
 #include <ydb/library/actors/core/log.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
-#include <optional>
-#include <map>
 #include <deque>
-#include <string>
+#include <map>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace NKikimr::NArrow::NSplitter {
 
 class TSimpleSerializationStat {
+public:
+    enum class EOrigination : ui32 {
+        Statistic = 0,
+        Loader,
+        Mix
+    };
+
 protected:
     ui64 SerializedBytes = 0;
     ui64 RecordsCount = 0;
     ui64 RawBytes = 0;
+    YDB_ACCESSOR(EOrigination, Origination, EOrigination::Statistic);
+
 public:
     TSimpleSerializationStat() = default;
     TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes);
 
-    std::vector<i64> SplitRecords(const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize, const ui32 maxBlobSize);
+    std::vector<i64> SplitRecords(
+        const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize, const ui32 maxBlobSize);
 
     TString DebugString() const {
         return TStringBuilder() << "{"
-            << "serialized_bytes=" << SerializedBytes << ";"
-            << "records=" << RecordsCount << ";"
-            << "raw_bytes=" << RawBytes << ";"
-            << "}";
-    }
+                                << "serialized_bytes=" << SerializedBytes << ";"
+                                << "records=" << RecordsCount << ";"
+                                << "raw_bytes=" << RawBytes << ";"
+                                << "origination=" << ::ToString(Origination) << ";"
+                                << "}";
+    };
 
     double GetSerializedBytesPerRecord() const {
         AFL_VERIFY(RecordsCount);
@@ -41,10 +51,10 @@ public:
         return 1.0 * RawBytes / RecordsCount;
     }
 
-    ui64 GetSerializedBytes() const{
+    ui64 GetSerializedBytes() const {
         return SerializedBytes;
     }
-    ui64 GetRecordsCount() const{
+    ui64 GetRecordsCount() const {
         return RecordsCount;
     }
     ui64 GetRawBytes() const {
@@ -52,6 +62,9 @@ public:
     }
 
     void AddStat(const TSimpleSerializationStat& stat) {
+        if (stat.GetOrigination() != GetOrigination()) {
+            Origination = EOrigination::Mix;
+        }
         SerializedBytes += stat.SerializedBytes;
         RecordsCount += stat.RecordsCount;
         RawBytes += stat.RawBytes;
@@ -77,6 +90,10 @@ public:
         Y_ABORT_UNLESS(recordsCount);
         SerializedBytesPerRecord = 1.0 * bytes / recordsCount;
         RawBytesPerRecord = 1.0 * rawBytes / recordsCount;
+    }
+
+    ui64 PredictPackedSize(const ui32 recordsCount) const {
+        return SerializedBytesPerRecord * recordsCount;
     }
 
     TString DebugString() const {
@@ -125,11 +142,11 @@ private:
     using TBase = TSimpleSerializationStat;
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY_DEF(std::string, ColumnName);
+
 public:
     TColumnSerializationStat(const ui32 columnId, const std::string& columnName)
         : ColumnId(columnId)
         , ColumnName(columnName) {
-
     }
 
     double GetPackedRecordSize() const {
@@ -138,7 +155,8 @@ public:
 
     TColumnSerializationStat RecalcForRecordsCount(const ui64 recordsCount) const {
         TColumnSerializationStat result(ColumnId, ColumnName);
-        result.Merge(TSimpleSerializationStat(SerializedBytes / RecordsCount * recordsCount, recordsCount, RawBytes / RecordsCount * recordsCount));
+        result.Merge(TSimpleSerializationStat(
+            1.0 * SerializedBytes / RecordsCount * recordsCount, recordsCount, 1.0 * RawBytes / RecordsCount * recordsCount));
         return result;
     }
 
@@ -158,6 +176,7 @@ private:
     std::deque<TColumnSerializationStat> ColumnStat;
     std::map<ui32, TColumnSerializationStat*> StatsByColumnId;
     std::map<std::string, TColumnSerializationStat*> StatsByColumnName;
+
 public:
     TString DebugString() const {
         TStringBuilder sb;
@@ -179,8 +198,10 @@ public:
         auto it = StatsByColumnId.find(info.GetColumnId());
         if (it == StatsByColumnId.end()) {
             ColumnStat.emplace_back(info);
-            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second)("column_id", info.GetColumnId())("column_name", info.GetColumnName());
-            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second)("column_id", info.GetColumnId())("column_name", info.GetColumnName());
+            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second)("column_id", info.GetColumnId())(
+                                                                      "column_name", info.GetColumnName());
+            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second)("column_id", info.GetColumnId())(
+                                                                          "column_name", info.GetColumnName());
         } else {
             it->second->Merge(info);
         }
@@ -226,5 +247,4 @@ public:
         return result;
     }
 };
-
-}
+}   // namespace NKikimr::NArrow::NSplitter

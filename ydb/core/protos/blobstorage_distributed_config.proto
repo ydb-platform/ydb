@@ -36,6 +36,7 @@ message TStorageConfig { // contents of storage metadata
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
     NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
+    NKikimrBridge.TClusterStateHistory ClusterStateHistory = 17; // history of unsynced state changes
 }
 
 message TPDiskMetadataRecord {
@@ -56,6 +57,17 @@ message TStorageFileContent {
     repeated TRecord Record = 1;
 }
 
+message TCacheUpdate {
+    message TKeyValuePair {
+        string Key = 1; // unique cache item key
+        uint32 Generation = 2; // generation of the key: Value may only change with increasing generation
+        optional bytes Value = 3; // updated value; when not set, this item is considered to be deleted
+    }
+
+    repeated TKeyValuePair KeyValuePairs = 1;
+    repeated string RequestedKeys = 2;
+}
+
 // Attach sender node to the recipient one; if already bound, then just update configuration.
 message TEvNodeConfigPush {
     message TBoundNode {
@@ -65,6 +77,7 @@ message TEvNodeConfigPush {
     bool Initial = 1; // set to true if this push is initial connection establishment
     repeated TBoundNode BoundNodes = 2; // a list of bound node updates (including itself)
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
+    TCacheUpdate CacheUpdate = 4;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -73,6 +86,7 @@ message TEvNodeConfigReversePush {
     bool Rejected = 2; // is the request rejected due to cyclic graph?
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
     bool RecurseConfigUpdate = 4;
+    TCacheUpdate CacheUpdate = 5;
 }
 
 // Remove node from bound list.
@@ -153,6 +167,12 @@ message TEvNodeConfigGather {
     }
 }
 
+message TStateStorageConfig {
+    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 1;
+    optional NKikimrConfig.TDomainsConfig.TStateStorage StateStorageBoardConfig = 2;
+    optional NKikimrConfig.TDomainsConfig.TStateStorage SchemeBoardConfig = 3;
+}
+
 // Some kind of RPC -- this event can be sent to any NW, it will forward the request to root node.
 message TEvNodeConfigInvokeOnRoot {
     message TUpdateConfig {
@@ -191,6 +211,9 @@ message TEvNodeConfigInvokeOnRoot {
         bool StateStorageBoard = 4;
         bool SchemeBoard = 5;
     }
+
+    message TGetStateStorageConfig {
+    } 
 
     message TAdvanceGeneration
     {}
@@ -233,6 +256,8 @@ message TEvNodeConfigInvokeOnRoot {
         TReplaceStorageConfig ReplaceStorageConfig = 9;
         TBootstrapCluster BootstrapCluster = 10;
         TSwitchBridgeClusterState SwitchBridgeClusterState = 11;
+        TStateStorageConfig ReconfigStateStorage = 12;
+        TGetStateStorageConfig GetStateStorageConfig = 13;
     }
 }
 
@@ -270,15 +295,17 @@ message TEvNodeConfigInvokeOnRootResult {
     TScepter Scepter = 3;
 
     reserved 4, 6, 7, 8, 9;
-
+    
     oneof Response {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
+        TStateStorageConfig StateStorageConfig = 12;
     }
 }
 
 message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
     bool NoQuorum = 2;
+    TCacheUpdate CacheUpdate = 3;
 }

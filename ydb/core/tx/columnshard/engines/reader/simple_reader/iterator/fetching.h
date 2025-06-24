@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -209,6 +210,30 @@ public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TShardingFilter()
         : TBase("SHARDING") {
+    }
+};
+
+class TDuplicateFilter: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+    class TFilterSubscriber: public NDuplicateFiltering::IFilterSubscriber {
+    private:
+        std::weak_ptr<IDataSource> Source;
+        TFetchingScriptCursor Step;
+        NColumnShard::TCounterGuard TaskGuard;
+
+        virtual void OnFilterReady(NArrow::TColumnFilter&& filter) override;
+        virtual void OnFailure(const TString& reason) override;
+
+    public:
+        TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step);
+    };
+
+public:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    TDuplicateFilter()
+        : TBase("DUPLICATE") {
     }
 };
 

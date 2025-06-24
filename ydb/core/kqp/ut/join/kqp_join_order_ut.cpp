@@ -74,7 +74,7 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 
     CreateTables(session, "schema/lookupbug.sql", useColumnStore);
 
-    CreateTables(session, "schema/general_priorities_bug.sql", useColumnStore);
+    CreateTables(session, "schema/sortings.sql", useColumnStore);
 
     {
         CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
@@ -123,7 +123,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
 
-    serverSettings.SetNodeCount(2);
+    serverSettings.SetNodeCount(1);
     #if defined(_asan_enabled_)
         serverSettings.SetNodeCount(1);
     #endif
@@ -554,12 +554,17 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TChainTester(65).Test();
     }
 
+    struct TExecuteParams {
+        bool RemoveLimitOperator = false;
+    };
+
     std::pair<TString, std::vector<NYdb::TResultSet>> ExecuteJoinOrderTestGenericQueryWithStats(
         const TString& queryPath,
         const TString& statsPath,
         bool useStreamLookupJoin,
         bool useColumnStore,
-        bool useCBO = true
+        bool useCBO = true,
+        const TExecuteParams& params = {}
     ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
@@ -573,7 +578,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         /* join with parameters */
         {
-            const TString query = GetStatic(queryPath);
+            std::string query = GetStatic(queryPath);
+            if (params.RemoveLimitOperator) {
+                std::regex pattern(R"(\blimit\s+\d+\b)", std::regex_constants::icase);
+                query = std::regex_replace(std::string{query}, pattern, "");
+            }
+            Cout << query << Endl;
 
             auto explainRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
             explainRes.GetIssues().PrintTo(Cerr);
@@ -704,34 +714,90 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     /* tpcds23 has > 1 result sets */
-    Y_UNIT_TEST_TWIN(TPCDS23, ColumnStore) {
-        ExplainJoinOrderTestDataQueryWithStats(
-            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, ColumnStore
+    Y_UNIT_TEST(TPCDS23) {
+        ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/tpcds23.sql", "stats/tpcds1000s.json", false, true
         );
     }
 
-    bool CheckLimitOnlyNotTopSort(const TString& plan) {
-        return plan.Contains("Limit") && !plan.Contains("Top");
+    bool CheckNoSortings(const TString& plan) {
+        return !plan.Contains("Top") && !plan.Contains("SortBy");
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug1) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug.sql", "stats/general_priorities_bug.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    bool CheckSorting(const TString& plan) {
+        return !CheckNoSortings(plan);
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug2) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug2.sql", "stats/general_priorities_bug.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    // tests, that check redudant sortings removal : if RemoveLimit is on we delete limit from the query to check
+    // if a sort operator was deleted, otherwise we want topsort deleted
+    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByPKAlias, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_pk_alias.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug3) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug3.sql", "stats/general_priorities_bug.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    Y_UNIT_TEST_TWIN(SortingsSimpleOrderByAliasIndexDesc, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_simple_order_by_alias_index_desc.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
     }
 
-    Y_UNIT_TEST(GeneralPrioritiesBug4) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/general_priorities_bug4.sql", "stats/general_priorities_bug.json", true, false);
-        UNIT_ASSERT(CheckLimitOnlyNotTopSort(plan));
+    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin1, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_1.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin2, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_2.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin3, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_3.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsWithLookupJoin4, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_4.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsByPrefixWithAttrEquiToPK, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_attr_equiv_to_pk.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsByPKWithLookupJoin, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk_with_lookupjoin.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsWithLookupJoinByPrefix, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_with_lookupjoin_by_prefix.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsByPrefixWithConstant, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_prefix_with_constant.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsByPK, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_by_pk.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(Sortings4Year, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_4_year.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsComplexOrderBy, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_complex_order_by.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckNoSortings(plan));
+    }
+
+    Y_UNIT_TEST_TWIN(SortingsDifferentDirs, RemoveLimitOperator) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/sortings_different_dirs.sql", "stats/sortings.json", true, false, true, {.RemoveLimitOperator = RemoveLimitOperator});
+        UNIT_ASSERT(CheckSorting(plan));
     }
 
     Y_UNIT_TEST_TWIN(TPCDS34, ColumnStore) {
@@ -992,14 +1058,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(TPCHEveryQueryWorks) {
+    Y_UNIT_TEST_TWIN(TPCHEveryQueryWorks, ColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpch1000s.json"), true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
         auto session = result.GetSession();
 
-        CreateTables(session, "schema/tpch.sql", true);
+        CreateTables(session, "schema/tpch.sql", ColumnStore);
 
         RunBenchmarkQueries(
             session,
@@ -1012,14 +1078,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    Y_UNIT_TEST(TPCDSEveryQueryWorks) {
+    Y_UNIT_TEST_TWIN(TPCDSEveryQueryWorks, ColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(false, GetStatic("stats/tpcds1000s.json"), true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
         auto session = result.GetSession();
 
-        CreateTables(session, "schema/tpcds.sql", true);
+        CreateTables(session, "schema/tpcds.sql", ColumnStore);
 
         RunBenchmarkQueries(
             session,

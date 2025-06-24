@@ -42,6 +42,9 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> SysViews;
 
+    // Can we have multiple long incremental restore operations?
+    TDeque<NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
@@ -132,6 +135,10 @@ public:
 
     void PersistSysView(const TPathId& pathId) {
         SysViews.emplace_back(pathId);
+    }
+
+    void PersistLongIncrementalRestoreOp(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
+        LongIncrementalRestoreOps.emplace_back(op);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

@@ -1,5 +1,7 @@
 PY3TEST()
 
+TIMEOUT(21600)
+
 TAG(ya:manual)
 
 SIZE(LARGE)

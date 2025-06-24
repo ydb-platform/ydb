@@ -249,6 +249,10 @@ public:
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
+        if (Context.ComputeCtx) {
+            Context.ComputeCtx->StartTs = &Stats->StartTs;
+            Context.ComputeCtx->InputConsumed = &InputConsumed;
+        }
         if (Y_UNLIKELY(CollectFull())) {
             Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
         }
@@ -679,6 +683,7 @@ public:
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
                     settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
                     settings.ArrayBufferMinFillPercentage = memoryLimits.ArrayBufferMinFillPercentage;
+                    settings.BufferPageAllocSize = memoryLimits.BufferPageAllocSize;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.Level = StatsModeToCollectStatsLevel(Settings.StatsMode);
 

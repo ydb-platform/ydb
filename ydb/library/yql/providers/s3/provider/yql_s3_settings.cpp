@@ -19,6 +19,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, ArrowRowGroupReordering);
     REGISTER_SETTING(*this, ParallelDownloadCount);
     REGISTER_SETTING(*this, UseBlocksSource);
+    REGISTER_SETTING(*this, UseBlocksSink);
     REGISTER_SETTING(*this, AtomicUploadCommit);
     REGISTER_SETTING(*this, UseConcurrentDirectoryLister);
     REGISTER_SETTING(*this, MaxDiscoveryFilesPerDirectory).Lower(1);
@@ -36,7 +37,7 @@ TS3Settings::TConstPtr TS3Configuration::Snapshot() const {
 }
 
 bool TS3Configuration::HasCluster(TStringBuf cluster) const {
-    return ValidClusters.contains(cluster);
+    return GetValidClusters().contains(cluster);
 }
 
 void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx)

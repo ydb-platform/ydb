@@ -319,6 +319,7 @@ static void s_mqtt_request_response_client_final_destroy(struct aws_mqtt_request
     aws_mqtt_request_response_client_subscriptions_clean_up(&client->subscriptions);
     aws_hash_table_clean_up(&client->operations_by_correlation_tokens);
 
+    aws_event_loop_group_release_from_event_loop(client->loop);
     aws_mem_release(client->allocator, client);
 
     if (terminate_callback != NULL) {
@@ -1060,8 +1061,19 @@ static struct aws_mqtt_request_response_client *s_aws_mqtt_request_response_clie
 
     rr_client->allocator = allocator;
     rr_client->config = *options;
-    rr_client->loop = loop;
     rr_client->state = AWS_RRCS_UNINITIALIZED;
+
+    rr_client->loop = loop;
+    // kept a reference to the event loop group to keep the event loop alive. It should be released when the client is
+    // destroyed.
+    if (!aws_event_loop_group_acquire_from_event_loop(loop)) {
+        aws_mem_release(allocator, rr_client);
+        AWS_LOGF_ERROR(
+            AWS_LS_MQTT_REQUEST_RESPONSE,
+            "(static) request response client creation failed - unable to acquire event loop group");
+        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        return NULL;
+    }
 
     aws_hash_table_init(
         &rr_client->operations,
@@ -1639,6 +1651,11 @@ static void s_mqtt_rr_client_submit_operation(struct aws_task *task, void *arg, 
     struct aws_mqtt_request_response_client *client = operation->client_internal_ref;
 
     if (status == AWS_TASK_STATUS_CANCELED) {
+        goto done;
+    }
+
+    if (client->state == AWS_RRCS_SHUTTING_DOWN) {
+        s_request_response_fail_operation(operation, AWS_ERROR_MQTT_REQUEST_RESPONSE_CLIENT_SHUT_DOWN);
         goto done;
     }
 

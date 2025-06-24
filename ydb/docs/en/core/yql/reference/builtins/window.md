@@ -1,14 +1,14 @@
 
 # List of window functions in YQL
 
-The syntax for calling window functions is detailed in a [separate article](../syntax/window.md).
+The syntax for calling window functions is detailed in a [separate article](../syntax/select/window.md).
 
 
 
 ## Aggregate functions {#aggregate-functions}
 
 All [aggregate functions](aggregation.md) can also be used as window functions.
-In this case, each row includes an aggregation result obtained on a set of rows from the [window frame](../syntax/window.md#frame).
+In this case, each row includes an aggregation result obtained on a set of rows from the [window frame](../syntax/select/window.md#frame).
 
 ### Examples
 
@@ -26,7 +26,7 @@ WINDOW
 
 ## ROW_NUMBER {#row_number}
 
-Row number within a [partition](../syntax/window.md#partition). No arguments.
+Row number within a [partition](../syntax/select/window.md#partition). No arguments.
 
 ### Signature
 
@@ -47,7 +47,7 @@ WINDOW w AS (ORDER BY key);
 
 ## LAG / LEAD {#lag-lead}
 
-Accessing a value from a row in the [section](../syntax/window.md#partition) that lags behind (`LAG`) or leads (`LEAD`) the current row by a fixed number. The first argument specifies the expression to be accessed, and the second argument specifies the offset in rows. You may omit the offset. By default, the neighbor row is used: the previous or next, respectively (hence, 1 is assumed by default). For the rows having no neighbors at a given distance (for example, `LAG(expr, 3)` `NULL` is returned in the first and second rows of the section).
+Accessing a value from a row in the [section](../syntax/select/window.md#partition) that lags behind (`LAG`) or leads (`LEAD`) the current row by a fixed number. The first argument specifies the expression to be accessed, and the second argument specifies the offset in rows. You may omit the offset. By default, the neighbor row is used: the previous or next, respectively (hence, 1 is assumed by default). For the rows having no neighbors at a given distance (for example, `LAG(expr, 3)` `NULL` is returned in the first and second rows of the section).
 
 ### Signature
 
@@ -93,7 +93,7 @@ item  odd  lag1
 
 ## FIRST_VALUE / LAST_VALUE
 
-Access values from the first and last rows (using the `ORDER BY` clause for the window) of the [window frame](../syntax/window.md#frame). The only argument is the expression that you need to access.
+Access values from the first and last rows (using the `ORDER BY` clause for the window) of the [window frame](../syntax/select/window.md#frame). The only argument is the expression that you need to access.
 
 Optionally, `OVER` can be preceded by the additional modifier `IGNORE NULLS`. It changes the behavior of functions to the first or last **non-empty** (i.e., non-`NULL`) value among the window frame rows. The antonym of this modifier is `RESPECT NULLS`: it's the default behavior that can be omitted.
 
@@ -124,7 +124,7 @@ WINDOW w AS (ORDER BY key);
 
 ## NTH_VALUE
 
-Access a value from a row specified by position in the window's `ORDER BY` order within [window frame](../syntax/window.md#frame). Arguments - the expression to access and the row number, starting with 1.
+Access a value from a row specified by position in the window's `ORDER BY` order within [window frame](../syntax/select/window.md#frame). Arguments - the expression to access and the row number, starting with 1.
 
 Optionally, the `IGNORE NULLS` modifier can be specified before `OVER`, which causes rows with `NULL` in the first argument's value to be skipped. The antonym of this modifier is `RESPECT NULLS`, which is the default behavior and may be skipped.
 
@@ -155,7 +155,7 @@ WINDOW w AS (ORDER BY key);
 
 ## RANK / DENSE_RANK / PERCENT_RANK {#rank}
 
-Number the groups of neighboring rows in the [partition](../syntax/window.md#partition) with the same expression value in the argument. `DENSE_RANK` numbers the groups one by one, and `RANK` skips `(N - 1)` values, with `N` being the number of rows in the previous group. `PERCENT_RANK` returns the relative rank of the current row: $(RANK - 1)/(number of rows in the partition - 1)$.
+Number the groups of neighboring rows in the [partition](../syntax/select/window.md#partition) with the same expression value in the argument. `DENSE_RANK` numbers the groups one by one, and `RANK` skips `(N - 1)` values, with `N` being the number of rows in the previous group. `PERCENT_RANK` returns the relative rank of the current row: $(RANK - 1)/(number of rows in the partition - 1)$.
 
 If there is no argument, it uses the order specified in the `ORDER BY` section in the window definition.
 If the argument is omitted and `ORDER BY` is not specified, then all rows are considered equal to each other.
@@ -201,7 +201,7 @@ WINDOW w AS (ORDER BY my_column);
 
 ## NTILE
 
-Distributes the rows of an ordered [partition](../syntax/window.md#partition) into a specified number of groups. The groups are numbered starting with one. For each row, the `NTILE` function returns the number of the group to which the row belongs.
+Distributes the rows of an ordered [partition](../syntax/select/window.md#partition) into a specified number of groups. The groups are numbered starting with one. For each row, the `NTILE` function returns the number of the group to which the row belongs.
 
 ### Signature
 
@@ -222,7 +222,7 @@ WINDOW w AS (ORDER BY key);
 
 ## CUME_DIST
 
-Returns the relative position (> 0 and <= 1) of a row within a [partition](../syntax/window.md#partition). No arguments.
+Returns the relative position (> 0 and <= 1) of a row within a [partition](../syntax/select/window.md#partition). No arguments.
 
 ### Signature
 
@@ -242,6 +242,6 @@ WINDOW w AS (ORDER BY key);
 
 ## SessionState() {#session-state}
 
-A non-standard window function `SessionState()` (without arguments) lets you get the session calculation status from [SessionWindow](../syntax/group_by.md#session-window) for the current row.
+A non-standard window function `SessionState()` (without arguments) lets you get the session calculation status from [SessionWindow](../syntax/select/group-by.md#session-window) for the current row.
 It's allowed only if `SessionWindow()` is present in the `PARTITION BY` section in the window definition.
 

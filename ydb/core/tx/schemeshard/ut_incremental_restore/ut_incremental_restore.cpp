@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
             Name: "TestCollection"
         )";
 
-        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/NotABackupDir/", restoreSettings, 
+        TestRestoreBackupCollection(runtime, ++txId, "/MyRoot/NotABackupDir/", restoreSettings,
                                    {NKikimrScheme::StatusNameConflict});
         env.TestWaitNotification(runtime, txId);
     }

@@ -1,5 +1,6 @@
-#include "schemeshard__operation_common.h"
 #include "schemeshard__operation_drop_cdc_stream.h"
+
+#include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 

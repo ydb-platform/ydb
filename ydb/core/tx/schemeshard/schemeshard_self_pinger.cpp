@@ -1,5 +1,6 @@
-#include "schemeshard.h"  // for TEvMeasureSelfResponseTime and TEvWakeupToMeasureSelfResponseTime
 #include "schemeshard_self_pinger.h"
+
+#include "schemeshard.h"  // for TEvMeasureSelfResponseTime and TEvWakeupToMeasureSelfResponseTime
 
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 

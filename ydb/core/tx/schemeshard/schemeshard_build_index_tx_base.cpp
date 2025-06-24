@@ -1,7 +1,8 @@
+#include "schemeshard_build_index_tx_base.h"
+
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard_billing_helpers.h"
 #include "schemeshard_build_index_helpers.h"
-#include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_identificators.h"
 #include "schemeshard_impl.h"
 

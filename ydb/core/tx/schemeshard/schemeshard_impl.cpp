@@ -1,10 +1,10 @@
-#include "schemeshard.h"
-#include "schemeshard__data_erasure_manager.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_svp_migration.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
+#include "schemeshard.h"
+#include "schemeshard__data_erasure_manager.h"
+#include "schemeshard_svp_migration.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "dedicated_pipe_pool.h"
+#include "olap/manager/manager.h"
+#include "operation_queue_timer.h"
 #include "schemeshard.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
@@ -17,10 +20,6 @@
 #include "schemeshard_shard_deleter.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
-
-#include "dedicated_pipe_pool.h"
-#include "olap/manager/manager.h"
-#include "operation_queue_timer.h"
 
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>

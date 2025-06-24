@@ -1,8 +1,7 @@
 #pragma once
 
-#include "schemeshard_identificators.h"
-
 #include "defs.h"
+#include "schemeshard_identificators.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 

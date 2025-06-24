@@ -1,7 +1,6 @@
 #pragma once
-#include "schemeshard_identificators.h"
-
 #include "defs.h"
+#include "schemeshard_identificators.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/storage_pools.h>

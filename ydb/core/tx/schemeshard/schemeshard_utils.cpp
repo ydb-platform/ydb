@@ -1,5 +1,6 @@
-#include "schemeshard_info_types.h"
 #include "schemeshard_utils.h"
+
+#include "schemeshard_info_types.h"
 
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/utils.h>

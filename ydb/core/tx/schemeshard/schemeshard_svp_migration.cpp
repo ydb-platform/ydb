@@ -1,5 +1,6 @@
-#include "schemeshard_impl.h"
 #include "schemeshard_svp_migration.h"
+
+#include "schemeshard_impl.h"
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 

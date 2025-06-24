@@ -1,10 +1,11 @@
+#include "schemeshard__operation_restore_backup_collection.h"
+
 #include "schemeshard__backup_collection_common.h"
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__operation_base.h"
 #include "schemeshard__operation_change_path_state.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard__operation_restore_backup_collection.h"
 #include "schemeshard__operation_states.h"
 
 #include <ydb/core/base/test_failure_injection.h>

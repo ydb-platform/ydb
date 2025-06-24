@@ -73,14 +73,9 @@ public:
             << ", opId: " << OperationId);
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.GetPathIdForDomain());
         
-        // Set the target path that will have its state changed
         txState.TargetPathId = path.Base()->PathId;
-        
-        // Set TargetPathTargetState instead of changing path state immediately
-        NIceDb::TNiceDb db(context.GetDB());
         txState.TargetPathTargetState = static_cast<NKikimrSchemeOp::EPathState>(changePathState.GetTargetState());
         
-        // Set the path state directly to allow the operation to proceed
         path.Base()->PathState = *txState.TargetPathTargetState;
         context.DbChanges.PersistPath(path.Base()->PathId);
         

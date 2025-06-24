@@ -786,15 +786,6 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
         return join;
     }
 
-    // Check if we should use block hash join
-    if (useBlockHashJoin && joinType == "Inner"sv && joinType != "Cross"sv) {
-        // Only support inner joins for block hash join for now
-        YQL_ENSURE(join.LeftInput().Maybe<TDqCnUnionAll>());
-        YQL_ENSURE(join.RightInput().Maybe<TDqCnUnionAll>());
-        
-        return DqBuildBlockHashJoin(join, ctx);
-    }
-
     TExprNode::TListType flags;
     if (const auto maybeFlags = join.Flags()) {
         flags = maybeFlags.Cast().Ref().ChildrenList();
@@ -1348,9 +1339,14 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
 
 }
 
-TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap) {
+TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
+
+    // Check if we should use block hash join
+    if (useBlockHashJoin && joinType == "Inner"sv) {
+        return DqBuildBlockHashJoin(join, ctx);
+    }
 
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();

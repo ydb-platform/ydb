@@ -9,6 +9,12 @@
 #include "olap/schema/schema.h"
 #include "olap/schema/update.h"
 
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
@@ -37,12 +43,6 @@
 #include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
-
-#include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/api/protos/ydb_coordination.pb.h>
-#include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 

@@ -2,6 +2,9 @@
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
 
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
+
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
@@ -10,9 +13,6 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
 

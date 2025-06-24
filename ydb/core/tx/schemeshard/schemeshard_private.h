@@ -1,12 +1,12 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/datetime/base.h>
 

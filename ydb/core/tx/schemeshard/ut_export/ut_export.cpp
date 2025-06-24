@@ -1,3 +1,5 @@
+#include <ydb/public/api/protos/ydb_export.pb.h>
+
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -10,8 +12,6 @@
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
-
-#include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <library/cpp/testing/hook/hook.h>
 

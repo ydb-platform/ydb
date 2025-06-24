@@ -1,5 +1,7 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
+#include <ydb/public/api/protos/ydb_import.pb.h>
+
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -15,8 +17,6 @@
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
-
-#include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>

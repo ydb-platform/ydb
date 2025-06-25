@@ -2,6 +2,8 @@
 
 Managing the default behavior of Yson UDF, for more information, see the [documentation](../../udf/list/yson.md) and, in particular, [Yson::Options](../../udf/list/yson.md#ysonoptions).
 
+The Yson pragma affects all subsequent expressions up to the end of the module in which it occurs.
+
 ## `yson.AutoConvert` {#autoconvert}
 
 | Value type | Default |

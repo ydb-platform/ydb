@@ -71,6 +71,7 @@ public:
         const NJson::TJsonValue* lastMessageNode = nullptr,
         const NJson::TJsonValue* waitTimeUsNode = nullptr);
     TSingleMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
+    TSingleMetric(std::shared_ptr<TSummaryMetric> summary);
 
     std::shared_ptr<TSummaryMetric> Summary;
     TAggregation Details;

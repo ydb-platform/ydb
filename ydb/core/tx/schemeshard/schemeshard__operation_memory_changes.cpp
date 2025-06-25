@@ -1,5 +1,5 @@
 #include "schemeshard__operation_memory_changes.h"
-#include "schemeshard__operation_memory_changes.h"
+
 #include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {

@@ -1,17 +1,18 @@
 #pragma once
 
-#include <util/generic/string.h>
-#include <util/generic/ptr.h>
-#include <util/generic/set.h>
+#include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_side_effects.h"
+#include "schemeshard_tx_infly.h"
+#include "schemeshard_types.h"
+
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
 
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_types.h"
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard__operation_memory_changes.h"
-#include "schemeshard__operation_db_changes.h"
+#include <util/generic/ptr.h>
+#include <util/generic/set.h>
+#include <util/generic/string.h>
 
 
 #define SCHEMESHARD_INCOMING_EVENTS(action) \

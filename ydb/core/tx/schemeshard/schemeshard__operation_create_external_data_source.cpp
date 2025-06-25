@@ -1,8 +1,8 @@
+#include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_external_data_source.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
-#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 

@@ -1,22 +1,22 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for NTableIndex::ExtractInfo
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
-
-#include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
-#include <ydb/core/tx/datashard/range_ops.h>
-#include <ydb/core/tx/datashard/upload_stats.h>
-#include <ydb/core/tx/datashard/scan_common.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for NTableIndex::ExtractInfo
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/datashard/scan_common.h>
+#include <ydb/core/tx/datashard/upload_stats.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/tx_proxy/upload_rows.h>
 #include <ydb/core/ydb_convert/table_description.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 namespace NKikimr {

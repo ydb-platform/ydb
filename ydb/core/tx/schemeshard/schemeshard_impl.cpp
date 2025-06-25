@@ -1,32 +1,36 @@
-#include "schemeshard.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_svp_migration.h"
+
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
+#include "schemeshard.h"
 #include "schemeshard__data_erasure_manager.h"
+#include "schemeshard_svp_migration.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tablet/tablet_counters_aggregator.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
-#include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/protos/auth.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
-#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/sys_view/partition_stats/partition_stats.h>
+#include <ydb/core/tablet/tablet_counters_aggregator.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
-#include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/library/login/password_checker/password_checker.h>
+
 #include <ydb/library/login/account_lockout/account_lockout.h>
+#include <ydb/library/login/password_checker/password_checker.h>
+
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+
 #include <util/random/random.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>

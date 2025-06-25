@@ -249,15 +249,7 @@ private:
 
 public:
     TRequestInput(const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<TVersionedIndex>& versions,
-        const NBlobOperations::EConsumer consumer, const TString& externalTaskId)
-        : Consumer(consumer)
-        , ExternalTaskId(externalTaskId) {
-        AFL_VERIFY(portions.size());
-        ActualSchema = versions->GetLastSchema();
-        for (auto&& i : portions) {
-            Portions.emplace_back(std::make_shared<TFullPortionInfo>(i, versions->GetSchemaVerified(i->GetSchemaVersionVerified())));
-        }
-    }
+        const NBlobOperations::EConsumer consumer, const TString& externalTaskId);
 };
 
 }   // namespace NKikimr::NOlap::NDataFetcher

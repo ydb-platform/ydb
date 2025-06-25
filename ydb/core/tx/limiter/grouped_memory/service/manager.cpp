@@ -123,8 +123,8 @@ void TManager::UnregisterProcess(const ui64 externalProcessId) {
         return;
     }
     Y_UNUSED(ProcessIds.ExtractInternalIdVerified(externalProcessId));
-    it->second.Unregister();
     AFL_VERIFY(ProcessesOrdered.erase(it->second.BuildUsageAddress()));
+    it->second.Unregister();
     Processes.erase(it);
     const ui64 nextInternalProcessId = ProcessIds.GetMinInternalIdDef(internalProcessId);
     if (internalProcessId < nextInternalProcessId) {

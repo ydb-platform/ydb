@@ -1,4 +1,5 @@
 #include "data_erasure_helpers.h"
+
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 namespace NSchemeShardUT_Private {

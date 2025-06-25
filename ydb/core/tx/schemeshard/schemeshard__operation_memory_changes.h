@@ -1,11 +1,12 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_path_element.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/stack.h>
+
 #include <optional>
 
 namespace NKikimr::NSchemeShard {

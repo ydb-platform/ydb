@@ -1,12 +1,10 @@
 #include "schemeshard__operation_create_cdc_stream.h"
 
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-
-#include "schemeshard_utils.h"  // for TransactionTemplate
-
+#include "schemeshard__operation_part.h"
 #include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>

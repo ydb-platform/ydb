@@ -56,7 +56,98 @@
     - `query_text` — текст SQL-запроса.
     - `query_type` — тип запроса, возможные значения: `QUERY_TYPE_SQL_GENERIC_QUERY`, `QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY`.
     - `table_metadata` — список Protobuf-описаний (сериализованных в JSON) для всех таблиц, участвующих в запросе. Каждый элемент списка содержит описание схемы таблицы, индексов и статистики, все эти поля изначально представлены в формате Protobuf.
+
+      {% cut "Пример описания таблицы в table_metadata" %}
+
+      ```json
+      {
+          "DoesExist": true,
+          "Cluster": "db",
+          "Name": "/local/users",
+          "SysView": "",
+          "PathId": {
+              "OwnerId": 72075186232723360,
+              "TableId": 33
+          },
+          "SchemaVersion": 1,
+          "Kind": 1,
+          "Columns": [
+              {
+                  "Name": "emails",
+                  "Id": 3,
+                  "Type": "Utf8",
+                  "TypeId": 4608,
+                  "NotNull": false,
+                  "DefaultFromSequence": "",
+                  "DefaultKind": 0,
+                  "DefaultFromLiteral": {},
+                  "IsBuildInProgress": false,
+                  "DefaultFromSequencePathId": {
+                      "OwnerId": 18446744073709551615,
+                      "TableId": 18446744073709551615
+                  }
+              },
+              {
+                  "Name": "id",
+                  "Id": 1,
+                  "Type": "Int32",
+                  "TypeId": 1,
+                  "NotNull": false,
+                  "DefaultFromSequence": "",
+                  "DefaultKind": 0,
+                  "DefaultFromLiteral": {},
+                  "IsBuildInProgress": false,
+                  "DefaultFromSequencePathId": {
+                      "OwnerId": 18446744073709551615,
+                      "TableId": 18446744073709551615
+                  }
+              },
+              {
+                  "Name": "name",
+                  "Id": 2,
+                  "Type": "Utf8",
+                  "TypeId": 4608,
+                  "NotNull": false,
+                  "DefaultFromSequence": "",
+                  "DefaultKind": 0,
+                  "DefaultFromLiteral": {},
+                  "IsBuildInProgress": false,
+                  "DefaultFromSequencePathId": {
+                      "OwnerId": 18446744073709551615,
+                      "TableId": 18446744073709551615
+                  }
+              }
+          ],
+          "KeyColunmNames": [
+              "id"
+          ],
+          "RecordsCount": 0,
+          "DataSize": 0,
+          "StatsLoaded": false
+      }
+      ```
+
+      {% endcut %}
+
 - `ast` — абстрактное синтаксическое дерево [AST](https://ru.wikipedia.org/wiki/Абстрактное_синтаксическое_дерево) запроса.
+
+  {% cut "Пример ast" %}
+
+  ```json
+  (
+  (let  (KqpTable '"/local/users" '"72075186232723360:33" '"" '1))
+  (let  '('"emails" '"id" '"name"))
+  (let  (KqpRowsSourceSettings   '() (Void) '()))
+  (let  (DqPhyStage '((DqSource (DataSource '"KqpReadRangesSource") )) (lambda '() (FromFlow (Filter (ToFlow ) (lambda '(0) (Coalesce (== (Member 0 '"emails") (String '"john@example.com")) (Bool 'false)))))) '('('"_logical_id" '401) '('"_id" '"45d03f9b-f40c98ba-b6705ab-90ee6ea"))))
+  (let  (DqCnUnionAll (TDqOutput  '"0")))
+  (let  (DqPhyStage '() (lambda '(1) 1) '('('"_logical_id" '477) '('"_id" '"28936ac-4af296f3-7afa38af-7dc0798"))))
+  (let  (DqCnResult (TDqOutput  '"0") '()))
+  (let  (OptionalType (DataType 'Utf8)))
+  (return (KqpPhysicalQuery '((KqpPhysicalTx '( ) '() '() '('('"type" '"generic")))) '((KqpTxResultBinding (ListType (StructType '('"emails" ) '('"id" (OptionalType (DataType 'Int32))) '('"name" ))) '"0" '"0")) '('('"type" '"query"))))
+  )
+  ```
+
+  {% endcut %}
 
 {% note warning %}
 

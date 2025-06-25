@@ -421,6 +421,23 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
         });
 
+    compiler->AddCallable("DqBlockHashJoin",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 5, "DqBlockHashJoin should have 5 arguments");
+            
+            // Compile all arguments
+            auto leftInput = MkqlBuildExpr(node.Child(0), buildCtx);
+            auto rightInput = MkqlBuildExpr(node.Child(1), buildCtx);
+            auto joinKind = MkqlBuildExpr(node.Child(2), buildCtx);
+            auto leftKeyColumns = MkqlBuildExpr(node.Child(3), buildCtx);
+            auto rightKeyColumns = MkqlBuildExpr(node.Child(4), buildCtx);
+
+            // Create MKQL callable
+            return buildCtx.ProgramBuilder.NewCallable(node.Pos(), "DqBlockHashJoin", {
+                leftInput, rightInput, joinKind, leftKeyColumns, rightKeyColumns
+            });
+        });
+
     return compiler;
 }
 

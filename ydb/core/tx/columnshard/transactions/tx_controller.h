@@ -361,6 +361,7 @@ public:
             AFL_VERIFY(!IsFail());
             ProposeStartInfo = DoStartProposeOnExecute(owner, txc);
             if (ProposeStartInfo->IsFail()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "tx_propose_failed")("error", ProposeStartInfo->DebugString());
                 SwitchStateVerified(EStatus::Parsed, EStatus::Failed);
             } else {
                 SwitchStateVerified(EStatus::Parsed, EStatus::ProposeStartedOnExecute);

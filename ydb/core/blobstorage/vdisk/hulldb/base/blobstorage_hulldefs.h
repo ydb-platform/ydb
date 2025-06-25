@@ -130,7 +130,7 @@ namespace NKikimr {
         const bool BarrierValidation;
         const ui32 HullSstSizeInChunksFresh;
         const ui32 HullSstSizeInChunksLevel;
-        const double HullCompFreeSpaceThreshold;
+        const double HullCompHugeGarbageThreshold;
         const ui32 FreshCompMaxInFlightWrites;
         const ui32 HullCompMaxInFlightWrites;
         const ui32 HullCompMaxInFlightReads;

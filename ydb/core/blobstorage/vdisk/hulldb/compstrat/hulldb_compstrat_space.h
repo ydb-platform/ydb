@@ -31,7 +31,7 @@ namespace NKikimr {
                 : HullCtx(std::move(hullCtx))
                 , LevelSnap(levelSnap)
                 , Task(task)
-                , Candidate(HullCtx->ChunkSize, HullCtx->HullCompFreeSpaceThreshold)
+                , Candidates(HullCtx->HullCompHugeGarbageThreshold)
             {}
 
             EAction Select() {
@@ -45,10 +45,10 @@ namespace NKikimr {
                 if (HullCtx->VCtx->ActorSystem) {
                     LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: FreeSpace: action# %s timeSpent# %s candidate# %s",
+                                "%s: FreeSpace: action# %s timeSpent# %s candidates# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
                                 ActionToStr(action), (finishTime - startTime).ToString().data(),
-                                Candidate.ToString().data()));
+                                Candidates.ToString().data()));
                 }
 
                 return action;
@@ -56,42 +56,46 @@ namespace NKikimr {
 
         private:
             ////////////////////////////////////////////////////////////////////////
-            // NHullComp::NPriv::TMostAbusingSst
+            // NHullComp::NPriv::TMostAbusingSsts
             ////////////////////////////////////////////////////////////////////////
-            struct TMostAbusingSst {
+            struct TMostAbusingSsts {
                 // constants
-                const ui64 ChunkSize;
-                const double FreeSpaceThreshold;
-                // fields
-                TLevelSstPtr LevelSstPtr;
-                double Rank = 0;
-                bool Present = false;
+                const double GarbageThreshold;
 
-                TMostAbusingSst(ui64 chunkSize, double freeSpaceThreshold)
-                    : ChunkSize(chunkSize)
-                    , FreeSpaceThreshold(freeSpaceThreshold)
+                std::vector<TLevelSstPtr> SstsToCompact;
+                ui32 MaxLevel = 0;
+
+                TMostAbusingSsts(double garbageThreshold)
+                    : GarbageThreshold(garbageThreshold)
                 {}
 
                 void Add(TLevelSstPtr &&p) {
                     TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
                     if (ratio) {
-                        const ui64 garbageHugeSize = ratio->HugeDataTotal - ratio->HugeDataKeep;
-                        const double rank = (double)garbageHugeSize / ChunkSize;
-                        if (rank > Rank) {
-                            LevelSstPtr = std::move(p);
-                            Rank = rank;
-                            Present = true;
+                        // garbage changes in range [0, +inf), 0 for full chunk, +inf for chunk containing only garbage
+                        const double garbage = (double)(ratio->HugeDataTotal - ratio->HugeDataKeep) / std::max<ui64>(1, ratio->HugeDataKeep);
+                        if (garbage > GarbageThreshold) {
+                            // only one-level compaction is possible, so save max level and in the end filter out SSTs for other levels
+                            MaxLevel = std::max(MaxLevel, p.Level);
+                            SstsToCompact.emplace_back(std::move(p));
                         }
                     }
                 }
 
-                bool CompactSstToFreeSpace() const {
-                    return Present && Rank > FreeSpaceThreshold;
+                void FilterOutSstsNotFromMaxLevel() {
+                    std::remove_if(SstsToCompact.begin(), SstsToCompact.end(), 
+                        [maxLevel=MaxLevel] (const auto &p) {
+                            return p.Level != maxLevel;
+                    });
                 }
 
                 TString ToString() const {
                     TStringStream str;
-                    str << "{Rank# " << Rank << " Level# " << LevelSstPtr.Level << "}";
+                    str << "{MaxLevel# " << MaxLevel;
+                    for (const auto& p : SstsToCompact) {
+                        str << p.ToString() << ", ";
+                    }
+                    str << "}";
                     return str.Str();
                 }
             };
@@ -102,7 +106,7 @@ namespace NKikimr {
             TIntrusivePtr<THullCtx> HullCtx;
             const TLevelIndexSnapshot &LevelSnap;
             TTask *Task;
-            TMostAbusingSst Candidate;
+            TMostAbusingSsts Candidates;
 
             EAction FreeSpace() {
                 EAction action = ActNothing;
@@ -114,17 +118,21 @@ namespace NKikimr {
                 while (it.Valid()) {
                     TLevelSstPtr p = it.Get();
                     if (p.Level > 0) {
-                        // TODO: handle zero level segments also
-                        Candidate.Add(std::move(p));
+                        Candidates.Add(std::move(p));
                     }
 
                     it.Next();
                 }
 
-                if (Candidate.CompactSstToFreeSpace()) {
-                    // free space by compacting this Sst
+                Candidates.FilterSstsFromOnlyMaxLevel();
+
+                auto& ssts = Candidates.SstsToCompact;
+                if (!ssts.empty()) {
+                    // free space by compacting these SSTs
                     action = ActCompactSsts;
-                    TUtils::SqueezeOneSst(LevelSnap.SliceSnap, Candidate.LevelSstPtr, Task->CompactSsts);
+                    for (auto& sst : ssts) {
+                        TUtils::SqueezeOneSst(LevelSnap.SliceSnap, sst, Task->CompactSsts);
+                    }
                 }
 
                 return action;

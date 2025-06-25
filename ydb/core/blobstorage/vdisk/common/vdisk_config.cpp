@@ -37,7 +37,7 @@ namespace NKikimr {
         HullCompLevel0MaxSstsAtOnce = 8u;
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
-        HullCompFreeSpaceThreshold = 2.0;
+        HullCompHugeGarbageThreshold = 2.0;
         FreshCompMaxInFlightWrites = 10;
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;

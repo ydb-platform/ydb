@@ -488,7 +488,7 @@ namespace NKikimr {
                         Config->BarrierValidation,
                         Config->HullSstSizeInChunksFresh,
                         Config->HullSstSizeInChunksLevel,
-                        Config->HullCompFreeSpaceThreshold,
+                        Config->HullCompHugeGarbageThreshold,
                         Config->FreshCompMaxInFlightWrites,
                         Config->HullCompMaxInFlightWrites,
                         Config->HullCompMaxInFlightReads,

@@ -100,7 +100,7 @@ namespace NKikimr {
         , BarrierValidation(barrierValidation)
         , HullSstSizeInChunksFresh(hullSstSizeInChunksFresh)
         , HullSstSizeInChunksLevel(hullSstSizeInChunksLevel)
-        , HullCompFreeSpaceThreshold(hullCompFreeSpaceThreshold)
+        , HullCompHugeGarbageThreshold(hullCompFreeSpaceThreshold)
         , FreshCompMaxInFlightWrites(freshCompMaxInFlightWrites)
         , HullCompMaxInFlightWrites(hullCompMaxInFlightWrites)
         , HullCompMaxInFlightReads(hullCompMaxInFlightReads)

@@ -2,7 +2,10 @@ import allure
 import logging
 import os
 import yatest.common
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
+import time as time_module
 
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
@@ -289,7 +292,8 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def execute_workload_test(self, workload_name: str, command_args: str, duration_value: float = None, 
                              additional_stats: dict = None, use_chunks: bool = False, 
-                             duration_param: str = "--duration", nemesis: bool = False):
+                             duration_param: str = "--duration", nemesis: bool = False,
+                             nodes_percentage: int = 100):
         """
         Выполняет полный цикл workload теста
 
@@ -300,19 +304,21 @@ class WorkloadTestBase(LoadSuiteBase):
             additional_stats: Дополнительная статистика
             use_chunks: Использовать ли разбивку на чанки для повышения надежности
             duration_param: Параметр для передачи времени выполнения
-            nemesis: Запускать ли сервис nemesis перед выполнением workload
+            nemesis: Запускать ли сервис nemesis через 15 секунд после начала выполнения workload
+            nodes_percentage: Процент нод кластера для запуска workload (от 1 до 100)
         """
         if duration_value is None:
             duration_value = self.timeout
             
-        # Управляем сервисом nemesis если требуется
-        if nemesis:
-            self._manage_nemesis(enable_nemesis=True)
+        # Проверяем корректность процента нод
+        if nodes_percentage < 1 or nodes_percentage > 100:
+            raise ValueError(f"nodes_percentage должен быть от 1 до 100, получено: {nodes_percentage}")
             
-        # Добавляем информацию о nemesis в статистику
+        # Добавляем информацию о nemesis и nodes_percentage в статистику
         if additional_stats is None:
             additional_stats = {}
         additional_stats["nemesis_enabled"] = nemesis
+        additional_stats["nodes_percentage"] = nodes_percentage
 
         return self._execute_workload_with_deployment(
             workload_name=workload_name,
@@ -320,10 +326,15 @@ class WorkloadTestBase(LoadSuiteBase):
             duration_param=duration_param,
             duration_value=duration_value,
             additional_stats=additional_stats,
-            use_chunks=use_chunks
+            use_chunks=use_chunks,
+            nodes_percentage=nodes_percentage,
+            nemesis=nemesis
         )
 
-    def _execute_workload_with_deployment(self, workload_name: str, command_args_template: str, duration_param: str, duration_value: float, additional_stats: dict = None, use_chunks: bool = False):
+    def _execute_workload_with_deployment(self, workload_name: str, command_args_template: str, 
+                                         duration_param: str, duration_value: float, 
+                                         additional_stats: dict = None, use_chunks: bool = False,
+                                         nodes_percentage: int = 100, nemesis: bool = False):
         """
         Базовый метод для выполнения workload с deployment и повторными запусками
         """
@@ -331,13 +342,13 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # ФАЗА 1: ПОДГОТОВКА
         preparation_result = self._prepare_workload_execution(
-            workload_name, duration_value, use_chunks, duration_param
+            workload_name, duration_value, use_chunks, duration_param, nodes_percentage
         )
 
         # ФАЗА 2: ВЫПОЛНЕНИЕ
         execution_result = self._execute_workload_runs(
             workload_name, command_args_template, duration_param,
-            use_chunks, preparation_result
+            use_chunks, preparation_result, nemesis
         )
 
         # ФАЗА 3: РЕЗУЛЬТАТЫ
@@ -348,16 +359,19 @@ class WorkloadTestBase(LoadSuiteBase):
         logging.info(f"=== Workload test completed for {workload_name} ===")
         return final_result
 
-    def _prepare_workload_execution(self, workload_name: str, duration_value: float, use_chunks: bool, duration_param: str):
+    def _prepare_workload_execution(self, workload_name: str, duration_value: float, 
+                                   use_chunks: bool, duration_param: str, 
+                                   nodes_percentage: int = 100):
         # """ФАЗА 1: Подготовка к выполнению workload"""
         with allure.step('Phase 1: Prepare workload execution'):
-            logging.info(f"Preparing execution: Duration={duration_value}s, chunks={use_chunks}, param={duration_param}")
+            logging.info(f"Preparing execution: Duration={duration_value}s, chunks={use_chunks}, "
+                        f"param={duration_param}, nodes_percentage={nodes_percentage}%, mode=parallel")
 
             # Сохраняем состояние нод для диагностики
             self.save_nodes_state()
 
-            # Выполняем deploy
-            deployed_binary_path, target_node = self._deploy_workload_binary(workload_name)
+            # Выполняем deploy на выбранный процент нод
+            deployed_nodes = self._deploy_workload_binary(workload_name, nodes_percentage)
 
             # Создаем план выполнения
             execution_plan = (self._create_chunks_plan(duration_value) if use_chunks else self._create_single_run_plan(duration_value))
@@ -366,159 +380,231 @@ class WorkloadTestBase(LoadSuiteBase):
             overall_result = YdbCliHelper.WorkloadRunResult()
             overall_result.start_time = time()
 
-            logging.info(f"Preparation completed: {len(execution_plan)} runs planned")
+            logging.info(f"Preparation completed: {len(execution_plan)} runs planned on {len(deployed_nodes)} nodes in parallel mode")
 
             return {
-                'deployed_binary_path': deployed_binary_path,
-                'target_node': target_node,
+                'deployed_nodes': deployed_nodes,
                 'execution_plan': execution_plan,
                 'overall_result': overall_result,
                 'workload_start_time': time()
             }
 
-    def _execute_workload_runs(self, workload_name: str, command_args_template: str, duration_param: str, use_chunks: bool, preparation_result: dict):
-        # """ФАЗА 2: Выполнение workload runs"""
-        with allure.step('Phase 2: Execute workload runs'):
-            deployed_binary_path = preparation_result['deployed_binary_path']
-            target_node = preparation_result['target_node']
+    def _execute_workload_runs(self, workload_name: str, command_args_template: str, duration_param: str, use_chunks: bool, preparation_result: dict, nemesis: bool = False):
+        # """ФАЗА 2: Параллельное выполнение workload на всех нодах"""
+        with allure.step('Phase 2: Execute workload runs in parallel'):
+            deployed_nodes = preparation_result['deployed_nodes']
             execution_plan = preparation_result['execution_plan']
             overall_result = preparation_result['overall_result']
+            
+            if not deployed_nodes:
+                logging.error("No deployed nodes available for execution")
+                return {
+                    'overall_result': overall_result,
+                    'successful_runs': 0,
+                    'total_runs': 0,
+                    'total_execution_time': 0,
+                    'workload_start_time': time(),
+                    'deployed_nodes': []
+                }
+            
+            # Параллельное выполнение на всех нодах
+            with allure.step(f'Execute workload in parallel on {len(deployed_nodes)} nodes'):
+                workload_start_time = time()
+                
+                # Запускаем nemesis через 15 секунд после начала выполнения workload
+                if nemesis:
+                    nemesis_thread = threading.Thread(
+                        target=self._delayed_nemesis_start,
+                        args=(15,),  # 15 секунд задержки
+                        daemon=True
+                    )
+                    nemesis_thread.start()
+                    logging.info("Scheduled nemesis to start in 15 seconds")
+                
+                # Для каждой ноды создаем свой план выполнения
+                node_execution_plans = []
+                for node in deployed_nodes:
+                    # Каждая нода получает копию плана выполнения
+                    node_plan = {
+                        'node': node,
+                        'plan': execution_plan
+                    }
+                    node_execution_plans.append(node_plan)
+                
+                logging.info(f"Starting parallel execution on {len(node_execution_plans)} nodes")
+                
+                # Результаты выполнения для каждой ноды
+                node_results = []
+                
+                # Блокировка для безопасного обновления общих данных из потоков
+                results_lock = threading.Lock()
+                
+                # Функция для выполнения workload на одной ноде
+                def execute_on_node(node_plan):
+                    node = node_plan['node']
+                    plan = node_plan['plan']
+                    node_host = node['node'].host
+                    deployed_binary_path = node['binary_path']
+                    
+                    node_result = {
+                        'node': node,
+                        'host': node_host,
+                        'successful_runs': 0,
+                        'total_runs': len(plan),
+                        'runs': [],
+                        'total_execution_time': 0
+                    }
+                    
+                    logging.info(f"Starting execution on node {node_host}")
+                    
+                    # Выполняем план для этой ноды
+                    for run_num, run_config in enumerate(plan, 1):
+                        run_name = (f"{workload_name}_{node_host}_chunk_{run_config.get('chunk_num', run_num)}" 
+                                   if use_chunks else f"{workload_name}_{node_host}_run_{run_num}")
+                        
+                        # Добавляем информацию о ноде в run_config для статистики
+                        run_config_copy = run_config.copy()
+                        run_config_copy['node_host'] = node_host
+                        run_config_copy['node_role'] = node['node'].role
+                        
+                        # Выполняем один run
+                        success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                            deployed_binary_path, node['node'], run_name,
+                            command_args_template, duration_param, run_config_copy
+                        )
+                        
+                        # Сохраняем результат запуска
+                        run_result = {
+                            'run_num': run_num,
+                            'run_config': run_config_copy,
+                            'success': success,
+                            'execution_time': execution_time,
+                            'stdout': stdout,
+                            'stderr': stderr,
+                            'is_timeout': is_timeout
+                        }
+                        node_result['runs'].append(run_result)
+                        
+                        # Обновляем статистику ноды
+                        node_result['total_execution_time'] += execution_time
+                        if success:
+                            node_result['successful_runs'] += 1
+                            logging.info(f"Run {run_num} on {node_host} completed successfully")
+                        else:
+                            logging.warning(f"Run {run_num} on {node_host} failed")
+                            if not use_chunks:
+                                break  # Прерываем при ошибке для одиночного запуска
+                    
+                    logging.info(f"Execution on {node_host} completed: "
+                               f"{node_result['successful_runs']}/{node_result['total_runs']} successful")
+                    
+                    return node_result
+                
+                # Запускаем параллельное выполнение на всех нодах
+                with ThreadPoolExecutor(max_workers=len(node_execution_plans)) as executor:
+                    future_to_node = {
+                        executor.submit(execute_on_node, node_plan): node_plan
+                        for node_plan in node_execution_plans
+                    }
+                    
+                    for future in as_completed(future_to_node):
+                        try:
+                            node_result = future.result()
+                            node_results.append(node_result)
+                        except Exception as e:
+                            node_plan = future_to_node[future]
+                            node_host = node_plan['node']['node'].host
+                            logging.error(f"Error executing on {node_host}: {e}")
+                            # Добавляем информацию об ошибке
+                            node_results.append({
+                                'node': node_plan['node'],
+                                'host': node_host,
+                                'error': str(e),
+                                'successful_runs': 0,
+                                'total_runs': len(node_plan['plan']),
+                                'runs': [],
+                                'total_execution_time': 0
+                            })
+                
+                # Обрабатываем результаты всех нод
+                successful_runs = 0
+                total_runs = 0
+                total_execution_time = 0
+                
+                # Обрабатываем результаты каждой ноды и добавляем их в общий результат
+                for node_idx, node_result in enumerate(node_results):
+                    node_host = node_result['host']
+                    
+                    # Добавляем статистику ноды в общую статистику
+                    successful_runs += node_result['successful_runs']
+                    total_runs += node_result['total_runs']
+                    total_execution_time += node_result['total_execution_time']
+                    
+                    # Обрабатываем результаты каждого запуска на этой ноде
+                    for run_result in node_result.get('runs', []):
+                        # Генерируем уникальный номер запуска для всех нод
+                        global_run_num = node_idx * len(execution_plan) + run_result['run_num']
+                        
+                        # Обрабатываем результат запуска
+                        self._process_single_run_result(
+                            overall_result, 
+                            f"{workload_name}_{node_host}", 
+                            global_run_num,
+                            run_result['run_config'],
+                            run_result['success'],
+                            run_result['execution_time'],
+                            run_result['stdout'],
+                            run_result['stderr'],
+                            run_result['is_timeout']
+                        )
+                
+                logging.info(f"Parallel execution completed: {successful_runs}/{total_runs} successful runs "
+                           f"on {len(node_results)} nodes")
 
-            successful_runs = 0
-            total_execution_time = 0
-            workload_start_time = None
+                return {
+                    'overall_result': overall_result,
+                    'successful_runs': successful_runs,
+                    'total_runs': total_runs,
+                    'total_execution_time': total_execution_time,
+                    'workload_start_time': workload_start_time,
+                    'deployed_nodes': deployed_nodes,
+                    'node_results': node_results
+                }
+                
+    def _delayed_nemesis_start(self, delay_seconds: int):
+        """
+        Запускает nemesis с задержкой после начала выполнения workload
+        
+        Args:
+            delay_seconds: Задержка в секундах перед запуском nemesis
+        """
+        try:
+            logging.info(f"Nemesis will start in {delay_seconds} seconds...")
+            time_module.sleep(delay_seconds)
+            logging.info("Starting nemesis after delay")
+            
+            with allure.step('Start nemesis after delay'):
+                self._manage_nemesis(enable_nemesis=True)
+                
+            logging.info("Nemesis started successfully after delay")
+        except Exception as e:
+            logging.error(f"Error starting nemesis after delay: {e}")
+            allure.attach(str(e), 'Nemesis Error', attachment_type=allure.attachment_type.TEXT)
 
-            for run_num, run_config in enumerate(execution_plan, 1):
-                # Запоминаем время начала первого workload run
-                if run_num == 1:
-                    workload_start_time = time()
-
-                run_name = (f"{workload_name}_chunk_{run_config['chunk_num']}" if use_chunks else f"{workload_name}_run_{run_num}")
-
-                # Выполняем один run
-                success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
-                    deployed_binary_path, target_node, run_name,
-                    command_args_template, duration_param, run_config
-                )
-
-                # Обрабатываем результат run'а
-                self._process_single_run_result(
-                    overall_result, workload_name, run_num, run_config,
-                    success, execution_time, stdout, stderr, is_timeout
-                )
-
-                total_execution_time += execution_time
-                if success:
-                    successful_runs += 1
-                    logging.info(f"Run {run_num} completed successfully")
-                else:
-                    logging.warning(f"Run {run_num} failed")
-                    if not use_chunks:
-                        break  # Прерываем при ошибке для одиночного запуска
-
-            logging.info(f"Execution completed: {successful_runs}/{len(execution_plan)} successful")
-
-            return {
-                'overall_result': overall_result,
-                'successful_runs': successful_runs,
-                'total_runs': len(execution_plan),
-                'total_execution_time': total_execution_time,
-                'workload_start_time': workload_start_time
-            }
-
-    def _finalize_workload_results(self, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_chunks: bool):
-        # """ФАЗА 3: Финализация результатов и диагностика"""
-        with allure.step('Phase 3: Finalize results and diagnostics'):
-            overall_result = execution_result['overall_result']
-            successful_runs = execution_result['successful_runs']
-            total_runs = execution_result['total_runs']
-
-            # Проверяем состояние схемы
-            self._check_scheme_state()
-
-            # Анализируем результаты и добавляем ошибки/предупреждения
-            self._analyze_execution_results(overall_result, successful_runs, total_runs, use_chunks)
-
-            # Собираем и добавляем статистику
-            self._add_execution_statistics(
-                overall_result, workload_name, execution_result,
-                additional_stats, duration_value, use_chunks
-            )
-
-            # Финальная обработка с диагностикой
-            overall_result.workload_start_time = execution_result['workload_start_time']
-            self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
-
-            logging.info(f"Final result: success={overall_result.success}, successful_runs={successful_runs}/{total_runs}")
-            return overall_result
-
-    def _process_single_run_result(self, overall_result, workload_name: str, run_num: int, run_config: dict, success: bool, execution_time: float, stdout: str, stderr: str, is_timeout: bool):
-        # """Обрабатывает результат одного run'а"""
-        # Создаем результат для run'а
-        run_result = self.create_workload_result(
-            workload_name=f"{workload_name}_run_{run_num}",
-            stdout=stdout,
-            stderr=stderr,
-            success=success,
-            additional_stats={
-                "run_number": run_num,
-                "run_duration": run_config.get('duration'),
-                "run_execution_time": execution_time,
-                **run_config
-            },
-            is_timeout=is_timeout,
-            iteration_number=run_num,
-            actual_execution_time=execution_time
-        )
-
-        # Добавляем iteration в общий результат
-        overall_result.iterations[run_num] = run_result.iterations[run_num]
-
-        # Накапливаем stdout/stderr
-        if overall_result.stdout is None:
-            overall_result.stdout = ""
-        if overall_result.stderr is None:
-            overall_result.stderr = ""
-
-        overall_result.stdout += f"\n=== Run {run_num} ===\n{stdout or ''}"
-        overall_result.stderr += f"\n=== Run {run_num} stderr ===\n{stderr or ''}"
-
-    def _analyze_execution_results(self, overall_result, successful_runs: int, total_runs: int, use_chunks: bool):
-        # """Анализирует результаты выполнения и добавляет ошибки/предупреждения"""
-        if successful_runs == 0:
-            overall_result.add_error(f"All {total_runs} runs failed to execute successfully")
-        elif successful_runs < total_runs and use_chunks:
-            overall_result.add_warning(f"Only {successful_runs}/{total_runs} runs completed successfully")
-
-    def _add_execution_statistics(self, overall_result, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_chunks: bool):
-        # """Собирает и добавляет статистику выполнения"""
-        successful_runs = execution_result['successful_runs']
-        total_runs = execution_result['total_runs']
-        total_execution_time = execution_result['total_execution_time']
-
-        # Базовая статистика
-        stats = {
-            "total_runs": total_runs,
-            "successful_runs": successful_runs,
-            "failed_runs": total_runs - successful_runs,
-            "total_execution_time": total_execution_time,
-            "planned_duration": duration_value,
-            "success_rate": successful_runs / total_runs if total_runs > 0 else 0,
-            "use_chunks": use_chunks
-        }
-
-        # Добавляем дополнительную статистику
-        if additional_stats:
-            stats.update(additional_stats)
-
-        # Добавляем всю статистику в результат
-        for key, value in stats.items():
-            overall_result.add_stat(workload_name, key, value)
-
-    def _deploy_workload_binary(self, workload_name: str):
-        """Выполняет deploy workload binary и возвращает путь к бинарному файлу и target node"""
+    def _deploy_workload_binary(self, workload_name: str, nodes_percentage: int = 100):
+        """
+        Выполняет deploy workload binary на указанный процент нод кластера
+        
+        Args:
+            workload_name: Имя workload для отчетов
+            nodes_percentage: Процент нод кластера для деплоя (от 1 до 100)
+            
+        Returns:
+            Список словарей с информацией о нодах, на которые выполнен деплой:
+            [{'node': node_object, 'binary_path': path_to_binary}, ...]
+        """
         with allure.step('Deploy workload binary'):
-            logging.info(f"Starting deployment for {workload_name}")
+            logging.info(f"Starting deployment for {workload_name} on {nodes_percentage}% of nodes")
 
             # Получаем бинарный файл
             with allure.step('Get workload binary'):
@@ -527,63 +613,88 @@ class WorkloadTestBase(LoadSuiteBase):
                 allure.attach(f"Binary path: {binary_files[0]}", 'Binary Path', attachment_type=allure.attachment_type.TEXT)
                 logging.info(f"Binary path resolved: {binary_files[0]}")
 
-            # Получаем ноды кластера и выбираем первую
-            with allure.step('Select cluster node'):
+            # Получаем уникальные хосты кластера
+            with allure.step('Select unique cluster hosts'):
                 nodes = YdbCluster.get_cluster_nodes()
                 if not nodes:
                     raise Exception("No cluster nodes found")
+                
+                # Собираем уникальные хосты и соответствующие им ноды
+                unique_hosts = {}
+                for node in nodes:
+                    if node.host not in unique_hosts:
+                        unique_hosts[node.host] = node
+                
+                unique_nodes = list(unique_hosts.values())
+                
+                # Определяем количество нод для деплоя на основе процента
+                num_nodes = max(1, int(len(unique_nodes) * nodes_percentage / 100))
+                # Выбираем первые N нод из списка уникальных
+                selected_nodes = unique_nodes[:num_nodes]
+                
+                allure.attach(f"Selected {len(selected_nodes)}/{len(unique_nodes)} unique hosts ({nodes_percentage}%)", 
+                             'Target Hosts', attachment_type=allure.attachment_type.TEXT)
+                logging.info(f"Selected {len(selected_nodes)}/{len(unique_nodes)} unique hosts for deployment")
 
-                target_node = nodes[0]
-                allure.attach(f"Selected node: {target_node.host}", 'Target Node', attachment_type=allure.attachment_type.TEXT)
-                logging.info(f"Selected target node: {target_node.host}")
-
-            # Развертываем бинарный файл
-            with allure.step(f'Deploy {self.workload_binary_name} to {target_node.host}'):
-                logging.info(f"Starting deployment to {target_node.host}")
+            # Развертываем бинарный файл на выбранных нодах
+            with allure.step(f'Deploy {self.workload_binary_name} to {len(selected_nodes)} hosts'):
+                target_hosts = [node.host for node in selected_nodes]
+                logging.info(f"Starting deployment to hosts: {target_hosts}")
+                
                 deploy_results = deploy_binaries_to_hosts(
-                    binary_files, [target_node.host], self.binaries_deploy_path
+                    binary_files, target_hosts, self.binaries_deploy_path
                 )
-
-                # Проверяем результат развертывания
-                binary_result = deploy_results.get(target_node.host, {}).get(self.workload_binary_name, {})
-                success = binary_result.get('success', False)
-
-                allure.attach(f"Deployment result: {binary_result}", 'Deployment Details', attachment_type=allure.attachment_type.TEXT)
-                logging.info(f"Deployment result: {binary_result}")
-
-                if not success:
+                
+                # Собираем информацию о результатах деплоя
+                deployed_nodes = []
+                failed_nodes = []
+                
+                for node in selected_nodes:
+                    binary_result = deploy_results.get(node.host, {}).get(self.workload_binary_name, {})
+                    success = binary_result.get('success', False)
+                    
+                    if success:
+                        deployed_nodes.append({
+                            'node': node,
+                            'binary_path': binary_result['path']
+                        })
+                        logging.info(f"Deployment successful on {node.host}: {binary_result['path']}")
+                    else:
+                        failed_nodes.append({
+                            'node': node,
+                            'error': binary_result.get('error', 'Unknown error')
+                        })
+                        logging.error(f"Deployment failed on {node.host}: {binary_result.get('error', 'Unknown error')}")
+                
+                # Прикрепляем детали развертывания
+                allure.attach(
+                    f"Successful deployments: {len(deployed_nodes)}/{len(selected_nodes)}\n" +
+                    f"Failed deployments: {len(failed_nodes)}/{len(selected_nodes)}",
+                    'Deployment Summary',
+                    attachment_type=allure.attachment_type.TEXT
+                )
+                
+                # Проверяем, что хотя бы одна нода успешно развернута
+                if not deployed_nodes:
                     # Создаем детальное сообщение об ошибке деплоя
                     deploy_error_details = []
                     deploy_error_details.append(f"DEPLOYMENT FAILED: {self.workload_binary_name}")
-                    deploy_error_details.append(f"Target host: {target_node.host}")
+                    deploy_error_details.append(f"Target hosts: {target_hosts}")
                     deploy_error_details.append(f"Target directory: {self.binaries_deploy_path}")
                     deploy_error_details.append(f"Binary environment variable: {self.workload_env_var}")
                     deploy_error_details.append(f"Local binary path: {binary_files[0]}")
-
-                    # Детали результата деплоя
-                    if 'error' in binary_result:
-                        deploy_error_details.append(f"Deploy error: {binary_result['error']}")
-
-                    # Показываем полный результат деплоя для диагностики
-                    deploy_error_details.append("\nFull deployment result:")
-                    for key, value in binary_result.items():
-                        deploy_error_details.append(f"  {key}: {value}")
-
-                    # Информация о хосте
-                    deploy_error_details.append("\nHost details:")
-                    deploy_error_details.append(f"  Host: {target_node.host}")
-                    deploy_error_details.append(f"  Role: {target_node.role}")
-                    deploy_error_details.append(f"  Start time: {target_node.start_time}")
-
+                    
+                    # Детали ошибок
+                    deploy_error_details.append("\nDeployment errors:")
+                    for failed in failed_nodes:
+                        deploy_error_details.append(f"  {failed['node'].host}: {failed['error']}")
+                    
                     detailed_deploy_error = "\n".join(deploy_error_details)
-
                     logging.error(detailed_deploy_error)
                     raise Exception(detailed_deploy_error)
-
-                deployed_binary_path = binary_result['path']
-                logging.info(f"Binary deployed successfully to: {deployed_binary_path}")
-
-                return deployed_binary_path, target_node
+                
+                logging.info(f"Binary deployed successfully to {len(deployed_nodes)} unique hosts")
+                return deployed_nodes
 
     def _create_chunks_plan(self, total_duration: float):
         """Создает план выполнения с чанками"""
@@ -705,3 +816,92 @@ class WorkloadTestBase(LoadSuiteBase):
             logging.info(f'scheme stdout: {scheme_stdout}')
             if scheme_stderr:
                 logging.warning(f'scheme stderr: {scheme_stderr}')
+
+    def _process_single_run_result(self, overall_result, workload_name: str, run_num: int, run_config: dict, success: bool, execution_time: float, stdout: str, stderr: str, is_timeout: bool):
+        # """Обрабатывает результат одного run'а"""
+        # Создаем результат для run'а
+        run_result = self.create_workload_result(
+            workload_name=f"{workload_name}_run_{run_num}",
+            stdout=stdout,
+            stderr=stderr,
+            success=success,
+            additional_stats={
+                "run_number": run_num,
+                "run_duration": run_config.get('duration'),
+                "run_execution_time": execution_time,
+                **run_config
+            },
+            is_timeout=is_timeout,
+            iteration_number=run_num,
+            actual_execution_time=execution_time
+        )
+
+        # Добавляем iteration в общий результат
+        overall_result.iterations[run_num] = run_result.iterations[run_num]
+
+        # Накапливаем stdout/stderr
+        if overall_result.stdout is None:
+            overall_result.stdout = ""
+        if overall_result.stderr is None:
+            overall_result.stderr = ""
+
+        overall_result.stdout += f"\n=== Run {run_num} ===\n{stdout or ''}"
+        overall_result.stderr += f"\n=== Run {run_num} stderr ===\n{stderr or ''}"
+
+    def _analyze_execution_results(self, overall_result, successful_runs: int, total_runs: int, use_chunks: bool):
+        # """Анализирует результаты выполнения и добавляет ошибки/предупреждения"""
+        if successful_runs == 0:
+            overall_result.add_error(f"All {total_runs} runs failed to execute successfully")
+        elif successful_runs < total_runs and use_chunks:
+            overall_result.add_warning(f"Only {successful_runs}/{total_runs} runs completed successfully")
+
+    def _add_execution_statistics(self, overall_result, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_chunks: bool):
+        # """Собирает и добавляет статистику выполнения"""
+        successful_runs = execution_result['successful_runs']
+        total_runs = execution_result['total_runs']
+        total_execution_time = execution_result['total_execution_time']
+
+        # Базовая статистика
+        stats = {
+            "total_runs": total_runs,
+            "successful_runs": successful_runs,
+            "failed_runs": total_runs - successful_runs,
+            "total_execution_time": total_execution_time,
+            "planned_duration": duration_value,
+            "success_rate": successful_runs / total_runs if total_runs > 0 else 0,
+            "use_chunks": use_chunks
+        }
+
+        # Добавляем дополнительную статистику
+        if additional_stats:
+            stats.update(additional_stats)
+
+        # Добавляем всю статистику в результат
+        for key, value in stats.items():
+            overall_result.add_stat(workload_name, key, value)
+
+    def _finalize_workload_results(self, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_chunks: bool):
+        # """ФАЗА 3: Финализация результатов и диагностика"""
+        with allure.step('Phase 3: Finalize results and diagnostics'):
+            overall_result = execution_result['overall_result']
+            successful_runs = execution_result['successful_runs']
+            total_runs = execution_result['total_runs']
+
+            # Проверяем состояние схемы
+            self._check_scheme_state()
+
+            # Анализируем результаты и добавляем ошибки/предупреждения
+            self._analyze_execution_results(overall_result, successful_runs, total_runs, use_chunks)
+
+            # Собираем и добавляем статистику
+            self._add_execution_statistics(
+                overall_result, workload_name, execution_result,
+                additional_stats, duration_value, use_chunks
+            )
+
+            # Финальная обработка с диагностикой
+            overall_result.workload_start_time = execution_result['workload_start_time']
+            self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
+
+            logging.info(f"Final result: success={overall_result.success}, successful_runs={successful_runs}/{total_runs}")
+            return overall_result

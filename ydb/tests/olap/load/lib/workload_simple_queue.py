@@ -41,13 +41,16 @@ class SimpleQueueBase(WorkloadTestBase):
             duration_value=self.timeout,
             additional_stats=additional_stats,
             use_chunks=True,
-            duration_param="--duration"
+            duration_param="--duration",
+            nodes_percentage=100
         )
 
     @pytest.mark.parametrize('table_type', [t.value for t in TableType])
     @pytest.mark.parametrize('nemesis_enabled', [True, False], 
                             ids=['nemesis_true', 'nemesis_false'])
-    def test_workload_simple_queue_with_nemesis(self, table_type: str, nemesis_enabled: bool):
+    @pytest.mark.parametrize('nodes_percentage', [100, 50, 25], 
+                           ids=['nodes_100p', 'nodes_50p', 'nodes_25p'])
+    def test_workload_simple_queue_with_nemesis(self, table_type: str, nemesis_enabled: bool, nodes_percentage: int):
         # Формируем аргументы команды (без --duration, он будет добавлен в чанках)
         command_args_template = (
             f"--endpoint {YdbCluster.ydb_endpoint} "
@@ -59,18 +62,20 @@ class SimpleQueueBase(WorkloadTestBase):
         additional_stats = {
             "table_type": table_type,
             "workload_type": "simple_queue",
-            "nemesis": nemesis_enabled
+            "nemesis": nemesis_enabled,
+            "nodes_percentage": nodes_percentage
         }
 
-        # Запускаем тест с чанками и указанием nemesis
+        # Запускаем тест с чанками и указанием nemesis и процента нод
         self.execute_workload_test(
-            workload_name=f"SimpleQueue_{table_type}_nemesis_{nemesis_enabled}",
+            workload_name=f"SimpleQueue_{table_type}_nemesis_{nemesis_enabled}_nodes_{nodes_percentage}p",
             command_args=command_args_template,
             duration_value=self.timeout,
             additional_stats=additional_stats,
             use_chunks=True,
             duration_param="--duration",
-            nemesis=nemesis_enabled
+            nemesis=nemesis_enabled,
+            nodes_percentage=nodes_percentage
         )
 
 

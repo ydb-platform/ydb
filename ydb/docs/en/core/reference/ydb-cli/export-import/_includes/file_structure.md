@@ -37,6 +37,12 @@ A database corresponds to a directory in the file structure, which contains:
 - The `create_group.sql` file, which describes the cluster groups in YQL format
 - The `alter_group.sql` file, which describes user membership in the cluster groups in YQL format
 
+## Schema mapping
+
+When exporting data to S3-compatible object storage with a common prefix, a `SchemaMapping/mapping.json` file is generated. This file contains a mapping of exported object paths to their corresponding S3 prefixes, relative to the common export prefix.
+
+For encrypted exports, this mapping serves two purposes: it anonymizes the original object names and stores additional metadata required for decryption.
+
 ## Directories {#dir}
 
 Each database directory has a corresponding directory in the file structure. Each of them includes a `permissions.pb` file, which describes the directory ACL and owner in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format. The directory hierarchy in the file structure mirrors the hierarchy in the database. If a database directory contains no items (neither tables nor subdirectories), directory in the file structure includes an empty file named `empty_dir`.

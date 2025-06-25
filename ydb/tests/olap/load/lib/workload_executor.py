@@ -187,6 +187,26 @@ class WorkloadTestBase(LoadSuiteBase):
         iteration = YdbCliHelper.Iteration()
         iteration.time = actual_execution_time if actual_execution_time is not None else self.timeout
 
+        # Добавляем имя итерации для лучшей идентификации
+        if additional_stats:
+            node_host = additional_stats.get('node_host', '')
+            chunk_num = additional_stats.get('chunk_num', iteration_number)
+            iteration.name = f"{workload_name}_{node_host}_chunk_{chunk_num}"
+            
+            # Добавляем статистику о chunk_num и node_host в итерацию
+            if not hasattr(iteration, 'stats'):
+                iteration.stats = {}
+            
+            iteration_stats = {
+                'chunk_info': {
+                    'chunk_num': chunk_num,
+                    'node_host': node_host
+                }
+            }
+            
+            # Добавляем статистику в итерацию
+            iteration.stats.update(iteration_stats)
+
         if is_timeout:
             # Для timeout используем более конкретное сообщение
             iteration.error_message = "Workload execution timed out"
@@ -469,14 +489,15 @@ class WorkloadTestBase(LoadSuiteBase):
                     
                     # Выполняем план для этой ноды
                     for run_num, run_config in enumerate(plan, 1):
-                        run_name = (f"{workload_name}_{node_host}_chunk_{run_config.get('chunk_num', run_num)}" 
-                                   if use_chunks else f"{workload_name}_{node_host}_run_{run_num}")
+                        # Формируем имя запуска с учетом ноды и chunk_num
+                        chunk_num = run_config.get('chunk_num', run_num)
+                        run_name = f"{workload_name}_{node_host}_chunk_{chunk_num}"
                         
                         # Добавляем информацию о ноде в run_config для статистики
                         run_config_copy = run_config.copy()
                         run_config_copy['node_host'] = node_host
                         run_config_copy['node_role'] = node['node'].role
-                        
+
                         # Выполняем один run
                         success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
                             deployed_binary_path, node['node'], run_name,
@@ -502,8 +523,8 @@ class WorkloadTestBase(LoadSuiteBase):
                             logging.info(f"Run {run_num} on {node_host} completed successfully")
                         else:
                             logging.warning(f"Run {run_num} on {node_host} failed")
-                            if not use_chunks:
-                                break  # Прерываем при ошибке для одиночного запуска
+                        if not use_chunks:
+                            break  # Прерываем при ошибке для одиночного запуска
                     
                     logging.info(f"Execution on {node_host} completed: "
                                f"{node_result['successful_runs']}/{node_result['total_runs']} successful")
@@ -558,7 +579,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         # Обрабатываем результат запуска
                         self._process_single_run_result(
                             overall_result, 
-                            f"{workload_name}_{node_host}", 
+                            workload_name, 
                             global_run_num,
                             run_result['run_config'],
                             run_result['success'],
@@ -733,7 +754,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def _create_single_run_plan(self, total_duration: float):
         """Создает план для одиночного выполнения"""
-        return [{'duration': total_duration, 'run_type': 'single'}]
+        return [{'duration': total_duration, 'run_type': 'single', 'chunk_num': 1}]
 
     def _execute_single_workload_run(self, deployed_binary_path: str, target_node, run_name: str, command_args_template: str, duration_param: str, run_config: dict):
         """Выполняет один запуск workload"""
@@ -745,6 +766,10 @@ class WorkloadTestBase(LoadSuiteBase):
         else:
             # Добавляем duration параметр
             command_args = f"{command_args_template} {duration_param} {run_config['duration']}"
+
+        # Добавляем информацию о chunk_num в имя запуска, если она доступна
+        if 'chunk_num' in run_config:
+            run_name = f"{run_name}_chunk_{run_config['chunk_num']}"
 
         run_start_time = time()
 
@@ -839,6 +864,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 "run_number": run_num,
                 "run_duration": run_config.get('duration'),
                 "run_execution_time": execution_time,
+                "chunk_num": run_config.get('chunk_num', 1),  # Добавляем chunk_num в статистику
                 **run_config
             },
             is_timeout=is_timeout,

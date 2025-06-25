@@ -19,13 +19,13 @@ namespace NSQLComplete {
         return std::tie(lhs.TableAlias, lhs.Name) < std::tie(rhs.TableAlias, rhs.Name);
     }
 
-    TVector<TTableId> TColumnContext::TablesWithAlias(TStringBuf alias) const {
+    TVector<TAliased<TTableId>> TColumnContext::TablesWithAlias(TStringBuf alias) const {
         if (alias.empty()) {
-            return TVector<TTableId>(Tables.begin(), Tables.end());
+            return TVector<TAliased<TTableId>>(Tables.begin(), Tables.end());
         }
 
         auto filtered = NFuncTools::Filter([&](const auto& x) { return x.Alias == alias; }, Tables);
-        return TVector<TTableId>(filtered.begin(), filtered.end());
+        return TVector<TAliased<TTableId>>(filtered.begin(), filtered.end());
     }
 
     bool TColumnContext::IsAsterisk() const {

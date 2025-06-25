@@ -17,30 +17,6 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
-    template <class T>
-        requires std::regular<T> &&
-                 requires(T x) { {x < x} -> std::convertible_to<bool>; }
-    struct TAliased: T {
-        TString Alias;
-
-        TAliased(TString alias, T value)
-            : T(std::move(value))
-            , Alias(std::move(alias))
-        {
-        }
-
-        TAliased(T value)
-            : T(std::move(value))
-        {
-        }
-
-        friend bool operator<(const TAliased& lhs, const TAliased& rhs) {
-            return std::tie(lhs.Alias, static_cast<const T&>(lhs)) < std::tie(rhs.Alias, static_cast<const T&>(rhs));
-        }
-
-        friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
-    };
-
     struct TColumnId {
         TString TableAlias;
         TString Name;
@@ -53,7 +29,7 @@ namespace NSQLComplete {
         TVector<TAliased<TTableId>> Tables;
         TVector<TColumnId> Columns;
 
-        TVector<TTableId> TablesWithAlias(TStringBuf alias) const;
+        TVector<TAliased<TTableId>> TablesWithAlias(TStringBuf alias) const;
         bool IsAsterisk() const;
         TColumnContext Renamed(TStringBuf alias) &&;
 

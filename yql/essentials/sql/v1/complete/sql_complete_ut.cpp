@@ -1160,6 +1160,24 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(5, engine, query), expected);
         }
         {
+            TString query = R"(
+                SELECT #
+                FROM example.`/yql/tutorial` AS x
+                JOIN example.`/yql/tutorial` AS y ON 1 = 1
+            )";
+
+            TVector<TCandidate> expected = {
+                {ColumnName, "y.course"},
+                {ColumnName, "x.course"},
+                {ColumnName, "x.room"},
+                {ColumnName, "y.room"},
+                {ColumnName, "x.time"},
+                {ColumnName, "y.time"},
+                {Keyword, "ALL"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(7, engine, query), expected);
+        }
+        {
             TString query = "SELECT # FROM (SELECT 1 AS x)";
 
             TVector<TCandidate> expected = {

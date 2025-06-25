@@ -44,7 +44,7 @@ namespace NSQLComplete {
                     Y_ENSURE(table.IsExisting);
                     for (TString& column : table.Columns) {
                         TColumnName name;
-                        name.Table = {.Cluster = "", .Path = tableName};
+                        name.TableAlias = tableName;
                         name.Indentifier = std::move(column);
 
                         response.RankedNames.emplace_back(std::move(name));

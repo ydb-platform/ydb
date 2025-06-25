@@ -41,12 +41,26 @@ namespace NSQLComplete {
         friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
     };
 
+    struct TColumnId {
+        TString TableAlias;
+        TString Name;
+
+        friend bool operator<(const TColumnId& lhs, const TColumnId& rhs);
+        friend bool operator==(const TColumnId& lhs, const TColumnId& rhs) = default;
+    };
+
     struct TColumnContext {
         TVector<TAliased<TTableId>> Tables;
+        TVector<TColumnId> Columns;
 
         TVector<TTableId> TablesWithAlias(TStringBuf alias) const;
+        bool IsAsterisk() const;
+        TColumnContext Renamed(TStringBuf alias) &&;
 
         friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
+        friend TColumnContext operator|(TColumnContext lhs, TColumnContext rhs);
+
+        static TColumnContext Asterisk();
     };
 
     struct TGlobalContext {

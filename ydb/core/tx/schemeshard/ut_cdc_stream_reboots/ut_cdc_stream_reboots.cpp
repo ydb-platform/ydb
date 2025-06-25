@@ -1,6 +1,6 @@
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 

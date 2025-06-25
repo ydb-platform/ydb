@@ -1,4 +1,5 @@
 #include "schemeshard_build_index.h"
+
 #include "schemeshard_impl.h"
 
 namespace NKikimr {

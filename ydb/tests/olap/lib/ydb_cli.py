@@ -173,7 +173,7 @@ class YdbCliHelper:
 
         def __get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
-                'workload', str(self.workload_type), '--path', self.db_path]
+                'workload', str(self.workload_type), '--path', YdbCluster.get_tables_path(self.db_path)]
             cmd += ['run']
             if self.external_path:
                 cmd += ['--suite-path', self.external_path]

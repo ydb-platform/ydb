@@ -1,7 +1,6 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
 #include "schemeshard_utils.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
@@ -9,6 +8,7 @@
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
+
 #include <ydb/services/lib/sharding/sharding.h>
 
 

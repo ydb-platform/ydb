@@ -1,6 +1,7 @@
 #pragma once
 
 #include "appdata.h"
+#include "runtime.h"
 
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/util/defs.h>

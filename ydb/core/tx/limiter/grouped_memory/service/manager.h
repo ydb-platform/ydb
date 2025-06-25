@@ -103,6 +103,8 @@ public:
     void UnregisterAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
     void UpdateAllocation(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId, const ui64 volume);
 
+    void UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit);
+
     bool IsEmpty() const {
         return Processes.empty();
     }

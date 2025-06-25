@@ -148,4 +148,16 @@ void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 e
     RefreshSignals();
 }
 
+void TManager::UpdateMemoryLimits(const ui64 limit, const ui64 hardLimit) {
+    if (!DefaultStage) {
+        return;
+    }
+
+    bool isLimitIncreased = false;
+    DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased);
+    if (isLimitIncreased) {
+        TryAllocateWaiting();
+    }
+}
+
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

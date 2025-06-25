@@ -498,7 +498,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
     {params_info}
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
         <tr style='background-color: #f0f0f0;'>
-            <th rowspan="2">Iter</th>
+            <th rowspan="2">Chunk</th>
             <th rowspan="2">Dur(s)</th>
     """
     
@@ -563,30 +563,78 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         
         return table_html
 
-    # Получаем информацию о запусках workload на каждой ноде из дополнительной статистики
-    node_workload_info = {}
-    if result.iterations:
-        for iteration_num, iteration in result.iterations.items():
-            # Проверяем, есть ли информация о ноде в дополнительной статистике
-            if hasattr(iteration, 'stats') and iteration.stats:
-                for stat_key, stat_value in iteration.stats.items():
+    # Анализируем итерации и группируем их по chunk_num
+    chunk_iterations = {}
+    
+    # Извлекаем информацию о chunk_num из дополнительной статистики итераций
+    for iteration_num, iteration in result.iterations.items():
+        chunk_num = None
+        node_host = None
+        
+        # Ищем информацию о chunk_num и node_host в статистике
+        if hasattr(iteration, 'stats'):
+            for stat_key, stat_value in iteration.stats.items():
+                if isinstance(stat_value, dict):
+                    if 'chunk_num' in stat_value:
+                        chunk_num = stat_value['chunk_num']
                     if 'node_host' in stat_value:
                         node_host = stat_value['node_host']
-                        if node_host not in node_workload_info:
-                            node_workload_info[node_host] = {}
-                        
-                        node_workload_info[node_host][iteration_num] = {
-                            'workload_status': __get_workload_status(iteration),
-                            'iteration': iteration
-                        }
-
-    # Добавляем строки для каждой итерации
-    iterations = sorted(result.iterations.keys())
-    for iteration_num in iterations:
-        iteration = result.iterations[iteration_num]
         
-        # Получаем продолжительность итерации
-        duration = getattr(iteration, 'time', 0)
+        # Если не нашли chunk_num, используем iteration_num как chunk_num
+        if chunk_num is None:
+            # Проверяем, есть ли в имени итерации информация о chunk
+            if hasattr(iteration, 'name') and '_chunk_' in iteration.name:
+                try:
+                    chunk_num = int(iteration.name.split('_chunk_')[-1])
+                except (ValueError, IndexError):
+                    chunk_num = iteration_num
+            else:
+                chunk_num = iteration_num
+        
+        # Если нет информации о хосте, пытаемся извлечь из имени итерации
+        if node_host is None and hasattr(iteration, 'name'):
+            # Ищем хост в имени итерации (например, SimpleQueue_column_nemesis_False_nodes_100p_ydb-sas-testing-0000.search.yandex.net_chunk_1)
+            for host in unique_nodes:
+                if host in iteration.name:
+                    node_host = host
+                    break
+        
+        # Добавляем информацию в структуру chunk_iterations
+        if chunk_num not in chunk_iterations:
+            chunk_iterations[chunk_num] = {
+                'duration': getattr(iteration, 'time', 0),
+                'nodes': {}
+            }
+        
+        if node_host:
+            chunk_iterations[chunk_num]['nodes'][node_host] = {
+                'iteration': iteration,
+                'status': __get_workload_status(iteration)
+            }
+    
+    # Если не удалось извлечь chunk_num, создаем искусственную группировку
+    if not chunk_iterations:
+        # Группируем итерации по номеру (предполагая, что это разные ноды одного chunk)
+        chunk_iterations[1] = {
+            'duration': max([getattr(iteration, 'time', 0) for iteration in result.iterations.values()], default=0),
+            'nodes': {}
+        }
+        
+        for iteration_num, iteration in result.iterations.items():
+            # Если у нас есть столько же итераций, сколько нод, предполагаем что каждая итерация - это отдельная нода
+            if len(result.iterations) == len(unique_nodes) and iteration_num <= len(unique_nodes):
+                node_host = unique_nodes[iteration_num - 1]
+                chunk_iterations[1]['nodes'][node_host] = {
+                    'iteration': iteration,
+                    'status': __get_workload_status(iteration)
+                }
+    
+    # Добавляем строки для каждого chunk
+    for chunk_num in sorted(chunk_iterations.keys()):
+        chunk_info = chunk_iterations[chunk_num]
+        
+        # Получаем продолжительность chunk
+        duration = chunk_info['duration']
         if duration:
             duration_str = f"{duration:.1f}"
             duration_color = "#f0f0f0"  # Нейтральный серый
@@ -597,16 +645,17 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         # Добавляем строку таблицы
         table_html += f"""
             <tr>
-                <td>{iteration_num}</td>
+                <td>{chunk_num}</td>
                 <td style='background-color: {duration_color};'>{duration_str}</td>
         """
         
         # Добавляем ячейки для каждой ноды
         if unique_nodes:
             for host in unique_nodes:
-                # Получаем статус workload для этой ноды и итерации
-                if host in node_workload_info and iteration_num in node_workload_info[host]:
-                    workload_color, workload_value = node_workload_info[host][iteration_num]['workload_status']
+                # Получаем статус workload для этой ноды и chunk
+                node_info = chunk_info['nodes'].get(host, {})
+                if node_info:
+                    workload_color, workload_value = node_info['status']
                 else:
                     workload_color, workload_value = "#f0f0f0", "-"
                 

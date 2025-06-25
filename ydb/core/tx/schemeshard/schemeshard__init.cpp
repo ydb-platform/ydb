@@ -5181,6 +5181,54 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (Self->PathsById.contains(backupCollectionPathId)) {
                         auto sourcePath = Self->PathsById.at(backupCollectionPathId);
                         sourcePath->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+
+                        // Get the backup collection path to construct backup table paths
+                        TPath backupCollectionPath = TPath::Init(backupCollectionPathId, Self);
+                        if (backupCollectionPath.IsResolved()) {
+                            TString backupCollectionPathStr = backupCollectionPath.PathString();
+
+                            // Set full backup table states using trimmed names
+                            if (op.HasFullBackupTrimmedName()) {
+                                TString fullBackupName = op.GetFullBackupTrimmedName() + "_full";
+                                TString fullBackupPath = backupCollectionPathStr + "/" + fullBackupName;
+                                
+                                // Set state for each table in the full backup
+                                for (const auto& tablePath : op.GetTablePathList()) {
+                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                                    if (originalTablePath.IsResolved()) {
+                                        TString tableName = originalTablePath.LeafName();
+                                        TString fullBackupTablePath = fullBackupPath + "/" + tableName;
+                                        
+                                        TPath fullBackupTableResolvedPath = TPath::Resolve(fullBackupTablePath, Self);
+                                        if (fullBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(fullBackupTableResolvedPath.Base()->PathId)) {
+                                            auto backupTablePathElement = Self->PathsById.at(fullBackupTableResolvedPath.Base()->PathId);
+                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Set incremental backup table states using trimmed names
+                            for (const auto& trimmedIncrName : op.GetIncrementalBackupTrimmedNames()) {
+                                TString incrBackupName = trimmedIncrName + "_incremental";
+                                TString incrBackupPath = backupCollectionPathStr + "/" + incrBackupName;
+                                
+                                // Set state for each table in the incremental backup
+                                for (const auto& tablePath : op.GetTablePathList()) {
+                                    TPath originalTablePath = TPath::Resolve(tablePath, Self);
+                                    if (originalTablePath.IsResolved()) {
+                                        TString tableName = originalTablePath.LeafName();
+                                        TString incrBackupTablePath = incrBackupPath + "/" + tableName;
+                                        
+                                        TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
+                                        if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
+                                            auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
+                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

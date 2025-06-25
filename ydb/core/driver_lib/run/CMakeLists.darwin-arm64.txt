@@ -109,6 +109,8 @@ target_link_libraries(run PUBLIC
   ydb-core-tx
   core-tx-columnshard
   tx-conveyor-service
+  core-tx-general_cache
+  columnshard-data_accessor-cache_policy
   core-tx-coordinator
   core-tx-datashard
   limiter-grouped_memory-usage

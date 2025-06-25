@@ -23,7 +23,6 @@ target_link_libraries(columnshard-data_accessor-in_mem PUBLIC
 
 target_sources(columnshard-data_accessor-in_mem PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/in_mem/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/in_mem/collector.cpp
 )
 
 

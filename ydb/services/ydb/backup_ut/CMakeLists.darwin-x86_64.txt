@@ -30,6 +30,7 @@ target_link_libraries(ydb-services-ydb-backup_ut PUBLIC
   cpp-testing-unittest_main
   ydb-services-ydb
   contrib-libs-fmt
+  cpp-streams-zstd
   core-testlib-default
   ydb-core-util
   core-wrappers-ut_helpers

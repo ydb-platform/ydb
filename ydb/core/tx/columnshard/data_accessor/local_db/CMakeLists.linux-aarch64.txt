@@ -24,7 +24,6 @@ target_link_libraries(columnshard-data_accessor-local_db PUBLIC
 
 target_sources(columnshard-data_accessor-local_db PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/local_db/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/local_db/collector.cpp
 )
 
 

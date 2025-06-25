@@ -263,9 +263,9 @@ std::vector<NTopic::TReadSessionEvent::TDataReceivedEvent> Read(std::shared_ptr<
 
 void AssertMessageAvaialbleThroughLogbrokerApiAndCommit(std::shared_ptr<NTopic::IReadSession> topicReader) {
     auto responseFromLogbrokerApi = Read(topicReader);
-    UNIT_ASSERT_EQUAL(responseFromLogbrokerApi.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(responseFromLogbrokerApi.size(), 1);
 
-    UNIT_ASSERT_EQUAL(responseFromLogbrokerApi[0].GetMessages().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(responseFromLogbrokerApi[0].GetMessages().size(), 1);
     responseFromLogbrokerApi[0].GetMessages()[0].Commit();
 }
 

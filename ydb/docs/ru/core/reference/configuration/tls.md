@@ -70,7 +70,7 @@ kafka_proxy_config:
 
 ```yaml
 monitoring_config:
-    monitoring_certificate_file: "/opt/ydb/certs/node.crt"
+    monitoring_certificate_file: "/opt/ydb/certs/web.pem"
 ```
 
 ## {{ ydb-short-name }} в роли клиента

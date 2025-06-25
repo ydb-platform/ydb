@@ -630,7 +630,11 @@ namespace NKikimr::NStorage {
             std::vector<ui32> nodes;
             const size_t maxNodesPerDataCenter = nodesByDataCenter.size() == 1 ? 8 : 3;
             for (auto& [_, v] : nodesByDataCenter) {
-                auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
+                size_t countToSelect = Min<size_t>(v.size(), maxNodesPerDataCenter);
+                if (v.size() < maxNodesPerDataCenter && nodesByDataCenter.size() > 1) {
+                    countToSelect = 1;
+                }
+                auto r = pickNodes(v, countToSelect);
                 nodes.insert(nodes.end(), r.begin(), r.end());
             }
             auto *rg = ss->AddRingGroups();

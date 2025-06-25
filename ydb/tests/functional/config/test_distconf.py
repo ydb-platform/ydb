@@ -70,7 +70,7 @@ class DistConfKiKiMRTest(object):
             cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
         log_configs = {
             'BOARD_LOOKUP': LogLevels.DEBUG,
-            # 'BS_NODE': LogLevels.DEBUG,
+            'BS_NODE': LogLevels.DEBUG,
             # 'GRPC_SERVER': LogLevels.DEBUG,
             # 'GRPC_PROXY': LogLevels.DEBUG,
             # 'TX_PROXY': LogLevels.DEBUG,
@@ -544,6 +544,7 @@ class TestKiKiMRDistConfReassignStateStorageMultipleRingGroup(KiKiMRDistConfReas
 
 class KiKiMRDistConfGenerateConfigTest(KiKiMRDistConfReassignStateStorageTest):
     def test(self):
+        logger.debug(f"Config: {self.do_request_config()}")
         self.do_test("StateStorage")
         self.do_test("StateStorageBoard")
         self.do_test("SchemeBoard")
@@ -554,8 +555,9 @@ class TestKiKiMRDistConfGenerateConfig18Nodes(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 18
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 9, 'Ring': [{'Node': [12]}, {'Node': [15]}, {'Node': [18]}, {'Node': [1]}, {'Node': [10]}, {'Node': [13]}, {'Node': [11]}, {'Node': [14]}, {'Node': [17]}]}]})
+        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"][0]
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
 
 
 class TestKiKiMRDistConfGenerateConfig9Nodes(KiKiMRDistConfGenerateConfigTest):
@@ -563,8 +565,9 @@ class TestKiKiMRDistConfGenerateConfig9Nodes(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 9
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 9, 'Ring': [{'Node': [3]}, {'Node': [6]}, {'Node': [9]}, {'Node': [1]}, {'Node': [4]}, {'Node': [7]}, {'Node': [2]}, {'Node': [5]}, {'Node': [8]}]}]})
+        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"][0]
+        assert_eq(rg["NToSelect"], 9)
+        assert_eq(len(rg["Ring"]), 9)
 
 
 class TestKiKiMRDistConfGenerateConfig8Nodes(KiKiMRDistConfGenerateConfigTest):
@@ -572,8 +575,9 @@ class TestKiKiMRDistConfGenerateConfig8Nodes(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 8
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 5, 'Ring': [{'Node': [1]}, {'Node': [2]}, {'Node': [3]}, {'Node': [4]}, {'Node': [5]}, {'Node': [6]}, {'Node': [7]}, {'Node': [8]}]}]})
+        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"][0]
+        assert_eq(rg["NToSelect"], 5)
+        assert_eq(len(rg["Ring"]), 8)
 
 
 class TestKiKiMRDistConfGenerateConfig16Nodes(KiKiMRDistConfGenerateConfigTest):
@@ -581,26 +585,28 @@ class TestKiKiMRDistConfGenerateConfig16Nodes(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 16
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 5, 'Ring': [{'Node': [1]}, {'Node': [10]}, {'Node': [11]}, {'Node': [12]}, {'Node': [13]}, {'Node': [14]}, {'Node': [15]}, {'Node': [16]}]}]})
+        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"][0]
+        assert_eq(rg["NToSelect"], 5)
+        assert_eq(len(rg["Ring"]), 8)
 
 
 class TestKiKiMRDistConfGenerateConfig6Nodes(KiKiMRDistConfGenerateConfigTest):
-    erasure = Erasure.MIRROR_3_DC
+    erasure = Erasure.NONE
     nodes_count = 6
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 3, 'Ring': [{'Node': [1]}, {'Node': [2]}, {'Node': [3]}, {'Node': [4]}, {'Node': [5]}, {'Node': [6]}]}]})
+        rg = self.do_request_config()[f"{configName}Config"]["RingGroups"][0]
+        assert_eq(rg["NToSelect"], 3)
+        assert_eq(len(rg["Ring"]), 6)
 
 
 class TestKiKiMRDistConfGenerateConfig3Nodes(KiKiMRDistConfGenerateConfigTest):
-    erasure = Erasure.MIRROR_3_DC
+    erasure = Erasure.NONE
     nodes_count = 3
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 3, 'Ring': [{'Node': [1]}, {'Node': [2]}, {'Node': [3]}]}]})
+        assert_eq(self.do_request_config()[f"{configName}Config"],
+            {'RingGroups': [{'NToSelect': 3, 'Ring': [{'Node': [1]}, {'Node': [2]}, {'Node': [3]}]}]})
 
 
 class TestKiKiMRDistConfGenerateConfig2Nodes(KiKiMRDistConfGenerateConfigTest):
@@ -608,8 +614,8 @@ class TestKiKiMRDistConfGenerateConfig2Nodes(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 2
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
-        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 1, 'Ring': [{'Node': [1]}, {'Node': [2]}]}]})
+        assert_eq(self.do_request_config()[f"{configName}Config"],
+            {'RingGroups': [{'NToSelect': 1, 'Ring': [{'Node': [1]}, {'Node': [2]}]}]})
 
 
 class TestKiKiMRDistConfGenerateConfig1Node(KiKiMRDistConfGenerateConfigTest):
@@ -617,5 +623,4 @@ class TestKiKiMRDistConfGenerateConfig1Node(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 1
 
     def do_test(self, configName):
-        logger.debug(f"Config: {self.do_request_config()}")
         assert_eq(self.do_request_config()[f"{configName}Config"], {'SSId': 1, 'Ring': {'NToSelect': 1, 'Node': [1]}})

@@ -525,7 +525,8 @@ TReadAnswer TReadInfo::FormAnswer(
 ) {
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
-    auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination);
+    THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination, IsInternal);
+
     NKikimrClient::TResponse& res = *answer->Response;
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
     if (HasError(blobResponse)) {
@@ -662,7 +663,7 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetStartOffset(startOffset);
     readResult->SetEndOffset(endOffset);
 
-    return {answerSize, std::move(answer)};
+    return {answerSize, std::move(answer), IsInternal};
 }
 
 void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ctx) {
@@ -673,7 +674,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
             ctx, nullptr, CompactionBlobEncoder.StartOffset, res->Offset, Partition, nullptr,
             res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
-    ctx.Send(Tablet, answer.Event.Release());
+    ctx.Send(answer.IsInternal ? SelfId() : Tablet, answer.Event.Release());
     PQ_LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
@@ -788,7 +789,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
 
     const TString& user = read->ClientId;
     auto& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-    if (!read->SessionId.empty() && !userInfo.NoConsumer) {
+    if (!read->SessionId.empty() && !userInfo.NoConsumer && user != CLIENTID_COMPACTION_CONSUMER) {
         if (userInfo.Session != read->SessionId) {
             TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_NO_SESSION].Increment(1);
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
@@ -828,7 +829,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     TReadInfo info(
             user, read->ClientDC, offset, read->LastOffset, read->PartNo, read->Count, read->Size, read->Cookie, read->ReadTimestampMs,
-            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient
+            waitQuotaTime, read->ExternalOperation, userInfo->PipeClient, read->IsInternal
     );
 
     ui64 cookie = NextReadCookie();
@@ -940,8 +941,18 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 }
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->IsInternal) {
+        Cerr << "=== Got internal proxy response\n";
+        if (Compacter) {
+            Compacter->ProcessResponse(ev);
+        }
+        return;
+    }
     ReadingTimestamp = false;
+
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
+    Cerr << "=== Got proxy response with client id = " << userInfo->User << Endl;
+
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         PQ_LOG_I("Topic '" << TopicConverter->GetClientsideName() << "'" <<
             " partition " << Partition <<

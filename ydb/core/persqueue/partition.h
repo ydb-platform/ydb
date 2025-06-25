@@ -114,6 +114,7 @@ struct TTransaction {
     TString Message;
     ECommitState State = ECommitState::Pending;
 };
+class TPartitionCompaction;
 
 class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitializer;
@@ -130,6 +131,7 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TPartitionSourceManager;
 
     friend class TPartitionTestWrapper;
+    friend class TPartitionCompaction;
 
 public:
     const TString& TopicName() const;
@@ -227,6 +229,7 @@ private:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
+    void Handle(TEvPQ::TEvAllocateCookie::TPtr& ev);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -478,6 +481,8 @@ private:
 
     TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
 
+    void CreateCompacter();
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -567,6 +572,7 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -632,6 +638,7 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvAllocateCookie, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -962,6 +969,9 @@ private:
 
     TInstant LastUsedStorageMeterTimestamp;
 
+    TMaybe<ui64> CompacterStartCookie;
+    THolder<TPartitionCompaction> Compacter;
+
     using TPendingEvent = std::variant<
         std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,
         std::unique_ptr<TEvPQ::TEvTxCommit>,
@@ -1012,10 +1022,11 @@ private:
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
                      ui64 creationUnixTime,
-                     const TActorContext& ctx);
+                     const TActorContext& ctx, bool includeToWriteCycle = true);
     void AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                      TEvKeyValue::TEvRequest* request,
-                     const TActorContext& ctx);
+                     const TActorContext& ctx, bool includeToWriteCycle = true);
+
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
                            TProcessParametersBase& parameters,
                            ui32 curWrites,
@@ -1041,6 +1052,7 @@ private:
     enum ERequestCookie : ui64 {
         ReadBlobsForCompaction = 0,
         WriteBlobsForCompaction,
+        CompactificationWrite,
         End
     };
 
@@ -1065,6 +1077,101 @@ private:
     TInstant GetFirstUncompactedBlobTimestamp() const;
 
     void TryCorrectStartOffset(TMaybe<ui64> offset);
+};
+
+
+class TPartitionCompaction {
+public:
+    TPartitionCompaction(ui64 lastCompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor, ui64 readQuota);
+
+    enum class EStep {
+        PENDING,
+        READING,
+        COMPACTING,
+    };
+
+    class TReadState {
+        friend TPartitionCompaction;
+        constexpr static const ui64 MAX_DATA_KEYS = 5000;
+
+        ui64 OffsetToRead;
+        ui64 LastOffset = 0;
+        ui64 NextPartNo = 0;
+        THashMap<TString, ui64> TopicData; //Key -> Offset
+
+
+        TPartition* PartitionActor;
+        TMaybe<NKikimrClient::TCmdReadResult::TResult> LastMessage;
+
+    public:
+        TReadState(ui64 firstOffset, TPartition* partitionActor);
+
+        bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
+        EStep ContinueIfPossible(ui64 nextRequestCookie);
+        THashMap<TString, ui64>&& GetData();
+        ui64 GetLastOffset();
+        void UpdateConfig(ui64 maxBurst, ui64 readQuota); //ToDo;
+    };
+
+    class TCompactState {
+        friend TPartitionCompaction;
+        using TKeysIter = std::deque<TDataKey>::iterator;
+
+        THolder<TEvKeyValue::TEvRequest> Request;
+        ui64 RequestSize;
+        //TKey NextDataKey;
+        ui64 MaxOffset;
+        std::shared_ptr<TQuotaTracker> QuotaTracker;
+        THashMap<TString, ui64> TopicData;
+        TPartition* PartitionActor;
+
+        TMaybe<ui64> DropOffset;
+        TKeysIter KeysIter;
+        TSet<ui64> OffsetsToKeep;
+        TSet<ui64>::iterator OffsetsIter;
+        bool Failure = false;
+        ui64 RequestDataSize = 0;
+        std::deque<TDataKey> DataKeysBody;
+        ui64 FirstHeadOffset;
+        ui64 FirstHeadPartNo;
+
+        TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset,
+                      const std::shared_ptr<TQuotaTracker> quotaTracker, TPartition* partitionActor);
+
+        EStep ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
+        bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
+
+        EStep ContinueIfPossible(ui64 nextCookie);
+        void RunKvRequest();
+        void AddDeleteRange(const TKey& key);
+    };
+
+    EStep Step = EStep::PENDING;
+    std::shared_ptr<TQuotaTracker> QuotaTracker;
+    ui64 FirstUncompactedOffset = 0;
+    bool HaveRequestInflight = false;
+    ui64 StartCookie = 0;
+    ui64 EndCookie = 0;
+    ui64 CurrentCookie = 0;
+
+
+    std::optional<TReadState> ReadState;
+    std::optional<TCompactState> CompactState;
+    TPartition* PartitionActor;
+
+    ui64 GetNextCookie() {
+        CurrentCookie++;
+        if (CurrentCookie > EndCookie) {
+            CurrentCookie = StartCookie;
+        }
+        return CurrentCookie;
+    }
+
+    void TryCompactionIfPossible();
+    void UpdatePartitionConifg();
+    void ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
+    void ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev);
+
 };
 
 } // namespace NKikimr::NPQ

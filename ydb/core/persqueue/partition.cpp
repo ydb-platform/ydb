@@ -377,6 +377,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     NKikimrPQ::TPartitionMeta meta;
     //meta.SetStartOffset(CompactionBlobEncoder.StartOffset);
     //meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), BlobEncoder.EndOffset));
+    meta.SetFirstUncompactedOffset(BlobEncoder.FirstUncompactedOffset);
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
@@ -1452,7 +1453,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
 }
 
 void TPartition::Handle(TEvPQ::TEvGetMaxSeqNoRequest::TPtr& ev, const TActorContext& ctx) {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(ev->Get()->Cookie, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -1483,6 +1484,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TEvPQ::TEvBlobResponse* blobResponse,
                                 const TActorContext& ctx)
 {
+    Cerr << "=== On read complete for user: " << info.User << Endl;
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
@@ -1512,7 +1514,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
-    ctx.Send(info.Destination != 0 ? Tablet : ctx.SelfID, answer.Event.Release());
+    ctx.Send((info.Destination != 0 && !info.IsInternal) ? Tablet : ctx.SelfID, answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
@@ -1524,10 +1526,12 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
         return;
     }
     auto it = ReadInfo.find(cookie);
+    Cerr << "=== Got blob response with cookie = " << cookie << Endl;
 
     // If there is no such cookie, then read was canceled.
     // For example, it can be after consumer deletion
     if (it == ReadInfo.end()) {
+        Cerr << "=== Drop response, cookie unknown" << Endl;
         return;
     }
 
@@ -1834,6 +1838,12 @@ void TPartition::Handle(NReadQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TAct
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     auto& response = ev->Get()->Record;
 
+    if (response.HasCookie() && (response.GetCookie() == ERequestCookie::CompactificationWrite)) {
+        if (Compacter) {
+            Compacter->ProcessResponse(ev);
+        }
+    }
+
     //check correctness of response
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         PQ_LOG_ERROR("OnWrite topic '" << TopicName() << "' partition " << Partition
@@ -1886,7 +1896,6 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         BlobsForCompactionWereWrite();
         return;
     }
-
     if (writeDuration > minWriteLatency) {
         OnHandleWriteResponse(ctx);
     } else {
@@ -2166,6 +2175,9 @@ void TPartition::RunPersist() {
         AddCmdWriteTxMeta(PersistRequest->Record);
         AddCmdWriteUserInfos(PersistRequest->Record);
         AddCmdWriteConfig(PersistRequest->Record);
+    }
+    if (Compacter) {
+        Compacter->TryCompactionIfPossible();
     }
     if (PersistRequest->Record.CmdDeleteRangeSize() || PersistRequest->Record.CmdWriteSize() || PersistRequest->Record.CmdRenameSize()) {
         // Apply counters
@@ -2892,6 +2904,13 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     Send(WriteQuotaTrackerActor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
+    if (Config.GetEnableCompactification()) {
+        CreateCompacter();
+    } else {
+        Cerr << "=== delete compacter due to disabled comp\n";
+        Compacter.Reset();
+    }
+
     if (Config.GetPartitionConfig().HasMirrorFrom()) {
         if (Mirrorer) {
             ctx.Send(Mirrorer->Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter,
@@ -3598,7 +3617,7 @@ TUserInfoBase* TPartition::GetPendingUserIfExists(const TString& user)
 
 THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyOk(const ui64 dst)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -3614,7 +3633,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
                                                                         bool consumerHasAnyCommits,
                                                                         const std::optional<TString>& committedMetadata)
 {
-    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
+    auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst, false);
     NKikimrClient::TResponse& resp = *response->Response;
 
     resp.SetStatus(NMsgBusProxy::MSTATUS_OK);

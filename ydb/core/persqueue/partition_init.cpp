@@ -326,7 +326,6 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
         Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
-
         if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
@@ -1013,6 +1012,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
             SetupTopicCounters(ctx);
         }
     }
+    if (Config.GetEnableCompactification()) {
+        Cerr << "=== Create compacter on init\n";
+        CreateCompacter();
+    }
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1252,6 +1255,23 @@ void TPartition::InitSplitMergeSlidingWindow() {
     SplitMergeAvgWriteBytes = std::make_unique<Tui64SumSlidingWindow>(TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()), 1000);
 }
 
+void TPartition::CreateCompacter() {
+    if (!CompacterStartCookie.Defined()) {
+        Send(Tablet, new TEvPQ::TEvAllocateCookie(100));
+        return;
+    } else {
+        ui64 readQuota = AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TotalPartitionWriteSpeed : std::numeric_limits<ui64>::max();
+        Compacter = MakeHolder<TPartitionCompaction>(0, *CompacterStartCookie, *CompacterStartCookie + 100, this, readQuota);
+        Compacter->TryCompactionIfPossible();
+    }
+}
+
+void TPartition::Handle(TEvPQ::TEvAllocateCookie::TPtr& ev) {
+    CompacterStartCookie = ev->Get()->StartCookie;
+    if (Config.GetEnableCompactification()) {
+        CreateCompacter();
+    }
+}
 //
 // Functions
 //

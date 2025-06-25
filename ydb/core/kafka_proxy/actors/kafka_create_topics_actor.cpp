@@ -11,6 +11,7 @@
 
 namespace NKafka {
 
+
 std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(
         const std::optional<TString>& configValue, std::optional<ECleanupPolicy>& cleanupPolicy
 ) {

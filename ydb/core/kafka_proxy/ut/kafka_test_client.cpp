@@ -168,6 +168,9 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartitio
     return Produce(topicPartition.TopicPath, msgs, transactionalId);
 }
 
+TMessagePtr<TListOffsetsResponseData> TKafkaTestClient::ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic) {
+    Cerr << ">>>>> TListOffsetsRequestData\n";
+
     TRequestHeaderData header = Header(NKafka::EApiKey::LIST_OFFSETS, 4);
     TListOffsetsRequestData request;
     request.IsolationLevel = 0;

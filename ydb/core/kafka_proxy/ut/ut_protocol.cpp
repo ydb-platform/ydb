@@ -3180,7 +3180,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto addPartsResponse = kafkaClient.AddPartitionsToTxn(transactionalId, producerInstanceId, topicPartitionsToAddToTxn);
         UNIT_ASSERT_VALUES_EQUAL(addPartsResponse->Results[0].Results[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
+        // end txn
         auto endTxnResponse = kafkaClient.EndTxn(transactionalId, producerInstanceId, true);
+        UNIT_ASSERT_VALUES_EQUAL(endTxnResponse->ErrorCode, EKafkaErrors::BROKER_NOT_AVAILABLE);
+    }
+
     Y_UNIT_TEST(ProducerFencedInTransactionScenario) {
         TInsecureTestServer testServer("1", false, true);
         TKafkaTestClient kafkaClient(testServer.Port);
@@ -3297,6 +3301,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto out1ProduceResponse = kafkaClient.Produce({outputTopicName, 1}, {{"1", "987"}}, 0, producerInstanceId, transactionalId);
         UNIT_ASSERT_VALUES_EQUAL(out1ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
         // init consumer
+        std::vector<TString> topicsToSubscribe;
+        topicsToSubscribe.push_back(outputTopicName);
+        TString protocolName = "range";
         auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 4, protocolName, 4, 15000);
 
         // validate data is not assessible in target topic
@@ -3338,5 +3345,4 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->ErrorCode, EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(offsetFetchResponse->Groups[0].Topics[0].Partitions[0].CommittedOffset, 0);
     }
-
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

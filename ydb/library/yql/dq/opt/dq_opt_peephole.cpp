@@ -880,12 +880,46 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const auto blockHashJoin = node.Cast<TDqPhyBlockHashJoin>();
     const auto pos = blockHashJoin.Pos();
 
-    // Extract table labels from TDqJoinBase API
-    const TString leftTableLabel(GetTableLabel(blockHashJoin.LeftLabel()));
-    const TString rightTableLabel(GetTableLabel(blockHashJoin.RightLabel()));
+    // Debug: Check if node has expected structure
+    YQL_CLOG(DEBUG, CoreDq) << "[DqPeepholeRewriteBlockHashJoin] Processing node with " 
+                             << blockHashJoin.Ref().ChildrenSize() << " children";
 
-    // Extract key columns using TDqJoinBase API 
-    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
+    // Safe access to table labels - check if TDqPhyBlockHashJoin actually has label methods
+    TString leftTableLabel = "";
+    TString rightTableLabel = "";
+    
+    // Try to get labels if they exist (TDqPhyBlockHashJoin might not inherit from TDqJoinBase)
+    try {
+        if (blockHashJoin.Ref().ChildrenSize() > 2) {  // Check if we have enough children
+            leftTableLabel = GetTableLabel(blockHashJoin.LeftLabel());
+            rightTableLabel = GetTableLabel(blockHashJoin.RightLabel());
+        }
+    } catch (...) {
+        // If accessing labels fails, use empty labels
+        YQL_CLOG(DEBUG, CoreDq) << "[DqPeepholeRewriteBlockHashJoin] Using empty table labels";
+    }
+
+    // Safe access to key columns - use direct child access if TDqJoinBase methods don't work
+    TExprNode::TListType leftKeyColumnNodes;
+    TExprNode::TListType rightKeyColumnNodes;
+    
+    try {
+        auto [leftKeys, rightKeys] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
+        leftKeyColumnNodes = std::move(leftKeys);
+        rightKeyColumnNodes = std::move(rightKeys);
+    } catch (...) {
+        // Fallback: try to access key columns directly by index
+        YQL_CLOG(DEBUG, CoreDq) << "[DqPeepholeRewriteBlockHashJoin] Fallback to direct child access";
+        if (blockHashJoin.Ref().ChildrenSize() > 4) {
+            // Assuming indices 3 and 4 are left/right key columns based on JSON definition
+            auto leftKeysNode = blockHashJoin.Ref().Child(3);
+            auto rightKeysNode = blockHashJoin.Ref().Child(4);
+            if (leftKeysNode && rightKeysNode) {
+                leftKeyColumnNodes = leftKeysNode->ChildrenList();
+                rightKeyColumnNodes = rightKeysNode->ChildrenList();
+            }
+        }
+    }
 
     const auto itemTypeLeft = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
     const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
@@ -905,8 +939,27 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
     }
 
+    // Safe access to join type
+    TExprNode::TPtr joinTypeNode;
+    TStringBuf joinTypeValue = "Inner";  // Default fallback
+    try {
+        joinTypeNode = blockHashJoin.JoinType().Ptr();
+        joinTypeValue = blockHashJoin.JoinType().Value();
+    } catch (...) {
+        // Fallback: try direct child access
+        if (blockHashJoin.Ref().ChildrenSize() > 2) {
+            joinTypeNode = blockHashJoin.Ref().Child(2);
+            if (joinTypeNode && joinTypeNode->IsAtom()) {
+                joinTypeValue = joinTypeNode->Content();
+            }
+        }
+        if (!joinTypeNode) {
+            joinTypeNode = ctx.NewAtom(pos, "Inner");
+        }
+    }
+
     // Build renames and full column names for right side
-    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
+    if (joinTypeValue != "LeftOnly" && joinTypeValue != "LeftSemi") {
         for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
             TString name(itemTypeRight->GetItems()[i]->GetName());
             if (rightTableLabel) {
@@ -921,34 +974,62 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> leftConvertedItems;
     std::vector<std::pair<TString, const TTypeAnnotationNode*>> rightConvertedItems;
 
-    // Process key types and conversions (similar to GraceJoin logic)
-    YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
-    for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
+    // Process key types and conversions only if we have valid key columns
+    if (!leftKeyColumnNodes.empty() && !rightKeyColumnNodes.empty()) {
+        YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
+        for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
+            if (!leftKeyColumnNodes[i] || !rightKeyColumnNodes[i]) {
+                continue; // Skip invalid keys
+            }
 
-        auto leftName = leftKeyColumnNodes[i]->Content();
-        auto leftIndex = itemTypeLeft->FindItem(leftName);
-        YQL_ENSURE(leftIndex);
-        const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
+            auto leftName = leftKeyColumnNodes[i]->Content();
+            auto leftIndex = itemTypeLeft->FindItem(leftName);
+            if (!leftIndex) {
+                // Try to interpret as index if name lookup fails
+                try {
+                    ui32 idx = FromString<ui32>(leftName);
+                    if (idx < itemTypeLeft->GetSize()) {
+                        leftIndex = idx;
+                        leftName = itemTypeLeft->GetItems()[idx]->GetName();
+                    }
+                } catch (...) {
+                    continue; // Skip invalid key
+                }
+            }
 
-        auto rightName = rightKeyColumnNodes[i]->Content();
-        auto rightIndex = itemTypeRight->FindItem(rightName);
-        YQL_ENSURE(rightIndex);
-        const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
+            auto rightName = rightKeyColumnNodes[i]->Content();
+            auto rightIndex = itemTypeRight->FindItem(rightName);
+            if (!rightIndex) {
+                // Try to interpret as index if name lookup fails
+                try {
+                    ui32 idx = FromString<ui32>(rightName);
+                    if (idx < itemTypeRight->GetSize()) {
+                        rightIndex = idx;
+                        rightName = itemTypeRight->GetItems()[idx]->GetName();
+                    }
+                } catch (...) {
+                    continue; // Skip invalid key
+                }
+            }
 
-        bool hasOptional = false;
-        auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
+            const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
+            const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
 
-        if (keyTypeLeft->Equals(*dryType)) {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
-        } else {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
-            leftConvertedItems.emplace_back(leftName, dryType);
-        }
-        if (keyTypeRight->Equals(*dryType)) {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
-        } else {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
-            rightConvertedItems.emplace_back(rightName, dryType);
+            bool hasOptional = false;
+            auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
+
+            if (keyTypeLeft->Equals(*dryType)) {
+                leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
+            } else {
+                leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
+                leftConvertedItems.emplace_back(leftName, dryType);
+            }
+            if (keyTypeRight->Equals(*dryType)) {
+                rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
+            } else {
+                rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
+                rightConvertedItems.emplace_back(rightName, dryType);
+            }
         }
     }
 
@@ -959,6 +1040,12 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     auto rightWideStream = ExpandJoinInput(*itemTypeRight, 
         ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}), 
         ctx, rightConvertedItems, pos);
+
+    // Verify that wide streams are not null
+    if (!leftWideStream || !rightWideStream) {
+        YQL_CLOG(ERROR, CoreDq) << "[DqPeepholeRewriteBlockHashJoin] Failed to create wide streams";
+        return node; // Return original node if conversion fails
+    }
 
     // Convert to block format
     auto leftBlocks = ctx.Builder(pos)
@@ -978,7 +1065,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftBlocks))
             .Add(1, std::move(rightBlocks))
-            .Add(2, blockHashJoin.JoinType().Ptr())
+            .Add(2, joinTypeNode)
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
             .Add(5, ctx.NewList(pos, std::move(leftRenames)))

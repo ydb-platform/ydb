@@ -361,6 +361,8 @@ public:
             StartPDiskThread();
             P_LOG(PRI_WARN, BSP01, "Device formatting done");
         } else {
+            RealtimeFlag.RemoveSources();
+            DeviceFlag.RemoveSources();
             PDisk.Reset(new TPDisk(PCtx, Cfg, PDiskCounters));
             PDisk->Initialize();
             Y_VERIFY_S(PDisk->PDiskThread.Running(), PCtx->PDiskLogPrefix);
@@ -524,6 +526,8 @@ public:
             StartPDiskThread();
             P_LOG(PRI_WARN, BSP01, "Format chunks reencryption finished");
         } else {
+            RealtimeFlag.RemoveSources();
+            DeviceFlag.RemoveSources();
             PDisk.Reset(new TPDisk(PCtx, Cfg, PDiskCounters));
             PDisk->Initialize();
             Y_VERIFY_S(PDisk->PDiskThread.Running(), PCtx->PDiskLogPrefix);
@@ -1115,6 +1119,8 @@ public:
         if (NeedToStopOnPoison && PDisk) {
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TStopDevice>());
         }
+        RealtimeFlag.RemoveSources();
+        DeviceFlag.RemoveSources();
         PDisk.Reset();
         PassAway();
         P_LOG(PRI_NOTICE, BSP01, "HandlePoison, PDiskThread stopped");

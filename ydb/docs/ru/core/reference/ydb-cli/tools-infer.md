@@ -11,7 +11,7 @@
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `options` — [параметры подкоманды](#options).
 
-Посмотреть актуальное описание команды можно с помощью опции `--help`:
+Получить описание параметров команды можно с помощью опции `--help`:
 
 ```bash
 {{ ydb-cli }} tools infer csv --help
@@ -23,25 +23,31 @@
 ---|---
 `-p, --path` | Путь в базе данных, по которому должна быть создана новая таблица. Значение по умолчанию: `table`.
 `--columns` | Список имен колонок таблицы, разделенных запятыми.
-`--gen-columns` | Имена колонок таблицы необходимо сгенерировать авторматически.
+`--gen-columns` | Имена колонок таблицы необходимо сгенерировать авторматически (column1, column2, ...).
 `--header` | Имена колонок таблицы необходимо считать из первой строчки CSV-файла.
 `--rows-to-analyze` | Количество первых строк CSV-файла, подлежащих анализу для выведения типов колонок. `0` означает, что следует прочитать весь файл. Значение по умолчанию: `500000`.
 `--execute` | Выполнить создание таблицы по результатам генерации скрипта.
 
 {% note info %}
 
-По умолчанию команда пытается использовать первую строку файла как список имен колонок, если это возможно.
-
 Используйте опции "--columns", "--gen-names" или "--header", чтобы явно указать источник имен колонок.
+
+По умолчанию (если не указана ни одна из этих опций), команда использует первую строку файла в качестве имен колонок, если это возможно (то есть если значения соответствуют требованиям к именам колонок и не совпадают с типами данных в остальных строках). В противном случае имена колонок будут сгенерированы автоматически. Подробнее см. [пример](#example-default) ниже.
 
 {% endnote %}
 
+## Текущее ограничение
+
+В качестве ключа всегда выбирается первая колонка. При необходимости следует изменить первичный ключ на подходящий.
 
 ## Примеры {#examples}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-### Имена колонок заданы в первой строке CSV-файла
+### Имена колонок заданы в первой строке CSV-файла, опции не указаны {#example-default}
+
+В этом примере опции не указаны.
+Значения `key` и `value` в первой строке соответствуют требованиям к именам колонок и подходят под типы данных в остальных строках (`Int64` и `Text`). Поэтому команда использует первую строку файла как имена колонок.
 
 ```bash
 $ cat data_with_header.csv
@@ -62,7 +68,7 @@ WITH (
     --, AUTO_PARTITIONING_BY_LOAD = ENABLED
     --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
-    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
+    --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
 );
 ```
 
@@ -72,7 +78,34 @@ WITH (
 
 {% endnote %}
 
-### Имена колонок таблицы указываются вручную
+### Имена колонок в первой строке, используется опция `--header` {#example-header}
+
+В этом примере значения `key` и `value` в первой строке совпадают с типами данных (`Text`) в остальных строках. Поэтому без опции `--header` команда не будет использовать первую строку как имена колонок, а сгенерирует их автоматически. Чтобы использовать первую строку как имена колонок в таком случае, явно укажите опцию `--header`:
+
+```bash
+$ cat data_with_header_text.csv
+key,value
+aaa,bbb
+ccc,ddd
+
+{{ ydb-cli }} tools infer csv data_with_header_text.csv --header
+CREATE TABLE table (
+    key Text,
+    value Text,
+    PRIMARY KEY (key) -- First column is chosen. Probably need to change this.
+)
+WITH (
+    STORE = ROW -- or COLUMN
+    -- Other useful table options to consider:
+    --, AUTO_PARTITIONING_BY_SIZE = ENABLED
+    --, AUTO_PARTITIONING_BY_LOAD = ENABLED
+    --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+    --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+);
+```
+
+### Явное указание списка колонок {#example-columns}
 
 ```bash
 cat ~/data_no_header.csv
@@ -92,11 +125,11 @@ WITH (
     --, AUTO_PARTITIONING_BY_LOAD = ENABLED
     --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
-    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
+    --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
 );
 ```
 
-### Автоматическая генерация имена колонок таблицы
+### Автоматическая генерация имён колонок {#example-gen-columns}
 
 ```bash
 cat ~/data_no_header.csv
@@ -104,9 +137,9 @@ cat ~/data_no_header.csv
 456,def
 
 {{ ydb-cli }} tools infer csv -p newtable ~/data_no_header.csv --gen-columns
-CREATE TABLE table (
-    f0 Int64,
-    f1 Text,
+CREATE TABLE newtable (
+    column1 Int64,
+    column2 Text,
     PRIMARY KEY (f0) -- First column is chosen. Probably need to change this.
 )
 WITH (
@@ -116,7 +149,7 @@ WITH (
     --, AUTO_PARTITIONING_BY_LOAD = ENABLED
     --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
     --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
-    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
+    --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
 );
 ```
 

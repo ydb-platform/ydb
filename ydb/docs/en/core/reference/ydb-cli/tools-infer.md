@@ -23,24 +23,32 @@ Option Name | Description
 ---|---
 `-p, --path` | Database path to table that should be created. Default: `table`.
 `--columns` | Explicitly specifies table column names, as a comma-separated list.
-`--gen-columns` | Explicitly indicates that table column names should be generated automatically.
+`--gen-columns` | Explicitly indicates that table column names should be generated automatically (column1, column2, ...).
 `--header` | Explicitly indicates that the first row in the CSV contains column names.
 `--rowsalyze` | Number of rows to analyze. 0 means unlimited. Reading will be stopped soon after this number of rows is read. Default: `500000`.
 `--execute` | Execute `CREATE TABLE` request right after generation.
 
 {% note info %}
 
-By default, if possible, the command attempts to use the first row of the file as column names.
-
 Use the options `--columns`, `--gen-columns`, or `--header` to explicitly specify the source of column names.
 
+By default (if none of these options are specified), the command uses the first row of the file as column names if possible (i.e., if the values meet the requirements for column names and do not match data types in the other rows). Otherwise, column names will be generated automatically. See the [example](#example-default) below for more details.
+
 {% endnote %}
+
+## Current Limitation
+
+The first column is always chosen as the primary key. You may need to change the primary key to a more appropriate one for your use case.
 
 ## Examples {#examples}
 
 {% include [ydb-cli-profile](../../_includes/ydb-cli-profile.md) %}
 
-### Column names in the first row
+### Column names in the first row, no options specified {#example-default}
+
+In this example no options are specified.
+Values `key` and `value` in the first row match the table column name requirements and do not match data types in the other rows (`Int64` and `Text`).
+So the command uses the first row of the file as column names.
 
 ```bash
 $ cat data_with_header.csv
@@ -71,7 +79,35 @@ The WITH block lists some useful table options. Uncomment the ones you need, and
 
 {% endnote %}
 
-### Explicit column list
+### Column names in the first, using `--header` option {#example-header}
+
+In this example values `key` and `value` in the first row match data types (`Text`) in the other rows.
+So without the --header option, the command would not use the first row of the file as column names but would generate column names automatically. To use the first row as column names in this situation, use the --header option explicitly.
+
+```bash
+$ cat data_with_header_text.csv
+key,value
+aaa,bbb
+ccc,ddd
+
+{{ ydb-cli }} tools infer csv data_with_header_text.csv --header
+CREATE TABLE table (
+    key Text,
+    value Text,
+    PRIMARY KEY (key) -- First column is chosen. Probably need to change this.
+)
+WITH (
+    STORE = ROW -- or COLUMN
+    -- Other useful table options to consider:
+    --, AUTO_PARTITIONING_BY_SIZE = ENABLED
+    --, AUTO_PARTITIONING_BY_LOAD = ENABLED
+    --, UNIFORM_PARTITIONS = 100 -- Initial number of partitions
+    --, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+    --, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+);
+```
+
+### Explicit column list {#example-columns}
 
 ```bash
 cat ~/data_no_header.csv
@@ -95,7 +131,7 @@ WITH (
 );
 ```
 
-### Automatically generate column names
+### Automatically generate column names {#example-gen-columns}
 
 ```bash
 cat ~/data_no_header.csv
@@ -104,8 +140,8 @@ cat ~/data_no_header.csv
 
 {{ ydb-cli }} tools infer csv -p newtable ~/data_no_header.csv --gen-columns
 CREATE TABLE newtable (
-    f0 Int64,
-    f1 Text,
+    column1 Int64,
+    column2 Text,
     PRIMARY KEY (f0) -- First column is chosen. Probably need to change this.
 )
 WITH (

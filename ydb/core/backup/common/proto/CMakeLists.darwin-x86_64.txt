@@ -32,6 +32,7 @@ add_library(backup-common-proto)
 target_link_libraries(backup-common-proto PUBLIC
   contrib-libs-cxxsupp
   yutil
+  api-protos-annotations
   contrib-libs-protobuf
 )
 

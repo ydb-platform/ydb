@@ -80,6 +80,7 @@ target_link_libraries(ydb-core-protos PUBLIC
   dq-actors-protos
   yql-dq-proto
   api-protos
+  api-protos-annotations
   core-file_storage-proto
   core-issue-protos
   providers-common-proto

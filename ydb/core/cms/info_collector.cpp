@@ -204,7 +204,7 @@ void TInfoCollector::Bootstrap() {
     Become(&TThis::StateWork);
 }
 
-using TPileMap = std::vector<std::vector<ui32>>;
+using TPileMap = TEvInterconnect::TEvNodesInfo::TPileMap;
 
 THashMap<ui32, ui32> FlipPileMap(const std::shared_ptr<const TPileMap> pileMap) {
     THashMap<ui32, ui32> result;
@@ -538,7 +538,7 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
 }
 
 void TInfoCollector::RequestBridgeInfo() {
-    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(true));
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::TEvNodeWardenQueryStorageConfig(false));
 }
 
 void TInfoCollector::Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr& ev) {

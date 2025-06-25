@@ -235,18 +235,6 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         desc.SetPathId(pathId.LocalPathId);
         desc.SetPath(path);
 
-        auto& self = *desc.MutablePathDescription()->MutableSelf();
-        self.SetName("TestPath");
-        self.SetPathId(pathId.LocalPathId);
-        self.SetSchemeshardId(owner);
-        self.SetPathType(NKikimrSchemeOp::EPathTypeDir);
-        self.SetCreateFinished(true);
-        self.SetCreateTxId(1);
-        self.SetCreateStep(1);
-        self.SetParentPathId(NSchemeShard::RootPathId);
-        self.SetPathState(NKikimrSchemeOp::EPathStateNoChanges);
-        self.SetPathVersion(1);
-
         return desc;
     }
 

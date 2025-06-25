@@ -16,7 +16,7 @@ Example usage:
 
 ![Example](_assets/general-example.gif)
 
-## Features {#features}
+The interactive query execution mode in YDB CLI offers the following features:
 
 * [Syntax highlighting](#syntax-highlighting)
 * [Hotkeys](#hotkeys)
@@ -70,7 +70,7 @@ It also searches for schema object names in database where possible.
 
 There are two types of suggestions: auto completion by pressing `TAB` key and interactive hints.
 
-## Auto completion by pressing `TAB` key {#auto-completion-tab}
+### Auto completion by pressing `TAB` key {#auto-completion-tab}
 
 While in interactive mode, pressing `TAB` key shows a list of suggestions of completion of current word according to the YQL syntax.
 
@@ -79,7 +79,7 @@ While in interactive mode, pressing `TAB` key shows a list of suggestions of com
 If there is only one available option, pressing TAB will automatically complete the current word.
 If all available options share a common prefix, pressing TAB will automatically insert it.
 
-## Interactive Hints {#interactive-hints}
+### Interactive Hints {#interactive-hints}
 
 While typing in interactive mode, a list of hints will appear under the cursor, showing first 4 suggestions of completion of current word according to the YQL grammar.
 

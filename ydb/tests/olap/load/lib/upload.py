@@ -151,10 +151,15 @@ class UploadTpchBase(UploadClusterBase):
         return f'upload/tpch/s{cls.scale}'
 
     def init(self):
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'init', '--store=column'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'init', '--store=column', '--clear'])
 
     def import_data(self):
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'import', 'generator', '--scale', str(self.scale)])
+
+    @classmethod
+    def teardown_class(cls) -> None:
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(cls.get_path()), 'clean'])
+        super().teardown_class()
 
 
 class TestUploadTpch1(UploadTpchBase):

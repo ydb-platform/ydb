@@ -336,6 +336,8 @@ public:
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK,
                     "PDiskId# " << PDisk->PDiskId << " device formatting done");
         } else {
+            RealtimeFlag.RemoveSources();
+            DeviceFlag.RemoveSources();
             PDisk.Reset(new TPDisk(Cfg, PDiskCounters));
             PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
             Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
@@ -379,7 +381,7 @@ public:
                         TPDiskConfig *cfg = actor->Cfg.Get();
 
                         if (cfg->ReadOnly) {
-                        TString readOnlyError = "PDisk is in read-only mode";
+                            TString readOnlyError = "PDisk is in read-only mode";
                             LOG_ERROR_S(*actorSystem, NKikimrServices::BS_PDISK, "Formatting error, " << readOnlyError);
                             actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(false, readOnlyError));
                             return nullptr;
@@ -493,6 +495,8 @@ public:
             LOG_WARN_S(*TlsActivationContext, NKikimrServices::BS_PDISK,
                     "PDiskId# " << PDisk->PDiskId << " format chunks reencryption finished");
         } else {
+            RealtimeFlag.RemoveSources();
+            DeviceFlag.RemoveSources();
             PDisk.Reset(new TPDisk(Cfg, PDiskCounters));
             PDisk->Initialize(TlsActivationContext->ActorSystem(), SelfId());
             Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
@@ -943,6 +947,8 @@ public:
 
     void HandlePoison() {
         ui32 pdiskId = PDisk->PDiskId;
+        RealtimeFlag.RemoveSources();
+        DeviceFlag.RemoveSources();
         PDisk.Reset();
         PassAway();
         LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_PDISK, "PDiskId# " << pdiskId

@@ -1004,6 +1004,53 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_STRING_CONTAINS(evInitRes->ErrorReason, "Total chunks# 0, System chunks needed# 1, cant run with < 3 free chunks!");
     }
 
+    Y_UNIT_TEST(FailedToFormatDiskInfoUpdate) {
+        TActorTestContext testCtx({
+            .IsBad = false,
+            .DiskSize = 16_MB,
+            .SmallDisk = true,
+            .InitiallyZeroed = true
+        });
+
+        TVDiskID vdiskID;
+
+        testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+            new NPDisk::TEvYardInit(1, vdiskID, testCtx.TestCtx.PDiskGuid),
+            NKikimrProto::CORRUPTED);
+
+        bool received = false;
+
+        struct TTestActor : public NActors::TActorBootstrapped<TTestActor> {
+
+            bool& Received;
+
+            TTestActor(bool& received) : Received(received) {}
+
+            void Bootstrap() {
+                Become(&TThis::StateDefault);
+            }
+            
+            STATEFN(StateDefault) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType: {
+                        Received = true;
+                        break;
+                    }
+                }
+            }
+        };
+
+        TActorId nodeWardenFake = testCtx.GetRuntime()->Register(new TTestActor(received));
+
+        testCtx.Send(new TEvents::TEvWakeup());
+
+        testCtx.GetRuntime()->RegisterService(MakeBlobStorageNodeWardenID(1), nodeWardenFake);
+
+        testCtx.GetRuntime()->WaitFor("TEvControllerUpdateDiskStatus", [&received]() {
+            return received;
+        });
+    }
+
     Y_UNIT_TEST(PDiskIncreaseLogChunksLimitAfterRestart) {
         TActorTestContext testCtx({
             .IsBad=false,

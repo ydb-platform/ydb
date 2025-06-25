@@ -1312,6 +1312,9 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
         }
     }
 
+    // Add scalar length column at the end (required for wide block streams)
+    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
     // Result is a stream of multi type (like BlockMapJoinCoreWrapper)
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
     return TStatus::Ok;

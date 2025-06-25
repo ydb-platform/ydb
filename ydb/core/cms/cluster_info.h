@@ -7,6 +7,7 @@
 #include "services.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -344,6 +345,7 @@ public:
     TString PreviousTenant;
     TServices Services;
     TInstant StartTime;
+    ui32 PileId;
 
     TVector<TSimpleSharedPtr<INodesChecker>> NodeGroups;
 };
@@ -1042,6 +1044,9 @@ public:
 
     TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
     TVector<TStateStorageRingInfoPtr> StateStorageRings;
+
+    std::vector<NKikimr::TBridgeInfo::TPile> Piles;
+    THashMap<ui32, ui32> NodeIdToPileId;
 };
 
 inline bool ActionRequiresHost(NKikimrCms::TAction::EType type) {

@@ -201,7 +201,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
-                    DataAccessorsManager, StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats);
+                    DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
                 PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
@@ -343,8 +343,9 @@ void TTablesManager::AddSchemaVersion(
     versionInfo.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(), DataAccessorsManager,
-            StoragesManager, version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
+        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
+            DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
+            NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }

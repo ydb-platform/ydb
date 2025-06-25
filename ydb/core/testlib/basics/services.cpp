@@ -168,7 +168,7 @@ namespace NPDisk {
     }
 
     void SetupCSMetadataCache(TTestActorRuntime& runtime, ui32 nodeIndex) {
-		auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(
+        auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(
 			NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
 		runtime.AddLocalService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),
 			TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
@@ -384,7 +384,7 @@ namespace NPDisk {
             SetupTabletPipePerNodeCaches(runtime, nodeIndex, forceFollowers);
             SetupResourceBroker(runtime, nodeIndex, app.ResourceBrokerConfig);
             SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig ? *sharedCacheConfig : defaultSharedCacheConfig);
-			SetupBlobCache(runtime, nodeIndex);
+            SetupBlobCache(runtime, nodeIndex);
             SetupCSMetadataCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);

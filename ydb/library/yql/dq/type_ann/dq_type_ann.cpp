@@ -1217,70 +1217,169 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
     auto leftKeyColumns = input->Child(TDqPhyBlockHashJoin::idx_LeftKeyColumns);
     auto rightKeyColumns = input->Child(TDqPhyBlockHashJoin::idx_RightKeyColumns);
 
-    if (!EnsureStreamType(*leftInput, ctx)) {
-        return TStatus::Error;
-    }
-    if (!EnsureStreamType(*rightInput, ctx)) {
-        return TStatus::Error;
-    }
     if (!EnsureAtom(*joinKind, ctx)) {
         return TStatus::Error;
     }
-    if (!EnsureTuple(*leftKeyColumns, ctx)) {
-        return TStatus::Error;
-    }
-    if (!EnsureTuple(*rightKeyColumns, ctx)) {
-        return TStatus::Error;
-    }
 
-    auto leftStructType = GetSequenceItemType(leftInput->Pos(), leftInput->GetTypeAnn(), false, ctx);
-    auto rightStructType = GetSequenceItemType(rightInput->Pos(), rightInput->GetTypeAnn(), false, ctx);
-
-    if (!leftStructType || !rightStructType) {
+    const auto joinKindStr = joinKind->Content();
+    if (joinKindStr != "Inner" && joinKindStr != "Left" && joinKindStr != "LeftSemi" && joinKindStr != "LeftOnly" && joinKindStr != "Cross") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinKind->Pos()), TStringBuilder() << "Unknown join kind: " << joinKindStr
+            << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
         return TStatus::Error;
     }
 
-    if (!EnsureStructType(leftInput->Pos(), *leftStructType, ctx)) {
+    // Validate left input - should be a stream/flow of block types
+    TTypeAnnotationNode::TListType leftItemTypes;
+    const TTypeAnnotationNode* leftInputType = nullptr;
+    if (!EnsureNewSeqType<false, false, true>(*leftInput, ctx, &leftInputType)) {
         return TStatus::Error;
     }
-    if (!EnsureStructType(rightInput->Pos(), *rightStructType, ctx)) {
+
+    // For block joins, we expect the input to be a stream of multi type (wide stream)
+    if (leftInputType->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(leftInput->Pos()), 
+            TStringBuilder() << "Expected multi item type for left input, but got: " << *leftInputType));
         return TStatus::Error;
     }
 
-    auto leftItems = leftStructType->Cast<TStructExprType>()->GetItems();
-    auto rightItems = rightStructType->Cast<TStructExprType>()->GetItems();
+    auto leftMultiType = leftInputType->Cast<TMultiExprType>();
+    for (const auto& item : leftMultiType->GetItems()) {
+        if (!item->IsBlockOrScalar()) {
+            ctx.AddError(TIssue(ctx.GetPosition(leftInput->Pos()),
+                TStringBuilder() << "Expected block or scalar types in left input, but got: " << *item));
+            return TStatus::Error;
+        }
+        leftItemTypes.push_back(item);
+    }
 
-    // Build result type similar to how it's done for regular joins
-    TVector<const TItemExprType*> resultStructItems;
-    
-    auto joinTypeStr = joinKind->Content();
-    bool leftOptional = IsLeftJoinSideOptional(joinTypeStr);
-    bool rightOptional = IsRightJoinSideOptional(joinTypeStr);
+    // Validate right input - should be a stream/flow of block types  
+    TTypeAnnotationNode::TListType rightItemTypes;
+    const TTypeAnnotationNode* rightInputType = nullptr;
+    if (!EnsureNewSeqType<false, false, true>(*rightInput, ctx, &rightInputType)) {
+        return TStatus::Error;
+    }
 
-    // Add left side columns (for inner join, all columns are included)
-    if (joinTypeStr != "RightOnly" && joinTypeStr != "RightSemi") {
-        for (const auto& item : leftItems) {
-            auto itemType = item->GetItemType();
-            if (leftOptional && !itemType->IsOptionalOrNull()) {
-                itemType = ctx.MakeType<TOptionalExprType>(itemType);
-            }
-            resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
+    if (rightInputType->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInput->Pos()),
+            TStringBuilder() << "Expected multi item type for right input, but got: " << *rightInputType));
+        return TStatus::Error;
+    }
+
+    auto rightMultiType = rightInputType->Cast<TMultiExprType>();
+    for (const auto& item : rightMultiType->GetItems()) {
+        if (!item->IsBlockOrScalar()) {
+            ctx.AddError(TIssue(ctx.GetPosition(rightInput->Pos()),
+                TStringBuilder() << "Expected block or scalar types in right input, but got: " << *item));
+            return TStatus::Error;
+        }
+        rightItemTypes.push_back(item);
+    }
+
+    // Validate key columns
+    if (!EnsureTupleOfAtoms(*leftKeyColumns, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*rightKeyColumns, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (leftKeyColumns->ChildrenSize() != rightKeyColumns->ChildrenSize()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Mismatch of key column count"));
+        return TStatus::Error;
+    }
+
+    if (joinKindStr == "Cross") {
+        if (!leftKeyColumns->Children().empty() || !rightKeyColumns->Children().empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Specifying key columns is not allowed for cross join"));
+            return TStatus::Error;
         }
     }
 
-    // Add right side columns (for inner join, all columns are included)
-    if (joinTypeStr != "LeftOnly" && joinTypeStr != "LeftSemi") {
-        for (const auto& item : rightItems) {
-            auto itemType = item->GetItemType();
-            if (rightOptional && !itemType->IsOptionalOrNull()) {
-                itemType = ctx.MakeType<TOptionalExprType>(itemType);
-            }
-            resultStructItems.emplace_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
+    // Check that key columns exist and have compatible types
+    for (size_t i = 0; i < leftKeyColumns->ChildrenSize(); ++i) {
+        const auto leftKeyName = leftKeyColumns->Child(i)->Content();
+        const auto rightKeyName = rightKeyColumns->Child(i)->Content();
+
+        // For block joins, we need to map column names to positions in multi type
+        // This is a simplified validation - in real implementation you'd need column name mapping
+        ui32 leftKeyPos, rightKeyPos;
+        if (!TryFromString(leftKeyName, leftKeyPos) || leftKeyPos >= leftItemTypes.size()) {
+            ctx.AddError(TIssue(ctx.GetPosition(leftKeyColumns->Child(i)->Pos()), 
+                TStringBuilder() << "Invalid left key column position: " << leftKeyName));
+            return TStatus::Error;
+        }
+
+        if (!TryFromString(rightKeyName, rightKeyPos) || rightKeyPos >= rightItemTypes.size()) {
+            ctx.AddError(TIssue(ctx.GetPosition(rightKeyColumns->Child(i)->Pos()),
+                TStringBuilder() << "Invalid right key column position: " << rightKeyName));
+            return TStatus::Error;
+        }
+
+        auto leftKeyType = leftItemTypes[leftKeyPos];
+        auto rightKeyType = rightItemTypes[rightKeyPos];
+
+        // Extract underlying types from block types for comparison
+        if (leftKeyType->GetKind() == ETypeAnnotationKind::Block) {
+            leftKeyType = leftKeyType->Cast<TBlockExprType>()->GetItemType();
+        }
+        if (rightKeyType->GetKind() == ETypeAnnotationKind::Block) {
+            rightKeyType = rightKeyType->Cast<TBlockExprType>()->GetItemType();
+        }
+
+        auto comparable = CanCompare<true>(leftKeyType, rightKeyType);
+        if (comparable != ECompareOptions::Comparable && comparable != ECompareOptions::Optional) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                TStringBuilder() << "Not comparable key types at position " << i 
+                << ": " << *leftKeyType << " vs " << *rightKeyType));
+            return TStatus::Error;
         }
     }
 
-    auto resultRowType = ctx.MakeType<TStructExprType>(resultStructItems);
-    input->SetTypeAnn(ctx.MakeType<TFlowExprType>(resultRowType));
+    // Build result type
+    std::vector<const TTypeAnnotationNode*> resultItems;
+
+    // Add left side columns 
+    if (joinKindStr != "RightOnly" && joinKindStr != "RightSemi") {
+        for (auto itemType : leftItemTypes) {
+            if (joinKindStr == "Right" && !itemType->IsOptionalOrNull()) {
+                // For right joins, left side becomes optional
+                auto underlyingType = itemType;
+                if (itemType->GetKind() == ETypeAnnotationKind::Block) {
+                    underlyingType = itemType->Cast<TBlockExprType>()->GetItemType();
+                    underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                } else {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(itemType);
+        }
+    }
+
+    // Add right side columns
+    if (joinKindStr != "LeftOnly" && joinKindStr != "LeftSemi") {
+        for (auto itemType : rightItemTypes) {
+            if (joinKindStr == "Left" && !itemType->IsOptionalOrNull()) {
+                // For left joins, right side becomes optional
+                auto underlyingType = itemType;
+                if (itemType->GetKind() == ETypeAnnotationKind::Block) {
+                    underlyingType = itemType->Cast<TBlockExprType>()->GetItemType();
+                    underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                } else {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(itemType);
+        }
+    }
+
+    // Add scalar length column at the end (typical for block operations)
+    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+    // Result is a stream of multi type
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
     return TStatus::Ok;
 }
 

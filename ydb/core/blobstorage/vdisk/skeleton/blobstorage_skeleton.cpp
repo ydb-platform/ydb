@@ -1572,13 +1572,6 @@ namespace NKikimr {
         }
 
         void Handle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
-            const bool postpone = OverloadHandler->PostponeEvent(ev);
-            if (!postpone) {
-                PrivateHandle(ev, ctx);
-            }
-        }
-
-        void PrivateHandle(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx) {
             TInstant now = TAppData::TimeProvider->Now();
             SyncLogIFaceGroup.LocalSyncMsgs()++;
 
@@ -2028,16 +2021,13 @@ namespace NKikimr {
                 auto vMultiPutHandler = [this] (const TActorContext &ctx, TEvBlobStorage::TEvVMultiPut::TPtr ev) {
                     this->PrivateHandle(ev, ctx);
                 };
-                auto loc = [this] (const TActorContext &ctx, TEvLocalSyncData::TPtr ev) {
-                    this->PrivateHandle(ev, ctx);
-                };
                 auto aoput = [this] (const TActorContext &ctx, TEvAnubisOsirisPut::TPtr ev) {
                     this->PrivateHandle(ev, ctx);
                 };
                 NMonGroup::TSkeletonOverloadGroup overloadMonGroup(VCtx->VDiskCounters, "subsystem", "emergency");
                 OverloadHandler = std::make_unique<TOverloadHandler>(Config, VCtx, PDiskCtx, Hull,
                     std::move(overloadMonGroup), std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
-                    std::move(vMultiPutHandler), std::move(loc), std::move(aoput));
+                    std::move(vMultiPutHandler), std::move(aoput));
                 ScheduleWakeupEmergencyPutQueue(ctx);
 
                 // actualize weights before we start

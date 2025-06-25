@@ -46,7 +46,6 @@ namespace NKikimr {
             TEvBlobStorage::TEvVPut::TPtr ev)>;
     using TVMultiPutHandler = std::function<void(const TActorContext &ctx,
             TEvBlobStorage::TEvVMultiPut::TPtr ev)>;
-    using TLocalSyncDataHandler = std::function<void(const TActorContext &ctx, TEvLocalSyncData::TPtr ev)>;
     using TAnubisOsirisPutHandler = std::function<void(const TActorContext &ctx, TEvAnubisOsirisPut::TPtr ev)>;
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -70,7 +69,6 @@ namespace NKikimr {
                 TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
                 TVMultiPutHandler &&vMultiPut,
-                TLocalSyncDataHandler &&loc,
                 TAnubisOsirisPutHandler &&aoput);
         ~TOverloadHandler();
 

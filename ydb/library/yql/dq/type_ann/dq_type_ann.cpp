@@ -1220,7 +1220,7 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
     if (!EnsureAtom(*joinKind, ctx)) {
         return TStatus::Error;
     }
-
+    
     const auto joinKindStr = joinKind->Content();
     if (joinKindStr != "Inner" && joinKindStr != "Left" && joinKindStr != "LeftSemi" && joinKindStr != "LeftOnly" && joinKindStr != "Cross") {
         ctx.AddError(TIssue(ctx.GetPosition(joinKind->Pos()), TStringBuilder() << "Unknown join kind: " << joinKindStr
@@ -1228,51 +1228,16 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
         return TStatus::Error;
     }
 
-    // Validate left input - should be a stream/flow of block types
+    // Validate left input - expecting wide stream of block types
     TTypeAnnotationNode::TListType leftItemTypes;
-    const TTypeAnnotationNode* leftInputType = nullptr;
-    if (!EnsureNewSeqType<false, false, true>(*leftInput, ctx, &leftInputType)) {
+    if (!EnsureWideStreamBlockType(*leftInput, leftItemTypes, ctx)) {
         return TStatus::Error;
     }
 
-    // For block joins, we expect the input to be a stream of multi type (wide stream)
-    if (leftInputType->GetKind() != ETypeAnnotationKind::Multi) {
-        ctx.AddError(TIssue(ctx.GetPosition(leftInput->Pos()), 
-            TStringBuilder() << "Expected multi item type for left input, but got: " << *leftInputType));
-        return TStatus::Error;
-    }
-
-    auto leftMultiType = leftInputType->Cast<TMultiExprType>();
-    for (const auto& item : leftMultiType->GetItems()) {
-        if (!item->IsBlockOrScalar()) {
-            ctx.AddError(TIssue(ctx.GetPosition(leftInput->Pos()),
-                TStringBuilder() << "Expected block or scalar types in left input, but got: " << *item));
-            return TStatus::Error;
-        }
-        leftItemTypes.push_back(item);
-    }
-
-    // Validate right input - should be a stream/flow of block types  
+    // Validate right input - expecting wide stream of block types  
     TTypeAnnotationNode::TListType rightItemTypes;
-    const TTypeAnnotationNode* rightInputType = nullptr;
-    if (!EnsureNewSeqType<false, false, true>(*rightInput, ctx, &rightInputType)) {
+    if (!EnsureWideStreamBlockType(*rightInput, rightItemTypes, ctx)) {
         return TStatus::Error;
-    }
-
-    if (rightInputType->GetKind() != ETypeAnnotationKind::Multi) {
-        ctx.AddError(TIssue(ctx.GetPosition(rightInput->Pos()),
-            TStringBuilder() << "Expected multi item type for right input, but got: " << *rightInputType));
-        return TStatus::Error;
-    }
-
-    auto rightMultiType = rightInputType->Cast<TMultiExprType>();
-    for (const auto& item : rightMultiType->GetItems()) {
-        if (!item->IsBlockOrScalar()) {
-            ctx.AddError(TIssue(ctx.GetPosition(rightInput->Pos()),
-                TStringBuilder() << "Expected block or scalar types in right input, but got: " << *item));
-            return TStatus::Error;
-        }
-        rightItemTypes.push_back(item);
     }
 
     // Validate key columns
@@ -1292,46 +1257,6 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
     if (joinKindStr == "Cross") {
         if (!leftKeyColumns->Children().empty() || !rightKeyColumns->Children().empty()) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Specifying key columns is not allowed for cross join"));
-            return TStatus::Error;
-        }
-    }
-
-    // Check that key columns exist and have compatible types
-    for (size_t i = 0; i < leftKeyColumns->ChildrenSize(); ++i) {
-        const auto leftKeyName = leftKeyColumns->Child(i)->Content();
-        const auto rightKeyName = rightKeyColumns->Child(i)->Content();
-
-        // For block joins, we need to map column names to positions in multi type
-        // This is a simplified validation - in real implementation you'd need column name mapping
-        ui32 leftKeyPos, rightKeyPos;
-        if (!TryFromString(leftKeyName, leftKeyPos) || leftKeyPos >= leftItemTypes.size()) {
-            ctx.AddError(TIssue(ctx.GetPosition(leftKeyColumns->Child(i)->Pos()), 
-                TStringBuilder() << "Invalid left key column position: " << leftKeyName));
-            return TStatus::Error;
-        }
-
-        if (!TryFromString(rightKeyName, rightKeyPos) || rightKeyPos >= rightItemTypes.size()) {
-            ctx.AddError(TIssue(ctx.GetPosition(rightKeyColumns->Child(i)->Pos()),
-                TStringBuilder() << "Invalid right key column position: " << rightKeyName));
-            return TStatus::Error;
-        }
-
-        auto leftKeyType = leftItemTypes[leftKeyPos];
-        auto rightKeyType = rightItemTypes[rightKeyPos];
-
-        // Extract underlying types from block types for comparison
-        if (leftKeyType->GetKind() == ETypeAnnotationKind::Block) {
-            leftKeyType = leftKeyType->Cast<TBlockExprType>()->GetItemType();
-        }
-        if (rightKeyType->GetKind() == ETypeAnnotationKind::Block) {
-            rightKeyType = rightKeyType->Cast<TBlockExprType>()->GetItemType();
-        }
-
-        auto comparable = CanCompare<true>(leftKeyType, rightKeyType);
-        if (comparable != ECompareOptions::Comparable && comparable != ECompareOptions::Optional) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                TStringBuilder() << "Not comparable key types at position " << i 
-                << ": " << *leftKeyType << " vs " << *rightKeyType));
             return TStatus::Error;
         }
     }
@@ -1375,10 +1300,7 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
         }
     }
 
-    // Add scalar length column at the end (typical for block operations)
-    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
-
-    // Result is a stream of multi type
+    // Result is a stream of multi type (like BlockMapJoinCoreWrapper)
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
     return TStatus::Ok;
 }

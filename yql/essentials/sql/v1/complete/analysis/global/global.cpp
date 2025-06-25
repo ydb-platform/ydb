@@ -19,21 +19,38 @@ namespace NSQLComplete {
         return std::tie(lhs.TableAlias, lhs.Name) < std::tie(rhs.TableAlias, rhs.Name);
     }
 
-    TVector<TAliased<TTableId>> TColumnContext::TablesWithAlias(TStringBuf alias) const {
-        if (alias.empty()) {
-            return TVector<TAliased<TTableId>>(Tables.begin(), Tables.end());
+    TColumnContext TColumnContext::ExtractAliased(TMaybe<TStringBuf> alias) {
+        if (alias.Empty()) {
+            return *this;
         }
 
-        auto filtered = NFuncTools::Filter([&](const auto& x) { return x.Alias == alias; }, Tables);
-        return TVector<TAliased<TTableId>>(filtered.begin(), filtered.end());
+        auto aliasedTables = std::ranges::partition(Tables, [&](const auto& table) {
+            return table.Alias != alias;
+        });
+
+        auto aliasedColumns = std::ranges::partition(Columns, [&](const auto& column) {
+            return column.TableAlias != alias;
+        });
+
+        TVector<TAliased<TTableId>> tables(aliasedTables.begin(), aliasedTables.end());
+        TVector<TColumnId> columns(aliasedColumns.begin(), aliasedColumns.end());
+
+        Tables.erase(aliasedTables.begin(), aliasedTables.end());
+        Columns.erase(aliasedColumns.begin(), aliasedColumns.end());
+
+        return {
+            .Tables = std::move(tables),
+            .Columns = std::move(columns),
+        };
     }
 
     bool TColumnContext::IsAsterisk() const {
-        return Columns.size() == 1 && Columns[0].Name == "*";
+        return Columns.size() == 1 &&
+               Columns[0].TableAlias.empty() &&
+               Columns[0].Name == "*";
     }
 
     TColumnContext TColumnContext::Renamed(TStringBuf alias) && {
-        Y_ENSURE(!alias.empty());
         for (TAliased<TTableId>& table : Tables) {
             table.Alias = alias;
         }
@@ -150,6 +167,12 @@ namespace NSQLComplete {
                     table.Cluster = use.Cluster;
                 }
             }
+        }
+
+        void DebugPrint(TStringBuf query, antlr4::ParserRuleContext* ctx) {
+            Cerr << "= = = = = = " << Endl;
+            Cerr << query << Endl;
+            Cerr << ctx->toStringTree(&Parser_, true) << Endl;
         }
 
         antlr4::ANTLRInputStream Chars_;

@@ -156,8 +156,12 @@ namespace NSQLComplete {
             }
 
             if (context.Column && global.Column) {
+                TMaybe<TStringBuf> table = context.Column->Table;
+                table = !table->empty() ? table : Nothing();
+
                 request.Constraints.Column = TColumnName::TConstraints();
-                request.Constraints.Column->Tables = global.Column->TablesWithAlias(context.Column->Table);
+                request.Constraints.Column->Tables =
+                    TColumnContext(*global.Column).ExtractAliased(table).Tables;
             }
 
             return request;

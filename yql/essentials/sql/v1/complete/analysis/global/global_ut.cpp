@@ -203,6 +203,40 @@ Y_UNIT_TEST_SUITE(GlobalAnalysisTests) {
             };
             UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
         }
+        {
+            TString query = R"(
+                SELECT # FROM (
+                    SELECT x.*, y.name, e
+                    FROM (SELECT a.*, d FROM a AS a JOIN c AS c ON TRUE) AS x
+                    JOIN b AS y
+                )
+            )";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {
+                .Tables = {
+                    TAliased<TTableId>("", {"", "a"}),
+                },
+                .Columns = {
+                    {.Name = "d"},
+                    {.Name = "e"},
+                },
+            };
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
+        {
+            TString query = "SELECT # FROM (SELECT 1, *, 2 FROM t)";
+
+            TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+            TColumnContext expected = {
+                .Tables = {
+                    TAliased<TTableId>("", {"", "t"}),
+                },
+            };
+            UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+        }
     }
 
     Y_UNIT_TEST(Projection) {

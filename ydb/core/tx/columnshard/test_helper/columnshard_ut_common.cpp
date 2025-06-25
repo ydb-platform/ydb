@@ -526,7 +526,7 @@ NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schema
 }
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
-    TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
+    TTestBasicRuntime& /*runtime*/, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
     std::vector<ui32> fields;
     ui32 idx = 1;
     for (auto&& f : schema) {

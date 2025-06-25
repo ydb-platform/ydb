@@ -500,10 +500,16 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_workload_result_with_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, workload_name: str, upload: bool):
+    def process_workload_result_with_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, workload_name: str, upload: bool, use_node_subcols: bool = False):
         """
         Обрабатывает результаты workload с диагностической информацией о нодах.
         Упрощенная версия без query-специфичной функциональности.
+        
+        Args:
+            result: Результат выполнения workload
+            workload_name: Имя workload для отчетов
+            upload: Загружать ли результаты
+            use_node_subcols: Использовать ли подколонки для каждой ноды (workload status и node status)
         """
         def _get_duraton(stats, field):
             r = stats.get(field)
@@ -594,7 +600,7 @@ class LoadSuiteBase:
         allure_test_description(
             cls.suite(), workload_name,
             start_time=result.start_time, end_time=end_time, node_errors=node_errors,
-            workload_result=result, workload_params=workload_params
+            workload_result=result, workload_params=workload_params, use_node_subcols=use_node_subcols
         )
 
         # Логируем статистику для отладки

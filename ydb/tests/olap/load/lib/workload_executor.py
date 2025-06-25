@@ -337,6 +337,16 @@ class WorkloadTestBase(LoadSuiteBase):
                                          nodes_percentage: int = 100, nemesis: bool = False):
         """
         Базовый метод для выполнения workload с deployment и повторными запусками
+        
+        Args:
+            workload_name: Имя workload для отчетов
+            command_args_template: Шаблон аргументов командной строки
+            duration_param: Параметр для передачи времени выполнения
+            duration_value: Время выполнения в секундах
+            additional_stats: Дополнительная статистика
+            use_chunks: Использовать ли разбивку на чанки
+            nodes_percentage: Процент нод кластера для запуска workload
+            nemesis: Запускать ли сервис nemesis
         """
         logging.info(f"=== Starting workload execution for {workload_name} ===")
 
@@ -901,7 +911,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Финальная обработка с диагностикой
             overall_result.workload_start_time = execution_result['workload_start_time']
-            self.process_workload_result_with_diagnostics(overall_result, workload_name, False)
+            self.process_workload_result_with_diagnostics(overall_result, workload_name, False, use_node_subcols=True)
 
             logging.info(f"Final result: success={overall_result.success}, successful_runs={successful_runs}/{total_runs}")
             return overall_result

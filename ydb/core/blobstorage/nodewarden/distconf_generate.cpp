@@ -637,7 +637,18 @@ namespace NKikimr::NStorage {
             if (pileId) {
                 pileId->CopyToProto(rg, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
             }
-            rg->SetNToSelect(nodes.size() / 2 + 1);
+            ui32 nodesCnt = nodes.size();
+            ui32 nToSelect = 1;
+            if (nodesCnt <= 2) {
+                nToSelect = 1;
+            } else if (nodesCnt < 8) {
+                nToSelect = 3;
+            } else if (nodesCnt == 8) {
+                nToSelect = 5;
+            } else if (nodesCnt > 8) {
+                nToSelect = 9;
+            }
+            rg->SetNToSelect(nToSelect);
             for (ui32 nodeId : nodes) {
                 rg->AddRing()->AddNode(nodeId);
             }

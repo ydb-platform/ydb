@@ -69,10 +69,10 @@ namespace NSQLComplete {
 
     struct TColumnName: TIndentifier {
         struct TConstraints {
-            TVector<TTableId> Tables;
+            TVector<TAliased<TTableId>> Tables;
         };
 
-        TTableId Table;
+        TString TableAlias;
     };
 
     struct TBindingName: TIndentifier {

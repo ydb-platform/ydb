@@ -1768,6 +1768,102 @@ TExprBase FilterOverAggregate(const TCoFlatMapBase& node, TExprContext& ctx, TOp
     return TExprBase(ctx.NewCallable(node.Pos(), node.Ref().Content(), { newAgg, restLambda }));
 }
 
+bool IsMemberOrJustMember(TExprNode::TPtr node, const TCoArgument& arg, bool& isJust, TStringBuf& memberName) {
+    isJust = node->IsCallable("Just");
+    if (isJust) {
+        node = node->HeadPtr();
+    }
+
+    if (node->IsCallable("Member")) {
+        memberName = node->Child(1)->Content();
+        return node->Child(0) == arg.Raw();
+    }
+
+    return false;
+}
+
+TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, TExprContext& ctx, const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char optName[] = "MemberNthOverFlatMap";
+    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
+        return node.Ptr();
+    }
+
+    auto filter = node.Input().Cast<TCoFilterNullMembers>();
+
+    THashSet<TStringBuf> memberNames;
+    if (!filter.Members().IsValid()) {
+        for (const auto& atom : filter.Members().Cast()) {
+            memberNames.insert(atom.Value());
+        }
+    } else {
+        const TTypeAnnotationNode* itemType = GetSequenceItemType(filter.Input(), false);
+        YQL_ENSURE(itemType);
+        const TStructExprType* structType = itemType->Cast<TStructExprType>();
+        for (auto entry : structType->GetItems()) {
+            if (entry->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                memberNames.insert(entry->GetName());
+            }
+        }
+    }
+
+    TCoArgument arg = node.Lambda().Args().Arg(0);
+
+    bool finish = false;
+    TNodeOnNodeOwnedMap remaps;
+    VisitExpr(node.Lambda().Body().Ptr(), [&](const TExprNode::TPtr& curr) {
+        if (finish) {
+            return false;
+        }
+        if (curr->GetDependencyScope() && curr->IsComplete()) {
+            return false;
+        }
+        if (curr->IsCallable("DependsOn")) {
+            TExprNodeList children = curr->Head().IsList() ? curr->Head().ChildrenList() : curr->ChildrenList();
+            if (AllOf(children, [](const TExprNode::TPtr& child) { return child->IsArgument(); })) {
+                return false;
+            }
+        }
+
+        TStringBuf name;
+        bool isJust;
+        if (IsMemberOrJustMember(curr, arg, isJust, name)) {
+            if (memberNames.contains(name)) {
+                if (isJust) {
+                    remaps[curr.Get()] = curr->HeadPtr();
+                } else {
+                    // finish if we found filtered member reference not covered by Just
+                    finish = true;
+                }
+            }
+            return false;
+        }
+
+        if (curr.Get() == arg.Raw()) {
+            // finish if we found any other usage of row
+            finish = true;
+            return false;
+        }
+
+        return true;
+    });
+
+    if (finish) {
+        return node.Ptr();
+    }
+
+    auto newBody = ctx.ReplaceNodes(node.Lambda().Body().Ptr(), remaps);
+    auto newLambda = ctx.ChangeChild(node.Lambda().Ref(), TCoLambda::idx_Body, std::move(newBody));
+
+    YQL_CLOG(DEBUG, Core) << node.CallableName() << " with Just(Member) over FilterNullMembers";
+    return ctx.Builder(node.Pos())
+        .Callable(node.CallableName())
+            .Add(0, ctx.RenameNode(filter.Ref(), "SkipNullMembers"))
+            .Add(1, ctx.DeepCopyLambda(*newLambda))
+        .Seal()
+        .Build();
+}
+
 } // namespace
 
 void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
@@ -1919,6 +2015,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                             .Seal()
                         .Seal()
                         .Build();
+                }
+            }
+
+            if (self.Input().Maybe<TCoFilterNullMembers>()) {
+                auto ret = FilterNullMembersToSkipNullMembers(self, ctx, optCtx);
+                if (ret != self.Ptr()) {
+                    return ret;
                 }
             }
         }
@@ -2142,9 +2245,9 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
     map["ExtractMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoExtractMembers self(node);
         const bool optInput = self.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
-        static const char splitFlag[] = "ExtractMembersSplitOnOptional";
+        static const char splitFlag[] = "MemberNthOverFlatMap";
         YQL_ENSURE(optCtx.Types);
-        const bool split = !IsOptimizerDisabled<splitFlag>(*optCtx.Types);
+        const bool split = IsOptimizerDisabled<splitFlag>(*optCtx.Types);
         if (!optCtx.IsSingleUsage(self.Input()) && (!optInput || !split)) {
             return node;
         }
@@ -2163,15 +2266,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        if (self.Input().Maybe<TCoSkipNullMembers>()) {
-            if (auto res = ApplyExtractMembersToSkipNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
-                return res;
-            }
-            return node;
-        }
-
-        if (self.Input().Maybe<TCoFilterNullMembers>()) {
-            if (auto res = ApplyExtractMembersToFilterNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, optCtx, {})) {
+        if (self.Input().Maybe<TCoFilterNullMembersBase>()) {
+            if (auto res = ApplyExtractMembersToFilterSkipNullMembers(self.Input().Ptr(), self.Members().Ptr(), ctx, optCtx, {})) {
                 return res;
             }
             return node;

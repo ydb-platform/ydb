@@ -115,7 +115,7 @@ namespace NActors {
 
             virtual T ExtractValue() override {
                 if (Coroutine) [[likely]] {
-                    TAsyncResult<T>& result = Coroutine->GetHandle().promise();
+                    TAsyncResult<T>& result = Coroutine.GetHandle().promise();
                     return result.ExtractValue();
                 }
                 Y_DEBUG_ABORT_UNLESS(CallbackException, "Unexpected ExtractValue call");
@@ -124,7 +124,7 @@ namespace NActors {
 
             virtual TTaskGroupResult<T> ExtractResult() override {
                 if (Coroutine) [[likely]] {
-                    TAsyncResult<T>& result = Coroutine->GetHandle().promise();
+                    TAsyncResult<T>& result = Coroutine.GetHandle().promise();
                     return TTaskGroupResult<T>(Index, std::move(result));
                 }
                 Y_DEBUG_ABORT_UNLESS(CallbackException, "Unexpected ExtractResult call");
@@ -188,26 +188,20 @@ namespace NActors {
                 }
                 // Callback might throw an exception and we need to handle it
                 try {
-                    // Use an implcit converter to construct async<T> without moving it
-                    struct TImplicitConverter {
-                        TTaskGroupTaskImpl& Self;
-                        operator async<T>() const {
-                            return std::move(Self.Callback)();
-                        }
-                    };
-                    Coroutine.emplace(TImplicitConverter{ *this });
+                    // Callback outlives the resulting coroutine
+                    Coroutine.UnsafeMoveFrom(Callback());
                 } catch (...) {
                     // Capture the callback exception
                     CallbackException = std::current_exception();
                 }
-                if (!Coroutine) {
+                if (!Coroutine) [[unlikely]] {
                     // Notify sink outside the catch body
                     Finish().resume();
                     return;
                 }
                 State = EState::Running;
-                Coroutine->GetHandle().promise().SetContinuation(Sink.GetActor(), *this, this->GetCoroutineHandle());
-                Coroutine->GetHandle().resume();
+                Coroutine.GetHandle().promise().SetContinuation(Sink.GetActor(), *this, this->GetCoroutineHandle());
+                Coroutine.GetHandle().resume();
             }
 
             void OnScheduled() noexcept {
@@ -255,10 +249,10 @@ namespace NActors {
 
         private:
             TTaskGroupSink<T>& Sink;
-            size_t Index;
+            const size_t Index;
             std::decay_t<TCallback> Callback;
-            std::optional<async<T>> Coroutine;
             std::exception_ptr CallbackException;
+            async<T> Coroutine = async<T>::UnsafeEmpty();
             std::coroutine_handle<> Pending;
             EState State = EState::Starting;
         };

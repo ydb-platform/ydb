@@ -81,8 +81,30 @@ namespace NActors {
             return TAwaiter{ Handle };
         }
 
+        constexpr async UnsafeMove() && noexcept {
+            auto h = Handle;
+            Handle = nullptr;
+            return async(h);
+        }
+
+        constexpr void UnsafeMoveFrom(async&& rhs) noexcept {
+            if (Handle) [[unlikely]] {
+                Handle.destroy();
+            }
+            Handle = rhs.Handle;
+            rhs.Handle = nullptr;
+        }
+
+        static constexpr async UnsafeEmpty() noexcept {
+            return async(nullptr);
+        }
+
     private:
-        constexpr explicit async(THandle handle)
+        constexpr explicit async(std::nullptr_t) noexcept
+            : Handle(nullptr)
+        {}
+
+        constexpr explicit async(THandle handle) noexcept
             : Handle(handle)
         {}
 

@@ -902,13 +902,14 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(0, std::move(rightWideStream))
         .Seal()
         .Build();
+    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, graceJoin, leftTableLabel, rightTableLabel);
 
     // Build block hash join core
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftBlocks))
             .Add(1, std::move(rightBlocks))
-            .Add(2, blockHashJoin.JoinKind().Ptr())
+            .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, blockHashJoin.LeftKeyColumns().Ptr())
             .Add(4, blockHashJoin.RightKeyColumns().Ptr())
         .Seal()

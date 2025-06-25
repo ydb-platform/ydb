@@ -2633,6 +2633,14 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     Y_UNIT_TEST(StreamLookupFailedRead) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetStartDelayMs(5);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxDelayMs(10);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardRetries(100);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxShardResolves(100);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0.5);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(2.0);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalRetries(100);
+
 
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
@@ -2658,7 +2666,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NKikimr::TEvTxProxySchemeCache::TEvResolveKeySetResult::EventType) {
                 if (runtime->FindActorName(ev->GetRecipientRewrite()) == "KQP_STREAM_LOOKUP_ACTOR") {
-                    if (!captureEvRead && arrivedDataCount < 3) {
+                    if (!captureEvRead && arrivedDataCount < 2) {
                         // don't resolve
                         captured.push_back(ev.Release());
                         return true;
@@ -2666,9 +2674,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 }
             } if (ev->GetTypeRewrite() == NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType) {
                 ++arrivedDataCount;
-                Cerr << "TEST >>> arrivedDataCount: " << arrivedDataCount << Endl;
 
-                if (captured.size() > 1 && arrivedDataCount > 3) {
+                if (captured.size() > 1 && arrivedDataCount > 2) {
                     auto resp = captured.back();
                     captured.pop_back();
                     runtime->Send(resp.Release());

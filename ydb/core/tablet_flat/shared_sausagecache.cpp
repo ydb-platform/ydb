@@ -397,7 +397,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const TLogoBlobID pageCollectionId = pageCollection.Label();
 
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Attach page collection " << pageCollectionId
-            << " owner " << ev->Sender);
+            << " owner " << ev->Sender
+            << " cache mode " << msg->CacheMode);
 
         TCollection& collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
         switch (msg->CacheMode) {
@@ -1160,6 +1161,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void TryMoveToRegularCacheTier(TCollection& collection, TActorId sender) {
         if (collection.InMemoryOwners.erase(sender) && collection.InMemoryOwners.empty()) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
+                << " to " << RegularCacheTier);
             // TODO: move pages async and batched
             for (const auto kv : collection.PageMap) {
                 auto* page = kv.second.Get();
@@ -1172,6 +1175,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TActorId sender, ui64 eventCookie, const TActorContext& ctx)
     {
         if (collection.InMemoryOwners.insert(sender).second && collection.InMemoryOwners.size() == 1) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
+                << " to " << TryInMemoryCacheTier);
             // TODO: re-request when evicted
             TVector<TPageId> pagesToRequest(::Reserve(pageCollection->Total()));
             for (const auto& pageId : xrange(pageCollection->Total())) {

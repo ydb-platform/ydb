@@ -141,6 +141,24 @@ namespace NKikimr::NSharedCache {
 }
 
 template<> inline
+void Out<NKikimr::NSharedCache::ECacheMode>(
+        IOutputStream& o,
+        NKikimr::NSharedCache::ECacheMode value)
+{
+    switch (value) {
+    case NKikimr::NSharedCache::ECacheMode::Regular:
+        o << "Regular";
+        break;
+    case NKikimr::NSharedCache::ECacheMode::TryKeepInMemory:
+        o << "TryKeepInMemory";
+        break;
+    default:
+        o << static_cast<ui32>(value);
+        break;
+    }
+}
+
+template<> inline
 void Out<NKikimr::NTabletFlatExecutor::NBlockIO::EPriority>(
         IOutputStream& o,
         NKikimr::NTabletFlatExecutor::NBlockIO::EPriority value)

@@ -16,7 +16,7 @@ using namespace NNodes;
 TExecTransformerBase::TStatusCallbackPair TExecTransformerBase::CallbackTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
     YQL_ENSURE(input->Type() == TExprNode::Callable);
     output = input;
-    if (auto handlerInfo = Handlers.FindPtr(input->Content())) {
+    if (auto handlerInfo = Handlers_.FindPtr(input->Content())) {
         auto status = (handlerInfo->Prerequisite)(input);
         if (status.Level != TStatus::Ok) {
             return SyncStatus(status);
@@ -36,7 +36,7 @@ void TExecTransformerBase::AddHandler(std::initializer_list<TStringBuf> names, T
     info.Handler = std::move(handler);
     info.Prerequisite = std::move(prerequisite);
     for (auto name: names) {
-        YQL_ENSURE(Handlers.emplace(name, info).second, "Duplicate execution handler for " << name);
+        YQL_ENSURE(Handlers_.emplace(name, info).second, "Duplicate execution handler for " << name);
     }
 }
 

@@ -10,6 +10,16 @@ namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+IBusServerPtr CreatePublicTcpBusServer(
+    TBusServerConfigPtr config,
+    IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
+    IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
+
+IBusServerPtr CreateLocalTcpBusServer(
+    TBusServerConfigPtr config,
+    IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
+    IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker());
+
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),

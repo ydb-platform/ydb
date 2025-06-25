@@ -5,6 +5,7 @@
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/string/builder.h>
@@ -272,11 +273,16 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
+    // long incremental restore
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        return "RESTORE INCREMENTAL";
     // system view
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         return "CREATE SYSTEM VIEW";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         return "DROP SYSTEM VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        return "CHANGE PATH STATE";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -614,11 +620,18 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalRestoreOp:
+        // For long incremental restore operations, extract the backup collection name
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSysView().GetName()}));
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpChangePathState:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetChangePathState().GetPath()}));
         break;
     }
 

@@ -210,6 +210,15 @@ message TPQConfig {
     optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];
 
     optional uint64 MaxWriteSessionBytesInflight = 57 [default = 1000000];
+
+    message TCompactionConfig {
+        optional uint32 BlobsCount = 1 [default = 300];
+        optional uint32 BlobsSize = 2 [default = 8388608]; // 8mb
+        optional uint32 MaxBlobsCount = 3 [default = 1000];
+        optional uint64 MaxWTimeLagSec = 4 [default = 300]; // 5min
+    }
+
+    optional TCompactionConfig CompactionConfig = 58;
 }
 
 message TChannelProfile {
@@ -456,10 +465,13 @@ message TMessageGroupInfo {
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue
+    optional uint32 ProducerEpoch = 10;  // For idempotent producer in Kafka protocol
+
     optional bool Explicit = 5;
     optional TPartitionKeyRange KeyRange = 6;
     optional EState State = 7;
     optional THeartbeat LastHeartbeat = 8;
+
 }
 
 message TBootstrapConfig {
@@ -911,6 +923,7 @@ message TUserInfo {
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
     optional bool AnyCommits = 8;
+    optional string CommittedMetadata = 9;
 }
 
 message TPartitionClientInfo {

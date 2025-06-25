@@ -30,7 +30,7 @@ static void WriteHex(ui16 bytes, IOutputStream& out, bool reverseBytes = false) 
 
 TString UuidBytesToString(const TString& in) {
     TStringStream ss;
-    
+
     UuidBytesToString(in, ss);
 
     return ss.Str();
@@ -44,12 +44,12 @@ void UuidBytesToString(const TString& in, IOutputStream& out) {
 
 void UuidHalfsToString(ui64 low, ui64 hi, IOutputStream& out) {
     union {
-        ui16 dw[8];
-        ui64 half[2];
+        ui16 Dw[8];
+        ui64 Half[2];
     } buf;
-    buf.half[0] = low;
-    buf.half[1] = hi;
-    NUuid::UuidToString(buf.dw, out);
+    buf.Half[0] = low;
+    buf.Half[1] = hi;
+    NUuid::UuidToString(buf.Dw, out);
 }
 
 void UuidToString(ui16 dw[8], IOutputStream& out) {
@@ -69,12 +69,12 @@ void UuidToString(ui16 dw[8], IOutputStream& out) {
 
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
     union {
-        char bytes[16];
-        ui64 half[2];
+        char Bytes[16];
+        ui64 Half[2];
     } buf;
-    buf.half[0] = low;
-    buf.half[1] = hi;
-    out.Write(buf.bytes, 16);
+    buf.Half[0] = low;
+    buf.Half[1] = hi;
+    out.Write(buf.Bytes, 16);
 }
 
 }

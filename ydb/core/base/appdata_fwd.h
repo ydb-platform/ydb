@@ -2,6 +2,7 @@
 
 // todo(gvit): remove
 #include <ydb/core/base/event_filter.h>
+#include <util/generic/hash_set.h>
 
 class TProgramShouldContinue;
 class IRandomProvider;
@@ -77,6 +78,7 @@ namespace NKikimrConfig {
     class THealthCheckConfig;
     class TWorkloadManagerConfig;
     class TQueryServiceConfig;
+    class TBridgeConfig;
 }
 
 namespace NKikimrReplication {
@@ -255,6 +257,7 @@ struct TAppData {
     NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
+    NKikimrConfig::TBridgeConfig *BridgeConfig = nullptr;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -300,6 +303,9 @@ struct TAppData {
 
     bool YamlConfigEnabled = false;
 
+    // Test failure injection system
+    THashSet<ui64> InjectedFailures;
+
     // Tracing configurator (look for tracing config in ydb/core/jaeger_tracing/actors_tracing_control)
     TIntrusivePtr<NKikimr::NJaegerTracing::TSamplingThrottlingConfigurator> TracingConfigurator;
 
@@ -315,6 +321,23 @@ struct TAppData {
 
     void InitFeatureFlags(const NKikimrConfig::TFeatureFlags& flags);
     void UpdateRuntimeFlags(const NKikimrConfig::TFeatureFlags& flags);
+
+    // Test failure injection methods
+    void InjectFailure(ui64 failureType) {
+        InjectedFailures.insert(failureType);
+    }
+
+    void RemoveFailure(ui64 failureType) {
+        InjectedFailures.erase(failureType);
+    }
+
+    void ClearAllFailures() {
+        InjectedFailures.clear();
+    }
+
+    bool HasInjectedFailure(ui64 failureType) const {
+        return InjectedFailures.contains(failureType);
+    }
 };
 
 inline TAppData* AppData(NActors::TActorSystem* actorSystem) {

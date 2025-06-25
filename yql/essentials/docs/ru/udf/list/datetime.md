@@ -24,8 +24,8 @@
 
 #### Список функций
 
-* `DateTime::Split(Date/TzDate/DateTime/TzDateTime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`
-* `DateTime::Split(Date32/TzDate32/DateTime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`
+* `DateTime::Split(Date/TzDate/Datetime/TzDatetime/Timestamp/TzTimestamp{Flags:AutoMap}) -> Resource<TM>`
+* `DateTime::Split(Date32/TzDate32/Datetime64/TzDatetime64/Timestamp64/TzTimestamp64{Flags:AutoMap}) -> Resource<TM64>`
 
 Функции, принимающие на вход `Resource<TM>` или `Resource<TM64>`, могут быть вызваны непосредственно от простого типа даты/времени. В этом случае будет сделано неявное преобразование через вызов соответствующей функции `Split`.
 
@@ -145,12 +145,12 @@ SELECT
 
 #### Список функций
 
-* `DateTime::ToSeconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`
-* `DateTime::ToSeconds(Date32/DateTime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToMilliseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
-* `DateTime::ToMilliseconds(Date32/DateTime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
-* `DateTime::ToMicroseconds(Date/DateTime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
-* `DateTime::ToMicroseconds(Date32/DateTime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
+* `DateTime::ToSeconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint32`
+* `DateTime::ToSeconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
+* `DateTime::ToMilliseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
+* `DateTime::ToMilliseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
+* `DateTime::ToMicroseconds(Date/Datetime/Timestamp/TzDate/TzDatetime/TzTimestamp{Flags:AutoMap}) -> Uint64`
+* `DateTime::ToMicroseconds(Date32/Datetime64/Timestamp64/TzDate32/TzDatetime64/TzTimestamp64{Flags:AutoMap}) -> Int64`
 
 #### Примеры
 
@@ -304,7 +304,7 @@ SELECT
 #### Примеры
 
 ```yql
-$tm1 = DateTime::Split(DateTime("2019-01-31T01:01:01Z"));
+$tm1 = DateTime::Split(Datetime("2019-01-31T01:01:01Z"));
 $tm2 = DateTime::Split(TzDatetime("2049-05-20T12:34:50,Europe/Moscow"));
 
 SELECT
@@ -425,7 +425,7 @@ $datetime_parse = DateTime::Parse("%Y-%m-%d %H:%M:%S");
 $datetime_parse_tz = DateTime::Parse("%Y-%m-%d %H:%M:%S %Z");
 
 SELECT
-    DateTime::ToSeconds(TzDateTime("2019-09-16T00:00:00,Europe/Moscow")) AS md_us1, -- 1568581200
+    DateTime::ToSeconds(TzDatetime("2019-09-16T00:00:00,Europe/Moscow")) AS md_us1, -- 1568581200
     DateTime::ToSeconds(DateTime::MakeDatetime($datetime_parse_tz("2019-09-16 00:00:00" || " Europe/Moscow"))),  -- 1568581200
     DateTime::ToSeconds(DateTime::MakeDatetime(DateTime::Update($datetime_parse("2019-09-16 00:00:00"), "Europe/Moscow" as Timezone))), -- 1568581200
 
@@ -501,7 +501,7 @@ SELECT
 
 ```yql
 SELECT
-    TzDateTime("2019-09-16T00:00:00,Europe/Moscow"), -- 2019-09-16T00:00:00,Europe/Moscow
+    TzDatetime("2019-09-16T00:00:00,Europe/Moscow"), -- 2019-09-16T00:00:00,Europe/Moscow
     Date("2019-09-16") -- 2019-09-16
 ```
 
@@ -509,7 +509,7 @@ SELECT
 
 ```yql
 SELECT
-    CAST("2019-09-16T00:00:00,Europe/Moscow" AS TzDateTime), -- 2019-09-16T00:00:00,Europe/Moscow
+    CAST("2019-09-16T00:00:00,Europe/Moscow" AS TzDatetime), -- 2019-09-16T00:00:00,Europe/Moscow
     CAST("2019-09-16" AS Date) -- 2019-09-16
 ```
 
@@ -518,7 +518,7 @@ SELECT
 `CAST` в `Date` или `TzDate` дает такую дату в таймзоне GMT, в которую происходит полночь по локальному времени (например, для московского времени 2019-10-22 00:00:00, будет возвращена дата 2019-10-21). Для получения даты в локальной таймзоне можно использовать DateTime::Format.
 
 ```yql
-$x = DateTime("2019-10-21T21:00:00Z");
+$x = Datetime("2019-10-21T21:00:00Z");
 select
     AddTimezone($x, "Europe/Moscow"), -- 2019-10-22T00:00:00,Europe/Moscow
     cast($x as TzDate), -- 2019-10-21,GMT

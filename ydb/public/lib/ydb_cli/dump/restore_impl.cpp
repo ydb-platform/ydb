@@ -965,9 +965,7 @@ namespace {
                 if (types.empty()) {
                     TVector<TFsPath> children;
                     if (fsPath.List(children); children.empty()) {
-                        return Result<TRestoreResult>(fsPath, EStatus::BAD_REQUEST,
-                            TStringBuilder() << "Empty folder without the special \"" << NFiles::Empty().FileName << "\" marker file."
-                        );
+                        continue;
                     }
                     // intermediate folder
                     backupEntries.emplace_back(fsPath, GetDbPath(fsPath, fsBackupRoot, dbRestoreRoot), ESchemeEntryType::Directory);

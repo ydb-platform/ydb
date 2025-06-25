@@ -35,6 +35,7 @@ TString CompressDeflate(TStringBuf source);
 TString DecompressDeflate(TStringBuf source);
 TString GetObfuscatedData(TString data, const THeaders& headers);
 TString ToHex(size_t value);
+bool IsReadableContent(TStringBuf contentType);
 
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
@@ -368,8 +369,12 @@ public:
 
     void ConnectionClosed();
 
+    size_t GetHeadersSize() const { // including request line
+        return HeaderType::Headers.end() - TSocketBuffer::Data();
+    }
+
     size_t GetBodySizeFromTotalSize() const {
-        return TotalSize.value() - (HeaderType::Headers.end() - TSocketBuffer::Data());
+        return TotalSize.value() - GetHeadersSize();
     }
 
     void Clear() {
@@ -493,8 +498,16 @@ public:
         Advance(data.size());
     }
 
+    TString AsReadableString() const {
+        if (IsReadableContent(HeaderType::ContentType)) {
+            return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        } else {
+            return TString(Data(), GetHeadersSize());
+        }
+    }
+
     TString GetObfuscatedData() const {
-        return NHttp::GetObfuscatedData(AsString(), HeaderType::Headers);
+        return NHttp::GetObfuscatedData(AsReadableString(), HeaderType::Headers);
     }
 };
 
@@ -609,6 +622,10 @@ public:
         Stage = ERenderStage::Body;
     }
 
+    size_t GetHeadersSize() const { // including request line
+        return HeaderType::Headers.end() - TSocketBuffer::Data();
+    }
+
     void SetBody(TStringBuf body) {
         Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         if (HeaderType::ContentLength.empty()) {
@@ -705,8 +722,16 @@ public:
         Y_ABORT_UNLESS(size == TSocketBuffer::Size());
     }
 
+    TString AsReadableString() const {
+        if (IsReadableContent(HeaderType::ContentType)) {
+            return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        } else {
+            return TString(Data(), GetHeadersSize());
+        }
+    }
+
     TString GetObfuscatedData() const {
-        return NHttp::GetObfuscatedData(AsString(), HeaderType::Headers);
+        return NHttp::GetObfuscatedData(AsReadableString(), HeaderType::Headers);
     }
 };
 
@@ -937,7 +962,7 @@ public:
     }
 
     bool IsNeedBody() const {
-        return GetRequest()->Method != "HEAD" && Status != "204";
+        return GetRequest()->Method != "HEAD" && Status != "204" && Status != "202";
     }
 
     bool EnableCompression() {

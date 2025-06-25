@@ -1081,6 +1081,10 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
     auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable,
         extraColumns, filter);
 
+    if (!lookup.Maybe<TKqlStreamLookupTable>()) {
+        return node;
+    }
+
     return Build<TCoTopBase>(ctx, node.Pos())
         .CallableName(node.Ref().Content())
         .Input(lookup)

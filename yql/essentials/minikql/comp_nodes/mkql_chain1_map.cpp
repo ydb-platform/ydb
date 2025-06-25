@@ -160,19 +160,19 @@ public:
         }
 
         ui64 GetListLength() const final {
-            if (!Length) {
-                Length = List.GetListLength();
+            if (!Length_) {
+                Length_ = List.GetListLength();
             }
 
-            return *Length;
+            return *Length_;
         }
 
         bool HasListItems() const final {
-            if (!HasItems) {
-                HasItems = List.HasListItems();
+            if (!HasItems_) {
+                HasItems_ = List.HasListItems();
             }
 
-            return *HasItems;
+            return *HasItems_;
         }
 
         TComputationContext& CompCtx;
@@ -414,7 +414,7 @@ public:
 
             const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
 
-            const auto itemsPtr = *Stateless || ctx.AlwaysInline ?
+            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
                 new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
                 new AllocaInst(elementsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, size, itemsPtr, block);

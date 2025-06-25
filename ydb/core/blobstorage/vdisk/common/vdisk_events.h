@@ -2725,7 +2725,8 @@ namespace NKikimr {
         TEvVAssimilate() = default;
 
         TEvVAssimilate(const TVDiskID& vdiskId, std::optional<ui64> skipBlocksUpTo,
-                std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo, std::optional<TLogoBlobID> skipBlobsUpTo) {
+                std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo, std::optional<TLogoBlobID> skipBlobsUpTo,
+                bool ignoreDecommitState, bool reverse) {
             VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
             if (skipBlocksUpTo) {
                 Record.SetSkipBlocksUpTo(*skipBlocksUpTo);
@@ -2737,6 +2738,12 @@ namespace NKikimr {
             }
             if (skipBlobsUpTo) {
                 LogoBlobIDFromLogoBlobID(*skipBlobsUpTo, Record.MutableSkipBlobsUpTo());
+            }
+            if (ignoreDecommitState) {
+                Record.SetIgnoreDecommitState(ignoreDecommitState);
+            }
+            if (reverse) {
+                Record.SetReverse(reverse);
             }
         }
     };
@@ -2903,11 +2910,18 @@ namespace NKikimr {
         {}
 
         TEvVSyncFull(const TSyncState &syncState, const TVDiskID &sourceVDisk, const TVDiskID &targetVDisk,
-                ui64 cookie, NKikimrBlobStorage::ESyncFullStage stage, const TLogoBlobID &logoBlobFrom,
-                ui64 blockTabletFrom, const TKeyBarrier &barrierFrom);
+                ui64 cookie, NKikimrBlobStorage::ESyncFullStage stage,
+                const TLogoBlobID &logoBlobFrom, ui64 blockTabletFrom, const TKeyBarrier &barrierFrom,
+                NKikimrBlobStorage::EFullSyncProtocol protocol = NKikimrBlobStorage::EFullSyncProtocol::Legacy);
 
         bool IsInitial() const {
             return Record.GetCookie() == 0;
+        }
+
+        NKikimrBlobStorage::EFullSyncProtocol GetProtocol() {
+            return Record.HasProtocol()
+                ? Record.GetProtocol()
+                : NKikimrBlobStorage::EFullSyncProtocol::Legacy;
         }
     };
 

@@ -2,8 +2,11 @@
 import ydb
 import os
 import threading
+import logging
 
 ydb.interceptor.monkey_patch_event_handler()
+
+logger = logging.getLogger(__name__)
 
 
 class YdbClient:
@@ -87,7 +90,7 @@ class WorkloadBase:
             try:
                 f()
             except Exception as e:
-                print(f"FATAL: {e}")
+                logger.exception(f"FATAL: {e}")
                 os._exit(1)
 
         for f in funcs:

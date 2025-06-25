@@ -230,7 +230,12 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
 struct PartitionConsumerOffset {
     ui64 PartitionIndex;
     ui64 Offset;
-    TString Metadata;
+    std::optional<TString> Metadata = std::nullopt;
+
+    PartitionConsumerOffset(ui64 partitionIndex, ui64 offset, std::optional<TString> metadata = std::nullopt) :
+                                                PartitionIndex(partitionIndex),
+                                                Offset(offset),
+                                                Metadata(metadata) {}
 };
 
 struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>

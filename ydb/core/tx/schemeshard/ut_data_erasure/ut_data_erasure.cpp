@@ -1,12 +1,13 @@
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/data_erasure_helpers.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/storage_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/data_erasure_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -74,7 +75,7 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TestDataErasure) {
-    void SimpleDataErasureTest(const TSchemeObject& createSchemeObject) {
+    void SimpleDataErasureTest(const TSchemeObject& createSchemeObject, ui64 currentBscGeneration = 0) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
@@ -92,6 +93,11 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
 
         auto sender = runtime.AllocateEdgeActor();
+        // Change BSC counter value between data erasure iterations
+        if (currentBscGeneration > 1) {
+            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(currentBscGeneration);
+            runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
+        }
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         ui64 txId = 100;
@@ -100,7 +106,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         CreateTestExtSubdomain(runtime, env, &txId, "Database2", createSchemeObject);
 
         TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, (currentBscGeneration >  1 ? 4 : 3)));
         runtime.DispatchEvents(options);
 
         auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
@@ -109,20 +115,28 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         TAutoPtr<IEventHandle> handle;
         auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
 
-        UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+        if (currentBscGeneration > 1) {
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), currentBscGeneration + 1, response->Record.GetGeneration());
+        } else {
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+        }
         UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
     }
 
-    Y_UNIT_TEST(SimpleDataErasureTestForTables) {
+    Y_UNIT_TEST(SimpleTestForTables) {
         SimpleDataErasureTest({.Table = true, .Topic = false});
     }
 
-    Y_UNIT_TEST(SimpleDataErasureTestForTopic) {
+    Y_UNIT_TEST(SimpleTestForTopic) {
         SimpleDataErasureTest({.Table = false, .Topic = true});
     }
 
-    Y_UNIT_TEST(SimpleDataErasureTestForAllSupportedObjects) {
+    Y_UNIT_TEST(SimpleTestForAllSupportedObjects) {
         SimpleDataErasureTest({.Table = true, .Topic = true});
+    }
+
+    Y_UNIT_TEST(SchemeShardCounterDoesNotConsistWithBscCounter) {
+        SimpleDataErasureTest({.Table = true, .Topic = false}, /*currentBscGeneration*/ 47);
     }
 
     void DataErasureRun3Cycles(const TSchemeObject& createSchemeObject) {
@@ -164,15 +178,15 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
     }
 
-    Y_UNIT_TEST(DataErasureRun3CyclesForTables) {
+    Y_UNIT_TEST(Run3CyclesForTables) {
         DataErasureRun3Cycles({.Table = true, .Topic = false});
     }
 
-    Y_UNIT_TEST(DataErasureRun3CyclesForTopics) {
+    Y_UNIT_TEST(Run3CyclesForTopics) {
         DataErasureRun3Cycles({.Table = false, .Topic = true});
     }
 
-    Y_UNIT_TEST(DataErasureRun3CyclesForAllSupportedObjects) {
+    Y_UNIT_TEST(Run3CyclesForAllSupportedObjects) {
         DataErasureRun3Cycles({.Table = true, .Topic = true});
     }
 
@@ -220,7 +234,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
     }
 
-    Y_UNIT_TEST(DataErasureManualLaunch3Cycles) {
+    Y_UNIT_TEST(ManualLaunch3Cycles) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
@@ -269,6 +283,67 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         RunDataErasure(1);
         RunDataErasure(2);
         RunDataErasure(3);
+    }
+
+    Y_UNIT_TEST(ManualLaunch3CyclesWithNotConsistentCountersInSchemeShardAndBSC) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+                return new TFakeBSController(tablet, info);
+            });
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
+        dataErasureConfig.SetDataErasureIntervalSeconds(0); // do not schedule
+        dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui64 txId = 100;
+
+        CreateTestExtSubdomain(runtime, env, &txId, "Database1");
+        CreateTestExtSubdomain(runtime, env, &txId, "Database2");
+
+        auto RunDataErasure = [&runtime] (ui32 expectedGeneration, ui32 requiredCountShredResponses) {
+            auto sender = runtime.AllocateEdgeActor();
+            {
+                auto request = MakeHolder<TEvSchemeShard::TEvDataErasureManualStartupRequest>();
+                runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            }
+
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, requiredCountShredResponses));
+            runtime.DispatchEvents(options);
+
+            auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
+
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), expectedGeneration, response->Record.GetGeneration());
+            UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
+        };
+
+        RunDataErasure(1, 3);
+        // Change BSC counter value between data erasure iterations
+        {
+            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(50);
+            runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
+        }
+        RunDataErasure(51, 4);
+        // Change BSC counter value between data erasure iterations
+        {
+            auto request = MakeHolder<TEvBlobStorage::TEvControllerShredRequest>(100);
+            runtime.SendToPipe(MakeBSControllerID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
+        }
+        RunDataErasure(101, 4);
     }
 
     Y_UNIT_TEST(DataErasureWithCopyTable) {

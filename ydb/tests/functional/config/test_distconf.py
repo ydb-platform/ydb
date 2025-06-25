@@ -2,6 +2,7 @@
 import logging
 import yaml
 import tempfile
+import os
 from hamcrest import assert_that, is_, has_length
 import time
 import requests
@@ -21,6 +22,14 @@ from ydb.tests.library.matchers.response import is_valid_response_with_field
 import ydb.public.api.protos.ydb_config_pb2 as config
 
 logger = logging.getLogger(__name__)
+
+
+def get_ring_group(request_config, config_name):
+    config = request_config[f"{config_name}Config"]
+    if "RingGroups" in config:
+        return config["RingGroups"][0]
+    else:
+        return config["Ring"]
 
 
 def value_for(key, tablet_id):
@@ -60,11 +69,12 @@ class DistConfKiKiMRTest(object):
         if cls.nodes_count == 0:
             cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
         log_configs = {
-            'BS_NODE': LogLevels.DEBUG,
-            'GRPC_SERVER': LogLevels.DEBUG,
-            'GRPC_PROXY': LogLevels.DEBUG,
-            'TX_PROXY': LogLevels.DEBUG,
-            'TICKET_PARSER': LogLevels.DEBUG,
+            'BOARD_LOOKUP': LogLevels.DEBUG,
+            # 'BS_NODE': LogLevels.DEBUG,
+            # 'GRPC_SERVER': LogLevels.DEBUG,
+            # 'GRPC_PROXY': LogLevels.DEBUG,
+            # 'TX_PROXY': LogLevels.DEBUG,
+            # 'TICKET_PARSER': LogLevels.DEBUG,
         }
         cls.configurator = KikimrConfigGenerator(
             cls.erasure,
@@ -175,6 +185,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
         # replace config
         replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
         # start new node
         new_node.start()
@@ -203,6 +214,103 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             if 'pdisk_info' in locals():
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
+
+    def test_cluster_expand_with_seed_nodes(self):
+        table_path = '/Root/mydb/mytable_with_seed_nodes'
+        number_of_tablets = 5
+
+        tablet_ids = create_kv_tablets_and_wait_for_start(
+            self.cluster.client,
+            self.cluster.kv_client,
+            self.swagger_client,
+            number_of_tablets,
+            table_path,
+            timeout_seconds=3
+        )
+
+        current_node_ids = list(self.cluster.nodes.keys())
+        expected_new_node_id = max(current_node_ids) + 1
+
+        node_port_allocator = self.configurator.port_allocator.get_node_port_allocator(expected_new_node_id)
+
+        fetched_config = fetch_config(self.config_client)
+        dumped_fetched_config = yaml.safe_load(fetched_config)
+        config_section = dumped_fetched_config["config"]
+
+        # create new pdisk
+        tmp_file = tempfile.NamedTemporaryFile(prefix="pdisk{}".format(1), suffix=".data",
+                                               dir=None)
+        pdisk_path = tmp_file.name
+
+        # add new host config
+        host_config_id = len(config_section["host_configs"]) + 1
+        config_section["host_configs"].append({
+            "drive": [
+                {
+                    "path": pdisk_path,
+                    "type": "ROT"
+                }
+            ],
+            "host_config_id": host_config_id,
+        })
+
+        # add new node in hosts
+        config_section["hosts"].append({
+            "host_config_id": host_config_id,
+            "host": "localhost",
+            "port": node_port_allocator.ic_port,
+        })
+        self.configurator.full_config = dumped_fetched_config
+
+        # prepare seed nodes file
+        seed_nodes = []
+        for node_id, node in self.cluster.nodes.items():
+            seed_nodes.append(f"grpc://localhost:{node.grpc_port}")
+
+        # create temporary seed nodes file
+        seed_nodes_file = tempfile.NamedTemporaryFile(mode='w', prefix="seed_nodes_", suffix=".yaml", delete=False)
+        yaml.dump(seed_nodes, seed_nodes_file)
+        seed_nodes_file.close()
+
+        # prepare new node
+        new_node = self.cluster.prepare_node(self.configurator, seed_nodes_file.name)
+        new_node.format_pdisk(pdisk_path, self.configurator.static_pdisk_size)
+        dumped_fetched_config["metadata"]["version"] = 1
+
+        # replace config
+        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        logger.debug(f"replace_config_response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+        # start new node
+        new_node.start()
+
+        self.check_kikimr_is_operational(table_path, tablet_ids)
+
+        time.sleep(5)
+
+        try:
+            pdisk_info = self.swagger_client.pdisk_info(new_node.node_id)
+
+            pdisks_list = pdisk_info['PDiskStateInfo']
+
+            found_pdisk_in_viewer = False
+            for pdisk_entry in pdisks_list:
+                node_id_in_entry = pdisk_entry.get('NodeId')
+                path_in_entry = pdisk_entry.get('Path')
+                state_in_entry = pdisk_entry.get('State')
+
+                if node_id_in_entry == new_node.node_id and path_in_entry == pdisk_path:
+                    logger.info(f"Found matching PDisk in viewer: NodeId={node_id_in_entry}, Path={path_in_entry}, State={state_in_entry}")
+                    found_pdisk_in_viewer = True
+                    break
+        except Exception as e:
+            logger.error(f"Viewer API check failed: {e}", exc_info=True)
+            if 'pdisk_info' in locals():
+                logger.error(f"Viewer API response content: {pdisk_info}")
+            raise
+        finally:
+            if os.path.exists(seed_nodes_file.name):
+                os.unlink(seed_nodes_file.name)
 
 
 def assert_eq(a, b):
@@ -311,6 +419,15 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
                     "RingGroups": defaultRingGroup + newRingGroup}}}))
         time.sleep(1)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": defaultRingGroup + newRingGroup})
+
+        time.sleep(1)
+        for i in range(len(defaultRingGroup)):
+            defaultRingGroup[i]["WriteOnly"] = True
+        logger.info(self.do_load_and_test({"ReconfigStateStorage": {f"{configName}Config": {
+                    "RingGroups": newRingGroup + defaultRingGroup}}}))
+        time.sleep(1)
+        assert_eq(self.do_request_config()[f"{configName}Config"], {"RingGroups": newRingGroup + defaultRingGroup})
+
         time.sleep(1)
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {f"{configName}Config": {
                     "RingGroups": newRingGroup}}}))
@@ -323,14 +440,14 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
 class KiKiMRDistConfReassignStateStorageBaseTest(KiKiMRDistConfReassignStateStorageTest):
     def test_cluster_change_state_storage(self):
         self.do_test("StateStorage")
-        # self.do_test("StateStorageBoard")
-        # self.do_test("SchemeBoard")
+        self.do_test("StateStorageBoard")
+        self.do_test("SchemeBoard")
 
 
 class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignStateStorageBaseTest):
     def check_failed(self, req, message):
         resp = self.do_request(req)
-        assert_that(resp["ErrorReason"].startswith(message), {"Response": resp, "Expected": message})
+        assert_that(resp.get("ErrorReason", "").startswith(message), {"Response": resp, "Expected": message})
 
     def do_test(self, storageName):
         self.check_failed({"ReconfigStateStorage": {}}, "New configuration is not defined")
@@ -343,7 +460,7 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}},
                           f"{storageName} too deep nested ring declaration")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}},
-                          f"New {storageName} configuration first ring group should be equal to old config")
+                          "New introduced ring group should be WriteOnly")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}},
                           f"{storageName} invalid ring group selection")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Node": [4], "Ring": [{"Node": [4]}]}]}}},
@@ -352,14 +469,27 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
                           f"New {storageName} configuration first RingGroup is writeOnly")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [{"NToSelect": 1, "Ring": [{"RingGroupActorIdOffset": 2, "Node": [4]}]}]}}},
                           f"{storageName} RingGroupActorIdOffset should be used in ring group level, not ring")
-        defaultRingGroup = self.do_request_config()[f"{storageName}Config"]["Ring"]
-        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"NToSelect": 1, "Node": [defaultRingGroup["Node"][0]]}]}}},
-                          f"{storageName} replicas ActorId intersection, specify RingGroupActorIdOffset if you run multiple replicas on one node")
+        defaultRingGroup = get_ring_group(self.do_request_config(), storageName)
+        node = defaultRingGroup["Node"][0] if "Node" in defaultRingGroup else defaultRingGroup["Ring"][0]["Node"][0]
+        cmd = {"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [
+            defaultRingGroup,
+            {"NToSelect": 1, "Ring": [{"Node": [node]}]}
+        ]}}}
+        self.check_failed(cmd, f"{storageName} replicas ActorId intersection, specify RingGroupActorIdOffset if you run multiple replicas on one node")
+
+        defaultRingGroup = [get_ring_group(self.do_request_config(), storageName)]
+        newRingGroup = [
+            {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
+            {"NToSelect": 3, "Ring": [{"Node": [7]}, {"Node": [8]}, {"Node": [1]}]}
+            ]
+        self.do_test_change_state_storage(defaultRingGroup, newRingGroup, storageName)
+        self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [newRingGroup[0]]}}},
+                          "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion")
 
 
 class TestKiKiMRDistConfReassignStateStorageNoChanges(KiKiMRDistConfReassignStateStorageBaseTest):
     def do_test(self, configName):
-        defaultRingGroup = [self.do_request_config()[f"{configName}Config"]["Ring"]]
+        defaultRingGroup = [get_ring_group(self.do_request_config(), configName)]
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {f"{configName}Config": {
                     "RingGroups": defaultRingGroup}}}))
         time.sleep(1)
@@ -368,7 +498,7 @@ class TestKiKiMRDistConfReassignStateStorageNoChanges(KiKiMRDistConfReassignStat
 
 class TestKiKiMRDistConfReassignStateStorage(KiKiMRDistConfReassignStateStorageBaseTest):
     def do_test(self, configName):
-        defaultRingGroup = [self.do_request_config()[f"{configName}Config"]["Ring"]]
+        defaultRingGroup = [get_ring_group(self.do_request_config(), configName)]
         newRingGroup = [{"WriteOnly": True, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}]
         self.do_test_change_state_storage(defaultRingGroup, newRingGroup, configName)
         assert_eq(self.do_request_config()[f"{configName}Config"], {"Ring": newRingGroup[0]})
@@ -376,7 +506,7 @@ class TestKiKiMRDistConfReassignStateStorage(KiKiMRDistConfReassignStateStorageB
 
 class TestKiKiMRDistConfReassignStateStorageToTheSameConfig(KiKiMRDistConfReassignStateStorageBaseTest):
     def do_test(self, configName):
-        defaultRingGroup = [self.do_request_config()[f"{configName}Config"]["Ring"]]
+        defaultRingGroup = [get_ring_group(self.do_request_config(), configName)]
         newRingGroup = deepcopy(defaultRingGroup)
         newRingGroup[0]["RingGroupActorIdOffset"] = 1
         self.do_test_change_state_storage(defaultRingGroup, newRingGroup, configName)
@@ -385,7 +515,7 @@ class TestKiKiMRDistConfReassignStateStorageToTheSameConfig(KiKiMRDistConfReassi
 
 class TestKiKiMRDistConfReassignStateStorageReuseSameNodes(KiKiMRDistConfReassignStateStorageBaseTest):
     def do_test(self, configName):
-        defaultRingGroup = [self.do_request_config()[f"{configName}Config"]["Ring"]]
+        defaultRingGroup = [get_ring_group(self.do_request_config(), configName)]
         newRingGroup = deepcopy(defaultRingGroup)
         newRingGroup[0]["NToSelect"] = 3
         newRingGroup[0]["RingGroupActorIdOffset"] = 1
@@ -397,7 +527,7 @@ class TestKiKiMRDistConfReassignStateStorageMultipleRingGroup(KiKiMRDistConfReas
     number_of_tablets = 3
 
     def do_test(self, configName):
-        defaultRingGroup = [self.do_request_config()[f"{configName}Config"]["Ring"]]
+        defaultRingGroup = [get_ring_group(self.do_request_config(), configName)]
         newRingGroup = [
             {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
             {"NToSelect": 3, "Ring": [{"Node": [7]}, {"Node": [8]}, {"Node": [1]}]}

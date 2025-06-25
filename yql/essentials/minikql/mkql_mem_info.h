@@ -55,12 +55,17 @@ namespace NMiniKQL {
 
 class TMemoryUsageInfo : public TThrRefBase
 {
+public:
+#if !defined(NDEBUG)
+    using TAllocatorLocation = std::variant<TMkqlLocation, THolder<TBackTrace>>;
+
     struct TAllocationInfo {
         ui64 Size;
-        TMkqlLocation Location;
+        TAllocatorLocation Location;
         bool IsDeleted;
     };
-public:
+#endif // NDEBUG
+
     explicit TMemoryUsageInfo(const TStringBuf& title);
     ~TMemoryUsageInfo();
 

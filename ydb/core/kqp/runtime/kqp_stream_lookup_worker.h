@@ -11,6 +11,19 @@
 namespace NKikimr {
 namespace NKqp {
 
+struct TLookupSettings {
+    TString TablePath;
+    TTableId TableId;
+
+    ui32 AllowNullKeysPrefixSize;
+    bool KeepRowsOrder;
+    NKqpProto::EStreamLookupStrategy LookupStrategy;
+
+    std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
+    std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
+    std::vector<TSysTables::TTableColumnInfo> Columns;
+};
+
 class TKqpStreamLookupWorker {
 public:
     using TReadList = std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>>;
@@ -45,7 +58,7 @@ public:
     };
 
 public:
-    TKqpStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
+    TKqpStreamLookupWorker(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc);
 
     virtual ~TKqpStreamLookupWorker();
@@ -58,25 +71,22 @@ public:
     }
 
     virtual void AddInputRow(NUdf::TUnboxedValue inputRow) = 0;
-    virtual std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
-        TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) = 0;
+    virtual void AddInputRow(TConstArrayRef<TCell> inputRow) = 0;
+    virtual std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) = 0;
     virtual TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) = 0;
     virtual void AddResult(TShardReadResult result) = 0;
     virtual TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) = 0;
+    virtual TReadResultStats ReadAllResult(std::function<void(TConstArrayRef<TCell>)> reader) = 0;
     virtual bool AllRowsProcessed() = 0;
-    virtual void ResetRowsProcessing(ui64 readId, ui32 firstUnprocessedQuery, TMaybe<TOwnedCellVec> lastProcessedKey) = 0;
+    virtual void ResetRowsProcessing(ui64 readId) = 0;
     virtual bool IsOverloaded() = 0;
 
 protected:
-    const NKikimrKqp::TKqpStreamLookupSettings Settings;
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     const NYql::NDqProto::TTaskInput& InputDesc;
-    const TString TablePath;
-    const TTableId TableId;
-    std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
-    std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
-    std::vector<TSysTables::TTableColumnInfo> Columns;
+    const TLookupSettings Settings;
+
     std::vector<NScheme::TTypeInfo> KeyColumnTypes;
 };
 

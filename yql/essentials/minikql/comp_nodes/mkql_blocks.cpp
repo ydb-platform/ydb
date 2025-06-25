@@ -417,7 +417,7 @@ private:
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
-            auto* inputFields = blockState.Pointer_;
+            auto* inputFields = blockState.Pointer;
             const size_t inputWidth = blockState.Values.size() - 1;
 
             if (!blockState.Count) {
@@ -651,10 +651,10 @@ private:
         }
 
         bool HasListItems() const final {
-            if (!HasItems.has_value()) {
-                HasItems = List_.HasListItems();
+            if (!HasItems_.has_value()) {
+                HasItems_ = List_.HasListItems();
             }
-            return *HasItems;
+            return *HasItems_;
         }
 
     private:
@@ -1347,25 +1347,25 @@ private:
         }
 
         bool HasListItems() const final {
-            if (!HasItems.has_value()) {
-                HasItems = List_.HasListItems();
+            if (!HasItems_.has_value()) {
+                HasItems_ = List_.HasListItems();
             }
-            return *HasItems;
+            return *HasItems_;
         }
 
         ui64 GetListLength() const final {
-            if (!Length.has_value()) {
+            if (!Length_.has_value()) {
                 auto iter = List_.GetListIterator();
 
-                Length = 0;
+                Length_ = 0;
                 NUdf::TUnboxedValue block;
                 while (iter.Next(block)) {
                     auto blockLengthValue = block.GetElement(BlockLengthIndex_);
-                    *Length += GetBlockCount(blockLengthValue);
+                    *Length_ += GetBlockCount(blockLengthValue);
                 }
             }
 
-            return *Length;
+            return *Length_;
         }
 
     private:

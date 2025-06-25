@@ -400,7 +400,7 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
 
     const auto& describePath = SchemeRequest->Ev->Get()->Record.GetDescribePath();
 
-    if (entry.TableId.IsSystemView() && entry.Kind != TNavigate::KindSysView) {
+    if (entry.TableId.IsSystemView()) {
         // don't go to schemeshard if entry describes sys view path and this path is virtual
         // for materialized sys view paths send the request to SchemeShard
         const auto& path = describePath.GetPath();

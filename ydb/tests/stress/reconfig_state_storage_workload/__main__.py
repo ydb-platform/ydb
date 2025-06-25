@@ -12,9 +12,8 @@ if __name__ == "__main__":
     parser.add_argument("--database", default="Root/test", help="A database to connect")
     parser.add_argument("--path", default="olap_workload", help="A path prefix for tables")
     parser.add_argument("--duration", default=10 ** 9, type=lambda x: int(x), help="A duration of workload in seconds.")
-    parser.add_argument("--allow-nullables-in-pk", default=False, help="Allow nullable types for columns in a Primary Key.")
     args = parser.parse_args()
     client = YdbClient(args.endpoint, args.database, True)
     client.wait_connection()
-    with WorkloadRunner(client, args.path, args.duration, args.allow_nullables_in_pk) as runner:
+    with WorkloadRunner(client, args.path, args.duration) as runner:
         runner.run()

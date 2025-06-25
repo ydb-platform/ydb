@@ -1,9 +1,8 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-
-#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -18,6 +17,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -46,9 +48,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -125,6 +127,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
                               "  Name: \"pool-1\" "
@@ -152,9 +157,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -219,7 +224,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         defaultValue.mutable_value()->set_uint64_value(1111); // TODO: check invalid value
 
         TestBuildColumn(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "ColumnValue", defaultValue, Ydb::StatusIds::SUCCESS);
-    
+
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
         Y_ASSERT(listing.EntriesSize() == 1);
 
@@ -237,6 +242,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -265,9 +273,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()
@@ -379,7 +387,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         for (const auto& ev: delayedUpsertRows) {
             runtime.Send(ev);
         }
-    
+
         enabledCapture = false;
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -388,7 +396,7 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
-        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE); 
+        Y_ASSERT(descr.GetIndexBuild().GetState() == Ydb::Table::IndexBuildState::STATE_DONE);
 
         for (ui32 delta = 50; delta < 101; ++delta) {
             UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::FakeHiveTablets + 6, "__user__Table", "key", 1 + delta));
@@ -407,6 +415,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
                                "Name: \"ResourceDB\"");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/ResourceDB");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
                               "StoragePools { "
@@ -435,9 +446,9 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
             Name: "ServerLessDB"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TString alterData = TStringBuilder()

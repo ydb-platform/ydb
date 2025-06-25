@@ -296,4 +296,25 @@ namespace NMonitoring {
             );
         }
     }
+
+    void TMetricRegistry::Took(TInstant time, IMetricConsumer* consumer) const {
+        TReadGuard g{*Lock_};
+
+        for (const auto& it: Metrics_) {
+            ILabels* labels = it.first.Get();
+            IMetric* metric = it.second.Metric.Get();
+            TMetricOpts opts = it.second.Opts;
+            ConsumeMetric(
+                time,
+                consumer,
+                metric,
+                [&]() {
+                    ConsumeLabels(consumer, CommonLabels_);
+                    ConsumeLabels(consumer, *labels);
+                },
+                opts
+            );
+            metric->Reset();
+        }
+    }
 }

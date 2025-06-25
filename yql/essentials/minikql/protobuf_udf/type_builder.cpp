@@ -63,7 +63,7 @@ private:
                  Builder_;
     TProtoInfo*  Info_;
     TType*       BasicTypes_[FieldDescriptor::Type::MAX_TYPE + 1];
-    TType*       YsonType;
+    TType*       YsonType_;
     TSet<TString> KnownMessages_;
     TTypeMap     Optionals_;
     TTypeMap     Lists_;
@@ -86,7 +86,7 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     , StringType_(stringType)
     , Builder_(builder)
     , Info_(nullptr)
-    , YsonType(nullptr)
+    , YsonType_(nullptr)
 {
     for (size_t i = 0; i < Y_ARRAY_SIZE(BasicTypes_); ++i) {
         BasicTypes_[i] = nullptr;
@@ -319,10 +319,10 @@ TType* TTypeBuilder::GetInt64Type() {
 }
 
 TType* TTypeBuilder::GetYsonType() {
-    if (YsonType == nullptr) {
-        YsonType = Builder_.SimpleType<TYson>();
+    if (YsonType_ == nullptr) {
+        YsonType_ = Builder_.SimpleType<TYson>();
     }
-    return YsonType;
+    return YsonType_;
 }
 
 TType* TTypeBuilder::GetUnderlyingType(const FieldDescriptor* fd, bool defaultYtSerialize) {

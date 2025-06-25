@@ -6,7 +6,8 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_scan_data_ut.cpp
-    kqp_compute_scheduler_ut.cpp
+
+    scheduler/old/kqp_compute_scheduler_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -10,6 +10,7 @@ SRCS(
     datetime2_udf.cpp
     math_udf.cpp
     unicode_udf.cpp
+    digest_udf.cpp
 )
 
 PEERDIR(
@@ -30,6 +31,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
+    contrib/libs/highwayhash
 )
 
 YQL_LAST_ABI_VERSION()

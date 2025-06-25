@@ -6,6 +6,7 @@
 
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
@@ -67,9 +68,11 @@ struct TEvPrivate {
         EvAskServiceDataAccessors,
         EvAddPortionDataAccessor,
         EvRemovePortionDataAccessor,
+        EvClearCacheDataAccessor,
         EvMetadataAccessorsInfo,
 
         EvRequestFilter,
+        EvFilterConstructionResult,
 
         EvEnd
     };
@@ -104,6 +107,20 @@ struct TEvPrivate {
         }
     };
 
+    class TEvAskTabletDataAccessors
+        : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+    private:
+        using TPortions = THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>;
+        YDB_ACCESSOR_DEF(TPortions, Portions);
+        YDB_READONLY_DEF(std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>, Callback);
+
+    public:
+        explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback)
+            : Portions(std::move(portions))
+            , Callback(callback) {
+        }
+    };
+
     class TEvStartCompaction: public NActors::TEventLocal<TEvStartCompaction, EvStartCompaction> {
     private:
         YDB_READONLY_DEF(std::shared_ptr<NPrioritiesQueue::TAllocationGuard>, Guard);
@@ -117,14 +134,17 @@ struct TEvPrivate {
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
+        TCounterGuard ScanCounter;
 
     public:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> ExtractResult() {
             return std::move(Result);
         }
 
-        TEvTaskProcessedResult(const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result)
-            : Result(result) {
+        TEvTaskProcessedResult(
+            const TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& result, TCounterGuard&& scanCounters)
+            : Result(result)
+            , ScanCounter(std::move(scanCounters)) {
         }
     };
 
@@ -160,18 +180,16 @@ struct TEvPrivate {
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
     struct TEvWriteIndex: public TEventLocal<TEvWriteIndex, EvWriteIndex> {
-        std::shared_ptr<NOlap::TVersionedIndex> IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         bool GranuleCompaction{ false };
         TUsage ResourceUsage;
         bool CacheData{ false };
         TDuration Duration;
         TBlobPutResult::TPtr PutResult;
+        TString ErrorMessage;
 
-        TEvWriteIndex(
-            const std::shared_ptr<NOlap::TVersionedIndex>& indexInfo, std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges, bool cacheData)
-            : IndexInfo(indexInfo)
-            , IndexChanges(indexChanges)
+        TEvWriteIndex(std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges, bool cacheData)
+            : IndexChanges(indexChanges)
             , CacheData(cacheData) {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
         }

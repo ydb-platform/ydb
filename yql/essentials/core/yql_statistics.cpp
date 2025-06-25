@@ -92,7 +92,18 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
         }
         os << "[" << tmp << "]";
     }
-    os << ", LogicalOrderings state: " << s.LogicalOrderings.GetState();
+    os << ", LogicalOrderings (Shufflings) state: " << s.LogicalOrderings.GetState();
+    os << ", Init Shuffling: " << s.LogicalOrderings.GetInitOrderingIdx();
+    os << ", SortingOrderings (Sortings) state: "   << s.SortingOrderings.GetState();
+    os << ", Init Sorting: " << s.SortingOrderings.GetInitOrderingIdx();
+
+    if (s.ReversedSortingOrderings.HasState()) {
+        os << ", ReversedSortingOrderings (Sortings) state: "   << s.ReversedSortingOrderings.GetState();
+    }
+
+    if (s.SortingOrderingIdx >= 0) {
+        os << ", SortingOrderingIdx: " << s.SortingOrderingIdx;
+    }
 
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
@@ -103,7 +114,7 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
         for (size_t i = 0; i < s.SortColumns->Columns.size() && i < s.SortColumns->Aliases.size(); i++) {
             auto c = s.SortColumns->Columns[i];
             auto a = s.SortColumns->Aliases[i];
-            if (a.empty()) {
+            if (!a.empty()) {
                 tmp.append(a).append(".");
             }
 

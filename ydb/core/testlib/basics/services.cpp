@@ -20,6 +20,7 @@
 #include <ydb/core/tablet/node_tablet_monitor.h>
 #include <ydb/core/tablet/tablet_list_renderer.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/scheme_board/replica.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
 #include <ydb/core/scheme/tablet_scheme.h>
@@ -166,6 +167,13 @@ namespace NPDisk {
             nodeIndex);
     }
 
+    void SetupCSMetadataCache(TTestActorRuntime& runtime, ui32 nodeIndex) {
+        auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(
+			NGeneralCache::NPublic::TConfig::BuildDefault(), runtime.GetDynamicCounters(nodeIndex));
+		runtime.AddLocalService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(runtime.GetNodeId(nodeIndex)),
+			TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
+    }
+
     void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
         runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(),
@@ -192,7 +200,7 @@ namespace NPDisk {
     }
 
     static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TActorId> &replicas, ui32 NToSelect, ui32 nrings, ui32 ringSize)
-    {   
+    {
         Y_ABORT_UNLESS(replicas.size() >= nrings * ringSize);
         Y_ABORT_UNLESS(NToSelect <= nrings);
 
@@ -201,7 +209,7 @@ namespace NPDisk {
         auto& group = info->RingGroups.back();
         group.NToSelect = NToSelect;
         group.Rings.resize(nrings);
-            
+
         ui32 inode = 0;
         for (size_t i = 0; i < nrings; ++i) {
             for (size_t j = 0; j < ringSize; ++j) {
@@ -212,10 +220,7 @@ namespace NPDisk {
         return info;
     }
 
-    static TActorId MakeBoardReplicaID(
-        const ui32 node,
-        const ui32 replicaIndex
-    ) {
+    TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex) {
         char x[12] = { 's', 's', 'b' };
         x[3] = (char)1;
         memcpy(x + 5, &replicaIndex, sizeof(ui32));
@@ -224,10 +229,10 @@ namespace NPDisk {
 
     void SetupCustomStateStorage(
         TTestActorRuntime &runtime,
-        ui32 NToSelect, 
-        ui32 nrings, 
+        ui32 NToSelect,
+        ui32 nrings,
         ui32 ringSize)
-    {   
+    {
         TVector<TActorId> ssreplicas;
         for (size_t i = 0; i < nrings * ringSize; ++i) {
             ssreplicas.push_back(MakeStateStorageReplicaID(runtime.GetNodeId(i), i));
@@ -249,7 +254,7 @@ namespace NPDisk {
         auto sbInfo = GenerateStateStorageInfo(sbreplicas, NToSelect, nrings, ringSize);
         auto bInfo = GenerateStateStorageInfo(breplicas, NToSelect, nrings, ringSize);
 
-        
+
         for (ui32 ssIndex = 0; ssIndex < nrings * ringSize; ++ssIndex) {
             runtime.AddLocalService(ssreplicas[ssIndex],
                 TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), ssIndex), TMailboxType::Revolving, 0), ssIndex);
@@ -265,7 +270,7 @@ namespace NPDisk {
         }
     }
 
-    
+
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex, bool firstNode)
     {
         const TActorId ssreplicas[3] = {
@@ -380,6 +385,7 @@ namespace NPDisk {
             SetupResourceBroker(runtime, nodeIndex, app.ResourceBrokerConfig);
             SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig ? *sharedCacheConfig : defaultSharedCacheConfig);
             SetupBlobCache(runtime, nodeIndex);
+            SetupCSMetadataCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
             SetupStatService(runtime, nodeIndex);

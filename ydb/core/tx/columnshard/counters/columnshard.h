@@ -15,7 +15,6 @@ enum class EOverloadStatus {
     ShardTxInFly /* "shard_tx" */ = 0,
     ShardWritesInFly /* "shard_writes" */,
     ShardWritesSizeInFly /* "shard_writes_size" */,
-    InsertTable /* "insert_table" */,
     OverloadMetadata /* "overload_metadata" */,
     Disk /* "disk" */,
     None /* "none" */,
@@ -94,8 +93,6 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadMetadataCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadCompactionBytes;
@@ -195,11 +192,6 @@ public:
     void OnSplitCompactionInfo(const ui64 bytes, const ui32 portionsCount) const {
         SplitCompactionGranuleBytes->SetValue(bytes);
         SplitCompactionGranulePortionsCount->SetValue(portionsCount);
-    }
-
-    void OnWriteOverloadInsertTable(const ui64 size) const {
-        OverloadInsertTableBytes->Add(size);
-        OverloadInsertTableCount->Add(1);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {

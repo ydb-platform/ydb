@@ -1,71 +1,67 @@
 #pragma once
 
 #include "dedicated_pipe_pool.h"
+#include "olap/manager/manager.h"
 #include "operation_queue_timer.h"
 #include "schemeshard.h"
-#include "schemeshard_export.h"
-#include "schemeshard_import.h"
-#include "schemeshard_backup.h"
-#include "schemeshard_build_index.h"
-#include "schemeshard_private.h"
-#include "schemeshard_types.h"
-#include "schemeshard_path_element.h"
-#include "schemeshard_path.h"
-#include "schemeshard_domain_links.h"
-#include "schemeshard_info_types.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_self_pinger.h"
-#include "schemeshard_shard_deleter.h"
-#include "schemeshard_schema.h"
 #include "schemeshard__operation.h"
 #include "schemeshard__stats.h"
+#include "schemeshard_backup.h"
+#include "schemeshard_build_index.h"
+#include "schemeshard_domain_links.h"
+#include "schemeshard_export.h"
+#include "schemeshard_import.h"
+#include "schemeshard_info_types.h"
+#include "schemeshard_path.h"
+#include "schemeshard_path_element.h"
+#include "schemeshard_private.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_self_pinger.h"
+#include "schemeshard_shard_deleter.h"
+#include "schemeshard_tx_infly.h"
+#include "schemeshard_types.h"
 
-#include "olap/manager/manager.h"
-
+#include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/message_seqno.h>
-#include <ydb/core/tx/scheme_board/events_schemeshard.h>
-#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
-#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
+#include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/core/util/token_bucket.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
-
-#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
-
-#include <ydb/core/blockstore/core/blockstore.h>
-#include <ydb/core/filestore/core/filestore.h>
-
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/blob_depot/events.h>
 
 #include <ydb/library/login/login.h>
 
@@ -283,6 +279,7 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
@@ -406,6 +403,12 @@ public:
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
+    THolder<TEvColumnShard::TEvProposeTransaction> MakeColumnShardProposal(const TPathId& pathId, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const;
+
+    THolder<::NActors::IEventBase> MakeShardProposal(const TPath& path, const TOperationId& opId,
+        const TMessageSeqNo& seqNo, const TString& body, const TActorContext& ctx) const;
+
 
     TPathId RootPathId() const {
         return MakeLocalId(TPathElement::RootPathId);
@@ -769,7 +772,8 @@ public:
     void PersistCompletedBackupRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& info, TTableInfo::TBackupRestoreResult::EKind kind);
     void PersistCompletedBackup(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& backupInfo);
     void PersistCompletedRestore(NIceDb::TNiceDb& db, TTxId txId, const TTxState& txState, const TTableInfo::TBackupRestoreResult& restoreInfo);
-    void PersistSchemeLimit(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+    void PersistSchemeLimits(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
+    void PersistSubDomainSchemeLimitsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistStoragePools(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -873,6 +877,8 @@ public:
     // SysView
     void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
+
+    void PersistLongIncrementalRestoreOp(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TLongIncrementalRestoreOp& op);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 
@@ -1058,8 +1064,8 @@ public:
     struct TTxRunDataErasure;
     NTabletFlatExecutor::ITransaction* CreateTxRunDataErasure(bool isNewDataErasure);
 
-    struct TTxAddEntryToDataErasure;
-    NTabletFlatExecutor::ITransaction* CreateTxAddEntryToDataErasure(const std::vector<TShardIdx>& dataErasureShards);
+    struct TTxAddNewShardToDataErasure;
+    NTabletFlatExecutor::ITransaction* CreateTxAddNewShardToDataErasure(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev);
 
     struct TTxCancelDataErasureShards;
     NTabletFlatExecutor::ITransaction* CreateTxCancelDataErasureShards(const std::vector<TShardIdx>& oldShards);
@@ -1189,6 +1195,7 @@ public:
     void Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvCleanUpDataResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvAddNewShardToDataErasure::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvDataErasureManualStartupRequest::TPtr& ev, const TActorContext& ctx);
@@ -1396,7 +1403,7 @@ public:
 
     void PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
-    void PersistBuildIndexIssue(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexAddIssue(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo, const TString& issue);
     void PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexAlterMainTableTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1452,7 +1459,7 @@ public:
         struct TTxReplyReshuffleKMeans;
         struct TTxReplyLocalKMeans;
         struct TTxReplyPrefixKMeans;
-        struct TTxReplyUpload;
+        struct TTxReplyUploadSample;
 
         struct TTxPipeReset;
         struct TTxBilling;

@@ -1220,11 +1220,11 @@ NKikimrPQ::TTabletTxInfo TPQTabletFixture::WaitForExactTxWritesCount(ui32 expect
     return {};
 }
 
-TString GetSupportivePartitionKeyFrom() {
+std::string GetSupportivePartitionKeyFrom() {
     return std::string{TKeyPrefix::EServiceType::ServiceTypeData};
 }
 
-TString GetSupportivePartitionKeyTo() {
+std::string GetSupportivePartitionKeyTo() {
     return std::string{static_cast<char>(TKeyPrefix::EServiceType::ServiceTypeData + 1)};
 }
 
@@ -1247,7 +1247,7 @@ TVector<TString> TPQTabletFixture::GetSupportivePartitionsKeysFromKV() {
     const auto& result = response->Record.GetReadRangeResult(0);
     if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
         for (ui32 i = 0; i < result.PairSize(); i++) {
-            supportivePartitionsKeys.emplace_back(result.GetPair(i).GetKey().c_str());
+            supportivePartitionsKeys.emplace_back(result.GetPair(i).GetKey());
         }
         return supportivePartitionsKeys;
     } else if (result.GetStatus() == NKikimrProto::NODATA) {

@@ -316,6 +316,7 @@ namespace NKafka {
         }
 
         return TxnTimeoutMs < GetMaxAllowedTxnTimeout();
+        return TransactionsEnabled() && !TransactionalId.empty();
     }
 
     EKafkaErrors TKafkaInitProducerIdActor::KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {

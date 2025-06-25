@@ -23,13 +23,8 @@ enum EOptionalFlag {
 struct TKikimrSettings {
     using TConstPtr = std::shared_ptr<const TKikimrSettings>;
 private:
-#ifdef YQL_BETTER_CONF_SETTING_API
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
     static constexpr NCommon::EConfSettingType Dynamic = NCommon::EConfSettingType::Dynamic;
-#else
-    static constexpr bool Static = false;
-    static constexpr bool Dynamic = true;
-#endif
 public:
     /* KQP */
     NCommon::TConfSetting<ui32, Static> _KqpSessionIdleTimeoutSec;
@@ -74,12 +69,16 @@ public:
     NCommon::TConfSetting<bool, Static> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, Static> OptEnablePredicateExtract;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdown;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
     NCommon::TConfSetting<bool, Static> OptShuffleEliminationWithMap;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizationLevel;
     NCommon::TConfSetting<bool, Static> UseBlockReader;
+
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
+    NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
     NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
 
@@ -102,6 +101,7 @@ public:
     bool HasOptDisableTopSort() const;
     bool HasOptDisableSqlInToJoin() const;
     bool HasOptEnableOlapPushdown() const;
+    bool HasOptEnableOlapPushdownProjections() const;
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasMaxSequentialReadsInFlight() const;
@@ -198,9 +198,14 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapScalarApply = false;
     bool EnableOlapSubstringPushdown = false;
     bool EnableIndexStreamWrite = false;
+    bool EnableOlapPushdownProjections = false;
+
+    NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
+    NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
+    bool GetEnableOlapPushdownProjections() const;
 };
 
 }

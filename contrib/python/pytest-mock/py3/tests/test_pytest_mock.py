@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 
 import pytest
+
 from pytest_mock import MockerFixture
 from pytest_mock import PytestMockWarning
 
@@ -1007,7 +1008,7 @@ def test_warn_patch_object_context_manager(mocker: MockerFixture) -> None:
         "Mocks returned by pytest-mock do not need to be used as context managers. "
         "The mocker fixture automatically undoes mocking at the end of a test. "
         "This warning can be ignored if it was triggered by mocking a context manager. "
-        "https://pytest-mock.readthedocs.io/en/latest/remarks.html#usage-as-context-manager"
+        "https://pytest-mock.readthedocs.io/en/latest/usage.html#usage-as-context-manager"
     )
 
     with pytest.warns(
@@ -1024,7 +1025,7 @@ def test_warn_patch_context_manager(mocker: MockerFixture) -> None:
         "Mocks returned by pytest-mock do not need to be used as context managers. "
         "The mocker fixture automatically undoes mocking at the end of a test. "
         "This warning can be ignored if it was triggered by mocking a context manager. "
-        "https://pytest-mock.readthedocs.io/en/latest/remarks.html#usage-as-context-manager"
+        "https://pytest-mock.readthedocs.io/en/latest/usage.html#usage-as-context-manager"
     )
 
     with pytest.warns(

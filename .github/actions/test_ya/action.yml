@@ -217,13 +217,16 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
+            if [ -z $TEST_RETRY_COUNT ]; then
+              TEST_RETRY_COUNT=1
+            fi
             IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
+            if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -232,7 +235,7 @@ runs:
             params+=(
               --build "release" --sanitize="memory"
             )
-            if [ $TEST_RETRY_COUNT -z ]; then
+            if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
             IS_TEST_RESULT_IGNORED=1
@@ -245,7 +248,7 @@ runs:
 
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
-        if [ $TEST_RETRY_COUNT -z ]; then
+        if [ -z $TEST_RETRY_COUNT ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
           TEST_RETRY_COUNT=3
         fi
@@ -287,7 +290,7 @@ runs:
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"
 
-        TESTMO_BRANCH_TAG="$BRANCH_NAME"
+        TESTMO_BRANCH_TAG="${BRANCH_NAME//[^a-zA-Z0-9-]/-}"
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}
 

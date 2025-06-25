@@ -590,10 +590,15 @@ message TCompactionPlannerConstructorContainer {
         repeated TCompactionSelectorConstructorContainer Selectors = 2;
     }
 
+    message TTilingOptimizer {
+        optional string Json = 1;
+    }
+
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
         TLCOptimizer LCBuckets = 22;
+        TTilingOptimizer Tiling = 23;
     }
 }
 
@@ -1792,6 +1797,8 @@ message TModifyScheme {
 
     optional TSysViewDescription CreateSysView = 81;
 
+    optional TChangePathState ChangePathState = 82;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -2229,4 +2236,19 @@ message TExportMetadata {
 message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
+    optional NKikimrProto.TPathID SourceObject = 3;
+}
+
+message TLongIncrementalRestoreOp {
+    optional uint64 TxId = 1;
+    optional NKikimrProto.TPathID BackupCollectionPathId = 2;
+    optional string Id = 3;
+    repeated string TablePathList = 4;
+    optional string FullBackupTrimmedName = 5;
+    repeated string IncrementalBackupTrimmedNames = 6;
+}
+
+message TChangePathState {
+    optional string Path = 1;
+    optional EPathState TargetState = 2;
 }

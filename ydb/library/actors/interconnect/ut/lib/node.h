@@ -28,7 +28,7 @@ public:
           ui32 numDynamicNodes = 0, ui32 numThreads = 1,
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
           ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED,
-          bool withTls = false) {
+          bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {}) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -60,6 +60,12 @@ public:
             CaPath = NInterconnect::GetTempCaPathForTest();
             common->Settings.CaFilePath = CaPath;
             common->Settings.EncryptionMode = EEncryptionMode::REQUIRED;
+        }
+
+        if (checkerFactory) {
+            TActorId checkerId(0, TStringBuf("CHECKER_____", 12));
+            setup.LocalServices.emplace_back(checkerId, TActorSetupCmd(checkerFactory(nodeId), TMailboxType::ReadAsFilled, 0));
+            common->ConnectionCheckerActorIds.push_back(checkerId);
         }
 
         setup.Interconnect.ProxyActors.resize(numNodes + 1 - numDynamicNodes);

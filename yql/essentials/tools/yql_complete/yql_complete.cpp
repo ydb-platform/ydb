@@ -1,7 +1,12 @@
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
+#include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
+#include <yql/essentials/sql/v1/complete/name/object/simple/static/schema_json.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/cluster/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -9,6 +14,9 @@
 #include <yql/essentials/utils/utf8.h>
 
 #include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/iterator/iterate_keys.h>
+#include <library/cpp/iterator/functools.h>
 
 #include <util/charset/utf8.h>
 #include <util/stream/file.h>
@@ -16,6 +24,15 @@
 NSQLComplete::TFrequencyData LoadFrequencyDataFromFile(TString filepath) {
     TString text = TUnbufferedFileInput(filepath).ReadAll();
     return NSQLComplete::Pruned(NSQLComplete::ParseJsonFrequencyData(text));
+}
+
+NJson::TJsonMap LoadSchemaJsonFromFile(TString filepath) {
+    TString text = TUnbufferedFileInput(filepath).ReadAll();
+    NJson::TJsonMap map;
+    if (!NJson::ReadJsonTree(text, &map)) {
+        ythrow yexception() << "Failed to parse JSON: '" << text << "'";
+    }
+    return map;
 }
 
 NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
@@ -40,10 +57,12 @@ int Run(int argc, char* argv[]) {
     TString inFileName;
     TString inQueryText;
     TString freqFileName;
+    TString schemaFileName;
     TMaybe<ui64> pos;
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('q', "query", "input query text").RequiredArgument("query").StoreResult(&inQueryText);
     opts.AddLongOption('f', "freq", "frequences file").StoreResult(&freqFileName);
+    opts.AddLongOption('s', "schema", "schema file").StoreResult(&schemaFileName);
     opts.AddLongOption('p', "pos", "position").StoreResult(&pos);
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
@@ -72,31 +91,45 @@ int Run(int argc, char* argv[]) {
     } else {
         frequency = LoadFrequencyDataFromFile(freqFileName);
     }
+    auto ranking = NSQLComplete::MakeDefaultRanking(frequency);
+
+    TVector<NSQLComplete::INameService::TPtr> services;
+
+    services.emplace_back(
+        NSQLComplete::MakeStaticNameService(
+            NSQLComplete::LoadDefaultNameSet(), ranking));
+
+    if (!schemaFileName.empty()) {
+        NJson::TJsonMap schema = LoadSchemaJsonFromFile(schemaFileName);
+
+        services.emplace_back(
+            NSQLComplete::MakeSchemaNameService(
+                NSQLComplete::MakeSimpleSchema(
+                    NSQLComplete::MakeStaticSimpleSchema(schema))));
+
+        auto clustersIt = NFuncTools::Filter(
+            [](const auto& x) { return !x.empty(); },
+            IterateKeys(schema.GetMapSafe()));
+        TVector<TString> clusters(clustersIt.begin(), clustersIt.end());
+
+        services.emplace_back(
+            NSQLComplete::MakeClusterNameService(
+                NSQLComplete::MakeStaticClusterDiscovery(std::move(clusters))));
+    }
 
     auto engine = NSQLComplete::MakeSqlCompletionEngine(
         MakePureLexerSupplier(),
-        NSQLComplete::MakeStaticNameService(
-            NSQLComplete::LoadDefaultNameSet(), 
-            std::move(frequency)));
+        NSQLComplete::MakeUnionNameService(std::move(services), ranking));
 
-    NSQLComplete::TCompletionInput input;
-
-    input.Text = queryString;
-    if (!NYql::IsUtf8(input.Text)) {
+    if (!NYql::IsUtf8(queryString)) {
         ythrow yexception() << "provided input is not UTF encoded";
     }
 
-    if (pos) {
-        input.CursorPosition = UTF8PositionToBytes(input.Text, *pos);
-    } else if (Count(input.Text, '#') == 1) {
-        Cerr << "Note: found an only '#', setting the cursor position\n";
-        input.CursorPosition = input.Text.find('#');
-    } else if (Count(input.Text, '#') >= 2) {
-        Cerr << "Note: found multiple '#', defaulting the cursor position\n";
-        input.CursorPosition = queryString.size();
-    } else {
-        input.CursorPosition = queryString.size();
+    if (auto count = Count(queryString, '#'); 1 < count) {
+        ythrow yexception() << "provided input contains " << count << " '#', expected 0 or 1";
     }
+
+    NSQLComplete::TCompletionInput input = NSQLComplete::SharpedInput(queryString);
 
     auto output = engine->CompleteAsync(input).ExtractValueSync();
     for (const auto& c : output.Candidates) {

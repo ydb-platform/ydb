@@ -13,18 +13,18 @@ namespace {
 
 struct TKsvIndexes
 {
-    ui32 key;
-    ui32 subkey;
-    ui32 value;
+    ui32 Key;
+    ui32 Subkey;
+    ui32 Value;
 };
 
 struct TResultIndexes
 {
     TType* DictType;
 
-    ui32 key;
-    ui32 subkey;
-    ui32 dict;
+    ui32 Key;
+    ui32 Subkey;
+    ui32 Dict;
     static constexpr ui32 FieldsCount = 3U;
 };
 
@@ -93,9 +93,9 @@ private:
             const IValueBuilder* valueBuilder,
             const TUnboxedValuePod* args) const final try
     {
-        auto keyData = args[0].GetElement(KsvIndexes_.key);
-        auto subkeyData = args[0].GetElement(KsvIndexes_.subkey);
-        auto valueData = args[0].GetElement(KsvIndexes_.value);
+        auto keyData = args[0].GetElement(KsvIndexes_.Key);
+        auto subkeyData = args[0].GetElement(KsvIndexes_.Subkey);
+        auto valueData = args[0].GetElement(KsvIndexes_.Value);
 
 
         auto dict = valueBuilder->NewDict(ResultIndexes_.DictType, 0);
@@ -104,9 +104,9 @@ private:
 
         TUnboxedValue* items = nullptr;
         const auto result = valueBuilder->NewArray(ResultIndexes_.FieldsCount, items);
-        items[ResultIndexes_.key] = keyData;
-        items[ResultIndexes_.subkey] = subkeyData;
-        items[ResultIndexes_.dict] = dict->Build();
+        items[ResultIndexes_.Key] = keyData;
+        items[ResultIndexes_.Subkey] = subkeyData;
+        items[ResultIndexes_.Dict] = dict->Build();
         return result;
     }
     catch (const std::exception& e) {
@@ -122,7 +122,7 @@ class TDsvParse: public TBoxedValue
 {
 public:
     explicit TDsvParse(TType* dictType)
-        : DictType(dictType)
+        : DictType_(dictType)
     {}
 private:
     TUnboxedValue Run(
@@ -133,7 +133,7 @@ private:
              std::string_view(args[1].AsStringRef()):
              std::string_view("\t");
 
-        auto dict = valueBuilder->NewDict(DictType, 0);
+        auto dict = valueBuilder->NewDict(DictType_, 0);
         ParseDsv(args[0], separator, valueBuilder, dict.Get());
         return dict->Build();
     }
@@ -141,7 +141,7 @@ private:
         UdfTerminate(e.what());
     }
 
-    const TType* DictType;
+    const TType* DictType_;
 };
 
 #define TYPE_TO_STRING(type) \
@@ -151,8 +151,8 @@ class TDsvSerialize: public TBoxedValue
 {
 public:
     explicit TDsvSerialize(const TVector<TDataTypeId>& typeIds, TStructTypeInspector* structInspector)
-        : TypeIds(typeIds)
-        , StructInspector(structInspector)
+        : TypeIds_(typeIds)
+        , StructInspector_(structInspector)
     {}
 
 private:
@@ -161,13 +161,13 @@ private:
             const TUnboxedValuePod* args) const final try
     {
         TVector<TString> result;
-        if (const ui32 structSize = StructInspector->GetMembersCount()) {
+        if (const ui32 structSize = StructInspector_->GetMembersCount()) {
             result.reserve(structSize);
             for (ui32 i = 0; i < structSize; ++i) {
-                auto part = TString(StructInspector->GetMemberName(i));
+                auto part = TString(StructInspector_->GetMemberName(i));
                 part += '=';
                 const TUnboxedValue& member = args[0].GetElement(i);
-                switch (TypeIds[i]) {
+                switch (TypeIds_[i]) {
                     TYPE_TO_STRING(i32)
                     TYPE_TO_STRING(ui32)
                     TYPE_TO_STRING(i64)
@@ -190,8 +190,8 @@ private:
         UdfTerminate(e.what());
     }
 
-    const TVector<TDataTypeId> TypeIds;
-    THolder<TStructTypeInspector> StructInspector;
+    const TVector<TDataTypeId> TypeIds_;
+    THolder<TStructTypeInspector> StructInspector_;
 };
 
 class TDsvModule: public IUdfModule
@@ -223,17 +223,17 @@ public:
         if (TStringRef::Of("ReadRecord") == name) {
             TKsvIndexes ksvIndexes;
             auto recordType = builder.Struct(3U)->
-                    AddField<char*>("key", &ksvIndexes.key)
-                    .AddField<char*>("subkey", &ksvIndexes.subkey)
-                    .AddField<char*>("value", &ksvIndexes.value)
+                    AddField<char*>("key", &ksvIndexes.Key)
+                    .AddField<char*>("subkey", &ksvIndexes.Subkey)
+                    .AddField<char*>("value", &ksvIndexes.Value)
                     .Build();
 
             TResultIndexes resultIndexes;
             resultIndexes.DictType = builder.Dict()->Key<char*>().Value<char*>().Build();
             const auto structType = builder.Struct(resultIndexes.FieldsCount)
-                    ->AddField<char*>("key", &resultIndexes.key)
-                    .AddField<char*>("subkey", &resultIndexes.subkey)
-                    .AddField("dict", resultIndexes.DictType, &resultIndexes.dict)
+                    ->AddField<char*>("key", &resultIndexes.Key)
+                    .AddField<char*>("subkey", &resultIndexes.Subkey)
+                    .AddField("dict", resultIndexes.DictType, &resultIndexes.Dict)
                     .Build();
 
             builder.Returns(structType)

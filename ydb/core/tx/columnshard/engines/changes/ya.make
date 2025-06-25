@@ -5,7 +5,6 @@ SRCS(
     cleanup_tables.cpp
     compaction.cpp
     general_compaction.cpp
-    indexation.cpp
     merge_subset.cpp
     ttl.cpp
     with_appended.cpp
@@ -14,7 +13,6 @@ SRCS(
 PEERDIR(
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/common
-    ydb/core/tx/columnshard/engines/insert_table
     ydb/core/tx/columnshard/engines/changes/abstract
     ydb/core/tx/columnshard/engines/changes/compaction
     ydb/core/tx/columnshard/engines/changes/counters

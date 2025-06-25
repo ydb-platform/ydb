@@ -359,6 +359,61 @@ bool IsNoPush(const TExprNode& node) {
     return node.IsCallable({"NoPush", "Likely"});
 }
 
+bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns) {
+    if (auto distinct = node.GetConstraint<TDistinctConstraintNode>()) {
+        if (distinct->ContainsCompleteSet(std::vector<std::string_view>(columns.cbegin(), columns.cend()))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns) {
+    if (auto sorted = node.GetConstraint<TSortedConstraintNode>()) {
+        for (const auto& item : sorted->GetContent()) {
+            size_t foundItemNamesCount = 0;
+            bool found = false;
+            for (const auto& path : item.first) {
+                if (path.size() == 1 && columns.contains(path.front())) {
+                    foundItemNamesCount++;
+                    found = true;
+                    break;
+                }
+            }
+            if (foundItemNamesCount == columns.size()) {
+                return true;
+            }
+
+            // Required columns are not sorted by prefix.
+            if (!found) {
+                break;
+            }
+        }
+    }
+
+    return false;
+}
+
+TExprNode::TPtr MakePruneKeysExtractorLambda(const TExprNode& node, const THashSet<TString>& columns, TExprContext& ctx) {
+    return ctx.Builder(node.Pos())
+        .Lambda()
+            .Param("item")
+            .List(0)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                    ui32 i = 0;
+                    for (const auto& column : columns) {
+                        parent.Callable(i++, "Member")
+                            .Arg(0, "item")
+                            .Atom(1, column)
+                        .Seal();
+                    }
+                    return parent;
+                })
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     auto columnOrder = typeCtx.LookupColumnOrder(src);
     if (!columnOrder) {
@@ -2039,6 +2094,12 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
     return res;
 }
 
+TExprNode::TPtr KeepUniqueDistinct(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
+    auto res = KeepUniqueConstraint<true>(node, src, ctx);
+    res = KeepUniqueConstraint<false>(std::move(res), src, ctx);
+    return res;
+}
+
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
     if (joinTree.IsAtom()) {
         return true;
@@ -2054,14 +2115,20 @@ bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
+    bool withOptionals)
 {
+    auto kind = node->GetTypeAnn()->GetKind();
 
     // Ignore stream input, because it cannot be used multiple times
-    if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+    if (!(kind == ETypeAnnotationKind::List || (withOptionals && kind == ETypeAnnotationKind::Optional))) {
         return;
     }
-    auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
+    auto itemType = kind == ETypeAnnotationKind::Optional ?
+        node->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType() :
+        node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
     if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
         return;
     }
@@ -2088,6 +2155,9 @@ void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, cons
                 usedFields.insert(member.Value());
             }
         }
+        else if (auto maybeMember = TMaybeNode<TCoMember>(parent)) {
+            usedFields.insert(maybeMember.Cast().Name().Value());
+        }
         else {
             return;
         }
@@ -2108,12 +2178,18 @@ void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, cons
 
     for (auto parent: it->second) {
         if (TCoExtractMembers::Match(parent)) {
-            if (parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
+            auto parentItemType = kind == ETypeAnnotationKind::Optional ?
+                parent->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType() :
+                parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            if (parentItemType->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
                 toOptimize[parent] = newInput;
             } else {
                 toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
             }
+        } else if (TCoMember::Match(parent)) {
+            toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
         } else {
+            YQL_ENSURE(TCoFlatMapBase::Match(parent));
             toOptimize[parent] = ctx.Builder(parent->Pos())
                 .Callable(parent->Content())
                     .Add(0, newInput)

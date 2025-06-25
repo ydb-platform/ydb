@@ -733,6 +733,20 @@
             "uri": "https://{canondata_backend}/995452/c22e7d9867fa56e2ee0c270fded39566aaa63a48/resource.tar.gz#test.test_flexible_types-group_by2-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[intersect-intersect_all_positional-default.txt-Debug]": [
+        {
+            "checksum": "03739015c1f4bef2b2c0ec1d4b990a6b",
+            "size": 2564,
+            "uri": "https://{canondata_backend}/1942415/0f21a583e42ec6120ebf4ae7adaf85924f5930c1/resource.tar.gz#test.test_intersect-intersect_all_positional-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[intersect-intersect_all_positional-default.txt-Results]": [
+        {
+            "checksum": "1737dd061908c24fa31d6dbd803743bc",
+            "size": 4456,
+            "uri": "https://{canondata_backend}/1942415/0f21a583e42ec6120ebf4ae7adaf85924f5930c1/resource.tar.gz#test.test_intersect-intersect_all_positional-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[join-eq_over_join_bad_rotate-default.txt-Debug]": [
         {
             "checksum": "75bc473eee49f48848cfac6902f99607",
@@ -818,6 +832,20 @@
             "checksum": "02e86332916457371461fd277e2f0003",
             "size": 4370,
             "uri": "https://{canondata_backend}/1942100/6ea7bdc94febc162c165c9eafba66d971745efa9/resource.tar.gz#test.test_match_recognize-test_type-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[optimizers-YQL-20079-default.txt-Debug]": [
+        {
+            "checksum": "2ca6dbe9b3b3d8fb0758f4466476a534",
+            "size": 473,
+            "uri": "https://{canondata_backend}/1925842/088a4fd339648a5b7675bfce9241140c058f3615/resource.tar.gz#test.test_optimizers-YQL-20079-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-YQL-20079-default.txt-Results]": [
+        {
+            "checksum": "56de73c873cafff267843da0d2621330",
+            "size": 889,
+            "uri": "https://{canondata_backend}/1925842/088a4fd339648a5b7675bfce9241140c058f3615/resource.tar.gz#test.test_optimizers-YQL-20079-default.txt-Results_/results.txt"
         }
     ],
     "test.test[optimizers-or_absorption--Debug]": [

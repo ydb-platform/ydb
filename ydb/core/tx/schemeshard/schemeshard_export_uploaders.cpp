@@ -1,9 +1,15 @@
-#include "schemeshard.h"
 #include "schemeshard_export_uploaders.h"
 
+#include "schemeshard.h"
+
+#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
-#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
@@ -12,12 +18,9 @@
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/ydb_convert/topic_description.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/public/api/protos/ydb_export.pb.h>
-#include <ydb/public/lib/ydb_cli/dump/files/files.h>
-#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -34,12 +37,162 @@ bool ShouldRetry(const Aws::S3::S3Error& error) {
 
 } // anonymous
 
-class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
-
+template <class TDerived>
+class TExportFilesUploader: public TActorBootstrapped<TDerived> {
+protected:
     using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
     using TEvExternalStorage = NWrappers::TEvExternalStorage;
     using TPutObjectResult = Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>;
 
+    struct TFileUpload {
+        TString Path;
+        TString Content;
+        size_t Attempt = 0;
+    };
+
+protected:
+    TExportFilesUploader(const Ydb::Export::ExportToS3Settings& settings, const TString& destinationPrefix)
+        : Settings(settings)
+        , DestinationPrefix(destinationPrefix)
+        , ExternalStorageConfig(new TS3ExternalStorageConfig(Settings))
+    {
+        if (Settings.has_encryption_settings()) {
+            Key = NBackup::TEncryptionKey(Settings.encryption_settings().symmetric_key().key());
+        }
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
+    }
+
+    // Adds a file to queue.
+    // filePath is relative to DestinationPrefix
+    // iv if file is needed to be encrypted
+    bool AddFile(
+        TString filePath,
+        TString content,
+        const TMaybe<NBackup::TEncryptionIV>& iv = Nothing())
+    {
+        if (iv) {
+            if (!Key) {
+                Fail(TStringBuilder() << "Internal error: no encryption key");
+                return false;
+            }
+            filePath += ".enc";
+            try {
+                TBuffer encContent = NBackup::TEncryptedFileSerializer::EncryptFullFile(
+                    Settings.encryption_settings().encryption_algorithm(),
+                    *Key, *iv,
+                    content);
+                content.assign(encContent.Data(), encContent.Size());
+            } catch (const std::exception& ex) {
+                Fail(TStringBuilder() << "Failed to encrypt " << filePath << ": " << ex.what());
+                return false;
+            }
+        }
+        Files.emplace_back(TFileUpload{
+            .Path = filePath,
+            .Content = content
+        });
+        return true;
+    }
+
+    // Starting function for upload already added files
+    void UploadFiles() {
+        if (!StorageOperator) {
+            StorageOperator = this->RegisterWithSameMailbox(
+                NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
+            );
+        }
+
+        this->Become(&TExportFilesUploader::UploadStateFunc);
+
+        ProcessQueue();
+    }
+
+    void ProcessQueue() {
+        if (Files.empty()) {
+            return Success();
+        }
+
+        const TFileUpload& upload = Files.front();
+
+        TStringBuilder path;
+        path << NBackup::NormalizeExportPrefix(DestinationPrefix) << '/' << upload.Path;
+
+        auto request = Aws::S3::Model::PutObjectRequest().WithKey(path);
+
+        this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(upload.Content)));
+    }
+
+    void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        TFileUpload& upload = Files.front();
+
+        LOG_D("Put file response " << upload.Path
+            << ", self: " << this->SelfId()
+            << ", result: " << result
+        );
+
+        if (!result.IsSuccess()) {
+            return RetryOrFinish(result.GetError(), upload);
+        }
+
+        Files.pop_front();
+        ProcessQueue();
+    }
+
+    void RetryOrFinish(const Aws::S3::S3Error& error, TFileUpload& upload) {
+        if (upload.Attempt < Settings.number_of_retries() && ShouldRetry(error)) {
+            Retry(upload);
+        } else {
+            Fail(TStringBuilder() << upload.Path << ". S3 error: " << error.GetMessage());
+        }
+    }
+
+    void Retry(TFileUpload& upload) {
+        Delay = Min(Delay * ++upload.Attempt, MaxDelay);
+        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
+        this->Schedule(Delay + random, new TEvents::TEvWakeup());
+    }
+
+    STATEFN(UploadStateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, ProcessQueue);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
+        }
+    }
+
+    void Success() {
+        OnFilesUploaded(true, {});
+    }
+
+    void Fail(const TString& error) {
+        OnFilesUploaded(false, error);
+    }
+
+    virtual void OnFilesUploaded(bool success, const TString& error) = 0;
+
+    void PassAway() override {
+        this->Send(StorageOperator, new TEvents::TEvPoisonPill());
+        IActor::PassAway();
+    }
+
+private:
+    Ydb::Export::ExportToS3Settings Settings;
+    TString DestinationPrefix;
+    TMaybe<NBackup::TEncryptionKey> Key;
+    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+    TActorId StorageOperator;
+
+    std::deque<TFileUpload> Files;
+
+    TDuration Delay = TDuration::Minutes(1);
+    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
+};
+
+class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
     void GetDescription() {
         Send(SchemeShard, new TEvSchemeShard::TEvDescribeScheme(SourcePathId));
         Become(&TThis::StateDescribe);
@@ -84,10 +237,12 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         FileName = TypeToFileName[PathType];
         switch (PathType) {
             case NKikimrSchemeOp::EPathTypeView: {
+                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
                 Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, error);
                 return !Scheme.empty();
             }
             case NKikimrSchemeOp::EPathTypePersQueueGroup: {
+                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
                 return BuildTopicScheme(describeResult, error);
             }
             default:
@@ -119,129 +274,45 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return Finish(false, "cannot infer permissions");
         }
 
-        UploadScheme();
+        StartUploadFiles();
     }
 
-    void UploadScheme() {
-        Y_ABORT_UNLESS(!SchemeUploaded);
-
+    void StartUploadFiles() {
         if (!Scheme) {
             return Finish(false, "cannot infer scheme");
         }
-        if (Attempt == 0) {
-            StorageOperator = RegisterWithSameMailbox(
-                NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
-            );
-        }
 
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/%s", DestinationPrefix->c_str(), FileName.c_str()));
-
-        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
-        Become(&TThis::StateUploadScheme);
-    }
-
-    void HandleSchemePutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
-
-        LOG_D("HandleSchemePutResponse"
-            << ", self: " << SelfId()
-            << ", result: " << result
-        );
-
-        if (!CheckResult(result, TStringBuf("PutObject (scheme)"))) {
+        if (!AddFile(FileName, Scheme, MakeIV(SchemeFileType))) {
             return;
         }
-        SchemeUploaded = true;
+
         if (EnablePermissions) {
-            UploadPermissions();
-        } else {
-            UploadMetadata();
+            if (!Permissions) {
+                return Finish(false, "cannot infer permissions");
+            }
+
+            if (!AddFile("permissions.pb", Permissions, MakeIV(NBackup::EBackupFileType::Permissions))) {
+                return;
+            }
         }
-    }
-
-    void UploadPermissions() {
-        Y_ABORT_UNLESS(EnablePermissions && !PermissionsUploaded);
-
-        if (!Permissions) {
-            return Finish(false, "cannot infer permissions");
-        }
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/permissions.pb", DestinationPrefix->c_str()));
-
-        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Permissions)));
-        Become(&TThis::StateUploadPermissions);
-    }
-
-    void HandlePermissionsPutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
-
-        LOG_D("HandlePermissionsPutResponse"
-            << ", self: " << SelfId()
-            << ", result: " << result
-        );
-
-        if (!CheckResult(result, TStringBuf("PutObject (permissions)"))) {
-            return;
-        }
-        PermissionsUploaded = true;
-        UploadMetadata();
-    }
-
-    void UploadMetadata() {
-        Y_ABORT_UNLESS(!MetadataUploaded);
 
         if (!Metadata) {
             return Finish(false, "empty metadata");
         }
-        auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/metadata.json", DestinationPrefix->c_str()));
 
-        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Metadata)));
-        Become(&TThis::StateUploadMetadata);
-    }
-
-    void HandleMetadataPutResponse(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
-
-        LOG_D("HandleMetadataPutResponse"
-            << ", self: " << SelfId()
-            << ", result: " << result
-        );
-
-        if (!CheckResult(result, TStringBuf("PutObject (metadata)"))) {
+        if (!AddFile("metadata.json", Metadata, IV)) {
             return;
         }
-        MetadataUploaded = true;
-        Finish();
+
+        UploadFiles();
     }
 
-    bool CheckResult(const TPutObjectResult& result, const TStringBuf marker) {
-        if (result.IsSuccess()) {
-            return true;
+    TMaybe<NBackup::TEncryptionIV> MakeIV(NBackup::EBackupFileType fileType) {
+        TMaybe<NBackup::TEncryptionIV> iv;
+        if (IV) {
+            iv = NBackup::TEncryptionIV::Combine(*IV, fileType, 0 /* backupItemNumber: already combined */, 0 /* shardNumber */);
         }
-
-        LOG_E("Error at '" << marker << "'"
-            << ", self: " << SelfId()
-            << ", error: " << result
-        );
-
-        RetryOrFinish(result.GetError());
-        return false;
-    }
-
-    void RetryOrFinish(const Aws::S3::S3Error& error) {
-        if (Attempt < Retries && ShouldRetry(error)) {
-            Retry();
-        } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage());
-        }
-    }
-
-    void Retry() {
-        Delay = Min(Delay * ++Attempt, MaxDelay);
-        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        Schedule(Delay + random, new TEvents::TEvWakeup());
+        return iv;
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
@@ -255,17 +326,18 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         PassAway();
     }
 
-    void PassAway() override {
-        Send(StorageOperator, new TEvents::TEvPoisonPill());
-        IActor::PassAway();
+    void OnFilesUploaded(bool success, const TString& error) override {
+        Finish(success, error);
+    }
+
+    static TString GetDestinationPrefix(const Ydb::Export::ExportToS3Settings& settings, ui32 itemIdx) {
+        if (itemIdx < ui32(settings.items_size())) {
+            return settings.items(itemIdx).destination_prefix();
+        }
+        return settings.destination_prefix();
     }
 
 public:
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
-    }
-
     TSchemeUploader(
         TActorId schemeShard,
         ui64 exportId,
@@ -274,127 +346,52 @@ public:
         const Ydb::Export::ExportToS3Settings& settings,
         const TString& databaseRoot,
         const TString& metadata,
-        bool enablePermissions
+        bool enablePermissions,
+        const TMaybe<NBackup::TEncryptionIV>& iv
     )
-        : SchemeShard(schemeShard)
+        : TExportFilesUploader<TSchemeUploader>(settings, GetDestinationPrefix(settings, itemIdx))
+        , SchemeShard(schemeShard)
         , ExportId(exportId)
         , ItemIdx(itemIdx)
         , SourcePathId(sourcePathId)
-        , ExternalStorageConfig(new TS3ExternalStorageConfig(settings))
-        , Retries(settings.number_of_retries())
+        , IV(iv)
         , DatabaseRoot(databaseRoot)
         , EnablePermissions(enablePermissions)
         , Metadata(metadata)
     {
-        if (itemIdx < ui32(settings.items_size())) {
-            DestinationPrefix = settings.items(itemIdx).destination_prefix();
-        }
     }
 
     void Bootstrap() {
-        if (!DestinationPrefix) {
-            return Finish(false, TStringBuilder() << "cannot determine destination prefix, item index: " << ItemIdx << " out of range");
-        }
-        if (!Scheme || !Permissions) {
-            return GetDescription();
-        }
-        if (!SchemeUploaded) {
-            return UploadScheme();
-        }
-        if (EnablePermissions && !PermissionsUploaded) {
-            return UploadPermissions();
-        }
-        if (!MetadataUploaded) {
-            return UploadMetadata();
-        }
-        Finish();
-    }
-
-    STATEFN(StateBase) {
-        switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvWakeup, Bootstrap);
-            sFunc(TEvents::TEvPoisonPill, PassAway);
-        }
+        GetDescription();
     }
 
     STATEFN(StateDescribe) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeDescription);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    STATEFN(StateUploadScheme) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleSchemePutResponse);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    STATEFN(StateUploadPermissions) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandlePermissionsPutResponse);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    STATEFN(StateUploadMetadata) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleMetadataPutResponse);
-        default:
-            return StateBase(ev);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
         }
     }
 
 private:
-
     TActorId SchemeShard;
 
     ui64 ExportId;
     ui32 ItemIdx;
     TPathId SourcePathId;
     NKikimrSchemeOp::EPathType PathType;
+    NBackup::EBackupFileType SchemeFileType;
     TString FileName;
 
-    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    TMaybe<TString> DestinationPrefix;
-
-    ui32 Attempt = 0;
-    const ui32 Retries;
+    TMaybe<NBackup::TEncryptionIV> IV;
 
     TString DatabaseRoot;
-
-    TActorId StorageOperator;
-
-    TDuration Delay = TDuration::Minutes(1);
-    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
-
     TString Scheme;
-    bool SchemeUploaded = false;
-
     bool EnablePermissions = false;
     TString Permissions;
-    bool PermissionsUploaded = false;
-
     TString Metadata;
-    bool MetadataUploaded = false;
-
 }; // TSchemeUploader
 
-class TExportMetadataUploader: public TActorBootstrapped<TExportMetadataUploader> {
-    using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
-    using TEvExternalStorage = NWrappers::TEvExternalStorage;
-    using TPutObjectResult = Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>;
-
-    struct TFileUpload {
-        TString Path;
-        TString Content;
-        size_t Attempt = 0;
-    };
-
+class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader> {
 public:
     TExportMetadataUploader(
         TActorId schemeShard,
@@ -403,65 +400,27 @@ public:
         const NKikimrSchemeOp::TExportMetadata& exportMetadata,
         bool enableChecksums
     )
-        : SchemeShard(schemeShard)
+        : TExportFilesUploader<TExportMetadataUploader>(settings, settings.destination_prefix())
+        , SchemeShard(schemeShard)
         , ExportId(exportId)
         , EnableChecksums(enableChecksums)
-        , Settings(settings)
         , ExportMetadata(exportMetadata)
-        , ExternalStorageConfig(new TS3ExternalStorageConfig(Settings))
     {
     }
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
-    }
-
     void Bootstrap() {
-        Become(&TExportMetadataUploader::StateFunc);
-
-        StorageOperator = RegisterWithSameMailbox(
-            NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
-        );
-
         if (ExportMetadata.HasIV()) {
             IV = NBackup::TEncryptionIV::FromBinaryString(ExportMetadata.GetIV());
-            Key = NBackup::TEncryptionKey(Settings.encryption_settings().symmetric_key().key());
         }
 
         if (!AddBackupMetadata() || !AddSchemaMappingMetadata() || !AddSchemaMappingJson()) {
             return;
         }
 
-        ProcessQueue();
+        UploadFiles();
     }
 
 private:
-    bool AddFile(
-        TString filePath,
-        TString content,
-        const TMaybe<NBackup::TEncryptionIV>& iv = Nothing(),
-        const TMaybe<NBackup::TEncryptionKey>& key = Nothing())
-    {
-        if (iv && key) {
-            filePath += ".enc";
-            try {
-                TBuffer encContent = NBackup::TEncryptedFileSerializer::EncryptFullFile(
-                    ExportMetadata.GetEncryptionAlgorithm(),
-                    *key, *iv,
-                    content);
-                content.assign(encContent.Data(), encContent.Size());
-            } catch (const std::exception& ex) {
-                Fail(TStringBuilder() << "Failed to encrypt " << filePath << ": " << ex.what());
-                return false;
-            }
-        }
-        Files.emplace_back(TFileUpload{
-            .Path = filePath,
-            .Content = content
-        });
-        return true;
-    }
-
     bool AddBackupMetadata() {
         TString content;
         TStringOutput ss(content);
@@ -499,7 +458,7 @@ private:
         writer.Flush();
         ss.Flush();
 
-        return AddFile("SchemaMapping/metadata.json", content, IV, Key)
+        return AddFile("SchemaMapping/metadata.json", content, IV)
             && (!EnableChecksums || AddFile(NBackup::ChecksumKey("SchemaMapping/metadata.json"), NBackup::ComputeChecksum(content)));
     }
 
@@ -519,79 +478,13 @@ private:
         }
 
         const TString content = schemaMapping.Serialize();
-        return AddFile("SchemaMapping/mapping.json", content, iv, Key)
+        return AddFile("SchemaMapping/mapping.json", content, iv)
             && (!EnableChecksums || AddFile(NBackup::ChecksumKey("SchemaMapping/mapping.json"), NBackup::ComputeChecksum(content)));
     }
 
-    void ProcessQueue() {
-        if (Files.empty()) {
-            return Success();
-        }
-
-        const TFileUpload& upload = Files.front();
-
-        TStringBuilder path;
-        path << Settings.destination_prefix();
-        if (path.back() != '/') {
-            path << '/';
-        }
-        path << upload.Path;
-
-        auto request = Aws::S3::Model::PutObjectRequest().WithKey(path);
-
-        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(upload.Content)));
-    }
-
-    void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
-        TFileUpload& upload = Files.front();
-
-        LOG_D("Put file response " << upload.Path
-            << ", self: " << SelfId()
-            << ", result: " << result
-        );
-
-        if (!result.IsSuccess()) {
-            return RetryOrFinish(result.GetError(), upload);
-        }
-
-        Files.pop_front();
-        ProcessQueue();
-    }
-
-    void RetryOrFinish(const Aws::S3::S3Error& error, TFileUpload& upload) {
-        if (upload.Attempt < Settings.number_of_retries() && ShouldRetry(error)) {
-            Retry(upload);
-        } else {
-            Fail(TStringBuilder() << upload.Path << ". S3 error: " << error.GetMessage());
-        }
-    }
-
-    void Retry(TFileUpload& upload) {
-        Delay = Min(Delay * ++upload.Attempt, MaxDelay);
-        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
-        Schedule(Delay + random, new TEvents::TEvWakeup());
-    }
-
-    STATEFN(StateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvWakeup, ProcessQueue);
-            sFunc(TEvents::TEvPoisonPill, PassAway);
-            hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
-        }
-    }
-
-    void Success() {
-        Finish(true, {});
-    }
-
-    void Fail(const TString& error) {
-        Finish(false, error);
-    }
-
-    void Finish(bool success, const TString& error) {
+    void OnFilesUploaded(bool success, const TString& error) override {
         LOG_I("Finish uploading export metadata"
-            << ", self: " << SelfId()
+            << ", self: " << this->SelfId()
             << ", success: " << success
             << ", error: " << error
         );
@@ -600,36 +493,22 @@ private:
         PassAway();
     }
 
-    void PassAway() override {
-        Send(StorageOperator, new TEvents::TEvPoisonPill());
-        IActor::PassAway();
-    }
-
 private:
     TActorId SchemeShard;
     ui64 ExportId;
     bool EnableChecksums = false;
 
-    Ydb::Export::ExportToS3Settings Settings;
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
 
-    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    TActorId StorageOperator;
     TMaybe<NBackup::TEncryptionIV> IV;
-    TMaybe<NBackup::TEncryptionKey> Key;
-
-    std::deque<TFileUpload> Files;
-
-    TDuration Delay = TDuration::Minutes(1);
-    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 };
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
-    bool enablePermissions
+    bool enablePermissions, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
-        metadata, enablePermissions);
+        metadata, enablePermissions, iv);
 }
 
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

@@ -549,6 +549,9 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         Send(OffloadActor, new TEvents::TEvPoisonPill());
     }
 
+    if(!Partition.IsSupportivePartition()) {
+        //Send(BlobCache, ) //ToDo!
+    }
     Die(ctx);
 }
 
@@ -1484,7 +1487,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TEvPQ::TEvBlobResponse* blobResponse,
                                 const TActorContext& ctx)
 {
-    Cerr << "=== On read complete for user: " << info.User << Endl;
+    Cerr << "=== On read complete for user " << info.User << Endl;
     TReadAnswer answer = info.FormAnswer(
         ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive(),
@@ -1550,6 +1553,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
 void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     ReadingTimestamp = false;
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
+    Cerr << "=== Read error " << Endl;
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         ProcessTimestampRead(ctx);
         return;
@@ -1842,6 +1846,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         if (Compacter) {
             Compacter->ProcessResponse(ev);
         }
+        return;
     }
 
     //check correctness of response

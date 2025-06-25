@@ -27,10 +27,8 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(ui64 nextRequestCookie, ui64 startOff
     return evRead;
 }
 
-TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor,
-                                           ui64 readQuota)
-    : QuotaTracker(std::make_shared<TQuotaTracker>(readQuota * 2, readQuota, TInstant::Now()))
-    , FirstUncompactedOffset(firstUncompactedOffset)
+TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor)
+    : FirstUncompactedOffset(firstUncompactedOffset)
     , StartCookie(startCookie)
     , EndCookie(endCookie)
     , CurrentCookie(startCookie)
@@ -40,8 +38,8 @@ TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 sta
 }
 
 void TPartitionCompaction::TryCompactionIfPossible() {
-    QuotaTracker->Update(Now());
-    if (!PartitionActor->TabletConfig.GetEnableCompactification()) {
+    if (!PartitionActor->Config.GetEnableCompactification()) {
+        Cerr << "=== Compacter created, but compaction is disabled\n";
         Step = EStep::PENDING;
         return;
     }
@@ -65,7 +63,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
         } else if (step == EStep::COMPACTING) {
             Cerr << "=== Try compaction, reading, go to compacting\n";
             Step = EStep::COMPACTING;
-            CompactState = TCompactState(std::move(ReadState->GetData()), FirstUncompactedOffset, ReadState->GetLastOffset(), QuotaTracker, PartitionActor);
+            CompactState = TCompactState(std::move(ReadState->GetData()), FirstUncompactedOffset, ReadState->GetLastOffset(), PartitionActor);
             ReadState = std::nullopt;
         } else {
             Cerr << "=== Try compaction, reading, switch to pending?\n";
@@ -74,9 +72,6 @@ void TPartitionCompaction::TryCompactionIfPossible() {
         [[fallthrough]];
     }
     case EStep::COMPACTING: {
-        if (!QuotaTracker->CanExaust(Now())) {
-            break;
-        }
         auto step = CompactState->ContinueIfPossible(GetNextCookie());
         Step = step;
         if (step == EStep::COMPACTING) {
@@ -103,18 +98,26 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
             ReadState->ProcessResponse(ev);
             break;
         }
+        case EStep::COMPACTING: {
+            Y_ABORT_UNLESS(CompactState);
+            CompactState->ProcessResponse(ev);
+            break;
+        }
         case EStep::PENDING:
             Cerr << "=== Got response on pending, ignore\n";
             break;
         default:
             Y_ABORT();
-
     }
+    TryCompactionIfPossible();
 }
+
 void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     if (CompactState) {
         CompactState->ProcessKVResponse(ev);
     }
+    HaveRequestInflight = false;
+
 }
 TPartitionCompaction::TReadState::TReadState(ui64 firstOffset, TPartition* partitionActor)
     : OffsetToRead(firstOffset)
@@ -146,7 +149,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
     {
         // empty?
     } else {
-        Cerr << "Read state: bad response\n";
+        Cerr << "====Read state: bad response\n";
         return false;
         // Will retry the request next;
     }
@@ -231,7 +234,9 @@ TPartitionCompaction::EStep TPartitionCompaction::TReadState::ContinueIfPossible
     if (OffsetToRead >= LastOffset) {
         return TopicData.size() ? EStep::COMPACTING : EStep::PENDING;
     }
-    Cerr << "=== === ReadState send EvRead with cookie " << nextRequestCookie << Endl;
+    TStringBuilder msg;
+    msg << "=== === ReadState send EvRead with cookie " << nextRequestCookie << ", offset = " << OffsetToRead << ", LastOffset: " << LastOffset << Endl;
+    Cerr << msg;
     auto evRead = MakeEvRead(nextRequestCookie, OffsetToRead, LastOffset);
     PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
     return EStep::READING;
@@ -247,11 +252,9 @@ ui64 TPartitionCompaction::TReadState::GetLastOffset() {
 }
 
 TPartitionCompaction::TCompactState::TCompactState(
-        THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset,
-        const std::shared_ptr<TQuotaTracker> quotaTracker, TPartition* partitionActor
+        THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor
 )
     : MaxOffset(maxOffset)
-    , QuotaTracker(quotaTracker)
     , TopicData(std::move(data))
     , PartitionActor(partitionActor)
     , DataKeysBody(PartitionActor->CompactionBlobEncoder.DataKeysBody)
@@ -280,6 +283,12 @@ TPartitionCompaction::TCompactState::TCompactState(
         }
         OffsetsToKeep.insert(offset);
     }
+    TStringBuilder msg;
+    msg << "===Compact state - start from offset: " << firstUncompactedOffset << ", max offset: " << maxOffset << Endl;
+    Cerr << msg;
+    for (const auto& offset : OffsetsToKeep) {
+        Cerr << "===Compact state - got offset to keep: " << offset << Endl;
+    }
 
     OffsetsToKeep.insert(FirstHeadOffset);
     OffsetsToKeep.insert(std::numeric_limits<ui64>::max());
@@ -293,15 +302,20 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
         return EStep::PENDING;
     }
     Cerr << "=== Compact state: continue if possible\n";
-
     while (KeysIter != DataKeysBody.end()) {
         const auto& currKey = KeysIter->Key;
         auto maxBlobOffset = currKey.GetOffset() + currKey.GetCount();
         if (maxBlobOffset >= MaxOffset)
             break;
-        if (!DropOffset.Defined() && currKey.GetCount() == 0 && currKey.GetOffset() == DropOffset) {
-            // A blob fully containing part of big message to drop; Delete it
-            AddDeleteRange(currKey);
+        if (currKey.GetCount() == 0) {
+            if (!DropOffset.Defined() && currKey.GetOffset() == DropOffset) {
+                // A blob fully containing part of big message to drop; Delete it
+                AddDeleteRange(currKey);
+            }
+            else {
+                //Keep key consisting only of large message part;
+                Cerr << "===Compact state - keep key " << KeysIter->Key.ToString() << Endl;
+            }
             KeysIter++;
             continue;
         }
@@ -322,6 +336,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
             break;
         }
         //Need to read and process this blob.
+        Cerr << "===Compact state - send evRead from offset " << currKey.GetOffset() << " part no " << currKey.GetPartNo() << Endl;
         auto evRead = MakeEvRead(nextRequestCookie, currKey.GetOffset(), currKey.GetOffset() + currKey.GetCount() + 1,
                 currKey.GetPartNo());
 
@@ -347,11 +362,11 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
     {
         // empty
     } else {
-        Cerr << "Compactstate: bad response\n";
+        Cerr << "===Compact state: bad response\n";
         return false;
         // Will retry the request next;
     }
-    Cerr << "===CompactState process reponse\n";
+    Cerr << "===Compact state process reponse\n";
     auto& readResult = *ev->Get()->Response->MutablePartitionResponse()->MutableCmdReadResult();
 
 
@@ -368,8 +383,13 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             ++OffsetsIter;
         }
         if (res.GetOffset() == *OffsetsIter || res.GetOffset() >= MaxOffset) {
-            //keep;
+            TStringBuilder msg;
+            msg << "====Compact state: KEEP part: " << res.GetOffset() << ":" << res.GetPartNo() << Endl;
+            Cerr << msg;
         } else {
+            TStringBuilder msg;
+            msg << "====Compact state: Delete part: " << res.GetOffset() << ":" << res.GetPartNo() << Endl;
+            Cerr << msg;
             res.SetData("");
             res.SetUncompressedSize(0);
             DropOffset = res.GetOffset();
@@ -393,6 +413,10 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
 }
 
 void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
+    DroppedKeys.push_back(key);
+    TStringBuilder msg;
+    msg << "====Compact state: Delete key: " << key.ToString() << ". (" <<key.GetOffset() << ":" << key.GetPartNo() << ":" << key.GetCount() << ")" << Endl;
+    Cerr << msg;
     if (!Request) {
         Request = MakeHolder<TEvKeyValue::TEvRequest>();
     }
@@ -406,17 +430,53 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
 }
 
 void TPartitionCompaction::TCompactState::RunKvRequest() {
+    Cerr << "====Compact state: RunKvRequest\n";
     Y_ABORT_UNLESS(Request);
     Request->Record.SetCookie(TPartition::ERequestCookie::CompactificationWrite);
-    PartitionActor->Send(PartitionActor->Tablet, Request.Release(), 0, 0, PartitionActor->PersistRequestSpan.GetTraceId());
+    PartitionActor->Send(PartitionActor->BlobCache, Request.Release(), 0, 0, PartitionActor->PersistRequestSpan.GetTraceId());
     RequestDataSize = 0;
 
     // ToDo: Do we need to add some meta here?
-
 }
 
 
 TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
+    Cerr << "====Compact state: Process KVResponse\n";
+    if (DroppedKeys) {
+        std::deque<TDataKey> newDataKeys;
+        ui64 i = 0;
+        for (const auto& dataKey : PartitionActor->CompactionBlobEncoder.DataKeysBody) {
+            while (i < DroppedKeys.size() && DroppedKeys[i].GetOffset() < dataKey.Key.GetOffset()) {
+                i++;
+            }
+            if (i < DroppedKeys.size() && dataKey.Key == DroppedKeys[i]) {
+                i++;
+                continue;
+            }
+            newDataKeys.push_back(dataKey);
+        }
+        TStringBuilder msg;
+        msg << "====Compact state: Dropped " << DroppedKeys.size() << ", compaction encoder had: " << PartitionActor->CompactionBlobEncoder.DataKeysBody.size()
+            << " keys, now have: " << newDataKeys.size() << Endl;
+        Cerr << msg;
+        msg.clear();
+        msg << "Old start offset: " << PartitionActor->CompactionBlobEncoder.StartOffset;
+        PartitionActor->CompactionBlobEncoder.DataKeysBody = std::move(newDataKeys);
+        if (PartitionActor->CompactionBlobEncoder.DataKeysBody.size() != 0) {
+            PartitionActor->CompactionBlobEncoder.StartOffset = PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() == 0
+                                                                ? PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
+                                                                : PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset() + 1;
+        } else if (PartitionActor->CompactionBlobEncoder.HeadKeys.size() != 0) {
+            PartitionActor->CompactionBlobEncoder.StartOffset = PartitionActor->CompactionBlobEncoder.HeadKeys.front().Key.GetOffset();
+        } else if (PartitionActor->BlobEncoder.DataKeysBody.size() != 0) {
+            PartitionActor->CompactionBlobEncoder.StartOffset = PartitionActor->BlobEncoder.DataKeysBody.front().Key.GetOffset();
+        } else {
+            PartitionActor->CompactionBlobEncoder.StartOffset = PartitionActor->CompactionBlobEncoder.EndOffset;
+        }
+        msg << "New start offset: " << PartitionActor->CompactionBlobEncoder.StartOffset << Endl;
+        Cerr << msg;
+    }
+
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         PQ_LOG_CRIT("Partition compaction state: Got not OK KV response");

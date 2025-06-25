@@ -1270,8 +1270,7 @@ void TPartition::CreateCompacter() {
         Send(Tablet, new TEvPQ::TEvAllocateCookie(100));
         return;
     } else {
-        ui64 readQuota = AppData()->PQConfig.GetQuotingConfig().GetEnableQuoting() ? TotalPartitionWriteSpeed : std::numeric_limits<ui64>::max();
-        Compacter = MakeHolder<TPartitionCompaction>(0, *CompacterStartCookie, *CompacterStartCookie + 100, this, readQuota);
+        Compacter = MakeHolder<TPartitionCompaction>(0, *CompacterStartCookie, *CompacterStartCookie + 100, this);
         Compacter->TryCompactionIfPossible();
     }
 }

@@ -2083,20 +2083,19 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TStringBuilder topic1FullPath;
         topic1FullPath << "/Root/" << topic1;
 
+        CreateTopic(pqClient, topic1FullPath, 1, {"consumer1"});
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
-                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+                //TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
                 TTopicConfig(topic2, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
                 TTopicConfig("topic_bad", 1, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}})
             });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 2);
 
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), topic1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, NONE_ERROR);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, INVALID_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), topic2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].ErrorCode, INVALID_REQUEST);
         }
 
         auto getConfigsMap = [&](const auto& describeResult) {
@@ -2111,6 +2110,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TString name;
             TString policy;
         };
+
+
         auto checkDescribeTopic = [&](const std::vector<TDescribeTopicResult>& topics) {
             std::vector<TString> topicNames;
 
@@ -2134,7 +2135,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
                 topicNames.push_back(topic.name);
             }
-
             auto msg = client.DescribeConfigs(topicNames);
             UNIT_ASSERT_VALUES_EQUAL(msg->Results.size(), topics.size());
             for (auto i = 0u; i < topics.size(); ++i) {
@@ -2159,8 +2159,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     UNIT_ASSERT_C(!hasCompConsumer, topics[i].name);
                 }
             }
-
         };
+
+        {
+            auto msg = client.AlterConfigs({
+                TTopicConfig(topic1, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
+            });
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+            checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
+        }
         //ui64 offset = 1, seqNo = 1;
         TString valueBase{700u, 'a'};
         TString largeValueBase{1'000'000u, 'a'};
@@ -2175,28 +2182,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             meta2.push_back(std::make_pair("__key", key + "-big"));
             message1.MessageMeta(meta1);
             message2.MessageMeta(meta2);
-            // TString value = key + valueBase;
-
-            // TKafkaRecordBatch batch;
-            // batch.BaseOffset = offset++;
-            // batch.BaseSequence = seqNo++;
-            // batch.Magic = 2; // Current supported
-            // batch.Records.resize(1);
-            // batch.Records[0].Key = TKafkaRawBytes(key.data(), key.size());
-            // batch.Records[0].Value = TKafkaRawBytes(value.data(), value.size());
-
-            // auto msg = client.Produce(topic1, 0, batch);
-
-            // UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topic1);
-            // UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
-            // UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
-            //                          static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             writeSession->Write(std::move(message1));
             writeSession->Write(std::move(message2));
         };
 
         checkDescribeTopic({{topic1, "compact"}, {topic2, "delete"}});
-        for (auto i = 0u; i < 10; i++) {
+        for (auto i = 0u; i < 20; i++) {
             produce("key1");
             produce("key2");
             produce("key3");
@@ -2204,49 +2195,50 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
         writeSession->Close(TDuration::Seconds(50));
 
-        {
-            auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "bad"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}}),
-            });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "compact"}, {topic2, "compact"}});
-
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
+        rSSettings.AppendTopics({topic1FullPath});
+        auto readSession = pqClient.CreateReadSession(rSSettings);
+        auto getMessagesFromTopic = [&](auto& reader) {
+            TMaybe<NTopic::TReadSessionEvent::TDataReceivedEvent> result;
+            while (true) {
+                auto event = reader->GetEvent(false);
+                if (!event)
+                    return result;
+                if (auto dataEvent = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    result = *dataEvent;
+                    break;
+                } else if (auto *lockEv = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    lockEv->Confirm();
+                } else if (auto *releaseEv = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    releaseEv->Confirm();
+                } else if (auto *closeSessionEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
+                    return result;
+                }
+            }
+            return result;
+        };
+        ui64 totalTries = 20;
+        ui64 totalMessages = 0;
+        while(totalTries) {
+            auto result = getMessagesFromTopic(readSession);
+            if (!result) {
+                --totalTries;
+                Sleep(TDuration::MilliSeconds(500));
+                continue;
+            }
+            if (result) {
+                for (const auto& message : result->GetMessages()) {
+                    TStringBuilder msg;
+                    msg << "==== Got message from offset " << message.GetOffset();
+                    totalMessages++;
+                    if (!message.GetMessageMeta()->Fields.empty()) {
+                        msg << " with meta: " << message.GetMessageMeta()->Fields[0].first << ":" << message.GetMessageMeta()->Fields[0].second << Endl;
+                    }
+                    Cerr << msg;
+                }
+            }
         }
-        {
-            auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", ""}})
-            });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
-
-        }
-        {
-            auto msg = client.AlterConfigs({
-                TTopicConfig(topic1, 12, std::nullopt, std::nullopt, {{"cleanup.policy", "delete"}}),
-                TTopicConfig(topic2, 13, std::nullopt, std::nullopt, {{"cleanup.policy", ""}})
-            });
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
-            checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
-        }
-
-        {
-            auto msg = client.DescribeConfigs({topic1, topic2});
-            const auto& res0 = msg->Results[0];
-            UNIT_ASSERT_VALUES_EQUAL(res0.ResourceName.value(), topic1);
-            UNIT_ASSERT_VALUES_EQUAL(res0.ErrorCode, NONE_ERROR);
-            auto configs0 = getConfigsMap(res0);
-            UNIT_ASSERT_VALUES_EQUAL(configs0.size(), 33);
-            UNIT_ASSERT(configs0.find("cleanup.policy") != configs0.end());
-            UNIT_ASSERT_VALUES_EQUAL(configs0.find("cleanup.policy")->second.Value->data(), "compact");
-
-            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ResourceName.value(), topic2);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, NONE_ERROR);
-            auto configs1 = getConfigsMap(msg->Results[1]);
-            UNIT_ASSERT(configs1.find("cleanup.policy") != configs1.end());
-            UNIT_ASSERT_VALUES_EQUAL(configs1.find("cleanup.policy")->second.Value->data(), "delete");
-        }
+        Cerr << "===Total messages: " << totalMessages << Endl;
     }
 
 

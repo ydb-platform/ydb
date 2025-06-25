@@ -71,11 +71,11 @@ class TKafkaTestClient {
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId = {});
-        
-        TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition, 
-                                                  const std::vector<std::pair<TString, TString>>& keyValueMessages, 
-                                                  ui32 baseSequence = 0, 
-                                                  const std::optional<TProducerInstanceId>& producerInstanceId = {}, 
+
+        TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition,
+                                                  const std::vector<std::pair<TString, TString>>& keyValueMessages,
+                                                  ui32 baseSequence = 0,
+                                                  const std::optional<TProducerInstanceId>& producerInstanceId = {},
                                                   const std::optional<TString>& transactionalId = {});
 
         TMessagePtr<TListOffsetsResponseData> ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic);
@@ -103,6 +103,8 @@ class TKafkaTestClient {
         TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TString groupId, std::map<TString, std::vector<i32>> topicsToPartions);
 
         TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData request);
+
+        TMessagePtr<TListGroupsResponseData> ListGroups(TListGroupsRequestData request);
 
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TKafkaUuid, std::vector<i32>>>& topics, i64 offset = 0);
         TMessagePtr<TFetchResponseData> Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset = 0);

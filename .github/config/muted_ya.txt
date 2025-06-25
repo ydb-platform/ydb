@@ -196,6 +196,7 @@ ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/bridge [test_bridge.py */*] chunk chunk
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_update_and_get_cluster_state
+ydb/tests/functional/bridge test_bridge.py.*
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.test_migration_to_v2
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf

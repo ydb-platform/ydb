@@ -17,36 +17,26 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
-    template <class T>
-        requires std::regular<T> &&
-                 requires(T x) { {x < x} -> std::convertible_to<bool>; }
-    struct TAliased: T {
-        TString Alias;
+    struct TColumnId {
+        TString TableAlias;
+        TString Name;
 
-        TAliased(TString alias, T value)
-            : T(std::move(value))
-            , Alias(std::move(alias))
-        {
-        }
-
-        TAliased(T value)
-            : T(std::move(value))
-        {
-        }
-
-        friend bool operator<(const TAliased& lhs, const TAliased& rhs) {
-            return std::tie(lhs.Alias, static_cast<const T&>(lhs)) < std::tie(rhs.Alias, static_cast<const T&>(rhs));
-        }
-
-        friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
+        friend bool operator<(const TColumnId& lhs, const TColumnId& rhs);
+        friend bool operator==(const TColumnId& lhs, const TColumnId& rhs) = default;
     };
 
     struct TColumnContext {
         TVector<TAliased<TTableId>> Tables;
+        TVector<TColumnId> Columns;
 
-        TVector<TTableId> TablesWithAlias(TStringBuf alias) const;
+        TVector<TAliased<TTableId>> TablesWithAlias(TStringBuf alias) const;
+        bool IsAsterisk() const;
+        TColumnContext Renamed(TStringBuf alias) &&;
 
         friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
+        friend TColumnContext operator|(TColumnContext lhs, TColumnContext rhs);
+
+        static TColumnContext Asterisk();
     };
 
     struct TGlobalContext {

@@ -73,7 +73,7 @@ class UploadClusterBase(UploadSuiteBase):
     __gross_time = 0
 
     @classmethod
-    def __get_path(cls) -> str:
+    def get_path(cls) -> str:
         pass
 
     @classmethod
@@ -93,7 +93,7 @@ class UploadClusterBase(UploadSuiteBase):
         return result.result_set.rows[0][0] == 0
 
     def __compaction_complete(self) -> bool:
-        for table in YdbCluster.get_tables(self.__get_path()):
+        for table in YdbCluster.get_tables(self.get_path()):
             if not self.__compaction_complete_for_table(table):
                 return False
         return True
@@ -102,7 +102,7 @@ class UploadClusterBase(UploadSuiteBase):
         sth = ScenarioTestHelper(None)
         raw_bytes = 0
         bytes = 0
-        for table in YdbCluster.get_tables(self.__get_path()):
+        for table in YdbCluster.get_tables(self.get_path()):
             table_raw_bytes, table_bytes = sth.get_volumes_columns(table, '')
             raw_bytes += table_raw_bytes
             bytes += table_bytes
@@ -147,14 +147,14 @@ class UploadClusterBase(UploadSuiteBase):
 
 class UploadTpchBase(UploadClusterBase):
     @classmethod
-    def __get_path(cls):
+    def get_path(cls):
         return f'upload/tpch/s{cls.scale}'
 
     def init(self):
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.__get_path()), 'init', '--store=column'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'init', '--store=column'])
 
     def import_data(self):
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.__get_path()), 'import', 'generator', '--scale', str(self.scale)])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'import', 'generator', '--scale', str(self.scale)])
 
 
 class TestUploadTpch1(UploadTpchBase):

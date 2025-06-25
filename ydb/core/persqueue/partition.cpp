@@ -641,6 +641,9 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         Send(OffloadActor, new TEvents::TEvPoisonPill());
     }
 
+    if(!Partition.IsSupportivePartition()) {
+        //Send(BlobCache, ) //ToDo!
+    }
     Die(ctx);
 }
 
@@ -1886,6 +1889,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         if (Compacter) {
             Compacter->ProcessResponse(ev);
         }
+        return;
     }
 
     //check correctness of response

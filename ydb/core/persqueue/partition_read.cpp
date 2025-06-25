@@ -396,6 +396,9 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_UNUSED(meteringMode);
     Y_UNUSED(partition);
     THolder<TEvPQ::TEvProxyResponse> answer = MakeHolder<TEvPQ::TEvProxyResponse>(destination, IsInternal);
+    if (IsInternal) {
+        Cerr << "===Form internal answer\n";
+    }
 
     NKikimrClient::TResponse& res = *answer->Response;
     const TEvPQ::TEvBlobResponse* response = &blobResponse;
@@ -596,6 +599,7 @@ TReadAnswer TReadInfo::FormAnswer(
 }
 
 void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ctx) {
+    Cerr << "====On TEvReadTimeout\n";
     auto res = Subscriber.OnTimeout(ev);
     if (!res)
         return;
@@ -933,6 +937,7 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 }
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
+    Cerr << "=== Partiton - got proxy response with cookie: " << ev->Get()->Cookie << Endl;
     if (ev->Get()->IsInternal) {
         Cerr << "=== Got internal proxy response\n";
         if (Compacter) {
@@ -1023,7 +1028,7 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
 void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription) {
     ui32 count = 0;
     ui32 size = 0;
-
+    Cerr << "=== Process read with cookie: " << cookie << Endl;
     Y_ABORT_UNLESS(!info.User.empty());
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 

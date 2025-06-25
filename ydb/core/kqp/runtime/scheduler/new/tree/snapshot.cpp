@@ -65,6 +65,7 @@ void TTreeElementBase::UpdateTopDown() {
         for (size_t i = 0, s = Children.size(); i < s; ++i) {
             const auto& child = Children.at(i);
             if (totalWeightedDemand > 0) {
+                // TODO: distribute resources lost because of integer division.
                 child->FairShare = weightedDemand.at(i) * FairShare / totalWeightedDemand;
             } else {
                 child->FairShare = 0;
@@ -74,13 +75,24 @@ void TTreeElementBase::UpdateTopDown() {
     }
     // FIFO variant (for queries)
     else {
+        // TODO: stable sort children by weight
+
         auto leftFairShare = FairShare;
 
-        // TODO: stable sort children by weight beforehand
+        // Give at least 1 fair-share for each demanding child
+        for (size_t i = 0, s = Children.size(); i < s && leftFairShare > 0; ++i) {
+            const auto& child = Children.at(i);
+            if (child->Demand > 0) {
+                child->FairShare = 1;
+                --leftFairShare;
+            }
+        }
+
         for (size_t i = 0, s = Children.size(); i < s; ++i) {
             const auto& child = Children.at(i);
-            child->FairShare = Min(leftFairShare, child->Demand);
-            leftFairShare = leftFairShare <= child->Demand ? 0 : leftFairShare - child->Demand;
+            auto demand = child->Demand > 0 ? child->Demand - 1 : 0;
+            child->FairShare += Min(leftFairShare, demand);
+            leftFairShare = leftFairShare <= demand ? 0 : leftFairShare - demand;
 
             // TODO: looks a little bit hacky.
             if (auto query = std::dynamic_pointer_cast<TQuery>(child); query && query->Origin) {
@@ -89,8 +101,6 @@ void TTreeElementBase::UpdateTopDown() {
             }
         }
     }
-
-    // TODO: distribute resources lost because of integer division.
 }
 
 ///////////////////////////////////////////////////////////////////////////////

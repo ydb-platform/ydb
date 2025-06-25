@@ -294,6 +294,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             super(KiKiMRNode, self).start()
         finally:
             logger.info("Started node %s", self)
+            logger.info("Node %s version:\n%s", self.node_id, self.get_node_binary_version())
 
     def read_node_config(self):
         config_file = os.path.join(self.__config_path, "config.yaml")
@@ -303,6 +304,15 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def get_config_version(self):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
+
+    def get_node_binary_version(self):
+        version_output = yatest.common.execute([self.binary_path, '-V']).std_out.decode('utf-8')
+        version_info = []
+        for line in version_output.splitlines():
+            if not line.strip():
+                break
+            version_info.append(line)
+        return '\n'.join(version_info)
 
     def enable_config_dir(self):
         self.__use_config_store = True

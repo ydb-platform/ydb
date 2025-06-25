@@ -174,6 +174,7 @@ class KikimrConfigGenerator(object):
             explicit_hosts_and_host_configs=False,
             table_service_config=None,  # dict[name]=value
             bridge_config=None,
+            memory_controller_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -435,8 +436,13 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if memory_controller_config:
+            self.yaml_config["memory_controller_config"] = memory_controller_config
+
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+            if "memory_controller_config" not in self.yaml_config:
+                self.yaml_config["memory_controller_config"] = {}
+            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))

@@ -250,6 +250,10 @@ public:
         return RequestEv->HasTopicOperations();
     }
 
+    bool HasKafkaApiOperations() const {
+        return RequestEv->HasKafkaApiOperations();
+    }
+
     bool GetQueryKeepInCache() const {
         return RequestEv->GetQueryKeepInCache();
     }

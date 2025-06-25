@@ -101,7 +101,11 @@ public:
     }
 
     bool HasTopicOperations() const {
-        return Record.GetRequest().HasTopicOperations() || Record.GetRequest().HasKafkaApiOperations();
+        return Record.GetRequest().HasTopicOperations();
+    }
+
+    bool HasKafkaApiOperations() const {
+        return Record.GetRequest().HasKafkaApiOperations();
     }
 
     bool GetKeepSession() const {

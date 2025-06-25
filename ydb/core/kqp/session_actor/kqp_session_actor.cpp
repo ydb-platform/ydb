@@ -532,22 +532,27 @@ public:
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
-        const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
-        for (const auto& topic : operations.GetTopics()) {
-            auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
+        if (QueryState->HasTopicOperations()) {
+            const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
+            for (const auto& topic : operations.GetTopics()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
 
-            for (const auto& partition : topic.partitions()) {
-                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, partition.partition_id())) {
-                    return false;
+                for (const auto& partition : topic.partitions()) {
+                    if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, partition.partition_id())) {
+                        return false;
+                    }
                 }
             }
         }
-        const NKikimrKqp::TKafkaApiOperationsRequest& kafkaOperations = QueryState->GetKafkaApiOperationsFromRequest();
-        for (const auto& topicPartition : kafkaOperations.GetPartitionsInTxn()) {
-            auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topicPartition.GetTopicPath()));
 
-            if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, topicPartition.GetPartitionId())) {
-                return false;
+        if (QueryState->HasKafkaApiOperations()) {
+            const NKikimrKqp::TKafkaApiOperationsRequest& operations = QueryState->GetKafkaApiOperationsFromRequest();
+            for (const auto& topicAndPartition : operations.GetPartitionsInTxn()) {
+                auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topicAndPartition.GetTopicPath()));
+
+                if (!QueryState->TxCtx->TopicOperations.HasThisPartitionAlreadyBeenAdded(path, topicAndPartition.GetPartitionId())) {
+                    return false;
+                }
             }
         }
         return true;
@@ -573,7 +578,7 @@ public:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations()) {
+        if (HasTopicWriteOperations() && !HasTopicApiWriteOperations() && !HasKafkaApiWriteOperations()) {
             Become(&TKqpSessionActor::ExecuteState);
             Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, QueryState->QueryId);
             return;

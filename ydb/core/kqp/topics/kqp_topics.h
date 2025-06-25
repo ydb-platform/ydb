@@ -191,6 +191,8 @@ private:
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
+
+    THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
 };
 
 }

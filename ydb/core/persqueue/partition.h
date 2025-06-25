@@ -1096,7 +1096,7 @@ private:
 
 class TPartitionCompaction {
 public:
-    TPartitionCompaction(ui64 lastCompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor, ui64 readQuota);
+    TPartitionCompaction(ui64 lastCompactedOffset, ui64 startCookie, ui64 endCookie, TPartition* partitionActor);
 
     enum class EStep {
         PENDING,
@@ -1133,10 +1133,9 @@ public:
 
         THolder<TEvKeyValue::TEvRequest> Request;
         ui64 RequestSize;
-        //TKey NextDataKey;
         ui64 MaxOffset;
-        std::shared_ptr<TQuotaTracker> QuotaTracker;
         THashMap<TString, ui64> TopicData;
+        TVector<TKey> DroppedKeys;
         TPartition* PartitionActor;
 
         TMaybe<ui64> DropOffset;
@@ -1149,8 +1148,7 @@ public:
         ui64 FirstHeadOffset;
         ui64 FirstHeadPartNo;
 
-        TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset,
-                      const std::shared_ptr<TQuotaTracker> quotaTracker, TPartition* partitionActor);
+        TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor);
 
         EStep ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
@@ -1161,7 +1159,6 @@ public:
     };
 
     EStep Step = EStep::PENDING;
-    std::shared_ptr<TQuotaTracker> QuotaTracker;
     ui64 FirstUncompactedOffset = 0;
     bool HaveRequestInflight = false;
     ui64 StartCookie = 0;

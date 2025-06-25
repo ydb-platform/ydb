@@ -880,14 +880,12 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const auto blockHashJoin = node.Cast<TDqPhyBlockHashJoin>();
     const auto pos = blockHashJoin.Pos();
 
-    // Use empty labels like in the original implementation, since TDqPhyBlockHashJoin 
-    // doesn't have label fields (unlike TDqPhyGraceJoin)
-    const TString leftTableLabel = "";
-    const TString rightTableLabel = "";
+    // Extract table labels from TDqJoinBase API
+    const TString leftTableLabel(GetTableLabel(blockHashJoin.LeftLabel()));
+    const TString rightTableLabel(GetTableLabel(blockHashJoin.RightLabel()));
 
-    // Extract key columns directly from the node (they should be column indices as atoms)
-    TExprNode::TListType leftKeyColumnNodes = blockHashJoin.LeftKeyColumns().Ref().ChildrenList();
-    TExprNode::TListType rightKeyColumnNodes = blockHashJoin.RightKeyColumns().Ref().ChildrenList();
+    // Extract key columns using TDqJoinBase API 
+    auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
 
     const auto itemTypeLeft = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx)->Cast<TStructExprType>();
     const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
@@ -899,15 +897,21 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     // Build renames and full column names for left side
     for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
         TString name(itemTypeLeft->GetItems()[i]->GetName());
+        if (leftTableLabel) {
+            name = leftTableLabel + "." + name;
+        }
         fullColNames.push_back(name);
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
         leftRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
     }
 
     // Build renames and full column names for right side
-    if (blockHashJoin.JoinKind().Value() != "LeftOnly" && blockHashJoin.JoinKind().Value() != "LeftSemi") {
+    if (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi") {
         for (auto i = 0u; i < itemTypeRight->GetSize(); i++) {
             TString name(itemTypeRight->GetItems()[i]->GetName());
+            if (rightTableLabel) {
+                name = rightTableLabel + "." + name;
+            }
             fullColNames.push_back(name);
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(i)));
             rightRenames.emplace_back(ctx.NewAtom(pos, ctx.GetIndexAsString(outputIndex++)));
@@ -920,33 +924,31 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     // Process key types and conversions (similar to GraceJoin logic)
     YQL_ENSURE(leftKeyColumnNodes.size() == rightKeyColumnNodes.size());
     for (auto i = 0U; i < leftKeyColumnNodes.size(); ++i) {
-        // leftKeyColumnNodes and rightKeyColumnNodes contain column indices as strings
-        auto leftIndexStr = leftKeyColumnNodes[i]->Content();
-        auto rightIndexStr = rightKeyColumnNodes[i]->Content();
-        
-        ui32 leftIndex = FromString<ui32>(leftIndexStr);
-        ui32 rightIndex = FromString<ui32>(rightIndexStr);
-        
-        YQL_ENSURE(leftIndex < itemTypeLeft->GetSize());
-        YQL_ENSURE(rightIndex < itemTypeRight->GetSize());
-        
-        const auto keyTypeLeft = itemTypeLeft->GetItems()[leftIndex]->GetItemType();
-        const auto keyTypeRight = itemTypeRight->GetItems()[rightIndex]->GetItemType();
+
+        auto leftName = leftKeyColumnNodes[i]->Content();
+        auto leftIndex = itemTypeLeft->FindItem(leftName);
+        YQL_ENSURE(leftIndex);
+        const auto keyTypeLeft = itemTypeLeft->GetItems()[*leftIndex]->GetItemType();
+
+        auto rightName = rightKeyColumnNodes[i]->Content();
+        auto rightIndex = itemTypeRight->FindItem(rightName);
+        YQL_ENSURE(rightIndex);
+        const auto keyTypeRight = itemTypeRight->GetItems()[*rightIndex]->GetItemType();
 
         bool hasOptional = false;
         auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
 
-        // Keys are already indices, so we don't need to convert them back to column names
-        if (!keyTypeLeft->Equals(*dryType)) {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), 
-                ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
-            leftConvertedItems.emplace_back(itemTypeLeft->GetItems()[leftIndex]->GetName(), dryType);
+        if (keyTypeLeft->Equals(*dryType)) {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
+        } else {
+            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
+            leftConvertedItems.emplace_back(leftName, dryType);
         }
-        
-        if (!keyTypeRight->Equals(*dryType)) {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), 
-                ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
-            rightConvertedItems.emplace_back(itemTypeRight->GetItems()[rightIndex]->GetName(), dryType);
+        if (keyTypeRight->Equals(*dryType)) {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
+        } else {
+            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
+            rightConvertedItems.emplace_back(rightName, dryType);
         }
     }
 
@@ -976,7 +978,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Callable("BlockHashJoinCore")
             .Add(0, std::move(leftBlocks))
             .Add(1, std::move(rightBlocks))
-            .Add(2, blockHashJoin.JoinKind().Ptr())
+            .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
             .Add(5, ctx.NewList(pos, std::move(leftRenames)))

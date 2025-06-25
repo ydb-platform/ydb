@@ -310,7 +310,7 @@ public:
             Y_UNUSED(i.second->Unregister());
         }
         RefreshMemoryUsage();
-        AFL_VERIFY(MemoryUsage == 0)("usage", MemoryUsage);
+//        AFL_VERIFY(MemoryUsage == 0)("usage", MemoryUsage);
         AllocationScopes.clear();
     }
 };

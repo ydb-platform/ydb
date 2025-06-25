@@ -3730,8 +3730,10 @@ void aws_mqtt5_client_options_storage_destroy(struct aws_mqtt5_client_options_st
     aws_tls_connection_options_clean_up(&options_storage->tls_options);
     aws_http_proxy_config_destroy(options_storage->http_proxy_config);
 
-    aws_mqtt5_packet_connect_storage_clean_up(options_storage->connect);
-    aws_mem_release(options_storage->connect->allocator, options_storage->connect);
+    if (options_storage->connect != NULL) {
+        aws_mqtt5_packet_connect_storage_clean_up(options_storage->connect);
+        aws_mem_release(options_storage->connect->allocator, options_storage->connect);
+    }
 
     aws_mem_release(options_storage->allocator, options_storage);
 }
@@ -3823,8 +3825,9 @@ struct aws_mqtt5_client_options_storage *aws_mqtt5_client_options_storage_new(
     }
 
     if (options->http_proxy_options != NULL) {
+        /* Ignore a specified proxy connection type and use TUNNEL unconditionally as only this proxy type works. */
         options_storage->http_proxy_config =
-            aws_http_proxy_config_new_from_proxy_options(allocator, options->http_proxy_options);
+            aws_http_proxy_config_new_tunneling_from_proxy_options(allocator, options->http_proxy_options);
         if (options_storage->http_proxy_config == NULL) {
             goto error;
         }

@@ -29,6 +29,14 @@ namespace types
 } // namespace types
 PYTHONIC_NS_END
 
+namespace std
+{
+  template <size_t I, class T>
+  struct tuple_element<I, pythonic::types::set<T>> {
+    typedef typename pythonic::types::set<T>::value_type type;
+  };
+} // namespace std
+
 /* type inference stuff  {*/
 #include "pythonic/include/types/combined.hpp"
 template <class A, class B>
@@ -157,7 +165,6 @@ namespace types
     template <class InputIterator>
     set(InputIterator start, InputIterator stop);
     set(empty_set const &);
-    set(T const &value, single_value);
     set(std::initializer_list<value_type> l);
     set(set<T> const &other);
     template <class F>

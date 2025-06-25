@@ -14,19 +14,21 @@ namespace NKikimr::NPQ {
         ui16 PartNo;
         ui32 Count; // have to be unique for {Partition, Offset, partNo}
         ui16 InternalPartsCount; // have to be unique for {Partition, Offset, partNo}
+        char Suffix;
 
-        TBlobId(const TPartitionId& partition, ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount)
+        TBlobId(const TPartitionId& partition, ui64 offset, ui16 partNo, ui32 count, ui16 internalPartsCount, TMaybe<char> suffix)
             : Partition(partition)
             , Offset(offset)
             , PartNo(partNo)
             , Count(count)
             , InternalPartsCount(internalPartsCount)
+            , Suffix(suffix ? *suffix : '\0')
         {
         }
 
         bool operator<(const TBlobId& r) const {
             auto makeTuple = [](const TBlobId& v) {
-                return std::make_tuple(v.Partition, v.Offset, v.PartNo, v.Count, v.InternalPartsCount);
+                return std::make_tuple(v.Partition, v.Offset, v.PartNo, v.Count, v.InternalPartsCount, v.Suffix);
             };
 
             return makeTuple(*this) < makeTuple(r);
@@ -34,7 +36,7 @@ namespace NKikimr::NPQ {
 
         bool operator==(const TBlobId& r) const {
             auto makeTuple = [](const TBlobId& v) {
-                return std::make_tuple(v.Partition, v.Offset, v.PartNo, v.Count, v.InternalPartsCount);
+                return std::make_tuple(v.Partition, v.Offset, v.PartNo, v.Count, v.InternalPartsCount, v.Suffix);
             };
 
             return makeTuple(*this) == makeTuple(r);
@@ -44,6 +46,7 @@ namespace NKikimr::NPQ {
             ui64 hash = Hash128to32((ui64(Partition.InternalPartitionId) << 17) + (Partition.IsSupportivePartition() ? 0 : (1 << 16)) + PartNo, Offset);
             hash = Hash128to32(hash, Count);
             hash = Hash128to32(hash, InternalPartsCount);
+            hash = Hash128to32(hash, Suffix);
             return hash;
         }
     };
@@ -58,7 +61,7 @@ struct THash<NKikimr::NPQ::TBlobId> {
 
 namespace NKikimr::NPQ {
     inline TBlobId MakeBlobId(const TPartitionId& partitionId, const TRequestedBlob& blob) {
-        return {partitionId, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount};
+        return {partitionId, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Key.GetSuffix()};
     }
 
     struct TKvRequest {
@@ -106,7 +109,7 @@ namespace NKikimr::NPQ {
             for (auto& blob : Blobs) {
                 if (blob.Value.empty()) {
                     // add reading command
-                    auto key = TKey::ForBody(TKeyPrefix::TypeData, Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
+                    const auto& key = blob.Key;
                     auto read = request->Record.AddCmdRead();
                     read->SetKey(key.Data(), key.Size());
                 }
@@ -142,9 +145,10 @@ namespace NKikimr::NPQ {
         }
 
         void Verify(const TRequestedBlob& blob) const {
-            auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
-            Y_ABORT_UNLESS(blob.Value.size() == blob.Size);
-            TClientBlob::CheckBlob(key, blob.Value);
+            Y_ABORT_UNLESS(blob.Value.size() == blob.Size,
+                           "\nblob.Value.size=%" PRISZT ", blob.Size=%" PRIu64 "\nblob.Key=%s",
+                           blob.Value.size(), blob.Size, blob.Key.ToString().data());
+            TClientBlob::CheckBlob(blob.Key, blob.Value);
         }
     };
 
@@ -271,7 +275,7 @@ namespace NKikimr::NPQ {
             for (const auto& blob : kvReq.Blobs) {
                 // Touching blobs in L2. We don't need data here
                 auto& blobs = blob.Cached ? reqData->RequestedBlobs : reqData->MissedBlobs;
-                blobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, nullptr);
+                blobs.emplace_back(kvReq.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Key.GetSuffix(), nullptr);
             }
 
             auto l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
@@ -298,7 +302,7 @@ namespace NKikimr::NPQ {
 
                 // there could be a new blob with same id (for big messages)
                 if (RemoveExists(ctx, blob)) {
-                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, nullptr);
+                    reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), nullptr);
                 }
 
                 auto cached = std::make_shared<TCacheValue>(reqBlob.Value, ctx.SelfID, TAppData::TimeProvider->Now());
@@ -308,7 +312,7 @@ namespace NKikimr::NPQ {
                 if (L1Strategy)
                     L1Strategy->SaveHeadBlob(blob);
 
-                reqData.StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, blob.Count, blob.InternalPartsCount, cached);
+                reqData.StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix, cached);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
@@ -322,10 +326,10 @@ namespace NKikimr::NPQ {
                 TPartitionId partitionId;
                 partitionId.OriginalPartitionId = FromString<ui32>(s.data() + 1, 10);
                 partitionId.InternalPartitionId = partitionId.OriginalPartitionId;
-                return {partitionId, 0, 0, 0, 0};
+                return {partitionId, 0, 0, 0, 0, Nothing()};
             } else {
                 auto key = TKey::FromString(s);
-                return {key.GetPartition(), key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount()};
+                return {key.GetPartition(), key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), key.GetSuffix()};
             }
         }
 
@@ -336,8 +340,8 @@ namespace NKikimr::NPQ {
                 TBlobId newBlob = MakeBlobId(newKey);
                 if (RenameExists(ctx, oldBlob, newBlob)) {
                     reqData.RenamedBlobs.emplace_back(std::piecewise_construct,
-                                                      std::make_tuple(oldBlob.Partition, oldBlob.Offset, oldBlob.PartNo, oldBlob.Count, oldBlob.InternalPartsCount, nullptr),
-                                                      std::make_tuple(newBlob.Partition, newBlob.Offset, newBlob.PartNo, newBlob.Count, newBlob.InternalPartsCount, nullptr));
+                                                      std::make_tuple(oldBlob.Partition, oldBlob.Offset, oldBlob.PartNo, oldBlob.Count, oldBlob.InternalPartsCount, oldBlob.Suffix, nullptr),
+                                                      std::make_tuple(newBlob.Partition, newBlob.Offset, newBlob.PartNo, newBlob.Count, newBlob.InternalPartsCount, newBlob.Suffix, nullptr));
 
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Renaming head blob in L1. Old partition "
                                 << oldBlob.Partition << " old offset " << oldBlob.Offset << " old count " << oldBlob.Count
@@ -357,7 +361,7 @@ namespace NKikimr::NPQ {
                 for (auto i = lowerBound; i != upperBound; ++i) {
                     const auto& [blob, value] = *i;
 
-                    reqData.RemovedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, nullptr);
+                    reqData.RemovedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix, nullptr);
                     Counters.Dec(value);
 
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Deleting head blob in L1. Partition "
@@ -395,7 +399,7 @@ namespace NKikimr::NPQ {
                 Cache[blob] = valL1; // weak
                 Counters.Inc(valL1);
 
-                reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, cached);
+                reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), cached);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Prefetched blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
@@ -450,7 +454,7 @@ namespace NKikimr::NPQ {
         void PrepareTouch(const TActorContext& ctx, THolder<TCacheL2Request>& reqData, const TDeque<TBlobId>& used)
         {
             for (auto& blob : used) {
-                reqData->ExpectedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, nullptr);
+                reqData->ExpectedBlobs.emplace_back(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix, nullptr);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Touching blob. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count);
@@ -462,14 +466,18 @@ namespace NKikimr::NPQ {
             const auto it = Cache.find(blobId);
             if (it == Cache.end()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "No blob in L1. Partition "
-                    << blobId.Partition << " offset " << blobId.Offset << " actorID " << ctx.SelfID);
+                    << blobId.Partition << " offset " << blobId.Offset <<
+                    " partno " << blobId.PartNo << " count " << blobId.Count << " parts_count " << blobId.InternalPartsCount <<
+                    " actorID " << ctx.SelfID);
                 return nullptr;
             }
 
             TCacheValue::TPtr data = it->second.GetBlob();
             if (!data) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Evicted blob in L1. Partition "
-                    << blobId.Partition << " offset " << blobId.Offset << " actorID " << ctx.SelfID);
+                    << blobId.Partition << " offset " << blobId.Offset <<
+                    " partno " << blobId.PartNo << " count " << blobId.Count << " parts_count " << blobId.InternalPartsCount <<
+                    " actorID " << ctx.SelfID);
                 RemoveBlob(it);
                 return nullptr;
             }
@@ -478,7 +486,8 @@ namespace NKikimr::NPQ {
 
             const TBlobId& blob = it->first;
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got data from cache. Partition "
-                << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
+                << blob.Partition << " offset " << blob.Offset <<
+                " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount
                 << " source " << (ui32)it->second.Source << " size " << data->DataSize()
                 << " accessed " << data->GetAccessCount() << " times before, last time " << data->GetAccessTime());
 

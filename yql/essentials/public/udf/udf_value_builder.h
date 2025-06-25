@@ -336,12 +336,12 @@ public:
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 39)
 class IValueBuilder: public IValueBuilder8 {
-protected:    
+protected:
     IValueBuilder();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 27)
 class IValueBuilder: public IValueBuilder7 {
-protected:    
+protected:
     IValueBuilder();
 };
 
@@ -372,7 +372,7 @@ protected:
 };
 #else
 class IValueBuilder: public IValueBuilder1 {
-protected:    
+protected:
     IValueBuilder();
 };
 #endif
@@ -381,12 +381,12 @@ UDF_ASSERT_TYPE_SIZE(IValueBuilder, 8);
 
 class TPlainArrayCache {
 private:
-    const ui32 Size;
-    std::array<TUnboxedValue, 2U> Cached;
-    std::array<TUnboxedValue*, 2U> CachedItems;
-    ui8 CacheIndex = 0U;
+    const ui32 Size_;
+    std::array<TUnboxedValue, 2U> Cached_;
+    std::array<TUnboxedValue*, 2U> CachedItems_;
+    ui8 CacheIndex_ = 0U;
 public:
-    TPlainArrayCache(ui32 size): Size(size) { Clear(); }
+    TPlainArrayCache(ui32 size): Size_(size) { Clear(); }
 
     TPlainArrayCache(TPlainArrayCache&&) = delete;
     TPlainArrayCache(const TPlainArrayCache&) = delete;
@@ -394,23 +394,23 @@ public:
     TPlainArrayCache& operator=(const TPlainArrayCache&) = delete;
 
     void Clear() {
-        Cached.fill(TUnboxedValue());
-        CachedItems.fill(nullptr);
+        Cached_.fill(TUnboxedValue());
+        CachedItems_.fill(nullptr);
     }
 
     TUnboxedValue NewArray(const IValueBuilder& builder, TUnboxedValue*& items) {
-        if (!CachedItems[CacheIndex] || !Cached[CacheIndex].UniqueBoxed()) {
-            CacheIndex ^= 1U;
-            if (!CachedItems[CacheIndex] || !Cached[CacheIndex].UniqueBoxed()) {
-                Cached[CacheIndex] = builder.NewArray(Size, CachedItems[CacheIndex]);
-                items = CachedItems[CacheIndex];
-                return Cached[CacheIndex];
+        if (!CachedItems_[CacheIndex_] || !Cached_[CacheIndex_].UniqueBoxed()) {
+            CacheIndex_ ^= 1U;
+            if (!CachedItems_[CacheIndex_] || !Cached_[CacheIndex_].UniqueBoxed()) {
+                Cached_[CacheIndex_] = builder.NewArray(Size_, CachedItems_[CacheIndex_]);
+                items = CachedItems_[CacheIndex_];
+                return Cached_[CacheIndex_];
             }
         }
 
-        items = CachedItems[CacheIndex];
-        std::fill_n(items, Size, TUnboxedValue());
-        return Cached[CacheIndex];
+        items = CachedItems_[CacheIndex_];
+        std::fill_n(items, Size_, TUnboxedValue());
+        return Cached_[CacheIndex_];
     }
 };
 

@@ -1,10 +1,12 @@
 #pragma once
 #include "schemeshard_identificators.h"
 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <util/datetime/base.h>
 
@@ -42,6 +44,7 @@ namespace TEvPrivate {
         EvRetryNodeSubscribe,
         EvRunDataErasure,
         EvRunTenantDataErasure,
+        EvAddNewShardToDataErasure,
         EvEnd
     };
 
@@ -263,6 +266,14 @@ namespace TEvPrivate {
         explicit TEvRetryNodeSubscribe(ui32 nodeId)
             : NodeId(nodeId)
         { }
+    };
+
+    struct TEvAddNewShardToDataErasure : public TEventLocal<TEvAddNewShardToDataErasure, EvAddNewShardToDataErasure> {
+        const std::vector<TShardIdx> Shards;
+
+        TEvAddNewShardToDataErasure(std::vector<TShardIdx>&& shards)
+            : Shards(std::move(shards))
+        {}
     };
 }; // TEvPrivate
 

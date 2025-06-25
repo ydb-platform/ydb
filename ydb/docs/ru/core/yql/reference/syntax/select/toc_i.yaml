@@ -5,7 +5,11 @@ items:
 - { name: FROM AS_TABLE,        href: from_as_table.md                                        }
 - { name: FROM SELECT,          href: from_select.md                                          }
 - { name: FOLDER,               href: folder.md,                when: yt                      }
+- { name: FLATTEN,              href: flatten.md                                             }
+- { name: GROUP BY,             href: group-by.md                                            }
+- { name: JOIN,                 href: join.md,                  when: feature_join           }
 - { name: WalkFolders,          href: walk_folders.md,          when: yt                      }
+- { name: WINDOW,               href: window.md,                when: feature_window_functions }
 - { name: DISTINCT,             href: distinct.md                                             }
 - { name: UNIQUE DISTINCT,      href: unique_distinct_hints.md                                }
 - { name: UNION,                href: union.md                                                }

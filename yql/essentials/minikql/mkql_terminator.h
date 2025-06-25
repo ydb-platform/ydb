@@ -31,7 +31,7 @@ struct TBindTerminator : private TNonCopyable {
 
     static thread_local ITerminator* Terminator;
 private:
-    ITerminator* PreviousTerminator;
+    ITerminator* PreviousTerminator_;
 };
 
 struct TThrowingBindTerminator : public TBindTerminator, public ITerminator {

@@ -40,7 +40,7 @@ namespace NFake {
 
     void SetupStateStorage(TTestActorRuntime& runtime, ui32 nodeIndex,
                            bool replicasOnFirstNode = false);
-    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize); 
+    void SetupCustomStateStorage(TTestActorRuntime &runtime, ui32 NToSelect, ui32 nrings, ui32 ringSize);
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig);
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
@@ -75,5 +75,7 @@ namespace NFake {
         virtual ~TStrandedPDiskServiceFactory()
         {}
     };
+
+    TActorId MakeBoardReplicaID(ui32 node, ui32 replicaIndex);
 
 }

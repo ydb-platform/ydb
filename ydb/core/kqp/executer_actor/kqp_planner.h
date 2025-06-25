@@ -65,6 +65,7 @@ public:
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
+        const TMaybe<size_t> BufferPageAllocSize;
         const bool VerboseMemoryLimitException;
     };
 
@@ -140,6 +141,7 @@ private:
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
+    const TMaybe<size_t> BufferPageAllocSize;
     const bool VerboseMemoryLimitException;
 
 public:

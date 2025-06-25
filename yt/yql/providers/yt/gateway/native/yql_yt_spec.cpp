@@ -552,7 +552,11 @@ void CheckSpecForSecretsImpl(
 
     YQL_ENSURE(secretMasker);
 
-    auto maskedSpecStr = NYT::NodeToYsonString(spec);
+    // Secure vault is guaranteed not to be exposed by YT
+    auto cleanSpec = spec.AsMap();
+    cleanSpec.erase("secure_vault");
+    auto maskedSpecStr = NYT::NodeToYsonString(cleanSpec);
+
     auto secrets = secretMasker->Mask(maskedSpecStr);
     if (!secrets.empty()) {
         auto maskedSpecStrBuf = TStringBuf(maskedSpecStr);

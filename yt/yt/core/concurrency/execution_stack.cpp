@@ -46,12 +46,14 @@ TExecutionStackBase::TExecutionStackBase(size_t size)
     , Size_(RoundUpToPage(size))
 {
     auto cookie = GetRefCountedTypeCookie<TExecutionStack>();
+    TRefCountedTrackerFacade::AllocateInstance(cookie);
     TRefCountedTrackerFacade::AllocateSpace(cookie, Size_);
 }
 
 TExecutionStackBase::~TExecutionStackBase()
 {
     auto cookie = GetRefCountedTypeCookie<TExecutionStack>();
+    TRefCountedTrackerFacade::FreeInstance(cookie);
     TRefCountedTrackerFacade::FreeSpace(cookie, Size_);
 }
 

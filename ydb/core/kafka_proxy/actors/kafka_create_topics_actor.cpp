@@ -15,7 +15,7 @@ std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPol
         const std::optional<TString>& configValue, std::optional<ECleanupPolicy>& cleanupPolicy
 ) {
     if (configValue.value_or("") == "delete") {
-        cleanupPolicy = ECleanupPolicy::DELETE;
+        cleanupPolicy = ECleanupPolicy::REMOVE;
         return std::nullopt;
     } else if (configValue.value_or("") == "compact") {
         cleanupPolicy = ECleanupPolicy::COMPACT;

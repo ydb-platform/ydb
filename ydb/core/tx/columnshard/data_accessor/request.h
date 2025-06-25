@@ -1,9 +1,12 @@
 #pragma once
-#include <ydb/library/signals/object_counter.h>
+#include "cache_policy/policy.h"
+
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,6 +18,15 @@ private:
     THashMap<ui64, TPortionDataAccessor> PortionsById;
 
 public:
+    TDataAccessorsResult() = default;
+
+    TDataAccessorsResult(std::vector<TPortionDataAccessor>&& portions) {
+        for (auto&& i : portions) {
+            const ui64 portionId = i.GetPortionInfo().GetPortionId();
+            PortionsById.emplace(portionId, std::move(i));
+        }
+    }
+
     const THashMap<ui64, TPortionDataAccessor>& GetPortions() const {
         return PortionsById;
     }
@@ -41,6 +53,14 @@ public:
         auto it = PortionsById.find(portionId);
         AFL_VERIFY(it != PortionsById.end());
         return it->second;
+    }
+
+    TPortionDataAccessor ExtractPortionAccessorVerified(const ui64 portionId) {
+        auto it = PortionsById.find(portionId);
+        AFL_VERIFY(it != PortionsById.end());
+        auto result = std::move(it->second);
+        PortionsById.erase(it);
+        return result;
     }
 
     void AddData(THashMap<ui64, TPortionDataAccessor>&& accessors) {
@@ -76,7 +96,7 @@ private:
     std::optional<TDataAccessorsResult> Result;
 
 public:
-    void OnResult(const ui32 requestId, TDataAccessorsResult&& result) {
+    void OnResult(const ui64 requestId, TDataAccessorsResult&& result) {
         AFL_VERIFY(RequestIds.erase(requestId));
         if (!Result) {
             Result = std::move(result);
@@ -177,7 +197,8 @@ private:
     static inline TAtomicCounter Counter = 0;
     ui32 FetchStage = 0;
     YDB_READONLY(ui64, RequestId, Counter.Inc());
-    YDB_READONLY_DEF(TString, Consumer);
+    YDB_READONLY(
+        NGeneralCache::TPortionsMetadataCachePolicy::EConsumer, Consumer, NGeneralCache::TPortionsMetadataCachePolicy::DefaultConsumer());
     THashSet<ui64> PortionIds;
     THashMap<TInternalPathId, TPathFetchingState> PathIdStatus;
     THashSet<TInternalPathId> PathIds;
@@ -203,6 +224,21 @@ private:
     }
 
 public:
+    std::shared_ptr<IDataAccessorRequestsSubscriber> ExtractSubscriber() {
+        AFL_VERIFY(HasSubscriber());
+        return std::move(Subscriber);
+    }
+
+    THashSet<NGeneralCache::TGlobalPortionAddress> BuildAddresses(const NActors::TActorId tabletActorId) const {
+        THashSet<NGeneralCache::TGlobalPortionAddress> result;
+        for (auto&& i : PathIdStatus) {
+            for (auto&& [_, p] : i.second.GetPortions()) {
+                AFL_VERIFY(result.emplace(NGeneralCache::TGlobalPortionAddress(tabletActorId, p->GetAddress())).second);
+            }
+        }
+        return result;
+    }
+
     void SetColumnIds(const std::set<ui32>& columnIds) {
         AFL_VERIFY(!ColumnIds);
         ColumnIds = columnIds;
@@ -217,10 +253,8 @@ public:
         return sb;
     }
 
-    TDataAccessorsRequest(const TString& consumer)
-        : Consumer(consumer)
-    {
-
+    TDataAccessorsRequest(const NGeneralCache::TPortionsMetadataCachePolicy::EConsumer consumer)
+        : Consumer(consumer) {
     }
 
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
@@ -291,7 +325,7 @@ public:
         auto it = PathIdStatus.find(pathId);
         if (it == PathIdStatus.end()) {
             PreparingCount.Inc();
-            it = PathIdStatus.emplace(pathId, TPathFetchingState{pathId}).first;
+            it = PathIdStatus.emplace(pathId, TPathFetchingState{ pathId }).first;
         }
         it->second.AddPortion(portion);
     }

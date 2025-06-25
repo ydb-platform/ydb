@@ -110,7 +110,7 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
     return true;
 }
 
-std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
     ui32 pos = 0;
     std::vector<std::shared_ptr<arrow::Array>> chunks;
     for (auto&& i : Chunks) {

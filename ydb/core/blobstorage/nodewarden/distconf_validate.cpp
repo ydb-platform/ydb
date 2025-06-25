@@ -101,7 +101,7 @@ namespace NKikimr::NStorage {
                     return "sudden group ErasureSpecies change";
                 } else if (group.RingsSize() != currentGroup.RingsSize()) {
                     return "sudden group geometry change";
-                } else if (group.GetRings(0).FailDomainsSize() != currentGroup.GetRings(0).FailDomainsSize()) {
+                } else if (group.RingsSize() && group.GetRings(0).FailDomainsSize() != currentGroup.GetRings(0).FailDomainsSize()) {
                     return "sudden group geometry change";
                 }
                 groupInfo.erase(it);

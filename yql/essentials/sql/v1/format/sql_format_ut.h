@@ -23,6 +23,8 @@ Y_UNIT_TEST(DotAfterDigits) {
 Y_UNIT_TEST(AlterDatabase) {
     TCases cases {
         {"use plato;alter database `/Root/test` owner to user1;", "USE plato;\n\nALTER DATABASE `/Root/test` OWNER TO user1;\n"},
+        {"use plato;alter database `/Root/test` set (key1 = 1);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1);\n"},
+        {"use plato;alter database `/Root/test` set (\n\tkey1 = 1,\n\tkey2 = \"2\"\n);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1, key2 = '2');\n"}
     };
 
     TSetup setup;
@@ -1540,6 +1542,34 @@ Y_UNIT_TEST(Union) {
             "SELECT\n\t1\nUNION ALL\n(\n\tSELECT\n\t\t2\n);\n"},
         {"select 1 union distinct select 2 union select 3 union distinct select 4 union select 5",
             "SELECT\n\t1\nUNION DISTINCT\nSELECT\n\t2\nUNION\nSELECT\n\t3\nUNION DISTINCT\nSELECT\n\t4\nUNION\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Intersect) {
+    TCases cases = {
+        {"select 1 intersect all select 2 intersect select 3 intersect all select 4 intersect select 5",
+            "SELECT\n\t1\nINTERSECT ALL\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nINTERSECT ALL\nSELECT\n\t4\nINTERSECT\nSELECT\n\t5\n;\n"},
+        {"select 1 intersect all (select 2)",
+            "SELECT\n\t1\nINTERSECT ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+        {"select 1 intersect distinct select 2 intersect select 3 intersect distinct select 4 intersect select 5",
+            "SELECT\n\t1\nINTERSECT DISTINCT\nSELECT\n\t2\nINTERSECT\nSELECT\n\t3\nINTERSECT DISTINCT\nSELECT\n\t4\nINTERSECT\nSELECT\n\t5\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(Except) {
+    TCases cases = {
+        {"select 1 except all select 2 except select 3 except all select 4 except select 5",
+            "SELECT\n\t1\nEXCEPT ALL\nSELECT\n\t2\nEXCEPT\nSELECT\n\t3\nEXCEPT ALL\nSELECT\n\t4\nEXCEPT\nSELECT\n\t5\n;\n"},
+        {"select 1 except all (select 2)",
+            "SELECT\n\t1\nEXCEPT ALL\n(\n\tSELECT\n\t\t2\n);\n"},
+        {"select 1 except distinct select 2 except select 3 except distinct select 4 except select 5",
+            "SELECT\n\t1\nEXCEPT DISTINCT\nSELECT\n\t2\nEXCEPT\nSELECT\n\t3\nEXCEPT DISTINCT\nSELECT\n\t4\nEXCEPT\nSELECT\n\t5\n;\n"},
     };
 
     TSetup setup;

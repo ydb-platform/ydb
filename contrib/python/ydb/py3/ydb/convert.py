@@ -352,16 +352,17 @@ def _unwrap_optionality(column):
 
 
 class _ResultSet(object):
-    __slots__ = ("columns", "rows", "truncated", "snapshot")
+    __slots__ = ("columns", "rows", "truncated", "snapshot", "index")
 
-    def __init__(self, columns, rows, truncated, snapshot=None):
+    def __init__(self, columns, rows, truncated, snapshot=None, index=None):
         self.columns = columns
         self.rows = rows
         self.truncated = truncated
         self.snapshot = snapshot
+        self.index = index
 
     @classmethod
-    def from_message(cls, message, table_client_settings=None, snapshot=None):
+    def from_message(cls, message, table_client_settings=None, snapshot=None, index=None):
         rows = []
         # prepare column parsers before actuall parsing
         column_parsers = []
@@ -384,7 +385,7 @@ class _ResultSet(object):
                 column_parser, unwrapped_type = column_info
                 row[column.name] = column_parser(unwrapped_type, value, table_client_settings)
             rows.append(row)
-        return cls(message.columns, rows, message.truncated, snapshot)
+        return cls(message.columns, rows, message.truncated, snapshot, index)
 
     @classmethod
     def lazy_from_message(cls, message, table_client_settings=None, snapshot=None):

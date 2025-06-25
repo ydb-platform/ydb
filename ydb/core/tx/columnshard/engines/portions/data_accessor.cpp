@@ -114,13 +114,19 @@ void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<TString, THashSet<TB
     return FillBlobRangesByStorage(result, schema->GetIndexInfo());
 }
 
-void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo) const {
+void TPortionDataAccessor::FillBlobRangesByStorage(THashMap<TString, THashSet<TBlobRange>>& result, const TIndexInfo& indexInfo, const std::set<ui32>* entityIds) const {
     for (auto&& i : GetRecordsVerified()) {
+        if (entityIds && !entityIds->contains(i.GetColumnId())) {
+            continue;
+        }
         const TString& storageId = PortionInfo->GetColumnStorageId(i.GetColumnId(), indexInfo);
         AFL_VERIFY(result[storageId].emplace(PortionInfo->RestoreBlobRange(i.GetBlobRange())).second)(
             "blob_id", PortionInfo->RestoreBlobRange(i.GetBlobRange()).ToString());
     }
     for (auto&& i : GetIndexesVerified()) {
+        if (entityIds && !entityIds->contains(i.GetIndexId())) {
+            continue;
+        }
         const TString& storageId = PortionInfo->GetIndexStorageId(i.GetIndexId(), indexInfo);
         if (auto bRange = i.GetBlobRangeOptional()) {
             AFL_VERIFY(result[storageId].emplace(PortionInfo->RestoreBlobRange(*bRange)).second)(

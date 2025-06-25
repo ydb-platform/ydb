@@ -53,6 +53,7 @@ public:
 
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);
+    void SetVolatileResults();
     void AddUserDataTable(const TUserDataTable& userDataTable);
     void SetCredentials(TCredentials::TPtr credentials);
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
@@ -83,12 +84,13 @@ public:
     void UnrepeatableRandom();
 private:
     const bool UseRepeatableRandomAndTimeProviders_;
-    bool UseUnrepeatableRandom = false;
+    bool UseUnrepeatableRandom_ = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const ui64 NextUniqueId_;
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TLangVersion LangVer_ = UnknownLangVersion;
     TLangVersion MaxLangVer_ = UnknownLangVersion;
+    bool VolatileResults_ = false;
     TUserDataTable UserDataTable_;
     TCredentials::TPtr Credentials_;
     const TGatewaysConfig* GatewaysConfig_;
@@ -120,6 +122,7 @@ public:
 
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);
+    void SetVolatileResults();
 
     void AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials);
     void ClearCredentials();
@@ -346,6 +349,7 @@ private:
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         TLangVersion langVer,
         TLangVersion maxLangVer,
+        bool volatileResults,
         const TUserDataTable& userDataTable,
         const TCredentials::TPtr& credentials,
         const IModuleResolver::TPtr& modules,
@@ -410,6 +414,7 @@ private:
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TLangVersion LangVer_;
     TLangVersion MaxLangVer_;
+    bool VolatileResults_;
     TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;

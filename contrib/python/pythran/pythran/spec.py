@@ -454,12 +454,23 @@ class SpecParser(object):
 
     def p_error(self, p):
         if p.type == 'IDENTIFIER':
+            alt = {'double': 'float64',
+                   'void': 'None',
+                   'char': 'int8',
+                   'short': 'int16',
+                   'long': 'int64',
+                   }.get(p.value)
+            if alt:
+                hint = " Did you mean `{}`?".format(alt)
+            else:
+                hint = ''
             raise self.PythranSpecError(
-                "Unexpected identifier `{}` at that point".format(p.value),
+                "Unsupported identifier `{}` at that point.{}".format(p.value,
+                                                                     hint),
                 p.lexpos)
         else:
             raise self.PythranSpecError(
-                "Unexpected token `{}` at that point".format(p.value),
+                "Unexpected token `{}` at that point.".format(p.value),
                 p.lexpos)
 
     def __init__(self):

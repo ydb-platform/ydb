@@ -10,7 +10,9 @@
 #include <pfr/detail/config.hpp>
 #include <pfr/traits_fwd.hpp>
 
+#if !defined(PFR_INTERFACE_UNIT)
 #include <type_traits> // for std::is_aggregate
+#endif
 
 namespace pfr { namespace detail {
 

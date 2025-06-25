@@ -1,3 +1,14 @@
+* Added the "ydb tools infer csv" command to generate a `CREATE TABLE` SQL query from a CSV file with data.
+* Fix inline hints
+* Added named expressions completion in interactive mode, cache schema responses.
+* Added processing of special values `null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.
+* Fixed bug when `ydb wokrload` commands did not work with absolute paths.
+* Added TPC-C benchmark as `ydb workload tpcc`.
+
+## 2.22.1 ##
+
+* Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.
+* Fixed bug with parsing certificate files from profile.
 
 ## 2.22.0 ##
 

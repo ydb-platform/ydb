@@ -1,18 +1,20 @@
 #include "distconf.h"
+#include "distconf_quorum.h"
 
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::CheckRootNodeStatus() {
         Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
             RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
-            static_cast<bool>(Scepter), "Binding# " << (Binding ? Binding->ToString() : "<null>")
-            << " RootState# " << RootState << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>"));
+            static_cast<bool>(Scepter) || ScepterlessOperationInProgress, "Binding# " << (Binding ? Binding->ToString() : "<null>")
+            << " RootState# " << RootState << " Scepter# " << (Scepter ? ToString(Scepter->Id) : "<null>")
+            << " ScepterlessOperationInProgress# " << ScepterlessOperationInProgress);
 
         if (Binding) { // can't become root node
             return;
         }
 
-        const bool hasQuorum = HasQuorum();
+        const bool hasQuorum = StorageConfig && HasQuorum(*StorageConfig);
 
         if (RootState == ERootState::INITIAL && hasQuorum) { // becoming root node
             Y_ABORT_UNLESS(!Scepter);
@@ -54,8 +56,10 @@ namespace NKikimr::NStorage {
         STLOG(PRI_NOTICE, BS_NODE, NWDC38, "SwitchToError", (RootState, RootState), (Reason, reason));
         if (Scepter) {
             UnbecomeRoot();
+            Scepter.reset();
+            ++ScepterCounter;
+            ScepterlessOperationInProgress = false;
         }
-        Scepter.reset();
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
         CurrentProposedStorageConfig.reset();
@@ -100,13 +104,13 @@ namespace NKikimr::NStorage {
         SwitchToError("incorrect response from peer");
     }
 
-    bool TDistributedConfigKeeper::HasQuorum() const {
+    bool TDistributedConfigKeeper::HasQuorum(const NKikimrBlobStorage::TStorageConfig& config) const {
         auto generateConnected = [&](auto&& callback) {
             for (const auto& [nodeId, node] : AllBoundNodes) {
                 callback(nodeId);
             }
         };
-        return StorageConfig && HasNodeQuorum(*StorageConfig, generateConnected);
+        return HasNodeQuorum(config, generateConnected);
     }
 
     void TDistributedConfigKeeper::ProcessCollectConfigs(TEvGather::TCollectConfigs *res) {

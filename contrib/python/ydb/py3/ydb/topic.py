@@ -340,12 +340,15 @@ class TopicClientAsyncIO:
 
         return TopicTxWriterAsyncIO(tx=tx, driver=self._driver, settings=settings, _client=self)
 
-    async def commit_offset(self, path: str, consumer: str, partition_id: int, offset: int) -> None:
+    async def commit_offset(
+        self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
+    ) -> None:
         req = _ydb_topic.CommitOffsetRequest(
             path=path,
             consumer=consumer,
             partition_id=partition_id,
             offset=offset,
+            read_session_id=read_session_id,
         )
 
         await self._driver(
@@ -618,12 +621,15 @@ class TopicClient:
 
         return TopicTxWriter(tx, self._driver, settings, _parent=self)
 
-    def commit_offset(self, path: str, consumer: str, partition_id: int, offset: int) -> None:
+    def commit_offset(
+        self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
+    ) -> None:
         req = _ydb_topic.CommitOffsetRequest(
             path=path,
             consumer=consumer,
             partition_id=partition_id,
             offset=offset,
+            read_session_id=read_session_id,
         )
 
         self._driver(

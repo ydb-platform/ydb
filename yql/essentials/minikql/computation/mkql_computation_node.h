@@ -142,12 +142,12 @@ struct TComputationContext : public TComputationContextLLVM {
     void UpdateUsageAdjustor(ui64 memLimit);
     NUdf::TLoggerPtr MakeLogger() const;
 private:
-    ui64 InitRss = 0ULL;
-    ui64 LastRss = 0ULL;
-    NUdf::TLoggerPtr RssLogger;
-    NUdf::TLogComponentId RssLoggerComponent;
+    ui64 InitRss_ = 0ULL;
+    ui64 LastRss_ = 0ULL;
+    NUdf::TLoggerPtr RssLogger_;
+    NUdf::TLogComponentId RssLoggerComponent_;
 #ifndef NDEBUG
-    TInstant LastPrintUsage;
+    TInstant LastPrintUsage_;
 #endif
 };
 

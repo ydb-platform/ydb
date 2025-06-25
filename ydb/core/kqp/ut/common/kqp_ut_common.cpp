@@ -74,6 +74,7 @@ NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
+NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDigestModule();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -85,7 +86,8 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
     funcRegistry->AddModule("", "Math", CreateMathModule());
     funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
-    
+    funcRegistry->AddModule("", "Digest", CreateDigestModule());
+
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
@@ -160,7 +162,15 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     }
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
-    Server->EnableGRpc(grpcPort);
+
+    if (settings.GrpcServerOptions) {
+        auto options = settings.GrpcServerOptions;
+        options->SetPort(grpcPort);
+        options->SetHost("localhost");
+        Server->EnableGRpc(*options);
+    } else {
+        Server->EnableGRpc(grpcPort);
+    }
 
     RunCall([this, domain = settings.DomainRoot] {
         this->Server->SetupDefaultProfiles();
@@ -728,7 +738,7 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
 NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
     auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
         .ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;
 }
@@ -1407,7 +1417,7 @@ void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const 
     );
     auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-};  
+};
 
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
@@ -1567,7 +1577,7 @@ void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, 
         const TString selectPartitionStats(Q_(Sprintf(R"(
             SELECT *
             FROM `/Root/.sys/partition_stats`
-            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'   
+            WHERE FollowerId %s 0 AND (RowReads != 0 OR RangeReadRows != 0) AND Path = '%s'
         )", (checkFollower ? "!=" : "="), tableName.c_str())));
 
         auto result = session.ExecuteDataQuery(selectPartitionStats, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -1585,7 +1595,7 @@ void CheckTableReads(NYdb::NTable::TSession& session, const TString& tableName, 
             Y_FAIL("!readsExpected, but there are read stats for %s", tableName.c_str());
         }
     }
-    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());    
+    Y_FAIL("readsExpected, but there is timeout waiting for read stats from %s", tableName.c_str());
 }
 
 TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
@@ -1829,6 +1839,22 @@ void TTestExtEnv::CreateDatabase(const TString& databaseName) {
     storage->set_count(1);
 
     Tenants->CreateTenant(request, EnvSettings.DynamicNodeCount);
+}
+
+Tests::TServer& TTestExtEnv::GetServer() const {
+    return *Server.Get();
+}
+
+Tests::TClient& TTestExtEnv::GetClient() const {
+    return *Client;
+}
+
+void CheckOwner(TSession& session, const TString& path, const TString& name) {
+    TDescribeTableResult describe = session.DescribeTable(path).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NYdb::EStatus::SUCCESS);
+    auto tableDesc = describe.GetTableDescription();
+    const auto& currentOwner = tableDesc.GetOwner();
+    UNIT_ASSERT_VALUES_EQUAL_C(name, currentOwner, "name is not currentOwner");
 }
 
 } // namspace NKqp

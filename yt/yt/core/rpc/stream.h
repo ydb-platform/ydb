@@ -130,7 +130,7 @@ private:
     };
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
-    std::atomic<size_t> CompressionSequenceNumber_ = {0};
+    std::atomic<size_t> CompressionSequenceNumber_ = 0;
     TSlidingWindow<TWindowPacket> Window_;
     TError Error_;
     TRingQueue<TSharedRef> DataQueue_;

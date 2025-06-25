@@ -1,0 +1,20 @@
+items:
+- name: Configuration V1
+  href: configuration-v1/index.md
+  include:
+    mode: link
+    path: configuration-v1/toc_p.yaml
+- name: Configuration V2
+  href: configuration-v2/index.md
+  include:
+    mode: link
+    path: configuration-v2/toc_p.yaml
+- name: Migration
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc_p.yaml
+- name: Checking configuration version
+  href: check-config-version.md
+- name: Comparing configurations V1 and V2
+  href: compare-configs.md

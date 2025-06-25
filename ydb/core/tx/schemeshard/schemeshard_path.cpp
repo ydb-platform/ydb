@@ -1,4 +1,5 @@
 #include "schemeshard_path.h"
+
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -1605,7 +1606,8 @@ bool TPath::IsUnderMoving() const {
 bool TPath::IsUnderOutgoingIncrementalRestore() const {
     Y_ABORT_UNLESS(IsResolved());
 
-    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore;
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore
+        || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
 }
 
 TPath& TPath::RiseUntilOlapStore() {

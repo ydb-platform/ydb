@@ -3,23 +3,23 @@
 #include "ls_checks.h"
 #include "test_env.h"
 
-#include <library/cpp/testing/unittest/registar.h>
-
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/testlib/minikql_compile.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
-#include <ydb/core/cms/console/console.h>
 
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/null.h>
 
@@ -310,6 +310,7 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
     GENERIC_HELPERS(BackupBackupCollection);
     GENERIC_HELPERS(BackupIncrementalBackupCollection);
+    GENERIC_HELPERS(RestoreBackupCollection);
 
     // sysview
     GENERIC_HELPERS(CreateSysView);
@@ -397,7 +398,7 @@ namespace NSchemeShardUT_Private {
     void AsyncBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString& columnName, const Ydb::TypedValue& literal);
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg);
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
-    void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TString column, TVector<TString> dataColumns = {});
+    void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
         const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
@@ -485,6 +486,8 @@ namespace NSchemeShardUT_Private {
     TVector<ui64> GetTableShards(TTestActorRuntime& runtime, ui64 schemeShard,  const TString& path);
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime);
 
+    TLocalPathId GetNextLocalPathId(TTestActorRuntime& runtime, ui64& txId);
+
     template <typename TCreateFunc>
     void CreateWithIntermediateDirs(TCreateFunc func) {
         TTestWithReboots t;
@@ -507,8 +510,14 @@ namespace NSchemeShardUT_Private {
     void CreateWithIntermediateDirsForceDrop(TCreateFunc func) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TLocalPathId nextPathId;
+            {
+                TInactiveZone inactive(activeZone);
+                nextPathId = GetNextLocalPathId(runtime, t.TxId);
+            }
+
             func(runtime, ++t.TxId, "/MyRoot");
-            AsyncForceDropUnsafe(runtime, ++t.TxId, 3);
+            AsyncForceDropUnsafe(runtime, ++t.TxId, nextPathId);
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -662,6 +671,10 @@ namespace NSchemeShardUT_Private {
     ui32 CountRows(TTestActorRuntime& runtime, const TString& table);
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,
-        bool withValue, ui32 shard, ui32 min, ui32 max);
+        ui32 shard, ui32 min, ui32 max, std::vector<ui32> columnIds = {});
+
+    void TestCreateServerLessDb(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId, ui64& tenantSchemeShard);
+
+    void MeteringDataEqual(const TString& leftMsg, const TString& rightMsg);
 
 } //NSchemeShardUT_Private

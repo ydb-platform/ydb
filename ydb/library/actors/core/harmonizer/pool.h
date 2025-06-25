@@ -31,6 +31,7 @@ struct TPoolInfo {
     i16 MinFullThreadCount = 0;
     i16 MaxFullThreadCount = 0;
 
+    float ThreadQuota = 0;
     float DefaultThreadCount = 0;
     float MinThreadCount = 0;
     float MaxThreadCount = 0;
@@ -54,13 +55,7 @@ struct TPoolInfo {
     std::atomic<ui64> DecreasingThreadsByStarvedState = 0;
     std::atomic<ui64> DecreasingThreadsByHoggishState = 0;
     std::atomic<ui64> DecreasingThreadsByExchange = 0;
-    std::atomic<i16> PotentialMaxThreadCount = 0;
-    std::atomic<ui64> ReceivedHalfThreadByNeedyState = 0;
-    std::atomic<ui64> GivenHalfThreadByOtherStarvedState = 0;
-    std::atomic<ui64> GivenHalfThreadByHoggishState = 0;
-    std::atomic<ui64> GivenHalfThreadByOtherNeedyState = 0;
-    std::atomic<ui64> ReturnedHalfThreadByStarvedState = 0;
-    std::atomic<ui64> ReturnedHalfThreadByOtherHoggishState = 0;
+    std::atomic<float> PotentialMaxThreadCount = 0;
 
     TValueHistory<16> UsedCpu;
     TValueHistory<16> ElapsedCpu;

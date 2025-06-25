@@ -1,7 +1,7 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_impl.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
+#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,7 +15,7 @@ private:
     static constexpr ui64 DefaultPage = 1;
 public:
     explicit TTxList(TSelf* self, TEvIndexBuilder::TEvListRequest::TPtr& ev)
-        : TTxSimple(self, ev, TXTYPE_LIST_INDEX_BUILD, false)
+        : TTxSimple(self, InvalidIndexBuildId, ev, TXTYPE_LIST_INDEX_BUILD, false)
     {}
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {

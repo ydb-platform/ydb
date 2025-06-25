@@ -20,7 +20,18 @@ namespace NSQLComplete {
     template <class T, class S = TStringBuf>
     void AppendAs(TVector<TGenericName>& target, const TVector<S>& source) {
         for (const auto& element : source) {
-            target.emplace_back(T{TString(element)});
+            T name;
+
+            TString* content = nullptr;
+            if constexpr (std::is_same_v<TKeyword, T>) {
+                content = &name.Content;
+            } else {
+                content = &name.Indentifier;
+            }
+
+            *content = element;
+
+            target.emplace_back(std::move(name));
         }
     }
 
@@ -86,7 +97,7 @@ namespace NSQLComplete {
 
     class TPragmaNameService: public IRankingNameService {
     public:
-        explicit TPragmaNameService(IRanking::TPtr ranking, TVector<TString> pragmas)
+        TPragmaNameService(IRanking::TPtr ranking, TVector<TString> pragmas)
             : IRankingNameService(std::move(ranking))
             , Pragmas_(BuildNameIndex(std::move(pragmas), NormalizeName))
         {
@@ -110,31 +121,61 @@ namespace NSQLComplete {
 
     class TTypeNameService: public IRankingNameService {
     public:
-        explicit TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
+        TTypeNameService(IRanking::TPtr ranking, TVector<TString> types)
             : IRankingNameService(std::move(ranking))
-            , Types_(BuildNameIndex(std::move(types), NormalizeName))
+            , SimpleTypes_(BuildNameIndex(std::move(types), NormalizeName))
+            , ContainerTypes_(BuildNameIndex(
+                  {
+                      "Optional",
+                      "Tuple",
+                      "Struct",
+                      "Variant",
+                      "List",
+                      "Stream",
+                      "Flow",
+                      "Dict",
+                      "Set",
+                      "Enum",
+                      "Resource",
+                      "Tagged",
+                      "Callable",
+                  }, NormalizeName))
+            , ParameterizedTypes_(BuildNameIndex(
+                  {
+                      "Decimal",
+                  }, NormalizeName))
         {
         }
 
         NThreading::TFuture<TNameResponse> LookupAllUnranked(TNameRequest request) const override {
             TNameResponse response;
             if (request.Constraints.Type) {
-                NameIndexScan<TTypeName>(
-                    Types_,
-                    request.Prefix,
-                    request.Constraints,
-                    response.RankedNames);
+                NameIndexScan<TTypeName>(SimpleTypes_, request.Prefix, request.Constraints, response.RankedNames);
+
+                size_t previousSize = response.RankedNames.size();
+                NameIndexScan<TTypeName>(ContainerTypes_, request.Prefix, request.Constraints, response.RankedNames);
+                for (size_t i = previousSize; i < response.RankedNames.size(); ++i) {
+                    std::get<TTypeName>(response.RankedNames[i]).Kind = TTypeName::EKind::Container;
+                }
+
+                previousSize = response.RankedNames.size();
+                NameIndexScan<TTypeName>(ParameterizedTypes_, request.Prefix, request.Constraints, response.RankedNames);
+                for (size_t i = previousSize; i < response.RankedNames.size(); ++i) {
+                    std::get<TTypeName>(response.RankedNames[i]).Kind = TTypeName::EKind::Parameterized;
+                }
             }
             return NThreading::MakeFuture<TNameResponse>(std::move(response));
         }
 
     private:
-        TNameIndex Types_;
+        TNameIndex SimpleTypes_;
+        TNameIndex ContainerTypes_;
+        TNameIndex ParameterizedTypes_;
     };
 
     class TFunctionNameService: public IRankingNameService {
     public:
-        explicit TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
+        TFunctionNameService(IRanking::TPtr ranking, TVector<TString> functions)
             : IRankingNameService(std::move(ranking))
             , Functions_(BuildNameIndex(std::move(functions), NormalizeName))
         {
@@ -158,7 +199,7 @@ namespace NSQLComplete {
 
     class THintNameService: public IRankingNameService {
     public:
-        explicit THintNameService(
+        THintNameService(
             IRanking::TPtr ranking,
             THashMap<EStatementKind, TVector<TString>> hints)
             : IRankingNameService(std::move(ranking))

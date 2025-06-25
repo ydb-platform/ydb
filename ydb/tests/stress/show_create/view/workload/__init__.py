@@ -171,29 +171,29 @@ class ShowCreateViewWorkload:
                     logger.error(f"[{thread_name}] SHOW CREATE VIEW `{self.view_path}` returned no data.")
                     show_had_critical_error = True
                 else:
-                    statement_column_index = -1
+                    create_query_column_index = -1
                     for i, col in enumerate(result_sets[0].columns):
-                        if col.name == "Statement":
-                            statement_column_index = i
+                        if col.name == "CreateQuery":
+                            create_query_column_index = i
                             break
-                    if statement_column_index == -1:
+                    if create_query_column_index == -1:
                         logger.error(
-                            f"[{thread_name}] Column 'Statement' not found in SHOW CREATE VIEW result for {self.view_path}."
+                            f"[{thread_name}] Column 'CreateQuery' not found in SHOW CREATE VIEW result for {self.view_path}."
                         )
                         show_had_critical_error = True
                     else:
-                        create_statement = result_sets[0].rows[0][statement_column_index]
-                        logger.debug(f"[{thread_name}] SHOW CREATE VIEW `{self.view_path}` result:\n{create_statement}")
+                        create_query = result_sets[0].rows[0][create_query_column_index]
+                        logger.debug(f"[{thread_name}] SHOW CREATE VIEW `{self.view_path}` result:\n{create_query}")
 
                         expected_view_substr = f"CREATE VIEW `{self.view_path}`"
                         expected_table_substr = f"FROM\n    `{self.table_path}`"
 
-                        if not (expected_view_substr in create_statement and expected_table_substr in create_statement):
+                        if not (expected_view_substr in create_query and expected_table_substr in create_query):
                             logger.error(
                                 f"[{thread_name}] VALIDATION FAILED for `{self.view_path}`:\n"
                                 f"  Expected view part: '{expected_view_substr}'\n"
                                 f"  Expected table part: '{expected_table_substr}'\n"
-                                f"  Got:\n{create_statement}"
+                                f"  Got:\n{create_query}"
                             )
                             show_had_critical_error = True
                         else:

@@ -125,6 +125,19 @@ class TestDeleteS3Ttl(TllDeleteBase):
 
         return not_empty
 
+    def wait_rows_stable(self, table_path, expected, attempts=3, timeout=300):
+        ok = [False] * attempts
+        last = None
+
+        def _cond():
+            last = self.get_aggregated(table_path)
+            ok.pop(0)
+            ok.append(last == expected)
+            return all(ok)
+
+        if not self.wait_for(_cond, timeout):
+            raise Exception(f"Row count not stable: last = {last}, expected = {expected}")
+
     def teset_generator(self, test_name, buckets, ttl, single_upsert_row_count, upsert_number):
         test_dir = f"{self.ydb_client.database}/{test_name}"
         table_path = f"{test_dir}/table"
@@ -148,18 +161,14 @@ class TestDeleteS3Ttl(TllDeleteBase):
         if not self.wait_for(lambda: self.all_buckets(lambda x: x != 0, buckets, table), 300):
             raise Exception("Data eviction has not been started")
 
-        data1 = self.get_aggregated(table_path)
-        if data1 != data:
-            raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
+        self.wait_rows_stable(table_path, expected=data, attempts=3, timeout=300)
 
         self.reset_ttl(table_path)
 
         if not self.wait_for(lambda: self.all_buckets(lambda x: x == 0, buckets, table), 300):
             raise Exception("not all data deleted")
 
-        data1 = self.get_aggregated(table_path)
-        if data1 != data:
-            raise Exception("Data changed after ttl change, was {} now {}".format(data, data1))
+        self.wait_rows_stable(table_path, expected=data, attempts=3, timeout=300)
 
     @link_test_case("#13542")
     def test_data_unchanged_after_ttl_change(self):

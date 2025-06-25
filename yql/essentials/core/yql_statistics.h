@@ -56,11 +56,22 @@ struct TOptimizerStatistics {
     struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
         TVector<TString> Data;
         TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
+
+        TVector<NDq::TJoinColumn> ToJoinColumns(const TString& alias) {
+            TVector<NDq::TJoinColumn> columns;
+            columns.reserve(Data.size());
+            for (std::size_t i = 0; i < Data.size(); ++i) {
+                columns.push_back(NDq::TJoinColumn(alias, Data[i]));
+            }
+
+            return columns;
+        }
     };
 
     struct TSortColumns : public TSimpleRefCount<TSortColumns> {
         TVector<TString> Columns;
         TVector<TString> Aliases;
+
         TSortColumns(const TVector<TString>& cols, const TVector<TString>& aliases)
             : Columns(cols)
             , Aliases(aliases)
@@ -99,7 +110,9 @@ struct TOptimizerStatistics {
     double Selectivity = 1.0;
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
+
     TIntrusivePtr<TShuffledByColumns> ShuffledByColumns;
+
     TIntrusivePtr<TSortColumns> SortColumns;
     EStorageType StorageType = EStorageType::NA;
     std::shared_ptr<IProviderStatistics> Specific;
@@ -108,8 +121,17 @@ struct TOptimizerStatistics {
     TString SourceTableName;
     TSimpleSharedPtr<THashSet<TString>> Aliases;
     TIntrusivePtr<NDq::TTableAliasMap> TableAliases;
+
     NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+
+    NDq::TOrderingsStateMachine::TLogicalOrderings SortingOrderings;
+    NDq::TOrderingsStateMachine::TLogicalOrderings ReversedSortingOrderings;
+
     std::optional<std::size_t> ShuffleOrderingIdx;
+    std::int64_t SortingOrderingIdx = -1;
+
+    // special flag for equijoin
+    bool CBOFired = false;
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;

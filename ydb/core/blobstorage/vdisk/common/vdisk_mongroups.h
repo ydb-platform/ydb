@@ -124,13 +124,11 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(EmergencyPatchStartQueueItems, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyPutQueueItems, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyMultiPutQueueItems, false);
-                COUNTER_INIT_IF_EXTENDED(EmergencyAnubisOsirisPutQueueItems, false);
 
                 COUNTER_INIT_IF_EXTENDED(EmergencyMovedPatchQueueBytes, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyPatchStartQueueBytes, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyPutQueueBytes, false);
                 COUNTER_INIT_IF_EXTENDED(EmergencyMultiPutQueueBytes, false);
-                COUNTER_INIT_IF_EXTENDED(EmergencyAnubisOsirisPutQueueBytes, false);
 
                 COUNTER_INIT_IF_EXTENDED(FreshSatisfactionRankPercent, false);
                 COUNTER_INIT_IF_EXTENDED(LevelSatisfactionRankPercent, false);
@@ -158,13 +156,11 @@ public:                                                                         
             COUNTER_DEF(EmergencyPatchStartQueueItems);
             COUNTER_DEF(EmergencyPutQueueItems);
             COUNTER_DEF(EmergencyMultiPutQueueItems);
-            COUNTER_DEF(EmergencyAnubisOsirisPutQueueItems);
 
             COUNTER_DEF(EmergencyMovedPatchQueueBytes);
             COUNTER_DEF(EmergencyPatchStartQueueBytes);
             COUNTER_DEF(EmergencyPutQueueBytes);
             COUNTER_DEF(EmergencyMultiPutQueueBytes);
-            COUNTER_DEF(EmergencyAnubisOsirisPutQueueBytes);
 
             COUNTER_DEF(FreshSatisfactionRankPercent);
             COUNTER_DEF(LevelSatisfactionRankPercent);

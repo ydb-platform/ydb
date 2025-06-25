@@ -39,7 +39,6 @@ namespace NKikimr {
         TVPatchStartHandler VPatchStartHandler;
         TVPutHandler VPutHandler;
         TVMultiPutHandler VMultiPutHandler;
-        TAnubisOsirisPutHandler AnubisOsirisPutHandler;
 
     public:
         TEmergencyQueue(
@@ -47,14 +46,12 @@ namespace NKikimr {
                 TVMovedPatchHandler &&vMovedPatch,
                 TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
-                TVMultiPutHandler &&vMultiPut,
-                TAnubisOsirisPutHandler &&aoput)
+                TVMultiPutHandler &&vMultiPut)
             : Mon(mon)
             , VMovedPatchHandler(std::move(vMovedPatch))
             , VPatchStartHandler(std::move(vPatchStart))
             , VPutHandler(std::move(vput))
             , VMultiPutHandler(std::move(vMultiPut))
-            , AnubisOsirisPutHandler(std::move(aoput))
         {}
 
         ~TEmergencyQueue() {
@@ -88,13 +85,6 @@ namespace NKikimr {
             ++Mon.EmergencyMultiPutQueueItems();
             auto size = ev->GetSize();
             Mon.EmergencyMultiPutQueueBytes() += size;
-            Queue.Push(TItem(ev, size));
-        }
-
-        void Push(TEvAnubisOsirisPut::TPtr ev) {
-            ++Mon.EmergencyAnubisOsirisPutQueueItems();
-            auto size = ev->Get()->ByteSize();
-            Mon.EmergencyAnubisOsirisPutQueueBytes() += size;
             Queue.Push(TItem(ev, size));
         }
 
@@ -141,13 +131,6 @@ namespace NKikimr {
                     --Mon.EmergencyMultiPutQueueItems();
                     Mon.EmergencyMultiPutQueueBytes() -= size;
                     VMultiPutHandler(ctx, *evMultiPut);
-                    break;
-                }
-                case TEvBlobStorage::EvAnubisOsirisPut: {
-                    auto *evAnubisOsirisPut = reinterpret_cast<TEvAnubisOsirisPut::TPtr*>(&ev);
-                    --Mon.EmergencyAnubisOsirisPutQueueItems();
-                    Mon.EmergencyAnubisOsirisPutQueueBytes() -= size;
-                    AnubisOsirisPutHandler(ctx, *evAnubisOsirisPut);
                     break;
                 }
                 default:
@@ -438,13 +421,12 @@ namespace NKikimr {
             TVMovedPatchHandler &&vMovedPatch,
             TVPatchStartHandler &&vPatchStart,
             TVPutHandler &&vput,
-            TVMultiPutHandler &&vMultiPut,
-            TAnubisOsirisPutHandler &&aoput)
+            TVMultiPutHandler &&vMultiPut)
         : VCtx(vctx)
         , Hull(std::move(hull))
         , Mon(std::move(mon))
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
-                std::move(vMultiPut), std::move(aoput)))
+                std::move(vMultiPut)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
         , ThrottlingController(new TThrottlingController(vcfg, Mon, pdiskCtx))
     {}
@@ -599,6 +581,5 @@ namespace NKikimr {
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev);
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev);
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev);
-    template bool TOverloadHandler::PostponeEvent(TEvAnubisOsirisPut::TPtr &ev);
 
 } // NKikimr

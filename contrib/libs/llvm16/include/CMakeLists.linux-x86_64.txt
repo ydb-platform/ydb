@@ -322,8 +322,8 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenACC/ACC.h.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenACC/ACC.h.inc.d
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenACC/ACC.td
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${TOOL_llvm-tblgen_bin}
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16
@@ -347,8 +347,8 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenACC/ACC.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenACC/ACC.inc.d
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenACC/ACC.td
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${TOOL_llvm-tblgen_bin}
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16
@@ -372,8 +372,8 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.h.inc.d
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.td
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${TOOL_llvm-tblgen_bin}
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16
@@ -397,8 +397,8 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.inc.d
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/OpenMP/OMP.td
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Frontend/Directive/DirectiveBase.td
   ${TOOL_llvm-tblgen_bin}
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16
@@ -446,9 +446,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicEnums.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicEnums.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -492,9 +492,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicImpl.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicImpl.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -538,9 +538,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -585,9 +585,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -632,9 +632,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -679,9 +679,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsBPF.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsBPF.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -726,9 +726,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsDirectX.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsDirectX.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -773,9 +773,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsHexagon.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsHexagon.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -820,9 +820,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsLoongArch.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsLoongArch.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -867,9 +867,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsMips.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsMips.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -914,9 +914,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsNVPTX.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsNVPTX.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -961,9 +961,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsPowerPC.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsPowerPC.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1008,9 +1008,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsR600.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsR600.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1055,9 +1055,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsRISCV.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsRISCV.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1102,9 +1102,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsS390.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsS390.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1149,9 +1149,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsVE.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsVE.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1196,9 +1196,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsWebAssembly.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsWebAssembly.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1243,9 +1243,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsX86.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1290,9 +1290,9 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsXCore.h
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsXCore.h.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/SDNodeProperties.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/CodeGen/ValueTypes.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/Intrinsics.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAArch64.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsAMDGPU.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/IR/IntrinsicsARM.td
@@ -1337,8 +1337,8 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/TargetParser/RISCVTargetParserDef.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/include/llvm/TargetParser/RISCVTargetParserDef.inc.d
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/RISCV/GISel/RISCVRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/RISCV/RISCV.td
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/RISCV/GISel/RISCVRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/RISCV/RISCVCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/RISCV/RISCVFeatures.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/RISCV/RISCVInstrFormats.td
@@ -6133,10 +6133,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenAsmMatcher.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenAsmMatcher.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6227,10 +6227,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenAsmWriter.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenAsmWriter.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6321,10 +6321,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenCallingConv.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenCallingConv.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6415,10 +6415,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenDAGISel.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenDAGISel.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6510,10 +6510,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenDisassemblerTables.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenDisassemblerTables.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6604,10 +6604,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenExegesis.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenExegesis.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6698,10 +6698,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenFastISel.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenFastISel.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6792,10 +6792,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenGlobalISel.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenGlobalISel.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6886,10 +6886,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenInstrInfo.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenInstrInfo.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -6980,10 +6980,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenMCCodeEmitter.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenMCCodeEmitter.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -7074,10 +7074,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenRegisterBank.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenRegisterBank.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -7168,10 +7168,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenRegisterInfo.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenRegisterInfo.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -7262,10 +7262,10 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenSubtargetInfo.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCGenSubtargetInfo.inc.d
   DEPENDS
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P10InstrResources.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/P9InstrResources.td
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPC.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCCallingConv.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstr64Bit.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/lib/Target/PowerPC/PPCInstrAltivec.td
@@ -9932,8 +9932,8 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/ObjcopyOpts.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/ObjcopyOpts.inc.d
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/CommonOpts.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/ObjcopyOpts.td
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/CommonOpts.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Option/OptParser.td
   ${TOOL_llvm-tblgen_bin}
   WORKING_DIRECTORY
@@ -9958,8 +9958,8 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/StripOpts.inc
   ${PROJECT_BINARY_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/StripOpts.inc.d
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/CommonOpts.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/StripOpts.td
+  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/tools/llvm-objcopy/CommonOpts.td
   ${PROJECT_SOURCE_DIR}/contrib/libs/llvm16/include/llvm/Option/OptParser.td
   ${TOOL_llvm-tblgen_bin}
   WORKING_DIRECTORY

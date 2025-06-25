@@ -53,14 +53,13 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/contrib/libs/lua/common.inc
   DEPENDS
   ${TOOL_archiver_bin}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/json.lua
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/json.lua
   COMMAND
   ${TOOL_archiver_bin}
   -q
   -x
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua\:
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/json.lua\:
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua:
+  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/json.lua:
   -o
   ${PROJECT_BINARY_DIR}/contrib/libs/lua/common.inc
 )

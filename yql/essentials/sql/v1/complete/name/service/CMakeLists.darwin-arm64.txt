@@ -16,6 +16,7 @@ add_subdirectory(ranking)
 add_subdirectory(binding)
 add_subdirectory(static)
 add_subdirectory(union)
+add_subdirectory(column)
 add_subdirectory(schema)
 add_subdirectory(cluster)
 

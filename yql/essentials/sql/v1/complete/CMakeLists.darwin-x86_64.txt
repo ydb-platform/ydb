@@ -35,6 +35,7 @@ target_link_libraries(sql-v1-complete PUBLIC
   v1-complete-text
   name-service-ranking
   name-service-binding
+  name-service-column
 )
 
 target_sources(sql-v1-complete PRIVATE

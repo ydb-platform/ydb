@@ -376,8 +376,8 @@ Y_UNIT_TEST_SUITE(KqpKv) {
     Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, UseExtBlobsPrecharge) {
         NKikimrConfig::TImmediateControlsConfig controls;
 
-        if (NewPrecharge) {
-            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1);
+        if (UseExtBlobsPrecharge) {
+            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1); // sets to "true"
         }
 
         NKikimrConfig::TFeatureFlags flags;

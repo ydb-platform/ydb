@@ -22,12 +22,14 @@ class WorkloadTestBase(LoadSuiteBase):
     workload_env_var: str = None      # Переменная окружения с путем к бинарному файлу
     binaries_deploy_path: str = '/tmp/stress_binaries/'  # Путь для деплоя бинарных файлов
     timeout: float = 1800.  # Таймаут по умолчанию
+    _nemesis_started: bool = False  # Флаг для отслеживания запуска nemesis
 
     @classmethod
     def do_teardown_class(cls):
         """
         Общая очистка для workload тестов.
         Останавливает процессы workload на всех нодах кластера.
+        Останавливает nemesis, если он был запущен.
         """
         if not cls.workload_binary_name:
             logging.warning(f"workload_binary_name not set for {cls.__name__}, skipping process cleanup")
@@ -41,8 +43,87 @@ class WorkloadTestBase(LoadSuiteBase):
                 process_names=[cls.binaries_deploy_path + cls.workload_binary_name],
                 target_dir=cls.binaries_deploy_path
             )
+            
+            # Останавливаем nemesis, если он был запущен
+            if getattr(cls, '_nemesis_started', False):
+                logging.info("Stopping nemesis service")
+                cls._stop_nemesis()
+                
         except Exception as e:
             logging.error(f"Error during teardown: {e}")
+
+    @classmethod
+    def _stop_nemesis(cls):
+        """Останавливает сервис nemesis на всех нодах кластера"""
+        try:
+            nodes = YdbCluster.get_cluster_nodes()
+            unique_hosts = set(node.host for node in nodes)
+            
+            for host in unique_hosts:
+                logging.info(f"Stopping nemesis on {host}")
+                execute_command(
+                    host=host,
+                    cmd="sudo service nemesis stop",
+                    raise_on_error=False
+                )
+            cls._nemesis_started = False
+        except Exception as e:
+            logging.error(f"Error stopping nemesis: {e}")
+
+    def _manage_nemesis(self, enable_nemesis: bool):
+        """
+        Управляет сервисом nemesis на всех уникальных хостах кластера
+        
+        Args:
+            enable_nemesis: True для запуска, False для остановки
+        """
+        if not enable_nemesis:
+            return
+            
+        with allure.step('Manage nemesis service'):
+            try:
+                # Получаем все уникальные хосты кластера
+                nodes = YdbCluster.get_cluster_nodes()
+                unique_hosts = set(node.host for node in nodes)
+                
+                if enable_nemesis:
+                    action = "restart"
+                    logging.info(f"Starting nemesis on {len(unique_hosts)} hosts")
+                else:
+                    action = "stop"
+                    logging.info(f"Stopping nemesis on {len(unique_hosts)} hosts")
+                
+                # Выполняем команду на каждом уникальном хосте
+                for host in unique_hosts:
+                    with allure.step(f'{action.capitalize()} nemesis on {host}'):
+                        cmd = f"sudo service nemesis {action}"
+                        allure.attach(cmd, 'Nemesis Command', attachment_type=allure.attachment_type.TEXT)
+                        
+                        result = execute_command(
+                            host=host,
+                            cmd=cmd,
+                            raise_on_error=False
+                        )
+                        
+                        stdout = result.stdout if result.stdout else ""
+                        stderr = result.stderr if result.stderr else ""
+                        
+                        allure.attach(f"stdout: {stdout}\nstderr: {stderr}", 
+                                    f'Nemesis {action} result', 
+                                    attachment_type=allure.attachment_type.TEXT)
+                        
+                        if stderr and "error" in stderr.lower():
+                            logging.warning(f"Error during nemesis {action} on {host}: {stderr}")
+                
+                # Устанавливаем флаг запуска nemesis
+                if enable_nemesis:
+                    self.__class__._nemesis_started = True
+                else:
+                    self.__class__._nemesis_started = False
+                    
+            except Exception as e:
+                logging.error(f"Error managing nemesis: {e}")
+                allure.attach(str(e), 'Nemesis Error', attachment_type=allure.attachment_type.TEXT)
 
     def create_workload_result(self, workload_name: str, stdout: str, stderr: str,
                                success: bool, additional_stats: dict = None, is_timeout: bool = False,
@@ -206,7 +287,9 @@ class WorkloadTestBase(LoadSuiteBase):
 
         return False
 
-    def execute_workload_test(self, workload_name: str, command_args: str, duration_value: float = None, additional_stats: dict = None, use_chunks: bool = False, duration_param: str = "--duration"):
+    def execute_workload_test(self, workload_name: str, command_args: str, duration_value: float = None, 
+                             additional_stats: dict = None, use_chunks: bool = False, 
+                             duration_param: str = "--duration", nemesis: bool = False):
         """
         Выполняет полный цикл workload теста
 
@@ -217,9 +300,19 @@ class WorkloadTestBase(LoadSuiteBase):
             additional_stats: Дополнительная статистика
             use_chunks: Использовать ли разбивку на чанки для повышения надежности
             duration_param: Параметр для передачи времени выполнения
+            nemesis: Запускать ли сервис nemesis перед выполнением workload
         """
         if duration_value is None:
             duration_value = self.timeout
+            
+        # Управляем сервисом nemesis если требуется
+        if nemesis:
+            self._manage_nemesis(enable_nemesis=True)
+            
+        # Добавляем информацию о nemesis в статистику
+        if additional_stats is None:
+            additional_stats = {}
+        additional_stats["nemesis_enabled"] = nemesis
 
         return self._execute_workload_with_deployment(
             workload_name=workload_name,
@@ -295,7 +388,6 @@ class WorkloadTestBase(LoadSuiteBase):
             total_execution_time = 0
             workload_start_time = None
 
-            # Выполняем план
             for run_num, run_config in enumerate(execution_plan, 1):
                 # Запоминаем время начала первого workload run
                 if run_num == 1:

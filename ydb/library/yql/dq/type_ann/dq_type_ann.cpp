@@ -1275,7 +1275,13 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
                     underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
                     itemType = ctx.MakeType<TBlockExprType>(underlyingType);
                 } else {
-                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                    underlyingType = ctx.MakeType<TOptionalExprType>(itemType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                }
+            } else {
+                // Ensure all types are block types
+                if (itemType->GetKind() != ETypeAnnotationKind::Block) {
+                    itemType = ctx.MakeType<TBlockExprType>(itemType);
                 }
             }
             resultItems.push_back(itemType);
@@ -1293,7 +1299,13 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
                     underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
                     itemType = ctx.MakeType<TBlockExprType>(underlyingType);
                 } else {
-                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                    underlyingType = ctx.MakeType<TOptionalExprType>(itemType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                }
+            } else {
+                // Ensure all types are block types
+                if (itemType->GetKind() != ETypeAnnotationKind::Block) {
+                    itemType = ctx.MakeType<TBlockExprType>(itemType);
                 }
             }
             resultItems.push_back(itemType);

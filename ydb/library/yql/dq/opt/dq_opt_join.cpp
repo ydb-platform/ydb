@@ -1564,7 +1564,6 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         callableName = "DqBlockHashJoin";
     }
 
-
     TCoArgument leftInputArg{ctx.NewArgument(join.LeftInput().Pos(), "_dq_join_left")};
     TCoArgument rightInputArg{ctx.NewArgument(join.RightInput().Pos(), "_dq_join_right")};
 
@@ -1579,7 +1578,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             .Build();
         rightWideFlow = ctx.Builder(join.Pos())
             .Callable("FromFlow")
-            .Add(0, std::move(leftWideFlow))
+            .Add(0, std::move(rightWideFlow))
             .Seal()
             .Build();
     }

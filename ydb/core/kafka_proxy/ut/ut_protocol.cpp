@@ -11,7 +11,7 @@
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
-
+#include <ydb/core/persqueue/user_info.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
 
@@ -2124,6 +2124,22 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(res.ErrorCode, NONE_ERROR);
                 UNIT_ASSERT_VALUES_EQUAL_C(getConfigsMap(res).find("cleanup.policy")->second.Value->data(),
                                            topics[i].policy, res.ResourceName.value());
+
+                auto topicDescribe = pqClient.DescribeTopic(topics[i].name).ExtractValueSync();
+                UNIT_ASSERT_C(topicDescribe.IsSuccess(), topicDescribe.GetIssues().ToString());
+                bool hasCompConsumer = false;
+                for (const auto& consumer : topicDescribe.GetTopicDescription().GetConsumers()) {
+                    Cerr << "Got consumer = " << consumer.GetConsumerName() << " for topic " << topics[i].name << Endl;
+                    if (consumer.GetConsumerName() == NPQ::CLIENTID_COMPACTION_CONSUMER) {
+                        hasCompConsumer = true;
+                    }
+                }
+                if (topics[i].policy == "compact") {
+                    UNIT_ASSERT_C(hasCompConsumer, topics[i].name);
+                } else {
+                    UNIT_ASSERT_C(!hasCompConsumer, topics[i].name);
+                }
+
             }
         };
 
@@ -2145,6 +2161,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[1].ErrorCode, INVALID_REQUEST);
             checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
         }
+
+        NYdb::NTopic::TAlterTopicSettings addConsumer;
+        addConsumer.BeginAddConsumer().ConsumerName(NPQ::CLIENTID_COMPACTION_CONSUMER).EndAddConsumer();
+        NYdb::NTopic::TAlterTopicSettings dropConsumer;
+        addConsumer.AppendDropConsumers(NPQ::CLIENTID_COMPACTION_CONSUMER);
+        pqClient.AlterTopic(topic1, addConsumer).GetValueSync();
+        pqClient.AlterTopic(topic2, dropConsumer).GetValueSync();
+        checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
     }
 
 

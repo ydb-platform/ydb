@@ -72,18 +72,3 @@ DefaultSettings {
     Name: "_KqpDisableLlvmForUdfStages"
     Value: "false"
 }
-
-DefaultSettings {
-    Name: UseGraceJoinCoreForMap
-    Value: false
-}
-
-DefaultSettings {
-    Name: UseBlockHashJoin
-    Value: true
-}
-
-DefaultSettings {
-    Name: EnableOrderPreservingLookupJoin
-    Value: "false"
-}

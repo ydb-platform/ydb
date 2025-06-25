@@ -1188,10 +1188,10 @@ namespace Tests {
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-			auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(NGeneralCache::NPublic::TConfig::BuildDefault(), new ::NMonitoring::TDynamicCounters());
-			const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-			Runtime->RegisterService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
-		}
+            auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(NGeneralCache::NPublic::TConfig::BuildDefault(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+        }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();

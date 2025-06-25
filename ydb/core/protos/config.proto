@@ -1549,6 +1549,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000,
             DefaultValue: 0 }];
+
+        optional uint64 EnableExplicitCompactionAfterDefrag = 28 [(ControlOptions) = {
+            Description: "Enable explicit compaction call after defragmentation",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TTabletControls {

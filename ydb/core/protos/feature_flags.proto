@@ -211,6 +211,6 @@ message TFeatureFlags {
     optional bool EnableNodeBrokerDeltaProtocol = 185 [default = false];
     optional bool EnableAccessToIndexImplTables = 186 [default = false];
     optional bool EnableAddUniqueIndex = 187 [default = false];
-    optional bool EnableSharedMetadataAccessorCache = 188 [default = true];
+    optional bool EnableSharedMetadataAccessorCache = 188 [default = true, deprecated = true];
     optional bool RequireDbPrefixInSecretName = 189 [default = false];
 }

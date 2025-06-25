@@ -107,6 +107,20 @@ struct TEvPrivate {
         }
     };
 
+    class TEvAskTabletDataAccessors
+        : public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+    private:
+        using TPortions = THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>;
+        YDB_ACCESSOR_DEF(TPortions, Portions);
+        YDB_READONLY_DEF(std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>, Callback);
+
+    public:
+        explicit TEvAskTabletDataAccessors(TPortions&& portions, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback)
+            : Portions(std::move(portions))
+            , Callback(callback) {
+        }
+    };
+
     class TEvStartCompaction: public NActors::TEventLocal<TEvStartCompaction, EvStartCompaction> {
     private:
         YDB_READONLY_DEF(std::shared_ptr<NPrioritiesQueue::TAllocationGuard>, Guard);

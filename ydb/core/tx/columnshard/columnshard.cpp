@@ -3,9 +3,6 @@
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
-#include "data_accessor/actor.h"
-#include "data_accessor/shared_metadata_accessor_cache_actor.h"
-#include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
 #include "engines/writer/buffer/actor2.h"
@@ -37,11 +34,6 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationInsertionWriteActorId, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
-    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataAccessorCache()){
-        ctx.Send(DataAccessorsControlActorId, new NOlap::NDataAccessorControl::TEvClearCache(SelfId()));
-    } else {
-        ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
-    }
     if (!!OperationsManager) {
         OperationsManager->StopWriting();
     }
@@ -130,14 +122,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
-    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataAccessorCache()){
-        DataAccessorsControlActorId = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(ctx.SelfID.NodeId());
-    } else {
-        DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
-    }
-
-    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
-
+    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(SelfId());
+    NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
     Execute(CreateTxInitSchema(), ctx);
 }

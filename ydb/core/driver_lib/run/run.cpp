@@ -1675,10 +1675,6 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, ProcessMemoryInfoProvider));
 
-    if (serviceMask.EnableSharedMetadataAccessorCache) {
-        sil->AddServiceInitializer(new TSharedMetadataAccessorCacheInitializer(runConfig));
-    }
-
 #if defined(ENABLE_MEMORY_TRACKING)
     if (serviceMask.EnableMemoryTracker) {
         sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
@@ -1714,6 +1710,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     if (serviceMask.EnableCompConveyor || serviceMask.EnableInsertConveyor || serviceMask.EnableScanConveyor) {
         sil->AddServiceInitializer(new TCompositeConveyorInitializer(runConfig));
+    }
+
+    if (serviceMask.EnableGeneralCachePortionsMetadata) {
+        sil->AddServiceInitializer(new TGeneralCachePortionsMetadataInitializer(runConfig));
     }
 
     if (serviceMask.EnableCms) {

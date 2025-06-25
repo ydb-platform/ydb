@@ -76,7 +76,6 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -130,6 +129,8 @@
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
@@ -1137,14 +1138,11 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
-        if (Settings->FeatureFlags.GetEnableSharedMetadataAccessorCache()) {
-            auto* actor = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
-
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::HTSwap, 0);
-            const auto serviceId = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(Runtime->GetNodeId(nodeIdx));
-            Runtime->RegisterService(serviceId, aid, nodeIdx);
+        {
+            auto* actor = NOlap::NDataAccessorControl::TGeneralCache::CreateService(NGeneralCache::NPublic::TConfig::BuildDefault(), new ::NMonitoring::TDynamicCounters());
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NOlap::NDataAccessorControl::TGeneralCache::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
-
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();

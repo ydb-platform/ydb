@@ -54,10 +54,14 @@ class TActorAccessorsManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
-        class TAdapterCallback: public NKikimr::NGeneralCache::NPublic::ICallback<NGeneralCache::TPortionsMetadataCachePolicy> {
+        class TAdapterCallback: public TGeneralCache::ICallback {
         private:
             std::shared_ptr<IDataAccessorRequestsSubscriber> AccessorsCallback;
             const ui64 RequestId;
+            virtual bool DoIsAborted() const override {
+                return AccessorsCallback->GetAbortionFlag() && AccessorsCallback->GetAbortionFlag()->Val();
+            }
+
             virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor>&& objectAddresses,
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
                 THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) const override {

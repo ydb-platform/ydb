@@ -8,12 +8,13 @@ namespace NKikimr::NGeneralCache {
 
 template <class TPolicy>
 class TServiceOperator {
-private:
+public:
     using TAddress = typename TPolicy::TAddress;
     using TObject = typename TPolicy::TObject;
     using EConsumer = typename TPolicy::EConsumer;
     using ICallback = NPublic::ICallback<TPolicy>;
 
+private:
     using TSelf = TServiceOperator<TPolicy>;
 
 public:

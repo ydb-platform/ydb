@@ -78,7 +78,6 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>

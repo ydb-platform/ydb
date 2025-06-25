@@ -13,23 +13,10 @@ struct TS3Download {
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
     NKikimrBackup::TChecksumState ChecksumState;
-    NKikimrBackup::TS3DownloadState DownloadState;
+    NKikimrBackup::TS3DownloadState DownloadState; // Can hold secure encryption key
 
-    void Out(IOutputStream& out) const {
-        out << "{"
-            << " DataETag: " << DataETag
-            << " ProcessedBytes: " << ProcessedBytes
-            << " WrittenBytes: " << WrittenBytes
-            << " WrittenRows: " << WrittenRows
-            << " ChecksumState: " << ChecksumState.ShortDebugString()
-            << " DownloadState: " << DownloadState.ShortDebugString()
-        << " }";
-    }
+    void Out(IOutputStream& out) const;
 };
 
 } // namespace NDataShard
 } // namespace NKikimr
-
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TS3Download, out, value) {
-    value.Out(out);
-}

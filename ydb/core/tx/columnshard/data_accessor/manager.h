@@ -57,7 +57,7 @@ private:
         class TAdapterCallback: public NKikimr::NGeneralCache::NPublic::ICallback<NGeneralCache::TPortionsMetadataCachePolicy> {
         private:
             std::shared_ptr<IDataAccessorRequestsSubscriber> AccessorsCallback;
-            const ui32 RequestId;
+            const ui64 RequestId;
             virtual void DoOnResultReady(THashMap<NGeneralCache::TGlobalPortionAddress, TPortionDataAccessor>&& objectAddresses,
                 THashSet<NGeneralCache::TGlobalPortionAddress>&& removedAddresses,
                 THashMap<NGeneralCache::TGlobalPortionAddress, TString>&& errorAddresses) const override {

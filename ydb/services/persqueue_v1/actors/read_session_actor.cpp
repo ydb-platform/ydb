@@ -1287,7 +1287,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     }
 
     const auto& parentPartitions = partitionNode->AllParents;
-    const auto database = Request->GetDatabaseName().GetOrElse(AppData(ctx)->PQConfig.GetDatabase());
+    const auto database = topic.DbPath;
     const TActorId actorId = ctx.Register(new TPartitionActor(
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,

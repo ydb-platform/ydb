@@ -74,7 +74,7 @@ public:
     virtual void OverrideCallable(const std::string_view& name, TCompiler compiler);
 
 private:
-    THashMap<TString, TCompiler> Callables;
+    THashMap<TString, TCompiler> Callables_;
 
 protected:
     void AddSimpleCallables(const std::initializer_list<std::pair<std::string_view, NKikimr::NMiniKQL::TProgramBuilder::UnaryFunctionMethod>>& callables);

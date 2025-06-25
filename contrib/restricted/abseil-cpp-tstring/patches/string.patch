@@ -1,0 +1,120 @@
+--- a/y_absl/flags/parse.cc
++++ b/y_absl/flags/parse.cc
+@@ -147,6 +147,6 @@ bool ArgsList::ReadFromFlagfile(const TString& flag_file_name) {
+   args_.emplace_back("");
+ 
+-  TString line;
++  std::string line;
+   bool success = true;
+ 
+   while (std::getline(flag_file, line)) {
+--- a/y_absl/numeric/int128.cc
++++ b/y_absl/numeric/int128.cc
+@@ -220,1 +220,1 @@ TString Uint128ToFormattedString(uint128 v, std::ios_base::fmtflags flags) {
+-  return os.str();
++  return TString(os.str());
+--- a/y_absl/strings/ascii.h
++++ b/y_absl/strings/ascii.h
+@@ -200,1 +200,1 @@ ABSL_MUST_USE_RESULT inline y_absl::string_view StripLeadingAsciiWhitespace(
+-  auto it = std::find_if_not(str->begin(), str->end(), y_absl::ascii_isspace);
++  auto it = std::find_if_not(str->cbegin(), str->cend(), y_absl::ascii_isspace);
+--- a/y_absl/strings/internal/str_format/arg.h
++++ b/y_absl/strings/internal/str_format/arg.h
+@@ -24,5 +24,6 @@
+ #include <memory>
+ #include <sstream>
+ #include <util/generic/string.h>
++#include <util/stream/str.h>
+ #include <type_traits>
+ #include <utility>
+@@ -238,10 +239,11 @@ template <typename T>
+ StringConvertResult FormatConvertImpl(const StreamedWrapper<T>& v,
+                                       FormatConversionSpecImpl conv,
+                                       FormatSinkImpl* out) {
+-  std::ostringstream oss;
++  TString buf;
++  TStringOutput oss(buf);
+   oss << v.v_;
+-  if (!oss) return {false};
+-  return str_format_internal::FormatConvertImpl(oss.str(), conv, out);
++  if (!buf) return {false};
++  return str_format_internal::FormatConvertImpl(buf, conv, out);
+ }
+
+ // Use templates and dependent types to delay evaluation of the function
+--- a/y_absl/strings/internal/charconv_bigint.cc
++++ b/y_absl/strings/internal/charconv_bigint.cc
+@@ -346,7 +346,7 @@ TString BigUnsigned<max_words>::ToString() const {
+   if (result.empty()) {
+     result.push_back('0');
+   }
+-  std::reverse(result.begin(), result.end());
++  std::reverse(result.begin(), result.vend());
+   return result;
+ }
+ 
+--- a/y_absl/strings/cord.cc
++++ b/y_absl/strings/cord.cc
+@@ -1895 +1895 @@ static TString ReportError(CordRep* root, CordRep* node) {
+-  return buf.str();
++  return TString(buf.str());
+--- a/y_absl/strings/str_cat.h
++++ b/y_absl/strings/str_cat.h
+@@ -253,6 +253,9 @@ class AlphaNum {
+       const std::basic_string<char, std::char_traits<char>, Allocator>& str)
+       : piece_(str) {}
+
++  AlphaNum(const TString& str)
++      : piece_(str.data(), str.size()) {}
++
+   // Use string literals ":" instead of character literals ':'.
+   AlphaNum(char c) = delete;  // NOLINT(runtime/explicit)
+
+--- a/y_absl/strings/substitute.h
++++ b/y_absl/strings/substitute.h
+@@ -110,6 +110,8 @@ class Arg {
+       : piece_(value) {}
+   Arg(y_absl::string_view value)  // NOLINT(google-explicit-constructor)
+       : piece_(value) {}
++  Arg(const TString& s)
++      : piece_(s.data(), s.size()) {}
+ 
+   // Overloads for primitives
+   //
+--- a/y_absl/time/internal/cctz/src/time_zone_info.cc
++++ b/y_absl/time/internal/cctz/src/time_zone_info.cc
+@@ -300,7 +300,7 @@ bool TimeZoneInfo::GetTransitionType(std::int_fast32_t utc_offset, bool is_dst,
+   std::size_t abbr_index = abbreviations_.size();
+   for (; type_index != transition_types_.size(); ++type_index) {
+     const TransitionType& tt(transition_types_[type_index]);
+-    const char* tt_abbr = &abbreviations_[tt.abbr_index];
++    const char* tt_abbr = &*abbreviations_.begin() + tt.abbr_index;
+     if (tt_abbr == abbr) abbr_index = tt.abbr_index;
+     if (tt.utc_offset == utc_offset && tt.is_dst == is_dst) {
+       if (abbr_index == tt.abbr_index) break;  // reuse
+@@ -736,1 +736,1 @@ time_zone::absolute_lookup TimeZoneInfo::LocalTime(
+-          tt.is_dst, &abbreviations_[tt.abbr_index]};
++          tt.is_dst, &*abbreviations_.begin() + tt.abbr_index};
+@@ -746,1 +746,1 @@ time_zone::absolute_lookup TimeZoneInfo::LocalTime(
+-          tt.utc_offset, tt.is_dst, &abbreviations_[tt.abbr_index]};
++          tt.utc_offset, tt.is_dst, &*abbreviations_.begin() + tt.abbr_index};
+@@ -888,7 +888,7 @@ TString TimeZoneInfo::Description() const {
+   oss << "#trans=" << transitions_.size();
+   oss << " #types=" << transition_types_.size();
+   oss << " spec='" << future_spec_ << "'";
+-  return oss.str();
++  return oss.str().c_str();
+ }
+ 
+ bool TimeZoneInfo::NextTransition(const time_point<seconds>& tp,
+--- a/y_absl/time/internal/cctz/src/time_zone_info.cc	(index)
++++ b/y_absl/time/internal/cctz/src/time_zone_info.cc	(working tree)
+@@ -754,7 +754,7 @@ std::unique_ptr<ZoneInfoSource> FuchsiaZoneInfoSource::Open(
+     auto fp = FOpen(path.c_str(), "rb");
+     if (fp == nullptr) continue;
+ 
+-    TString version;
++    std::string version;
+     if (!prefix.empty()) {
+       // Fuchsia builds place the version in "<prefix>revision.txt".
+       std::ifstream version_stream(prefix + "revision.txt");

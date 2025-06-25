@@ -78,6 +78,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -445,7 +446,7 @@ namespace Tests {
         const auto nodeCount = StaticNodes() + DynamicNodes();
 
         if (Settings->AuditLogBackendLines) {
-            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, 
+            Runtime = MakeHolder<TTestBasicRuntime>(nodeCount,
                                                     Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount,
                                                     Settings->UseRealThreads,
                                                     CreateTestAuditLogBackends(*Settings->AuditLogBackendLines));
@@ -688,7 +689,7 @@ namespace Tests {
                 if (const auto& domain = appData.DomainsInfo->Domain) {
                     rootDomains.emplace_back("/" + domain->Name);
                 }
-                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());    
+                desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
             } else {
                 desc->ServedDatabases.emplace_back(CanonizePath(*tenant));
             }
@@ -1190,6 +1191,14 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
+        if (Settings->FeatureFlags.GetEnableSharedMetadataAccessorCache()) {
+            auto* actor = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::CreateActor();
+
+            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::HTSwap, 0);
+            const auto serviceId = NOlap::NDataAccessorControl::TSharedMetadataAccessorCacheActor::MakeActorId(Runtime->GetNodeId(nodeIdx));
+            Runtime->RegisterService(serviceId, aid, nodeIdx);
+        }
+
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();
@@ -1459,7 +1468,7 @@ namespace Tests {
             IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
-            
+
             TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateTransactionsCoordinator(), nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeTransactionsServiceID(Runtime->GetNodeId(nodeIdx)), kafkaTxnCoordinatorActorId, nodeIdx);
 

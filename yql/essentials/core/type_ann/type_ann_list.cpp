@@ -2761,8 +2761,8 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus UnionAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        const bool checkHashes = input->IsCallable("Union");
+    IGraphTransformer::TStatus SelectOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        const bool checkHashes = !input->IsCallable("UnionAll") && !input->IsCallable("UnionMerge");
         switch (input->ChildrenSize()) {
             case 0U:
                 output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
@@ -2770,16 +2770,35 @@ namespace {
             case 1U:
                 output = input->HeadPtr();
                 return IGraphTransformer::TStatus::Repeat;
+            case 2U:
+                break;
             default:
+                if (!input->Content().StartsWith("Union")) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                            << "Only Union, UnionAll, and UnionMerge may use more than 2 inputs. Invalid Callable: " << input->Content()));
+                    return IGraphTransformer::TStatus::Error;
+                }
                 break;
         }
 
         const bool hasEmptyLists = AnyOf(input->Children(), IsEmptyList);
         if (hasEmptyLists) {
-            auto children = input->ChildrenList();
-            EraseIf(children, IsEmptyList);
-            output = ctx.Expr.ChangeChildren(*input, std::move(children));
-            return IGraphTransformer::TStatus::Repeat;
+            if (input->Content().StartsWith("Union")) {
+                auto children = input->ChildrenList();
+                EraseIf(children, IsEmptyList);
+                output = ctx.Expr.ChangeChildren(*input, std::move(children));
+                return IGraphTransformer::TStatus::Repeat;
+            } else {
+                if (input->Content().StartsWith("Intersect")) {
+                    output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
+                    return IGraphTransformer::TStatus::Repeat;
+                } else if (input->Content().StartsWith("Except")) {
+                    // the first input is empty -> output is empty
+                    // the second input is empty -> output is the first input
+                    output = input->HeadPtr();
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+            }
         }
 
         std::unordered_map<std::string_view, std::pair<const TTypeAnnotationNode*, ui32>> members;
@@ -2881,7 +2900,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus UnionAllPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    IGraphTransformer::TStatus SelectOpPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!ctx.Types.OrderedColumns) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()

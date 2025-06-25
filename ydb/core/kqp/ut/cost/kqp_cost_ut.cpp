@@ -412,7 +412,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto result = session.ExecuteDataQuery(query, txControl, GetDataQuerySettings()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-        Cerr << "PONOS" << Endl;
         Cerr << result.GetQueryPlan() << Endl;
 
         CompareYson(R"(

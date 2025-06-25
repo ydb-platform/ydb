@@ -201,7 +201,7 @@ public:
             std::move(poller),
             PacketTranscoderFactory_,
             MemoryUsageTracker_,
-            DynamicConfig_.Acquire()->NeedRejectConnectionOnMemoryOvercommit);
+            DynamicConfig_.Acquire()->RejectConnectionOnMemoryOvercommit);
         connection->Start();
 
         return New<TTcpClientBusProxy>(std::move(connection));

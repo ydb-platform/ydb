@@ -90,7 +90,7 @@ public:
         , UserType(userType)
         , WrapDateTimeConvert(wrapDateTimeConvert)
     {
-        this->Stateless = false;
+        this->Stateless_ = false;
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -246,7 +246,7 @@ public:
         , WrapDateTimeConvert(wrapDateTimeConvert)
         , UdfIndex(mutables.CurValueIndex++)
     {
-        this->Stateless = false;
+        this->Stateless_ = false;
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
@@ -465,9 +465,9 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
 
     NUdf::TSourcePosition pos;
     if (callable.GetInputsCount() == 7) {
-        pos.File_ = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().AsStringRef();
-        pos.Row_ = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<ui32>();
-        pos.Column_ = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui32>();
+        pos.File = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().AsStringRef();
+        pos.Row = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<ui32>();
+        pos.Column = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui32>();
     }
 
     ui32 flags = 0;
@@ -614,9 +614,9 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
 
     NUdf::TSourcePosition pos;
     if (callable.GetInputsCount() == 7) {
-        pos.File_ = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().AsStringRef();
-        pos.Row_ = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<ui32>();
-        pos.Column_ = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui32>();
+        pos.File = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().AsStringRef();
+        pos.Row = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<ui32>();
+        pos.Column = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui32>();
     }
 
     const auto userType = static_cast<TType*>(userTypeNode.GetNode());

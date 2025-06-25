@@ -1016,17 +1016,18 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
                 continue;
             }
 
-            bool lhsShuffled =
-                leftNode->Stats.LogicalOrderings.HasState() && // we may not have state for the Node in case there is no info about shuffling (statistics propogation problem)
-                leftNode->Stats.LogicalOrderings.ContainsShuffle(csgCmpEdge->LeftJoinKeysShuffleOrderingIdx) &&
-                leftNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->LeftJoinKeys.size());
-            bool rhsShuffled =
-                rightNode->Stats.LogicalOrderings.HasState() &&
-                rightNode->Stats.LogicalOrderings.ContainsShuffle(csgCmpEdge->RightJoinKeysShuffleOrderingIdx) &&
-                rightNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(csgCmpEdge->RightJoinKeys.size());
-            // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle.
+            i64 lhsHashFuncArgCnt = leftNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount();
+            i64 rhsHashFuncArgCnt = rightNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount();
 
-            // bool sameHashFuncArgCount = leftNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == rightNode->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount();
+            bool lhsShuffled =
+                leftNode->Stats.LogicalOrderings.ContainsShuffle(csgCmpEdge->LeftJoinKeysShuffleOrderingIdx) &&
+                lhsHashFuncArgCnt == static_cast<std::int64_t>(csgCmpEdge->LeftJoinKeys.size());
+            bool rhsShuffled =
+                rightNode->Stats.LogicalOrderings.ContainsShuffle(csgCmpEdge->RightJoinKeysShuffleOrderingIdx) &&
+                rhsHashFuncArgCnt == static_cast<std::int64_t>(csgCmpEdge->RightJoinKeys.size());
+
+            // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle.
+            // bool sameHashFuncArgCount = (lhsHashFuncArgCnt == rhsHashFuncArgCnt);
             if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
                 if (leftNode->Stats.Nrows < rightNode->Stats.Nrows) {
                     lhsShuffled = false;

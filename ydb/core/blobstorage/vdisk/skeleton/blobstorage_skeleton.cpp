@@ -87,6 +87,7 @@ namespace NKikimr {
             // out of space
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(&satisfactionRank);
+            ev->Record.SetGroupSizeInUnits(Config->GroupSizeInUnits);
             const TInstant now = ctx.Now();
             const TInstant prev = std::exchange(WhiteboardUpdateTimestamp, now);
             const ui64 bytesRead = QueryCtx ? QueryCtx->PDiskReadBytes.exchange(0) : 0;
@@ -1702,16 +1703,8 @@ namespace NKikimr {
             if (Config->BaseInfo.DonorMode) {
                 return; // this is a race; donor disk can't answer TEvVSyncFull queries
             }
-
-            // run handler in the same mailbox
-            TInstant now = TAppData::TimeProvider->Now();
-
-            ui64 dbBirthLsn = 0;
-            const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForHull();
-            dbBirthLsn = *DbBirthLsn;
-            auto aid = ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx, SelfVDiskId, ctx.SelfID, Hull,
-                IFaceMonGroup, ev, now, dbBirthLsn, confirmedLsn));
-            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            Y_VERIFY(Db->SyncFullHandlerID);
+            ctx.Send(ev->Forward(Db->SyncFullHandlerID));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1829,6 +1822,16 @@ namespace NKikimr {
         }
 
         void SkeletonIsUpAndRunning(const TActorContext &ctx, bool runRepl = false) {
+            // Now, if we obtained DbBirthLsn, we can create full sync handler actor
+            // run handler in the same mailbox
+            // We start Skeleton without DbBirthLsn only in DonorMode,
+            // which makes VDisk unable to sync with at all
+            if (DbBirthLsn) {
+                Db->SyncFullHandlerID.Set(ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx,
+                    SelfVDiskId, ctx.SelfID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
+                ActiveActors.Insert(Db->SyncFullHandlerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            }
+
             Become(&TThis::StateNormal);
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::OK);
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON IS UP AND RUNNING"
@@ -2457,6 +2460,9 @@ namespace NKikimr {
             if (BalancingId) {
                 ctx.Send(BalancingId, ev->Get()->Clone());
             }
+            if (Db->SyncFullHandlerID) {
+                ctx.Send(Db->SyncFullHandlerID, ev->Get()->Clone());
+            }
 
             // FIXME: reconfigure handoff
         }
@@ -3031,6 +3037,8 @@ namespace NKikimr {
             , SyncLogIFaceGroup(VCtx->VDiskCounters, "subsystem", "synclog")
             , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(
                 VCtx->VDiskCounters, "subsystem", "interface"))
+            , FullSyncGroup(std::make_shared<NMonGroup::TFullSyncGroup>(
+                VCtx->VDiskCounters, "subsystem", "fullsync"))
             , EnableVPatch(cfg->EnableVPatch)
         {
             auto cpuGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu");
@@ -3081,6 +3089,7 @@ namespace NKikimr {
         NMonGroup::TReplGroup ReplMonGroup;
         NMonGroup::TSyncLogIFaceGroup SyncLogIFaceGroup;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
+        std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
         bool ReplDone = false;
         bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();

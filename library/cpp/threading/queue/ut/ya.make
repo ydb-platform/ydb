@@ -1,7 +1,5 @@
 UNITTEST_FOR(library/cpp/threading/queue)
 
-ALLOCATOR(B)
-
 SRCS(
     basic_ut.cpp
     queue_ut.cpp

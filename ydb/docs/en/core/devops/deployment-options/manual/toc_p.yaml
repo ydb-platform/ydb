@@ -1,0 +1,20 @@
+items:
+- name: Initial deployment
+  href: initial-deployment.md
+- name: Updating configuration
+  href: update-config.md
+- name: Cluster maintenance
+  href: maintenance.md
+- name: Updating executable
+  href: update-executable.md
+- name: Database node authentication and authorization
+  href: node-authorization.md
+- name: Managing a cluster's disk subsystem
+  include:
+    mode: link
+    path: ../../../maintenance/manual/toc_p.yaml
+- name: Federated queries
+  href: federated-queries/index.md
+  include:
+    mode: link
+    path: federated-queries/toc_p.yaml

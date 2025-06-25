@@ -839,6 +839,8 @@ public:
     virtual bool IsSystemView(const TStringBuf viewName) const = 0;
 
     virtual TVector<TString> GetSystemViewNames(ETarget target) const = 0;
+
+    virtual const THashMap<TString, NKikimrSysView::ESysViewType>& GetSystemViewsTypes(ETarget target) const = 0;
 };
 
 ISystemViewResolver* CreateSystemViewResolver();

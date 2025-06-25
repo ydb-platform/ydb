@@ -84,9 +84,8 @@ class LoadSuiteBase:
     def check_tables_size(cls, folder: Optional[str], tables: dict[str, int]):
         wait_error = YdbCluster.wait_ydb_alive(
             int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), (
-                YdbCluster.get_tables_path(folder)
-                if folder is not None
-                else [YdbCluster.get_tables_path(t) for t in tables.keys()]
+                folder if folder is not None
+                else [t for t in tables.keys()]
             ))
         if wait_error is not None:
             pytest.fail(f'Cluster is dead: {wait_error}')

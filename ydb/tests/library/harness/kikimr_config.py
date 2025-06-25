@@ -175,6 +175,7 @@ class KikimrConfigGenerator(object):
             table_service_config=None,  # dict[name]=value
             bridge_config=None,
             memory_controller_config=None,
+            verbose_memory_limit_exception=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -274,6 +275,9 @@ class KikimrConfigGenerator(object):
 
         if "table_service_config" not in self.yaml_config:
             self.yaml_config["table_service_config"] = {}
+
+        if verbose_memory_limit_exception:
+            self.yaml_config["table_service_config"]["resource_manager"]["verbose_memory_limit_exception"] = True
 
         if table_service_config:
             self.yaml_config["table_service_config"].update(table_service_config)

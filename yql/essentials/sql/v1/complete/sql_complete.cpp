@@ -209,7 +209,18 @@ namespace NSQLComplete {
                 if constexpr (std::is_base_of_v<TKeyword, T>) {
                     TVector<TString>& seq = context.Keywords[name.Content];
                     seq.insert(std::begin(seq), name.Content);
-                    return {ECandidateKind::Keyword, FormatKeywords(seq)};
+
+                    TCandidate candidate = {
+                        .Kind = ECandidateKind::Keyword,
+                        .Content = FormatKeywords(seq),
+                    };
+
+                    if (candidate.Content.EndsWith('(')) {
+                        candidate.Content += ')';
+                        candidate.CursorShift = 1;
+                    }
+
+                    return candidate;
                 }
 
                 if constexpr (std::is_base_of_v<TPragmaName, T>) {
@@ -217,22 +228,37 @@ namespace NSQLComplete {
                 }
 
                 if constexpr (std::is_base_of_v<TTypeName, T>) {
+                    TCandidate candidate = {
+                        .Kind = ECandidateKind::TypeName,
+                        .Content = std::move(name.Indentifier),
+                    };
+
                     switch (name.Kind) {
                         case TTypeName::EKind::Simple: {
                         } break;
                         case TTypeName::EKind::Container: {
-                            name.Indentifier += "<";
+                            candidate.Content += "<>";
+                            candidate.CursorShift = 1;
                         } break;
                         case TTypeName::EKind::Parameterized: {
-                            name.Indentifier += "(";
+                            candidate.Content += "()";
+                            candidate.CursorShift = 1;
                         } break;
                     }
-                    return {ECandidateKind::TypeName, std::move(name.Indentifier)};
+
+                    return candidate;
                 }
 
                 if constexpr (std::is_base_of_v<TFunctionName, T>) {
-                    name.Indentifier += "(";
-                    return {ECandidateKind::FunctionName, std::move(name.Indentifier)};
+                    TCandidate candidate = {
+                        .Kind = ECandidateKind::FunctionName,
+                        .Content = std::move(name.Indentifier),
+                    };
+
+                    candidate.Content += "()";
+                    candidate.CursorShift = 1;
+
+                    return candidate;
                 }
 
                 if constexpr (std::is_base_of_v<THintName, T>) {
@@ -240,16 +266,31 @@ namespace NSQLComplete {
                 }
 
                 if constexpr (std::is_base_of_v<TFolderName, T>) {
-                    name.Indentifier.append('/');
-                    if (!context.Object || !context.Object->IsQuoted) {
-                        name.Indentifier.prepend('`');
+                    TCandidate candidate = {
+                        .Kind = ECandidateKind::FolderName,
+                        .Content = std::move(name.Indentifier),
+                    };
+
+                    if (!context.IsQuoted.AtLhs) {
+                        candidate.Content.prepend('`');
                     }
-                    return {ECandidateKind::FolderName, std::move(name.Indentifier)};
+
+                    candidate.Content.append('/');
+
+                    if (!context.IsQuoted.AtRhs) {
+                        candidate.Content.append('`');
+                        candidate.CursorShift = 1;
+                    }
+
+                    return candidate;
                 }
 
                 if constexpr (std::is_base_of_v<TTableName, T>) {
-                    if (!context.Object || !context.Object->IsQuoted) {
+                    if (!context.IsQuoted.AtLhs) {
                         name.Indentifier.prepend('`');
+                    }
+                    if (!context.IsQuoted.AtRhs) {
+                        name.Indentifier.append('`');
                     }
                     return {ECandidateKind::TableName, std::move(name.Indentifier)};
                 }
@@ -393,5 +434,9 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
 
 template <>
 void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& value) {
-    out << "{" << value.Kind << ", \"" << value.Content << "\"}";
+    out << "{" << value.Kind << ", \"" << value.Content << "\"";
+    if (value.CursorShift != 0) {
+        out << ", " << value.CursorShift;
+    }
+    out << "}";
 }

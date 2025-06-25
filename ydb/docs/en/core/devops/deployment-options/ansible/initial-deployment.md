@@ -127,7 +127,7 @@ timeout = 60
 
 {% endcut %}
 
-### Edit the Inventory Files {#inventory-edit}
+### Create the Primary Inventory File {#inventory-create}
 
 Create a `inventory/50-inventory.yaml` file using one of the templates below depending on the chosen [{{ ydb-short-name }} cluster topology](../../../concepts/topology.md):
 
@@ -331,19 +331,6 @@ Create a `inventory/50-inventory.yaml` file using one of the templates below dep
 
 Mandatory settings to adjust for your environment in the chosen template:
 
-* `ydb_version`: automatically download one of the [{{ ydb-short-name }} official releases](../../../downloads/index.md#ydb-server) by version number. For example, `23.4.11`.
-* `ydb_git_version`: automatically compile the {{ ydb-short-name }} executables from the source code, downloaded from [the official GitHub repository](https://github.com/ydb-platform/ydb). The setting's value is a branch, tag, or commit name. For example, `main`.
-* `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
-* `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
-
-### Optional Changes in the Inventory Files
-
-Recommended settings to adjust:
-
-* `ydb_cores_dynamic` – set the number of CPU cores to be used by the dynamic node. For example, 8.
-* `ydb_cores_static` – set the number of CPU cores to be used by the static node. For example, 8.
-* `ydb_tls_dir` – specify a local path to a folder with TLS certificates prepared in advance. It must contain the `ca.crt` file and subdirectories with names matching node hostnames, containing certificates for a given node. If omitted, self-signed TLS certificates will be generated automatically for the whole {{ ydb-short-name }} cluster.
-
 1. **Server hostnames.** Replace `static-node-*.ydb-cluster.com` in `all.children.ydb.hosts` with the real [FQDNs](https://en.wikipedia.org/wiki/Fully_qualified_domain_name).
 2. **Server locations.** The names in `data_center` and `rack` in `all.children.ydb.hosts.location` are arbitrary, but they should match between servers only if they are indeed located in the same datacenter (or availability zone) and rack, respectively.
 3. **Filesystem paths to block devices** in `all.children.ydb.vars.ydb_disks`. The template assumes `/dev/vda` is for the operating system and the following disks like `/dev/vdb` are for {{ ydb-short-name }} storage layer. Disk labels are created by the playbooks automatically and their names can be arbitrary.
@@ -482,8 +469,6 @@ The easiest way to explore the newly deployed cluster is by using [Embedded UI](
 After successfully creating the {{ ydb-short-name }} cluster, you can check its state using the following Embedded UI page: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). It might look like this:
 
 ![ydb-cluster-check](../../../_assets/ydb-cluster-check.png)
-
-## Monitoring the Cluster State {#troubleshooting}
 
 This section displays the following parameters of the {{ ydb-short-name }} cluster, reflecting its state:
 

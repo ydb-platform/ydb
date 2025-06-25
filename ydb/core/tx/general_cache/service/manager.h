@@ -168,14 +168,12 @@ public:
 
     void AddRequest(const std::shared_ptr<TRequest>& request) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "add_request");
-        std::vector<TAddress> addressesToAsk;
         THashMap<TAddress, TObject> objectsResult;
         Counters->IncomingRequestsCount->Inc();
         for (auto&& i : request->GetWait()) {
             auto it = Cache.Find(i);
             if (it == Cache.End()) {
                 Counters->ObjectCacheMiss->Inc();
-                addressesToAsk.emplace_back(i);
             } else {
                 Counters->ObjectCacheHit->Inc();
                 AFL_VERIFY(objectsResult.emplace(i, it.Value()).second);

@@ -318,7 +318,9 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
         }
 
         for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
-            Info->AddBSGroup(group);
+            if (!group.GetIsProxyGroup()) {
+                Info->AddBSGroup(group);
+            }
         }
 
         MaybeReplyAndDie();

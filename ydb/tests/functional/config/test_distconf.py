@@ -605,8 +605,7 @@ class TestKiKiMRDistConfGenerateConfig3Nodes(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 3
 
     def do_test(self, configName):
-        assert_eq(self.do_request_config()[f"{configName}Config"],
-            {'RingGroups': [{'NToSelect': 3, 'Ring': [{'Node': [1]}, {'Node': [2]}, {'Node': [3]}]}]})
+        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 3, 'Ring': [{'Node': [1]}, {'Node': [2]}, {'Node': [3]}]}]})
 
 
 class TestKiKiMRDistConfGenerateConfig2Nodes(KiKiMRDistConfGenerateConfigTest):
@@ -614,8 +613,7 @@ class TestKiKiMRDistConfGenerateConfig2Nodes(KiKiMRDistConfGenerateConfigTest):
     nodes_count = 2
 
     def do_test(self, configName):
-        assert_eq(self.do_request_config()[f"{configName}Config"],
-            {'RingGroups': [{'NToSelect': 1, 'Ring': [{'Node': [1]}, {'Node': [2]}]}]})
+        assert_eq(self.do_request_config()[f"{configName}Config"], {'RingGroups': [{'NToSelect': 1, 'Ring': [{'Node': [1]}, {'Node': [2]}]}]})
 
 
 class TestKiKiMRDistConfGenerateConfig1Node(KiKiMRDistConfGenerateConfigTest):

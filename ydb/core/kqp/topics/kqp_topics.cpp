@@ -104,16 +104,6 @@ void TConsumerOperations::Merge(const TConsumerOperations& rhs)
         return;
     }
 
-    if (rhs.IsKafkaApiOperation()) {
-        KafkaCommitOffset_ = rhs.KafkaCommitOffset_;
-        return;
-    }
-
-    if (rhs.IsKafkaApiOperation()) {
-        KafkaCommitOffset_ = rhs.KafkaCommitOffset_;
-        return;
-    }
-
     if (!rhs.Offsets_.Empty()) {
         for (auto& range : rhs.Offsets_) {
             AddOperationImpl(*rhs.Consumer_, range.first, range.second, rhs.GetForceCommit(), rhs.GetKillReadSession(), rhs.GetOnlyCheckCommitedToFinish(), rhs.GetReadSessionId());

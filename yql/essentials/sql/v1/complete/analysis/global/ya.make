@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    base_visitor.cpp
     column.cpp
     evaluate.cpp
     function.cpp

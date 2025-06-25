@@ -16,7 +16,7 @@ def should_be_covered(unit, filters):
     return not any(pred(unit_path) for pred in filters)
 
 
-def get_cpp_coverage_filters(unit, filters=[]):
+def get_coverage_filters(unit, filters=[]):
     # don`t calculate filters if it already was calculated
     if filters:
         return filters
@@ -36,8 +36,21 @@ def get_cpp_coverage_filters(unit, filters=[]):
 
 
 def onset_cpp_coverage_flags(unit):
-    if unit.get("CLANG_COVERAGE") == "no":
+    if unit.get("CLANG_COVERAGE") != "yes":
         return
-    filters = get_cpp_coverage_filters(unit)
+    filters = get_coverage_filters(unit)
     if should_be_covered(unit, filters):
         unit.on_setup_clang_coverage()
+
+
+def on_filter_py_coverage(unit):
+    if unit.get("PYTHON_COVERAGE") != "yes":
+        return
+
+    if unit.get("COVERAGE_FILTER_PROGRAMS") != "yes" or unit.get("CYTHON_COVERAGE") == "yes":
+        unit.on_enable_python_coverage()
+        return
+
+    filters = get_coverage_filters(unit)
+    if should_be_covered(unit, filters):
+        unit.on_enable_python_coverage()

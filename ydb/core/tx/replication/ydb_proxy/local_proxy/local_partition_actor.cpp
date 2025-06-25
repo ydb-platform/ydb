@@ -41,11 +41,15 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 
     const auto& entry = result->ResultSet.at(0);
 
-    if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
-        return;
+    if (entry.Status == TNavigate::EStatus::PathErrorUnknown) {
+        return OnFatalError(TStringBuilder() << "Discovery for all topics failed. The last error was: no path '" << Database << TopicPath << "'");
     }
 
     if (!CheckEntrySucceeded(errorMarket, entry, DoRetryDescribe())) {
+        return;
+    }
+
+    if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
         return;
     }
 

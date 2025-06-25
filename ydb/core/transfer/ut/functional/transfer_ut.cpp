@@ -845,9 +845,11 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
+        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+
         testCase.DropTopic();
 
-        testCase.CheckTransferStateError("Discovery for all topics failed. The last error was: no path 'local/Topic_");
+        testCase.CheckTransferStateError("Discovery for all topics failed. The last error was: no path '");
 
         testCase.DropTransfer();
         testCase.DropTable();
@@ -860,7 +862,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
     Y_UNIT_TEST(TransferSourceDropped_LocalTopic)
     {
-        //TransferSourceDropped(true);
+        TransferSourceDropped(true);
     }
 
     void CreateTransferSourceIsNotTopic(bool localTopic)

@@ -2629,6 +2629,135 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(read["scan_by"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(read["scan_by"][0], "Key [SomeString, SomeStrinh)");
     }
+
+    Y_UNIT_TEST(StreamLookupFailedRead) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+
+        server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_DEBUG);
+
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
+
+        InitRoot(server, sender);
+
+        std::vector<TAutoPtr<IEventHandle>> captured;
+        bool captureEvRead = true;
+        int arrivedDataCount = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::TEvTxProxySchemeCache::TEvResolveKeySetResult::EventType) {
+                if (runtime->FindActorName(ev->GetRecipientRewrite()) == "KQP_STREAM_LOOKUP_ACTOR") {
+                    if (!captureEvRead && arrivedDataCount < 3) {
+                        // don't resolve
+                        captured.push_back(ev.Release());
+                        return true;
+                    }
+                }
+            } if (ev->GetTypeRewrite() == NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType) {
+                ++arrivedDataCount;
+                Cerr << "TEST >>> arrivedDataCount: " << arrivedDataCount << Endl;
+
+                if (captured.size() > 1 && arrivedDataCount > 3) {
+                    auto resp = captured.back();
+                    captured.pop_back();
+                    runtime->Send(resp.Release());
+                }
+            } else if (ev->GetTypeRewrite() == NKqp::TEvKqpExecuter::TEvStreamData::EventType) {
+                auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+                Y_ASSERT(record.GetResultSet().rows().size() == 0);
+
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                resp->Record.SetEnough(false);
+                runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+                return true;
+            } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                if (captureEvRead) {
+                    auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                    auto resp = MakeHolder<NKikimr::TEvDataShard::TEvReadResult>();
+                    resp->Record.SetReadId(record.GetReadId());
+                    resp->Record.MutableStatus()->SetCode(Ydb::StatusIds::NOT_FOUND);
+
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+
+                    captured.push_back(ev.Release());
+
+                    captureEvRead = false;
+                    return true;
+                }
+            } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
+            }
+
+            return false;
+        };
+
+        auto createSession = [&]() {
+            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
+            auto record = reply->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            return record.GetResponse().GetSessionId();
+        };
+
+        auto createTable = [&](const TString& sessionId, const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+        };
+
+        auto sendQuery = [&](const TString& queryText) {
+            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+            ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            ev->Record.MutableRequest()->SetQuery(queryText);
+            ev->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
+
+            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
+            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                reply->Get()->Record.GetYdbStatus(),
+                Ydb::StatusIds::SUCCESS,
+                reply->Get()->Record.GetResponse().DebugString());
+        };
+
+        createTable(createSession(), R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Table1` (Key uint32, Value uint32, PRIMARY KEY(Key))
+                WITH (UNIFORM_PARTITIONS = 64, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64);
+        )");
+
+        server->GetRuntime()->SetEventFilter(captureEvents);
+
+        sendQuery(R"(
+            $data = AsList(
+                AsStruct(1u AS Key, 1u AS Value),
+                AsStruct(2147483648u AS Key, 2147483648u AS Value));
+
+            SELECT a.Value, b.Value
+            FROM AS_TABLE($data) a
+            JOIN `/Root/Table1` b
+            ON a.Key = b.Key;
+        )");
+    }
 }
 
 

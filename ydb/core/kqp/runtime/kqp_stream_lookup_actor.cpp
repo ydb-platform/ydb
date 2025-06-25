@@ -349,8 +349,11 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        ResolveShardsInProgress = false;
         CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
+        if (!ResolveShardsInProgress) {
+            return;
+        }
+        ResolveShardsInProgress = false;
         if (ev->Get()->Request->ErrorCount > 0) {
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
                 << StreamLookupWorker->GetTablePath();
@@ -533,7 +536,7 @@ private:
         CA_LOG_D("TEvSchemeCacheRequestTimeout was received, shards for table " << StreamLookupWorker->GetTablePath()
             << " was resolved: " << !!Partitioning);
 
-        if (!Partitioning) {
+        if (ResolveShardsInProgress) {
             LookupActorStateSpan.EndError("timeout exceeded");
             CA_LOG_D("Retry attempt to resolve shards for table: " << StreamLookupWorker->GetTablePath());
             ResolveShardsInProgress = false;

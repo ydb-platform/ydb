@@ -536,7 +536,7 @@ private:
         CA_LOG_D("TEvSchemeCacheRequestTimeout was received, shards for table " << StreamLookupWorker->GetTablePath()
             << " was resolved: " << !!Partitioning);
 
-        if (ResolveShardsInProgress) {
+        if (!Partitioning) {
             LookupActorStateSpan.EndError("timeout exceeded");
             CA_LOG_D("Retry attempt to resolve shards for table: " << StreamLookupWorker->GetTablePath());
             ResolveShardsInProgress = false;

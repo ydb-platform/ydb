@@ -12,7 +12,6 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/tiering/tier/object.h>
-#include <ydb/core/tx/columnshard/data_accessor/shared_metadata_accessor_cache_actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

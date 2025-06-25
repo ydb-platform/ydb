@@ -15,13 +15,49 @@
 
 namespace NSQLComplete {
 
-    TVector<TTableId> TColumnContext::TablesWithAlias(TStringBuf alias) const {
+    bool operator<(const TColumnId& lhs, const TColumnId& rhs) {
+        return std::tie(lhs.TableAlias, lhs.Name) < std::tie(rhs.TableAlias, rhs.Name);
+    }
+
+    TVector<TAliased<TTableId>> TColumnContext::TablesWithAlias(TStringBuf alias) const {
         if (alias.empty()) {
-            return TVector<TTableId>(Tables.begin(), Tables.end());
+            return TVector<TAliased<TTableId>>(Tables.begin(), Tables.end());
         }
 
         auto filtered = NFuncTools::Filter([&](const auto& x) { return x.Alias == alias; }, Tables);
-        return TVector<TTableId>(filtered.begin(), filtered.end());
+        return TVector<TAliased<TTableId>>(filtered.begin(), filtered.end());
+    }
+
+    bool TColumnContext::IsAsterisk() const {
+        return Columns.size() == 1 && Columns[0].Name == "*";
+    }
+
+    TColumnContext TColumnContext::Renamed(TStringBuf alias) && {
+        Y_ENSURE(!alias.empty());
+        for (TAliased<TTableId>& table : Tables) {
+            table.Alias = alias;
+        }
+        for (TColumnId& column : Columns) {
+            column.TableAlias = alias;
+        }
+        return *this;
+    }
+
+    TColumnContext operator|(TColumnContext lhs, TColumnContext rhs) {
+        lhs.Tables.reserve(lhs.Tables.size() + rhs.Tables.size());
+        lhs.Columns.reserve(lhs.Columns.size() + rhs.Columns.size());
+
+        std::move(rhs.Tables.begin(), rhs.Tables.end(), std::back_inserter(lhs.Tables));
+        std::move(rhs.Columns.begin(), rhs.Columns.end(), std::back_inserter(lhs.Columns));
+
+        SortUnique(lhs.Tables);
+        SortUnique(lhs.Columns);
+
+        return lhs;
+    }
+
+    TColumnContext TColumnContext::Asterisk() {
+        return {.Columns = {{.Name = "*"}}};
     }
 
     class TErrorStrategy: public antlr4::DefaultErrorStrategy {
@@ -132,8 +168,14 @@ void Out<NSQLComplete::TAliased<NSQLComplete::TTableId>>(IOutputStream& out, con
 }
 
 template <>
+void Out<NSQLComplete::TColumnId>(IOutputStream& out, const NSQLComplete::TColumnId& value) {
+    out << value.TableAlias << "." << value.Name;
+}
+
+template <>
 void Out<NSQLComplete::TColumnContext>(IOutputStream& out, const NSQLComplete::TColumnContext& value) {
     out << "TColumnContext { ";
     out << "Tables: " << JoinSeq(", ", value.Tables);
+    out << ", Columns: " << JoinSeq(", ", value.Columns);
     out << " }";
 }

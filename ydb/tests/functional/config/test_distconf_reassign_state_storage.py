@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 import logging
-import yaml
-import tempfile
-import os
 from hamcrest import assert_that, is_, has_length
 import time
 import requests
@@ -14,12 +11,10 @@ from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start, get_kv_tablet_ids, wait_tablets_state_by_id
+from ydb.tests.library.kv.helpers import get_kv_tablet_ids, wait_tablets_state_by_id
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.matchers.response import is_valid_response_with_field
-
-import ydb.public.api.protos.ydb_config_pb2 as config
 
 logger = logging.getLogger(__name__)
 

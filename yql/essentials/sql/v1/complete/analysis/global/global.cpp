@@ -95,6 +95,17 @@ namespace NSQLComplete {
         }
 
         TGlobalContext Analyze(TCompletionInput input, TEnvironment env) override {
+            TString recovered;
+            if (IsRecoverable(input)) {
+                recovered = TString(input.Text);
+
+                // - "_" is to parse `SELECT x._ FROM table`
+                //        instead of `SELECT x.FROM table`
+                recovered.insert(input.CursorPosition, "_");
+
+                input.Text = recovered;
+            }
+
             SQLv1::Sql_queryContext* sqlQuery = Parse(input.Text);
             Y_ENSURE(sqlQuery);
 
@@ -114,6 +125,17 @@ namespace NSQLComplete {
         }
 
     private:
+        bool IsRecoverable(TCompletionInput input) const {
+            static const TStringBuf prev = " ";
+            static const TStringBuf next = " .(";
+
+            TStringBuf s = input.Text;
+            size_t i = input.CursorPosition;
+
+            return (i < s.size() && prev.Contains(s[i]) || i == s.size()) &&
+                   (i > 0 /*  */ && next.Contains(s[i - 1]));
+        }
+
         SQLv1::Sql_queryContext* Parse(TStringBuf input) {
             Chars_.load(input.Data(), input.Size(), /* lenient = */ false);
             Lexer_.reset();

@@ -137,8 +137,8 @@ namespace NActors {
      */
     template<class TAwaiter>
     concept IsActorAwareAwaiter = (
-        std::bool_constant<(TAwaiter::IsActorAwareAwaiter == true)>::value ||
-        requires { typename TAwaiter::IsActorAwareAwaiter; });
+        std::bool_constant<(std::decay_t<TAwaiter>::IsActorAwareAwaiter == true)>::value ||
+        requires { typename std::decay_t<TAwaiter>::IsActorAwareAwaiter; });
 
     namespace NDetail {
 
@@ -735,7 +735,7 @@ namespace NActors {
         class TUnsafeAwaitableByReference {
         public:
             constexpr TUnsafeAwaitableByReference(TAwaitable&& awaitable) noexcept
-                : Awaitable(awaitable)
+                : Awaitable(std::forward<TAwaitable>(awaitable))
             {}
 
             constexpr decltype(auto) operator co_await() && {
@@ -746,6 +746,9 @@ namespace NActors {
             TAwaitable&& Awaitable;
         };
 
+        template<class TAwaitable>
+        TUnsafeAwaitableByReference(TAwaitable&&) -> TUnsafeAwaitableByReference<TAwaitable>;
+
         /**
          * Common bases class for promises, provides await_transform support
          */
@@ -754,14 +757,15 @@ namespace NActors {
             /**
              * Transforms awaitables which can only be awaited by value
              *
-             * Such awaitables must have a non-trivial destructor, usually
-             * cannot be moved and might hold references to temporaries created
-             * as part of a co_await expression. Their destructor will be called
-             * after any temporary we return from this method.
+             * Such awaitables usually cannot be moved and might hold references
+             * to temporaries created as part of a co_await expression. Returning
+             * a reference to itself is dangerous, but possible: it must have
+             * a non-trivial destructor, otherwise the object will be destroyed
+             * before co_await starts.
              */
             template<class TAwaitable>
             static constexpr decltype(auto) await_transform(TAwaitable awaitable)
-                requires (HasCoAwaitByValue<TAwaitable> && !std::is_trivially_destructible_v<TAwaitable>)
+                requires (HasCoAwaitByValue<TAwaitable>)
             {
                 // Note: may be a reference type, even the same reference
                 using TAwaiter = decltype(std::forward<TAwaitable>(awaitable).CoAwaitByValue());

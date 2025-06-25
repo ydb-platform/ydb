@@ -394,9 +394,9 @@ namespace NActors {
         };
 
         template<class T>
-        class TTaskGroupSinkWithGroup {
+        class TWithTaskGroupAwaiterBase {
         public:
-            TTaskGroupSinkWithGroup()
+            TWithTaskGroupAwaiterBase()
                 : Group(Sink)
             {}
 
@@ -407,16 +407,17 @@ namespace NActors {
 
         template<class T, class R>
         class TWithTaskGroupAwaiter
-            : private TTaskGroupSinkWithGroup<T> // must be above decorator
+            : private TWithTaskGroupAwaiterBase<T> // must be above decorator base
             , public TAsyncDecoratorAwaiter<R, TWithTaskGroupAwaiter<T, R>>
         {
             friend TAsyncDecoratorAwaiter<R, TWithTaskGroupAwaiter<T, R>>;
-            using TBase = TAsyncDecoratorAwaiter<R, TWithTaskGroupAwaiter<T, R>>;
+            using TBase = TWithTaskGroupAwaiterBase<T>;
+            using TDecorator = TAsyncDecoratorAwaiter<R, TWithTaskGroupAwaiter<T, R>>;
 
         public:
             template<class TCallback>
             TWithTaskGroupAwaiter(TCallback&& callback)
-                : TBase([&]() -> async<R> { return std::forward<TCallback>(callback)(this->Group); })
+                : TDecorator([&]() -> async<R> { return std::forward<TCallback>(callback)(this->Group); })
             {}
 
             TWithTaskGroupAwaiter(TWithTaskGroupAwaiter&&) = delete;
@@ -424,10 +425,14 @@ namespace NActors {
             TWithTaskGroupAwaiter& operator=(TWithTaskGroupAwaiter&&) = delete;
             TWithTaskGroupAwaiter& operator=(const TWithTaskGroupAwaiter&) = delete;
 
+            TWithTaskGroupAwaiter& CoAwaitByValue() && {
+                return *this;
+            }
+
         private:
             std::coroutine_handle<> Start() noexcept {
                 this->Sink.SetActor(this->GetActor());
-                return TBase::Start();
+                return TDecorator::Start();
             }
 
             std::coroutine_handle<> OnResume(std::coroutine_handle<> h) noexcept {

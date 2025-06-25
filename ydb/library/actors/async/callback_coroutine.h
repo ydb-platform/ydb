@@ -6,16 +6,6 @@ namespace NActors {
 
     namespace NDetail {
 
-        template<class TCallback>
-        concept IsCallbackCoroutineResumeVoid = requires(TCallback& callback) {
-            { callback() } -> std::same_as<void>;
-        };
-
-        template<class TCallback>
-        concept IsCallbackCoroutineResumeHandle = requires(TCallback& callback) {
-            { callback() } -> std::convertible_to<std::coroutine_handle<>>;
-        };
-
         struct TCallbackCoroutineResume {};
 
     } // namespace NDetail
@@ -41,14 +31,16 @@ namespace NActors {
 
                 static void await_suspend(std::coroutine_handle<promise_type> self)
                     noexcept(noexcept(self.promise()()))
-                    requires (NDetail::IsCallbackCoroutineResumeVoid<TCallback>)
+                    // Note: not a named concept for friends to work correctly
+                    requires requires { { self.promise()() } -> std::same_as<void>; }
                 {
                     self.promise()();
                 }
 
                 static std::coroutine_handle<> await_suspend(std::coroutine_handle<promise_type> self)
                     noexcept(noexcept(self.promise()()))
-                    requires (NDetail::IsCallbackCoroutineResumeHandle<TCallback>)
+                    // Note: not a named concept for friends to work correctly
+                    requires requires { { self.promise()() } -> std::convertible_to<std::coroutine_handle<>>; }
                 {
                     return self.promise()();
                 }
@@ -64,10 +56,6 @@ namespace NActors {
     public:
         constexpr TCallbackCoroutine() noexcept = default;
         constexpr TCallbackCoroutine(std::nullptr_t) noexcept {}
-
-        constexpr explicit TCallbackCoroutine(std::coroutine_handle<promise_type> handle) noexcept
-            : Handle(handle)
-        {}
 
         TCallbackCoroutine(TCallbackCoroutine&& rhs) noexcept
             : Handle(rhs.Handle)
@@ -100,6 +88,16 @@ namespace NActors {
             }
         }
 
+        constexpr std::coroutine_handle<promise_type> GetHandle() const noexcept {
+            return Handle;
+        }
+
+        constexpr std::coroutine_handle<promise_type> Release() noexcept {
+            auto h = Handle;
+            Handle = nullptr;
+            return h;
+        }
+
         constexpr explicit operator bool() const noexcept {
             return bool(Handle);
         }
@@ -108,10 +106,8 @@ namespace NActors {
             return Handle;
         }
 
-        constexpr std::coroutine_handle<promise_type> Release() noexcept {
-            auto h = Handle;
-            Handle = nullptr;
-            return h;
+        constexpr operator std::coroutine_handle<promise_type>() const noexcept {
+            return Handle;
         }
 
         TCallback& operator*() const noexcept {
@@ -144,6 +140,11 @@ namespace NActors {
         static std::coroutine_handle<> FromCallback(TCallback& callback) {
             return std::coroutine_handle<promise_type>::from_promise(static_cast<promise_type&>(callback));
         }
+
+    private:
+        constexpr explicit TCallbackCoroutine(std::coroutine_handle<promise_type> handle) noexcept
+            : Handle(handle)
+        {}
 
     private:
         std::coroutine_handle<promise_type> Handle;

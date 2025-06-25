@@ -4,15 +4,9 @@
 
 namespace NActors {
 
-    template<class T, class TDerived>
-    class TAsyncDecoratorAwaiter
-        : private NDetail::TAwaitCancelSource
-        , private NDetail::TSymmetricResumeCallback<TAsyncDecoratorAwaiter<T, TDerived>>
-        , private NDetail::TSymmetricCancelCallback<TAsyncDecoratorAwaiter<T, TDerived>, /*Lazy*/ true>
-    {
+    template<class R, class TDerived>
+    class TAsyncDecoratorAwaiter {
         friend NDetail::TAwaitCancelSource;
-        friend NDetail::TSymmetricResumeCallback<TAsyncDecoratorAwaiter<T, TDerived>>;
-        friend NDetail::TSymmetricCancelCallback<TAsyncDecoratorAwaiter<T, TDerived>, /*Lazy*/ true>;
 
     public:
         static constexpr bool IsActorAwareAwaiter = true;
@@ -22,6 +16,54 @@ namespace NActors {
             : Coroutine(std::forward<TCallback>(callback)())
         {}
 
+    private:
+        /**
+         * Base class for resume interception coroutine
+         */
+        class TResumeCallback : private NDetail::TAwaitCancelSource {
+            friend TAsyncDecoratorAwaiter;
+            friend TCallbackCoroutine<TResumeCallback>;
+
+        public:
+            TResumeCallback() = default;
+
+            IActor& GetActor() noexcept {
+                return *Self->Actor;
+            }
+
+            TAwaitCancelSource& GetAwaitCancelSource() noexcept {
+                return *this;
+            }
+
+        private:
+            std::coroutine_handle<> operator()() noexcept {
+                return Self->OnResumeCallback();
+            }
+
+        private:
+            TAsyncDecoratorAwaiter* Self = nullptr;
+        };
+
+        /**
+         * Base class for unwind interception coroutine
+         */
+        class TUnwindCallback {
+            friend TAsyncDecoratorAwaiter;
+            friend TCallbackCoroutine<TUnwindCallback>;
+
+        public:
+            TUnwindCallback() = default;
+
+        private:
+            std::coroutine_handle<> operator()() noexcept {
+                return Self->OnUnwindCallback();
+            }
+
+        private:
+            TAsyncDecoratorAwaiter* Self = nullptr;
+        };
+
+    public:
         bool await_ready() noexcept {
             return false;
         }
@@ -30,61 +72,48 @@ namespace NActors {
         std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> c) {
             TPromise& caller = c.promise();
             IActor& actor = caller.GetActor();
-            TAwaitCancelSource& source = caller.GetAwaitCancelSource();
+            NDetail::TAwaitCancelSource& source = caller.GetAwaitCancelSource();
 
             Actor = &actor;
             Continuation = c;
             Cancellation = source.GetCancellation();
 
-            if (auto h = static_cast<TDerived&>(*this).Bypass()) {
-                Coroutine.GetHandle().promise().SetContinuation(actor, source, c);
-                return h;
+            if (auto next = static_cast<TDerived&>(*this).Bypass()) {
+                Coroutine.GetHandle().promise().SetContinuation(c);
+                return next;
             }
 
-            // We want to hook early in case anything below includes async steps
-            Coroutine.GetHandle().promise().SetContinuation(actor, *this, this->GetResumeHandle());
+            ResumeProxy = MakeCallbackCoroutine<TResumeCallback>();
+            ResumeProxy->Self = this;
+
+            Coroutine.GetHandle().promise().SetContinuation(ResumeProxy.GetHandle());
 
             if (Cancellation) {
-                // Starting in a cancelled state, call decorator's Cancel to
-                // customize cancellation. It might want to return immediately,
-                // start some asybc task, or ignore caller's cancellation.
-                if (auto h = static_cast<TDerived&>(*this).Cancel()) {
-                    return h;
-                }
-            } else {
-                // Subscribe to caller's cancellation attempts
-                Cleanup = source.SetAwaiter(*this);
+                return static_cast<TDerived&>(*this).StartCancelled();
             }
 
-            // Note: assume Start may throw exceptions
+            // Subscribe to caller's cancellation attempts
+            Cleanup = source.SetAwaiter(*this);
+
+            // We start normally, unsubscribing on exceptions
             TCallCleanup callCleanup{ this };
-            auto h = static_cast<TDerived&>(*this).Start();
+            auto next = static_cast<TDerived&>(*this).Start();
             callCleanup.Cancel();
 
-            return h;
+            return next;
         }
 
         decltype(auto) await_resume() {
             Cleanup();
-            static_cast<TDerived&>(*this).OnReturn();
-            return Coroutine.GetHandle().promise().ExtractValue();
+            return static_cast<TDerived&>(*this).Return();
         }
 
     public:
         /**
          * Allows bypassing decorator
          *
-         * When Bypass returns a valid coroutine handle it will be resumed with
-         * this decorator bypassed. Return path or cancellation will not be
-         * intercepted.
-         *
-         * Examples:
-         *
-         * - GetAsyncBody(): async body starts in bypassed state
-         * - GetContinuation(): async body does not start, return to caller
-         * - GetCancellation(): async body does not start, unwind caller
-         * - Any other coroutine handle allows for async setup before
-         *   eventually resuming any handle above.
+         * When Bypass() returns a valid coroutine handle it is resumed without
+         * decoration. Return path or cancellation will not be intercepted.
          *
          * Default returns nullptr (no bypass).
          */
@@ -93,35 +122,22 @@ namespace NActors {
         }
 
         /**
-         * Allows modifying behavior when caller requests cancellation
+         * Allows modifying startup behavior when caller is already cancelled.
          *
-         * By default passes cancellation to async body.
+         * Must return a valid coroutine handle which will be resumed.
          *
-         * When calling this method manually and the returned handle is not
-         * nullptr it must be resumed either with symmetric transfer or in
-         * background. Usually this starts some cancellation work, which may
-         * eventually result in OnCancel being called, but not necessarily.
-         *
-         * Important: when scheduling this handle to execute in background it
-         * is important to remember async body may return normally before this
-         * handle is resumed, which may cause destructors to free memory where
-         * decoractor stored this handle. Care must be taken to properly wait
-         * until background resume is processed before returning to caller.
-         *
-         * Note: this method may be called between Bypass and Start when caller
-         * is cancelled already. Start will only be called when this method
-         * returns nullptr in that case.
+         * Default propagates cancellation and calls Start().
          */
-        [[nodiscard]] std::coroutine_handle<> Cancel() {
-            if (!TAwaitCancelSource::GetCancellation()) {
-                return TAwaitCancelSource::Cancel(this->GetCancelHandle());
-            } else {
-                return nullptr;
+        [[nodiscard]] std::coroutine_handle<> StartCancelled() {
+            Y_DEBUG_ABORT_UNLESS(ResumeProxy, "cannot start bypassed coroutines");
+            if (!ResumeProxy->GetCancellation()) [[likely]] {
+                ResumeProxy->SetCancellation(CreateUnwindProxy());
             }
+            return static_cast<TDerived&>(*this).Start();
         }
 
         /**
-         * Allows modifying startup behavior.
+         * Allows modifying startup behavior
          *
          * Must return a valid coroutine handle which will be resumed.
          *
@@ -131,12 +147,38 @@ namespace NActors {
          * - GetContinuation(): async body does not start, return to caller
          * - GetCancellation(): async body does not start, unwind caller
          * - Any other coroutine handle allows for async setup before
-         *   eventually resuming any handle above.
+         *   eventually resuming any handle above or calling Start().
          *
          * Default returns GetAsyncBody().
          */
         [[nodiscard]] std::coroutine_handle<> Start() noexcept {
+            Y_DEBUG_ABORT_UNLESS(ResumeProxy, "cannot start bypassed coroutines");
             return GetAsyncBody();
+        }
+
+        /**
+         * Allows modifying behavior when caller requests cancellation
+         *
+         * By default passes cancellation to the decorated async body.
+         *
+         * When calling this method manually and the returned handle is not
+         * nullptr it must be resumed either with symmetric transfer or in
+         * background. Usually this starts some cancellation work, which may
+         * eventually result in OnCancel being called, but not necessarily.
+         *
+         * Important: when scheduling the returned handle to execute in the
+         * background it is important to remember async body may return normally
+         * before such a handle is resumed, which may cause destructors to free
+         * memory where you stored it. Care must be taken to properly wait until
+         * background unwind is processed before returning to caller.
+         */
+        [[nodiscard]] std::coroutine_handle<> Cancel() {
+            Y_DEBUG_ABORT_UNLESS(ResumeProxy, "cannot cancel bypassed coroutines");
+            if (!ResumeProxy->GetCancellation()) [[likely]] {
+                return ResumeProxy->Cancel(CreateUnwindProxy());
+            } else {
+                return nullptr;
+            }
         }
 
         /**
@@ -166,10 +208,12 @@ namespace NActors {
         }
 
         /**
-         * Allows modifying behavior just before returning to caller
+         * Allows modifying the result when returning to caller
+         *
+         * Default returns the async body result.
          */
-        void OnReturn() noexcept {
-            // nothing
+        R Return() {
+            return Coroutine.GetHandle().promise().ExtractValue();
         }
 
     protected:
@@ -181,23 +225,23 @@ namespace NActors {
         }
 
         /**
-         * Returns the async callback body for use in OnStart.
+         * Returns the async body handle for returning from Bypass() or Start().
          */
-        std::coroutine_handle<> GetAsyncBody() const {
+        std::coroutine_handle<> GetAsyncBody() const noexcept {
             return Coroutine.GetHandle();
         }
 
         /**
          * Returns the normal return coroutine handle.
          */
-        std::coroutine_handle<> GetContinuation() const {
+        std::coroutine_handle<> GetContinuation() const noexcept {
             return Continuation;
         }
 
         /**
          * Returns the cancelled return coroutine handle for stack unwinding.
          */
-        std::coroutine_handle<> GetCancellation() const {
+        std::coroutine_handle<> GetCancellation() const noexcept {
             return Cancellation;
         }
 
@@ -211,11 +255,20 @@ namespace NActors {
          */
         [[nodiscard]] std::coroutine_handle<> CancelWithBypass() noexcept {
             Y_ASSERT(Cancellation);
-            if (!TAwaitCancelSource::GetCancellation()) {
-                return TAwaitCancelSource::Cancel(Cancellation);
+            Y_DEBUG_ABORT_UNLESS(ResumeProxy, "cannot cancel bypassed coroutines");
+            if (!ResumeProxy->GetCancellation()) {
+                return ResumeProxy->Cancel(Cancellation);
             } else {
                 return nullptr;
             }
+        }
+
+    private:
+        std::coroutine_handle<> CreateUnwindProxy() {
+            Y_DEBUG_ABORT_UNLESS(!UnwindProxy, "unexpected unwind proxy already allocated");
+            UnwindProxy = MakeCallbackCoroutine<TUnwindCallback>();
+            UnwindProxy->Self = this;
+            return UnwindProxy;
         }
 
     private:
@@ -224,11 +277,11 @@ namespace NActors {
             return static_cast<TDerived&>(*this).Cancel();
         }
 
-        std::coroutine_handle<> OnResumeHandle() noexcept {
+        std::coroutine_handle<> OnResumeCallback() noexcept {
             return static_cast<TDerived&>(*this).OnResume(Continuation);
         }
 
-        std::coroutine_handle<> OnCancelHandle() noexcept {
+        std::coroutine_handle<> OnUnwindCallback() noexcept {
             Coroutine.Destroy();
             return static_cast<TDerived&>(*this).OnUnwind(Cancellation);
         }
@@ -249,11 +302,14 @@ namespace NActors {
         };
 
     private:
-        async<T> Coroutine;
         IActor* Actor = nullptr;
         std::coroutine_handle<> Continuation;
         std::coroutine_handle<> Cancellation;
         NDetail::TAwaitCancelCleanup Cleanup;
+        TCallbackCoroutine<TResumeCallback> ResumeProxy;
+        TCallbackCoroutine<TUnwindCallback> UnwindProxy;
+        // Must be below proxies, so it is destroyed first
+        async<R> Coroutine;
     };
 
 } // namespace NActors

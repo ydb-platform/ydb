@@ -17,7 +17,7 @@ namespace NActors {
             static constexpr bool IsActorAwareAwaiter = true;
 
             explicit TActorSleepAwaiter(TWhen when)
-                : When{ when }
+                : When(when)
             {}
 
             TActorSleepAwaiter(const TActorSleepAwaiter&) = delete;
@@ -184,23 +184,27 @@ namespace NActors {
 
     namespace NDetail {
 
-        template<class TWhen, class T>
+        template<class TWhen, class R>
         class [[nodiscard]] TActorAsyncWithTimeoutAwaiter
-            : public TAsyncDecoratorAwaiter<T, TActorAsyncWithTimeoutAwaiter<TWhen, T>>
+            : public TAsyncDecoratorAwaiter<R, TActorAsyncWithTimeoutAwaiter<TWhen, R>>
         {
-            friend TAsyncDecoratorAwaiter<T, TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
-            using TBase = TAsyncDecoratorAwaiter<T, TActorAsyncWithTimeoutAwaiter<TWhen, T>>;
+            friend TAsyncDecoratorAwaiter<R, TActorAsyncWithTimeoutAwaiter<TWhen, R>>;
+            using TBase = TAsyncDecoratorAwaiter<R, TActorAsyncWithTimeoutAwaiter<TWhen, R>>;
 
         public:
             template<class TCallback>
             TActorAsyncWithTimeoutAwaiter(TWhen when, TCallback&& callback)
                 : TBase(std::forward<TCallback>(callback))
-                , When{ when }
+                , When(when)
             {}
 
             ~TActorAsyncWithTimeoutAwaiter() {
                 // Handle emergency cancellation (actor system shutdown)
                 Detach();
+            }
+
+            TActorAsyncWithTimeoutAwaiter& CoAwaitByValue() && noexcept {
+                return *this;
             }
 
         private:
@@ -219,7 +223,7 @@ namespace NActors {
                 Bridge->Ref(); // extra reference used by the event
                 selfId.Schedule(When, new TEvents::TEvResumeRunnable(Bridge.Get()));
 
-                return this->GetAsyncBody();
+                return TBase::Start();
             }
 
             std::coroutine_handle<> Cancel() noexcept {
@@ -257,13 +261,15 @@ namespace NActors {
                 }
             }
 
-            void OnReturn() {
+            R Return() {
                 // Make sure timer is cancelled
                 Detach();
 
                 if (ThrowException) {
                     throw TActorTimeoutException() << "operation timed out";
                 }
+
+                return TBase::Return();
             }
 
         private:
@@ -328,22 +334,22 @@ namespace NActors {
     template<IsAsyncCoroutineCallback TCallback>
     inline auto ActorWithTimeout(TDuration duration, TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)());
-        using T = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TDuration, T>(duration, std::forward<TCallback>(callback));
+        using R = TAsyncCoroutineResult<TCallbackResult>;
+        return NDetail::TActorAsyncWithTimeoutAwaiter<TDuration, R>(duration, std::forward<TCallback>(callback));
     }
 
     template<IsAsyncCoroutineCallback TCallback>
     inline auto ActorWithDeadline(TMonotonic deadline, TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)());
-        using T = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TMonotonic, T>(deadline, std::forward<TCallback>(callback));
+        using R = TAsyncCoroutineResult<TCallbackResult>;
+        return NDetail::TActorAsyncWithTimeoutAwaiter<TMonotonic, R>(deadline, std::forward<TCallback>(callback));
     }
 
     template<IsAsyncCoroutineCallback TCallback>
     inline auto ActorWithDeadline(TInstant deadline, TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)());
-        using T = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TInstant, T>(deadline, std::forward<TCallback>(callback));
+        using R = TAsyncCoroutineResult<TCallbackResult>;
+        return NDetail::TActorAsyncWithTimeoutAwaiter<TInstant, R>(deadline, std::forward<TCallback>(callback));
     }
 
 } // namespace NActors

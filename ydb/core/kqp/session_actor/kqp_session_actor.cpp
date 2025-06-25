@@ -526,7 +526,7 @@ public:
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
-        const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
+        const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperations();
         for (const auto& topic : operations.GetTopics()) {
             auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));
 

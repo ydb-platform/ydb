@@ -309,6 +309,82 @@ namespace NPDisk {
         SetupStateStorage(runtime, nodeIndex, true);
     }
 
+    namespace {
+
+        void AddReplicas(TStateStorageInfo::TRingGroup& group, const TVector<TActorId>& replicas) {
+            group.NToSelect = replicas.size();
+            group.Rings.resize(replicas.size());
+            for (size_t i = 0; i < replicas.size(); ++i) {
+                // one replica per ring
+                group.Rings[i].Replicas.push_back(replicas[i]);
+            }
+        }
+
+        TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TVector<TStateStorageInfo::TRingGroup>& ringGroups) {
+            auto info = MakeIntrusive<TStateStorageInfo>();
+            info->RingGroups = ringGroups;
+            return info;
+        }
+
+    }
+
+    TStateStorageSetupper CreateCustomStateStorageSetupper(const TVector<TStateStorageInfo::TRingGroup>& ringGroups, int replicasInRingGroup) {
+        return [=](TTestActorRuntime& runtime, ui32 nodeIndex) {
+            auto ssInfo = GenerateStateStorageInfo(ringGroups);
+            auto sbInfo = GenerateStateStorageInfo(ringGroups);
+            auto bInfo = GenerateStateStorageInfo(ringGroups);
+
+            for (size_t ringGroup = 0; ringGroup < ringGroups.size(); ++ringGroup) {
+                TVector<TActorId> ssreplicas;
+                for (int i = 0; i < replicasInRingGroup; ++i) {
+                    ssreplicas.emplace_back(MakeStateStorageReplicaID(runtime.GetNodeId(0), replicasInRingGroup * ringGroup + i));
+                }
+                AddReplicas(ssInfo->RingGroups[ringGroup], ssreplicas);
+
+                TVector<TActorId> sbreplicas;
+                for (int i = 0; i < replicasInRingGroup; ++i) {
+                    sbreplicas.emplace_back(MakeSchemeBoardReplicaID(runtime.GetNodeId(0), replicasInRingGroup * ringGroup + i));
+                }
+                AddReplicas(sbInfo->RingGroups[ringGroup], sbreplicas);
+
+                TVector<TActorId> breplicas;
+                for (int i = 0; i < replicasInRingGroup; ++i) {
+                    breplicas.emplace_back(MakeBoardReplicaID(runtime.GetNodeId(0), replicasInRingGroup * ringGroup + i));
+                }
+                AddReplicas(bInfo->RingGroups[ringGroup], breplicas);
+
+                if (nodeIndex == 0) {
+                    for (int i = 0; i < replicasInRingGroup; ++i) {
+                        runtime.AddLocalService(ssreplicas[i],
+                            TActorSetupCmd(CreateStateStorageReplica(ssInfo.Get(), replicasInRingGroup * ringGroup + i), TMailboxType::Revolving, 0),
+                            nodeIndex
+                        );
+                        runtime.AddLocalService(sbreplicas[i],
+                            TActorSetupCmd(CreateSchemeBoardReplica(sbInfo.Get(), replicasInRingGroup * ringGroup + i), TMailboxType::Revolving, 0),
+                            nodeIndex
+                        );
+                        runtime.AddLocalService(breplicas[i],
+                            TActorSetupCmd(CreateStateStorageBoardReplica(bInfo.Get(), replicasInRingGroup * ringGroup + i), TMailboxType::Revolving, 0),
+                            nodeIndex
+                        );
+                    }
+                }
+            }
+
+            const TActorId ssproxy = MakeStateStorageProxyID();
+            runtime.AddLocalService(ssproxy,
+                TActorSetupCmd(CreateStateStorageProxy(ssInfo.Get(), bInfo.Get(), sbInfo.Get()), TMailboxType::Revolving, 0),
+                nodeIndex
+            );
+        };
+    }
+
+    constexpr int ReplicasInRingGroup = 3;
+
+    TStateStorageSetupper CreateDefaultStateStorageSetupper() {
+        return CreateCustomStateStorageSetupper({ TStateStorageInfo::TRingGroup{} }, ReplicasInRingGroup);
+    }
+
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
         runtime.AddLocalService(MakeQuoterServiceID(),

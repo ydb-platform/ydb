@@ -158,7 +158,7 @@ class UploadTpchBase(UploadClusterBase):
 
     @classmethod
     def teardown_class(cls) -> None:
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'clean'])
+        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(cls.get_path()), 'clean'])
         super().teardown_class()
 
 

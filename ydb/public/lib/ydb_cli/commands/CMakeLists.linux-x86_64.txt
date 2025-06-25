@@ -46,6 +46,7 @@ target_link_libraries(clicommands PUBLIC
   kikimr_backup
   arrow-csv-table
   ydb-library-workload
+  ydb-library-yaml_config
   library-yaml_config-public
   public-lib-stat_visualization
   ydb_cli_command_base

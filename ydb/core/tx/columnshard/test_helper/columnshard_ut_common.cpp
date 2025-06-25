@@ -526,7 +526,7 @@ NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schema
 }
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
-    TTestBasicRuntime& /*runtime*/, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
+    TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
     std::vector<ui32> fields;
     ui32 idx = 1;
     for (auto&& f : schema) {
@@ -534,19 +534,11 @@ std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
         fields.emplace_back(idx++);
     }
 
-     std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema) {
-         std::vector<ui32> fields;
-         ui32 idx = 1;
-         for (auto&& f : schema) {
-             Y_UNUSED(f);
-             fields.emplace_back(idx++);
-         }
-
-         NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
-         reader.SetReplyColumnIds(fields);
-         auto rb = reader.ReadAll();
-         //UNIT_ASSERT(reader.IsCorrectlyFinished());
-         return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
-     }
+    NTxUT::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    reader.SetReplyColumnIds(fields);
+    auto rb = reader.ReadAll();
+    //UNIT_ASSERT(reader.IsCorrectlyFinished());
+    return rb ? rb : NArrow::MakeEmptyBatch(NArrow::MakeArrowSchema(schema));
 }
+
 }   // namespace NKikimr::NColumnShard

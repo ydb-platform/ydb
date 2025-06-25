@@ -20,21 +20,6 @@ namespace {
         NYql::TExprNode::TPtr MoveTable = nullptr;
     };
 
-    bool IsOlap(const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& tableSettings) {
-        if (!tableSettings) {
-            return false;
-        }
-        for (const auto& field : tableSettings.Cast()) {
-            if (field.Name().Value() == "storeType") {
-                YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
-                if (field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue() == "COLUMN") {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     bool IsCreateTableAs(
             NYql::TExprNode::TPtr root,
             NYql::TExprContext& exprCtx) {
@@ -187,8 +172,6 @@ namespace {
         const auto& insertData = writeArgs.Get(3);
         YQL_ENSURE(insertData.Ptr()->Content() != "Void");
 
-        const bool isOlap = IsOlap(settings.TableSettings);
-
         const auto pos = insertData.Ref().Pos();
 
         auto type = insertDataPtr->GetTypeAnn();
@@ -243,7 +226,7 @@ namespace {
             return std::nullopt;
         }
 
-        const bool isAtomicOperation = !isOlap;
+        const bool isAtomicOperation = true;
 
         const TString tmpTableName = TStringBuilder()
             << tableName

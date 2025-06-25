@@ -191,6 +191,7 @@ private:
             HFunc(TEvBlobCache::TEvReadBlobRangeBatch, Handle);
             HFunc(TEvBlobCache::TEvCacheBlobRange, Handle);
             HFunc(TEvBlobCache::TEvForgetBlob, Handle);
+            HFunc(TEvBlobCache::TEvUpdateMaxCacheDataSize, Handle);
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -331,6 +332,17 @@ private:
         }
 
         CachedRanges.erase(begin, end);
+    }
+
+    void Handle(TEvBlobCache::TEvUpdateMaxCacheDataSize::TPtr& ev, const TActorContext&) {
+        const i64 newMaxCacheDataSize = ev->Get()->MaxCacheDataSize;
+        if (newMaxCacheDataSize == (i64)MaxCacheDataSize) {
+            return;
+        }
+
+        LOG_S_INFO("Update max cache data size: " << newMaxCacheDataSize);
+
+        MaxCacheDataSize = newMaxCacheDataSize;
     }
 
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie,

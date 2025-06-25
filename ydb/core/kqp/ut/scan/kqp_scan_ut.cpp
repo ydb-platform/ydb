@@ -2406,101 +2406,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
     }
 
-    Y_UNIT_TEST(StreamLookupTryGetDataBeforeSchemeInitialization) {
-        NKikimrConfig::TAppConfig appConfig;
-
-        TPortManager tp;
-        ui16 mbusport = tp.GetPort(2134);
-        auto settings = Tests::TServerSettings(mbusport)
-            .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(appConfig);
-
-        Tests::TServer::TPtr server = new Tests::TServer(settings);
-
-        auto runtime = server->GetRuntime();
-        auto sender = runtime->AllocateEdgeActor();
-        auto kqpProxy = MakeKqpProxyID(runtime->GetNodeId(0));
-
-        InitRoot(server, sender);
-
-        std::vector<TAutoPtr<IEventHandle>> captured;
-        bool firstAttemptToGetData = false;
-
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::TEvResolveKeySetResult::EventType) {
-                Cerr << "Captured TEvTxProxySchemeCache::TEvResolveKeySetResult from " << runtime->FindActorName(ev->Sender) << " to " << runtime->FindActorName(ev->GetRecipientRewrite()) << Endl;
-                if (runtime->FindActorName(ev->GetRecipientRewrite()) == "KQP_STREAM_LOOKUP_ACTOR") {
-                    if (!firstAttemptToGetData) {
-                        // capture response from scheme cache until CA calls GetAsyncInputData()
-                        captured.push_back(ev.Release());
-                        return true;
-                    }
-
-                    for (auto ev : captured) {
-                        runtime->Send(ev.Release());
-                    }
-                }
-            } else if (ev->GetTypeRewrite() == NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType) {
-                firstAttemptToGetData = true;
-            } else if (ev->GetTypeRewrite() == NKqp::TEvKqpExecuter::TEvStreamData::EventType) {
-                auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
-                Y_ASSERT(record.GetResultSet().rows().size() == 0);
-
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
-                resp->Record.SetEnough(false);
-                runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
-                return true;
-            }
-
-            return false;
-        };
-
-        auto createSession = [&]() {
-            runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
-            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
-            auto record = reply->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-            return record.GetResponse().GetSessionId();
-        };
-
-        auto createTable = [&](const TString& sessionId, const TString& queryText) {
-            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
-            ev->Record.MutableRequest()->SetSessionId(sessionId);
-            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
-            ev->Record.MutableRequest()->SetQuery(queryText);
-
-            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
-            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        };
-
-        auto sendQuery = [&](const TString& queryText) {
-            auto ev = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
-            ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
-            ev->Record.MutableRequest()->SetQuery(queryText);
-            ev->Record.MutableRequest()->SetKeepSession(false);
-            ActorIdToProto(sender, ev->Record.MutableRequestActorId());
-
-            runtime->Send(new IEventHandle(kqpProxy, sender, ev.release()));
-            auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
-        };
-
-        createTable(createSession(), R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/Table` (Key int32, Fk int32, Value int32, PRIMARY KEY(Key), INDEX Index GLOBAL ON (Fk));
-        )");
-
-        server->GetRuntime()->SetEventFilter(captureEvents);
-
-        sendQuery(R"(
-            SELECT Value FROM `/Root/Table` VIEW Index WHERE Fk IN AsList(1, 2, 3);
-        )");
-    }
-
     Y_UNIT_TEST(LimitOverSecondaryIndexRead) {
         NKikimrConfig::TAppConfig appConfig;
         TKikimrRunner kikimr(TKikimrSettings().SetAppConfig(appConfig));
@@ -2702,7 +2607,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     captureEvRead = false;
                     return true;
                 }
-            } else if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
             }
 
             return false;

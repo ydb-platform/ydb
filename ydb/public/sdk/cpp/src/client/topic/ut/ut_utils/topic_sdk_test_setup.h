@@ -20,11 +20,10 @@ public:
                      std::optional<std::size_t> maxPartitionCount = std::nullopt,
                      const TDuration retention = TDuration::Hours(1),
                      bool important = false) override;
-
     void CreateTopicWithAutoscale(const std::string& name = TEST_TOPIC,
                                   const std::string& consumer = TEST_CONSUMER,
                                   std::size_t partitionCount = 1,
-                                  std::optional<std::size_t> maxPartitionCount = std::nullopt);
+                                  std::size_t maxPartitionCount = 100);
 
     TConsumerDescription DescribeConsumer(const std::string& name = TEST_TOPIC,
                                           const std::string& consumer = TEST_CONSUMER);
@@ -51,6 +50,8 @@ public:
 
     std::string GetEndpoint() const override;
     std::string GetDatabase() const override;
+
+    std::string GetFullTopicPath() const;
 
     std::vector<std::uint32_t> GetNodeIds() override;
     std::uint16_t GetPort() const override;

@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         auto firstGenerationId = getPartitionGeneration();
 
-        setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
+        setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
 
         while (firstGenerationId == getPartitionGeneration()) {
             Sleep(TDuration::MilliSeconds(100));
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         auto firstGenerationId = getPartitionGeneration();
 
-        setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
+        setup.GetServer().KillTopicPqrbTablet(setup.GetFullTopicPath());
 
         while (firstGenerationId == getPartitionGeneration()) {
             Sleep(TDuration::MilliSeconds(100));

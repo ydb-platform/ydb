@@ -20,7 +20,7 @@ using namespace NKikimr::NPQ::NTest;
 Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     void SimpleTest(SdkVersion sdk, bool autoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale();
 
         TTopicClient client = setup.MakeClient();
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void ReadingAfterSplitTest(SdkVersion sdk, bool autoscaleAwareSDK, bool autoCommit) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale();
 
         TTopicClient client = setup.MakeClient();
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void ReadingAfterSplitTest_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale();
 
         TTopicClient client = setup.MakeClient();
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void PartitionSplit_oldSDK(SdkVersion sdk) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionSplit_AutoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void PartitionSplit_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
 
     void PartitionMerge_PreferedPartition(SdkVersion sdk, bool autoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void PartitionSplit_ReadEmptyPartitions(SdkVersion sdk, bool autoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void PartitionSplit_ReadNotEmptyPartitions(SdkVersion sdk) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -489,7 +489,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionSplit_ReadNotEmptyPartitions_AutoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void PartitionSplit_ManySession(SdkVersion sdk) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionSplit_ManySession_AutoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -595,7 +595,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionSplit_ManySession_existed_AutoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -624,7 +624,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(ControlPlane_CreateAlterDescribe) {
         auto autoscalingTestTopic = "autoscalit-topic";
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         TTopicClient client = setup.MakeClient();
 
         auto minParts = 5;
@@ -696,7 +696,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     Y_UNIT_TEST(ControlPlane_DisableAutoPartitioning) {
         auto topicName = "autoscalit-topic";
 
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         TTopicClient client = setup.MakeClient();
 
         {
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     Y_UNIT_TEST(ControlPlane_BackCompatibility) {
         auto topicName = "back-compatibility-test";
 
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         TTopicClient client = setup.MakeClient();
 
         {
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     Y_UNIT_TEST(ControlPlane_PauseAutoPartitioning) {
         auto topicName = "autoscalit-topic";
 
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         TTopicClient client = setup.MakeClient();
 
         {
@@ -812,7 +812,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
     Y_UNIT_TEST(ControlPlane_AutoscalingWithStorageSizeRetention) {
         auto autoscalingTestTopic = "autoscalit-topic";
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         TTopicClient client = setup.MakeClient();
 
         TCreateTopicSettings createSettings;
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         TTopicClient client = setup.MakeClient();
 
         TCreateTopicSettings createSettings;
@@ -896,7 +896,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         TTopicClient client = setup.MakeClient();
 
         TCreateTopicSettings createSettings;
@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(WithDir_PartitionSplit_AutosplitByLoad) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(CDC_PartitionSplit_AutosplitByLoad) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
@@ -1045,7 +1045,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ControlPlane_CDC) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto client = setup.MakeClient();
@@ -1103,7 +1103,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ControlPlane_CDC_Enable) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto client = setup.MakeClient();
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ControlPlane_CDC_Disable) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
         auto client = setup.MakeClient();
@@ -1189,7 +1189,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(BalancingAfterSplit_sessionsWithPartition) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 1, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -1229,7 +1229,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     Y_UNIT_TEST(ReBalancingAfterSplit_sessionsWithPartition) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale(TEST_TOPIC, TEST_CONSUMER, 2, 100);
 
         TTopicClient client = setup.MakeClient();
@@ -1357,7 +1357,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
     }
 
     void ReadFromTimestamp(SdkVersion sdk, bool autoscaleAwareSDK) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopicWithAutoscale();
 
         TTopicClient client = setup.MakeClient();

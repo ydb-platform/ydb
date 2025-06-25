@@ -28,10 +28,6 @@ void TTopicTestFixture::SetUp() {
     consumerBuilder << testInfo->test_suite_name() << "-" << testInfo->name() << "-";
     ConsumerPrefix_ = consumerBuilder.str();
 
-    // std::cerr << "TopicPrefix: " << TopicPrefix_ << std::endl
-    //     << "ConsumerPrefix: " << ConsumerPrefix_ << std::endl
-    //     << "Database: " << GetDatabase() << std::endl;
-
     client.DropTopic(GetTopicPath()).GetValueSync();
     CreateTopic();
 }

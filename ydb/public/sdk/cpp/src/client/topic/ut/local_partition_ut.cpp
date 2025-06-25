@@ -71,7 +71,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
             for (size_t i = 1; i <= 10; ++i) {
                 std::cerr << "=== Restart attempt " << i << std::endl;
-                setup->GetServer().KillTopicPqTablets(setup->GetTopicPath());
+                setup->GetServer().KillTopicPqTablets(setup->GetFullTopicPath());
                 WriteMessage(*setup, *client);
                 ReadMessage(*setup, *client, i);
             }
@@ -98,7 +98,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
             retryPolicy->ExpectBreakDown();
             auto writeSession = client.CreateSimpleBlockingWriteSession(sessionSettings);
             UNIT_ASSERT(writeSession->Write("message"));
-            setup->GetServer().KillTopicPqTablets(setup->GetTopicPath());
+            setup->GetServer().KillTopicPqTablets(setup->GetFullTopicPath());
             retryPolicy->WaitForRepairSync();
             writeSession->Close();
 

@@ -19,7 +19,7 @@ using namespace NKikimr::NPQ::NTest;
 Y_UNIT_TEST_SUITE(Balancing) {
 
     void Simple(SdkVersion sdk) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
 
         auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk });
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
 
     void ManyTopics(SdkVersion sdk) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
         setup.CreateTopic("other-test-topic", TEST_CONSUMER, 10);
 

@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto res = session->Write(messageBase);
             UNIT_ASSERT(res);
             if (i % 10 == 0) {
-                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
             }
         }
         session->Close();

@@ -20,18 +20,18 @@ TTopicSdkTestSetup::TTopicSdkTestSetup(const std::string& testCaseName, const NK
     }
 }
 
-void TTopicSdkTestSetup::CreateTopicWithAutoscale(const std::string& path,
+void TTopicSdkTestSetup::CreateTopicWithAutoscale(const std::string& name,
                                                   const std::string& consumer,
                                                   std::size_t partitionCount,
-                                                  std::optional<std::size_t> maxPartitionCount) {
-    CreateTopic(path, consumer, partitionCount, maxPartitionCount);
+                                                  std::size_t maxPartitionCount) {
+    CreateTopic(name, consumer, partitionCount, maxPartitionCount);
 }
 
-void TTopicSdkTestSetup::CreateTopic(const std::string& path, const std::string& consumer,
+void TTopicSdkTestSetup::CreateTopic(const std::string& name, const std::string& consumer,
                                      std::size_t partitionCount, std::optional<std::size_t> maxPartitionCount,
                                      const TDuration retention, bool important)
 {
-    ITopicTestSetup::CreateTopic(path, consumer, partitionCount, maxPartitionCount, retention, important);
+    ITopicTestSetup::CreateTopic(name, consumer, partitionCount, maxPartitionCount, retention, important);
 
     Server_.WaitInit(GetTopicPath());
 }
@@ -146,6 +146,10 @@ std::string TTopicSdkTestSetup::GetEndpoint() const {
 
 std::string TTopicSdkTestSetup::GetDatabase() const {
     return Database_;
+}
+
+std::string TTopicSdkTestSetup::GetFullTopicPath() const {
+    return GetDatabase() + "/" + GetTopicPath();
 }
 
 std::vector<std::uint32_t> TTopicSdkTestSetup::GetNodeIds() {

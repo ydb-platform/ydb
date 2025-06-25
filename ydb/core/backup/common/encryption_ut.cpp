@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         size_t blockSizePos = fileData.Size() - 20 /* last block with MAC */ - 16 /* MAC */ - srcText.size() - 4 /* sizeof(size) */;
         UNIT_ASSERT_LT(blockSizePos, fileData.Size() - 4);
         uint32_t* size = reinterpret_cast<uint32_t*>(fileData.Data() + blockSizePos);
-        *size = htonl(50_MB);
+        *size = htonl(51_MB);
         fileData.Resize(fileData.Size() + 4);
         {
             TEncryptedFileDeserializer deserializer(Key32);

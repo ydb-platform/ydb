@@ -5223,7 +5223,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                         TPath incrBackupTableResolvedPath = TPath::Resolve(incrBackupTablePath, Self);
                                         if (incrBackupTableResolvedPath.IsResolved() && Self->PathsById.contains(incrBackupTableResolvedPath.Base()->PathId)) {
                                             auto backupTablePathElement = Self->PathsById.at(incrBackupTableResolvedPath.Base()->PathId);
-                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
+                                            backupTablePathElement->PathState = TPathElement::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
                                         }
                                     }
                                 }

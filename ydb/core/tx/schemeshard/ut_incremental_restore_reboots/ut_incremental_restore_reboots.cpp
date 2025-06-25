@@ -215,6 +215,182 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
         Cerr << "Backup table trimmed name reconstruction verification completed successfully for regular restore" << Endl;
     }
 
+    // Helper function to verify path states after reboot for incremental restore operations (with both full and incremental backups)
+    void VerifyIncrementalPathStatesAfterReboot(TTestActorRuntime& runtime, const TVector<TString>& targetTables, 
+                                                 const TString& collectionName) {
+        Cerr << "Verifying path states after reboot for incremental restore operation..." << Endl;
+        
+        // Check target table states - they should be in EPathStateIncomingIncrementalRestore during operation
+        // or EPathStateNoChanges after completion
+        for (const auto& tableName : targetTables) {
+            auto targetTableDesc = DescribePath(runtime, TStringBuilder() << "/MyRoot/" << tableName);
+            if (targetTableDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist) {
+                auto targetState = targetTableDesc.GetPathDescription().GetSelf().GetPathState();
+                Cerr << "Target table '" << tableName << "' state: " << NKikimrSchemeOp::EPathState_Name(targetState) << Endl;
+                
+                bool validState = (targetState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore) ||
+                                 (targetState == NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+                UNIT_ASSERT_C(validState,
+                    TStringBuilder() << "Target table '" << tableName << "' should be in EPathStateIncomingIncrementalRestore or EPathStateNoChanges state, but got: " 
+                                   << NKikimrSchemeOp::EPathState_Name(targetState));
+            }
+        }
+
+        // Check backup collection state - should be in EPathStateOutgoingIncrementalRestore during operation
+        auto backupCollectionDesc = DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName);
+        if (backupCollectionDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist) {
+            auto collectionState = backupCollectionDesc.GetPathDescription().GetSelf().GetPathState();
+            Cerr << "Backup collection '" << collectionName << "' state: " << NKikimrSchemeOp::EPathState_Name(collectionState) << Endl;
+            
+            bool validState = (collectionState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore) ||
+                             (collectionState == NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+            UNIT_ASSERT_C(validState,
+                TStringBuilder() << "Backup collection '" << collectionName << "' should be in valid state, but got: " 
+                               << NKikimrSchemeOp::EPathState_Name(collectionState));
+        }
+    }
+
+    // Helper function to verify backup table path states for incremental restore operations (both full and incremental)
+    void VerifyIncrementalBackupTablePathStates(TTestActorRuntime& runtime, const TString& collectionName, 
+                                                 const TVector<TString>& tableNames) {
+        Cerr << "Verifying backup table path states for incremental restore operation in collection: " << collectionName << Endl;
+        
+        // Verify full backup table states (_full suffix)
+        TString fullBackupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full";
+        for (const auto& tableName : tableNames) {
+            TString fullBackupTablePath = TStringBuilder() << fullBackupPath << "/" << tableName;
+            auto desc = DescribePath(runtime, fullBackupTablePath);
+            
+            if (desc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist) {
+                auto state = desc.GetPathDescription().GetSelf().GetPathState();
+                Cerr << "Full backup table '" << fullBackupTablePath << "' state: " << NKikimrSchemeOp::EPathState_Name(state) << Endl;
+                
+                // Full backup tables should always be in EPathStateNoChanges at the end, regardless of incremental backups
+                // They transition to this state after the operation completes
+                bool validState = (state == NKikimrSchemeOp::EPathState::EPathStateNoChanges);
+                UNIT_ASSERT_C(validState,
+                    TStringBuilder() << "Full backup table '" << fullBackupTablePath 
+                                   << "' should be in EPathStateNoChanges state (operation completed), but got: " 
+                                   << NKikimrSchemeOp::EPathState_Name(state));
+            }
+        }
+
+        // Verify incremental backup table states (_incremental suffix) - THIS IS THE KEY TEST!
+        TString incrementalBackupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_incremental";
+        for (const auto& tableName : tableNames) {
+            TString incrementalBackupTablePath = TStringBuilder() << incrementalBackupPath << "/" << tableName;
+            auto desc = DescribePath(runtime, incrementalBackupTablePath);
+            
+            if (desc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist) {
+                auto state = desc.GetPathDescription().GetSelf().GetPathState();
+                Cerr << "Incremental backup table '" << incrementalBackupTablePath << "' state: " << NKikimrSchemeOp::EPathState_Name(state) << Endl;
+                
+                // This is the critical test - incremental backup tables should preserve their EPathStateAwaitingOutgoingIncrementalRestore state
+                // throughout the incremental restore workflow, even after operation completion
+                bool validState = (state == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore);
+                UNIT_ASSERT_C(validState,
+                    TStringBuilder() << "Incremental backup table '" << incrementalBackupTablePath 
+                                   << "' should be in EPathStateAwaitingOutgoingIncrementalRestore state (this tests trimmed name reconstruction), but got: " 
+                                   << NKikimrSchemeOp::EPathState_Name(state));
+            } else {
+                UNIT_ASSERT_C(false, TStringBuilder() << "Incremental backup table '" << incrementalBackupTablePath << "' should exist for this test");
+            }
+        }
+    }
+
+    // Helper function to verify that incremental backup table trimmed name reconstruction works correctly
+    void VerifyIncrementalBackupTableTrimmedNameReconstruction(TTestActorRuntime& runtime, const TString& collectionName, 
+                                                                const TVector<TString>& tableNames) {
+        Cerr << "Verifying incremental backup table trimmed name reconstruction in collection: " << collectionName << Endl;
+        
+        // Test the trimmed name pattern for incremental restore operations:
+        // Full backup: backup_001_full (trimmed name: backup_001, suffix: _full)  
+        // Incremental backup: backup_001_incremental (trimmed name: backup_001, suffix: _incremental)
+        // Both should be reconstructed from the same trimmed name "backup_001"
+        
+        // Verify that both full and incremental backup paths exist
+        auto fullBackupDesc = DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full");
+        UNIT_ASSERT_C(fullBackupDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist,
+            "Full backup directory should exist for incremental trimmed name reconstruction test");
+            
+        auto incrementalBackupDesc = DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_incremental");
+        UNIT_ASSERT_C(incrementalBackupDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist,
+            "Incremental backup directory should exist for incremental trimmed name reconstruction test");
+        
+        // Verify table paths within both backup directories
+        for (const auto& tableName : tableNames) {
+            auto fullTableDesc = DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full/" << tableName);
+            UNIT_ASSERT_C(fullTableDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist,
+                TStringBuilder() << "Full backup table '" << tableName << "' should exist for incremental trimmed name test");
+                
+            auto incrementalTableDesc = DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_incremental/" << tableName);
+            UNIT_ASSERT_C(incrementalTableDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist,
+                TStringBuilder() << "Incremental backup table '" << tableName << "' should exist for incremental trimmed name test");
+        }
+        
+        Cerr << "Incremental backup table trimmed name reconstruction verification completed successfully" << Endl;
+    }
+
+    // Helper function to create a comprehensive backup scenario with both full AND incremental backups
+    // This tests the trimmed name reconstruction logic for incremental backup tables
+    void CreateIncrementalBackupScenario(TTestActorRuntime& runtime, TTestEnv& env, ui64& txId, 
+                                          const TString& collectionName, const TVector<TString>& tableNames) {
+        // Create backup collection
+        TString collectionSettings = TStringBuilder() << R"(
+            Name: ")" << collectionName << R"("
+            ExplicitEntryList {)";
+        for (const auto& tableName : tableNames) {
+            collectionSettings += TStringBuilder() << R"(
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/)" << tableName << R"("
+                })";
+        }
+        collectionSettings += R"(
+            }
+            Cluster: {}
+        )";
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create BOTH full and incremental backup directories and table backups
+        // This tests the trimmed name reconstruction logic: trimmed name "backup_001" should create both:
+        // - backup_001_full (full backup tables)  
+        // - backup_001_incremental (incremental backup tables)
+        
+        // Create full backup directory and tables
+        TestMkDir(runtime, ++txId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, "backup_001_full");
+        env.TestWaitNotification(runtime, txId);
+        
+        for (const auto& tableName : tableNames) {
+            AsyncCreateTable(runtime, ++txId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full", 
+                TStringBuilder() << R"(
+                    Name: ")" << tableName << R"("
+                    Columns { Name: "key"   Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Create incremental backup directory and tables  
+        TestMkDir(runtime, ++txId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, "backup_001_incremental");
+        env.TestWaitNotification(runtime, txId);
+        
+        for (const auto& tableName : tableNames) {
+            AsyncCreateTable(runtime, ++txId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_incremental", 
+                TStringBuilder() << R"(
+                    Name: ")" << tableName << R"("
+                    Columns { Name: "key"   Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    Columns { Name: "incremental_data" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )");
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
     Y_UNIT_TEST(BasicIncrementalRestoreWithReboots) {
         TTestWithReboots t;
         t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
@@ -652,6 +828,248 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             }
             
             Cerr << "Backup table path state restoration after multiple reboots test completed successfully" << Endl;
+        });
+    }
+
+    Y_UNIT_TEST(IncrementalBackupTablePathStatesWithReboots) {
+        TTestWithReboots t;
+        t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            // Setup backup infrastructure
+            TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            TestMkDir(runtime, ++t.TxId, "/MyRoot/.backups", "collections");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            // Create incremental backup scenario with BOTH full and incremental backup tables
+            // This tests the critical trimmed name reconstruction logic: "backup_001" -> "backup_001_full" + "backup_001_incremental"
+            CreateIncrementalBackupScenario(runtime, *t.TestEnv, t.TxId, "IncrementalRestoreCollection", 
+                                          {"IncrementalTable1", "IncrementalTable2"});
+
+            // Verify both backup directories exist before starting restore
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/IncrementalRestoreCollection"), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                });
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/IncrementalRestoreCollection/backup_001_full"), {
+                    NLs::PathExist,
+                });
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/IncrementalRestoreCollection/backup_001_incremental"), {
+                    NLs::PathExist,
+                });
+            }
+
+            // Execute incremental restore operation
+            TString restoreSettings = R"(
+                Name: "IncrementalRestoreCollection"
+            )";
+            TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections/", restoreSettings);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            // THE CRITICAL TEST: Verify that incremental backup table path states are correctly preserved after reboot
+            {
+                TInactiveZone inactive(activeZone);
+                
+                // Verify that the target tables were created  
+                for (const auto& tableName : TVector<TString>{"IncrementalTable1", "IncrementalTable2"}) {
+                    TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/" << tableName), {NLs::PathExist});
+                }
+                
+                // Verify operation persisted in database (operations may be cleaned up after completion)
+                TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+                VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, false);
+                
+                // CRITICAL: Verify path states for incremental restore operation
+                VerifyIncrementalPathStatesAfterReboot(runtime, {"IncrementalTable1", "IncrementalTable2"}, "IncrementalRestoreCollection");
+                
+                // CRITICAL: Verify backup table path states for BOTH full and incremental backup tables
+                // This tests that the trimmed name reconstruction logic correctly sets path states for incremental backup tables
+                VerifyIncrementalBackupTablePathStates(runtime, "IncrementalRestoreCollection", {"IncrementalTable1", "IncrementalTable2"});
+                
+                // CRITICAL: Verify trimmed name reconstruction works for incremental backups
+                VerifyIncrementalBackupTableTrimmedNameReconstruction(runtime, "IncrementalRestoreCollection", {"IncrementalTable1", "IncrementalTable2"});
+                
+                Cerr << "*** CRITICAL TEST PASSED: Incremental backup table path states correctly preserved after reboot ***" << Endl;
+                Cerr << "*** This verifies the trimmed name reconstruction logic: backup_001 -> backup_001_full + backup_001_incremental ***" << Endl;
+            }
+        });
+    }
+
+    Y_UNIT_TEST(MultipleIncrementalBackupSnapshots) {
+        TTestWithReboots t;
+        t.EnvOpts = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            // Setup backup infrastructure
+            TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            TestMkDir(runtime, ++t.TxId, "/MyRoot/.backups", "collections");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            // Setup test data
+            TString collectionName = "MultiSnapshotCollection";
+            TVector<TString> tableNames = {"SnapshotTable1", "SnapshotTable2", "SnapshotTable3"}; // 3 tables per snapshot
+            
+            // Note: We do NOT create source tables here because restore operation will create them
+            // The backup collection references them in ExplicitEntryList, but they don't need to exist beforehand
+            
+            // STEP 1: Create backup collection that references the source tables (but these don't need to exist yet)
+            TString collectionSettings = TStringBuilder() << R"(
+                Name: ")" << collectionName << R"("
+                ExplicitEntryList {)";
+            for (const auto& tableName : tableNames) {
+                collectionSettings += TStringBuilder() << R"(
+                    Entries {
+                        Type: ETypeTable
+                        Path: "/MyRoot/)" << tableName << R"("
+                    })";
+            }
+            collectionSettings += R"(
+                }
+                Cluster: {}
+            )";
+
+            TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections/", collectionSettings);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            
+            // STEP 2: Create full backup directory and tables (required for incremental restore)
+            TestMkDir(runtime, ++t.TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, "backup_001_full");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            
+            for (const auto& tableName : tableNames) {
+                AsyncCreateTable(runtime, ++t.TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full", 
+                    TStringBuilder() << R"(
+                        Name: ")" << tableName << R"("
+                        Columns { Name: "key"   Type: "Uint32" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            
+            // STEP 3: Create multiple incremental backup snapshots: backup_001_incremental, backup_002_incremental, backup_003_incremental
+            // This tests the trimmed name reconstruction logic with multiple incremental snapshots
+            for (ui32 snapshotNum = 1; snapshotNum <= 3; ++snapshotNum) {
+                TString snapshotName = TStringBuilder() << "backup_" << Sprintf("%03d", snapshotNum) << "_incremental";
+                
+                // Create incremental backup directory
+                TestMkDir(runtime, ++t.TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, snapshotName);
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                
+                // Create tables in this incremental backup snapshot (these will be used during incremental restore)
+                for (const auto& tableName : tableNames) {
+                    AsyncCreateTable(runtime, ++t.TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/" << snapshotName, 
+                        TStringBuilder() << R"(
+                            Name: ")" << tableName << R"("
+                            Columns { Name: "key"   Type: "Uint32" }
+                            Columns { Name: "value" Type: "Utf8" }
+                            Columns { Name: "snapshot_data_)" << snapshotNum << R"(" Type: "Utf8" }
+                            KeyColumnNames: ["key"]
+                        )");
+                    t.TestEnv->TestWaitNotification(runtime, t.TxId);
+                }
+                
+                Cerr << "Created incremental backup snapshot: " << snapshotName << " with " << tableNames.size() << " tables" << Endl;
+            }
+
+            // STEP 4: Verify all backup structures exist before starting restore
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                });
+                
+                // Note: We don't verify source tables here since we didn't create them
+                // The restore operation will create them as target tables
+                
+                // Verify full backup directory and tables exist
+                TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full"), {NLs::PathExist});
+                for (const auto& tableName : tableNames) {
+                    TestDescribeResult(DescribePath(runtime, TStringBuilder() 
+                        << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full/" << tableName), {NLs::PathExist});
+                }
+                
+                // Verify all 3 incremental backup directories exist
+                for (ui32 snapshotNum = 1; snapshotNum <= 3; ++snapshotNum) {
+                    TString snapshotName = TStringBuilder() << "backup_" << Sprintf("%03d", snapshotNum) << "_incremental";
+                    TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/" << snapshotName), {
+                        NLs::PathExist,
+                    });
+                    
+                    // Verify all table paths exist in each incremental backup directory
+                    for (const auto& tableName : tableNames) {
+                        TestDescribeResult(DescribePath(runtime, TStringBuilder() 
+                            << "/MyRoot/.backups/collections/" << collectionName << "/" << snapshotName << "/" << tableName), {NLs::PathExist});
+                    }
+                }
+            }
+
+            // Execute incremental restore operation
+            TString restoreSettings = TStringBuilder() << R"(
+                Name: ")" << collectionName << R"("
+            )";
+            TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections/", restoreSettings);
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            // THE CRITICAL TEST: Verify that ALL incremental backup snapshots maintain their path states after reboot
+            {
+                TInactiveZone inactive(activeZone);
+                
+                // Verify that target tables were created in the destination (this verifies the restore succeeded)
+                for (const auto& tableName : tableNames) {
+                    TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/" << tableName), {NLs::PathExist});
+                    Cerr << "Successfully verified target table created: " << tableName << Endl;
+                }
+                
+                // Verify operation persisted in database (operations may be cleaned up after completion)
+                TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+                VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, false);
+                
+                // CRITICAL: Verify path states for ALL incremental backup snapshots
+                // Each incremental backup table should be in EPathStateAwaitingOutgoingIncrementalRestore
+                for (ui32 snapshotNum = 1; snapshotNum <= 3; ++snapshotNum) {
+                    TString snapshotName = TStringBuilder() << "backup_" << Sprintf("%03d", snapshotNum) << "_incremental";
+                    TString incrementalBackupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/" << snapshotName;
+                    
+                    for (const auto& tableName : tableNames) {
+                        TString incrementalBackupTablePath = TStringBuilder() << incrementalBackupPath << "/" << tableName;
+                        auto desc = DescribePath(runtime, incrementalBackupTablePath);
+                        
+                        UNIT_ASSERT_C(desc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist,
+                            TStringBuilder() << "Incremental backup table '" << incrementalBackupTablePath << "' should exist");
+                        
+                        auto state = desc.GetPathDescription().GetSelf().GetPathState();
+                        UNIT_ASSERT_C(state == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore,
+                            TStringBuilder() << "Incremental backup table '" << incrementalBackupTablePath 
+                                           << "' should be in EPathStateAwaitingOutgoingIncrementalRestore state, but got: " 
+                                           << NKikimrSchemeOp::EPathState_Name(state));
+                        
+                        Cerr << "✓ Verified incremental backup table '" << snapshotName << "/" << tableName << "' has correct state: " 
+                             << NKikimrSchemeOp::EPathState_Name(state) << Endl;
+                    }
+                }
+                
+                // Additional verification: Test trimmed name reconstruction for multiple snapshots
+                // The trimmed names would be: backup_001, backup_002, backup_003
+                // Each should reconstruct to: backup_XXX_incremental
+                for (ui32 snapshotNum = 1; snapshotNum <= 3; ++snapshotNum) {
+                    TString trimmedName = TStringBuilder() << "backup_" << Sprintf("%03d", snapshotNum);
+                    TString incrementalName = TStringBuilder() << trimmedName << "_incremental";
+                    
+                    auto incrementalDesc = DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/" << incrementalName);
+                    UNIT_ASSERT_C(incrementalDesc.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist,
+                        TStringBuilder() << "Incremental backup directory '" << incrementalName << "' should exist for trimmed name '" << trimmedName << "'");
+                    
+                    Cerr << "✓ Verified trimmed name reconstruction: " << trimmedName << " -> " << incrementalName << Endl;
+                }
+                
+                Cerr << "*** CRITICAL TEST PASSED: Multiple incremental backup snapshots (3 snapshots × 3 tables = 9 total incremental backup tables) path states correctly preserved after reboot ***" << Endl;
+                Cerr << "*** This verifies the trimmed name reconstruction logic works correctly for multiple incremental snapshots with multiple tables ***" << Endl;
+                Cerr << "*** Confirmed: backup_001 -> backup_001_incremental (3 tables), backup_002 -> backup_002_incremental (3 tables), backup_003 -> backup_003_incremental (3 tables) ***" << Endl;
+            }
         });
     }
 }

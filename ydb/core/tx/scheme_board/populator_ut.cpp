@@ -208,42 +208,11 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         return CreateCustomStateStorageSetupper({ TStateStorageInfo::TRingGroup{} });
     }
 
-    void AddDomain(
-        TTestActorRuntime& runtime,
-        TAppPrepare& app,
-        const TString& name,
-        ui32 domainUid,
-        ui64 hiveTabletId,
-        ui64 schemeshardTabletId
-    ) {
-        app.ClearDomainsAndHive();
-        ui32 planResolution = 50;
-        auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
-            name, domainUid, schemeshardTabletId,
-            planResolution,
-            TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(1)},
-            TVector<ui64>{},
-            TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(1)},
-            DefaultPoolKinds()
-        );
-
-        TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
-        ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());
-        runtime.SetTxAllocatorTabletIds(ids);
-
-        app.AddDomain(domain.Release());
-        app.AddHive(hiveTabletId);
-    }
-
     void SetupRuntime(TTestActorRuntime& runtime, const TStateStorageSetupper& setupStateStorage = CreateDefaultStateStorageSetupper()) {
         for (ui32 i : xrange(runtime.GetNodeCount())) {
             setupStateStorage(runtime, i);
         }
-
-        TAppPrepare app;
-        AddDomain(runtime, app, "Root", 0, TTestTxConfig::Hive, TTestTxConfig::SchemeShard);
-        SetupChannelProfiles(app, 1);
-        runtime.Initialize(app.Unwrap());
+        runtime.Initialize(TAppPrepare().Unwrap());
     }
 
     TIntrusiveConstPtr<TStateStorageInfo> GetStateStorageConfig(TTestActorRuntime& runtime) {
@@ -322,12 +291,12 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         const TActorId edge = runtime.AllocateEdgeActor();
         constexpr ui64 owner = TTestTxConfig::SchemeShard;
 
-        auto groupInfo = GetStateStorageConfig(runtime);
-        const auto replicas = groupInfo->SelectAllReplicas();
+        auto stateStorageInfo = GetStateStorageConfig(runtime);
+        const auto replicas = stateStorageInfo->SelectAllReplicas();
         UNIT_ASSERT_VALUES_EQUAL_C(
             replicas.size(),
             ReplicasInRingGroup * ringGroupsConfiguration.size(),
-            groupInfo->ToString()
+            stateStorageInfo->ToString()
         );
         Cerr << "replicas: " << JoinSeq(", ", replicas) << '\n';
 
@@ -382,7 +351,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         }
 
         ackBlocker.Stop();
-        auto requiredAcks = GetAcksRequiredForQuorum(ackBlocker, populatorToReplicaMap, groupInfo->RingGroups);
+        auto requiredAcks = GetAcksRequiredForQuorum(ackBlocker, populatorToReplicaMap, stateStorageInfo->RingGroups);
         UNIT_ASSERT(!requiredAcks.empty());
         // resend all required acks except the last one
         for (int i = 0; i + 1 < ssize(requiredAcks); ++i) {

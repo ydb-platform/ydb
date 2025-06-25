@@ -223,6 +223,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(code); delay.Defined()) {
+            DEBUG("Repeat the request to KQP in " << *delay);
             Schedule(*delay, new TEvents::TEvWakeup());
         }
     }
@@ -254,6 +255,10 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
+        DEBUG("Start of a request to KQP for a WriteId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId);
+
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
         Become(&TThis::StateGetWriteId);
@@ -269,7 +274,12 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         }
     }
 
-    void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& /*ctx*/) {
+        DEBUG("End of the request to KQP for the WriteId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId <<
+              " Status: " << ev->Get()->Record.GetYdbStatus());
+
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
         case Ydb::StatusIds::SUCCESS:
@@ -283,10 +293,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
-                    "SessionId: " << Opts.SessionId <<
-                    " TxId: " << Opts.TxId <<
-                    " WriteId: " << WriteId);
+        DEBUG("SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId <<
+              " WriteId: " << WriteId);
 
         GetOwnership();
     }
@@ -404,11 +413,20 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         Y_ABORT_UNLESS(HasWriteId());
         Y_ABORT_UNLESS(HasSupportivePartitionId());
 
+        DEBUG("Start of a request to KQP to save PartitionId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId);
+
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
     void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
+        DEBUG("End of a request to KQP to save PartitionId. " <<
+              "SessionId: " << Opts.SessionId <<
+              " TxId: " << Opts.TxId <<
+              " Status: " << ev->Get()->Record.GetYdbStatus());
+
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
         case Ydb::StatusIds::SUCCESS:
@@ -968,7 +986,10 @@ private:
     using IRetryState = IRetryPolicy::IRetryState;
 
     static IRetryPolicy::TPtr GetRetryPolicy() {
-        return IRetryPolicy::GetExponentialBackoffPolicy(Retryable);
+        return IRetryPolicy::GetExponentialBackoffPolicy(Retryable,
+                                                         TDuration::MilliSeconds(10),
+                                                         TDuration::MilliSeconds(10),
+                                                         TDuration::MilliSeconds(100));
     };
 
     static ERetryErrorClass Retryable(Ydb::StatusIds::StatusCode code) {

@@ -373,7 +373,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 
 ## Users, groups, and access rights {#auth}
 
-The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.
+The following system views contain information about users, access groups, user membership in groups, and access rights granted to groups or directly to users.
 
 ### Auth users {#users}
 
@@ -387,7 +387,7 @@ Table structure:
 |--------|-------------|
 | `Sid` | [SID](../concepts/glossary.md#sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
-| `IsLockedOut` | Indicates that user has been automatically deactivated due to exceeding the threshold for unsuccessful authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `IsLockedOut` | Indicates that the user has been automatically deactivated due to exceeding the threshold for unsuccessful authentication attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
 | `LastSuccessfulAttemptAt` | Timestamp of the last successful authentication attempt.<br />Type: `Timestamp`. |
 | `LastFailedAttemptAt` | Timestamp of the last failed authentication attempt.<br />Type: `Timestamp`. |
@@ -440,7 +440,7 @@ Table structure:
 
 #### Example queries {#auth-permissions-examples}
 
-Retrieving explicitly granted permissions on the access object - table `my_table`:
+Retrieving explicitly granted permissions on the access object, a table named `my_table`:
 
 ```yql
 SELECT *
@@ -448,7 +448,7 @@ FROM `.sys/auth_permissions`
 WHERE Path = "my_table"
 ```
 
-Retrieving effective permissions on the access object - table `my_table`:
+Retrieving effective permissions on the access object, a table named `my_table`:
 
 ```yql
 SELECT *

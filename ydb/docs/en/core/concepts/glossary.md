@@ -314,7 +314,7 @@ An **[access right](../security/authorization.md#right)** is an entity that repr
 
 ### Access right inheritance {#access-right-inheritance}
 
-**Access rights inheritance** is a mechanism by which [access rights](#access-right) granted on parent [access objects](#access-object) are inherited by child objects in the hierarchical structure of the database. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
+**Access rights inheritance** is a mechanism by which [access rights](#access-right) granted on parent [access objects](#access-object) are inherited by child objects in the hierarchical structure of the database. This ensures that permissions granted at a higher level in the hierarchy are applied to all sublevels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
 
 ### Access control list {#access-control-list}
 

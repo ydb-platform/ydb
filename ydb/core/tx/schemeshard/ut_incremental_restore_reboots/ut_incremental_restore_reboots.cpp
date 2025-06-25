@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
         }
     }
 
-    // Helper function to verify backup table path states for incremental restore operations (both full and incremental)
+    // Helper function to verify backup table path states for incremental restore operations
     void VerifyIncrementalBackupTablePathStates(TTestActorRuntime& runtime, const TString& collectionName, 
                                                  const TVector<TString>& tableNames) {
         Cerr << "Verifying backup table path states for incremental restore operation in collection: " << collectionName << Endl;
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             }
         }
 
-        // Verify incremental backup table states (_incremental suffix) - THIS IS THE KEY TEST!
+        // Verify incremental backup table states (_incremental suffix)
         TString incrementalBackupPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_incremental";
         for (const auto& tableName : tableNames) {
             TString incrementalBackupTablePath = TStringBuilder() << incrementalBackupPath << "/" << tableName;
@@ -868,7 +868,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections/", restoreSettings);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            // THE CRITICAL TEST: Verify that incremental backup table path states are correctly preserved after reboot
+            // Verify that incremental backup table path states are correctly preserved after reboot
             {
                 TInactiveZone inactive(activeZone);
                 
@@ -877,22 +877,20 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                     TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/" << tableName), {NLs::PathExist});
                 }
                 
-                // Verify operation persisted in database (operations may be cleaned up after completion)
+                // Verify operation persisted in database
                 TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
                 VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, false);
                 
-                // CRITICAL: Verify path states for incremental restore operation
+                // Verify path states for incremental restore operation
                 VerifyIncrementalPathStatesAfterReboot(runtime, {"IncrementalTable1", "IncrementalTable2"}, "IncrementalRestoreCollection");
                 
-                // CRITICAL: Verify backup table path states for BOTH full and incremental backup tables
-                // This tests that the trimmed name reconstruction logic correctly sets path states for incremental backup tables
+                // Verify backup table path states for both full and incremental backup tables
                 VerifyIncrementalBackupTablePathStates(runtime, "IncrementalRestoreCollection", {"IncrementalTable1", "IncrementalTable2"});
                 
-                // CRITICAL: Verify trimmed name reconstruction works for incremental backups
+                // Verify trimmed name reconstruction works for incremental backups
                 VerifyIncrementalBackupTableTrimmedNameReconstruction(runtime, "IncrementalRestoreCollection", {"IncrementalTable1", "IncrementalTable2"});
                 
-                Cerr << "*** CRITICAL TEST PASSED: Incremental backup table path states correctly preserved after reboot ***" << Endl;
-                Cerr << "*** This verifies the trimmed name reconstruction logic: backup_001 -> backup_001_full + backup_001_incremental ***" << Endl;
+                Cerr << "Incremental backup table path states correctly preserved after reboot" << Endl;
             }
         });
     }
@@ -911,10 +909,10 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             TString collectionName = "MultiSnapshotCollection";
             TVector<TString> tableNames = {"SnapshotTable1", "SnapshotTable2", "SnapshotTable3"}; // 3 tables per snapshot
             
-            // Note: We do NOT create source tables here because restore operation will create them
+            // Note: We do not create source tables here because restore operation will create them
             // The backup collection references them in ExplicitEntryList, but they don't need to exist beforehand
             
-            // STEP 1: Create backup collection that references the source tables (but these don't need to exist yet)
+            // Create backup collection that references the source tables
             TString collectionSettings = TStringBuilder() << R"(
                 Name: ")" << collectionName << R"("
                 ExplicitEntryList {)";
@@ -933,7 +931,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections/", collectionSettings);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             
-            // STEP 2: Create full backup directory and tables (required for incremental restore)
+            // Create full backup directory and tables (required for incremental restore)
             TestMkDir(runtime, ++t.TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, "backup_001_full");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             
@@ -949,7 +947,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             }
 
             
-            // STEP 3: Create multiple incremental backup snapshots: backup_001_incremental, backup_002_incremental, backup_003_incremental
+            // Create multiple incremental backup snapshots with different snapshot numbers
             // This tests the trimmed name reconstruction logic with multiple incremental snapshots
             for (ui32 snapshotNum = 1; snapshotNum <= 3; ++snapshotNum) {
                 TString snapshotName = TStringBuilder() << "backup_" << Sprintf("%03d", snapshotNum) << "_incremental";
@@ -958,7 +956,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 TestMkDir(runtime, ++t.TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, snapshotName);
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 
-                // Create tables in this incremental backup snapshot (these will be used during incremental restore)
+                // Create tables in this incremental backup snapshot
                 for (const auto& tableName : tableNames) {
                     AsyncCreateTable(runtime, ++t.TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/" << snapshotName, 
                         TStringBuilder() << R"(
@@ -974,16 +972,13 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 Cerr << "Created incremental backup snapshot: " << snapshotName << " with " << tableNames.size() << " tables" << Endl;
             }
 
-            // STEP 4: Verify all backup structures exist before starting restore
+            // Verify all backup structures exist before starting restore
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName), {
                     NLs::PathExist,
                     NLs::IsBackupCollection,
                 });
-                
-                // Note: We don't verify source tables here since we didn't create them
-                // The restore operation will create them as target tables
                 
                 // Verify full backup directory and tables exist
                 TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName << "/backup_001_full"), {NLs::PathExist});
@@ -1014,21 +1009,21 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
             TestRestoreBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections/", restoreSettings);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            // THE CRITICAL TEST: Verify that ALL incremental backup snapshots maintain their path states after reboot
+            // Main test: Verify that all incremental backup snapshots maintain their path states after reboot
             {
                 TInactiveZone inactive(activeZone);
                 
-                // Verify that target tables were created in the destination (this verifies the restore succeeded)
+                // Verify that target tables were created in the destination
                 for (const auto& tableName : tableNames) {
                     TestDescribeResult(DescribePath(runtime, TStringBuilder() << "/MyRoot/" << tableName), {NLs::PathExist});
                     Cerr << "Successfully verified target table created: " << tableName << Endl;
                 }
                 
-                // Verify operation persisted in database (operations may be cleaned up after completion)
+                // Verify operation persisted in database
                 TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
                 VerifyIncrementalRestoreOperationInDatabase(runtime, schemeShardTabletId, false);
                 
-                // CRITICAL: Verify path states for ALL incremental backup snapshots
+                // Verify path states for all incremental backup snapshots
                 // Each incremental backup table should be in EPathStateAwaitingOutgoingIncrementalRestore
                 for (ui32 snapshotNum = 1; snapshotNum <= 3; ++snapshotNum) {
                     TString snapshotName = TStringBuilder() << "backup_" << Sprintf("%03d", snapshotNum) << "_incremental";
@@ -1053,8 +1048,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 }
                 
                 // Additional verification: Test trimmed name reconstruction for multiple snapshots
-                // The trimmed names would be: backup_001, backup_002, backup_003
-                // Each should reconstruct to: backup_XXX_incremental
                 for (ui32 snapshotNum = 1; snapshotNum <= 3; ++snapshotNum) {
                     TString trimmedName = TStringBuilder() << "backup_" << Sprintf("%03d", snapshotNum);
                     TString incrementalName = TStringBuilder() << trimmedName << "_incremental";
@@ -1066,9 +1059,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                     Cerr << "✓ Verified trimmed name reconstruction: " << trimmedName << " -> " << incrementalName << Endl;
                 }
                 
-                Cerr << "*** CRITICAL TEST PASSED: Multiple incremental backup snapshots (3 snapshots × 3 tables = 9 total incremental backup tables) path states correctly preserved after reboot ***" << Endl;
-                Cerr << "*** This verifies the trimmed name reconstruction logic works correctly for multiple incremental snapshots with multiple tables ***" << Endl;
-                Cerr << "*** Confirmed: backup_001 -> backup_001_incremental (3 tables), backup_002 -> backup_002_incremental (3 tables), backup_003 -> backup_003_incremental (3 tables) ***" << Endl;
+                Cerr << "Multiple incremental backup snapshots test passed: " << tableNames.size() * 3 << " incremental backup tables" << Endl;
             }
         });
     }

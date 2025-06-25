@@ -51,7 +51,7 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 
     auto* node = entry.PQGroupInfo->PartitionGraph->GetPartition(PartitionId);
     if (!node) {
-        return OnFatalError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicPath << "' not found");
+        return OnError(TStringBuilder() << "The partition " << PartitionId << " of the topic '" << TopicPath << "' not found");
     }
     PartitionTabletId = node->TabletId;
     DoCreatePipe();

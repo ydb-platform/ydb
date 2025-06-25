@@ -77,7 +77,7 @@ private:
         }
         Y_VERIFY_S(record.GetErrorCode() == NPersQueue::NErrorCode::OK, "Unimplemented!");
         Y_VERIFY_S(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdGetClientOffsetResult(), "Unimplemented!");
-        auto resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
+        const auto& resp = record.GetPartitionResponse().GetCmdGetClientOffsetResult();
         Offset = resp.GetOffset();
         SentOffset = Offset;
 

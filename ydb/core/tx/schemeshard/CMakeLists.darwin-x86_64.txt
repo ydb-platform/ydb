@@ -78,6 +78,7 @@ add_subdirectory(ut_split_merge_reboots)
 add_subdirectory(ut_stats)
 add_subdirectory(ut_subdomain)
 add_subdirectory(ut_subdomain_reboots)
+add_subdirectory(ut_system_names)
 add_subdirectory(ut_sysview)
 add_subdirectory(ut_sysview_reboots)
 add_subdirectory(ut_topic_splitmerge)
@@ -178,6 +179,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__monitoring.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__notify.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__op_traits.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_bsv.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_cdc_stream.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_alter_continuous_backup.cpp
@@ -335,6 +337,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_self_pinger.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_shard_deleter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_system_names.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_utils.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_validate_ttl.cpp
@@ -361,6 +364,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_self_pinger.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_shard_deleter.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_system_names.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_tx_infly.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h

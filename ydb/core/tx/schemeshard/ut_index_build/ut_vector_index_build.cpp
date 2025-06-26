@@ -484,6 +484,13 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             return true;
         });
 
+        TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse> recomputeKBlocker(runtime, [&](const auto& ev) {
+            auto response = ev->Get()->Record;
+            readRows += response.GetReadRows();
+            readBytes += response.GetReadBytes();
+            return true;
+        });
+
         TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadSampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
             uploadRows += response.GetUploadRows();
@@ -542,6 +549,21 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
         UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
 
+        // every RECOMPUTE round reads table once, no writes; there are 4 recompute rounds:
+        for (ui32 round = 0; round < 4; round++) {
+            for (ui32 shard = 0; shard < 3; shard++) {
+                runtime.WaitFor("recomputeK", [&]{ return recomputeKBlocker.size(); });
+                recomputeKBlocker.Unblock();
+            }
+            expectedReadRows += tableRows;
+            expectedReadBytes += tableBytes;
+            logBillingStats();
+            UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
+            UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
+            UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
+            UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
+        }
+
         runtime.WaitFor("uploadSampleK", [&]{ return uploadSampleKBlocker.size(); });
         // upload SAMPLE writes K level rows, no reads:
         expectedUploadRows += K;
@@ -590,13 +612,18 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
             localKMeansBlocker.Unblock();
         }
-        // KMEANS writes build table once and forms K * K level rows:
-        expectedUploadRows += tableRows + K * K;
-        expectedUploadBytes += postingBytes + K * K * levelRowBytes;
+        // KMEANS writes build table once and forms at least K, at most K * K level rows
+        // (depending on clustering uniformity; it's not so good on test data)
+        expectedUploadRows += tableRows;
+        expectedUploadBytes += postingBytes;
+        UNIT_ASSERT(uploadRows >= expectedUploadRows + K);
+        const ui64 level2clusters = uploadRows - expectedUploadRows;
+        expectedUploadRows += level2clusters;
+        expectedUploadBytes += level2clusters * levelRowBytes;
         if (smallScanBuffer) {
-            // KMEANS reads build table five times (SAMPLE + KMEANS * 3 + UPLOAD):
-            expectedReadRows += tableRows * 5;
-            expectedReadBytes += buildBytes * 5;
+            // KMEANS reads build table 6 times (SAMPLE + KMEANS * 4 + UPLOAD):
+            expectedReadRows += tableRows * 6;
+            expectedReadBytes += buildBytes * 6;
         } else {
             // KMEANS reads build table once:
             expectedReadRows += tableRows;

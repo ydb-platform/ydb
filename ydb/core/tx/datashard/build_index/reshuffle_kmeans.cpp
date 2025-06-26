@@ -462,7 +462,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
         if (!clusters) {
             badRequest(error);
         } else if (request.ClustersSize() < 1) {

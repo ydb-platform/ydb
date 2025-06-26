@@ -25,14 +25,12 @@ NYdb::NTopic::TTopicDescription TCommandWorkloadTopicDescribe::DescribeTopic(con
     auto result = topicClient.DescribeTopic(fullTopicName, {}).GetValueSync();
 
     if (!result.IsSuccess() || result.GetIssues()) {
-        Cerr << "Error describe topic " << fullTopicName << "\n" << (NYdb::TStatus)result << "\n";
-        exit(EXIT_FAILURE);
+        throw yexception() << "Error describe topic " << fullTopicName;
     }
 
     NYdb::NTopic::TTopicDescription description = result.GetTopicDescription();
     if (description.GetTotalPartitionsCount() == 0) {
-        Cerr << "Topic " << fullTopicName << " does not have partitions.\n";
-        exit(EXIT_FAILURE);
+        throw yexception() << "Topic " << fullTopicName << " does not have partitions.";
     }
 
     return description;

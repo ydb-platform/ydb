@@ -1857,11 +1857,6 @@ struct TSchemeShard::TIndexBuilder::TTxReplyRecomputeKMeans: public TTxShardRepl
         Self->PersistBuildIndexClustersUpdate(db, buildInfo);
     }
 
-    TBillingStats GetBillingStats() const override {
-        auto& record = Response->Get()->Record;
-        return {0, 0, record.GetReadRows(), record.GetReadBytes()};
-    }
-
     TString ResponseShortDebugString() const override {
         auto& record = Response->Get()->Record;
         return ToShortDebugString(record);

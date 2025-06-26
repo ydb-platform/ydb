@@ -1,13 +1,14 @@
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/metering/metering.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -385,10 +386,11 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         // Wait and check Filling state:
-        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto&) {
             return true;
         });
-        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
+        runtime.WaitFor("sampleK", [&]{ return sampleKBlocker.size(); });
+        sampleKBlocker.Stop().Unblock();
         {
             auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
             UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
@@ -403,7 +405,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 NLs::PathExist,
                 NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateWriteOnly)});
         }
-        localKBlocker.Stop().Unblock();
 
         // Wait Done state:
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
@@ -482,15 +483,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse> recomputeKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
-            return true;
-        });
-
-        TBlockEvents<TEvDataShard::TEvRecomputeKMeansResponse> recomputeKBlocker(runtime, [&](const auto& ev) {
-            auto response = ev->Get()->Record;
-            readRows += response.GetReadRows();
-            readBytes += response.GetReadBytes();
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
@@ -548,13 +541,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 runtime.WaitFor("recomputeK", [&]{ return recomputeKBlocker.size(); });
                 recomputeKBlocker.Unblock();
             }
-            expectedReadRows += tableRows;
-            expectedReadBytes += tableBytes;
+            expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows);
+            expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes);
             logBillingStats();
-            UNIT_ASSERT_VALUES_EQUAL(uploadRows, expectedUploadRows);
-            UNIT_ASSERT_VALUES_EQUAL(uploadBytes, expectedUploadBytes);
-            UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
-            UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
+            UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
         }
 
         runtime.WaitFor("uploadSampleK", [&]{ return uploadSampleKBlocker.size(); });
@@ -578,15 +568,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-<<<<<<< HEAD
-            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
-=======
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> d2fd957ba9d (Metering_ServerLessDB_Restarts)
-=======
->>>>>>> b53802b554b (copy-paste main version)
             previousBillId = newBillId;
             meteringBlocker.Unblock();
         }
@@ -607,19 +589,14 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
             localKMeansBlocker.Unblock();
         }
-<<<<<<< HEAD
-
         // KMEANS writes build table once and forms at least K, at most K * K level rows
         // (depending on clustering uniformity; it's not so good on test data)
-        expectedUploadRows += tableRows;
-        expectedUploadBytes += postingBytes;
-        UNIT_ASSERT(uploadRows >= expectedUploadRows + K);
-        const ui64 level2clusters = uploadRows - expectedUploadRows;
-        expectedUploadRows += level2clusters;
-        expectedUploadBytes += level2clusters * levelRowBytes;
-        logBillingStats();
-        UNIT_ASSERT_VALUES_EQUAL(billingStats.GetUploadRows(), 420);
-        UNIT_ASSERT_VALUES_EQUAL(billingStats.GetUploadBytes(), 11740);
+        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows);
+        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + postingBytes);
+        UNIT_ASSERT(billingStats.GetUploadRows() >= expectedBillingStats.GetUploadRows() + K);
+        const ui64 level2clusters = billingStats.GetUploadRows() - expectedBillingStats.GetUploadRows();
+        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + level2clusters);
+        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + level2clusters * levelRowBytes);
         if (smallScanBuffer) {
             // KMEANS reads build table 6 times (SAMPLE + KMEANS * 4 + UPLOAD):
             expectedReadRows += tableRows * 6;
@@ -668,15 +645,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-<<<<<<< HEAD
-            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
-=======
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> d2fd957ba9d (Metering_ServerLessDB_Restarts)
-=======
->>>>>>> b53802b554b (copy-paste main version)
             previousBillId = newBillId;
             meteringBlocker.Stop().Unblock();
         }

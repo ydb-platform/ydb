@@ -664,9 +664,25 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         
         # Получаем продолжительность итерации
         duration = iter_info['duration']
-        if duration:
+        
+        # Проверяем, есть ли фактическое время выполнения в статистике
+        actual_duration = None
+        for node_info in iter_info['nodes'].values():
+            if 'iteration' in node_info and hasattr(node_info['iteration'], 'stats'):
+                for stat_key, stat_value in node_info['iteration'].stats.items():
+                    if isinstance(stat_value, dict) and stat_key == 'iteration_info' and 'actual_execution_time' in stat_value:
+                        actual_duration = stat_value['actual_execution_time']
+                        break
+                if actual_duration is not None:
+                    break
+        
+        # Если нашли фактическое время, используем его вместо planned
+        if actual_duration is not None:
+            duration_str = f"{actual_duration:.1f}"
+            duration_color = "#e0f0e0"  # Светло-зеленый для фактического времени
+        elif duration:
             duration_str = f"{duration:.1f}"
-            duration_color = "#f0f0f0"  # Нейтральный серый
+            duration_color = "#f0f0f0"  # Нейтральный серый для планового времени
         else:
             duration_str = "N/A"
             duration_color = "#ffffcc"  # Светло-желтый для неизвестных значений

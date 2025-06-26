@@ -33,7 +33,7 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 `--destination-prefix PREFIX`: Destination prefix in the S3 bucket.
 
-`--include PATH`: Schema objects to be included in the export. Directories are traversed recursively. Paths are relative to the `root-path`. You may provide a comma-separated list of values and/or specify this parameter multiple times to include several objects. If not specified, all non-system objects in the `root-path` are exported.
+`--include PATH`: Schema objects to be included in the export. Directories are traversed recursively. Paths are relative to the `root-path`. You may specify this parameter multiple times to include several objects. If not specified, all non-system objects in the `root-path` are exported.
 
 `--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Paths are relative to the `root-path`. Specify this parameter multiple times for different templates.
 
@@ -170,7 +170,7 @@ Or using the `--destination-prefix` and `--include` parameters:
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --destination-prefix export1 --include dir1,dir2
+  --destination-prefix export1 --include dir1 --include dir2
 ```
 
 ### Exporting a directory with encryption {#example-encryption}

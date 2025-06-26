@@ -865,12 +865,12 @@ NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprCo
 }
 
 /**
- * Rewrites a `TDqPhyBlockHashJoin` to use block-based processing with BlockHashJoinCore.
+ * Rewrites a `TDqPhyBlockHashJoin` to use block-based processing with BlockHashJoin.
  *
  * This function handles the block hash join optimization by:
  *  - Using GraceJoin logic for key processing and type handling
  *  - Converting inputs to wide streams and then to blocks
- *  - Performing the block hash join with BlockHashJoinCore
+ *  - Performing the block hash join with BlockHashJoin
  *  - Converting back with FromBlocks and structuring the result
  */
 TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ctx) {
@@ -977,9 +977,9 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
-    // Build block hash join core (this accepts block streams)
+    // Build block hash join (this accepts block streams)
     auto blockJoinCore = ctx.Builder(pos)
-        .Callable("BlockHashJoinCore")
+        .Callable("BlockHashJoin")
             .Add(0, std::move(leftBlocks))
             .Add(1, std::move(rightBlocks))
             .Add(2, blockHashJoin.JoinType().Ptr())

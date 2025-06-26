@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + level2clusters);
         expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + level2clusters * levelRowBytes);
         if (smallScanBuffer) {
-            // KMEANS reads build table 5 times (SAMPLE + KMEANS * 4 + UPLOAD):
+            // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
             expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 5);
             expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  buildBytes * 5);
         } else {

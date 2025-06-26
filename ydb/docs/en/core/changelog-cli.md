@@ -1,5 +1,23 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.23.0 {#2-23-0}
+
+Released on June 27, 2025. To update to version **2.23.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Features
+
+* Added the `{{ ydb-cli }} workload tpcc` command as a TPC-C benchmark.
+* Added the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TABLE` SQL query from a CSV data file.
+
+### Improvements
+
+* Enhanced processing of special values (`null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr`, and `cerr`) for the `--output` option in the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
+* The `{{ ydb-cli }} workload` [commands](./reference/ydb-cli/commands/workload/index.md) now work with absolute paths.
+* Improvements in the `{{ ydb-cli }}` interactive mode:
+  * Improved inline hints.
+  * Added named expressions completion (i.e. table column names).
+  * Added schema response caching.
+
 ## Version 2.22.1 {#2-22-1}
 
 Released on June 17, 2025. To update to version **2.22.1**, select the [Downloads](downloads/index.md#ydb-cli) section.
@@ -22,11 +40,11 @@ Released on June 4, 2025. To update to version **2.22.0**, select the [Downloads
 
 ### Backward incompatible changes
 
-* Removed the `--executor` option from the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload). The `generic` executor is now always used.
+* Removed the `--executor` option from the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md). The `generic` executor is now always used.
 
 ### Bug fixes
 
-* Fixed an issue where the `{{ ydb-cli }} workload * clean` [commands](./reference/ydb-cli/commands/workload) were deleting all contents from the target directory, instead of just the tables created by the init command.
+* Fixed an issue where the `{{ ydb-cli }} workload * clean` [commands](./reference/ydb-cli/commands/workload/index.md) were deleting all contents from the target directory, instead of just the tables created by the init command.
 
 ## Version 2.21.0 {#2-21-0}
 

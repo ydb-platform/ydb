@@ -1,7 +1,8 @@
 #pragma once
-#include <util/system/types.h>
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
+#include <util/string/builder.h>
+#include <util/system/types.h>
 
 namespace NKikimr::NColumnShard {
 class TInternalPathId {
@@ -42,6 +43,10 @@ public:
     void ToProto(Proto& proto) const;
 
     auto operator<=>(const TInternalPathId&) const = default;
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TInternalPathId& s) {
+        return out << s.PathId;
+    }
 };
 
 static_assert(sizeof(TInternalPathId) == sizeof(ui64));

@@ -8,22 +8,22 @@ namespace NActors {
     namespace NDetail {
 
         template<class TWhen>
-        class [[nodiscard]] TActorSleepAwaiter final
-            : private TActorRunnableItem::TImpl<TActorSleepAwaiter<TWhen>>
+        class [[nodiscard]] TAsyncSleepAwaiter final
+            : private TActorRunnableItem::TImpl<TAsyncSleepAwaiter<TWhen>>
         {
-            friend TActorRunnableItem::TImpl<TActorSleepAwaiter<TWhen>>;
+            friend TActorRunnableItem::TImpl<TAsyncSleepAwaiter<TWhen>>;
 
         public:
             static constexpr bool IsActorAwareAwaiter = true;
 
-            explicit TActorSleepAwaiter(TWhen when)
+            explicit TAsyncSleepAwaiter(TWhen when)
                 : When(when)
             {}
 
-            TActorSleepAwaiter(const TActorSleepAwaiter&) = delete;
-            TActorSleepAwaiter& operator=(const TActorSleepAwaiter&) = delete;
+            TAsyncSleepAwaiter(const TAsyncSleepAwaiter&) = delete;
+            TAsyncSleepAwaiter& operator=(const TAsyncSleepAwaiter&) = delete;
 
-            ~TActorSleepAwaiter() {
+            ~TAsyncSleepAwaiter() {
                 // Handle emergency cancellation (actor system shutdown)
                 Detach();
             }
@@ -128,7 +128,7 @@ namespace NActors {
         private:
             class TBridge : public TThrRefBase, public TActorRunnableItem::TImpl<TBridge> {
             public:
-                TBridge(TActorSleepAwaiter* self)
+                TBridge(TAsyncSleepAwaiter* self)
                     : Self(self)
                 {}
 
@@ -145,7 +145,7 @@ namespace NActors {
                 }
 
             public:
-                TActorSleepAwaiter* Self;
+                TAsyncSleepAwaiter* Self;
             };
 
             void OnTimeout() {
@@ -164,46 +164,49 @@ namespace NActors {
 
     } // namespace NDetail
 
-    inline NDetail::TActorSleepAwaiter<TDuration> ActorYield() {
-        return NDetail::TActorSleepAwaiter<TDuration>(TDuration::Zero());
+    inline NDetail::TAsyncSleepAwaiter<TDuration> AsyncSleepFor(TDuration duration) {
+        return NDetail::TAsyncSleepAwaiter<TDuration>(duration);
     }
 
-    inline NDetail::TActorSleepAwaiter<TDuration> ActorSleepFor(TDuration duration) {
-        return NDetail::TActorSleepAwaiter<TDuration>(duration);
+    inline NDetail::TAsyncSleepAwaiter<TMonotonic> AsyncSleepUntil(TMonotonic deadline) {
+        return NDetail::TAsyncSleepAwaiter<TMonotonic>(deadline);
     }
 
-    inline NDetail::TActorSleepAwaiter<TMonotonic> ActorSleepUntil(TMonotonic deadline) {
-        return NDetail::TActorSleepAwaiter<TMonotonic>(deadline);
+    inline NDetail::TAsyncSleepAwaiter<TInstant> AsyncSleepUntil(TInstant deadline) {
+        return NDetail::TAsyncSleepAwaiter<TInstant>(deadline);
     }
 
-    inline NDetail::TActorSleepAwaiter<TInstant> ActorSleepUntil(TInstant deadline) {
-        return NDetail::TActorSleepAwaiter<TInstant>(deadline);
+    inline NDetail::TAsyncSleepAwaiter<TDuration> AsyncYield() {
+        return NDetail::TAsyncSleepAwaiter<TDuration>(TDuration::Zero());
     }
 
-    class TActorTimeoutException : public TAsyncCancellation {};
+    /**
+     * Used when callee times out before it can produce any result
+     */
+    class TAsyncTimeout : public TAsyncCancellation {};
 
     namespace NDetail {
 
         template<class TWhen, class R>
-        class [[nodiscard]] TActorAsyncWithTimeoutAwaiter
-            : public TAsyncDecoratorAwaiter<R, TActorAsyncWithTimeoutAwaiter<TWhen, R>>
+        class [[nodiscard]] TWithTimeoutAwaiter
+            : public TAsyncDecoratorAwaiter<R, TWithTimeoutAwaiter<TWhen, R>>
         {
-            friend TAsyncDecoratorAwaiter<R, TActorAsyncWithTimeoutAwaiter<TWhen, R>>;
-            using TBase = TAsyncDecoratorAwaiter<R, TActorAsyncWithTimeoutAwaiter<TWhen, R>>;
+            friend TAsyncDecoratorAwaiter<R, TWithTimeoutAwaiter<TWhen, R>>;
+            using TBase = TAsyncDecoratorAwaiter<R, TWithTimeoutAwaiter<TWhen, R>>;
 
         public:
             template<class TCallback, class... TArgs>
-            TActorAsyncWithTimeoutAwaiter(TWhen when, TCallback&& callback, TArgs&&... args)
+            TWithTimeoutAwaiter(TWhen when, TCallback&& callback, TArgs&&... args)
                 : TBase(std::forward<TCallback>(callback), std::forward<TArgs>(args)...)
                 , When(when)
             {}
 
-            ~TActorAsyncWithTimeoutAwaiter() {
+            ~TWithTimeoutAwaiter() {
                 // Handle emergency cancellation (actor system shutdown)
                 Detach();
             }
 
-            TActorAsyncWithTimeoutAwaiter& CoAwaitByValue() && noexcept {
+            TWithTimeoutAwaiter& CoAwaitByValue() && noexcept {
                 return *this;
             }
 
@@ -266,7 +269,7 @@ namespace NActors {
                 Detach();
 
                 if (ThrowException) {
-                    throw TActorTimeoutException() << "operation timed out";
+                    throw TAsyncTimeout() << "operation timed out";
                 }
 
                 return TBase::Return();
@@ -304,7 +307,7 @@ namespace NActors {
         private:
             class TBridge : public TThrRefBase, public TActorRunnableItem::TImpl<TBridge> {
             public:
-                TBridge(TActorAsyncWithTimeoutAwaiter* self)
+                TBridge(TWithTimeoutAwaiter* self)
                     : Self(self)
                 {}
 
@@ -321,7 +324,7 @@ namespace NActors {
                 }
 
             public:
-                TActorAsyncWithTimeoutAwaiter* Self;
+                TWithTimeoutAwaiter* Self;
             };
 
         private:
@@ -332,30 +335,30 @@ namespace NActors {
     }
 
     template<class TCallback, class... TArgs>
-    inline auto ActorWithTimeout(TDuration duration, TCallback&& callback, TArgs&&... args)
-        requires (IsAsyncCoroutineCallback<TCallback, TArgs&&...>)
+    inline auto WithTimeout(TDuration duration, TCallback&& callback, TArgs&&... args)
+        requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
     {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
-        using R = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TDuration, R>(duration, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
+        using R = typename TCallbackResult::result_type;
+        return NDetail::TWithTimeoutAwaiter<TDuration, R>(duration, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
     template<class TCallback, class... TArgs>
     inline auto ActorWithDeadline(TMonotonic deadline, TCallback&& callback, TArgs&&... args)
-        requires (IsAsyncCoroutineCallback<TCallback, TArgs&&...>)
+        requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
     {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
-        using R = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TMonotonic, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
+        using R = typename TCallbackResult::result_type;
+        return NDetail::TWithTimeoutAwaiter<TMonotonic, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
     template<class TCallback, class... TArgs>
     inline auto ActorWithDeadline(TInstant deadline, TCallback&& callback, TArgs&&... args)
-        requires (IsAsyncCoroutineCallback<TCallback, TArgs&&...>)
+        requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
     {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
-        using R = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TInstant, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
+        using R = typename TCallbackResult::result_type;
+        return NDetail::TWithTimeoutAwaiter<TInstant, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
 } // namespace NActors

@@ -28,10 +28,10 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { finished = true; };
 
-                co_await ActorYield();
-                co_await ActorSleepFor(TDuration::Zero());
-                co_await ActorSleepUntil(TMonotonic::Zero());
-                co_await ActorSleepUntil(TInstant::Zero());
+                co_await AsyncYield();
+                co_await AsyncSleepFor(TDuration::Zero());
+                co_await AsyncSleepUntil(TMonotonic::Zero());
+                co_await AsyncSleepUntil(TInstant::Zero());
 
                 finishedNormally = true;
             });
@@ -68,7 +68,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { finished = true; };
 
-                co_await ActorSleepFor(TDuration::Max());
+                co_await AsyncSleepFor(TDuration::Max());
 
                 finishedNormally = true;
             });
@@ -100,7 +100,7 @@ namespace NAsyncTest {
 
                 self->PassAway();
 
-                co_await ActorYield();
+                co_await AsyncYield();
 
                 finishedNormally = true;
             });
@@ -121,7 +121,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { finished = true; };
 
-                co_await ActorYield();
+                co_await AsyncYield();
 
                 finishedNormally = true;
             });
@@ -153,7 +153,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { finished = true; };
 
-                co_await ActorSleepFor(TDuration::MilliSeconds(1));
+                co_await AsyncSleepFor(TDuration::MilliSeconds(1));
 
                 finishedNormally = true;
             });
@@ -177,7 +177,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { finished = true; };
 
-                co_await ActorSleepFor(TDuration::MilliSeconds(2));
+                co_await AsyncSleepFor(TDuration::MilliSeconds(2));
 
                 finishedNormally = true;
             });
@@ -203,7 +203,7 @@ namespace NAsyncTest {
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
                 Y_DEFER { finished = true; };
 
-                co_await ActorSleepFor(TDuration::MilliSeconds(2));
+                co_await AsyncSleepFor(TDuration::MilliSeconds(2));
 
                 finishedNormally = true;
             });
@@ -242,10 +242,10 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<void> {
+                    co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<void> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                     });
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -282,11 +282,11 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -317,11 +317,11 @@ namespace NAsyncTest {
                 self->PassAway();
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -353,12 +353,12 @@ namespace NAsyncTest {
                 self->PassAway();
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -388,12 +388,12 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -434,12 +434,12 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -478,12 +478,12 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -530,12 +530,12 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -579,12 +579,12 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }
@@ -631,12 +631,12 @@ namespace NAsyncTest {
                 Y_DEFER { finished = true; };
 
                 try {
-                    int result = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int result = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         co_await TSuspendAwaiter{ &resume, &cancel };
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(result, 42);
-                } catch (const TActorTimeoutException&) {
+                } catch (const TAsyncTimeout&) {
                     finishedWithTimeout = true;
                     throw;
                 }

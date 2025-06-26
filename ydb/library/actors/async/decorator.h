@@ -2,11 +2,11 @@
 #include "async.h"
 #include "symmetric_proxy.h"
 
-namespace NActors {
+namespace NActors::NDetail {
 
     template<class R, class TDerived>
     class TAsyncDecoratorAwaiter {
-        friend NDetail::TAwaitCancelSource;
+        friend TAwaitCancelSource;
 
     public:
         static constexpr bool IsActorAwareAwaiter = true;
@@ -20,7 +20,7 @@ namespace NActors {
         /**
          * Base class for resume interception coroutine
          */
-        class TResumeCallback : private NDetail::TAwaitCancelSource {
+        class TResumeCallback : private TAwaitCancelSource {
             friend TAsyncDecoratorAwaiter;
             friend TCallbackCoroutine<TResumeCallback>;
 
@@ -72,7 +72,7 @@ namespace NActors {
         std::coroutine_handle<> await_suspend(std::coroutine_handle<TPromise> c) {
             TPromise& caller = c.promise();
             IActor& actor = caller.GetActor();
-            NDetail::TAwaitCancelSource& source = caller.GetAwaitCancelSource();
+            TAwaitCancelSource& source = caller.GetAwaitCancelSource();
 
             Actor = &actor;
             Continuation = c;
@@ -305,11 +305,11 @@ namespace NActors {
         IActor* Actor = nullptr;
         std::coroutine_handle<> Continuation;
         std::coroutine_handle<> Cancellation;
-        NDetail::TAwaitCancelCleanup Cleanup;
+        TAwaitCancelCleanup Cleanup;
         TCallbackCoroutine<TResumeCallback> ResumeProxy;
         TCallbackCoroutine<TUnwindCallback> UnwindProxy;
         // Must be below proxies, so it is destroyed first
         async<R> Coroutine;
     };
 
-} // namespace NActors
+} // namespace NActors::NDetail

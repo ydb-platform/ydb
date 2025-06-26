@@ -14,7 +14,7 @@ namespace NActors {
     }
 
     /**
-     * Used when callee cannot finish and produce the result due to cancellation
+     * Used when callee produces no result due to cancellation
      */
     class TAsyncCancellation : public yexception {};
 
@@ -29,6 +29,7 @@ namespace NActors {
         friend NDetail::TAsyncPromise<T>;
 
     public:
+        using result_type = T;
         using promise_type = NDetail::TAsyncPromise<T>;
         using THandle = std::coroutine_handle<promise_type>;
 
@@ -120,10 +121,6 @@ namespace NActors {
         struct TIsAsyncCoroutineHelper : public std::false_type {};
         template<class T>
         struct TIsAsyncCoroutineHelper<async<T>> : public std::true_type {};
-        template<class T>
-        struct TAsyncCoroutineResultHelper {};
-        template<class T>
-        struct TAsyncCoroutineResultHelper<async<T>> { typedef T type; };
     }
 
     /**
@@ -133,26 +130,20 @@ namespace NActors {
     concept IsAsyncCoroutine = NDetail::TIsAsyncCoroutineHelper<T>::value;
 
     /**
-     * Concept matches all callbacks returning any async<T>
+     * Concept matches all callables returning any async<T>
      */
     template<class TCallback, class... TArgs>
-    concept IsAsyncCoroutineCallback = requires (TCallback&& callback) {
+    concept IsAsyncCoroutineCallable = requires (TCallback&& callback) {
         { std::forward<TCallback>(callback)(std::declval<TArgs>()...) } -> IsAsyncCoroutine;
     };
 
     /**
-     * Concept matches all callbacks returning a specific async<T>
+     * Concept matches all callables returning a specific async<R>
      */
-    template<class TCallback, class T, class... TArgs>
-    concept IsSpecificAsyncCoroutineCallback = requires (TCallback&& callback) {
-        { std::forward<TCallback>(callback)(std::declval<TArgs>()...) } -> std::same_as<async<T>>;
+    template<class TCallback, class R, class... TArgs>
+    concept IsSpecificAsyncCoroutineCallable = requires (TCallback&& callback) {
+        { std::forward<TCallback>(callback)(std::declval<TArgs>()...) } -> std::same_as<async<R>>;
     };
-
-    /**
-     * Extracts the result type (T) from the type async<T>
-     */
-    template<IsAsyncCoroutine T>
-    using TAsyncCoroutineResult = typename NDetail::TAsyncCoroutineResultHelper<T>::type;
 
     /**
      * Concept matches all types which are marked as IsActorAwareAwaiter

@@ -33,10 +33,10 @@ namespace NActors {
         std::unique_ptr<NDetail::TAsyncCancellationState> State;
     };
 
-    template<IsAsyncCoroutineCallback TCallback>
+    template<IsAsyncCoroutineCallable TCallback>
     inline auto ActorWithCancellation(TAsyncCancellationSource& source, TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)());
-        using T = TAsyncCoroutineResult<TCallbackResult>;
+        using T = typename TCallbackResult::result_type;
         return NDetail::TAsyncCancellationAwaiterWithCallback<T>(source, std::forward<TCallback>(callback));
     }
 

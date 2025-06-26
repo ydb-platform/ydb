@@ -2,13 +2,12 @@
 #include <concepts>
 #include <coroutine>
 
-namespace NActors {
+namespace NActors::NDetail {
 
-    namespace NDetail {
-
-        struct TCallbackCoroutineResume {};
-
-    } // namespace NDetail
+    /**
+     * Special value yielded on resume internally by callback coroutines
+     */
+    struct TCallbackCoroutineResume {};
 
     /**
      * A coroutine class which subclasses TCallback and calls its operator() on every resume
@@ -48,7 +47,7 @@ namespace NActors {
                 static void await_resume() noexcept {}
             };
 
-            static TResumeAwaiter yield_value(NDetail::TCallbackCoroutineResume) {
+            static TResumeAwaiter yield_value(TCallbackCoroutineResume) {
                 return TResumeAwaiter{};
             }
         };
@@ -156,8 +155,8 @@ namespace NActors {
     template<class TCallback>
     inline TCallbackCoroutine<TCallback> MakeCallbackCoroutine() {
         for (;;) {
-            co_yield NDetail::TCallbackCoroutineResume{};
+            co_yield TCallbackCoroutineResume{};
         }
     }
 
-} // namespace NActors
+} // namespace NActors::NDetail

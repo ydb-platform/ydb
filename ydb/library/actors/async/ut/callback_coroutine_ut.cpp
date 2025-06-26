@@ -3,7 +3,7 @@
 
 namespace NAsyncTest {
 
-    using namespace NActors;
+    using namespace NActors::NDetail;
 
     Y_UNIT_TEST_SUITE(CallbackCoroutine) {
 

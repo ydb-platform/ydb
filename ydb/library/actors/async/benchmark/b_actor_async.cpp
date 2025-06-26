@@ -112,7 +112,7 @@ public:
 
     void StartSleeping() {
         Cerr << "Before sleep..." << Endl;
-        co_await ActorSleepFor(TDuration::MilliSeconds(100));
+        co_await AsyncSleepFor(TDuration::MilliSeconds(100));
         Cerr << "After sleep..." << Endl;
     }
 
@@ -128,14 +128,14 @@ public:
 
     void StartSomethingWithTimeout() {
         try {
-            Cerr << "Before ActorWithTimeout..." << Endl;
-            co_await ActorWithTimeout(TDuration::MilliSeconds(100), [&]() -> async<void> {
-                Cerr << "Before ActorSleepFor..." << Endl;
-                co_await ActorSleepFor(TDuration::MilliSeconds(1000));
-                Cerr << "After ActorSleepFor..." << Endl;
+            Cerr << "Before WithTimeout..." << Endl;
+            co_await WithTimeout(TDuration::MilliSeconds(100), [&]() -> async<void> {
+                Cerr << "Before AsyncSleepFor..." << Endl;
+                co_await AsyncSleepFor(TDuration::MilliSeconds(1000));
+                Cerr << "After AsyncSleepFor..." << Endl;
             });
-            Cerr << "After ActorWithTimeout..." << Endl;
-        } catch (const TActorTimeoutException& e) {
+            Cerr << "After WithTimeout..." << Endl;
+        } catch (const TAsyncTimeout& e) {
             Cerr << "Got timeout: " << e.what() << Endl;
         }
     }

@@ -51,7 +51,7 @@ namespace NActors {
          *
          * The returned task index may be used to match results of the added task
          */
-        template<IsSpecificAsyncCoroutineCallback<T> TCallback>
+        template<IsSpecificAsyncCoroutineCallable<T> TCallback>
         size_t Add(TCallback&& callback) {
             return Sink.Add(std::forward<TCallback>(callback));
         }
@@ -288,7 +288,7 @@ namespace NActors {
                 Actor = &actor;
             }
 
-            template<IsSpecificAsyncCoroutineCallback<T> TCallback>
+            template<IsSpecificAsyncCoroutineCallable<T> TCallback>
             size_t Add(TCallback&& callback) {
                 size_t index = NextIndex++;
                 Y_ABORT_UNLESS(!Cancellation, "Cannot add more tasks after task group coroutine returns");
@@ -545,17 +545,17 @@ namespace NActors {
         return TNextResultAwaiter(Sink);
     }
 
-    template<class T, IsAsyncCoroutineCallback<TTaskGroup<T>&> TCallback>
+    template<class T, IsAsyncCoroutineCallable<TTaskGroup<T>&> TCallback>
     inline auto WithTaskGroup(TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::declval<TTaskGroup<T>&>));
-        using R = TAsyncCoroutineResult<TCallbackResult>;
+        using R = typename TCallbackResult::result_type;
         return NDetail::TWithTaskGroupAwaiter<T, R>(std::forward<TCallback>(callback));
     }
 
-    template<IsAsyncCoroutineCallback<TTaskGroup<void>&> TCallback>
+    template<IsAsyncCoroutineCallable<TTaskGroup<void>&> TCallback>
     inline auto WithTaskGroup(TCallback&& callback) {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::declval<TTaskGroup<void>&>));
-        using R = TAsyncCoroutineResult<TCallbackResult>;
+        using R = typename TCallbackResult::result_type;
         return NDetail::TWithTaskGroupAwaiter<void, R>(std::forward<TCallback>(callback));
     }
 

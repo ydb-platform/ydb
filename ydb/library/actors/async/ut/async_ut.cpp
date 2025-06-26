@@ -4,6 +4,24 @@ namespace NAsyncTest {
 
     using namespace NActors;
 
+    namespace NActorAwareTest {
+
+        struct TActorAwareNone {};
+        struct TActorAwareType { using IsActorAwareAwaiter = void; };
+        struct TActorAwareTrue { static constexpr bool IsActorAwareAwaiter = true; };
+        struct TActorAwareFalse { static constexpr bool IsActorAwareAwaiter = false; };
+        struct TActorAwareNonConstexpr { static inline bool IsActorAwareAwaiter = true; };
+        struct TActorAwareNonStatic { bool IsActorAwareAwaiter = true; };
+
+        static_assert(!IsActorAwareAwaiter<TActorAwareNone>);
+        static_assert(IsActorAwareAwaiter<TActorAwareType>);
+        static_assert(IsActorAwareAwaiter<TActorAwareTrue>);
+        static_assert(!IsActorAwareAwaiter<TActorAwareFalse>);
+        static_assert(!IsActorAwareAwaiter<TActorAwareNonConstexpr>);
+        static_assert(!IsActorAwareAwaiter<TActorAwareNonStatic>);
+
+    } // NActorAwareTest
+
     struct TReturnIntAwaiter {
         static constexpr bool IsActorAwareAwaiter = true;
         const int Value;

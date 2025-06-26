@@ -238,7 +238,7 @@ namespace NAsyncTest {
                         taskFinishedNormally = true;
                     });
                     UNIT_ASSERT(!resume);
-                    co_await ActorYield();
+                    co_await AsyncYield();
                     UNIT_ASSERT(resume);
                     UNIT_ASSERT(!cancel);
                     groupFinishedNormally = true;
@@ -250,7 +250,7 @@ namespace NAsyncTest {
                 finishedNormally = true;
             });
 
-            // Note: ActorYield pending on the mailbox, but task must have started
+            // Note: AsyncYield pending on the mailbox, but task must have started
             UNIT_ASSERT(!groupFinishedNormally);
             UNIT_ASSERT(resume);
             UNIT_ASSERT(!cancel);
@@ -398,12 +398,12 @@ namespace NAsyncTest {
                     });
                     groupState = 1;
                     try {
-                        co_await ActorWithTimeout(TDuration::MilliSeconds(1), [&]() -> async<void> {
+                        co_await WithTimeout(TDuration::MilliSeconds(1), [&]() -> async<void> {
                             groupValue = co_await g.Next();
                         });
-                    } catch(TActorTimeoutException&) {}
+                    } catch(TAsyncTimeout&) {}
                     groupState = 2;
-                    int value = co_await ActorWithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
+                    int value = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         groupValue = co_await g.Next();
                         co_return groupValue;
                     });
@@ -455,12 +455,12 @@ namespace NAsyncTest {
                     Y_DEFER { groupFinished = true; };
                     g.Add([&]() -> async<void> {
                         startedTask1 = true;
-                        co_await ActorYield();
+                        co_await AsyncYield();
                         co_await TSuspendAwaiter{ &resume1, &cancel1 };
                     });
                     g.Add([&]() -> async<void> {
                         startedTask2 = true;
-                        co_await ActorYield();
+                        co_await AsyncYield();
                         co_await TSuspendAwaiter{ &resume2, &cancel2 };
                     });
                     while (g) {

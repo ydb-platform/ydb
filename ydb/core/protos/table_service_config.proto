@@ -397,5 +397,5 @@ message TTableServiceConfig {
 
     optional uint64 BufferPageAllocSize = 90  [ default = 4096 ];
 
-    optional bool EnableOlapPushdownProjections = 91  [ default = false ];
+    optional bool EnableOlapPushdownProjections = 91  [ default = true ];
 };

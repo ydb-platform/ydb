@@ -230,9 +230,10 @@ TString TTxMonitoring::RenderCompactionPage() {
     for (auto [tableId, _] : Self->TablesManager.GetTables()) {
         html << "<h3>TableId : " << tableId << "</h3>";
         auto& compaction = engine.GetGranuleVerified(tableId).GetOptimizerPlanner();
-        html << "<b>DebugString : " << compaction.DebugString() << "</b><br />";
-        html << "<b>UsefulMetric : " << compaction.GetUsefulMetric().DebugString() << "</b><br />";
-        html << "<b>SerializeToJsonVisual : " << compaction.SerializeToJsonVisual() << "</b><br />";
+        auto json = compaction.SerializeToJsonVisual();
+        html << "<pre>";
+        NJson::WriteJson(&html, &json, true, true, true);
+        html << "</pre>";
     }
     return html.Str();
 }

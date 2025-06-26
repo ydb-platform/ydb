@@ -237,6 +237,9 @@ public:
     using TPreparedColumn = NAssembling::TPreparedColumn;
     using TPreparedBatchData = NAssembling::TPreparedBatchData;
 
+    TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
+        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
+    }
     ui64 GetMetadataSize() const {
         return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + 
             (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0) +

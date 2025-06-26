@@ -133,7 +133,7 @@
 
   {% cut "Пример ast" %}
 
-  ```json
+  ```
   (
   (let  (KqpTable '"/local/users" '"72075186232723360:33" '"" '1))
   (let  '('"emails" '"id" '"name"))

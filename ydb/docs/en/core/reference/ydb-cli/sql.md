@@ -133,7 +133,7 @@ Diagnostics for each query are saved to `<path_to_diagnostics>`, overwriting the
 
   {% cut "Example of ast" %}
 
-  ```json
+  ```
   (
   (let  (KqpTable '"/local/users" '"72075186232723360:33" '"" '1))
   (let  '('"emails" '"id" '"name"))

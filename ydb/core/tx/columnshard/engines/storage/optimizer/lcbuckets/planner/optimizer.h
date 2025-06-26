@@ -151,9 +151,11 @@ public:
         return result;
     }
 
+    ~TOptimizerPlanner() = default;
+
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters, std::shared_ptr<TSimplePortionsGroupInfo> portionsGroupInfo,
-        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors);
+        std::vector<std::shared_ptr<IPortionsLevel>>&& levels, std::vector<std::shared_ptr<IPortionsSelector>>&& selectors, const ui32 nodePortionsCountLimit);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

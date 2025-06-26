@@ -123,6 +123,7 @@ message TEvWrite {
     optional uint32 GranuleShardingVersionId = 9;
 
     optional ELockMode LockMode = 10;
+    optional uint64 TimeoutSeconds = 11;
 }
 
 message TEvWriteResult {

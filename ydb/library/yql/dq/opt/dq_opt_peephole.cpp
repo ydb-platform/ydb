@@ -939,15 +939,15 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         auto dryType = JoinDryKeyType(keyTypeLeft, keyTypeRight, hasOptional, ctx);
 
         if (keyTypeLeft->Equals(*dryType)) {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*leftIndex));
+            leftKeyColumnNodes[i] = ctx.NewCallable(leftKeyColumnNodes[i]->Pos(), "Uint32", {ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ToString(*leftIndex))});
         } else {
-            leftKeyColumnNodes[i] = ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeLeft->GetSize() + leftConvertedItems.size()));
+            leftKeyColumnNodes[i] = ctx.NewCallable(leftKeyColumnNodes[i]->Pos(), "Uint32", {ctx.NewAtom(leftKeyColumnNodes[i]->Pos(), ToString(itemTypeLeft->GetSize() + leftConvertedItems.size()))});
             leftConvertedItems.emplace_back(leftName, dryType);
         }
         if (keyTypeRight->Equals(*dryType)) {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(*rightIndex));
+            rightKeyColumnNodes[i] = ctx.NewCallable(rightKeyColumnNodes[i]->Pos(), "Uint32", {ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ToString(*rightIndex))});
         } else {
-            rightKeyColumnNodes[i] = ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ctx.GetIndexAsString(itemTypeRight->GetSize() + rightConvertedItems.size()));
+            rightKeyColumnNodes[i] = ctx.NewCallable(rightKeyColumnNodes[i]->Pos(), "Uint32", {ctx.NewAtom(rightKeyColumnNodes[i]->Pos(), ToString(itemTypeRight->GetSize() + rightConvertedItems.size()))});
             rightConvertedItems.emplace_back(rightName, dryType);
         }
     }

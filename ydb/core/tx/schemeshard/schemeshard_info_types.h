@@ -3905,25 +3905,15 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus& info)
-{
-    o << info.ToString();
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus, stream, value) {
+    stream << value.ToString();
 }
 
-template <>
-inline void Out<NKikimrIndexBuilder::TMeteringStats>
-    (IOutputStream& o, const NKikimrIndexBuilder::TMeteringStats& stats)
-{
-    o << stats.ShortDebugString();
+Y_DECLARE_OUT_SPEC(inline, NKikimrIndexBuilder::TMeteringStats, stream, value) {
+    stream << value.ShortDebugString();
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TIndexBuildInfo& info)
-{
-
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     o << "TBuildInfo{";
     o << " IndexBuildId: " << info.Id;
     o << ", Uid: " << info.Uid;

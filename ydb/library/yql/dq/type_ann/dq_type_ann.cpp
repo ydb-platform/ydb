@@ -1284,41 +1284,41 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             if (input->Content() == "BlockHashJoin") {
                 // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
                 if (!EnsureArgsCount(*input, 5, ctx)) {
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
 
                 if (!EnsureAtom(*input->Child(2), ctx)) {
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
                 const auto joinKind = input->Child(2)->Content();
                 if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly" && joinKind != "Cross") {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
                         << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
 
                 TTypeAnnotationNode::TListType leftItemTypes;
                 if (!EnsureWideStreamBlockType(input->Head(), leftItemTypes, ctx)) {
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
                 leftItemTypes.pop_back(); // Remove length column
 
                 TTypeAnnotationNode::TListType rightItemTypes;
                 if (!EnsureWideStreamBlockType(*input->Child(1), rightItemTypes, ctx)) {
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
                 rightItemTypes.pop_back(); // Remove length column
 
                 if (!EnsureTupleOfAtoms(*input->Child(3), ctx)) {
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
                 if (!EnsureTupleOfAtoms(*input->Child(4), ctx)) {
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
 
                 if (input->Child(3)->ChildrenSize() != input->Child(4)->ChildrenSize()) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Child(4)->Pos()), TStringBuilder() << "Mismatch of key column count"));
-                    return TStatus::Error;
+                    return IGraphTransformer::TStatus(TStatus::Error);
                 }
 
                 // Build result types based on join semantics
@@ -1346,7 +1346,7 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
                 input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
-                return TStatus::Ok;
+                return IGraphTransformer::TStatus(TStatus::Ok);
             }
 
 

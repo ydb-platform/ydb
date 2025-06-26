@@ -15,7 +15,6 @@ class StressFixture:
 
     def setup_cluster(self, **kwargs):
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths,
             **kwargs,
         )

@@ -498,7 +498,7 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
     {params_info}
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
         <tr style='background-color: #f0f0f0;'>
-            <th rowspan="2">Chunk</th>
+            <th rowspan="2">Iter</th>
             <th rowspan="2">Dur(s)</th>
     """
     
@@ -563,21 +563,21 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         
         return table_html
 
-    # Анализируем итерации и группируем их по chunk_num
-    chunk_iterations = {}
+    # Анализируем итерации и группируем их по iteration_num
+    iteration_groups = {}
     
-    # Извлекаем информацию о chunk_num из дополнительной статистики итераций
+    # Извлекаем информацию о iteration_num из дополнительной статистики итераций
     for iteration_num, iteration in result.iterations.items():
-        chunk_num = None
+        iter_num = None
         node_host = None
         
-        # Проверяем, есть ли у итерации имя с информацией о chunk и ноде
+        # Проверяем, есть ли у итерации имя с информацией об итерации и ноде
         if hasattr(iteration, 'name') and iteration.name:
-            # Извлекаем chunk_num из имени итерации (поддерживаем оба формата: iter_N и chunk_N)
+            # Извлекаем iteration_num из имени итерации (поддерживаем оба формата: iter_N и chunk_N)
             for pattern in ['_iter_', '_chunk_']:
                 if pattern in iteration.name:
                     try:
-                        chunk_num = int(iteration.name.split(pattern)[-1])
+                        iter_num = int(iteration.name.split(pattern)[-1])
                         break
                     except (ValueError, IndexError):
                         pass
@@ -590,24 +590,32 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         
         # Проверяем, есть ли статистика в итерации
         if hasattr(iteration, 'stats') and iteration.stats:
-            # Ищем информацию о chunk_num и node_host в статистике
+            # Ищем информацию о iteration_num и node_host в статистике
             for stat_key, stat_value in iteration.stats.items():
                 if isinstance(stat_value, dict):
-                    # Проверяем chunk_info
-                    if stat_key == 'chunk_info':
+                    # Проверяем iteration_info
+                    if stat_key == 'iteration_info':
+                        if 'iteration_num' in stat_value:
+                            iter_num = stat_value['iteration_num']
+                        if 'node_host' in stat_value:
+                            node_host = stat_value['node_host']
+                    # Для обратной совместимости проверяем chunk_info
+                    elif stat_key == 'chunk_info':
                         if 'chunk_num' in stat_value:
-                            chunk_num = stat_value['chunk_num']
+                            iter_num = stat_value['chunk_num']
                         if 'node_host' in stat_value:
                             node_host = stat_value['node_host']
                     # Проверяем другие поля
-                    if 'chunk_num' in stat_value:
-                        chunk_num = stat_value['chunk_num']
+                    if 'iteration_num' in stat_value:
+                        iter_num = stat_value['iteration_num']
+                    elif 'chunk_num' in stat_value:  # Для обратной совместимости
+                        iter_num = stat_value['chunk_num']
                     if 'node_host' in stat_value:
                         node_host = stat_value['node_host']
         
-        # Если все еще нет chunk_num, используем iteration_num
-        if chunk_num is None:
-            chunk_num = iteration_num
+        # Если все еще нет iter_num, используем iteration_num
+        if iter_num is None:
+            iter_num = iteration_num
         
         # Если все еще нет node_host и у нас есть уникальные ноды и их столько же, сколько итераций
         if node_host is None and unique_nodes and len(unique_nodes) == len(result.iterations):
@@ -618,23 +626,23 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
             except IndexError:
                 pass
         
-        # Добавляем информацию в структуру chunk_iterations
-        if chunk_num not in chunk_iterations:
-            chunk_iterations[chunk_num] = {
+        # Добавляем информацию в структуру iteration_groups
+        if iter_num not in iteration_groups:
+            iteration_groups[iter_num] = {
                 'duration': getattr(iteration, 'time', 0),
                 'nodes': {}
             }
         
         if node_host:
-            chunk_iterations[chunk_num]['nodes'][node_host] = {
+            iteration_groups[iter_num]['nodes'][node_host] = {
                 'iteration': iteration,
                 'status': __get_workload_status(iteration)
             }
     
-    # Если не удалось извлечь chunk_num, создаем искусственную группировку
-    if not chunk_iterations:
-        # Группируем итерации по номеру (предполагая, что это разные ноды одного chunk)
-        chunk_iterations[1] = {
+    # Если не удалось извлечь iter_num, создаем искусственную группировку
+    if not iteration_groups:
+        # Группируем итерации по номеру (предполагая, что это разные ноды одной итерации)
+        iteration_groups[1] = {
             'duration': max([getattr(iteration, 'time', 0) for iteration in result.iterations.values()], default=0),
             'nodes': {}
         }
@@ -643,17 +651,17 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
             # Если у нас есть столько же итераций, сколько нод, предполагаем что каждая итерация - это отдельная нода
             if len(result.iterations) == len(unique_nodes) and iteration_num <= len(unique_nodes):
                 node_host = unique_nodes[iteration_num - 1]
-                chunk_iterations[1]['nodes'][node_host] = {
+                iteration_groups[1]['nodes'][node_host] = {
                     'iteration': iteration,
                     'status': __get_workload_status(iteration)
                 }
     
-    # Добавляем строки для каждого chunk
-    for chunk_num in sorted(chunk_iterations.keys()):
-        chunk_info = chunk_iterations[chunk_num]
+    # Добавляем строки для каждой итерации
+    for iter_num in sorted(iteration_groups.keys()):
+        iter_info = iteration_groups[iter_num]
         
-        # Получаем продолжительность chunk
-        duration = chunk_info['duration']
+        # Получаем продолжительность итерации
+        duration = iter_info['duration']
         if duration:
             duration_str = f"{duration:.1f}"
             duration_color = "#f0f0f0"  # Нейтральный серый
@@ -664,15 +672,15 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         # Добавляем строку таблицы
         table_html += f"""
             <tr>
-                <td>{chunk_num}</td>
+                <td>{iter_num}</td>
                 <td style='background-color: {duration_color};'>{duration_str}</td>
         """
         
         # Добавляем ячейки для каждой ноды
         if unique_nodes:
             for host in unique_nodes:
-                # Получаем статус workload для этой ноды и chunk
-                node_info = chunk_info['nodes'].get(host, {})
+                # Получаем статус workload для этой ноды и итерации
+                node_info = iter_info['nodes'].get(host, {})
                 if node_info:
                     workload_color, workload_value = node_info['status']
                 else:

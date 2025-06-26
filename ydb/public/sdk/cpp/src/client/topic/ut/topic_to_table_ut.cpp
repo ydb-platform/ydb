@@ -26,6 +26,9 @@
 
 #include <thread>
 
+
+using namespace std::chrono_literals;
+
 namespace NYdb::inline Dev::NTopic::NTests {
 
 const auto TEST_MESSAGE_GROUP_ID_1 = TEST_MESSAGE_GROUP_ID + "_1";
@@ -340,9 +343,9 @@ private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader);
 
-    ui64 GetTopicTabletId(const TActorId& actorId,
-                          const std::string& topicPath,
-                          std::uint32_t partition);
+    std::uint64_t GetTopicTabletId(const TActorId& actorId,
+                                   const std::string& topicPath,
+                                   std::uint32_t partition);
     std::vector<std::string> GetTabletKeys(const TActorId& actorId,
                                            std::uint64_t tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
@@ -430,7 +433,7 @@ void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
     auto& runtime = Setup->GetRuntime();
     auto actorId = runtime.AllocateEdgeActor();
 
-    ui64 ssId = GetSchemeShardTabletId(actorId);
+    std::uint64_t ssId = GetSchemeShardTabletId(actorId);
 
     runtime.SendToPipe(ssId, actorId, request.release());
     runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>();
@@ -482,7 +485,7 @@ std::unique_ptr<TTransactionBase> TFixture::TTableSession::BeginTx()
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return std::make_unique<NTable::TTransaction>(result.GetTransaction());
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -495,7 +498,7 @@ void TFixture::TTableSession::CommitTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -508,7 +511,7 @@ void TFixture::TTableSession::RollbackTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -567,7 +570,7 @@ std::unique_ptr<TTransactionBase> TFixture::TQuerySession::BeginTx()
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return std::make_unique<NQuery::TTransaction>(result.GetTransaction());
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -580,7 +583,7 @@ void TFixture::TQuerySession::CommitTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -593,7 +596,7 @@ void TFixture::TQuerySession::RollbackTx(TTransactionBase& tx, EStatus status)
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToString());
             return;
         }
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -601,11 +604,11 @@ void TFixture::TQuerySession::Close()
 {
     // SDK doesn't provide a method to close the session for Query Client, so we use grpc API directly
     auto credentials = grpc::InsecureChannelCredentials();
-    auto channel = grpc::CreateChannel(TString(Endpoint_), credentials);
+    auto channel = grpc::CreateChannel(TStringType(Endpoint_), credentials);
     auto stub = Ydb::Query::V1::QueryService::NewStub(channel);
 
     grpc::ClientContext context;
-    context.AddMetadata("x-ydb-database", TString(Database_));
+    context.AddMetadata("x-ydb-database", TStringType(Database_));
 
     Ydb::Query::DeleteSessionRequest request;
     request.set_session_id(Session_.GetId());
@@ -891,7 +894,7 @@ std::vector<std::string> TFixture::ReadFromTopic(const std::string& topicPath,
 
         for (auto& event : session->GetEvents(settings)) {
             if (auto* e = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                Cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << Endl;
+                std::cerr << e->HasCompressedMessages() << " " << e->GetMessagesCount() << std::endl;
                 for (auto& m : e->GetMessages()) {
                     messages.emplace_back(m.GetData());
                 }
@@ -970,7 +973,7 @@ void TFixture::WaitForSessionClose(const std::string& topicPath,
     UNIT_ASSERT(context.AckCount() <= context.WriteCount);
 }
 
-ui64 TFixture::GetSchemeShardTabletId(const TActorId& actorId)
+std::uint64_t TFixture::GetSchemeShardTabletId(const TActorId& actorId)
 {
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
     navigate->DatabaseName = "/Root";
@@ -1041,11 +1044,11 @@ std::uint64_t TFixture::GetTopicTabletId(const TActorId& actorId, const std::str
 
     UNIT_FAIL("unknown partition");
 
-    return Max<ui64>();
+    return std::numeric_limits<std::uint64_t>::max();
 }
 
 std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
-                                                 ui64 tabletId)
+                                                 std::uint64_t tabletId)
 {
     auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(12345);
@@ -1320,8 +1323,8 @@ void TFixture::TestWriteToTopic26()
     // the test verifies a transaction in which data is read from a partition of one topic and written to
     // another partition of this topic
     //
-    const ui32 PARTITION_0 = 0;
-    const ui32 PARTITION_1 = 1;
+    const std::uint32_t PARTITION_0 = 0;
+    const std::uint32_t PARTITION_1 = 1;
 
     CreateTopic("topic_A", TEST_CONSUMER, 2);
 
@@ -1428,7 +1431,7 @@ bool TFixture::GetAllowOlapDataQuery() const
 }
 
 NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
-                                              ui64 tabletId)
+                                              std::uint64_t tabletId)
 {
     auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(12345);
@@ -1457,7 +1460,7 @@ NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
 }
 
 void TFixture::SendLongTxLockStatus(const TActorId& actorId,
-                                    ui64 tabletId,
+                                    std::uint64_t tabletId,
                                     const NPQ::TWriteId& writeId,
                                     NKikimrLongTxService::TEvLockStatus::EStatus status)
 {
@@ -1506,7 +1509,7 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
             break;
         }
 
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 }
 
@@ -1517,7 +1520,7 @@ void TFixture::RestartPQTablet(const std::string& topicName, std::uint32_t parti
     std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, partition);
     runtime.SendToPipe(tabletId, edge, new TEvents::TEvPoison());
 
-    Sleep(TDuration::Seconds(2));
+    std::this_thread::sleep_for(2s);
 }
 
 void TFixture::DeleteSupportivePartition(const std::string& topicName, std::uint32_t partition)
@@ -1538,7 +1541,7 @@ void TFixture::CheckTabletKeys(const std::string& topicName)
     TActorId edge = runtime.AllocateEdgeActor();
     std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
 
-    const THashSet<char> types {
+    const std::unordered_set<char> types {
         NPQ::TKeyPrefix::TypeInfo,
         NPQ::TKeyPrefix::TypeData,
         NPQ::TKeyPrefix::TypeTmpData,
@@ -1568,15 +1571,15 @@ void TFixture::CheckTabletKeys(const std::string& topicName)
             break;
         }
 
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
     }
 
     if (found) {
-        Cerr << "keys for tablet " << tabletId << ":" << Endl;
+        std::cerr << "keys for tablet " << tabletId << ":" << std::endl;
         for (const auto& k : keys) {
-            Cerr << k << Endl;
+            std::cerr << k << std::endl;
         }
-        Cerr << "=============" << Endl;
+        std::cerr << "=============" << std::endl;
 
         UNIT_FAIL("unexpected keys for tablet " << tabletId);
     }
@@ -1589,7 +1592,7 @@ void TFixture::DumpPQTabletKeys(const std::string& topicName)
     std::uint64_t tabletId = GetTopicTabletId(edge, "/Root/" + topicName, 0);
     auto keys = GetTabletKeys(edge, tabletId);
     for (const auto& key : keys) {
-        Cerr << key << Endl;
+        std::cerr << key << std::endl;
     }
 }
 
@@ -1808,17 +1811,17 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
     auto tx = session->BeginTx();
 
     for (size_t i = 0; i < params.OldHeadCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'));
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(100'000, 'x'));
         ++oldHeadMsgCount;
     }
 
     for (size_t i = 0; i < params.BigBlobsCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(7'000'000, 'x'), tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(7'000'000, 'x'), tx.get());
         ++bigBlobMsgCount;
     }
 
     for (size_t i = 0; i < params.NewHeadCount; ++i) {
-        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, TString(100'000, 'x'), tx.get());
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, std::string(100'000, 'x'), tx.get());
         ++newHeadMsgCount;
     }
 
@@ -1832,7 +1835,7 @@ void TFixture::TestTxWithBigBlobs(const TTestTxWithBigBlobsParams& params)
         RestartPQTablet("topic_A", 0);
     }
 
-    TVector<TString> messages;
+    std::vector<std::string> messages;
     for (size_t i = 0; (i < 10) && (messages.size() < (oldHeadMsgCount + bigBlobMsgCount + newHeadMsgCount)); ++i) {
         auto block = ReadFromTopic("topic_A", TEST_CONSUMER, TDuration::Seconds(2));
         for (auto& m : block) {
@@ -1928,7 +1931,7 @@ auto TFixture::MakeJsonDoc(const std::vector<TTableRecord>& records) -> std::str
         return "[]";
     }
 
-    TString s = "[";
+    std::string s = "[";
 
     s += makeJsonObject(records.front());
     for (auto i = records.begin() + 1; i != records.end(); ++i) {
@@ -2041,31 +2044,31 @@ Y_UNIT_TEST_F(ReadRuleGeneration, TFixtureNoClient)
     NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = false});
 
     // Users have created their own topic on it
-    CreateTopic(TString{TEST_TOPIC});
+    CreateTopic(TEST_TOPIC);
 
     // And they wrote their messages into it
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-1");
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-2");
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-3");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-1");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-2");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-3");
 
     // And he had a consumer
-    AddConsumer(TString{TEST_TOPIC}, {"consumer-1"});
+    AddConsumer(TEST_TOPIC, {"consumer-1"});
 
     // We read messages from the topic and committed offsets
-    Read_Exactly_N_Messages_From_Topic(TString{TEST_TOPIC}, "consumer-1", 3);
-    CloseTopicReadSession(TString{TEST_TOPIC}, "consumer-1");
+    Read_Exactly_N_Messages_From_Topic(TEST_TOPIC, "consumer-1", 3);
+    CloseTopicReadSession(TEST_TOPIC, "consumer-1");
 
     // And then the Logbroker team turned on the feature flag
     NotifySchemeShard({.EnablePQConfigTransactionsAtSchemeShard = true});
 
     // Users continued to write to the topic
-    WriteToTopic(TString{TEST_TOPIC}, TEST_MESSAGE_GROUP_ID, "message-4");
+    WriteToTopic(TEST_TOPIC, TEST_MESSAGE_GROUP_ID, "message-4");
 
     // Users have added new consumers
-    AddConsumer(TString{TEST_TOPIC}, {"consumer-2"});
+    AddConsumer(TEST_TOPIC, {"consumer-2"});
 
     // And they wanted to continue reading their messages
-    Read_Exactly_N_Messages_From_Topic(TString{TEST_TOPIC}, "consumer-1", 1);
+    Read_Exactly_N_Messages_From_Topic(TEST_TOPIC, "consumer-1", 1);
 }
 
 void TFixture::CheckAvgWriteBytes(const std::string& topicPath,
@@ -2241,7 +2244,7 @@ void TFixture::TestWriteToTopic50()
 
     session->CommitTx(*tx, EStatus::SUCCESS);
 
-    Sleep(TDuration::Seconds(5));
+    std::this_thread::sleep_for(5s);
 
     UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
 
@@ -2259,7 +2262,7 @@ void TFixture::TestWriteToTopic50()
 
     session->CommitTx(*tx, EStatus::SUCCESS);
 
-    Sleep(TDuration::Seconds(5));
+    std::this_thread::sleep_for(5s);
 
     UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
 }
@@ -2276,8 +2279,8 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_50_Query, TFixtureQuery)
 
 class TFixtureSinks : public TFixture {
 protected:
-    void CreateRowTable(const TString& path);
-    void CreateColumnTable(const TString& tablePath);
+    void CreateRowTable(const std::string& path);
+    void CreateColumnTable(const std::string& tablePath);
 
     bool GetEnableOltpSink() const override;
     bool GetEnableOlapSink() const override;
@@ -2312,16 +2315,16 @@ protected:
     }
 };
 
-void TFixtureSinks::CreateRowTable(const TString& path)
+void TFixtureSinks::CreateRowTable(const std::string& path)
 {
     CreateTable(path);
 }
 
-void TFixtureSinks::CreateColumnTable(const TString& tablePath)
+void TFixtureSinks::CreateColumnTable(const std::string& tablePath)
 {
     UNIT_ASSERT(!tablePath.empty());
 
-    TString path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
+    std::string path = (tablePath[0] != '/') ? ("/Root/" + tablePath) : tablePath;
 
     auto createSessionResult = GetTableClient().CreateSession().ExtractValueSync();
     UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());

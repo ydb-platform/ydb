@@ -12,7 +12,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
 
 class TTopicSdkTestSetup : public ITopicTestSetup {
 public:
-    TTopicSdkTestSetup(const std::string& testCaseName, const NKikimr::Tests::TServerSettings& settings = MakeServerSettings(), bool createTopic = true);
+    explicit TTopicSdkTestSetup(const std::string& testCaseName, const NKikimr::Tests::TServerSettings& settings = MakeServerSettings(), bool createTopic = true);
 
     void CreateTopic(const std::string& name = TEST_TOPIC,
                      const std::string& consumer = TEST_CONSUMER,

@@ -5,6 +5,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+
+using namespace std::chrono_literals;
 namespace NYdb::inline Dev::NTopic::NTests {
 
 Y_UNIT_TEST_SUITE(DirectReadWithServer) {
@@ -85,7 +87,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath());
 
         while (firstGenerationId == getPartitionGeneration()) {
-            Sleep(TDuration::MilliSeconds(100));
+            std::this_thread::sleep_for(100ms);
         }
 
         writeMessages(1);
@@ -164,7 +166,7 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         setup.GetServer().KillTopicPqrbTablet(setup.GetFullTopicPath());
 
         while (firstGenerationId == getPartitionGeneration()) {
-            Sleep(TDuration::MilliSeconds(100));
+            std::this_thread::sleep_for(100ms);
         }
 
         writeMessages(1);

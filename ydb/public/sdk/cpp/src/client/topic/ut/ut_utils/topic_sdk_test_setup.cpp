@@ -1,5 +1,8 @@
 #include "topic_sdk_test_setup.h"
 
+
+using namespace std::chrono_literals;
+
 namespace NYdb::inline Dev::NTopic::NTests {
 
 TTopicSdkTestSetup::TTopicSdkTestSetup(const std::string& testCaseName, const NKikimr::Tests::TServerSettings& settings, bool createTopic)
@@ -124,7 +127,7 @@ TTopicSdkTestSetup::TReadResult TTopicSdkTestSetup::Read(const std::string& topi
             }
         }
 
-        Sleep(TDuration::MilliSeconds(250));
+        std::this_thread::sleep_for(250ms);
     }
 
     result.Timeout = continueFlag;
@@ -141,7 +144,7 @@ TStatus TTopicSdkTestSetup::Commit(const std::string& path, const std::string& c
 
 
 std::string TTopicSdkTestSetup::GetEndpoint() const {
-    return "localhost:" + ToString(Server_.GrpcPort);
+    return "localhost:" + std::to_string(Server_.GrpcPort);
 }
 
 std::string TTopicSdkTestSetup::GetDatabase() const {

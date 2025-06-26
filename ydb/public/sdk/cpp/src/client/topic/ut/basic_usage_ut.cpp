@@ -20,19 +20,19 @@
 
 #include <util/stream/zlib.h>
 
-#include <future>
 
+using namespace std::chrono_literals;
 
 static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
 
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
-void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, ui32 count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor) {
+void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor) {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
-    for (ui32 i = 1; i <= count; ++i) {
+    for (std::uint32_t i = 1; i <= count; ++i) {
         bool res = session->Write(message);
         UNIT_ASSERT(res);
     }
@@ -46,7 +46,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     auto WaitTasks = [&](auto f, size_t c) {
         while (f() < c) {
-            Sleep(TDuration::MilliSeconds(100));
+            std::this_thread::sleep_for(100ms);
         };
     };
     auto WaitPlannedTasks = [&](auto e, size_t count) {
@@ -71,7 +71,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         size_t completed = e->GetExecutedCount();
 
         setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
-        Sleep(TDuration::MilliSeconds(100));
+        std::this_thread::sleep_for(100ms);
 
         e->StartFuncs(tasks);
         WaitExecutedTasks(e, completed + n);
@@ -92,7 +92,7 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     ReadSession = topicClient.CreateReadSession(readSettings);
 
-    ui32 i = 0;
+    std::uint32_t i = 0;
     while (AtomicGet(lastOffset) + 1 < count) {
         RunTasks(decompressor, {i++});
     }
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .CompressionExecutor(compressor);
 
 
-        ui32 count = 700;
+        std::uint32_t count = 700;
         std::string message(2'000, 'x');
 
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .CompressionExecutor(compressor);
 
 
-        ui32 count = 700;
+        std::uint32_t count = 700;
         std::string message(2'000, 'x');
 
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
@@ -173,12 +173,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         IExecutor::TPtr executor = new TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
-        ui64 count = 100u;
+        std::uint64_t count = 100u;
 
         auto client = setup.MakeClient();
         auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
-        TString messageBase = "message----";
+        std::string messageBase = "message----";
 
         for (auto i = 0u; i < count; i++) {
             auto res = session->Write(messageBase);

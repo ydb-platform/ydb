@@ -6,6 +6,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+
 namespace NYdb::inline Dev::NTopic::NTests {
 
     Y_UNIT_TEST_SUITE(Describe) {

@@ -113,7 +113,27 @@ private:
         return "";
     }
 
+    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
+        return Meta.GetBlobIds();
+    }
+
+    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
+        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
+    }
+
+    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
+        return Meta.GetBlobId(linkId);
+    }
+
+    ui32 GetBlobIdsCount() const {
+        return Meta.GetBlobIdsCount();
+    }
+
 public:
+    const TUnifiedBlobId& GetBlobIdPrivate(const TBlobRangeLink16::TLinkId linkId) const {
+        return Meta.GetBlobId(linkId);
+    }
+
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
     NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
@@ -155,10 +175,6 @@ public:
     }
 
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const = 0;
-
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return Meta.GetBlobIds();
-    }
 
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
@@ -225,18 +241,6 @@ public:
             }
         }
         return (RuntimeFeatures & (TRuntimeFeatures)feature);
-    }
-
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
-
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        return Meta.GetBlobId(linkId);
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return Meta.GetBlobIdsCount();
     }
 
     ui64 GetTxVolume() const {

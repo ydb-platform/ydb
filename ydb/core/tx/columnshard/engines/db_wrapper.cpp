@@ -35,7 +35,8 @@ void TDbWrapper::WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRe
             .Key(0, 0, row.ColumnId, 1, 1, portion.GetPortionId(), row.Chunk)
             .Update(NIceDb::TUpdate<IndexColumns::XPlanStep>(removeSnapshot ? removeSnapshot->GetPlanStep() : 0),
                 NIceDb::TUpdate<IndexColumns::XTxId>(removeSnapshot ? removeSnapshot->GetTxId() : 0),
-                NIceDb::TUpdate<IndexColumns::Blob>(portion.GetBlobId(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
+                NIceDb::TUpdate<IndexColumns::Blob>(portion.GetBlobIdPrivate(row.GetBlobRange().GetBlobIdxVerified()).SerializeBinary()),
+                NIceDb::TUpdate<IndexColumns::BlobIdx>(row.GetBlobRange().GetBlobIdxVerified()),
                 NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
                 NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset), NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size),
                 NIceDb::TUpdate<IndexColumns::PathId>(portion.GetPathId().GetRawValue()));
@@ -156,7 +157,8 @@ void TDbWrapper::WriteIndex(const TPortionInfo& portion, const TIndexChunk& row)
         AFL_VERIFY(bRange->IsValid());
         db.Table<IndexIndexes>()
             .Key(portion.GetPathId().GetRawValue(), portion.GetPortionId(), row.GetIndexId(), row.GetChunkIdx())
-            .Update(NIceDb::TUpdate<IndexIndexes::Blob>(portion.GetBlobId(bRange->GetBlobIdxVerified()).SerializeBinary()),
+            .Update(NIceDb::TUpdate<IndexIndexes::Blob>(portion.GetBlobIdPrivate(bRange->GetBlobIdxVerified()).SerializeBinary()),
+                NIceDb::TUpdate<IndexIndexes::BlobIdx>(bRange->GetBlobIdxVerified()),
                 NIceDb::TUpdate<IndexIndexes::Offset>(bRange->Offset), NIceDb::TUpdate<IndexIndexes::Size>(row.GetDataSize()),
                 NIceDb::TUpdate<IndexIndexes::RecordsCount>(row.GetRecordsCount()), NIceDb::TUpdate<IndexIndexes::RawBytes>(row.GetRawBytes()));
     } else if (auto bData = row.GetBlobDataOptional()) {

@@ -18,14 +18,13 @@ struct TIndexInfo;
 class TPortionMetaBase {
 protected:
     std::vector<TUnifiedBlobId> BlobIds;
-public:
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return BlobIds;
-    }
-
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
         AFL_VERIFY(linkId < GetBlobIds().size());
         return BlobIds[linkId];
+    }
+
+    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
+        return BlobIds;
     }
 
     ui32 GetBlobIdsCount() const {
@@ -51,18 +50,29 @@ public:
         return std::nullopt;
     }
 
+    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
+        auto result = GetBlobIdxOptional(blobId);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+public:
+    TBlobRangeLink16::TLinkId GetBlobIdxVerifiedPrivate(const TUnifiedBlobId& blobId) const {
+        auto result = GetBlobIdxOptional(blobId);
+        AFL_VERIFY(result);
+        return *result;
+    }
+
+    const std::vector<TUnifiedBlobId>& GetBlobIdsPrivate() const {
+        return BlobIds;
+    }
+
     ui64 GetMetadataMemorySize() const {
         return GetBlobIds().capacity() * sizeof(TUnifiedBlobId);
     }
 
     ui64 GetMetadataDataSize() const {
         return GetBlobIds().size() * sizeof(TUnifiedBlobId);
-    }
-
-    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
-        auto result = GetBlobIdxOptional(blobId);
-        AFL_VERIFY(result);
-        return *result;
     }
 };
 
@@ -82,6 +92,7 @@ private:
     YDB_READONLY(ui32, IndexBlobBytes, 0);
 
     friend class TPortionMetaConstructor;
+    friend class TPortionInfo;
     friend class TCompactedPortionInfo;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
         : PKSchema(pk.GetSchema())

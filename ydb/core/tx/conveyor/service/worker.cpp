@@ -71,6 +71,9 @@ void TWorker::UpdateCPUSoftLimit(const double cpuSoftLimit) {
         return;
     }
 
+    Sleep(TDuration::MilliSeconds(10));
+
+    AFL_VERIFY(!Instants.empty());
     auto wakeupTime = Instants.back();
     if (CPUSoftLimit < 1) {
         wakeupTime += GetWakeupDuration();

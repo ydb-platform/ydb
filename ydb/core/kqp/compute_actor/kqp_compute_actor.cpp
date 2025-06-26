@@ -14,6 +14,7 @@
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 
 
 namespace NKikimr {
@@ -58,6 +59,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
             if (name == "KqpIndexLookupJoin"sv) {
                 return WrapKqpIndexLookupJoin(callable, ctx);
+            }
+
+            if (name == "DqBlockHashJoin"sv) {
+                return WrapDqBlockHashJoin(callable, ctx);
             }
 
             return nullptr;

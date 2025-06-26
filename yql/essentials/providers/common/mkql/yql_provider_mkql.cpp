@@ -735,8 +735,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         [&](TRuntimeNode::TList items, TRuntimeNode::TList state) {
             items.insert(items.cend(), state.cbegin(), state.cend());
             return MkqlBuildWideLambda(*node.Child(3), ctx, items);
-        },
-        HasContextFuncs(*node.Child(1)) || HasContextFuncs(*node.Child(3)));
+        }, HasContextFuncs(*node.Child(1)) || HasContextFuncs(*node.Child(3)));
     });
 
     AddCallable("WideCombiner", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1713,6 +1712,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.BlockMapJoinCore(leftStream, rightBlockStorage, rightItemMkqlType, joinKind, leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops, returnType);
     });
+
 
     AddCallable({"GraceJoinCore", "GraceSelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         bool selfJoin = node.Content() == "GraceSelfJoinCore";

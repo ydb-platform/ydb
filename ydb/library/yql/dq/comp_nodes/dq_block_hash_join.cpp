@@ -87,13 +87,15 @@ public:
 
     void MakeBlocks(const THolderFactory& holderFactory) {
         Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)));
-        OutputRows_ = 0;
-        BuilderAllocatedSize_ = 0;
 
         for (size_t i = 0; i < Builders_.size(); i++) {
             Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
         }
-        FillArrays();  // CRITICAL: This populates the Arrays_ from Values for TBlockState::Get()
+        FillArrays();  // CRITICAL: This sets Count = OutputRows_ from the last column
+        
+        // Reset AFTER FillArrays() to preserve Count
+        OutputRows_ = 0;
+        BuilderAllocatedSize_ = 0;
     }
 
     NYql::NUdf::TBlockItem GetItem(size_t idx, size_t offset = 0) const {

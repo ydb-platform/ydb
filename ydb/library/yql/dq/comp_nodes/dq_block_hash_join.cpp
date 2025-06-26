@@ -166,7 +166,10 @@ public:
         return OutputWidth_ + 1;
     }
 
-    TUnboxedValueVector Inputs_;  // Made public for access from TStreamValue
+    // Public fields for access from TStreamValue, in order of construction
+    size_t InputWidth_;
+    size_t OutputWidth_;
+    TUnboxedValueVector Inputs_;
 
 private:
     void AddItem(const NYql::NUdf::TBlockItem& item, size_t idx) {
@@ -181,8 +184,6 @@ private:
     static const size_t MaxAllocatedFactor_ = 4;
     size_t InputRows_ = 0;
     size_t OutputRows_ = 0;
-    size_t InputWidth_;
-    size_t OutputWidth_;
     const TVector<ui32> LeftIOMap_;
     const std::vector<arrow::ValueDescr> InputsDescr_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;

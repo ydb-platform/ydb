@@ -17,6 +17,7 @@ TBufferedWriter::TBlockDeviceWrite::TBlockDeviceWrite(const TReqId& ReqId, TBuff
 }
 
 void TBufferedWriter::TBlockDeviceWrite::DoCall(IBlockDevice &BlockDevice) {
+    // TODO: do not mock writes one-by-one, do a huge PwriteAsync
     ui8 *source = Buffer->Data() + DirtyFrom - StartOffset;
     ui32 sizeToWrite = (ui32)(DirtyTo - DirtyFrom);
     BlockDevice.PwriteAsync(source, sizeToWrite, DirtyFrom, Buffer.Release(), ReqId, &TraceId);

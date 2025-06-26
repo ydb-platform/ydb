@@ -344,7 +344,7 @@ void TPDisk::Stop() {
 
     /* Waits all thread pool tasks to be completed.
      * Do we need to look for an implementation that drops all requests
-     * For Stop() to be faster? 
+     * For Stop() to be faster?
      */
     ChunkEncoder->Stop();
     {
@@ -952,6 +952,10 @@ TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
     if (evChunkWrite->IsReplied) {
         return {nullptr, true};
     }
+    piece->Completion = MakeHolder<TCompletionChunkWritePart>(piece, piece->ChunkWrite->Completion);
+    if (piece->ChunkWrite->Completion->AllPartsStarted()) {
+        Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(HPNow()));
+    }
     Y_VERIFY_S(piece->PieceShift % Format.SectorPayloadSize() == 0, PCtx->PDiskLogPrefix);
     Y_VERIFY_S(piece->PieceSize % Format.SectorPayloadSize() == 0 || piece->PieceShift + piece->PieceSize == evChunkWrite->TotalSize,
         PCtx->PDiskLogPrefix << "pieceShift# " << piece->PieceShift << " pieceSize# " << piece->PieceSize
@@ -986,8 +990,10 @@ TChunkWriteResult TPDisk::ChunkWritePiece(TChunkWritePiece *piece) {
                 desiredSectorIdx, dataChunkSizeSectors, Format.MagicDataChunk, chunkIdx, nullptr, desiredSectorIdx,
                 nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption, true);
 
+        piece->Span.Event("PDisk.ChunkWritePiece.EncryptionStart");
         bool end = ChunkWritePieceEncrypted(piece, writer.GetRef(), piece->PieceSize);
-        LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx, piece->PieceShift, piece->PieceSize);
+        //TODO: fix data race
+        //LWTRACK(PDiskChunkWriteLastPieceSendToDevice, evChunkWrite->Orbit, PCtx->PDiskId, evChunkWrite->Owner, chunkIdx, piece->PieceShift, piece->PieceSize);
         return {std::move(writer), end};
     } else {
         ChunkWritePiecePlain(piece);
@@ -2482,12 +2488,14 @@ void TPDisk::ProcessChunkWriteQueue() {
 
         // For plain chunks, nothing happens here, and ChunkWriter is nullptr
         if (piece->ChunkWriteResult->ChunkWriter) {
+            P_LOG(PRI_DEBUG, BPD11, "Performing TChunkWritePiece write to block device",
+                (ReqId, piece->ChunkWrite->ReqId),
+                (chunkIdx, piece->ChunkWrite->ChunkIdx),
+                (PieceShift, piece->PieceShift),
+                (PieceSize, piece->PieceSize),
+            );
+            //TODO: Span? LWTRACK?
             piece->ChunkWriteResult->ChunkWriter->WriteToBlockDevice();
-        }
-
-        bool lastPart = piece->ChunkWriteResult->LastPart;
-        if (lastPart) {
-            Mon.IncrementQueueTime(piece->ChunkWrite->PriorityClass, piece->ChunkWrite->LifeDurationMs(HPNow()));
         }
 
         // Last flush happens here.
@@ -3484,27 +3492,25 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
         const ui32 jobCount = (whole->TotalSize + jobSizeLimit - 1) / jobSizeLimit;
         whole->Completion->Pieces = jobCount;
         ui32 remainingSize = whole->TotalSize;
-        TVector <TChunkWritePiece*> chunkWritePieces;
-        chunkWritePieces.reserve(jobCount);
+
         for (ui32 idx = 0; idx < jobCount; ++idx) {
             auto span = request->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
             span.Attribute("small_job_idx", idx)
                 .Attribute("is_last_piece", idx == jobCount - 1);
             ui32 jobSize = Min(remainingSize, jobSizeLimit);
-            TChunkWritePiece *piece = new TChunkWritePiece(this, whole, idx * jobSizeLimit, jobSize, std::move(span), whole->Completion);
+            TChunkWritePiece *piece = new TChunkWritePiece(this, whole, idx * jobSizeLimit, jobSize, std::move(span));
             piece->GateId = whole->GateId;
             piece->EstimateCost(DriveModel);
-            chunkWritePieces.push_back(piece);
             remainingSize -= jobSize;
-        }
-        /* To avoid the situation when one piece is scheduled, instantly completed,
-         * PartsInProgress becomes 0 and TEvChunkWriteCompletion is sent away
-         * before other parts finish
-         */
-        for (auto piece : chunkWritePieces) {
+
+            P_LOG(PRI_INFO, BPD01, "PDiskChunkWritePieceAddToScheduler", (idx, idx), (jobSizeLimit, jobSizeLimit),
+                (pieceShift, piece->PieceShift), (pieceSize, piece->PieceSize));
+            LWTRACK(PDiskChunkWritePieceAddToScheduler, whole->Orbit, PCtx->PDiskId, idx, piece->PieceShift,
+                    piece->PieceSize);
+
             AddJobToScheduler(piece, request->JobKind);
         }
-        chunkWritePieces.clear();
+
         Y_VERIFY_S(remainingSize == 0, PCtx->PDiskLogPrefix << "remainingSize# " << remainingSize);
     } else if (request->GetType() == ERequestType::RequestChunkRead) {
         TIntrusivePtr<TChunkRead> read = std::move(static_cast<TChunkRead*>(request)->SelfPointer);

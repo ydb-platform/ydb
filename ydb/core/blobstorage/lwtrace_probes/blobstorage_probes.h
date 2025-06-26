@@ -217,9 +217,15 @@ struct TEventTypeField {
     PROBE(PDiskChunkReadPieceComplete, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, double), \
       NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
+    PROBE(PDiskChunkWritePieceComplete, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui64, ui64, double), \
+      NAMES("pdisk", "size", "relativeOffset", "deviceTimeMs")) \
     PROBE(PDiskChunkWriteAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, double, ui64, bool, ui64, ui64), \
       NAMES("pdisk", "reqId", "creationTimeSec", "owner", "isFast", "priorityClass", "size")) \
+    PROBE(PDiskChunkWritePieceAddToScheduler, GROUPS("PDisk", "PDiskRequest"), \
+      TYPES(TPDiskIdField, ui32, ui64, ui64), \
+      NAMES("pdisk", "pieceIdx", "offset", "size")) \
     PROBE(PDiskChunkWriteLastPieceSendToDevice, GROUPS("PDisk", "PDiskRequest"), \
       TYPES(TPDiskIdField, ui64, ui64, ui64, ui64), \
       NAMES("pdisk", "owner", "chunkIdx", "pieceOffset", "pieceSize")) \

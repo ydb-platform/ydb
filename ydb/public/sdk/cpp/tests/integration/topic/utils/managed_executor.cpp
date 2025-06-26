@@ -1,6 +1,7 @@
 #include "managed_executor.h"
 
-namespace NYdb::NTopic::NTests {
+
+namespace NYdb::inline Dev::NTopic::NTests {
 
 TManagedExecutor::TManagedExecutor(TExecutorPtr executor) :
     Executor{std::move(executor)}
@@ -14,10 +15,10 @@ bool TManagedExecutor::IsAsync() const
 
 void TManagedExecutor::Post(TFunction &&f)
 {
-    with_lock (Mutex) {
-        Funcs.push_back(std::move(f));
-        ++Planned;
-    }
+    std::lock_guard lock(Mutex);
+
+    Funcs.push_back(std::move(f));
+    ++Planned;
 }
 
 void TManagedExecutor::DoStart()
@@ -46,21 +47,21 @@ void TManagedExecutor::RunTask(TFunction&& func)
 
 void TManagedExecutor::StartFuncs(const std::vector<size_t>& indicies)
 {
-    with_lock (Mutex) {
-        for (auto index : indicies) {
+    std::lock_guard lock(Mutex);
+
+    for (auto index : indicies) {
             Y_ABORT_UNLESS(index < Funcs.size());
             Y_ABORT_UNLESS(Funcs[index]);
 
-            RunTask(std::move(Funcs[index]));
-        }
+        RunTask(std::move(Funcs[index]));
     }
 }
 
 size_t TManagedExecutor::GetFuncsCount() const
 {
-    with_lock (Mutex) {
-        return Funcs.size();
-    }
+    std::lock_guard lock(Mutex);
+
+    return Funcs.size();
 }
 
 size_t TManagedExecutor::GetPlannedCount() const
@@ -80,11 +81,11 @@ size_t TManagedExecutor::GetExecutedCount() const
 
 void TManagedExecutor::RunAllTasks()
 {
-    with_lock (Mutex) {
-        for (auto& func : Funcs) {
-            if (func) {
-                RunTask(std::move(func));
-            }
+    std::lock_guard lock(Mutex);
+
+    for (auto& func : Funcs) {
+        if (func) {
+            RunTask(std::move(func));
         }
     }
 }

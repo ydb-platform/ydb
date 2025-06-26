@@ -136,16 +136,16 @@ namespace NActors {
      * Concept matches all callbacks returning any async<T>
      */
     template<class TCallback, class... TArgs>
-    concept IsAsyncCoroutineCallback = requires (TCallback&& callback, TArgs&&... args) {
-        { std::forward<TCallback>(callback)(std::forward<TArgs>(args)...) } -> IsAsyncCoroutine;
+    concept IsAsyncCoroutineCallback = requires (TCallback&& callback) {
+        { std::forward<TCallback>(callback)(std::declval<TArgs>()...) } -> IsAsyncCoroutine;
     };
 
     /**
      * Concept matches all callbacks returning a specific async<T>
      */
     template<class TCallback, class T, class... TArgs>
-    concept IsSpecificAsyncCoroutineCallback = requires (TCallback&& callback, TArgs&&... args) {
-        { std::forward<TCallback>(callback)(std::forward<TArgs>(args)...) } -> std::same_as<async<T>>;
+    concept IsSpecificAsyncCoroutineCallback = requires (TCallback&& callback) {
+        { std::forward<TCallback>(callback)(std::declval<TArgs>()...) } -> std::same_as<async<T>>;
     };
 
     /**

@@ -192,9 +192,9 @@ namespace NActors {
             using TBase = TAsyncDecoratorAwaiter<R, TActorAsyncWithTimeoutAwaiter<TWhen, R>>;
 
         public:
-            template<class TCallback>
-            TActorAsyncWithTimeoutAwaiter(TWhen when, TCallback&& callback)
-                : TBase(std::forward<TCallback>(callback))
+            template<class TCallback, class... TArgs>
+            TActorAsyncWithTimeoutAwaiter(TWhen when, TCallback&& callback, TArgs&&... args)
+                : TBase(std::forward<TCallback>(callback), std::forward<TArgs>(args)...)
                 , When(when)
             {}
 
@@ -331,25 +331,31 @@ namespace NActors {
         };
     }
 
-    template<IsAsyncCoroutineCallback TCallback>
-    inline auto ActorWithTimeout(TDuration duration, TCallback&& callback) {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+    template<class TCallback, class... TArgs>
+    inline auto ActorWithTimeout(TDuration duration, TCallback&& callback, TArgs&&... args)
+        requires (IsAsyncCoroutineCallback<TCallback, TArgs&&...>)
+    {
+        using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
         using R = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TDuration, R>(duration, std::forward<TCallback>(callback));
+        return NDetail::TActorAsyncWithTimeoutAwaiter<TDuration, R>(duration, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
-    template<IsAsyncCoroutineCallback TCallback>
-    inline auto ActorWithDeadline(TMonotonic deadline, TCallback&& callback) {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+    template<class TCallback, class... TArgs>
+    inline auto ActorWithDeadline(TMonotonic deadline, TCallback&& callback, TArgs&&... args)
+        requires (IsAsyncCoroutineCallback<TCallback, TArgs&&...>)
+    {
+        using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
         using R = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TMonotonic, R>(deadline, std::forward<TCallback>(callback));
+        return NDetail::TActorAsyncWithTimeoutAwaiter<TMonotonic, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
-    template<IsAsyncCoroutineCallback TCallback>
-    inline auto ActorWithDeadline(TInstant deadline, TCallback&& callback) {
-        using TCallbackResult = decltype(std::forward<TCallback>(callback)());
+    template<class TCallback, class... TArgs>
+    inline auto ActorWithDeadline(TInstant deadline, TCallback&& callback, TArgs&&... args)
+        requires (IsAsyncCoroutineCallback<TCallback, TArgs&&...>)
+    {
+        using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
         using R = TAsyncCoroutineResult<TCallbackResult>;
-        return NDetail::TActorAsyncWithTimeoutAwaiter<TInstant, R>(deadline, std::forward<TCallback>(callback));
+        return NDetail::TActorAsyncWithTimeoutAwaiter<TInstant, R>(deadline, std::forward<TCallback>(callback), std::forward<TArgs>(args)...);
     }
 
 } // namespace NActors

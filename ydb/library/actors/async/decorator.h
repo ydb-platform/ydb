@@ -11,9 +11,9 @@ namespace NActors {
     public:
         static constexpr bool IsActorAwareAwaiter = true;
 
-        template<class TCallback>
-        TAsyncDecoratorAwaiter(TCallback&& callback)
-            : Coroutine(std::forward<TCallback>(callback)())
+        template<class TCallback, class... TArgs>
+        TAsyncDecoratorAwaiter(TCallback&& callback, TArgs&&... args)
+            : Coroutine(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...))
         {}
 
     private:

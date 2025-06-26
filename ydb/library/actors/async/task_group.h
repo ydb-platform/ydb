@@ -250,7 +250,7 @@ namespace NActors {
         private:
             TTaskGroupSink<T>& Sink;
             const size_t Index;
-            std::decay_t<TCallback> Callback;
+            [[no_unique_address]] std::decay_t<TCallback> Callback;
             std::exception_ptr CallbackException;
             async<T> Coroutine = async<T>::UnsafeEmpty();
             std::coroutine_handle<> Pending;
@@ -411,7 +411,7 @@ namespace NActors {
         public:
             template<class TCallback>
             TWithTaskGroupAwaiter(TCallback&& callback)
-                : TDecorator([&]() -> async<R> { return std::forward<TCallback>(callback)(this->Group); })
+                : TDecorator(std::forward<TCallback>(callback), this->Group)
             {}
 
             TWithTaskGroupAwaiter(TWithTaskGroupAwaiter&&) = delete;

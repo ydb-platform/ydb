@@ -28,8 +28,11 @@ TMeteringStats& operator += (TMeteringStats& value, const TMeteringStats& other)
 
 TMeteringStats& operator -= (TMeteringStats& value, const TMeteringStats& other) {
     const auto safeSub = [](ui64 x, ui64 y) {
-        Y_ENSURE(x >= y);
-        return x - y;
+        if (Y_LIKELY(x >= y)) {
+            return x - y;
+        }
+        Y_ASSERT(false);
+        return 0ul;
     };
 
     value.SetUploadRows(safeSub(value.GetUploadRows(), other.GetUploadRows()));

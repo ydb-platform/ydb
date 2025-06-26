@@ -435,7 +435,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
-            Evict(Cache.Touch(page.Get(), cacheTier));
+            Evict(Cache.MoveTouch(page.Get(), cacheTier));
         }
 
         DoGC();
@@ -731,7 +731,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 droppedPages[pageCollectionId].insert(touchedPages.begin(), touchedPages.end());
                 continue;
             }
-            ui32 cacheTier = collection->GetCacheTier();
+            ui32 cacheTierHint = collection->GetCacheTier();
 
             for (auto pageId : touchedPages) {
                 Y_ENSURE(pageId < collection->PageMap.size());
@@ -755,7 +755,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     AddActivePage(page);
                     [[fallthrough]];
                 case PageStateLoaded:
-                    Evict(Cache.Touch(page, cacheTier));
+                    Evict(Cache.Touch(page, cacheTierHint));
                     break;
                 default:
                     Y_TABLET_ERROR("unknown load state");
@@ -880,7 +880,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
                 page->Initialize(std::move(paged.Data));
                 BodyProvided(*collection, page);
-                Evict(Cache.Touch(page, cacheTier));
+                Evict(Cache.MoveTouch(page, cacheTier));
             }
         }
 
@@ -913,7 +913,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         case PageStateLoaded:
             Counters.CacheHitPages->Inc();
             Counters.CacheHitBytes->Add(page->Size);
-            Evict(Cache.Touch(page, cacheTier));
+            Evict(Cache.MoveTouch(page, cacheTier));
             break;
         case PageStateNo:
         case PageStateRequested:
@@ -1161,7 +1161,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             // TODO: move pages async and batched
             for (const auto kv : collection.PageMap) {
                 auto* page = kv.second.Get();
-                Cache.Move(page, RegularCacheTier);
+                Cache.TryMove(page, RegularCacheTier);
             }
         }
     }

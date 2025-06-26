@@ -10,9 +10,9 @@ namespace NKikimr::NSharedCache {
         using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
         using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
-        static constexpr ui32 MaxTiersCount = 3;
-        static_assert(MaxTiersCount < (1 << 2));
-        static constexpr ui32 DefaultTier = 1;
+        static constexpr ui32 MaxTier = 3;
+        static_assert(MaxTier == ((1 << 2) - 1));
+        static constexpr ui32 DefaultTier = 0;
 
         struct TCacheHolder {
             TSwitchableCache<TPage, TPageTraits> Cache;
@@ -25,9 +25,9 @@ namespace NKikimr::NSharedCache {
         TTieredCache(ui64 limit, TCacheBuilder createCache, ui32 numberOfTiers, TReplacementPolicy policy, TSharedPageCacheCounters& cacheCounters)
             : CacheTiers(::Reserve(numberOfTiers))
         {
-            Y_ENSURE(numberOfTiers > 0 && numberOfTiers <= MaxTiersCount);
+            Y_ENSURE(numberOfTiers > 0 && numberOfTiers <= MaxTier);
             TCounterPtr sizeCounter = cacheCounters.ReplacementPolicySize(policy);
-            for (ui32 tier = 1; tier <= numberOfTiers; ++tier) {
+            for (ui32 tier = 0; tier < numberOfTiers; ++tier) {
                 ui64 tierLimit = tier == DefaultTier ? limit : 0;
                 CacheTiers.emplace_back(
                     TSwitchableCache<TPage, TPageTraits>(tierLimit, createCache(), sizeCounter),
@@ -37,13 +37,12 @@ namespace NKikimr::NSharedCache {
             }
         }
 
-        // move if page in cache
-        TIntrusiveList<TPage> Move(TPage *page, ui32 targetTier) {
+        TIntrusiveList<TPage> TryMove(TPage *page, ui32 targetTier) {
             ui32 sourceTier = TPageTraits::GetTier(page);
-            Y_ENSURE(sourceTier <= CacheTiers.size());
-            Y_ENSURE(targetTier > 0 && targetTier <= CacheTiers.size());
+            Y_ENSURE(sourceTier <= MaxTier);
+            Y_ENSURE(targetTier < MaxTier);
 
-            if (sourceTier == 0 || sourceTier == targetTier) {
+            if (sourceTier == MaxTier || sourceTier == targetTier) {
                 // nothing to move
                 return {};
             }
@@ -55,16 +54,16 @@ namespace NKikimr::NSharedCache {
         TIntrusiveList<TPage> Switch(TCacheBuilder createCache, TCounterPtr sizeCounter) Y_WARN_UNUSED_RESULT {
             TIntrusiveList<TPage> evictedList;
 
-            for (ui32 tier = 1; tier <= CacheTiers.size(); ++tier) {
-                evictedList.Append(ProcessEvicted(GetTierCache(tier).Cache.Switch(createCache(), sizeCounter), tier));
+            for (ui32 tier = 0; tier < CacheTiers.size(); ++tier) {
+                evictedList.Append(ProcessEvicted(CacheTiers[tier].Cache.Switch(createCache(), sizeCounter), tier));
             }
 
             return evictedList;
         }
 
         TIntrusiveList<TPage> EvictNext() {
-            for (ui32 tier = 1; tier <= CacheTiers.size(); ++tier) {
-                auto& cache = GetTierCache(tier);
+            for (ui32 tier = 0; tier < CacheTiers.size(); ++tier) {
+                auto& cache = CacheTiers[tier];
                 if (auto evicted = cache.Cache.EvictNext(); !evicted.Empty()) {
                     return ProcessEvicted(std::move(evicted), tier);
                 }
@@ -72,13 +71,37 @@ namespace NKikimr::NSharedCache {
             return {};
         }
 
-        TIntrusiveList<TPage> Touch(TPage *page, ui32 targetTier) {
+        TIntrusiveList<TPage> Touch(TPage *page, ui32 tierHint) {
             ui32 tier = TPageTraits::GetTier(page);
-            Y_ENSURE(tier <= CacheTiers.size());
-            Y_ENSURE(targetTier > 0 && targetTier <= CacheTiers.size());
+            Y_ENSURE(tier <= MaxTier);
+            Y_ENSURE(tierHint < MaxTier);
+
+            TIntrusiveList<TPage> evictedList;
+            ui32 targetTier = tier;
+            if (tier == MaxTier) {
+                targetTier = tierHint;
+                auto& sourceCache = CacheTiers[DefaultTier];
+                auto& targetCache = CacheTiers[targetTier];
+                UpdateLimits(page, sourceCache, targetCache);
+                if (sourceCache.Cache.GetSize() > sourceCache.Cache.GetLimit()) {
+                    evictedList.Append(ProcessEvicted(sourceCache.Cache.EvictNext(), DefaultTier));
+                }
+                TPageTraits::SetTier(page, targetTier);
+                targetCache.ActivePages->Inc();
+                targetCache.ActiveBytes->Add(TPageTraits::GetSize(page));
+            }
+
+            evictedList.Append(ProcessEvicted(CacheTiers[targetTier].Cache.Touch(page), targetTier));
+            return evictedList;
+        }
+
+        TIntrusiveList<TPage> MoveTouch(TPage *page, ui32 targetTier) {
+            ui32 tier = TPageTraits::GetTier(page);
+            Y_ENSURE(tier <= MaxTier);
+            Y_ENSURE(targetTier < MaxTier);
 
             if (tier == targetTier) {
-                return ProcessEvicted(GetTierCache(tier).Cache.Touch(page), tier);
+                return ProcessEvicted(CacheTiers[tier].Cache.Touch(page), tier);
             }
 
             return DoMove(page, tier, targetTier);
@@ -86,27 +109,27 @@ namespace NKikimr::NSharedCache {
 
         void Erase(TPage *page) {
             ui32 tier = TPageTraits::GetTier(page);
-            Y_ENSURE(tier <= CacheTiers.size());
-            if (tier > 0) {
-                auto& cache = GetTierCache(tier);
+            Y_ENSURE(tier <= MaxTier);
+            if (tier < MaxTier) {
+                auto& cache = CacheTiers[tier];
                 if (tier != DefaultTier) {
-                    UpdateLimits(page, cache, GetTierCache(DefaultTier));
+                    UpdateLimits(page, cache, CacheTiers[DefaultTier]);
                 }
                 cache.ActivePages->Dec();
                 cache.ActiveBytes->Sub(TPageTraits::GetSize(page));
-                TPageTraits::SetTier(page, 0);
+                TPageTraits::SetTier(page, MaxTier);
                 cache.Cache.Erase(page);
             }
         }
 
         void UpdateLimit(ui64 limit) {
-            for (ui32 tier = CacheTiers.size(); tier > DefaultTier; --tier) {
-                auto& cache = GetTierCache(tier);
+            for (ui32 tier = CacheTiers.size() - 1; tier > DefaultTier; --tier) {
+                auto& cache = CacheTiers[tier];
                 ui64 currentTierLimit = Min(cache.Cache.GetSize(), limit);
                 cache.Cache.UpdateLimit(currentTierLimit);
                 limit -= currentTierLimit;
             }
-            GetTierCache(DefaultTier).Cache.UpdateLimit(limit); // set all remaining limit for default tier
+            CacheTiers[DefaultTier].Cache.UpdateLimit(limit); // set all remaining limit for default zero tier
         }
 
         ui64 GetLimit() const {
@@ -129,13 +152,13 @@ namespace NKikimr::NSharedCache {
             TStringBuilder result;
             bool first = true;
 
-            for (ui32 tierIndex = 0; tierIndex < CacheTiers.size(); ++tierIndex) {
+            for (ui32 tier = 0; tier < CacheTiers.size(); ++tier) {
                 if (first) {
                     first = false;
                 } else {
                     result << "; ";
                 }
-                result << "Tier " << (tierIndex + 1) << ": " << CacheTiers[tierIndex].Cache.Dump();
+                result << "Tier " << tier << ": " << CacheTiers[tier].Cache.Dump();
             }
         
             return result;
@@ -145,15 +168,15 @@ namespace NKikimr::NSharedCache {
 
         TIntrusiveList<TPage> DoMove(TPage *page, ui32 sourceTier, ui32 targetTier) {
             TIntrusiveList<TPage> evictedList;
-            auto& targetCache = GetTierCache(targetTier);
-            if (sourceTier == 0) {
-                auto& sourceCache = GetTierCache(DefaultTier);
+            auto& targetCache = CacheTiers[targetTier];
+            if (sourceTier == MaxTier) {
+                auto& sourceCache = CacheTiers[DefaultTier];
                 UpdateLimits(page, sourceCache, targetCache);
                 if (sourceCache.Cache.GetSize() > sourceCache.Cache.GetLimit()) {
                     evictedList.Append(ProcessEvicted(sourceCache.Cache.EvictNext(), DefaultTier));
                 }
             } else {
-                auto& sourceCache = GetTierCache(sourceTier);
+                auto& sourceCache = CacheTiers[sourceTier];
                 UpdateLimits(page, sourceCache, targetCache);
                 sourceCache.ActivePages->Dec();
                 sourceCache.ActiveBytes->Sub(TPageTraits::GetSize(page));
@@ -179,13 +202,13 @@ namespace NKikimr::NSharedCache {
         }
 
         TIntrusiveList<TPage> ProcessEvicted(TIntrusiveList<TPage>&& evictedList, ui32 tier) {
-            auto& cache = GetTierCache(tier);
+            auto& cache = CacheTiers[tier];
             if (tier != DefaultTier) {
                 // shrink non-default cache limit to actual size 
                 auto cacheSize = cache.Cache.GetSize();
                 auto cacheLimit = cache.Cache.GetLimit();
                 if (cacheLimit > cacheSize) {
-                    TransferLimits(cacheLimit - cacheSize, cache, GetTierCache(DefaultTier));
+                    TransferLimits(cacheLimit - cacheSize, cache, CacheTiers[DefaultTier]);
                 }
             }
 
@@ -198,7 +221,7 @@ namespace NKikimr::NSharedCache {
 
             for (auto& page_ : evictedList) {
                 TPage* page = &page_;
-                TPageTraits::SetTier(page, 0);
+                TPageTraits::SetTier(page, MaxTier);
                 ++evictedPages;
                 evictedSize += TPageTraits::GetSize(page);
             }
@@ -209,12 +232,8 @@ namespace NKikimr::NSharedCache {
             return evictedList;
         }
 
-        Y_FORCE_INLINE TCacheHolder& GetTierCache(ui32 tier) {
-            return CacheTiers[tier - 1];
-        }
-
     private:
-        TVector<TCacheHolder> CacheTiers; // tierIndex == tier - 1
+        TVector<TCacheHolder> CacheTiers;
     };
 
 } // namespace NKikimr::NSharedCache

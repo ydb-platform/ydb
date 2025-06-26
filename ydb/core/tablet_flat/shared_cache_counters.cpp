@@ -1,4 +1,5 @@
 #include "shared_cache_counters.h"
+#include "shared_page.h"
 #include "shared_sausagecache.h"
 
 namespace NKikimr::NSharedCache {

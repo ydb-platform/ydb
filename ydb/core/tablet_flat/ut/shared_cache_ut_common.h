@@ -4,6 +4,8 @@
 
 namespace NKikimr::NSharedCache::NTest {
 
+    static constexpr ui32 MaxCacheTier = 3;
+
     struct TPage : public TIntrusiveListItem<TPage> {
         ui32 Id;
         size_t Size;
@@ -13,7 +15,7 @@ namespace NKikimr::NSharedCache::NTest {
         {}
 
         ui32 CacheId : 4 = 0;
-        ui32 CacheTier : 2 = 0;
+        ui32 CacheTier : 2 = MaxCacheTier;
     };
 
     struct TPageTraits {

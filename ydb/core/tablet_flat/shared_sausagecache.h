@@ -8,11 +8,6 @@
 
 namespace NKikimr::NSharedCache {
 
-enum ECacheTiers {
-    RegularCacheTier = 1,
-    TryInMemoryCacheTier = 2,
-};
-
 using TSharedCacheConfig = NKikimrSharedCache::TSharedCacheConfig;
 
 IActor* CreateSharedPageCache(

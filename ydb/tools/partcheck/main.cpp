@@ -90,24 +90,47 @@ int main(int argc, char *argv[]) {
                         }
                     }
                 } else {
-                    unsigned badParts = 0;
-                    for (size_t i = 0; i < parts.size(); ++i) {
-                        std::vector<TRope> temp(ropes);
-                        temp[i] = {};
-                        ErasureRestore((TBlobStorageGroupType::ECrcMode)current->CrcMode(), gtype, current->BlobSize(), nullptr,
-                            temp, 1 << i);
-                        if (temp[i] != ropes[i]) {
-                            badParts |= 1 << i;
+                    unsigned possibleBadParts = 0;
+                    bool someBad = false;
+
+                    for (size_t badPart = 0; badPart < gtype.TotalPartCount(); ++badPart) {
+                        bool otherPartsCorrect = true;
+
+                        for (unsigned mask = 0; mask < (1 << gtype.TotalPartCount()); ++mask) {
+                            if ((int)std::popcount(mask) != (int)gtype.ParityParts() || ~mask & 1 << badPart) {
+                                continue;
+                            }
+
+                            std::vector<TRope> temp(ropes);
+                            for (size_t i = 0; i < gtype.TotalPartCount(); ++i) {
+                                if (mask & 1 << i) {
+                                    temp[i] = {};
+                                }
+                            }
+
+                            ErasureRestore((TBlobStorageGroupType::ECrcMode)current->CrcMode(), gtype, current->BlobSize(),
+                                nullptr, temp, mask);
+
+                            for (size_t i = 0; i < gtype.TotalPartCount(); ++i) {
+                                if (~mask & 1 << i) { // we didn't restore this part, no need to check
+                                    continue;
+                                }
+                                if (temp[i] != ropes[i]) {
+                                    someBad = true;
+                                    if (i != badPart) {
+                                        otherPartsCorrect = false;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (otherPartsCorrect) {
+                            possibleBadParts |= 1 << badPart;
                         }
                     }
-                    if (!badParts) {
-                        // all parts are correct
-                    } else if (std::popcount(badParts) + 1 == (int)gtype.TotalPartCount()) {
-                        int partIdx = std::countr_one(badParts);
-                        addLog(TStringBuilder() << "partId# " << partIdx + 1 << " value incorrect");
-                        errors = true;
-                    } else {
-                        addLog("more than one part is incorrect");
+
+                    if (someBad) {
+                        addLog(TStringBuilder() << "part value incorrect possibleBadParts# " << possibleBadParts);
                         errors = true;
                     }
                 }

@@ -31,6 +31,10 @@ private:
     const EConsumer Consumer;
 
 public:
+    bool IsAborted() const {
+        return Callback->IsAborted();
+    }
+
     EConsumer GetConsumer() const {
         return Consumer;
     }
@@ -93,6 +97,10 @@ private:
             auto request = std::move(RequestsQueue.front());
             RequestsQueue.pop_front();
             QueueObjectsCount.Sub(request->GetWait().size());
+            if (request->IsAborted()) {
+                Counters->AbortedRequests->Inc();
+                continue;
+            }
             AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
             auto& addresses = requestedAddresses[request->GetConsumer()];
             for (auto&& i : request->GetWait()) {
@@ -169,7 +177,12 @@ public:
     void AddRequest(const std::shared_ptr<TRequest>& request) {
         AFL_DEBUG(NKikimrServices::GENERAL_CACHE)("event", "add_request");
         THashMap<TAddress, TObject> objectsResult;
-        Counters->IncomingRequestsCount->Inc();
+        if (request->IsAborted()) {
+            Counters->IncomingAbortedRequestsCount->Inc();
+            return;
+        } else {
+            Counters->IncomingRequestsCount->Inc();
+        }
         for (auto&& i : request->GetWait()) {
             auto it = Cache.Find(i);
             if (it == Cache.End()) {

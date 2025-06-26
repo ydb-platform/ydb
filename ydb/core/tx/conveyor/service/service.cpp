@@ -10,7 +10,7 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
     Workers.reserve(WorkersCount);
     for (ui32 i = 0; i < WorkersCount; ++i) {
         const auto usage = config.GetWorkerCPUUsage(i);
-        Workers.emplace_back(std::make_unique<TWorker>(conveyorName, usage, distributorId, i, Counters.SendFwdHistogram, Counters.SendFwdDuration));
+        Workers.emplace_back(usage, std::make_unique<TWorker>(conveyorName, usage, distributorId, i, Counters.SendFwdHistogram, Counters.SendFwdDuration));
         MaxWorkerThreads += usage;
     }
     AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)("count", WorkersCount);
@@ -61,15 +61,18 @@ void TWorkersPool::ChangeAmountCPULimit(const double delta) {
     ActiveWorkersCount = 0;
     ActiveWorkerThreads = numberThreads;
     ActiveWorkersIdx.clear();
-    for (const auto& worker : Workers) {
+    for (auto& worker : Workers) {
         if (numberThreads <= 0) {
             break;
         }
         if (!worker.GetRunningTask()) {
             ActiveWorkersIdx.emplace_back(ActiveWorkersCount);
         }
-        worker.GetWorker()->UpdateCPUSoftLimit(std::min<double>(numberThreads, 1));
-        numberThreads -= worker.GetWorker()->GetCPUSoftLimit();
+
+        const auto newCPUSoftLimit = std::min<double>(numberThreads, 1);
+        worker.ChangeCPUSoftLimit(newCPUSoftLimit);
+
+        numberThreads -= newCPUSoftLimit;
         ++ActiveWorkersCount;
     }
     AFL_VERIFY(std::abs(numberThreads) < Eps);

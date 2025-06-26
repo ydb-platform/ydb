@@ -1,5 +1,6 @@
 #include "schemeshard_path.h"
 
+#include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/path.h>
@@ -16,8 +17,6 @@ TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation loca
     , Location(location)
 {
 }
-
-bool isSysDirCreateAllowed = false;  // TODO(n00bcracker): remove after giving permissions only for metadata@system
 
 TPath::TChecker::operator bool() const {
     return !Failed;
@@ -688,13 +687,13 @@ const TPath::TChecker& TPath::TChecker::FailOnExist(TPathElement::EPathType expe
     return FailOnExist(TSet<TPathElement::EPathType>{expectedType}, acceptAlreadyExist);
 }
 
-const TPath::TChecker& TPath::TChecker::IsValidLeafName(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsValidLeafName(const NACLib::TUserToken* userToken, EStatus status) const {
     if (Failed) {
         return *this;
     }
 
     TString error;
-    if (Path.IsValidLeafName(error)) {
+    if (Path.IsValidLeafName(userToken, error)) {
         return *this;
     }
 
@@ -1814,8 +1813,15 @@ const TString& TPath::LeafName() const {
     return NameParts.back();
 }
 
-bool TPath::IsValidLeafName(TString& explain) const {
+bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explain) const {
     Y_ABORT_UNLESS(!IsEmpty());
+
+    if (!SS->IsSchemeShardConfigured()) {
+        explain += TStringBuilder()
+            << (SS->IsDomainSchemeShard ? "cluster" : "database")
+            << " schema root is not initialized yet";
+        return false;
+    }
 
     const auto& leaf = NameParts.back();
     if (leaf.empty()) {
@@ -1830,19 +1836,21 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
-    if (!SS->IsSchemeShardConfigured()) {
-        explain += "cluster don't have initialized root yet";
-        return false;
-    }
-
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && !isSysDirCreateAllowed &&
-        leaf == NSysView::SysPathName) {
+    if (AppData()->FeatureFlags.GetEnableSystemNamesProtection()) {
+        if (!CheckReservedName(leaf, AppData(), userToken, explain)) {
+            return false;
+        }
+    } else if (leaf == NSysView::SysPathName) {
+        // Compatibility case.
+        // If system names protection is disabled, only `.sys` remains forbidden to create,
+        // preserving behavior that existed before the introduction of system names protection.
         explain += TStringBuilder()
-            << "path part '" << NSysView::SysPathName << "' is reserved by the system";
+            << "path part '" << leaf << "', name is reserved by the system: '" << leaf << "'";
         return false;
-    }
-
-    if (IsPathPartContainsOnlyDots(leaf)) {
+    } else if (IsPathPartContainsOnlyDots(leaf)) {
+        // Compatibility case.
+        // If system names protection is disabled, only-dots check should be executed explicitly.
+        // Generally only-dots check is covered by the reserved prefix check performed by CheckReservedName().
         explain += TStringBuilder()
             << "is not allowed path part contains only dots '" << leaf << "'";
         return false;

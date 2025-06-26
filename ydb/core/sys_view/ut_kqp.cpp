@@ -3578,6 +3578,12 @@ ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS,
     Y_UNIT_TEST(SystemViewFailOps) {
         TTestEnv env;
 
+        // Make AdministrationAllowedSIDs non-empty to deny anonymous user cluster admin privilege.
+        // All requests here are made anonymously, effectively making all requests run with admin rights.
+        // That can cause side effects, especially when dealing with system reserved names.
+        // Using an authorized non-admin user helps avoid these side effects.
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
+
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
 

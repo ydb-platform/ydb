@@ -88,7 +88,10 @@ bool ValidateDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain)
 
     if (checks) {
         checks
-            .IsValidLeafName()
+            //NOTE: using TSystemUsers::Metadata() here allows restoration of paths with system-reserved names/prefixes.
+            // Reason is, that these names aren't being created anew but were legitimate elsewhere or
+            // at some other point in time, blocking them now would create unnecessary problems.
+            .IsValidLeafName(&NACLib::TSystemUsers::Metadata())
             .DepthLimit()
             .PathsLimit();
 
@@ -1011,7 +1014,7 @@ private:
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
         }
-        
+
         if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);

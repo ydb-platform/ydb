@@ -10077,9 +10077,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets+2, TTestTxConfig::FakeHiveTablets+10));
     }
 
-    Y_UNIT_TEST(RejectSystemViewPath) {
+    Y_UNIT_TEST_FLAG(RejectSystemViewPath, EnableSystemNamesProtection) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableSystemViews(true));
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(EnableSystemNamesProtection));
+
+        // Make AdministrationAllowedSIDs not empty to deny anonymous user cluster admin privilege
+        // (this test follows the suite of many others to use anonymous user to do stuff).
+        runtime.GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
+        // Then, when EnableSystemNamesProtection == false, .sys should be impossible to create because of special check,
+        // and when EnableSystemNamesProtection == true, .sys should be impossible to create because client is not an admin.
+        //
+        // EnableSystemNamesProtection == true allow cluster admin to create any reserved names
+        // and there is whole other ut_system_names testsuite that tests behavior around creation of system names.
+
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",

@@ -1252,28 +1252,20 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
     }
     rightItemTypes.pop_back(); // Remove length column
 
-    // Build result block types
+    // Build result types (will be converted from blocks by WideFromBlocks)
     std::vector<const TTypeAnnotationNode*> resultItems;
 
     // Add left side columns 
     if (joinKind != "RightOnly" && joinKind != "RightSemi") {
         for (auto itemType : leftItemTypes) {
+            // Extract underlying type from block type
+            if (itemType->GetKind() == ETypeAnnotationKind::Block) {
+                itemType = itemType->Cast<TBlockExprType>()->GetItemType();
+            }
+            
             if (joinKind == "Right" && !itemType->IsOptionalOrNull()) {
                 // For right joins, left side becomes optional
-                auto underlyingType = itemType;
-                if (itemType->GetKind() == ETypeAnnotationKind::Block) {
-                    underlyingType = itemType->Cast<TBlockExprType>()->GetItemType();
-                    underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
-                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
-                } else {
-                    underlyingType = ctx.MakeType<TOptionalExprType>(itemType);
-                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
-                }
-            } else {
-                // Ensure all types are block types
-                if (itemType->GetKind() != ETypeAnnotationKind::Block) {
-                    itemType = ctx.MakeType<TBlockExprType>(itemType);
-                }
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
             }
             resultItems.push_back(itemType);
         }
@@ -1282,32 +1274,21 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
     // Add right side columns
     if (joinKind != "LeftOnly" && joinKind != "LeftSemi") {
         for (auto itemType : rightItemTypes) {
+            // Extract underlying type from block type
+            if (itemType->GetKind() == ETypeAnnotationKind::Block) {
+                itemType = itemType->Cast<TBlockExprType>()->GetItemType();
+            }
+            
             if (joinKind == "Left" && !itemType->IsOptionalOrNull()) {
                 // For left joins, right side becomes optional
-                auto underlyingType = itemType;
-                if (itemType->GetKind() == ETypeAnnotationKind::Block) {
-                    underlyingType = itemType->Cast<TBlockExprType>()->GetItemType();
-                    underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
-                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
-                } else {
-                    underlyingType = ctx.MakeType<TOptionalExprType>(itemType);
-                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
-                }
-            } else {
-                // Ensure all types are block types
-                if (itemType->GetKind() != ETypeAnnotationKind::Block) {
-                    itemType = ctx.MakeType<TBlockExprType>(itemType);
-                }
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
             }
             resultItems.push_back(itemType);
         }
     }
 
-    // Add scalar length column at the end (required for wide block streams)
-    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
-
-    // Result is a stream of multi type with block types (like BlockMapJoinCore)
-    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+    // Result is a flow of multi type with regular (non-block) types
+    input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
     return TStatus::Ok;
 }
 

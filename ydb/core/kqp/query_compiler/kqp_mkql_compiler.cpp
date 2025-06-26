@@ -421,7 +421,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
         });
 
-    compiler->AddCallable("DqBlockHashJoin",
+    compiler->AddCallable(TDqPhyBlockHashJoin::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             YQL_ENSURE(node.ChildrenSize() == 5, "DqBlockHashJoin should have 5 arguments");
             
@@ -451,7 +451,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 }
                 return indices;
             };
-            
             auto leftKeyColumns = extractColumnIndices(node.Child(3));
             auto rightKeyColumns = extractColumnIndices(node.Child(4));
             

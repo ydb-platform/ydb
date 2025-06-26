@@ -1062,7 +1062,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
 
     // Build block hash join core (this accepts block streams)
     auto blockJoinCore = ctx.Builder(pos)
-        .Callable("BlockHashJoinCore")
+        .Callable("BlockHashJoin")
             .Add(0, std::move(leftBlocks))
             .Add(1, std::move(rightBlocks))
             .Add(2, joinTypeNode)

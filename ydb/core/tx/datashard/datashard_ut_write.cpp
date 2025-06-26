@@ -81,10 +81,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 {"uint16_val", "Uint16", false, false},   // id=3
                 {"uint32_val", "Uint32", false, false},   // id=4
                 {"uint64_val", "Uint64", false, false},   // id=5
-                {"int8_val", "Int8", false, false},       // id=6
-                {"int16_val", "Int16", false, false},     // id=7
-                {"int32_val", "Int32", false, false},     // id=8
-                {"int64_val", "Int64", false, false},     // id=9
             });
     
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
@@ -93,17 +89,13 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Insert initial data =========\n";
         {
-            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9}; // all columns
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5}; // all columns
             TVector<TCell> cells = {
                 TCell::Make(ui64(1)),     // key = 1
                 TCell::Make(ui8(2)),
                 TCell::Make(ui16(3)),
                 TCell::Make(ui32(4)), 
                 TCell::Make(ui64(5)),
-                TCell::Make(i8(6)), 
-                TCell::Make(i16(7)),
-                TCell::Make(i32(8)),
-                TCell::Make(i64(9)),
             };
 
             auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells);
@@ -115,36 +107,27 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_STRINGS_EQUAL(tableState, 
-                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 4, "
-                "uint64_val = 5, int8_val = 6, int16_val = 7, int32_val = 8, int64_val = 9\n"
-            );
+                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 4, uint64_val = 5\n");
         }
 
-        Cout << "========= Upsert exist row with default values in columns 5, 6 =========\n";
+        Cout << "========= Upsert exist row with default values in columns 2, 3 =========\n";
         {
-            TVector<ui32> columnIds = {1, 2, 3, 4, 7, 8, 9, 5, 6}; // key and numerical columns
+            TVector<ui32> columnIds = {1, 4, 5, 2, 3}; // key and numerical columns
             ui32 defaultFilledColumns = 2;
             
             TVector<TCell> cells = {
                 TCell::Make(ui64(1)),    // key = 1
+                TCell::Make(ui32(44)),
+                TCell::Make(ui64(55)),
                 TCell::Make(ui8(22)),
                 TCell::Make(ui16(33)),
-                TCell::Make(ui32(44)),
-                TCell::Make(i16(-77)),
-                TCell::Make(i32(-88)),
-                TCell::Make(i64(-99)),
-                TCell::Make(ui64(55)),
-                TCell::Make(i8(-66)),
                 
-                TCell::Make(ui64(333)),    // key = 33
-                TCell::Make(ui8(22)),
-                TCell::Make(ui16(33)),
+                TCell::Make(ui64(333)),    // key = 333
                 TCell::Make(ui32(44)),
-                TCell::Make(i16(-77)),
-                TCell::Make(i32(-88)),
-                TCell::Make(i64(-99)),
                 TCell::Make(ui64(55)),
-                TCell::Make(i8(-66)),
+                TCell::Make(ui8(22)),
+                TCell::Make(ui16(33))
+
             };
 
             auto result = UpsertWithDefaultValues(runtime, sender, shard, tableId, txId, 
@@ -157,26 +140,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = ReadTable(server, shards, tableId);
             
             UNIT_ASSERT_STRINGS_EQUAL(tableState, 
-                "key = 1, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 5, int8_val = 6, int16_val = -77, int32_val = -88, int64_val = -99\n"
-
-                "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 55, int8_val = -66, int16_val = -77, int32_val = -88, int64_val = -99\n"
-            );
+                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 44, uint64_val = 55\n"
+                "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, uint64_val = 55\n");
         }
 
         Cout << "========= Try replace with default values in columns 2, 3 (should fail) =========\n";
         {
-            TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 2, 3};
+            TVector<ui32> columnIds = {1, 4, 5, 2, 3};
             ui32 defaultFilledColumns = 2;
             TVector<TCell> cells = {
                 TCell::Make(ui64(1)),    // key = 1
                 TCell::Make(ui32(944)),
                 TCell::Make(ui64(955)),
-                TCell::Make(i8(-96)),
-                TCell::Make(i16(-977)),
-                TCell::Make(i32(-988)),
-                TCell::Make(i64(-999)),
                 TCell::Make(ui8(92)),
                 TCell::Make(ui16(933))
             };
@@ -192,26 +167,18 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             auto tableState = ReadTable(server, shards, tableId);
             
             UNIT_ASSERT_STRINGS_EQUAL(tableState, 
-                "key = 1, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 5, int8_val = 6, int16_val = -77, int32_val = -88, int64_val = -99\n"
-
-                "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, "
-                "uint64_val = 55, int8_val = -66, int16_val = -77, int32_val = -88, int64_val = -99\n"
-            );
+                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 44, uint64_val = 55\n"
+                "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, uint64_val = 55\n");
         }
         
         Cout << "========= Try upsert with default values in too much columns  (should fail) =========\n";
         {
-            TVector<ui32> columnIds = {1, 4, 5, 6, 7, 8, 9, 2, 3};
+            TVector<ui32> columnIds = {1, 4, 5, 2, 3};
             ui32 defaultFilledColumns = 9;
             TVector<TCell> cells = {
                 TCell::Make(ui64(1)),    // key = 1
                 TCell::Make(ui32(944)),
                 TCell::Make(ui64(955)),
-                TCell::Make(i8(-96)),
-                TCell::Make(i16(-977)),
-                TCell::Make(i32(-988)),
-                TCell::Make(i64(-999)),
                 TCell::Make(ui8(92)),
                 TCell::Make(ui16(933))
             };

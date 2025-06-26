@@ -3,11 +3,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/executor.h>
 
-#include <util/system/mutex.h>
-
 #include <vector>
 
-namespace NYdb::NTopic::NTests {
+
+namespace NYdb::inline Dev::NTopic::NTests {
 
 class TManagedExecutor : public IExecutor {
 public:
@@ -35,7 +34,7 @@ private:
     void RunTask(TFunction&& func);
 
     TExecutorPtr Executor;
-    TMutex Mutex;
+    mutable std::mutex Mutex;
     std::vector<TFunction> Funcs;
     std::atomic<size_t> Planned = 0;
     std::atomic<size_t> Running = 0;

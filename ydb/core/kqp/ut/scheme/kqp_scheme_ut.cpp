@@ -3592,6 +3592,93 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         ValidatingUniqIndex(false, false);
     }
 
+    Y_UNIT_TEST(UniqueIndexMultipleNulls) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetQueryClient();
+        {
+            TString createQuery = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    TableKey Uint64,
+                    IndexKey String,
+                    PRIMARY KEY (TableKey),
+                    INDEX uniq_value_idx GLOBAL UNIQUE ON (IndexKey)
+                );
+            )sql";
+            auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (TableKey, IndexKey)
+                    VALUES
+                        (1, "index_1"),
+                        (2, NULL),
+                        (3, NULL);
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto getRowsCount = [&]() {
+            TString selectQuery = R"sql(
+                SELECT COUNT(*) FROM `/Root/TestTable`;
+            )sql";
+            auto result = db.ExecuteQuery(selectQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto parser = result.GetResultSetParser(0);
+            UNIT_ASSERT(parser.TryNextRow());
+            return parser.ColumnParser(0).GetUint64();
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(getRowsCount(), 3);
+
+        {
+            TString dropIndexQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                DROP INDEX uniq_value_idx;
+            )sql";
+            auto result = db.ExecuteQuery(dropIndexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Build the same index and check that the process succeeds
+        {
+            TString addIndexQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (IndexKey);
+            )sql";
+            auto result = db.ExecuteQuery(addIndexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRowsCount(), 3);
+
+        {
+            TString upsertQuery = R"sql(
+                INSERT INTO `/Root/TestTable` (TableKey, IndexKey)
+                    VALUES
+                        (4, NULL),
+                        (5, NULL);
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRowsCount(), 5);
+    }
+
     Y_UNIT_TEST(AlterTableAddUniqIndexSqlFeatureOff) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(false);

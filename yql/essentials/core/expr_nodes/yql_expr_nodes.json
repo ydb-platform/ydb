@@ -1694,8 +1694,8 @@
                 {"Index": 6, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
                 {"Index": 7, "Name": "RightKeyDrops", "Type": "TCoAtomList"}
             ]
-        },
-        {
+                  },
+          {
             "Name": "TCoGraceJoinCore",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "GraceJoinCore"},

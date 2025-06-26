@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
+#include <ydb/public/lib/ydb_cli/common/csv_parser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <arrow/csv/options.h>

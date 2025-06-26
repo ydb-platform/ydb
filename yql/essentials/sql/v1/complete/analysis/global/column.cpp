@@ -11,7 +11,7 @@ namespace NSQLComplete {
 
         // TODO: Extract it to `identifier.cpp` and reuse it also at `use.cpp`
         //       and replace `GetId` at `parse_tree.cpp`.
-        class TIdentifierVisitor: public TSQLv1BaseVisitor {
+        class TIdentifierVisitor: public SQLv1Antlr4BaseVisitor {
         public:
             std::any visitCluster_expr(SQLv1::Cluster_exprContext* ctx) override {
                 if (auto* x = ctx->pure_column_or_named()) {
@@ -27,14 +27,30 @@ namespace NSQLComplete {
                 return {};
             }
 
-            std::any visitTerminal(antlr4::tree::TerminalNode* node) override {
-                TString text = GetText(node);
-                switch (node->getSymbol()->getType()) {
-                    case SQLv1::TOKEN_ID_QUOTED: {
-                        text = Unquoted(std::move(text));
-                    } break;
+            std::any visitUnary_casual_subexpr(SQLv1::Unary_casual_subexprContext* ctx) override {
+                std::any prev;
+                if (auto* x = ctx->id_expr()) {
+                    prev = visit(x);
+                } else if (auto* x = ctx->atom_expr()) {
+                    prev = visit(x);
                 }
-                return text;
+
+                std::any next = visit(ctx->unary_subexpr_suffix());
+                if (!next.has_value()) {
+                    return prev;
+                }
+
+                return {};
+            }
+
+            std::any visitTerminal(antlr4::tree::TerminalNode* node) override {
+                switch (node->getSymbol()->getType()) {
+                    case SQLv1::TOKEN_ID_QUOTED:
+                        return Unquoted(GetText(node));
+                    case SQLv1::TOKEN_ID_PLAIN:
+                        return GetText(node);
+                }
+                return {};
             }
 
         private:
@@ -101,17 +117,44 @@ namespace NSQLComplete {
             }
 
             std::any visitSelect_core(SQLv1::Select_coreContext* ctx) override {
-                TMaybe<TColumnContext> head = Head(ctx);
-                if (head.Empty() || head->IsAsterisk()) {
-                    return AccumulatingVisit(ctx->join_source());
+                TColumnContext context = AccumulatingVisit(ctx->result_column());
+                auto asterisks = std::ranges::partition(context.Columns, [](const TColumnId& x) {
+                    return x.Name != "*";
+                });
+
+                if (std::ranges::empty(asterisks)) {
+                    return context;
                 }
 
-                return AccumulatingVisit(ctx->result_column());
+                TColumnContext source = AccumulatingVisit(ctx->join_source());
+
+                TColumnContext imported;
+                for (const TColumnId& qualified : asterisks) {
+                    auto aliased = source.ExtractAliased(qualified.TableAlias);
+                    imported = std::move(imported) | std::move(aliased);
+                }
+
+                context.Columns.erase(asterisks.begin(), asterisks.end());
+                imported = std::move(imported).Renamed("");
+                return std::move(context) | std::move(imported);
             }
 
             std::any visitResult_column(SQLv1::Result_columnContext* ctx) override {
-                if (ctx->TOKEN_ASTERISK() != nullptr) {
+                if (ctx->opt_id_prefix() == nullptr && ctx->TOKEN_ASTERISK() != nullptr) {
                     return TColumnContext::Asterisk();
+                }
+
+                if (ctx->opt_id_prefix() != nullptr && ctx->TOKEN_ASTERISK() != nullptr) {
+                    TMaybe<TString> alias = GetId(ctx->opt_id_prefix()->an_id());
+                    if (alias.Empty()) {
+                        return TColumnContext::Asterisk();
+                    }
+
+                    return TColumnContext{
+                        .Columns = {
+                            {.TableAlias = std::move(*alias), .Name = "*"},
+                        },
+                    };
                 }
 
                 TMaybe<TString> column = GetAlias(ctx);
@@ -119,7 +162,8 @@ namespace NSQLComplete {
                     return TColumnContext{
                         .Columns = {
                             {.Name = std::move(*column)},
-                        }};
+                        },
+                    };
                 }
 
                 return {};

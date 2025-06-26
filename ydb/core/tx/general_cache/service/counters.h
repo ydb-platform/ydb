@@ -24,7 +24,9 @@ public:
     const NMonitoring::TDynamicCounters::TCounterPtr RequestsQueueSize;
     const NMonitoring::TDynamicCounters::TCounterPtr ObjectsQueueSize;
     const NMonitoring::TDynamicCounters::TCounterPtr IncomingRequestsCount;
+    const NMonitoring::TDynamicCounters::TCounterPtr IncomingAbortedRequestsCount;
     const NMonitoring::TDynamicCounters::TCounterPtr DirectRequests;
+    const NMonitoring::TDynamicCounters::TCounterPtr AbortedRequests;
     const NMonitoring::TDynamicCounters::TCounterPtr AdditionalObjectInfo;
     const NMonitoring::TDynamicCounters::TCounterPtr RemovedObjectInfo;
     const NMonitoring::TDynamicCounters::TCounterPtr FetchedObject;
@@ -45,7 +47,9 @@ public:
         , RequestsQueueSize(TBase::GetValue("RequestsQueue/Size/Count"))
         , ObjectsQueueSize(TBase::GetValue("ObjectsQueue/Size/Count"))
         , IncomingRequestsCount(TBase::GetDeriviative("Incoming/Requests/Count"))
+        , IncomingAbortedRequestsCount(TBase::GetDeriviative("Incoming/AbortedRequests/Count"))
         , DirectRequests(TBase::GetDeriviative("DirectRequest/Count"))
+        , AbortedRequests(TBase::GetDeriviative("AbortedRequest/Count"))
         , AdditionalObjectInfo(TBase::GetDeriviative("AdditionalInfo/Count"))
         , RemovedObjectInfo(TBase::GetDeriviative("RemovedInfo/Count"))
         , FetchedObject(TBase::GetDeriviative("DirectRequest/Fetched/Count"))

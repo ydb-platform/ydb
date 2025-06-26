@@ -239,7 +239,8 @@ public:
 
     ui64 GetMetadataSize() const {
         return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + 
-            (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0);
+            (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0) +
+               sizeof(TPortionInfo::TConstPtr);
     }
 
     class TExtractContext {

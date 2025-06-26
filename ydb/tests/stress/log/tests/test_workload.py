@@ -6,7 +6,7 @@ import yatest
 from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbWorkload(StressFixture):
+class TestYdbLogWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster()

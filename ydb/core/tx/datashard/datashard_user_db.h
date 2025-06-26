@@ -43,6 +43,11 @@ public:
             const TArrayRef<const NIceDb::TUpdateOp> ops,
             const ui32 defaultFilledColumnCount) = 0;
 
+    virtual void UpsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) = 0;
+    
     virtual void ReplaceRow(
             const TTableId& tableId,
             const TArrayRef<const TRawTypeValue> key,
@@ -123,6 +128,11 @@ public:
             const TArrayRef<const TRawTypeValue> key,
             const TArrayRef<const NIceDb::TUpdateOp> ops,
             const ui32 defaultFilledColumnCount) override;
+
+    void UpsertRow(
+            const TTableId& tableId,
+            const TArrayRef<const TRawTypeValue> key,
+            const TArrayRef<const NIceDb::TUpdateOp> ops) override;
     
     void ReplaceRow(
             const TTableId& tableId,

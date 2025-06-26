@@ -83,6 +83,7 @@ TArrayRef<const NIceDb::TUpdateOp> TDataShardUserDb::RemoveDefaultColumnsIfNeede
     return newOps;  
 }
 
+
 void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
@@ -95,6 +96,18 @@ void TDataShardUserDb::UpsertRow(
 
     auto opsWithoutNoNeedDefault = RemoveDefaultColumnsIfNeeded(tableId, key, ops, DefaultFilledColumnCount);
 
+    UpsertRow(tableId, key, opsWithoutNoNeedDefault);
+}
+
+void TDataShardUserDb::UpsertRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops
+)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+
     // apply special columns if declared
     TUserTable::TSpecialUpdate specUpdates = Self.SpecialUpdates(Db, tableId);
     if (specUpdates.HasUpdates) {
@@ -102,8 +115,8 @@ void TDataShardUserDb::UpsertRow(
         const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(localTableId);
 
         TStackVec<NIceDb::TUpdateOp> extendedOps;
-        extendedOps.reserve(opsWithoutNoNeedDefault.size() + 3);
-        for (const NIceDb::TUpdateOp& op : opsWithoutNoNeedDefault) {
+        extendedOps.reserve(ops.size() + 3);
+        for (const NIceDb::TUpdateOp& op : ops) {
             if (op.Tag == specUpdates.ColIdTablet)
                 specUpdates.ColIdTablet = Max<ui32>();
             else if (op.Tag == specUpdates.ColIdEpoch)
@@ -136,8 +149,8 @@ void TDataShardUserDb::UpsertRow(
         UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
         IncreaseUpdateCounters(key, extendedOps);
     } else {
-        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, opsWithoutNoNeedDefault);
-        IncreaseUpdateCounters(key, opsWithoutNoNeedDefault);
+        UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
+        IncreaseUpdateCounters(key, ops);
     }
 }
 

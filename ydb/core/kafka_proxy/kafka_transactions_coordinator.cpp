@@ -21,10 +21,10 @@ namespace NKafka {
                 return;
             } 
 
-            it->second = {std::move(newProducerId), request->TxnTimeoutMs};
+            it->second = {newProducerId, request->TxnTimeoutMs};
             DeleteTransactionActor(request->TransactionalId);
         } else {
-            ProducersByTransactionalId.emplace(request->TransactionalId, TProducerInstance{std::move(request->ProducerInstanceId), request->TxnTimeoutMs});
+            ProducersByTransactionalId.emplace(request->TransactionalId, TProducerInstance{request->ProducerInstanceId, request->TxnTimeoutMs});
         }
         
         ctx.Send(ev->Sender, new TEvKafka::TEvSaveTxnProducerResponse(TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK, ""));

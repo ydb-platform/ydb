@@ -24,9 +24,9 @@
 namespace NKafka {
 
     NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message) {
-        std::optional<i32> txnTimeoutMs = message->TransactionTimeoutMs == 0 ? std::nullopt : std::optional(message->TransactionTimeoutMs);
+        std::optional<i32> transactionTimeoutMs = message->TransactionTimeoutMs == 0 ? std::nullopt : std::optional(message->TransactionTimeoutMs);
 
-        return new TKafkaInitProducerIdActor(context, correlationId, message->TransactionalId, txnTimeoutMs);
+        return new TKafkaInitProducerIdActor(context, correlationId, message->TransactionalId, transactionTimeoutMs);
     }
 
     // for non-transactional INIT_PRODUCER_ID request - just return random producer.id and 0 as epoch
@@ -44,17 +44,17 @@ namespace NKafka {
     //          b. Then send Insert in Handle(TEvQueryResponse) when LastSentToKqpRequest == DELETE
     //       case (RowExistsAndEpochWillNotOverflow): Update epoch in table and return in to the client
     // 6. Send reponse in Handle(TEvQueryResponse) with new (if insert) producer.id and epoch
-    TKafkaInitProducerIdActor::TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const std::optional<TString>& transactionalId, const std::optional<i32>& txnTimeoutMs)
+    TKafkaInitProducerIdActor::TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const std::optional<TString>& transactionalId, std::optional<i32> transactionTimeoutMs)
         : Context(context)
         , CorrelationId(correlationId)
         , TransactionalId(transactionalId)
-        , TxnTimeoutMs(txnTimeoutMs) {
+        , TransactionTimeoutMs(transactionTimeoutMs) {
     }
         
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
         if (IsTransactionalProducerInitialization()) {
             if (!TxnTimeoutIsValid()) {
-                TString error = TStringBuilder() << "Transactional producer initialization failed. Invalid transaction timeout: " << TxnTimeoutMs.value() << ". Maximum allowed: " << GetMaxAllowedTxnTimeout();
+                TString error = TStringBuilder() << "Transactional producer initialization failed. Invalid transaction timeout: " << TransactionTimeoutMs.value() << ". Maximum allowed: " << GetMaxAllowedTransactionTimeoutMs();
                 SendResponseFail(EKafkaErrors::INVALID_TRANSACTION_TIMEOUT, error);
                 Die(ctx);
                 return;
@@ -297,7 +297,7 @@ namespace NKafka {
                 producerState.ProducerId, 
                 producerState.ProducerEpoch
             },
-            static_cast<ui64>(*TxnTimeoutMs)
+            static_cast<ui64>(*TransactionTimeoutMs)
         ));
     }
 
@@ -306,7 +306,7 @@ namespace NKafka {
         return NKikimr::AppData()->FeatureFlags.GetEnableKafkaTransactions() && TransactionalId.has_value();
     }
 
-    ui64 TKafkaInitProducerIdActor::GetMaxAllowedTxnTimeout() {
+    ui64 TKafkaInitProducerIdActor::GetMaxAllowedTransactionTimeoutMs() {
         return AppData()->KafkaProxyConfig.GetTransactionTimeoutMs();
     }
 
@@ -315,7 +315,7 @@ namespace NKafka {
             return true;
         }
 
-        return TxnTimeoutMs < GetMaxAllowedTxnTimeout();
+        return TransactionTimeoutMs < GetMaxAllowedTransactionTimeoutMs();
     }
 
     EKafkaErrors TKafkaInitProducerIdActor::KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status) {

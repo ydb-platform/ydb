@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 22u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
         }
 
         // authenticate
@@ -1213,7 +1213,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = clientA.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 22u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
         }
 
         {
@@ -1470,7 +1470,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             {
                 auto msg = clientA.ApiVersions();
                 UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 22u);
+                UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
             }
             {
                 auto msg = clientA.SaslHandshake();
@@ -2403,7 +2403,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 22u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
         }
 
         {
@@ -2442,7 +2442,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 22u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
         }
 
         {
@@ -3059,8 +3059,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(out0ProduceResponse->Responses[0].PartitionResponses[0].ErrorCode, EKafkaErrors::NONE_ERROR);
 
         // init consumer
-        std::vector<TString> topicsToSubscribe;
-        topicsToSubscribe.push_back(outputTopicName);
+        std::vector<TString> topicsToSubscribe{outputTopicName};
         TString protocolName = "range";
         auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
 

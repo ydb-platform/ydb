@@ -29,7 +29,7 @@ namespace NKafka {
                 BEGIN_TRANSACTION
             };
 
-            TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const std::optional<TString>& transactionalId, const std::optional<i32>& txnTimeoutMs);
+            TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const std::optional<TString>& transactionalId, std::optional<i32> transactionTimeoutMs);
 
             void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -40,7 +40,7 @@ namespace NKafka {
             // Kafka related fields
             const ui64 CorrelationId;
             const std::optional<TString> TransactionalId;
-            const std::optional<i32> TxnTimeoutMs;
+            const std::optional<i32> TransactionTimeoutMs;
             
             // kqp related staff
             std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
@@ -98,7 +98,7 @@ namespace NKafka {
 
             // helper methods
             bool IsTransactionalProducerInitialization();
-            ui64 GetMaxAllowedTxnTimeout();
+            ui64 GetMaxAllowedTransactionTimeoutMs();
             bool TxnTimeoutIsValid();
             EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status);
             std::optional<TProducerState> ParseProducerState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);

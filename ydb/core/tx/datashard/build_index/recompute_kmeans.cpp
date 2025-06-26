@@ -79,7 +79,6 @@ public:
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
-        Clusters->InitAggregatedClusters();
 
         const auto& embedding = request.GetEmbeddingColumn();
         NTable::TTag embeddingTag;
@@ -191,7 +190,7 @@ protected:
     void Feed(TArrayRef<const TCell>, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
+            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
     }
 
@@ -201,7 +200,7 @@ protected:
         auto& record = Response->Record;
         Clusters->RecomputeClusters();
         const auto& clusters = Clusters->GetClusters();
-        const auto& sizes = Clusters->GetClusterSizes();
+        const auto& sizes = Clusters->GetNextClusterSizes();
         for (size_t i = 0; i < clusters.size(); i++) {
             record.AddClusters(clusters[i]);
             record.AddClusterSizes(sizes[i]);
@@ -331,7 +330,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvRecomputeKMeansRequest::TPtr& ev, c
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
         if (!clusters) {
             badRequest(error);
         } else if (request.ClustersSize() < 1) {

@@ -132,7 +132,6 @@ public:
         , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
-        Clusters->Init(request.GetK(), request.GetNeedsRounds());
 
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
@@ -231,7 +230,7 @@ public:
         if (PrefixColumns && !Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
             auto newParent = key.at(0).template AsValue<ui64>();
-            Child += (newParent - Parent) * Clusters->GetK();
+            Child += (newParent - Parent) * K;
             Parent = newParent;
         }
 
@@ -380,13 +379,11 @@ protected:
             }
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
-            Clusters->InitAggregatedClusters();
             return false; // do KMEANS
         }
 
         if (State == EState::KMEANS) {
-            if (Clusters->RecomputeClusters()) {
-                Clusters->RemoveEmptyClusters();
+            if (Clusters->NextRound()) {
                 FormLevelRows();
                 State = UploadState;
                 return false; // do UPLOAD_*
@@ -444,7 +441,7 @@ protected:
     void FeedKMeans(TArrayRef<const TCell> row) noexcept
     {
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
-            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
+            Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }
     }
 
@@ -661,7 +658,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
         // 3. Validating vector index settings
         TString error;
-        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), error);
+        auto clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), request.GetNeedsRounds(), error);
         if (!clusters) {
             badRequest(error);
             auto sent = trySendBadRequest();

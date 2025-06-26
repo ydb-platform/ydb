@@ -105,11 +105,14 @@ private:
                 Cerr << "Left stream status: " << (int)status << Endl;
                 
                 switch (status) {
-                case NUdf::EFetchStatus::Ok:
+                case NUdf::EFetchStatus::Ok: {
                     Cerr << "Left stream read successful!" << Endl;
                     // Copy left stream data to output (assuming same structure for now)
                     // For proper join, we would need to map columns correctly
-                    for (size_t i = 0; i < std::min(static_cast<size_t>(width), LeftStreamWidth_); i++) {
+                    
+                    // First, copy all elements except the last one (block length)
+                    size_t dataCols = std::min(static_cast<size_t>(width), LeftStreamWidth_) - 1;
+                    for (size_t i = 0; i < dataCols; i++) {
                         Cerr << "Copying leftInput[" << i << "] IsBoxed=" << leftInput[i].IsBoxed() 
                              << " IsSpecial=" << leftInput[i].IsSpecial()
                              << " IsInvalid=" << leftInput[i].IsInvalid() << Endl;
@@ -121,34 +124,32 @@ private:
                             throw;
                         }
                     }
-                    // Fill remaining columns if output is wider
-                    for (size_t i = LeftStreamWidth_; i < width; i++) {
-                        if (i == width - 1) {
-                            // Last column is block length - copy from left
-                            Cerr << "Copying block length from leftInput[" << (LeftStreamWidth_ - 1) << "] IsBoxed=" 
-                                 << leftInput[LeftStreamWidth_ - 1].IsBoxed() << Endl;
-                            
-                            // Block length is a primitive ui64 value, not boxed
-                            if (leftInput[LeftStreamWidth_ - 1].IsBoxed()) {
-                                output[i] = std::move(leftInput[LeftStreamWidth_ - 1]);
-                            } else {
-                                // Create a boxed ui64 value for block length
-                                auto blockLength = leftInput[LeftStreamWidth_ - 1].Get<ui64>();
-                                Cerr << "Creating block length scalar with value: " << blockLength << Endl;
-                                output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLength)));
-                            }
-                        } else {
-                            // Create empty array for additional columns
-                            Cerr << "Creating empty array for output[" << i << "]" << Endl;
-                            auto blockItemType = AS_TYPE(TBlockType, ResultItemTypes_[i])->GetItemType();
-                            std::shared_ptr<arrow::DataType> arrowType;
-                            MKQL_ENSURE(ConvertArrowType(blockItemType, arrowType), "Failed to convert type to arrow");
-                            auto emptyArray = arrow::MakeArrayOfNull(arrowType, 0);
-                            ARROW_OK(emptyArray.status());
-                            output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(emptyArray.ValueOrDie()));
-                        }
+                    
+                    // Copy block length to the last position in output
+                    if (width > 0) {
+                        size_t blockLengthSrcIdx = LeftStreamWidth_ - 1;
+                        size_t blockLengthDstIdx = width - 1;
+                        Cerr << "Copying block length from leftInput[" << blockLengthSrcIdx << "] to output[" << blockLengthDstIdx << "] IsBoxed=" 
+                             << leftInput[blockLengthSrcIdx].IsBoxed() 
+                             << " IsEmpty=" << !leftInput[blockLengthSrcIdx]
+                             << " IsEmbedded=" << leftInput[blockLengthSrcIdx].IsEmbedded() << Endl;
+                        
+                        output[blockLengthDstIdx] = std::move(leftInput[blockLengthSrcIdx]);
+                    }
+                    
+                    // Fill remaining middle columns if output is wider than left stream
+                    for (size_t i = dataCols; i < width - 1; i++) {
+                        // Create empty array for additional columns
+                        Cerr << "Creating empty array for output[" << i << "]" << Endl;
+                        auto blockItemType = AS_TYPE(TBlockType, ResultItemTypes_[i])->GetItemType();
+                        std::shared_ptr<arrow::DataType> arrowType;
+                        MKQL_ENSURE(ConvertArrowType(blockItemType, arrowType), "Failed to convert type to arrow");
+                        auto emptyArray = arrow::MakeArrayOfNull(arrowType, 0);
+                        ARROW_OK(emptyArray.status());
+                        output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(emptyArray.ValueOrDie()));
                     }
                     return NUdf::EFetchStatus::Ok;
+                }
                     
                 case NUdf::EFetchStatus::Yield:
                     return NUdf::EFetchStatus::Yield;
@@ -166,41 +167,42 @@ private:
                 auto status = RightStream_.WideFetch(rightInput.data(), RightStreamWidth_);
                 
                 switch (status) {
-                case NUdf::EFetchStatus::Ok:
+                case NUdf::EFetchStatus::Ok: {
                     Cerr << "Right stream read successful!" << Endl;
                     // Copy right stream data to output (assuming same structure for now)
-                    for (size_t i = 0; i < std::min(static_cast<size_t>(width), RightStreamWidth_); i++) {
+                    
+                    // First, copy all elements except the last one (block length)
+                    size_t dataCols = std::min(static_cast<size_t>(width), RightStreamWidth_) - 1;
+                    for (size_t i = 0; i < dataCols; i++) {
                         Cerr << "Copying rightInput[" << i << "] IsBoxed=" << rightInput[i].IsBoxed() << Endl;
                         output[i] = std::move(rightInput[i]);
                     }
-                    // Fill remaining columns if output is wider
-                    for (size_t i = RightStreamWidth_; i < width; i++) {
-                        if (i == width - 1) {
-                            // Last column is block length - copy from right
-                            Cerr << "Copying block length from rightInput[" << (RightStreamWidth_ - 1) << "] IsBoxed=" 
-                                 << rightInput[RightStreamWidth_ - 1].IsBoxed() << Endl;
-                            
-                            // Block length is a primitive ui64 value, not boxed
-                            if (rightInput[RightStreamWidth_ - 1].IsBoxed()) {
-                                output[i] = std::move(rightInput[RightStreamWidth_ - 1]);
-                            } else {
-                                // Create a boxed ui64 value for block length
-                                auto blockLength = rightInput[RightStreamWidth_ - 1].Get<ui64>();
-                                Cerr << "Creating block length scalar with value: " << blockLength << Endl;
-                                output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLength)));
-                            }
-                        } else {
-                            // Create empty array for additional columns
-                            Cerr << "Creating empty array for output[" << i << "]" << Endl;
-                            auto blockItemType = AS_TYPE(TBlockType, ResultItemTypes_[i])->GetItemType();
-                            std::shared_ptr<arrow::DataType> arrowType;
-                            MKQL_ENSURE(ConvertArrowType(blockItemType, arrowType), "Failed to convert type to arrow");
-                            auto emptyArray = arrow::MakeArrayOfNull(arrowType, 0);
-                            ARROW_OK(emptyArray.status());
-                            output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(emptyArray.ValueOrDie()));
-                        }
+                    
+                    // Copy block length to the last position in output
+                    if (width > 0) {
+                        size_t blockLengthSrcIdx = RightStreamWidth_ - 1;
+                        size_t blockLengthDstIdx = width - 1;
+                        Cerr << "Copying block length from rightInput[" << blockLengthSrcIdx << "] to output[" << blockLengthDstIdx << "] IsBoxed=" 
+                             << rightInput[blockLengthSrcIdx].IsBoxed() 
+                             << " IsEmpty=" << !rightInput[blockLengthSrcIdx]
+                             << " IsEmbedded=" << rightInput[blockLengthSrcIdx].IsEmbedded() << Endl;
+                        
+                        output[blockLengthDstIdx] = std::move(rightInput[blockLengthSrcIdx]);
+                    }
+                    
+                    // Fill remaining middle columns if output is wider than right stream
+                    for (size_t i = dataCols; i < width - 1; i++) {
+                        // Create empty array for additional columns
+                        Cerr << "Creating empty array for output[" << i << "]" << Endl;
+                        auto blockItemType = AS_TYPE(TBlockType, ResultItemTypes_[i])->GetItemType();
+                        std::shared_ptr<arrow::DataType> arrowType;
+                        MKQL_ENSURE(ConvertArrowType(blockItemType, arrowType), "Failed to convert type to arrow");
+                        auto emptyArray = arrow::MakeArrayOfNull(arrowType, 0);
+                        ARROW_OK(emptyArray.status());
+                        output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(emptyArray.ValueOrDie()));
                     }
                     return NUdf::EFetchStatus::Ok;
+                }
                     
                 case NUdf::EFetchStatus::Yield:
                     return NUdf::EFetchStatus::Yield;

@@ -16,7 +16,7 @@ namespace NKikimr::NColumnShard {
 
 TWriteOperation::TWriteOperation(const TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
     const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
-    const NEvWrite::EModificationType mType)
+    const NEvWrite::EModificationType mType, const bool isBulk)
     : PathId(pathId)
     , Status(status)
     , CreatedAt(createdAt)
@@ -24,7 +24,8 @@ TWriteOperation::TWriteOperation(const TUnifiedPathId& pathId, const TOperationW
     , LockId(lockId)
     , Cookie(cookie)
     , GranuleShardingVersionId(granuleShardingVersionId)
-    , ModificationType(mType) {
+    , ModificationType(mType)
+    , IsBulk(isBulk) {
 }
 
 void TWriteOperation::Start(
@@ -36,8 +37,10 @@ void TWriteOperation::Start(
         context.GetWritingCounters()->GetWriteFlowCounters());
     writeMeta->SetLockId(LockId);
     writeMeta->SetModificationType(ModificationType);
-    NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
-        owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR));
+    writeMeta->SetIsBulk(IsBulk);
+    auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);
+    writingAction->SetIsBulk(IsBulk);
+    NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(), std::move(writingAction));
     std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
     NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
 
@@ -95,6 +98,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     }
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(true);
+    proto.SetIsBulk(IsBulk);
     PathId.InternalPathId.ToProto(proto);
 }
 
@@ -109,6 +113,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
     } else {
         ModificationType = NEvWrite::EModificationType::Replace;
     }
+    IsBulk = proto.GetIsBulk();
 }
 
 void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {

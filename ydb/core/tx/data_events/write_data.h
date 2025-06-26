@@ -53,6 +53,8 @@ private:
     const std::shared_ptr<TWriteFlowCounters> Counters;
     mutable NOlap::NCounters::TStateSignalsOperator<NEvWrite::EWriteStage>::TGuard StateGuard;
 
+    YDB_ACCESSOR(bool, IsBulk, false);
+
 public:
     void OnStage(const EWriteStage stage) const;
 

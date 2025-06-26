@@ -853,6 +853,12 @@ bool TCms::TryToLockPDisk(const TAction &action,
                           const TPDiskInfo &pdisk,
                           TErrorInfo &error) const
 {
+    TDuration duration = TDuration::MicroSeconds(action.GetDuration());
+    duration += opts.PermissionDuration;
+    
+    if (pdisk.IsLocked(error, State->Config.DefaultRetryTime, TActivationContext::Now(), duration))
+        return false;
+
     if (!TryToLockVDisks(action, opts, pdisk.VDisks, error))
         return false;
 

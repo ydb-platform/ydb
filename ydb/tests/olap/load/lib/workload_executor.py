@@ -214,7 +214,9 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Добавляем информацию о выполнении в iterations
         iteration = YdbCliHelper.Iteration()
-        iteration.time = actual_execution_time if actual_execution_time is not None else self.timeout
+        # Используем фактическое время выполнения, если оно указано, иначе плановое время
+        execution_time = actual_execution_time if actual_execution_time is not None else self.timeout
+        iteration.time = execution_time
         
         # Добавляем имя итерации для лучшей идентификации
         if additional_stats:
@@ -240,7 +242,8 @@ class WorkloadTestBase(LoadSuiteBase):
                 'iteration_info': {
                     'iteration_num': iteration_num,
                     'node_host': node_host,
-                    'thread_id': node_host  # Идентификатор потока - хост ноды
+                    'thread_id': node_host,  # Идентификатор потока - хост ноды
+                    'actual_execution_time': execution_time  # Добавляем фактическое время выполнения
                 }
             }
             
@@ -257,7 +260,8 @@ class WorkloadTestBase(LoadSuiteBase):
         result.iterations[iteration_number] = iteration
 
         # Добавляем базовую статистику
-        result.add_stat(workload_name, "execution_time", self.timeout)
+        result.add_stat(workload_name, "execution_time", execution_time)  # Используем фактическое время
+        result.add_stat(workload_name, "planned_duration", self.timeout)  # Добавляем плановую длительность отдельно
         # Timeout не считается неуспешным выполнением, это warning
         result.add_stat(workload_name, "workload_success", (success and not error_found) or is_timeout)
         result.add_stat(workload_name, "success_flag", success)  # Исходный флаг успеха
@@ -1119,6 +1123,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # Получаем номер итерации из статистики или из имени
             real_iter_num = None
             node_host = None
+            actual_time = None
             
             # Проверяем статистику
             if hasattr(iteration, 'stats') and iteration.stats:
@@ -1129,6 +1134,8 @@ class WorkloadTestBase(LoadSuiteBase):
                                 real_iter_num = stat_value['iteration_num']
                             if 'node_host' in stat_value:
                                 node_host = stat_value['node_host']
+                            if 'actual_execution_time' in stat_value:
+                                actual_time = stat_value['actual_execution_time']
                         elif 'iteration_num' in stat_value:
                             real_iter_num = stat_value['iteration_num']
                         elif 'chunk_num' in stat_value:  # Для обратной совместимости
@@ -1173,7 +1180,21 @@ class WorkloadTestBase(LoadSuiteBase):
             
             if iteration_success:
                 successful_iterations += 1
-
+                
+        # Вычисляем фактическое время выполнения как среднее по всем итерациям
+        actual_execution_times = []
+        for iter_list in iterations_by_number.values():
+            for iteration in iter_list:
+                if hasattr(iteration, 'time') and iteration.time is not None:
+                    actual_execution_times.append(iteration.time)
+                elif hasattr(iteration, 'stats') and iteration.stats:
+                    for stat_key, stat_value in iteration.stats.items():
+                        if isinstance(stat_value, dict) and 'actual_execution_time' in stat_value:
+                            actual_execution_times.append(stat_value['actual_execution_time'])
+        
+        # Вычисляем среднее фактическое время выполнения
+        avg_actual_time = sum(actual_execution_times) / len(actual_execution_times) if actual_execution_times else duration_value
+        
         # Базовая статистика
         stats = {
             "total_runs": total_runs,
@@ -1181,6 +1202,7 @@ class WorkloadTestBase(LoadSuiteBase):
             "failed_runs": total_runs - successful_runs,
             "total_execution_time": total_execution_time,
             "planned_duration": duration_value,
+            "actual_duration": avg_actual_time,  # Добавляем фактическое время выполнения
             "success_rate": successful_runs / total_runs if total_runs > 0 else 0,
             "use_iterations": use_iterations,
             "total_iterations": real_iteration_count,
@@ -1261,7 +1283,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     workload_stats = result.stats[workload_name]
                     
                     # Добавляем важные параметры в начало
-                    important_params = ['total_runs', 'planned_duration', 'use_iterations', 'workload_type', 'table_type']
+                    important_params = ['total_runs', 'planned_duration', 'actual_duration', 'use_iterations', 'workload_type', 'table_type']
                     for param in important_params:
                         if param in workload_stats:
                             workload_params[param] = workload_stats[param]
@@ -1315,6 +1337,20 @@ class WorkloadTestBase(LoadSuiteBase):
             
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}
+            
+            # Добавляем информацию о фактическом времени выполнения
+            if workload_params.get('actual_duration') is not None:
+                actual_duration = workload_params['actual_duration']
+                planned_duration = workload_params.get('planned_duration', self.timeout)
+                
+                # Форматируем время в минуты и секунды
+                actual_minutes = int(actual_duration) // 60
+                actual_seconds = int(actual_duration) % 60
+                planned_minutes = int(planned_duration) // 60
+                planned_seconds = int(planned_duration) % 60
+                
+                # Добавляем информацию о времени выполнения
+                additional_table_strings['execution_time'] = f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
             
             # Информация об итерациях и потоках
             if 'total_iterations' in workload_params and 'total_threads' in workload_params:

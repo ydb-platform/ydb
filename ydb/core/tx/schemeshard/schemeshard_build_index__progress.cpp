@@ -821,10 +821,6 @@ private:
 
     void AddGlobalShardsForCurrentParent(TIndexBuildInfo& buildInfo) {
         Y_ENSURE(NoShardsAdded(buildInfo));
-        if (buildInfo.KMeans.Parent == 0) {
-            AddAllShards(buildInfo);
-            return;
-        }
         auto it = buildInfo.Cluster2Shards.lower_bound(buildInfo.KMeans.Parent);
         Y_ENSURE(it != buildInfo.Cluster2Shards.end());
         if (it->second.Shards.size() > 1) {

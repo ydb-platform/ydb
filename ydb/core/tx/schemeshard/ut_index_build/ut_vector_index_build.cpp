@@ -387,11 +387,10 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         }
 
         // Wait and check Filling state:
-        TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto&) {
+        TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKBlocker(runtime, [&](const auto&) {
             return true;
         });
-        runtime.WaitFor("sampleK", [&]{ return sampleKBlocker.size(); });
-        sampleKBlocker.Stop().Unblock();
+        runtime.WaitFor("localK", [&]{ return localKBlocker.size(); });
         {
             auto buildIndexOperations = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
             UNIT_ASSERT_VALUES_EQUAL(buildIndexOperations.EntriesSize(), 1);
@@ -406,6 +405,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 NLs::PathExist,
                 NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateWriteOnly)});
         }
+        localKBlocker.Stop().Unblock();
 
         // Wait Done state:
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);

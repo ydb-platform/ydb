@@ -36,6 +36,7 @@ class Slice:
     ):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
         self.__slice_cfg_path = '/Berkanavt/kikimr/cfg'
+        self.__slice_tenants_path = '/Berkanavt/tenants'
         self.slice_secrets_path = '/Berkanavt/kikimr/token'
         self.components = components
         self.nodes = nodes
@@ -55,6 +56,10 @@ class Slice:
     @property
     def slice_cfg_path(self) -> str:
         return self.__slice_cfg_path
+
+    @property
+    def slice_tenants_path(self) -> str:
+        return self.__slice_tenants_path
 
     @property
     def v2(self):
@@ -92,6 +97,20 @@ class Slice:
             cmd = "sudo {} admin bs disk obliterate {}".format(self.slice_kikimr_path, drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)
+
+    def _set_locations(self):
+        # Set location for each group of hosts sharing the same datacenter
+        for datacenter, hosts in self.configurator.group_hosts_by_datacenter.items():
+            cmd = "sudo sh -c 'echo {} > {}/location'".format(datacenter, self.slice_tenants_path)
+            self.nodes.execute_async(cmd, nodes=hosts)
+
+        # Set bridge-pile for each group of hosts sharing the same pile
+        for pile, hosts in self.configurator.group_hosts_by_bridge_pile.items():
+            cmd = "sudo sh -c 'echo {} > {}/bridge-pile'".format(pile, self.slice_tenants_path)
+            self.nodes.execute_async(cmd, nodes=hosts)
+
+    def _clean_locations(self):
+        self.nodes.execute_async("sudo rm -f {}/{{location,bridge-pile}}".format(self.slice_tenants_path))
 
     def slice_format(self):
         self.slice_stop()
@@ -196,11 +215,9 @@ class Slice:
                 self._update_kikimr()
 
             self._format_drives()
+            self._set_locations()
             if 'cfg' in self.components.get('kikimr', []):
-                if self.v2:
-                    static_cfg_path = self.configurator.create_v2_cfg()
-                else:
-                    static_cfg_path = self.configurator.create_static_cfg()
+                static_cfg_path = self.configurator.create_static_cfg()
                 self._upload_cfg(static_cfg_path)
                 self._deploy_secrets()
 

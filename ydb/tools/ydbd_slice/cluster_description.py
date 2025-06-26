@@ -75,6 +75,10 @@ class ClusterDetails(ClusterDetailsProvider):
     def hosts_names(self):
         return sorted(list(set(node.hostname for node in self.hosts)))
 
+    @property
+    def hosts_datacenters(self):
+        return {host.get('host'): host.get('location', {}).get('data_center') for host in self.hosts}
+
     @staticmethod
     def __is_oneof_in(oneof, container):
         facts = [x in container for x in oneof]

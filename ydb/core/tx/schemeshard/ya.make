@@ -26,6 +26,7 @@ RECURSE_FOR_TESTS(
     ut_failure_injection
     ut_filestore_reboots
     ut_incremental_restore
+    ut_incremental_restore_reboots
     ut_index
     ut_index_build
     ut_index_build_reboots

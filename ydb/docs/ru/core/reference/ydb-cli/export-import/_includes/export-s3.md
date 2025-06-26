@@ -161,16 +161,16 @@
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+  --destination-prefix export1 --include dir1 --include dir2
 ```
 
-Либо с использованием параметров `--destination-prefix` и `--include`:
+Либо с использованием альтернативного способа:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --destination-prefix export1 --include dir1 --include dir2
+  --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
 ```
 
 ### Выгрузка директории с шифрованием {#example-encryption}

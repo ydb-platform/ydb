@@ -136,18 +136,19 @@
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --item src=export1,dst=.
+  --source-prefix export1
 ```
 
 ### Загрузка нескольких директорий {#example-specific-dirs}
 
-Загрузка объектов из директорий `dir1` и `dir2` бакета S3 `mybucket` в одноименные директории базы данных с использованием явно заданных параметров аутентификации в S3:
+Загрузка объектов из директорий `dir1` и `dir2` выгрузки, которая находится в директории `export1` в бакете `mybucket`, в одноименные директории базы данных с использованием явно заданных параметров аутентификации в S3:
 
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
+  --source-prefix export1
+  --include dir1 --include dir2
 ```
 
 ### Перечисление объектов в существующей загифрованной выгрузке {#example-list}
@@ -162,7 +163,6 @@
   --encryption-key-file ~/my_secret_key
   --list
 ```
-
 
 ### Загрузка зашифрованной выгрузки {#example-encryption}
 

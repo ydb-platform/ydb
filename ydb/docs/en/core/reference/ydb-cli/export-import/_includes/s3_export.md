@@ -161,16 +161,16 @@ Exporting items from DB directories named `dir1` and `dir2` to the `export1` dir
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+  --destination-prefix export1 --include dir1 --include dir2
 ```
 
-Or using the `--destination-prefix` and `--include` parameters:
+Or using the alternate syntax:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --destination-prefix export1 --include dir1 --include dir2
+  --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
 ```
 
 ### Exporting a directory with encryption {#example-encryption}

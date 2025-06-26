@@ -54,7 +54,7 @@ Some features may not be available using the alternate syntax (like encryption a
 
 ## Importing {#exec}
 
-### Export result {#result}
+### Import result {#result}
 
 If successful, the `import s3` command prints summary information about the enqueued operation to import data from S3 in the format specified in the `--format` option. The import itself is performed by the server asynchronously. The summary shows the operation ID that you can use later to check the operation status and perform actions on it:
 
@@ -136,18 +136,19 @@ Importing to the database root the contents of the `export1` directory in the `m
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
-  --item src=export1,dst=.
+  --source-prefix export1
 ```
 
 ### Importing multiple directories {#example-specific-dirs}
 
-Importing items from the `dir1` and `dir2` directories in the `mybucket` S3 bucket to the same-name database directories using explicitly specified S3 authentication parameters:
+Importing items from the `dir1` and `dir2` directories of an export located in `export1` in the `mybucket` S3 bucket to the same-name database directories using explicitly specified S3 authentication parameters:
 
 ```bash
 {{ ydb-cli }} -p quickstart import s3 \
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
-  --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
+  --source-prefix export1
+  --include dir1 --include dir2
 ```
 
 ### List objects in existing encrypted export {#example-list}
@@ -162,7 +163,6 @@ Listing all object paths in existing encrypted export located in `export1` in th
   --encryption-key-file ~/my_secret_key
   --list
 ```
-
 
 ### Importing encrypted export {#example-encryption}
 

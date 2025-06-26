@@ -361,16 +361,18 @@ class TCdcWorker
             const auto tabletId = partition.GetTabletId();
 
             auto it = Workers.find(partitionId);
-            if (it != Workers.end()) {
-                workers.emplace(partitionId, it->second);
-                Workers.erase(it);
-            } else {
-                LOG_T("Register new worker"
-                    << ": partitionId# " << partitionId);
+            if (NKikimrPQ::ETopicPartitionStatus::Active == partition.GetStatus()) {
+                if (it != Workers.end()) {
+                    workers.emplace(partitionId, it->second);
+                    Workers.erase(it);
+                } else {
+                    LOG_T("Register new worker"
+                        << ": partitionId# " << partitionId);
 
-                const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
-                workers.emplace(partitionId, worker);
-                Pending.emplace(worker, partitionId);
+                    const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
+                    workers.emplace(partitionId, worker);
+                    Pending.emplace(worker, partitionId);
+                }
             }
         }
 

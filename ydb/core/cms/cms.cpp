@@ -715,7 +715,9 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     }
 
     Y_ABORT_UNLESS(ClusterInfo->StateStorageInfo->RingGroups.size() > 0);
-    const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[0].NToSelect;
+    // If the cluster is not in Bridge Mode, then pileId = 0
+    const ui32 pileId = ClusterInfo->NodeIdToPileId[node.NodeId];
+    const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[pileId].NToSelect;
     const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;
     ui32 restartRings = 0;
@@ -724,6 +726,12 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     auto now = AppData(ctx)->TimeProvider->Now();
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings) {
+        Y_ABORT_UNLESS(ringInfo->Replicas.size() > 0);
+        // If the cluster is not in Bridge Mode, then it is always false
+        if (ClusterInfo->NodeIdToPileId[ringInfo->Replicas[0]->NodeId] != pileId) {
+            continue;
+        } 
+
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration);
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
                                                                  << "; State: " << TStateStorageRingInfo::RingStateToString(state));

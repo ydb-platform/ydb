@@ -141,6 +141,7 @@ namespace NTable {
             }
 
             if (Index.GetRowId() >= EndRowId) {
+                Y_ABORT("FOUND A SPECIAL CASE");
                 // Page is outside of bounds
                 return Exhausted();
             }

@@ -39,13 +39,6 @@ public:
         , LeftIOMap_(leftIOMap)
         , InputsDescr_(ToValueDescr(inputItems))
     {
-        // Debug output
-        Cerr << "TBlockHashJoinState created:" << Endl;
-        Cerr << "  inputItems.size() = " << inputItems.size() << Endl;
-        Cerr << "  outputItems.size() = " << outputItems.size() << Endl;
-        Cerr << "  InputWidth_ = " << InputWidth_ << Endl;
-        Cerr << "  OutputWidth_ = " << OutputWidth_ << Endl;
-        Cerr << "  LeftIOMap_.size() = " << LeftIOMap_.size() << Endl;
         const auto& pgBuilder = ctx.Builder->GetPgBuilder();
         MaxLength_ = CalcMaxBlockLength(outputItems);
         TBlockTypeHelper helper;
@@ -93,16 +86,12 @@ public:
     }
 
     void MakeBlocks(const THolderFactory& holderFactory) {
-        Cerr << "MakeBlocks: OutputRows_ = " << OutputRows_ << ", Values.size() = " << Values.size() << ", Builders_.size() = " << Builders_.size() << Endl;
-        
         Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)));
 
         for (size_t i = 0; i < Builders_.size(); i++) {
             Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
         }
         FillArrays();  // CRITICAL: This sets Count = OutputRows_ from the last column
-        
-        Cerr << "MakeBlocks: After FillArrays, Count = " << Count << ", Arrays.size() = " << Arrays.size() << Endl;
         
         // Reset AFTER FillArrays() to preserve Count
         OutputRows_ = 0;
@@ -370,10 +359,7 @@ private:
 
             const auto sliceSize = joinState.Slice();
 
-            Cerr << "Before Get: sliceSize = " << sliceSize << ", outputWidth = " << outputWidth << ", Arrays.size() = " << joinState.Arrays.size() << Endl;
-
             for (size_t i = 0; i < outputWidth; i++) {
-                Cerr << "Calling Get for i = " << i << Endl;
                 output[i] = joinState.Get(sliceSize, HolderFactory_, i);
             }
 

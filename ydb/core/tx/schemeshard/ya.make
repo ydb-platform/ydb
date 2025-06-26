@@ -87,6 +87,7 @@ SRCS(
     schemeshard__init_schema.cpp
     schemeshard__list_users.cpp
     schemeshard__login.cpp
+    schemeshard__login_finalize.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__notify.cpp
@@ -251,6 +252,8 @@ SRCS(
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
+    schemeshard_login_helper.cpp
+    schemeshard_login_helper.h
     schemeshard_path.cpp
     schemeshard_path.h
     schemeshard_path_describer.cpp

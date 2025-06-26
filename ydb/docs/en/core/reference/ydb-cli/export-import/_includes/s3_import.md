@@ -22,9 +22,9 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 ### Imported schema objects {#objects}
 
-`--source-prefix PREFIX`: Source prefix for export in the bucket. Required for encrypted exports.
+`--source-prefix PREFIX`: Source prefix for export in the bucket.
 
-`--destination-path PATH`: Root destination folder for the objects being imported; defaults to the database root if not provided.
+`--destination-path PATH`: Destination folder for the objects being imported; defaults to the database root if not provided.
 
 `--include PATH`: Schema objects to be included in the import. Directories are traversed recursively. You may specify this parameter multiple times to include several objects. If not specified, all objects in export are imported.
 

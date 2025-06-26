@@ -618,6 +618,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
+    app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

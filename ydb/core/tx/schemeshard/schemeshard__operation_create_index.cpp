@@ -178,7 +178,7 @@ public:
             if (checks) {
                 checks
                     .PathsLimit()
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsValidACL(acl);
             }
 

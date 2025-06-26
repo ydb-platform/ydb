@@ -25,7 +25,7 @@ TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const 
     const auto& cbOp = tx.GetCreateContinuousBackup();
     const auto& tableName = cbOp.GetTableName();
 
-    const auto checksResult = NCdc::DoNewStreamPathChecks(opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME, acceptExisted);
+    const auto checksResult = NCdc::DoNewStreamPathChecks(context, opId, workingDirPath, tableName, NBackup::CB_CDC_STREAM_NAME, acceptExisted);
     if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
         return {std::get<ISubOperation::TPtr>(checksResult)};
     }

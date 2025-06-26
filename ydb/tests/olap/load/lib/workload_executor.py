@@ -10,6 +10,7 @@ import time as time_module
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.allure_utils import NodeErrors
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -219,8 +220,17 @@ class WorkloadTestBase(LoadSuiteBase):
         if additional_stats:
             node_host = additional_stats.get('node_host', '')
             iteration_num = additional_stats.get('iteration_num', iteration_number)
-            # Используем формат iter_N
-            iteration.name = f"{workload_name}_{node_host}_iter_{iteration_num}"
+            
+            # Проверяем, был ли уже добавлен префикс iter_ в имя
+            iter_prefix_added = additional_stats.get('iter_prefix_added', False)
+            
+            # Формируем имя итерации
+            if iter_prefix_added:
+                # Если префикс уже добавлен, просто используем имя workload
+                iteration.name = f"{workload_name}_{node_host}"
+            else:
+                # Если префикс еще не добавлен, добавляем его
+                iteration.name = f"{workload_name}_{node_host}_iter_{iteration_num}"
             
             # Добавляем статистику об итерации и потоке в итерацию
             if not hasattr(iteration, 'stats'):
@@ -476,13 +486,16 @@ class WorkloadTestBase(LoadSuiteBase):
             workload_name: Имя workload для отчетов
             command_args_template: Шаблон аргументов командной строки
             duration_param: Параметр для передачи времени выполнения
-            use_chunks: Использовать ли разбивку на итерации
+            use_chunks: Использовать ли разбивку на итерации (устаревший параметр)
             preparation_result: Результаты подготовительной фазы
             nemesis: Запускать ли сервис nemesis
             
         Returns:
             Словарь с результатами выполнения
         """
+        # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
+        use_iterations = use_chunks
+        
         with allure.step('Phase 2: Execute workload runs in parallel'):
             deployed_nodes = preparation_result['deployed_nodes']
             execution_plan = preparation_result['execution_plan']
@@ -553,14 +566,16 @@ class WorkloadTestBase(LoadSuiteBase):
                     for run_num, run_config in enumerate(plan, 1):
                         # Формируем имя запуска с учетом ноды и номера итерации
                         iteration_num = run_config.get('iteration_num', run_num)
-                        # Используем формат iter_N
+                        # Используем формат iter_N без добавления префикса iter_ в _execute_single_workload_run
+                        # так как он будет добавлен там
                         run_name = f"{workload_name}_{node_host}_iter_{iteration_num}"
                         
-                        # Добавляем информацию о ноде в run_config для статистики
+                        # Устанавливаем флаг, что префикс iter_ уже добавлен
                         run_config_copy = run_config.copy()
                         run_config_copy['node_host'] = node_host
                         run_config_copy['node_role'] = node['node'].role
                         run_config_copy['thread_id'] = node_host  # Идентификатор потока - хост ноды
+                        run_config_copy['iter_prefix_added'] = True  # Флаг, что префикс iter_ уже добавлен
 
                         # Выполняем один run
                         success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
@@ -587,7 +602,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             logging.info(f"Run {run_num} on {node_host} completed successfully")
                         else:
                             logging.warning(f"Run {run_num} on {node_host} failed")
-                        if not use_chunks:
+                        if not use_iterations:
                             break  # Прерываем при ошибке для одиночного запуска
                     
                     logging.info(f"Execution on {node_host} completed: "
@@ -859,8 +874,8 @@ class WorkloadTestBase(LoadSuiteBase):
             # Добавляем duration параметр
             command_args = f"{command_args_template} {duration_param} {run_config['duration']}"
 
-        # Добавляем информацию об итерации в имя запуска
-        if 'iteration_num' in run_config:
+        # Добавляем информацию об итерации в имя запуска только если префикс еще не добавлен
+        if 'iteration_num' in run_config and not run_config.get('iter_prefix_added', False):
             # Используем формат iter_N
             run_name = f"{run_name}_iter_{run_config['iteration_num']}"
 
@@ -972,6 +987,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 "run_execution_time": execution_time,
                 "iteration_num": run_config.get('iteration_num', 1),  # Номер итерации
                 "thread_id": run_config.get('thread_id', ''),  # Идентификатор потока
+                "iter_prefix_added": run_config.get('iter_prefix_added', False),  # Флаг, что префикс iter_ уже добавлен
                 **run_config
             },
             is_timeout=is_timeout,
@@ -1001,10 +1017,82 @@ class WorkloadTestBase(LoadSuiteBase):
             total_runs: Общее количество запусков
             use_iterations: Использовались ли итерации
         """
-        if successful_runs == 0:
-            overall_result.add_error(f"All {total_runs} runs failed to execute successfully")
-        elif successful_runs < total_runs and use_iterations:
-            overall_result.add_warning(f"Only {successful_runs}/{total_runs} runs completed successfully")
+        # Группируем итерации по их номеру, чтобы определить реальное количество итераций
+        iterations_by_number = {}
+        threads_by_iteration = {}
+        
+        # Анализируем все итерации и группируем их по номеру итерации
+        for iter_num, iteration in overall_result.iterations.items():
+            # Получаем номер итерации из статистики или из имени
+            real_iter_num = None
+            node_host = None
+            
+            # Проверяем статистику
+            if hasattr(iteration, 'stats') and iteration.stats:
+                for stat_key, stat_value in iteration.stats.items():
+                    if isinstance(stat_value, dict):
+                        if stat_key == 'iteration_info':
+                            if 'iteration_num' in stat_value:
+                                real_iter_num = stat_value['iteration_num']
+                            if 'node_host' in stat_value:
+                                node_host = stat_value['node_host']
+                        elif 'iteration_num' in stat_value:
+                            real_iter_num = stat_value['iteration_num']
+                        elif 'chunk_num' in stat_value:  # Для обратной совместимости
+                            real_iter_num = stat_value['chunk_num']
+            
+            # Если не нашли в статистике, пробуем извлечь из имени
+            if real_iter_num is None and hasattr(iteration, 'name') and iteration.name:
+                name_parts = iteration.name.split('_')
+                for i, part in enumerate(name_parts):
+                    if part == "iter" and i + 1 < len(name_parts):
+                        try:
+                            real_iter_num = int(name_parts[i + 1])
+                            break
+                        except (ValueError, IndexError):
+                            pass
+            
+            # Если все еще не определили, используем номер итерации
+            if real_iter_num is None:
+                real_iter_num = iter_num
+            
+            # Добавляем итерацию в группу по её номеру
+            if real_iter_num not in iterations_by_number:
+                iterations_by_number[real_iter_num] = []
+                threads_by_iteration[real_iter_num] = set()
+            
+            iterations_by_number[real_iter_num].append(iteration)
+            if node_host:
+                threads_by_iteration[real_iter_num].add(node_host)
+        
+        # Определяем реальное количество итераций и потоков
+        real_iteration_count = len(iterations_by_number)
+        failed_iterations = 0
+        
+        # Проверяем каждую итерацию на наличие ошибок
+        for iter_num, iterations in iterations_by_number.items():
+            # Если хотя бы один поток в итерации завершился успешно, считаем итерацию успешной
+            iteration_success = any(
+                not hasattr(iter_obj, 'error_message') or not iter_obj.error_message
+                for iter_obj in iterations
+            )
+            
+            if not iteration_success:
+                failed_iterations += 1
+        
+        # Формируем сообщение об ошибке или предупреждение
+        if failed_iterations == real_iteration_count and real_iteration_count > 0:
+            # Все итерации завершились с ошибкой
+            threads_info = ""
+            if real_iteration_count == 1 and sum(len(threads) for threads in threads_by_iteration.values()) > 1:
+                # Если была только одна итерация с несколькими потоками, указываем это
+                thread_count = sum(len(threads) for threads in threads_by_iteration.values())
+                threads_info = f" with {thread_count} parallel threads"
+            
+            overall_result.add_error(f"All {real_iteration_count} iterations{threads_info} failed to execute successfully")
+        elif failed_iterations > 0:
+            # Некоторые итерации завершились с ошибкой
+            overall_result.add_warning(f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully")
 
     def _add_execution_statistics(self, overall_result, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_iterations: bool):
         """
@@ -1022,6 +1110,70 @@ class WorkloadTestBase(LoadSuiteBase):
         total_runs = execution_result['total_runs']
         total_execution_time = execution_result['total_execution_time']
 
+        # Группируем итерации по их номеру для определения реального количества итераций и потоков
+        iterations_by_number = {}
+        threads_by_iteration = {}
+        
+        # Анализируем все итерации и группируем их по номеру итерации
+        for iter_num, iteration in overall_result.iterations.items():
+            # Получаем номер итерации из статистики или из имени
+            real_iter_num = None
+            node_host = None
+            
+            # Проверяем статистику
+            if hasattr(iteration, 'stats') and iteration.stats:
+                for stat_key, stat_value in iteration.stats.items():
+                    if isinstance(stat_value, dict):
+                        if stat_key == 'iteration_info':
+                            if 'iteration_num' in stat_value:
+                                real_iter_num = stat_value['iteration_num']
+                            if 'node_host' in stat_value:
+                                node_host = stat_value['node_host']
+                        elif 'iteration_num' in stat_value:
+                            real_iter_num = stat_value['iteration_num']
+                        elif 'chunk_num' in stat_value:  # Для обратной совместимости
+                            real_iter_num = stat_value['chunk_num']
+            
+            # Если не нашли в статистике, пробуем извлечь из имени
+            if real_iter_num is None and hasattr(iteration, 'name') and iteration.name:
+                name_parts = iteration.name.split('_')
+                for i, part in enumerate(name_parts):
+                    if part == "iter" and i + 1 < len(name_parts):
+                        try:
+                            real_iter_num = int(name_parts[i + 1])
+                            break
+                        except (ValueError, IndexError):
+                            pass
+            
+            # Если все еще не определили, используем номер итерации
+            if real_iter_num is None:
+                real_iter_num = iter_num
+            
+            # Добавляем итерацию в группу по её номеру
+            if real_iter_num not in iterations_by_number:
+                iterations_by_number[real_iter_num] = []
+                threads_by_iteration[real_iter_num] = set()
+            
+            iterations_by_number[real_iter_num].append(iteration)
+            if node_host:
+                threads_by_iteration[real_iter_num].add(node_host)
+        
+        # Определяем реальное количество итераций и потоков
+        real_iteration_count = len(iterations_by_number)
+        total_thread_count = sum(len(threads) for threads in threads_by_iteration.values())
+        
+        # Считаем успешные итерации
+        successful_iterations = 0
+        for iter_num, iterations in iterations_by_number.items():
+            # Если хотя бы один поток в итерации завершился успешно, считаем итерацию успешной
+            iteration_success = any(
+                not hasattr(iter_obj, 'error_message') or not iter_obj.error_message
+                for iter_obj in iterations
+            )
+            
+            if iteration_success:
+                successful_iterations += 1
+
         # Базовая статистика
         stats = {
             "total_runs": total_runs,
@@ -1030,7 +1182,12 @@ class WorkloadTestBase(LoadSuiteBase):
             "total_execution_time": total_execution_time,
             "planned_duration": duration_value,
             "success_rate": successful_runs / total_runs if total_runs > 0 else 0,
-            "use_iterations": use_iterations
+            "use_iterations": use_iterations,
+            "total_iterations": real_iteration_count,
+            "successful_iterations": successful_iterations,
+            "failed_iterations": real_iteration_count - successful_iterations,
+            "total_threads": total_thread_count,
+            "avg_threads_per_iteration": total_thread_count / real_iteration_count if real_iteration_count > 0 else 0
         }
 
         # Добавляем дополнительную статистику
@@ -1081,3 +1238,104 @@ class WorkloadTestBase(LoadSuiteBase):
 
             logging.info(f"Final result: success={overall_result.success}, successful_runs={successful_runs}/{total_runs}")
             return overall_result
+
+    def process_workload_result_with_diagnostics(self, result: YdbCliHelper.WorkloadRunResult, workload_name: str, 
+                                               check_scheme: bool = True, use_node_subcols: bool = False):
+        """
+        Обрабатывает результат workload с добавлением диагностической информации
+        
+        Args:
+            result: Результат выполнения workload
+            workload_name: Имя workload для отчетов
+            check_scheme: Проверять ли схему базы данных
+            use_node_subcols: Использовать ли подколонки для нод в таблице итераций
+        """
+        with allure.step(f'Process workload result for {workload_name}'):
+            # Собираем информацию о параметрах workload для заголовка
+            workload_params = {}
+            
+            # Извлекаем параметры из статистики
+            if result.stats:
+                # Основные параметры
+                if workload_name in result.stats:
+                    workload_stats = result.stats[workload_name]
+                    
+                    # Добавляем важные параметры в начало
+                    important_params = ['total_runs', 'planned_duration', 'use_iterations', 'workload_type', 'table_type']
+                    for param in important_params:
+                        if param in workload_stats:
+                            workload_params[param] = workload_stats[param]
+                    
+                    # Информация об итерациях и потоках
+                    if 'total_iterations' in workload_stats:
+                        workload_params['total_iterations'] = workload_stats['total_iterations']
+                    if 'total_threads' in workload_stats:
+                        workload_params['total_threads'] = workload_stats['total_threads']
+                    
+                    # Добавляем остальные параметры
+                    for key, value in workload_stats.items():
+                        if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
+                            workload_params[key] = value
+            
+            # Собираем информацию об ошибках нод
+            node_errors = []
+            
+            # Проверяем состояние нод и собираем ошибки
+            try:
+                # Получаем информацию о состоянии нод
+                nodes_state = self.get_nodes_state()
+                
+                # Проверяем каждую ноду на наличие ошибок
+                for node, state in nodes_state.items():
+                    # Создаем объект ошибки, если есть проблемы
+                    if state.get('error') or state.get('cores') or state.get('oom'):
+                        node_error = NodeErrors(node, state.get('error', ''))
+                        
+                        # Добавляем информацию о cores
+                        if state.get('cores'):
+                            for core_id, core_hash in state['cores']:
+                                node_error.core_hashes.append((core_id, core_hash))
+                        
+                        # Добавляем информацию об OOM
+                        if state.get('oom'):
+                            node_error.was_oom = True
+                        
+                        node_errors.append(node_error)
+            except Exception as e:
+                logging.error(f"Error getting nodes state: {e}")
+                # Добавляем ошибку в результат
+                result.add_warning(f"Error getting nodes state: {e}")
+            
+            # Вычисляем время выполнения
+            end_time = time()
+            start_time = result.start_time if result.start_time else end_time - 1
+            
+            # Добавляем информацию о workload в отчет
+            from ydb.tests.olap.lib.allure_utils import allure_test_description
+            
+            # Добавляем дополнительную информацию для отчета
+            additional_table_strings = {}
+            
+            # Информация об итерациях и потоках
+            if 'total_iterations' in workload_params and 'total_threads' in workload_params:
+                total_iterations = workload_params['total_iterations']
+                total_threads = workload_params['total_threads']
+                
+                if total_iterations == 1 and total_threads > 1:
+                    additional_table_strings['execution_mode'] = f"Single iteration with {total_threads} parallel threads"
+                elif total_iterations > 1:
+                    avg_threads = workload_params.get('avg_threads_per_iteration', 1)
+                    additional_table_strings['execution_mode'] = f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
+            
+            # Создаем отчет
+            allure_test_description(
+                suite="workload",
+                test=workload_name,
+                start_time=start_time,
+                end_time=end_time,
+                addition_table_strings=additional_table_strings,
+                node_errors=node_errors,
+                workload_result=result,
+                workload_params=workload_params,
+                use_node_subcols=use_node_subcols
+            )

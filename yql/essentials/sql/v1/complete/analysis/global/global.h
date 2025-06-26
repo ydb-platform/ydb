@@ -29,8 +29,8 @@ namespace NSQLComplete {
         TVector<TAliased<TTableId>> Tables;
         TVector<TColumnId> Columns;
 
-        TVector<TAliased<TTableId>> TablesWithAlias(TStringBuf alias) const;
         bool IsAsterisk() const;
+        TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);
         TColumnContext Renamed(TStringBuf alias) &&;
 
         friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;

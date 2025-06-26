@@ -92,7 +92,7 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
 // TChunkWritePiece
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span, TCompletionChunkWrite* parent)
+TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
     : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
     , PDisk(pdisk)
     , ChunkWrite(write)
@@ -100,18 +100,10 @@ TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &wr
     , PieceSize(pieceSize)
 {
     ChunkWrite->RegisterPiece();
-    Completion = MakeHolder<TCompletionChunkWritePart>(this, parent);
 }
 
 void TChunkWritePiece::Process(void*) {
-    //TODO: 
-    // req->Span.Event("PDisk.BeforeBlockDevice"); ?
-    // P_LOG(PRI_DEBUG, BPD01, "ChunkWritePiece",
-    //     (ChunkIdx, this->ChunkWrite->ChunkIdx),
-    //     (Offset, PieceShift),
-    //     (Size, PieceSize)
-    // ); ?
-    this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this/*->ChunkWrite.Get(), PieceShift, PieceSize*/));
+    this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
     PDisk->PushChunkWrite(this);
 }
 

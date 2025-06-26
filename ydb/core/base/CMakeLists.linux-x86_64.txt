@@ -74,6 +74,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/board_lookup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/board_publish.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/board_replica.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/bridge.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/counters.cpp
@@ -107,6 +108,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/auth.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/appdata.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/backtrace.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/bridge.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/channel_profiles.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/counters.h

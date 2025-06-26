@@ -591,8 +591,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 runtime.WaitFor("recomputeK", [&]{ return recomputeKBlocker.size(); });
                 recomputeKBlocker.Unblock();
             }
-            expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows);
-            expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes);
+            AddRead(expectedBillingStats, tableRows, tableBytes);
             logBillingStats();
             UNIT_ASSERT_VALUES_EQUAL(billingStats.ShortDebugString(), expectedBillingStats.ShortDebugString());
         }
@@ -638,12 +637,10 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
         // KMEANS writes build table once and forms at least K, at most K * K level rows
         // (depending on clustering uniformity; it's not so good on test data)
-        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows);
-        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + postingBytes);
+        AddUpload(expectedBillingStats, tableRows, postingBytes);
         UNIT_ASSERT(billingStats.GetUploadRows() >= expectedBillingStats.GetUploadRows() + K);
         const ui64 level2clusters = billingStats.GetUploadRows() - expectedBillingStats.GetUploadRows();
-        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + level2clusters);
-        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + level2clusters * levelRowBytes);
+        AddUpload(expectedBillingStats, level2clusters, level2clusters * levelRowBytes);
         if (smallScanBuffer) {
             // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
             expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 5);
@@ -813,11 +810,9 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         reshuffleBlocker.Unblock();
         runtime.WaitFor("reshuffle", [&]{ return reshuffleBlocker.size(); });
         // shard RESHUFFLE reads and writes once:
-        TMeteringStats shardReshuffleBillingStats;
-        shardReshuffleBillingStats.SetUploadRows(shardRows);
-        shardReshuffleBillingStats.SetUploadBytes(buildShardBytes);
-        shardReshuffleBillingStats.SetReadRows(shardRows);
-        shardReshuffleBillingStats.SetReadBytes(tableShardBytes);
+        TMeteringStats shardReshuffleBillingStats = TMeteringStatsHelper::ZeroValue();
+        AddUpload(shardReshuffleBillingStats, shardRows, buildShardBytes);
+        AddRead(shardReshuffleBillingStats, shardRows, tableShardBytes);
         expectedBillingStats += shardReshuffleBillingStats;
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
@@ -862,10 +857,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         reshuffleBlocker.Stop().Unblock();
         // RESHUFFLE reads and writes table once:
         expectedBillingStats -= shardReshuffleBillingStats; // already added
-        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows);
-        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + buildBytes);
-        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows);
-        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes);
+        AddUpload(expectedBillingStats, tableRows, buildBytes);
+        AddRead(expectedBillingStats, tableRows, tableBytes);
     
         if (doRestarts) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });

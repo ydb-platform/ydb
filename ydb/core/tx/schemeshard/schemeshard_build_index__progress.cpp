@@ -1713,8 +1713,8 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         auto stats = GetMeteringStats();
-        TMeteringStatsCalculator::AddTo(shardStatus.Processed, stats);
-        TMeteringStatsCalculator::AddTo(buildInfo.Processed, stats);
+        shardStatus.Processed += stats;
+        buildInfo.Processed += stats;
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1924,7 +1924,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        TMeteringStatsCalculator::AddTo(buildInfo.Processed, record.GetMeteringStats());
+        buildInfo.Processed += record.GetMeteringStats();
         // As long as we don't try to upload sample in parallel with requests to shards,
         // it's okay to persist Processed not incrementally
         Self->PersistBuildIndexProcessed(db, buildInfo);

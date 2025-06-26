@@ -468,15 +468,15 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
         TString previousBillId = "0-0-0-0";
 
-        TMeteringStats billingStats = TMeteringStatsCalculator::Zero();
-        TMeteringStats expectedBillingStats = TMeteringStatsCalculator::Zero();
+        TMeteringStats billingStats = TMeteringStatsHelper::ZeroValue();
+        TMeteringStats expectedBillingStats = TMeteringStatsHelper::ZeroValue();
         auto logBillingStats = [&]() {
             Cerr << "BillingStats: " << billingStats << Endl;
         };
 
         TBlockEvents<TEvDataShard::TEvSampleKResponse> sampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
@@ -496,19 +496,19 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadSampleKBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
         TBlockEvents<TEvDataShard::TEvLocalKMeansResponse> localKMeansBlocker(runtime, [&](const auto& ev) {
             auto response = ev->Get()->Record;
-            TMeteringStatsCalculator::AddTo(billingStats, response.GetMeteringStats());
+            billingStats += response.GetMeteringStats();
             return true;
         });
 
@@ -727,8 +727,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             return true;
         });
         TString previousBillId = "0-0-0-0";
-        TMeteringStats billedStats = TMeteringStatsCalculator::Zero();
-        TMeteringStats expectedBillingStats = TMeteringStatsCalculator::Zero();
+        TMeteringStats billedStats = TMeteringStatsHelper::ZeroValue();
+        TMeteringStats expectedBillingStats = TMeteringStatsHelper::ZeroValue();
 
         TBlockEvents<TEvDataShard::TEvReshuffleKMeansResponse> reshuffleBlocker(runtime, [&](const auto&) {
             return true;
@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         shardReshuffleBillingStats.SetUploadBytes(buildShardBytes);
         shardReshuffleBillingStats.SetReadRows(shardRows);
         shardReshuffleBillingStats.SetReadBytes(tableShardBytes);
-        TMeteringStatsCalculator::AddTo(expectedBillingStats, shardReshuffleBillingStats);
+        expectedBillingStats += shardReshuffleBillingStats;
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
 
         reshuffleBlocker.Stop().Unblock();
         // RESHUFFLE reads and writes table once:
-        TMeteringStatsCalculator::SubFrom(expectedBillingStats, shardReshuffleBillingStats); // already added
+        expectedBillingStats -= shardReshuffleBillingStats; // already added
         expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows);
         expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + buildBytes);
         expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows);

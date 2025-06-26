@@ -7,12 +7,15 @@ namespace NKikimr::NSchemeShard {
 
 using TMeteringStats = NKikimrIndexBuilder::TMeteringStats;
 
-struct TMeteringStatsCalculator {
+TMeteringStats operator + (const TMeteringStats& value, const TMeteringStats& other);
+TMeteringStats operator - (const TMeteringStats& value, const TMeteringStats& other);
+TMeteringStats& operator += (TMeteringStats& value, const TMeteringStats& other);
+TMeteringStats& operator -= (TMeteringStats& value, const TMeteringStats& other);
+
+struct TMeteringStatsHelper {
     static void TryFixOldFormat(TMeteringStats& value);
-    static TMeteringStats Zero();
+    static TMeteringStats ZeroValue();
     static bool IsZero(TMeteringStats& value);
-    static void AddTo(TMeteringStats& value, const TMeteringStats& other);
-    static void SubFrom(TMeteringStats& value, const TMeteringStats& other);
 };
 
 struct TRUCalculator {

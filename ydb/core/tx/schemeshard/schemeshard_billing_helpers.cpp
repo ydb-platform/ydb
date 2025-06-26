@@ -6,39 +6,27 @@
 
 namespace NKikimr::NSchemeShard {
 
-void TMeteringStatsCalculator::TryFixOldFormat(TMeteringStats& value) {
-    // old format: assign upload to read
-    if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
-        value.SetReadRows(value.GetUploadRows());
-        value.SetReadBytes(value.GetUploadBytes());
-    }
+TMeteringStats operator + (const TMeteringStats& value, const TMeteringStats& other) {
+    TMeteringStats result = value;
+    result += other;
+    return result;
 }
 
-TMeteringStats TMeteringStatsCalculator::Zero() {
-    // this method the only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
-    TMeteringStats value;
-    value.SetUploadRows(0);
-    value.SetUploadBytes(0);
-    value.SetReadRows(0);
-    value.SetReadBytes(0);
-    return value;
+TMeteringStats operator - (const TMeteringStats& value, const TMeteringStats& other) {
+    TMeteringStats result = value;
+    result -= other;
+    return result;
 }
 
-bool TMeteringStatsCalculator::IsZero(TMeteringStats& value) {
-    return value.GetUploadRows() == 0
-        && value.GetUploadBytes() == 0
-        && value.GetReadRows() == 0
-        && value.GetReadBytes() == 0;
-}
-
-void TMeteringStatsCalculator::AddTo(TMeteringStats& value, const TMeteringStats& other) {
+TMeteringStats& operator += (TMeteringStats& value, const TMeteringStats& other) {
     value.SetUploadRows(value.GetUploadRows() + other.GetUploadRows());
     value.SetUploadBytes(value.GetUploadBytes() + other.GetUploadBytes());
     value.SetReadRows(value.GetReadRows() + other.GetReadRows());
     value.SetReadBytes(value.GetReadBytes() + other.GetReadBytes());
+    return value;
 }
 
-void TMeteringStatsCalculator::SubFrom(TMeteringStats& value, const TMeteringStats& other) {
+TMeteringStats& operator -= (TMeteringStats& value, const TMeteringStats& other) {
     const auto safeSub = [](ui64 x, ui64 y) {
         Y_ENSURE(x >= y);
         return x - y;
@@ -48,6 +36,32 @@ void TMeteringStatsCalculator::SubFrom(TMeteringStats& value, const TMeteringSta
     value.SetUploadBytes(safeSub(value.GetUploadBytes(), other.GetUploadBytes()));
     value.SetReadRows(safeSub(value.GetReadRows(), other.GetReadRows()));
     value.SetReadBytes(safeSub(value.GetReadBytes(), other.GetReadBytes()));
+    return value;
+}
+
+void TMeteringStatsHelper::TryFixOldFormat(TMeteringStats& value) {
+    // old format: assign upload to read
+    if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
+        value.SetReadRows(value.GetUploadRows());
+        value.SetReadBytes(value.GetUploadBytes());
+    }
+}
+
+TMeteringStats TMeteringStatsHelper::ZeroValue() {
+    // this method the only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
+    TMeteringStats value;
+    value.SetUploadRows(0);
+    value.SetUploadBytes(0);
+    value.SetReadRows(0);
+    value.SetReadBytes(0);
+    return value;
+}
+
+bool TMeteringStatsHelper::IsZero(TMeteringStats& value) {
+    return value.GetUploadRows() == 0
+        && value.GetUploadBytes() == 0
+        && value.GetReadRows() == 0
+        && value.GetReadBytes() == 0;
 }
 
 ui64 TRUCalculator::ReadTable(ui64 bytes) {

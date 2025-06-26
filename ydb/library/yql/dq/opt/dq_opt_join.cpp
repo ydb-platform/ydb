@@ -1589,40 +1589,18 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
                 // Create TDqPhyBlockHashJoin node - peephole will handle block conversion
-                TExprNode::TListType leftKeyAtoms, rightKeyAtoms;
-                TExprNode::TListType leftRenames, rightRenames;
-                
-                // Build key atoms
-                for (ui32 i = 0U; i < leftKeys.size(); ++i) {
-                    leftKeyAtoms.push_back(ctx.NewAtom(join.Pos(), ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default));
-                }
-                for (ui32 i = 0U; i < rightKeys.size(); ++i) {
-                    rightKeyAtoms.push_back(ctx.NewAtom(join.Pos(), ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default));
-                }
-                
-                // Build renames
-                for (ui32 i = 0U; i < leftNames.size(); ++i) {
-                    leftRenames.push_back(ctx.NewAtom(join.Pos(), ctx.GetIndexAsString(i), TNodeFlags::Default));
-                    leftRenames.push_back(ctx.NewAtom(join.Pos(), ctx.GetIndexAsString(i), TNodeFlags::Default));
-                }
-                for (ui32 i = 0U; i < rightNames.size(); ++i) {
-                    rightRenames.push_back(ctx.NewAtom(join.Pos(), ctx.GetIndexAsString(i), TNodeFlags::Default));
-                    rightRenames.push_back(ctx.NewAtom(join.Pos(), ctx.GetIndexAsString(leftNames.size() + i), TNodeFlags::Default));
-                }
+                // TDqPhyBlockHashJoin uses TDqJoinBase structure:
+                // LeftInput, RightInput, LeftLabel, RightLabel, JoinType, JoinKeys, LeftJoinKeyNames, RightJoinKeyNames
                 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(std::move(leftWideFlow))
                     .RightInput(std::move(rightWideFlow))
-                    .JoinType(join.JoinType())
-                    .LeftKeys(ctx.NewList(join.Pos(), std::move(leftKeyAtoms)))
-                    .RightKeys(ctx.NewList(join.Pos(), std::move(rightKeyAtoms)))
                     .LeftLabel(join.LeftLabel())
                     .RightLabel(join.RightLabel())
-                    .LeftRenames(ctx.NewList(join.Pos(), std::move(leftRenames)))
-                    .RightRenames(ctx.NewList(join.Pos(), std::move(rightRenames)))
+                    .JoinType(join.JoinType())
+                    .JoinKeys(join.JoinKeys())
                     .LeftJoinKeyNames(join.LeftJoinKeyNames())
                     .RightJoinKeyNames(join.RightJoinKeyNames())
-                    .Flags(ctx.NewList(join.Pos(), std::move(flags)))
                     .Done().Ptr();
             } else {
                 hashJoin = ctx.Builder(join.Pos())

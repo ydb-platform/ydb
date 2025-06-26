@@ -319,6 +319,77 @@ Y_UNIT_TEST_SUITE(TResourcePoolTest) {
         }
     }
 
+    Y_UNIT_TEST(ParallelAlterResourcePool) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".metadata/workload_manager/pools");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools", R"(
+                Name: "MyResourcePool"
+                Properties {
+                    Properties {
+                        key: "concurrent_query_limit",
+                        value: "10"
+                    }
+                    Properties {
+                        key: "query_count_limit",
+                        value: "50"
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted}
+        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        constexpr ui32 TEST_RUNS = 30;
+        TSet<ui64> txIds;
+        for (ui32 i = 0; i < TEST_RUNS; ++i) {
+            AsyncAlterResourcePool(runtime, ++txId, "/MyRoot/.metadata/workload_manager/pools",R"(
+                    Name: "MyResourcePool"
+                    Properties {
+                        Properties {
+                            key: "concurrent_query_limit",
+                            value: "20"
+                        }
+                        Properties {
+                            key: "query_cancel_after_seconds",
+                            value: "60"
+                        }
+                    }
+                )"
+            );
+
+            txIds.insert(txId);
+        }
+
+        ui32 acceptedCount = 0;
+        for (auto testTx : txIds) {
+            const auto result = TestModificationResults(runtime, testTx, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            acceptedCount += result == NKikimrScheme::StatusAccepted;
+        }
+        UNIT_ASSERT_GE(acceptedCount, 1);
+
+        env.TestWaitNotification(runtime, txIds);
+
+        {
+            auto describeResult =  DescribePath(runtime, "/MyRoot/.metadata/workload_manager/pools/MyResourcePool");
+            TestDescribeResult(describeResult, {NLs::PathExist});
+            UNIT_ASSERT(describeResult.GetPathDescription().HasResourcePoolDescription());
+            const auto& resourcePoolDescription = describeResult.GetPathDescription().GetResourcePoolDescription();
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetName(), "MyResourcePool");
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetVersion(), acceptedCount + 1);
+
+            NKikimrSchemeOp::TResourcePoolProperties properties;
+            properties.MutableProperties()->insert({"concurrent_query_limit", "20"});
+            properties.MutableProperties()->insert({"query_count_limit", "50"});
+            properties.MutableProperties()->insert({"query_cancel_after_seconds", "60"});
+            UNIT_ASSERT_VALUES_EQUAL(resourcePoolDescription.GetProperties().DebugString(), properties.DebugString());
+        }
+    }
+
     Y_UNIT_TEST(AlterResourcePoolShouldFailIfSuchEntityNotExists) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

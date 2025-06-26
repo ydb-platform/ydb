@@ -2249,3 +2249,7 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
 }
 
 } // namespace NKikimr
+
+//TPDiskTest::ChunkWriteBadOffset
+//TPDiskUtil::FormatSectorMap
+//WilsonTrace::LogWriteChunkWriteChunkRead

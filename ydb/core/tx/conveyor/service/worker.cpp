@@ -62,7 +62,8 @@ void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     ExecuteTask(ev->Get()->ExtractTasks());
 }
 
-void TWorker::UpdateCPUSoftLimit(const double cpuSoftLimit) {
+void TWorker::HandleMain(TEvInternal::TEvChangeCPUSoftLimit::TPtr& ev) {
+    const auto cpuSoftLimit = ev->Get()->GetCPUSoftLimit();
     AFL_VERIFY(0 < cpuSoftLimit);
     AFL_VERIFY(cpuSoftLimit <= CPUHardLimit);
     CPUSoftLimit = cpuSoftLimit;
@@ -71,9 +72,6 @@ void TWorker::UpdateCPUSoftLimit(const double cpuSoftLimit) {
         return;
     }
 
-    Sleep(TDuration::MilliSeconds(10));
-
-    AFL_VERIFY(!Instants.empty());
     auto wakeupTime = Instants.back();
     if (CPUSoftLimit < 1) {
         wakeupTime += GetWakeupDuration();

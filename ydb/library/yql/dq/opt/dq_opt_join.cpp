@@ -1588,13 +1588,11 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                // Create TDqPhyBlockHashJoin node - peephole will handle block conversion
-                // TDqPhyBlockHashJoin uses TDqJoinBase structure:
-                // LeftInput, RightInput, LeftLabel, RightLabel, JoinType, JoinKeys, LeftJoinKeyNames, RightJoinKeyNames
-                
+                // Create TDqPhyBlockHashJoin node with structured inputs - peephole will handle conversion
+                // Pass the original structured inputs, not wide flows
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
-                    .LeftInput(std::move(leftWideFlow))
-                    .RightInput(std::move(rightWideFlow))
+                    .LeftInput(leftInputArg)
+                    .RightInput(rightInputArg)
                     .LeftLabel(join.LeftLabel())
                     .RightLabel(join.RightLabel())
                     .JoinType(join.JoinType())

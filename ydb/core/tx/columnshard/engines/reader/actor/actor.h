@@ -35,7 +35,8 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const TComputeShardingPolicy& computeShardingPolicy, ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId,
         TDuration timeout, const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
-        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits);
+        const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
+        NKqp::NScheduler::TSchedulableTaskPtr schedulableTask);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -131,6 +132,7 @@ private:
     const NKikimrDataEvents::EDataFormat DataFormat;
     const ui64 TabletId;
     const NConveyorComposite::TCPULimitsConfig CPULimits;
+    NKqp::NScheduler::TSchedulableTaskPtr SchedulableTask;
 
     TReadMetadataBase::TConstPtr ReadMetadataRange;
     std::unique_ptr<TScanIteratorBase> ScanIterator;

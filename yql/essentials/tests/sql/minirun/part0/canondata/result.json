@@ -876,6 +876,20 @@
             "uri": "https://{canondata_backend}/1597364/388cf5920d17fb9690dc3f4d18ce7c82ae3bce7f/resource.tar.gz#test.test_optimizers-unordered_over_extract_members_topsort-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[optimizers-yql-20117_empty_or-default.txt-Debug]": [
+        {
+            "checksum": "e511f96dbd615dbcd89146ff1c241d48",
+            "size": 530,
+            "uri": "https://{canondata_backend}/1942100/6c2a774c208067888b3de8f1ff9dff571453fb04/resource.tar.gz#test.test_optimizers-yql-20117_empty_or-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-yql-20117_empty_or-default.txt-Results]": [
+        {
+            "checksum": "be2e16c994a7bc241e89b4667b9b9799",
+            "size": 1090,
+            "uri": "https://{canondata_backend}/1942100/6c2a774c208067888b3de8f1ff9dff571453fb04/resource.tar.gz#test.test_optimizers-yql-20117_empty_or-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[params-struct--Debug]": [
         {
             "checksum": "f9dc205de4d3652a1c45c5c40e79d4ca",

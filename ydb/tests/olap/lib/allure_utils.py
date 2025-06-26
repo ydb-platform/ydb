@@ -573,11 +573,13 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         
         # Проверяем, есть ли у итерации имя с информацией об итерации и ноде
         if hasattr(iteration, 'name') and iteration.name:
-            # Извлекаем iteration_num из имени итерации (поддерживаем оба формата: iter_N и chunk_N)
-            for pattern in ['_iter_', '_chunk_']:
-                if pattern in iteration.name:
+            # Извлекаем iteration_num из имени итерации
+            name_parts = iteration.name.split('_')
+            # Ищем "iter_X" в имени
+            for i, part in enumerate(name_parts):
+                if part == "iter" and i + 1 < len(name_parts):
                     try:
-                        iter_num = int(iteration.name.split(pattern)[-1])
+                        iter_num = int(name_parts[i + 1])
                         break
                     except (ValueError, IndexError):
                         pass

@@ -1224,6 +1224,13 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
         return TStatus::Error;
     }
 
+    const auto joinKind = joinType->Content();
+    if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly" && joinKind != "Cross") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinType->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
+            << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
+        return TStatus::Error;
+    }
+
     if (!EnsureTuple(*leftKeys, ctx)) {
         return TStatus::Error;
     }
@@ -1232,57 +1239,75 @@ TStatus AnnotateDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ctx)
         return TStatus::Error;
     }
 
-    // Get input types
-    auto leftType = leftInput->GetTypeAnn();
-    auto rightType = rightInput->GetTypeAnn();
-
-    if (!leftType || !rightType) {
-        return TStatus::Repeat;
-    }
-
-    // Ensure stream types - DqBlockHashJoin works with streams
-    if (!EnsureNewSeqType<false, false, true>(input->Pos(), *leftType, ctx)) {
+    // Validate inputs as wide streams of block types (like BlockMapJoinCore)
+    TTypeAnnotationNode::TListType leftItemTypes;
+    if (!EnsureWideStreamBlockType(*leftInput, leftItemTypes, ctx)) {
         return TStatus::Error;
     }
-    if (!EnsureNewSeqType<false, false, true>(input->Pos(), *rightType, ctx)) {
+    leftItemTypes.pop_back(); // Remove length column
+
+    TTypeAnnotationNode::TListType rightItemTypes;  
+    if (!EnsureWideStreamBlockType(*rightInput, rightItemTypes, ctx)) {
         return TStatus::Error;
     }
+    rightItemTypes.pop_back(); // Remove length column
 
-    // Get item types - should be Multi (wide stream)
-    const auto& leftInputItemType = GetSeqItemType(*leftType);
-    const auto& rightInputItemType = GetSeqItemType(*rightType);
+    // Build result block types
+    std::vector<const TTypeAnnotationNode*> resultItems;
 
-    TVector<const TTypeAnnotationNode*> resultTypes;
-    
-    // Handle Multi types (wide streams) 
-    if (leftInputItemType.GetKind() == ETypeAnnotationKind::Multi) {
-        auto leftMultiType = leftInputItemType.Cast<TMultiExprType>();
-        for (const auto& item : leftMultiType->GetItems()) {
-            resultTypes.push_back(item);
+    // Add left side columns 
+    if (joinKind != "RightOnly" && joinKind != "RightSemi") {
+        for (auto itemType : leftItemTypes) {
+            if (joinKind == "Right" && !itemType->IsOptionalOrNull()) {
+                // For right joins, left side becomes optional
+                auto underlyingType = itemType;
+                if (itemType->GetKind() == ETypeAnnotationKind::Block) {
+                    underlyingType = itemType->Cast<TBlockExprType>()->GetItemType();
+                    underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                } else {
+                    underlyingType = ctx.MakeType<TOptionalExprType>(itemType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                }
+            } else {
+                // Ensure all types are block types
+                if (itemType->GetKind() != ETypeAnnotationKind::Block) {
+                    itemType = ctx.MakeType<TBlockExprType>(itemType);
+                }
+            }
+            resultItems.push_back(itemType);
         }
-    } else {
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), 
-            TStringBuilder() << "Expected Multi type for left input, got: " << leftInputItemType.GetKind()));
-        return TStatus::Error;
     }
 
-    // Add right side types
-    if (rightInputItemType.GetKind() == ETypeAnnotationKind::Multi) {
-        auto rightMultiType = rightInputItemType.Cast<TMultiExprType>();
-        for (const auto& item : rightMultiType->GetItems()) {
-            resultTypes.push_back(item);
+    // Add right side columns
+    if (joinKind != "LeftOnly" && joinKind != "LeftSemi") {
+        for (auto itemType : rightItemTypes) {
+            if (joinKind == "Left" && !itemType->IsOptionalOrNull()) {
+                // For left joins, right side becomes optional
+                auto underlyingType = itemType;
+                if (itemType->GetKind() == ETypeAnnotationKind::Block) {
+                    underlyingType = itemType->Cast<TBlockExprType>()->GetItemType();
+                    underlyingType = ctx.MakeType<TOptionalExprType>(underlyingType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                } else {
+                    underlyingType = ctx.MakeType<TOptionalExprType>(itemType);
+                    itemType = ctx.MakeType<TBlockExprType>(underlyingType);
+                }
+            } else {
+                // Ensure all types are block types
+                if (itemType->GetKind() != ETypeAnnotationKind::Block) {
+                    itemType = ctx.MakeType<TBlockExprType>(itemType);
+                }
+            }
+            resultItems.push_back(itemType);
         }
-    } else {
-        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), 
-            TStringBuilder() << "Expected Multi type for right input, got: " << rightInputItemType.GetKind()));
-        return TStatus::Error;
     }
 
-    // Result should be Multi type since inputs are Multi
-    auto resultMultiType = ctx.MakeType<TMultiExprType>(resultTypes);
-    auto resultType = ctx.MakeType<TStreamExprType>(resultMultiType);
+    // Add scalar length column at the end (required for wide block streams)
+    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
-    input->SetTypeAnn(resultType);
+    // Result is a stream of multi type with block types (like BlockMapJoinCore)
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
     return TStatus::Ok;
 }
 

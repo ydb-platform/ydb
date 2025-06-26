@@ -44,6 +44,7 @@ class YdbCluster:
             }
             self.ic_port: int = ports.get('ic', 0)
             self.mon_port: int = ports.get('http-mon', 0)
+            self.grpc_port: int = ports.get('grpc', 0)
             self.disconnected: bool = desc.get('Disconnected', False)
             self.version: str = ss.get('Version', '')
             self.start_time: float = 0.001 * int(ss.get('StartTime', time() * 1000))

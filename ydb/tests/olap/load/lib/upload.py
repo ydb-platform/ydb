@@ -7,6 +7,7 @@ from time import time, sleep
 import yatest.common
 import allure
 import logging
+import ydb.tests.olap.lib.remote_execution as re
 
 
 class UploadSuiteBase(LoadSuiteBase):
@@ -146,20 +147,62 @@ class UploadClusterBase(UploadSuiteBase):
 
 
 class UploadTpchBase(UploadClusterBase):
+    __static_nodes: list[YdbCluster.Node] = []
+
+    @classmethod
+    def __execute_on_nodes(cls, cmd):
+        execs = []
+        for i in range(len(cls.__static_nodes)):
+            node = cls.__static_nodes[i]
+            execs.append(cls.execute_ssh(node.host, cmd))
+        for e in execs:
+            e.wait()
+
     @classmethod
     def get_path(cls):
         return f'upload/tpch/s{cls.scale}'
+
+    @classmethod
+    def get_remote_tmpdir(cls):
+        return f'/tmp/{cls.get_path()}'
+
+    @classmethod
+    def do_setup_class(cls) -> None:
+        cls.__static_nodes = YdbCluster.get_cluster_nodes(role=YdbCluster.Node.Role.STORAGE, db_only=False)
+        re.deploy_binaries_to_hosts(
+            [YdbCliHelper.get_cli_path()],
+            [n.host for n in cls.__static_nodes],
+            cls.get_remote_tmpdir()
+        )
+        for i in range(len(cls.__static_nodes)):
+            node = cls.__static_nodes[i]
+            script_path = yatest.common.work_path('ydb_upload_tpch.sh')
+            with open(script_path, 'w') as script_file:
+                script_file.write(f'''#!/bin/bash
+
+                    rm -f {cls.get_remote_tmpdir()}/state.json
+                    RET_CODE=1
+                    while [ $RET_CODE -ne 0 ]
+                    do
+                        {cls.get_remote_tmpdir()}/ydb -e grpc://{node.host}:{node.grpc_port} -d /{YdbCluster.ydb_database} \\
+                            workload tpch -p {YdbCluster.get_tables_path(cls.get_path())} \\
+                            import --bulk-size 50000 \\
+                            generator --scale {cls.scale} -i {i} -C {len(cls.__static_nodes)} --state {cls.get_remote_tmpdir()}/state.json
+                        RET_CODE="$?"
+                    done
+                ''')
+            re.deploy_binary(script_path, node.host, cls.get_remote_tmpdir())
 
     def init(self):
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'init', '--store=column', '--clear'])
 
     def import_data(self):
-        yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(self.get_path()), 'import', 'generator', '--scale', str(self.scale)])
+        self.__execute_on_nodes(f'{self.get_remote_tmpdir()}/ydb_upload_tpch.sh')
 
     @classmethod
-    def teardown_class(cls) -> None:
+    def do_teardown_class(cls) -> None:
         yatest.common.execute(YdbCliHelper.get_cli_command() + ['workload', 'tpch', '-p', YdbCluster.get_tables_path(cls.get_path()), 'clean'])
-        super().teardown_class()
+        cls.__execute_on_nodes(f'rm -rf {cls.get_remote_tmpdir()}')
 
 
 class TestUploadTpch1(UploadTpchBase):
@@ -172,3 +215,7 @@ class TestUploadTpch10(UploadTpchBase):
 
 class TestUploadTpch100(UploadTpchBase):
     scale: int = 100
+
+
+class TestUploadTpch1000(UploadTpchBase):
+    scale: int = 1000

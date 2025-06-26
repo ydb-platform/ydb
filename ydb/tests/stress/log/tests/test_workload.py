@@ -1,19 +1,15 @@
 # -*- coding: utf-8 -*-
 import os
-
 import pytest
-
 import yatest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.stress.fixtures import StressFixture
 
 
-class TestYdbLogWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
-        cls.cluster.start()
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster()
 
     @classmethod
     def get_command_prefix(cls, subcmds: list[str], path: str) -> list[str]:
@@ -35,10 +31,6 @@ class TestYdbLogWorkload(object):
             '--key-cols', '4',
             '--len', '200',
         ]
-
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
 
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):

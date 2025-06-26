@@ -551,8 +551,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(readRows, expectedReadRows);
         UNIT_ASSERT_VALUES_EQUAL(readBytes, expectedReadBytes);
 
-        // every RECOMPUTE round reads table once, no writes; there are 4 recompute rounds:
-        for (ui32 round = 0; round < 4; round++) {
+        // every RECOMPUTE round reads table once, no writes; there are 3 recompute rounds:
+        for (ui32 round = 0; round < 3; round++) {
             for (ui32 shard = 0; shard < 3; shard++) {
                 runtime.WaitFor("recomputeK", [&]{ return recomputeKBlocker.size(); });
                 recomputeKBlocker.Unblock();
@@ -623,9 +623,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         expectedUploadRows += level2clusters;
         expectedUploadBytes += level2clusters * levelRowBytes;
         if (smallScanBuffer) {
-            // KMEANS reads build table 6 times (SAMPLE + KMEANS * 4 + UPLOAD):
-            expectedReadRows += tableRows * 6;
-            expectedReadBytes += buildBytes * 6;
+            // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
+            expectedReadRows += tableRows * 5;
+            expectedReadBytes += buildBytes * 5;
         } else {
             // KMEANS reads build table once:
             expectedReadRows += tableRows;

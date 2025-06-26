@@ -1880,6 +1880,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%d", server.GetPort())));
@@ -2226,9 +2227,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalVectorKmeansTree:
-                return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeGlobalUnique:
-                break; // https://github.com/ydb-platform/ydb/issues/10468
+                return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -2908,6 +2908,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
 
@@ -3026,10 +3027,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalVectorKmeansTree:
+            case EIndexTypeGlobalUnique:
                 TestTableWithIndexBackupRestore(Value);
                 break;
-            case EIndexTypeGlobalUnique:
-                break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

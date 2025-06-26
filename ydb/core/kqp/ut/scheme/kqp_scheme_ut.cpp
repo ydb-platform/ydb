@@ -1159,7 +1159,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithPartitionSize(true);
     }
 
-    Y_UNIT_TEST_TWIN(RenameTable, СolumnTable) {
+    Y_UNIT_TEST_TWIN(RenameTable, ColumnTable) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1172,8 +1172,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value String,
                 PRIMARY KEY (Key)
             )
-            )") 
-            + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
+            )")
+            + (ColumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -1212,7 +1212,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value String,
                 PRIMARY KEY (Key)
             )
-            )" + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
+            )" + (ColumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -3480,6 +3480,111 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         BuildingUniqIndexDeniesTableModifications(true);
     }
 
+    void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetQueryClient();
+        {
+            TString createQuery = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    TableKey1 Uint64,
+                    TableKey2 String,
+                    IndexKey1 String,
+                    IndexKey2 Int64,
+                    TableDataColumn String,
+                    IndexDataColumn String,
+                    PRIMARY KEY (TableKey1, TableKey2)
+                );
+            )sql";
+            auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (TableKey1, TableKey2, IndexKey1, IndexKey2, TableDataColumn, IndexDataColumn)
+                    VALUES
+                        (1, "1", "index_1", 1, "table_data1", "index_data1"),
+                        (2, "2", "index_2", 2, "table_data2", "index_data2"),
+                        (3, "3", "index_3", 3, "table_data3", "index_data3");
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        if (!isUnique) { // insert one more key
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (TableKey1, TableKey2, IndexKey1, IndexKey2, TableDataColumn, IndexDataColumn)
+                    VALUES
+                        (4, "4", "index_2", 2, "table_data2", "index_data2");
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        if (sqlInterface) {
+            TString alterQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (IndexKey1, IndexKey2) COVER (IndexDataColumn);
+            )sql";
+            auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            if (isUnique) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Duplicate key found: (IndexKey1=index_2, IndexKey2=2)");
+            }
+        } else {
+            TAlterTableSettings settings;
+            settings.AppendAddIndexes(TIndexDescription(
+                "uniq_value_idx",
+                EIndexType::GlobalUnique,
+                {"IndexKey1", "IndexKey2"},
+                {"IndexDataColumn"}
+            ));
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
+            NYdb::TOperation::TOperationId alterOpId = op.Id();
+            TMaybe<NYdb::NTable::TBuildIndexOperation> buildOp;
+            do {
+                Sleep(TDuration::MilliSeconds(100));
+                NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+                buildOp = opClient.Get<NYdb::NTable::TBuildIndexOperation>(alterOpId).GetValueSync();
+            } while (!buildOp->Ready());
+
+            if (isUnique) {
+                UNIT_ASSERT_C(buildOp->Status().IsSuccess(), buildOp->Status().GetIssues().ToString());
+            } else {
+                UNIT_ASSERT(!buildOp->Status().IsSuccess());
+                UNIT_ASSERT_STRING_CONTAINS(buildOp->Status().GetIssues().ToString(), "Duplicate key found: (IndexKey1=index_2, IndexKey2=2)");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSqlSuccess) {
+        ValidatingUniqIndex(true, true);
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSdkSuccess) {
+        ValidatingUniqIndex(false, true);
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSqlFail) {
+        ValidatingUniqIndex(true, false);
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSdkFail) {
+        ValidatingUniqIndex(false, false);
+    }
+
     Y_UNIT_TEST(AlterTableAddUniqIndexSqlFeatureOff) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(false);
@@ -3512,7 +3617,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "unsupported index type to build");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "building global unique index is disabled");
         }
     }
 
@@ -3543,7 +3648,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ));
             auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::BAD_REQUEST, op.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "unsupported index type to build");
+            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "building global unique index is disabled");
         }
     }
 

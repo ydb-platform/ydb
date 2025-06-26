@@ -93,7 +93,7 @@ public:
         for (size_t i = 0; i < Builders_.size(); i++) {
             Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
         }
-        FillArrays();
+        FillArrays();  // CRITICAL: This populates the Arrays_ from Values for TBlockState::Get()
     }
 
     NYql::NUdf::TBlockItem GetItem(size_t idx, size_t offset = 0) const {
@@ -119,12 +119,7 @@ public:
 
     void Reset() {
         Current_ = 0;
-        // Set InputRows_ from the last element (block length)
-        if (!Inputs_.empty()) {
-            InputRows_ = GetBlockCount(Inputs_.back());
-        } else {
-            InputRows_ = 0;
-        }
+        InputRows_ = GetBlockCount(Inputs_.back());
     }
 
     void Finish() {
@@ -171,10 +166,7 @@ public:
         return OutputWidth_ + 1;
     }
 
-    void AddValue(const NUdf::TUnboxedValuePod& value, size_t idx) {
-        Inputs_[idx] = value;
-        // InputRows_ will be set in Reset() after all values are added
-    }
+    TUnboxedValueVector Inputs_;  // Made public for access from TStreamValue
 
 private:
     void AddItem(const NYql::NUdf::TBlockItem& item, size_t idx) {
@@ -191,7 +183,6 @@ private:
     size_t OutputRows_ = 0;
     size_t InputWidth_;
     size_t OutputWidth_;
-    TUnboxedValueVector Inputs_;
     const TVector<ui32> LeftIOMap_;
     const std::vector<arrow::ValueDescr> InputsDescr_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
@@ -292,31 +283,28 @@ private:
                         case NUdf::EFetchStatus::Yield:
                             return NUdf::EFetchStatus::Yield;
                         case NUdf::EFetchStatus::Ok:
-                            // Add the input block to join state
+                            // Copy input block to join state
                             for (size_t i = 0; i < inputWidth; i++) {
-                                joinState.AddValue(inputFields[i], i);
+                                joinState.Inputs_[i] = inputFields[i];
                             }
-                            // Reset to set InputRows_ from block length
+                            // Process current block from left stream
                             joinState.Reset();
                             // Copy all rows from current block
                             while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
                                 joinState.CopyRow();
                                 joinState.NextRow();
                             }
-                            if (joinState.RemainingRowsCount() == 0) {
-                                joinState.Reset();
-                            }
                             continue;
                         case NUdf::EFetchStatus::Finish:
                             // Process remaining rows from current block if any
-                            while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
-                                joinState.CopyRow();
-                                joinState.NextRow();
-                            }
-                            if (joinState.RemainingRowsCount() == 0) {
-                                LeftFinished_ = true;
+                            if (joinState.RemainingRowsCount() > 0) {
                                 joinState.Reset();
+                                while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
+                                    joinState.CopyRow();
+                                    joinState.NextRow();
+                                }
                             }
+                            LeftFinished_ = true;
                             break;
                         }
                     }
@@ -329,31 +317,29 @@ private:
                         case NUdf::EFetchStatus::Yield:
                             return NUdf::EFetchStatus::Yield;
                         case NUdf::EFetchStatus::Ok:
-                            // Add the input block to join state
+                            // Copy input block to join state
                             for (size_t i = 0; i < inputWidth; i++) {
-                                joinState.AddValue(inputFields[i], i);
+                                joinState.Inputs_[i] = inputFields[i];
                             }
-                            // Reset to set InputRows_ from block length
+                            // Process current block from right stream
                             joinState.Reset();
                             // Copy all rows from current block
                             while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
                                 joinState.CopyRow();
                                 joinState.NextRow();
                             }
-                            if (joinState.RemainingRowsCount() == 0) {
-                                joinState.Reset();
-                            }
                             continue;
                         case NUdf::EFetchStatus::Finish:
                             // Process remaining rows from current block if any
-                            while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
-                                joinState.CopyRow();
-                                joinState.NextRow();
+                            if (joinState.RemainingRowsCount() > 0) {
+                                joinState.Reset();
+                                while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
+                                    joinState.CopyRow();
+                                    joinState.NextRow();
+                                }
                             }
-                            if (joinState.RemainingRowsCount() == 0) {
-                                RightFinished_ = true;
-                                joinState.Finish();
-                            }
+                            RightFinished_ = true;
+                            joinState.Finish();
                             break;
                         }
                     }

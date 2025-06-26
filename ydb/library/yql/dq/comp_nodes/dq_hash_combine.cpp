@@ -20,10 +20,12 @@ using NUdf::TUnboxedValuePod;
 
 namespace {
 
-struct TMyValueEqual {
-    TMyValueEqual(const TKeyTypes& types)
+struct TWideUnboxedEqual
+{
+    TWideUnboxedEqual(const TKeyTypes& types)
         : Types(types)
-    {}
+    {
+    }
 
     bool operator()(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
         for (ui32 i = 0U; i < Types.size(); ++i)
@@ -35,10 +37,12 @@ struct TMyValueEqual {
     const TKeyTypes& Types;
 };
 
-struct TMyValueHasher {
-    TMyValueHasher(const TKeyTypes& types)
+struct TWideUnboxedHasher
+{
+    TWideUnboxedHasher(const TKeyTypes& types)
         : Types(types)
-    {}
+    {
+    }
 
     NUdf::THashType operator()(const NUdf::TUnboxedValuePod* values) const {
         if (Types.size() == 1U)
@@ -66,6 +70,7 @@ using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
 using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
 
+
 // Key-state tuple arena which provides fixed-size allocations
 template<typename T>
 struct TStorageWrapper
@@ -80,13 +85,11 @@ struct TStorageWrapper
         MKQL_ENSURE_S(AllocSize > 0);
     }
 
-    T* Alloc()
-    {
+    T* Alloc() {
         return static_cast<T*>(Storage.Alloc(AllocSize, EMemorySubPool::Temporary));
     }
 
-    void Clear()
-    {
+    void Clear() {
         Storage.Clear();
     }
 };
@@ -95,8 +98,7 @@ struct TStorageWrapper
 class TMemoryEstimationHelper
 {
 private:
-    static std::optional<size_t> GetUVSizeBound(TType* type)
-    {
+    static std::optional<size_t> GetUVSizeBound(TType* type) {
         using NYql::NUdf::EDataSlot;
 
         bool optional = false;
@@ -119,8 +121,7 @@ private:
         }
     }
 
-    static std::optional<size_t> GetMultiUVSizeBound(std::vector<TType*>& types)
-    {
+    static std::optional<size_t> GetMultiUVSizeBound(std::vector<TType*>& types) {
         size_t result = 0;
         for (auto type : types) {
             auto stateItemSize = GetUVSizeBound(type);
@@ -145,8 +146,7 @@ public:
         StateSizeBound = GetMultiUVSizeBound(stateItemTypes);
     }
 
-    std::optional<size_t> EstimateKeySize(const TUnboxedValuePod* items) const
-    {
+    std::optional<size_t> EstimateKeySize(const TUnboxedValuePod* items) const {
         constexpr const size_t uvSize = sizeof(TUnboxedValuePod);
 
         size_t sizeSum = 0;
@@ -167,8 +167,7 @@ public:
     }
 };
 
-[[maybe_unused]] void DebugPrintUV(TUnboxedValuePod& uv)
-{
+[[maybe_unused]] void DebugPrintUV(TUnboxedValuePod& uv) {
     Cerr << "----- UV at " << (size_t)(&uv) << Endl;
     Cerr << "Refcount: " << uv.RefCount() << Endl;
     Cerr << "IsString: " << uv.IsString() << "; IsEmbedded: " << uv.IsEmbedded() << Endl;
@@ -179,7 +178,7 @@ public:
     Cerr << Endl;
 }
 
-}
+} // anonymous namespace
 
 class IAggregation
 {
@@ -190,8 +189,7 @@ public:
     virtual void ExtractState(void* rawState, TUnboxedValue* const* output) = 0;
     virtual void ForgetState(void* rawState) = 0;
 
-    virtual ~IAggregation()
-    {
+    virtual ~IAggregation() {
     }
 };
 
@@ -219,14 +217,12 @@ public:
     {
     }
 
-    size_t GetStateSize() const override
-    {
+    size_t GetStateSize() const override {
         return StateSize;
     }
 
     // Assumes the input row and extracted keys have already been copied into the input nodes, so row isn't even used here
-    void UpdateState(void* rawState, TUnboxedValue* const* /*row*/) override
-    {
+    void UpdateState(void* rawState, TUnboxedValue* const* /*row*/) override {
         TUnboxedValue* state = static_cast<TUnboxedValue*>(rawState);
         TUnboxedValue* stateIter = state;
 
@@ -239,8 +235,7 @@ public:
     }
 
     // Assumes the input row has already been copied into the input nodes, so row isn't even used here
-    void InitState(void* rawState, TUnboxedValue* const* /*row*/) override
-    {
+    void InitState(void* rawState, TUnboxedValue* const* /*row*/) override {
         TUnboxedValuePod* state = static_cast<TUnboxedValuePod*>(rawState);
         for (size_t i = 0; i < StateWidth; ++i) {
             state[i] = TUnboxedValuePod();
@@ -253,8 +248,7 @@ public:
     }
 
     // Assumes the key part of the Finish lambda input has been initialized
-    void ExtractState(void* rawState, TUnboxedValue* const* output) override
-    {
+    void ExtractState(void* rawState, TUnboxedValue* const* output) override {
         TUnboxedValue* state = static_cast<TUnboxedValue*>(rawState);
         TUnboxedValue* stateIter = state;
 
@@ -270,8 +264,7 @@ public:
         ForgetState(rawState);
     }
 
-    void ForgetState(void* rawState) override
-    {
+    void ForgetState(void* rawState) override {
         TUnboxedValue* state = static_cast<TUnboxedValue*>(rawState);
         for (size_t i = 0; i < StateWidth; ++i) {
             *state++ = TUnboxedValue(); // TODO: or maybe just Unref?
@@ -287,43 +280,17 @@ enum class EFillState
     SourceEmpty,
 };
 
+// The current draft memory strategy uses a compile-time target memory limit and attempts to statically compute the HashMap capacity
 constexpr const size_t TargetMemoryLimit = 128ull << 20; // TODO: use memLimit from ProgramBuilder
 constexpr const float ExtraMapCapacity = 1.25; // hashmap size is target row count increased by this factor
-constexpr const size_t DefaultMapLimit = static_cast<size_t>(1024 * ExtraMapCapacity); // some minimum value if we can't precalculate the row size
+constexpr const size_t DefaultMapLimit = static_cast<size_t>(1024 * ExtraMapCapacity); // some minimum value if we can't estimate the row size
 
 class TBaseAggregationState: public TComputationValue<TBaseAggregationState>
 {
 protected:
     using TMap = TRobinHoodHashSet<NUdf::TUnboxedValuePod*, TEqualsFunc, THashFunc, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
 
-    TComputationContext& Ctx;
-
-    const TMemoryEstimationHelper& MemoryHelper;
-    std::optional<size_t> MaxRowCount;
-    size_t InitialMapCapacity;
-
-    [[maybe_unused]] size_t InputWidth;
-    TUnboxedValueVector InputBuffer;
-    const NDqHashOperatorCommon::TCombinerNodes& Nodes;
-    const ui32 WideFieldsIndex;
-    std::vector<std::unique_ptr<IAggregation>> Aggs;
-    const TKeyTypes& KeyTypes;
-    THashFunc const Hasher;
-    TEqualsFunc const Equals;
-    const bool HasGenericAggregation;
-
-    std::optional<size_t> CurrentMemoryUsage;
-
-    using TStore = TStorageWrapper<char>;
-    std::unique_ptr<TStore> Store;
-    TMap Map;
-    void* KeyStateBuffer;
-    size_t StatesOffset;
-    bool Draining;
-    bool SourceEmpty;
-
-    static std::optional<size_t> GetMaxRowCount(const TMemoryEstimationHelper& memoryHelper)
-    {
+    static std::optional<size_t> GetMaxRowCount(const TMemoryEstimationHelper& memoryHelper) {
         if (!memoryHelper.KeySizeBound.has_value() || !memoryHelper.StateSizeBound.has_value()) {
             return {};
         }
@@ -336,16 +303,14 @@ protected:
         return TargetMemoryLimit / memoryPerRow;
     }
 
-    static size_t GetInitialMapCapacity(std::optional<size_t> rowCount)
-    {
+    static size_t GetInitialMapCapacity(std::optional<size_t> rowCount) {
         if (!rowCount.has_value()) {
             return DefaultMapLimit;
         }
         return static_cast<size_t>(rowCount.value() * ExtraMapCapacity);
     }
 
-    void ResetMemoryUsage()
-    {
+    void ResetMemoryUsage() {
         if (!MemoryHelper.StateSizeBound) {
             CurrentMemoryUsage = {};
         }
@@ -432,12 +397,12 @@ protected:
                 return EFillState::Drain;
             }
 
-            Map.CheckGrow(); // catch TMemoryLimitExceededException
+            Map.CheckGrow(); // TODO: must handle TMemoryLimitExceededException here
             KeyStateBuffer = Store->Alloc();
         }
 
         if (!CurrentMemoryUsage.has_value()) {
-            // TODO: this means we can't prove state or key size is bounded; fall back to some row limit & yellow zone, as per the old implementation
+            // TODO: this means we can't prove state+key size is bounded; fall back to some row limit & yellow zone, as per the old implementation
         }
 
         return EFillState::ContinueFilling;
@@ -456,8 +421,8 @@ public:
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
         , KeyTypes(keyTypes)
-        , Hasher(TMyValueHasher(KeyTypes))
-        , Equals(TMyValueEqual(KeyTypes))
+        , Hasher(TWideUnboxedHasher(KeyTypes))
+        , Equals(TWideUnboxedEqual(KeyTypes))
         , HasGenericAggregation(nodes.StateNodes.size() > 0)
         , Map(Hasher, Equals, 128u)
         , KeyStateBuffer(nullptr)
@@ -479,8 +444,7 @@ public:
         KeyStateBuffer = Store->Alloc();
     }
 
-    virtual ~TBaseAggregationState()
-    {
+    virtual ~TBaseAggregationState() {
     }
 
     virtual bool TryDrain(NUdf::TUnboxedValue* const* output) = 0;
@@ -488,17 +452,39 @@ public:
 
     virtual bool IsDraining() = 0;
     virtual bool IsSourceEmpty() = 0;
-};
 
+protected:
+    TComputationContext& Ctx;
+
+    const TMemoryEstimationHelper& MemoryHelper;
+    std::optional<size_t> MaxRowCount;
+    size_t InitialMapCapacity;
+
+    [[maybe_unused]] size_t InputWidth;
+    TUnboxedValueVector InputBuffer;
+    const NDqHashOperatorCommon::TCombinerNodes& Nodes;
+    const ui32 WideFieldsIndex;
+    std::vector<std::unique_ptr<IAggregation>> Aggs;
+    const TKeyTypes& KeyTypes;
+    THashFunc const Hasher;
+    TEqualsFunc const Equals;
+    const bool HasGenericAggregation;
+
+    std::optional<size_t> CurrentMemoryUsage;
+
+    using TStore = TStorageWrapper<char>;
+    std::unique_ptr<TStore> Store;
+    TMap Map;
+    void* KeyStateBuffer;
+    size_t StatesOffset;
+    bool Draining;
+    bool SourceEmpty;
+};
 
 class TWideAggregationState: public TBaseAggregationState
 {
 private:
-    TUnboxedValueVector InputBuffer;
-    const char* DrainMapIterator;
-
-    void OpenDrain() override
-    {
+    void OpenDrain() override {
         Draining = true;
         DrainMapIterator = Map.Begin();
     }
@@ -518,7 +504,7 @@ public:
     {
         InputBuffer.resize(inputWidth, TUnboxedValuePod());
 
-        // Why are we even using Ctx.WideFields, we can't really survive Save/LoadGraphState
+        // TODO: Why are we even using Ctx.WideFields, we can't really survive Save/LoadGraphState
         std::transform(InputBuffer.begin(), InputBuffer.end(), Ctx.WideFields.data() + WideFieldsIndex, [&](TUnboxedValue& val) {
             return &val;
         });
@@ -532,8 +518,7 @@ public:
         return SourceEmpty;
     }
 
-    EFillState TryFill(IComputationWideFlowNode& flow) override
-    {
+    EFillState TryFill(IComputationWideFlowNode& flow) override {
         auto **fields = Ctx.WideFields.data() + WideFieldsIndex;
         const auto result = flow.FetchValues(Ctx, fields);
 
@@ -548,8 +533,7 @@ public:
         return ProcessFetchedRow(fields);
     }
 
-    bool TryDrain(NUdf::TUnboxedValue* const* output) override
-    {
+    bool TryDrain(NUdf::TUnboxedValue* const* output) override {
         for (; DrainMapIterator != Map.End(); Map.Advance(DrainMapIterator)) {
             if (Map.IsValid(DrainMapIterator)) {
                 break;
@@ -593,8 +577,7 @@ public:
         return true;
     }
 
-    ~TWideAggregationState()
-    {
+    ~TWideAggregationState() {
         if (!Draining) {
             DrainMapIterator = Map.Begin();
         }
@@ -608,49 +591,33 @@ public:
                 agg->ForgetState(statePtr);
                 statePtr += agg->GetStateSize();
             }
+            if (HasGenericAggregation) {
+                auto keyIter = key;
+                for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
+                    (keyIter++)->UnRef();
+                }
+            }
         }
         Map.Clear();
         Store->Clear();
 
         // TODO: CleanupCurrentContext for the allocator?
     }
+
+private:
+    TUnboxedValueVector InputBuffer;
+    const char* DrainMapIterator;
 };
 
 class TBlockAggregationState: public TBaseAggregationState
 {
 private:
-    [[maybe_unused]] static constexpr const size_t OutputBlockSize = 8192;
-
-    std::vector<TType*> InputTypes;
-    std::vector<TType*> OutputTypes;
-
-    size_t InputColumns; // without the block height column
-    size_t OutputColumns;
-    std::vector<std::unique_ptr<IBlockReader>> InputReaders;
-    std::vector<std::unique_ptr<IBlockItemConverter>> InputItemConverters;
-
-    std::vector<std::unique_ptr<IBlockItemConverter>> OutputItemConverters;
-
-    TUnboxedValueVector InputBuffer;
-    TUnboxedValueVector RowBuffer;
-    std::vector<TUnboxedValue*> RowBufferPointers;
-
-    TUnboxedValueVector OutputBuffer;
-    std::vector<TUnboxedValue*> OutputBufferPointers;
-
-    size_t CurrentInputBatchSize = 0;
-    size_t CurrentInputBatchPtr = 0;
-
-    const char* DrainMapIterator;
-
-    void OpenDrain() override
-    {
+    void OpenDrain() override {
         Draining = true;
         DrainMapIterator = Map.Begin();
     }
 
-    bool OpenBlock()
-    {
+    bool OpenBlock() {
         const auto batchLength = TArrowBlock::From(InputBuffer.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
         if (!batchLength) {
             CurrentInputBatchSize = 0;
@@ -720,8 +687,7 @@ public:
         return SourceEmpty;
     }
 
-    EFillState TryFill(IComputationWideFlowNode& flow) override
-    {
+    EFillState TryFill(IComputationWideFlowNode& flow) override {
         if (CurrentInputBatchPtr >= CurrentInputBatchSize) {
             std::vector<TUnboxedValue*> ptrs;
             ptrs.resize(InputBuffer.size(), nullptr);
@@ -767,8 +733,7 @@ public:
         return ProcessFetchedRow(RowBufferPointers.data());
     }
 
-    bool TryDrain(NUdf::TUnboxedValue* const* output) override
-    {
+    bool TryDrain(NUdf::TUnboxedValue* const* output) override {
         MKQL_ENSURE(DrainMapIterator != nullptr, "Cannot call TryDrain when DrainMapIterator is null");
 
         TTypeInfoHelper helper;
@@ -844,10 +809,34 @@ public:
         return true;
     }
 
-    ~TBlockAggregationState()
-    {
-        // TODO: clean up drainage
+    ~TBlockAggregationState() {
+        // TODO: clean up drainage like in TWideAggregationState
     }
+
+private:
+    [[maybe_unused]] static constexpr const size_t OutputBlockSize = 8192;
+
+    std::vector<TType*> InputTypes;
+    std::vector<TType*> OutputTypes;
+
+    size_t InputColumns; // without the block height column
+    size_t OutputColumns;
+    std::vector<std::unique_ptr<IBlockReader>> InputReaders;
+    std::vector<std::unique_ptr<IBlockItemConverter>> InputItemConverters;
+
+    std::vector<std::unique_ptr<IBlockItemConverter>> OutputItemConverters;
+
+    TUnboxedValueVector InputBuffer;
+    TUnboxedValueVector RowBuffer;
+    std::vector<TUnboxedValue*> RowBufferPointers;
+
+    TUnboxedValueVector OutputBuffer;
+    std::vector<TUnboxedValue*> OutputBufferPointers;
+
+    size_t CurrentInputBatchSize = 0;
+    size_t CurrentInputBatchPtr = 0;
+
+    const char* DrainMapIterator;
 };
 
 

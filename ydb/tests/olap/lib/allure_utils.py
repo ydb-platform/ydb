@@ -571,33 +571,52 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
         chunk_num = None
         node_host = None
         
-        # Ищем информацию о chunk_num и node_host в статистике
-        if hasattr(iteration, 'stats'):
+        # Проверяем, есть ли у итерации имя с информацией о chunk и ноде
+        if hasattr(iteration, 'name') and iteration.name:
+            # Извлекаем chunk_num из имени итерации (поддерживаем оба формата: iter_N и chunk_N)
+            for pattern in ['_iter_', '_chunk_']:
+                if pattern in iteration.name:
+                    try:
+                        chunk_num = int(iteration.name.split(pattern)[-1])
+                        break
+                    except (ValueError, IndexError):
+                        pass
+                
+            # Извлекаем node_host из имени итерации
+            for host in unique_nodes:
+                if host in iteration.name:
+                    node_host = host
+                    break
+        
+        # Проверяем, есть ли статистика в итерации
+        if hasattr(iteration, 'stats') and iteration.stats:
+            # Ищем информацию о chunk_num и node_host в статистике
             for stat_key, stat_value in iteration.stats.items():
                 if isinstance(stat_value, dict):
+                    # Проверяем chunk_info
+                    if stat_key == 'chunk_info':
+                        if 'chunk_num' in stat_value:
+                            chunk_num = stat_value['chunk_num']
+                        if 'node_host' in stat_value:
+                            node_host = stat_value['node_host']
+                    # Проверяем другие поля
                     if 'chunk_num' in stat_value:
                         chunk_num = stat_value['chunk_num']
                     if 'node_host' in stat_value:
                         node_host = stat_value['node_host']
         
-        # Если не нашли chunk_num, используем iteration_num как chunk_num
+        # Если все еще нет chunk_num, используем iteration_num
         if chunk_num is None:
-            # Проверяем, есть ли в имени итерации информация о chunk
-            if hasattr(iteration, 'name') and '_chunk_' in iteration.name:
-                try:
-                    chunk_num = int(iteration.name.split('_chunk_')[-1])
-                except (ValueError, IndexError):
-                    chunk_num = iteration_num
-            else:
-                chunk_num = iteration_num
+            chunk_num = iteration_num
         
-        # Если нет информации о хосте, пытаемся извлечь из имени итерации
-        if node_host is None and hasattr(iteration, 'name'):
-            # Ищем хост в имени итерации (например, SimpleQueue_column_nemesis_False_nodes_100p_ydb-sas-testing-0000.search.yandex.net_chunk_1)
-            for host in unique_nodes:
-                if host in iteration.name:
-                    node_host = host
-                    break
+        # Если все еще нет node_host и у нас есть уникальные ноды и их столько же, сколько итераций
+        if node_host is None and unique_nodes and len(unique_nodes) == len(result.iterations):
+            # Используем ноду по индексу итерации
+            try:
+                node_idx = (iteration_num - 1) % len(unique_nodes)
+                node_host = unique_nodes[node_idx]
+            except IndexError:
+                pass
         
         # Добавляем информацию в структуру chunk_iterations
         if chunk_num not in chunk_iterations:

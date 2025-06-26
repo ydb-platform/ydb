@@ -28,6 +28,34 @@ class WorkloadTestBase(LoadSuiteBase):
     _nemesis_started: bool = False  # Флаг для отслеживания запуска nemesis
 
     @classmethod
+    def setup_class(cls) -> None:
+        """
+        Общая инициализация для workload тестов.
+        Останавливает nemesis сервис на всех нодах кластера для чистого старта.
+        """
+        cls._setup_start_time = time()
+        
+        # Останавливаем nemesis сервис на всех нодах кластера
+        try:
+            logging.info("Stopping nemesis service on all cluster nodes during setup")
+            nodes = YdbCluster.get_cluster_nodes()
+            unique_hosts = set(node.host for node in nodes)
+            
+            for host in unique_hosts:
+                logging.info(f"Stopping nemesis on {host}")
+                execute_command(
+                    host=host,
+                    cmd="sudo service nemesis stop",
+                    raise_on_error=False
+                )
+            logging.info("Nemesis service stopped on all nodes")
+        except Exception as e:
+            logging.error(f"Error stopping nemesis during setup: {e}")
+        
+        # Наследуемся от LoadSuiteBase
+        super().setup_class()
+
+    @classmethod
     def do_teardown_class(cls):
         """
         Общая очистка для workload тестов.
@@ -186,12 +214,13 @@ class WorkloadTestBase(LoadSuiteBase):
         # Добавляем информацию о выполнении в iterations
         iteration = YdbCliHelper.Iteration()
         iteration.time = actual_execution_time if actual_execution_time is not None else self.timeout
-
+        
         # Добавляем имя итерации для лучшей идентификации
         if additional_stats:
             node_host = additional_stats.get('node_host', '')
             chunk_num = additional_stats.get('chunk_num', iteration_number)
-            iteration.name = f"{workload_name}_{node_host}_chunk_{chunk_num}"
+            # Используем формат iter_N_chunk_M
+            iteration.name = f"{workload_name}_{node_host}_iter_{chunk_num}"
             
             # Добавляем статистику о chunk_num и node_host в итерацию
             if not hasattr(iteration, 'stats'):
@@ -491,7 +520,8 @@ class WorkloadTestBase(LoadSuiteBase):
                     for run_num, run_config in enumerate(plan, 1):
                         # Формируем имя запуска с учетом ноды и chunk_num
                         chunk_num = run_config.get('chunk_num', run_num)
-                        run_name = f"{workload_name}_{node_host}_chunk_{chunk_num}"
+                        # Используем формат iter_N_chunk_M
+                        run_name = f"{workload_name}_{node_host}_iter_{chunk_num}"
                         
                         # Добавляем информацию о ноде в run_config для статистики
                         run_config_copy = run_config.copy()
@@ -743,6 +773,7 @@ class WorkloadTestBase(LoadSuiteBase):
             current_chunk_size = min(chunk_size, remaining_time)
             chunks.append({
                 'chunk_num': chunk_num,
+                'iter_num': chunk_num,  # Добавляем iter_num для совместимости
                 'duration': current_chunk_size,
                 'start_offset': total_duration - remaining_time
             })
@@ -754,7 +785,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def _create_single_run_plan(self, total_duration: float):
         """Создает план для одиночного выполнения"""
-        return [{'duration': total_duration, 'run_type': 'single', 'chunk_num': 1}]
+        return [{'duration': total_duration, 'run_type': 'single', 'chunk_num': 1, 'iter_num': 1}]
 
     def _execute_single_workload_run(self, deployed_binary_path: str, target_node, run_name: str, command_args_template: str, duration_param: str, run_config: dict):
         """Выполняет один запуск workload"""
@@ -769,7 +800,13 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Добавляем информацию о chunk_num в имя запуска, если она доступна
         if 'chunk_num' in run_config:
-            run_name = f"{run_name}_chunk_{run_config['chunk_num']}"
+            # Используем формат iter_N_chunk_M вместо chunk_N_chunk_M
+            # Проверяем, не содержит ли уже имя информацию о chunk
+            if '_chunk_' not in run_name:
+                run_name = f"{run_name}_iter_{run_config['chunk_num']}"
+            else:
+                # Если имя уже содержит chunk, заменяем на iter
+                run_name = run_name.replace('_chunk_', '_iter_')
 
         run_start_time = time()
 

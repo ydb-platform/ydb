@@ -1,5 +1,8 @@
 #include "dq_block_hash_join.h"
 
+#include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -12,15 +15,16 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-// Helper function from BlockMapJoinCore
+// Helper function similar to BlockMapJoinCore
 size_t CalcMaxBlockLength(const TVector<TType*>& items) {
-    return std::accumulate(items.cbegin(), items.cend(), size_t(0),
+    return CalcBlockLen(std::accumulate(items.cbegin(), items.cend(), 0ULL,
         [](size_t max, const TType* type) {
-            return std::max(max, CalcBlockLen(type));
-        });
+            const TType* itemType = AS_TYPE(TBlockType, type)->GetItemType();
+            return std::max(max, CalcMaxBlockItemSize(itemType));
+        }));
 }
 
-// Block join state for hash join (reuse infrastructure from BlockMapJoinCore)
+// Block join state for hash join (simplified from BlockMapJoinCore)
 template <bool RightRequired = true>
 class TBlockHashJoinState : public TBlockState {
 public:
@@ -35,68 +39,87 @@ public:
         , LeftIOMap_(leftIOMap)
         , InputsDescr_(ToValueDescr(inputItems))
     {
-        const ui64 maxLength = CalcMaxBlockLength(inputItems);
-        MaxLength_ = std::min<ui64>(maxLength, DEFAULT_BLOCK_LEN);
-        Readers_.resize(inputItems.size());
-        Converters_.resize(inputItems.size());
-        Builders_.resize(outputItems.size());
-        Hashers_.resize(inputItems.size());
-
+        const auto& pgBuilder = ctx.Builder->GetPgBuilder();
+        MaxLength_ = CalcMaxBlockLength(outputItems);
+        TBlockTypeHelper helper;
         for (size_t i = 0; i < inputItems.size(); i++) {
-            Readers_[i] = MakeBlockReader(TTypeInfoHelper(), inputItems[i]);
-            Hashers_[i] = MakeBlockItemHasher(TTypeInfoHelper(), inputItems[i]);
+            TType* blockItemType = AS_TYPE(TBlockType, inputItems[i])->GetItemType();
+            Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), blockItemType));
+            Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), blockItemType, pgBuilder));
+            Hashers_.push_back(helper.MakeHasher(blockItemType));
         }
-
-        for (size_t i = 0; i < outputItems.size(); i++) {
-            Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), outputItems[i], arrow::default_memory_pool(), MaxLength_, nullptr);
+        // The last output column (i.e. block length) doesn't require a block builder.
+        for (size_t i = 0; i < OutputWidth_; i++) {
+            const TType* blockItemType = AS_TYPE(TBlockType, outputItems[i])->GetItemType();
+            Builders_.push_back(MakeArrayBuilder(TTypeInfoHelper(), blockItemType, ctx.ArrowMemoryPool, MaxLength_, &pgBuilder, &BuilderAllocatedSize_));
         }
+        MaxBuilderAllocatedSize_ = MaxAllocatedFactor_ * BuilderAllocatedSize_;
     }
 
     void CopyRow() {
-        for (size_t i = 0; i < InputWidth_; i++) {
-            const auto item = GetItem(LeftIOMap_[i]);
-            AddItem(item, i);
+        // Copy items from the "left" stream.
+        for (size_t i = 0; i < LeftIOMap_.size(); i++) {
+            AddItem(GetItem(LeftIOMap_[i]), i);
         }
         OutputRows_++;
     }
 
     void MakeRow(const std::vector<NYql::NUdf::TBlockItem>& rightColumns) {
-        // First, copy left side
-        for (size_t i = 0; i < LeftIOMap_.size(); i++) {
-            const auto item = GetItem(LeftIOMap_[i]);
-            AddItem(item, i);
+        size_t builderIndex = 0;
+
+        for (size_t i = 0; i < LeftIOMap_.size(); i++, builderIndex++) {
+            AddItem(GetItem(LeftIOMap_[i]), builderIndex);
         }
-        // Then add right side
-        for (size_t i = 0; i < rightColumns.size(); i++) {
-            AddItem(rightColumns[i], LeftIOMap_.size() + i);
+
+        if (!rightColumns.empty()) {
+            Y_ENSURE(LeftIOMap_.size() + rightColumns.size() == OutputWidth_);
+            for (size_t i = 0; i < rightColumns.size(); i++) {
+                AddItem(rightColumns[i], builderIndex++);
+            }
+        } else {
+            while (builderIndex < OutputWidth_) {
+                AddItem(NYql::NUdf::TBlockItem(), builderIndex++);
+            }
         }
+
         OutputRows_++;
     }
 
     void MakeBlocks(const THolderFactory& holderFactory) {
-        TBlockState::FillArrays(Builders_, OutputRows_);
-        TBlockState::FlushArrays(Builders_);
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)));
+        OutputRows_ = 0;
+        BuilderAllocatedSize_ = 0;
+
+        for (size_t i = 0; i < Builders_.size(); i++) {
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+        }
+        FillArrays();
     }
 
-    TBlockItem GetItem(size_t idx, size_t offset = 0) const {
-        return Readers_[idx]->GetItem(*TBlockState::GetArray(idx), Current_ + offset);
+    NYql::NUdf::TBlockItem GetItem(size_t idx, size_t offset = 0) const {
+        Y_ENSURE(Current_ + offset < InputRows_);
+        const auto& datum = TArrowBlock::From(Inputs_[idx]).GetDatum();
+        ARROW_DEBUG_CHECK_DATUM_TYPES(InputsDescr_[idx], datum.descr());
+        if (datum.is_scalar()) {
+            return Readers_[idx]->GetScalarItem(*datum.scalar());
+        }
+        MKQL_ENSURE(datum.is_array(), "Expecting array");
+        return Readers_[idx]->GetItem(*datum.array(), Current_ + offset);
     }
 
-    std::pair<TBlockItem, ui64> GetItemWithHash(size_t idx, size_t offset) const {
-        const auto item = GetItem(idx, offset);
-        const auto hash = Hashers_[idx]->Hash(item);
+    std::pair<NYql::NUdf::TBlockItem, ui64> GetItemWithHash(size_t idx, size_t offset) const {
+        auto item = GetItem(idx, offset);
+        ui64 hash = Hashers_[idx]->Hash(item);
         return std::make_pair(item, hash);
     }
 
     NUdf::TUnboxedValuePod GetValue(const THolderFactory& holderFactory, size_t idx) const {
-        return holderFactory.CreateArrowBlock(Datum(TBlockState::GetArray(idx)));
+        return Converters_[idx]->MakeValue(GetItem(idx), holderFactory);
     }
 
     void Reset() {
         Current_ = 0;
-        OutputRows_ = 0;
-        InputRows_ = 0;
-        TBlockState::ResetArrays(Builders_);
+        InputRows_ = GetBlockCount(Inputs_.back());
     }
 
     void Finish() {
@@ -108,11 +131,12 @@ public:
     }
 
     bool HasBlocks() {
-        return TBlockState::GetValuesCount() > 0;
+        return Count > 0;
     }
 
     bool IsNotFull() const {
-        return OutputRows_ < MaxLength_;
+        return OutputRows_ < MaxLength_
+            && BuilderAllocatedSize_ <= MaxBuilderAllocatedSize_;
     }
 
     bool IsEmpty() const {
@@ -124,6 +148,7 @@ public:
     }
 
     size_t RemainingRowsCount() const {
+        Y_ENSURE(InputRows_ >= Current_);
         return InputRows_ - Current_;
     }
 
@@ -132,30 +157,36 @@ public:
     }
 
     size_t GetInputWidth() const {
-        return InputWidth_;
+        // Mind the last block length column.
+        return InputWidth_ + 1;
     }
 
     size_t GetOutputWidth() const {
-        return OutputWidth_;
+        // Mind the last block length column.
+        return OutputWidth_ + 1;
     }
 
     void AddValue(const NUdf::TUnboxedValuePod& value, size_t idx) {
         Inputs_[idx] = value;
-        auto datum = TArrowBlock::From(value).GetDatum();
+        const auto& datum = TArrowBlock::From(value).GetDatum();
+        ARROW_DEBUG_CHECK_DATUM_TYPES(InputsDescr_[idx], datum.descr());
         TBlockState::AddArray(idx, datum);
         if (0 == idx) {
-            InputRows_ = TBlockState::GetArray(idx)->length;
+            InputRows_ = GetBlockCount(value);
         }
     }
 
 private:
-    void AddItem(const TBlockItem& item, size_t idx) {
+    void AddItem(const NYql::NUdf::TBlockItem& item, size_t idx) {
         Builders_[idx]->Add(item);
     }
 
     size_t Current_ = 0;
     bool IsFinished_ = false;
     size_t MaxLength_;
+    size_t BuilderAllocatedSize_ = 0;
+    size_t MaxBuilderAllocatedSize_ = 0;
+    static const size_t MaxAllocatedFactor_ = 4;
     size_t InputRows_ = 0;
     size_t OutputRows_ = 0;
     size_t InputWidth_;

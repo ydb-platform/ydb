@@ -119,7 +119,12 @@ public:
 
     void Reset() {
         Current_ = 0;
-        InputRows_ = GetBlockCount(Inputs_.back());
+        // Set InputRows_ from the last element (block length)
+        if (!Inputs_.empty()) {
+            InputRows_ = GetBlockCount(Inputs_.back());
+        } else {
+            InputRows_ = 0;
+        }
     }
 
     void Finish() {
@@ -168,9 +173,7 @@ public:
 
     void AddValue(const NUdf::TUnboxedValuePod& value, size_t idx) {
         Inputs_[idx] = value;
-        if (0 == idx) {
-            InputRows_ = GetBlockCount(value);
-        }
+        // InputRows_ will be set in Reset() after all values are added
     }
 
 private:
@@ -293,6 +296,8 @@ private:
                             for (size_t i = 0; i < inputWidth; i++) {
                                 joinState.AddValue(inputFields[i], i);
                             }
+                            // Reset to set InputRows_ from block length
+                            joinState.Reset();
                             // Copy all rows from current block
                             while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
                                 joinState.CopyRow();
@@ -328,6 +333,8 @@ private:
                             for (size_t i = 0; i < inputWidth; i++) {
                                 joinState.AddValue(inputFields[i], i);
                             }
+                            // Reset to set InputRows_ from block length
+                            joinState.Reset();
                             // Copy all rows from current block
                             while (joinState.RemainingRowsCount() > 0 && joinState.IsNotFull()) {
                                 joinState.CopyRow();

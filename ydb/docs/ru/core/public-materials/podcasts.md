@@ -6,7 +6,7 @@
 
 ## sysadmins №54. YDB
 
-{% include notitle [releases_tag](../../tags.md#general) %}
+{% include notitle [releases_tag](./_includes/tags.md#general) %}
 
 В подкасте linkmeup руководитель проектного офиса YDB Антон Коваленко представляет обзор современной распределенной СУБД.
 

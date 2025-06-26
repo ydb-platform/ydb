@@ -15,6 +15,12 @@ class StressFixture:
     def setup_cluster(self, **kwargs):
         self.config = KikimrConfigGenerator(
             binary_paths=self.all_binary_paths,
+            hive_config={
+                "min_scatter_to_balance": 0.01,
+                "min_cpu_scatter_to_balance": 0.01,
+                "min_node_usage_to_balance": 0.01,
+                "tablet_kick_cooldown_period": 5,
+            }
             **kwargs,
         )
 

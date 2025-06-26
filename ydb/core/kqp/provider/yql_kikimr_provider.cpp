@@ -2,6 +2,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -225,20 +226,20 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
 bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path) {
     auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
     if (mainTableImpl) {
-
-        for(const auto& index: mainTableImpl->Metadata->Indexes) {
+        for (const auto& index: mainTableImpl->Metadata->Indexes) {
             if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
                 continue;
             }
-
-            for(const auto& implTable: index.GetImplTables()) {
-                TString implTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << implTable;
-                if (path == implTablePath)
-                    return true;
+            if (index.KeyColumns.size() > 1) {
+                // prefixed index update is not supported yet
+                return true;
+            }
+            auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
+            if (path == levelTablePath) {
+                return true;
             }
         }
     }
-
     return false;
 }
 

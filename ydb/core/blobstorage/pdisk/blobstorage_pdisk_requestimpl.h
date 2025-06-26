@@ -525,7 +525,7 @@ public:
     TAtomic Pieces = 0;
     TAtomic Aborted = 0;
 
-    TCompletionChunkWrite *Completion;
+    TCompletionChunkWrite* Completion;
 
     TChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, TReqId reqId, NWilson::TSpan span);
 
@@ -586,7 +586,7 @@ public:
     THolder<TChunkWriteResult> ChunkWriteResult;
     THolder<TCompletionChunkWritePart> Completion;
 
-    TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span, TCompletionChunkWrite* parent);
+    TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span);
 
     ERequestType GetType() const override {
         return ERequestType::RequestChunkWritePiece;

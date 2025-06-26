@@ -31,7 +31,7 @@ using namespace NKikimr::NPQ::NTest;
 Y_UNIT_TEST_SUITE(WithSDK) {
 
     Y_UNIT_TEST(DescribeConsumer) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
 
         auto describe = [&]() {

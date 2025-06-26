@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_Flat_WithWrongSession) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareFlatTopic(setup);
 
         {
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_Flat_WithWrongSession_ToPast) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareFlatTopic(setup);
 
         {
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithoutSession_TopPast) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         auto status = setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 0);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithWrongSession_ToParent) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
         setup.CreateTopicWithAutoscale();
 
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithoutSession_ParentNotFinished) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         {
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithoutSession_ToPastParentPartition) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         {
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithSession_ParentNotFinished_SameSession) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         {
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithSession_ParentNotFinished_OtherSession) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
         TTopicClient client(setup.MakeDriver());
 
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithSession_ParentNotFinished_OtherSession_ParentCommittedToEnd) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
         TTopicClient client(setup.MakeDriver());
 
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_WithSession_ToPastParentPartition) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         {
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(Commit_FromSession_ToNewChild_WithoutCommitToParent) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale();
 
         setup.Write("message-0-0", 0);
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(PartitionSplit_OffsetCommit) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         {
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(DistributedTxCommit) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         auto count = 0;
@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(DistributedTxCommit_ChildFirst) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         auto count = 0;
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(DistributedTxCommit_CheckSessionResetAfterCommit) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         std::unordered_map<std::string, size_t> counters;
@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(DistributedTxCommit_CheckOffsetCommitForDifferentCases) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareAutopartitionedTopic(setup);
 
         auto commit = [&](const std::string& sessionId, ui64 offset) {
@@ -559,7 +559,7 @@ Y_UNIT_TEST_SUITE(CommitOffset) {
     }
 
     Y_UNIT_TEST(DistributedTxCommit_Flat_CheckOffsetCommitForDifferentCases) {
-        TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup();
         PrepareFlatTopic(setup);
 
         auto commit = [&](const std::string& sessionId, ui64 offset) {

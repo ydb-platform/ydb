@@ -1979,10 +1979,13 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     // Convert back from block format if using block hash join
     if (useBlockHashJoin) {
         hashJoin = ctx.Builder(join.Pos())
+            .Callable("WideFromBlocks")
+                .Add(0, std::move(hashJoin))
+            .Seal()
+            .Build();
+        hashJoin = ctx.Builder(join.Pos())
             .Callable("ToFlow")
-                .Callable(0, "WideFromBlocks")
-                    .Add(0, std::move(hashJoin))
-                .Seal()
+                .Add(0, std::move(hashJoin))
             .Seal()
             .Build();
     }

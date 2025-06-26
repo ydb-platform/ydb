@@ -26,7 +26,7 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 `--destination-path PATH`: Root destination folder for the objects being imported; defaults to the database root if not provided.
 
-`--include PATH`: Schema objects to be included in the import. Directories are traversed recursively. Paths are relative to the root path of the export. You may specify this parameter multiple times to include several objects. If not specified, all objects in export are imported.
+`--include PATH`: Schema objects to be included in the import. Directories are traversed recursively. You may specify this parameter multiple times to include several objects. If not specified, all objects in export are imported.
 
 {% cut "Alternate syntax" %}
 

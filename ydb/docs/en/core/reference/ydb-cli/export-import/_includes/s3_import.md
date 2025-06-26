@@ -20,32 +20,37 @@ If you need to import some more data to your existing S3 tables (for example, us
 
 To run the command to import data from an S3 storage, specify the [S3 connection parameters](../auth-s3.md). As data is imported by the YDB server asynchronously, the specified endpoint must be available so that a connection can be established from the server side.
 
-### List of imported objects {#items}
+### Imported schema objects {#objects}
 
 `--source-prefix PREFIX`: Source prefix for export in the bucket. Required for encrypted exports.
 
 `--destination-path PATH`: Root destination folder for the objects being imported; defaults to the database root if not provided.
+
+`--include PATH`: Schema objects to be included in the import. Directories are traversed recursively. Paths are relative to the root path of the export. You may specify this parameter multiple times to include several objects. If not specified, all objects in export are imported.
+
+{% cut "Alternate syntax" %}
+
+There's an alternate syntax to specify the list of imported objects, supported for backward compatibility.
 
 `--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times to import multiple items. If no `--item` or `--include` parameters are specified, all objects from the source prefix will be imported. `STRING` is specified in the `<property>=<value>,...` format with the following properties:
 
 - `source`, `src`, or `s` is the key prefix in S3 that contains the imported directory or table.
 - `destination`, `dst`, or `d` is the database path to host the imported directory or table. The destination of the path must not exist. All the directories along the path will be created if missing.
 
-`--include PATH`: Object paths relative to the export root that are included in the import. Specify this parameter multiple times for different paths, or provide a single comma-separated list of values. If no `--item` or `--include` parameters are specified, all objects from the source prefix will be imported.
+Some features may not be available using the alternate syntax (like encryption and listing).
+
+{% endcut %}
 
 ### Additional parameters {#aux}
 
-`--description STRING`: A text description of the operation saved in the operation history.
-`--retries NUM`: The number of import retries to be made by the server. The default value is 10.
-`--skip-checksum-validation`: Skip the validating imported objects' checksums step.
-`--format STRING`: The format of the results.
-
-- `pretty`: Human-readable format (default).
-- `proto-json-base64`: Protobuf in JSON format, binary strings are Base64-encoded.
-
-`--encryption-key-file PATH`: File path containing the encryption key (only for encrypted exports).
-
-`--list`: List objects in an existing export.
+| Parameter | Description |
+--- | ---
+| `--description STRING` | A text description of the operation saved in the operation history. |
+| `--retries NUM` | The number of import retries to be made by the server. The default value is 10. |
+| `--skip-checksum-validation` | Skip the validating imported objects' checksums step. |
+| `--encryption-key-file PATH` | File path containing the encryption key (only for encrypted exports). |
+| `--list` | List objects in an existing export. |
+| `--format STRING` | Result format.<br/>Possible values:<br/><ul><li>`pretty`: Human-readable format (default).</li><li>`proto-json-base64`: [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |
 
 ## Importing {#exec}
 
@@ -145,6 +150,20 @@ Importing items from the `dir1` and `dir2` directories in the `mybucket` S3 buck
   --item src=export/dir1,dst=dir1 --item src=export/dir2,dst=dir2
 ```
 
+### List objects in existing encrypted export {#example-list}
+
+Listing all object paths in existing encrypted export located in `export1` in the `mybucket` S3 bucket, using the secret key stored in the `~/my_secret_key` file.
+
+```bash
+{{ ydb-cli }} -p quickstart import s3 \
+  --s3-endpoint storage.yandexcloud.net --bucket mybucket \
+  --access-key <access-key> --secret-key <secret-key> \
+  --source-prefix export1
+  --encryption-key-file ~/my_secret_key
+  --list
+```
+
+
 ### Importing encrypted export {#example-encryption}
 
 Importing one table that was exported using the `dir/my_table` path to the `dir1/dir/my_table` path from an encrypted export located in `export1` in the `mybucket` S3 bucket, using the secret key stored in the `~/my_secret_key` file.
@@ -154,7 +173,7 @@ Importing one table that was exported using the `dir/my_table` path to the `dir1
   --s3-endpoint storage.yandexcloud.net --bucket mybucket \
   --access-key <access-key> --secret-key <secret-key> \
   --source-prefix export1 --destination-path dir1 \
-  --item src_path=dir/my_table \
+  --include dir/my_table \
   --encryption-key-file ~/my_secret_key
 ```
 

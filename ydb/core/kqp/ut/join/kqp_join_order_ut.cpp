@@ -130,11 +130,10 @@ static TKikimrRunner GetKikimrWithJoinSettings(
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
     }
 
-    appConfig.MutableFeatureFlags()->SetEnableSeparationComputeActorsFromRead(false);
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(params.EnableSeparationComputeActorsFromRead);
     serverSettings.SetKqpSettings(settings);
-Y_UNUSED(params);
+
     serverSettings.SetNodeCount(1);
     #if defined(_asan_enabled_)
         serverSettings.SetNodeCount(1);

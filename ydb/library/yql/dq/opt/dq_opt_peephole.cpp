@@ -978,6 +978,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Build();
 
     // Build block hash join (this accepts block streams)
+    // WrapDqBlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
     auto blockJoinCore = ctx.Builder(pos)
         .Callable("BlockHashJoin")
             .Add(0, std::move(leftBlocks))
@@ -985,8 +986,6 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
-            .Add(5, ctx.NewList(pos, std::move(leftRenames)))
-            .Add(6, ctx.NewList(pos, std::move(rightRenames)))
         .Seal()
         .Build();
 

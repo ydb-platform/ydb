@@ -161,7 +161,7 @@ TString InputPassword() {
 #elif defined(_win_)
             SetConsoleMode(hStdin, mode);
 #endif
-            exit(EXIT_FAILURE);
+            throw yexception() << "Input interrupted";
         } else {
             Cerr << '*';
             password.push_back(c);

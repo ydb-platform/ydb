@@ -12,6 +12,21 @@ bool TClientCommand::PROGRESS_REQUESTS = false; // display progress of long requ
 
 using namespace NUtils;
 
+namespace {
+    static bool HelpPrintedNeedToExit = false;
+    void PrintUsageAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
+        parser->PrintUsage();
+        HelpPrintedNeedToExit = true;
+        throw THelpPrintedException();
+    }
+
+    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
+        parser->PrintUsage();
+        HelpPrintedNeedToExit = true;
+        throw THelpPrintedException();
+    }
+}
+
 TClientCommand::TClientCommand(
     const TString& name,
     const std::initializer_list<TString>& aliases,
@@ -22,11 +37,17 @@ TClientCommand::TClientCommand(
         , Description(description)
         , Visible(visible)
         , Parent(nullptr)
-        , Opts(NLastGetopt::TOpts::Default())
 {
-    HideOption("svnrevision");
-    Opts.AddHelpOption('h');
-    ChangeOptionDescription("help", "Print usage, -hh for detailed help");
+    Opts.Opts_.clear();
+    Opts.AddLongOption('V', "svnrevision", "print svn version")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintSvnVersionAndThrowHelpPrinted)
+        .Hidden();
+    Opts.AddLongOption('h', "help", "Print usage, -hh for detailed help")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintUsageAndThrowHelpPrinted);
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
     Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(lineLength)));
@@ -157,7 +178,21 @@ TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& conf
         }
         ++_argc;
     }
+    if (_argc > config.ArgC) {
+        // This is possible if the last option should have an argument, but it is not provided
+        _argc = config.ArgC;
+    }
     Init(config.Opts, _argc, const_cast<const char**>(config.ArgV));
+}
+
+void TClientCommand::TCommandOptsParseResult::HandleError() const {
+    if (HelpPrintedNeedToExit) {
+        throw THelpPrintedException();
+    }
+    if (ThrowOnParseError) {
+        throw;
+    }
+    NLastGetopt::TOptsParseResult::HandleError();
 }
 
 void TClientCommand::CheckForExecutableOptions(TConfig& config) {
@@ -221,8 +256,13 @@ int TClientCommand::Run(TConfig& config) {
 }
 
 int TClientCommand::Process(TConfig& config) {
-    Prepare(config);
-    return ValidateAndRun(config);
+    try {
+        Prepare(config);
+        return ValidateAndRun(config);
+    } catch (const THelpPrintedException& e) {
+        // Help was printed on demand, return EXIT_SUCCESS
+        return EXIT_SUCCESS;
+    }
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {

@@ -46,6 +46,9 @@ void TWorkersPool::ReleaseWorker(const ui32 workerIdx) {
 
 void TWorkersPool::ChangeAmountCPULimit(const double delta) {
     AmountCPULimit += delta;
+    if (std::abs(AmountCPULimit) < Eps) {
+        AmountCPULimit = 0;
+    }
     AFL_VERIFY(AmountCPULimit >= 0);
     Counters.AmountCPULimit->Set(AmountCPULimit);
     Counters.ChangeCPULimitRate->Inc();

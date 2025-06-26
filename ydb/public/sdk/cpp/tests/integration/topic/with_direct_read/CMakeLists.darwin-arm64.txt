@@ -48,6 +48,7 @@ target_sources(topic_direct_read_it PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/describe_topic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/direct_read.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/local_partition.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/topic_to_table.cpp
 )
 
 

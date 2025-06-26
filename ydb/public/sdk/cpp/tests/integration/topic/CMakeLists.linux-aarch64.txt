@@ -12,8 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(setup)
 add_subdirectory(utils)
+add_subdirectory(setup)
 add_subdirectory(with_direct_read)
 
 add_executable(topic_it)
@@ -53,6 +53,7 @@ target_sources(topic_it PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/basic_usage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/describe_topic.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/local_partition.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/topic_to_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/trace.cpp
 )
 

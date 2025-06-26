@@ -30,14 +30,11 @@ target_link_libraries(topic-ut-ut_utils PUBLIC
   sdk-library-persqueue-topic_parser_public-v3
   src-client-driver
   src-client-topic
+  integration-topic-utils
 )
 
 target_sources(topic-ut-ut_utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/managed_executor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/trace.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/managed_executor.h
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/trace.h
 )
 

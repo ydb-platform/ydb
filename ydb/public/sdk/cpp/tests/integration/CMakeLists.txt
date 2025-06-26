@@ -12,9 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(topic)
 add_subdirectory(basic_example)
 add_subdirectory(bulk_upsert)
 add_subdirectory(server_restart)
 add_subdirectory(sessions)
 add_subdirectory(sessions_pool)
-add_subdirectory(topic)

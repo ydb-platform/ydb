@@ -26,6 +26,10 @@ target_link_libraries(integration-topic-utils PUBLIC
 )
 
 target_sources(integration-topic-utils PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/utils/describe.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/utils/local_partition.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/utils/setup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/tests/integration/topic/utils/trace.cpp
 )
 

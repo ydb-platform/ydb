@@ -24,6 +24,8 @@ private:
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
+    bool IsBulk = false;
+
 protected:
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;
@@ -92,6 +94,14 @@ public:
     }
 
     void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId);
+
+    void SetIsBulk(const bool isBulk) {
+        IsBulk = isBulk;
+    }
+
+    bool GetIsBulk() const {
+        return IsBulk;
+    }
 };
 
 class TWriteActionsCollection {

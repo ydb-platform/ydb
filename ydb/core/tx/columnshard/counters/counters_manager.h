@@ -98,7 +98,17 @@ public:
         CSCounters.OnWritePutBlobsSuccess(d);
     }
 
+    void OnWritePutBulkBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
+        TabletCounters->OnWritePutBulkBlobsSuccess(rowsWritten);
+        CSCounters.OnWritePutBlobsSuccess(d);
+    }
+
     void OnWritePutBlobsFailed(const TDuration d, const ui64 /*rowsWritten*/) const {
+        TabletCounters->OnWriteFailure();
+        CSCounters.OnWritePutBlobsFail(d);
+    }
+
+    void OnWritePutBulkBlobsFailed(const TDuration d, const ui64 /*rowsWritten*/) const {
         TabletCounters->OnWriteFailure();
         CSCounters.OnWritePutBlobsFail(d);
     }

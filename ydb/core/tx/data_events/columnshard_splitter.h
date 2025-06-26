@@ -50,6 +50,7 @@ class TColumnShardShardsSplitter: public IShardsSplitter {
             operation->SetPayloadIndex(0);
             operation->MutableTableId()->SetTableId(tableId);
             operation->MutableTableId()->SetSchemaVersion(schemaVersion);
+            operation->SetIsBulk(true);
         }
     };
 

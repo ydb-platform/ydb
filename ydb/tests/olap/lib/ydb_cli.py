@@ -29,18 +29,21 @@ class CheckCanonicalPolicy(Enum):
 
 class YdbCliHelper:
     @staticmethod
+    def get_cli_path() -> str:
+        cli = get_external_param('ydb-cli', 'main')
+        if cli == 'git':
+            return yatest.common.work_path('ydb')
+        if cli == 'main':
+            return yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))
+        return cli
+
+    @staticmethod
     def get_cli_command() -> list[str]:
-        args = [
+        return [
+            YdbCliHelper.get_cli_path(),
             '-e', YdbCluster.ydb_endpoint,
             '-d', f'/{YdbCluster.ydb_database}'
         ]
-        cli = get_external_param('ydb-cli', 'main')
-        if cli == 'git':
-            return [yatest.common.work_path('ydb')] + args
-        elif cli == 'main':
-            return [yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))] + args
-        else:
-            return [cli] + args
 
     class QueryPlan:
         def __init__(self) -> None:

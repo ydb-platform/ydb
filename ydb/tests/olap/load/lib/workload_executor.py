@@ -218,18 +218,19 @@ class WorkloadTestBase(LoadSuiteBase):
         # Добавляем имя итерации для лучшей идентификации
         if additional_stats:
             node_host = additional_stats.get('node_host', '')
-            chunk_num = additional_stats.get('chunk_num', iteration_number)
-            # Используем формат iter_N_chunk_M
-            iteration.name = f"{workload_name}_{node_host}_iter_{chunk_num}"
+            iteration_num = additional_stats.get('iteration_num', iteration_number)
+            # Используем формат iter_N
+            iteration.name = f"{workload_name}_{node_host}_iter_{iteration_num}"
             
-            # Добавляем статистику о chunk_num и node_host в итерацию
+            # Добавляем статистику об итерации и потоке в итерацию
             if not hasattr(iteration, 'stats'):
                 iteration.stats = {}
             
             iteration_stats = {
-                'chunk_info': {
-                    'chunk_num': chunk_num,
-                    'node_host': node_host
+                'iteration_info': {
+                    'iteration_num': iteration_num,
+                    'node_host': node_host,
+                    'thread_id': node_host  # Идентификатор потока - хост ноды
                 }
             }
             
@@ -348,14 +349,17 @@ class WorkloadTestBase(LoadSuiteBase):
 
         Args:
             workload_name: Имя workload для отчетов
-            command_args: Аргументы командной строки (может быть шаблоном при use_chunks=True)
+            command_args: Аргументы командной строки (может быть шаблоном при use_iterations=True)
             duration_value: Время выполнения в секундах (если None, используется self.timeout)
             additional_stats: Дополнительная статистика
-            use_chunks: Использовать ли разбивку на чанки для повышения надежности
+            use_chunks: Использовать ли разбивку на итерации (устаревший параметр, для обратной совместимости)
             duration_param: Параметр для передачи времени выполнения
             nemesis: Запускать ли сервис nemesis через 15 секунд после начала выполнения workload
             nodes_percentage: Процент нод кластера для запуска workload (от 1 до 100)
         """
+        # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
+        use_iterations = use_chunks
+        
         if duration_value is None:
             duration_value = self.timeout
             
@@ -368,6 +372,7 @@ class WorkloadTestBase(LoadSuiteBase):
             additional_stats = {}
         additional_stats["nemesis_enabled"] = nemesis
         additional_stats["nodes_percentage"] = nodes_percentage
+        additional_stats["use_iterations"] = use_iterations
 
         return self._execute_workload_with_deployment(
             workload_name=workload_name,
@@ -375,7 +380,7 @@ class WorkloadTestBase(LoadSuiteBase):
             duration_param=duration_param,
             duration_value=duration_value,
             additional_stats=additional_stats,
-            use_chunks=use_chunks,
+            use_chunks=use_iterations,  # Передаем параметр под старым именем для обратной совместимости
             nodes_percentage=nodes_percentage,
             nemesis=nemesis
         )
@@ -421,9 +426,24 @@ class WorkloadTestBase(LoadSuiteBase):
     def _prepare_workload_execution(self, workload_name: str, duration_value: float, 
                                    use_chunks: bool, duration_param: str, 
                                    nodes_percentage: int = 100):
-        # """ФАЗА 1: Подготовка к выполнению workload"""
+        """
+        ФАЗА 1: Подготовка к выполнению workload
+        
+        Args:
+            workload_name: Имя workload для отчетов
+            duration_value: Время выполнения в секундах
+            use_chunks: Использовать ли разбивку на итерации (устаревший параметр)
+            duration_param: Параметр для передачи времени выполнения
+            nodes_percentage: Процент нод кластера для запуска workload
+            
+        Returns:
+            Словарь с результатами подготовки
+        """
+        # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
+        use_iterations = use_chunks
+        
         with allure.step('Phase 1: Prepare workload execution'):
-            logging.info(f"Preparing execution: Duration={duration_value}s, chunks={use_chunks}, "
+            logging.info(f"Preparing execution: Duration={duration_value}s, iterations={use_iterations}, "
                         f"param={duration_param}, nodes_percentage={nodes_percentage}%, mode=parallel")
 
             # Сохраняем состояние нод для диагностики
@@ -433,13 +453,13 @@ class WorkloadTestBase(LoadSuiteBase):
             deployed_nodes = self._deploy_workload_binary(workload_name, nodes_percentage)
 
             # Создаем план выполнения
-            execution_plan = (self._create_chunks_plan(duration_value) if use_chunks else self._create_single_run_plan(duration_value))
+            execution_plan = (self._create_chunks_plan(duration_value) if use_iterations else self._create_single_run_plan(duration_value))
 
             # Инициализируем результат
             overall_result = YdbCliHelper.WorkloadRunResult()
             overall_result.start_time = time()
 
-            logging.info(f"Preparation completed: {len(execution_plan)} runs planned on {len(deployed_nodes)} nodes in parallel mode")
+            logging.info(f"Preparation completed: {len(execution_plan)} iterations planned on {len(deployed_nodes)} nodes in parallel mode")
 
             return {
                 'deployed_nodes': deployed_nodes,
@@ -449,12 +469,25 @@ class WorkloadTestBase(LoadSuiteBase):
             }
 
     def _execute_workload_runs(self, workload_name: str, command_args_template: str, duration_param: str, use_chunks: bool, preparation_result: dict, nemesis: bool = False):
-        # """ФАЗА 2: Параллельное выполнение workload на всех нодах"""
+        """
+        ФАЗА 2: Параллельное выполнение workload на всех нодах
+        
+        Args:
+            workload_name: Имя workload для отчетов
+            command_args_template: Шаблон аргументов командной строки
+            duration_param: Параметр для передачи времени выполнения
+            use_chunks: Использовать ли разбивку на итерации
+            preparation_result: Результаты подготовительной фазы
+            nemesis: Запускать ли сервис nemesis
+            
+        Returns:
+            Словарь с результатами выполнения
+        """
         with allure.step('Phase 2: Execute workload runs in parallel'):
             deployed_nodes = preparation_result['deployed_nodes']
             execution_plan = preparation_result['execution_plan']
             overall_result = preparation_result['overall_result']
-            
+
             if not deployed_nodes:
                 logging.error("No deployed nodes available for execution")
                 return {
@@ -469,7 +502,7 @@ class WorkloadTestBase(LoadSuiteBase):
             # Параллельное выполнение на всех нодах
             with allure.step(f'Execute workload in parallel on {len(deployed_nodes)} nodes'):
                 workload_start_time = time()
-                
+
                 # Запускаем nemesis через 15 секунд после начала выполнения workload
                 if nemesis:
                     nemesis_thread = threading.Thread(
@@ -518,15 +551,16 @@ class WorkloadTestBase(LoadSuiteBase):
                     
                     # Выполняем план для этой ноды
                     for run_num, run_config in enumerate(plan, 1):
-                        # Формируем имя запуска с учетом ноды и chunk_num
-                        chunk_num = run_config.get('chunk_num', run_num)
-                        # Используем формат iter_N_chunk_M
-                        run_name = f"{workload_name}_{node_host}_iter_{chunk_num}"
+                        # Формируем имя запуска с учетом ноды и номера итерации
+                        iteration_num = run_config.get('iteration_num', run_num)
+                        # Используем формат iter_N
+                        run_name = f"{workload_name}_{node_host}_iter_{iteration_num}"
                         
                         # Добавляем информацию о ноде в run_config для статистики
                         run_config_copy = run_config.copy()
                         run_config_copy['node_host'] = node_host
                         run_config_copy['node_role'] = node['node'].role
+                        run_config_copy['thread_id'] = node_host  # Идентификатор потока - хост ноды
 
                         # Выполняем один run
                         success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
@@ -758,38 +792,65 @@ class WorkloadTestBase(LoadSuiteBase):
                 return deployed_nodes
 
     def _create_chunks_plan(self, total_duration: float):
-        """Создает план выполнения с чанками"""
-        # Вычисляем размер чанка: минимум 100 сек, максимум 1 час
-        chunk_size = min(max(total_duration // 10, 100), 3600)
-        # Если общее время меньше 200 сек - используем один чанк
+        """
+        Создает план выполнения с разделением на итерации
+        
+        Args:
+            total_duration: Общая длительность теста в секундах
+            
+        Returns:
+            Список итераций с информацией о длительности каждой
+        """
+        # Вычисляем размер итерации: минимум 100 сек, максимум 1 час
+        iteration_size = min(max(total_duration // 10, 100), 3600)
+        # Если общее время меньше 200 сек - используем одну итерацию
         if total_duration < 200:
-            chunk_size = total_duration
+            iteration_size = total_duration
 
-        chunks = []
+        iterations = []
         remaining_time = total_duration
-        chunk_num = 1
+        iteration_num = 1
 
         while remaining_time > 0:
-            current_chunk_size = min(chunk_size, remaining_time)
-            chunks.append({
-                'chunk_num': chunk_num,
-                'iter_num': chunk_num,  # Добавляем iter_num для совместимости
-                'duration': current_chunk_size,
+            current_iteration_size = min(iteration_size, remaining_time)
+            iterations.append({
+                'iteration_num': iteration_num,
+                'duration': current_iteration_size,
                 'start_offset': total_duration - remaining_time
             })
-            remaining_time -= current_chunk_size
-            chunk_num += 1
+            remaining_time -= current_iteration_size
+            iteration_num += 1
 
-        logging.info(f"Created {len(chunks)} chunks with size {chunk_size}s each")
-        return chunks
+        logging.info(f"Created {len(iterations)} iterations with size {iteration_size}s each")
+        return iterations
 
     def _create_single_run_plan(self, total_duration: float):
-        """Создает план для одиночного выполнения"""
-        return [{'duration': total_duration, 'run_type': 'single', 'chunk_num': 1, 'iter_num': 1}]
+        """
+        Создает план для одиночного выполнения (одна итерация)
+        
+        Args:
+            total_duration: Общая длительность теста в секундах
+            
+        Returns:
+            Список с одной итерацией
+        """
+        return [{'duration': total_duration, 'run_type': 'single', 'iteration_num': 1}]
 
     def _execute_single_workload_run(self, deployed_binary_path: str, target_node, run_name: str, command_args_template: str, duration_param: str, run_config: dict):
-        """Выполняет один запуск workload"""
-
+        """
+        Выполняет один запуск workload
+        
+        Args:
+            deployed_binary_path: Путь к бинарному файлу workload
+            target_node: Нода для выполнения
+            run_name: Базовое имя запуска
+            command_args_template: Шаблон аргументов командной строки
+            duration_param: Параметр для передачи времени выполнения
+            run_config: Конфигурация запуска с информацией об итерации
+            
+        Returns:
+            Кортеж (успех, время выполнения, stdout, stderr, флаг таймаута)
+        """
         # Формируем команду
         if duration_param is None:
             # Используем command_args_template как есть (для обратной совместимости)
@@ -798,15 +859,10 @@ class WorkloadTestBase(LoadSuiteBase):
             # Добавляем duration параметр
             command_args = f"{command_args_template} {duration_param} {run_config['duration']}"
 
-        # Добавляем информацию о chunk_num в имя запуска, если она доступна
-        if 'chunk_num' in run_config:
-            # Используем формат iter_N_chunk_M вместо chunk_N_chunk_M
-            # Проверяем, не содержит ли уже имя информацию о chunk
-            if '_chunk_' not in run_name:
-                run_name = f"{run_name}_iter_{run_config['chunk_num']}"
-            else:
-                # Если имя уже содержит chunk, заменяем на iter
-                run_name = run_name.replace('_chunk_', '_iter_')
+        # Добавляем информацию об итерации в имя запуска
+        if 'iteration_num' in run_config:
+            # Используем формат iter_N
+            run_name = f"{run_name}_iter_{run_config['iteration_num']}"
 
         run_start_time = time()
 
@@ -890,7 +946,20 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.warning(f'scheme stderr: {scheme_stderr}')
 
     def _process_single_run_result(self, overall_result, workload_name: str, run_num: int, run_config: dict, success: bool, execution_time: float, stdout: str, stderr: str, is_timeout: bool):
-        # """Обрабатывает результат одного run'а"""
+        """
+        Обрабатывает результат одного запуска
+        
+        Args:
+            overall_result: Общий результат для добавления информации
+            workload_name: Имя workload
+            run_num: Номер запуска
+            run_config: Конфигурация запуска
+            success: Успешность выполнения
+            execution_time: Время выполнения
+            stdout: Вывод workload
+            stderr: Ошибки workload
+            is_timeout: Флаг таймаута
+        """
         # Создаем результат для run'а
         run_result = self.create_workload_result(
             workload_name=f"{workload_name}_run_{run_num}",
@@ -901,7 +970,8 @@ class WorkloadTestBase(LoadSuiteBase):
                 "run_number": run_num,
                 "run_duration": run_config.get('duration'),
                 "run_execution_time": execution_time,
-                "chunk_num": run_config.get('chunk_num', 1),  # Добавляем chunk_num в статистику
+                "iteration_num": run_config.get('iteration_num', 1),  # Номер итерации
+                "thread_id": run_config.get('thread_id', ''),  # Идентификатор потока
                 **run_config
             },
             is_timeout=is_timeout,
@@ -921,15 +991,33 @@ class WorkloadTestBase(LoadSuiteBase):
         overall_result.stdout += f"\n=== Run {run_num} ===\n{stdout or ''}"
         overall_result.stderr += f"\n=== Run {run_num} stderr ===\n{stderr or ''}"
 
-    def _analyze_execution_results(self, overall_result, successful_runs: int, total_runs: int, use_chunks: bool):
-        # """Анализирует результаты выполнения и добавляет ошибки/предупреждения"""
+    def _analyze_execution_results(self, overall_result, successful_runs: int, total_runs: int, use_iterations: bool):
+        """
+        Анализирует результаты выполнения и добавляет ошибки/предупреждения
+        
+        Args:
+            overall_result: Общий результат для добавления информации
+            successful_runs: Количество успешных запусков
+            total_runs: Общее количество запусков
+            use_iterations: Использовались ли итерации
+        """
         if successful_runs == 0:
             overall_result.add_error(f"All {total_runs} runs failed to execute successfully")
-        elif successful_runs < total_runs and use_chunks:
+        elif successful_runs < total_runs and use_iterations:
             overall_result.add_warning(f"Only {successful_runs}/{total_runs} runs completed successfully")
 
-    def _add_execution_statistics(self, overall_result, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_chunks: bool):
-        # """Собирает и добавляет статистику выполнения"""
+    def _add_execution_statistics(self, overall_result, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_iterations: bool):
+        """
+        Собирает и добавляет статистику выполнения
+        
+        Args:
+            overall_result: Общий результат для добавления статистики
+            workload_name: Имя workload
+            execution_result: Результаты выполнения
+            additional_stats: Дополнительная статистика
+            duration_value: Время выполнения в секундах
+            use_iterations: Использовались ли итерации
+        """
         successful_runs = execution_result['successful_runs']
         total_runs = execution_result['total_runs']
         total_execution_time = execution_result['total_execution_time']
@@ -942,7 +1030,7 @@ class WorkloadTestBase(LoadSuiteBase):
             "total_execution_time": total_execution_time,
             "planned_duration": duration_value,
             "success_rate": successful_runs / total_runs if total_runs > 0 else 0,
-            "use_chunks": use_chunks
+            "use_iterations": use_iterations
         }
 
         # Добавляем дополнительную статистику
@@ -954,7 +1042,22 @@ class WorkloadTestBase(LoadSuiteBase):
             overall_result.add_stat(workload_name, key, value)
 
     def _finalize_workload_results(self, workload_name: str, execution_result: dict, additional_stats: dict, duration_value: float, use_chunks: bool):
-        # """ФАЗА 3: Финализация результатов и диагностика"""
+        """
+        ФАЗА 3: Финализация результатов и диагностика
+        
+        Args:
+            workload_name: Имя workload для отчетов
+            execution_result: Результаты выполнения
+            additional_stats: Дополнительная статистика
+            duration_value: Время выполнения в секундах
+            use_chunks: Использовать ли разбивку на итерации (устаревший параметр)
+            
+        Returns:
+            Финальный результат выполнения
+        """
+        # Для обратной совместимости переименовываем параметр use_chunks в use_iterations
+        use_iterations = use_chunks
+        
         with allure.step('Phase 3: Finalize results and diagnostics'):
             overall_result = execution_result['overall_result']
             successful_runs = execution_result['successful_runs']
@@ -964,12 +1067,12 @@ class WorkloadTestBase(LoadSuiteBase):
             self._check_scheme_state()
 
             # Анализируем результаты и добавляем ошибки/предупреждения
-            self._analyze_execution_results(overall_result, successful_runs, total_runs, use_chunks)
+            self._analyze_execution_results(overall_result, successful_runs, total_runs, use_iterations)
 
             # Собираем и добавляем статистику
             self._add_execution_statistics(
                 overall_result, workload_name, execution_result,
-                additional_stats, duration_value, use_chunks
+                additional_stats, duration_value, use_iterations
             )
 
             # Финальная обработка с диагностикой

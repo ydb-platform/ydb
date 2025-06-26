@@ -68,11 +68,8 @@ void TWorkersPool::ChangeAmountCPULimit(const double delta) {
         if (!worker.GetRunningTask()) {
             ActiveWorkersIdx.emplace_back(ActiveWorkersCount);
         }
-
-        const auto newCPUSoftLimit = std::min<double>(numberThreads, 1);
-        worker.ChangeCPUSoftLimit(newCPUSoftLimit);
-
-        numberThreads -= newCPUSoftLimit;
+        worker.ChangeCPUSoftLimit(std::min<double>(numberThreads, 1));
+        numberThreads -= worker.GetCPUSoftLimit();
         ++ActiveWorkersCount;
     }
     AFL_VERIFY(std::abs(numberThreads) < Eps);

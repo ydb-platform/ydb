@@ -24,6 +24,10 @@
 namespace NKikimr {
 namespace NSchemeBoard {
 
+void SetupMinimalRuntime(TTestActorRuntime& runtime, const TStateStorageSetupper& setupStateStorage = CreateDefaultStateStorageSetupper());
+
+TIntrusiveConstPtr<TStateStorageInfo> GetStateStorageInfo(TTestActorRuntime& runtime);
+
 class TTestContext: public TTestBasicRuntime {
 public:
     using TTestBasicRuntime::TTestBasicRuntime;

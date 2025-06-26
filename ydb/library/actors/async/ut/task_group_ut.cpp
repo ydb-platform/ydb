@@ -1,6 +1,7 @@
 #include "common.h"
 #include <ydb/library/actors/async/task_group.h>
-#include <ydb/library/actors/async/sleep.h>
+#include <ydb/library/actors/async/timeout.h>
+#include <ydb/library/actors/async/yield.h>
 
 namespace NAsyncTest {
 
@@ -401,7 +402,7 @@ namespace NAsyncTest {
                         co_await WithTimeout(TDuration::MilliSeconds(1), [&]() -> async<void> {
                             groupValue = co_await g.Next();
                         });
-                    } catch(TAsyncTimeout&) {}
+                    } catch (const TAsyncTimeout&) {}
                     groupState = 2;
                     int value = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
                         groupValue = co_await g.Next();

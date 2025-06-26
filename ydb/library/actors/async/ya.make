@@ -20,8 +20,12 @@ SRCS(
     symmetric_proxy.h
     task_group.cpp
     task_group.h
+    timeout.cpp
+    timeout.h
     wait_for_event.cpp
     wait_for_event.h
+    yield.cpp
+    yield.h
 )
 
 PEERDIR(

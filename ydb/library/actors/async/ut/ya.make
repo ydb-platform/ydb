@@ -9,6 +9,7 @@ SRCS(
     callback_coroutine_ut.cpp
     sleep_ut.cpp
     task_group_ut.cpp
+    timeout_ut.cpp
 )
 
 END()

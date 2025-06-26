@@ -1,4 +1,5 @@
 #include "dq_program_builder.h"
+#include "type_utils.h"
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -6,40 +7,6 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
-bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result)
-{
-    bool hasBlock = false;
-    bool hasNonBlock = false;
-
-    result.reserve(typeComponents.size());
-    for (TType* type : typeComponents) {
-        if (type->GetKind() == TType::EKind::Block) {
-            hasBlock = true;
-            type = static_cast<const TBlockType*>(type)->GetItemType();
-        } else {
-            hasNonBlock = true;
-        }
-        result.push_back(type);
-    }
-    MKQL_ENSURE(hasBlock != hasNonBlock, "Inconsistent wide item types: mixing of blocks and non-blocks detected");
-    return hasBlock;
-};
-
-void WrapArrayBlockTypes(std::vector<TType*>& types, const TDqProgramBuilder& pb)
-{
-    std::transform(
-        types.begin(),
-        types.end(),
-        types.begin(),
-        [&](TType* type) {
-            return pb.NewBlockType(type, TBlockType::EShape::Many);
-        }
-    );
-}
-
-}
 
 TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
     : TProgramBuilder(env, functionRegistry) {}

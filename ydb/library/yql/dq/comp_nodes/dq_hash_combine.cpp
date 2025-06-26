@@ -1,6 +1,7 @@
 #include "dq_hash_combine.h"
 #include "dq_hash_operator_common.h"
 #include "dq_hash_operator_serdes.h"
+#include "type_utils.h"
 
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <yql/essentials/public/udf/arrow/block_builder.h>
@@ -65,45 +66,32 @@ using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
 using TEqualsFunc = std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 using THashFunc = std::function<NUdf::THashType(const NUdf::TUnboxedValuePod*)>;
 
-// TODO: Please disregard this for now, I'll replace this with a TPagedPool or something similar.
-// TODO: The idea was to use a pool of structured key-state tuples but this thing here is just allocating bytes now, inefficiently.
-template<typename T, size_t ItemsPerRow, typename TAllocator>
+// Key-state tuple arena which provides fixed-size allocations
+template<typename T>
 struct TStorageWrapper
 {
-    size_t Width;
-    size_t Cutoff;
-    size_t NumFilled;
-
-    using TRow = std::array<T, ItemsPerRow>;
-    std::deque<TRow, typename TAllocator::template rebind<TRow>::other> Storage;
+    TPagedArena Storage;
+    size_t AllocSize;
 
     TStorageWrapper(size_t width)
-        : Width(width)
-        , Cutoff(width * (ItemsPerRow / width))
-        , NumFilled(Cutoff)
+        : Storage(TlsAllocState)
+        , AllocSize(width * sizeof(T))
     {
-        MKQL_ENSURE_S(Cutoff > 0);
+        MKQL_ENSURE_S(AllocSize > 0);
     }
 
     T* Alloc()
     {
-        if (NumFilled >= Cutoff) {
-            auto& row = Storage.emplace_back();
-            row.fill(T());
-            NumFilled = 0;
-        }
-        T* result = Storage.back().begin() + NumFilled;
-        NumFilled += Width;
-        return result;
+        return static_cast<T*>(Storage.Alloc(AllocSize, EMemorySubPool::Temporary));
     }
 
     void Clear()
     {
-        NumFilled = Cutoff;
-        Storage.clear();
+        Storage.Clear();
     }
 };
 
+// Calculate static memory size bounds from TType*s and dynamic sizes from UVs
 class TMemoryEstimationHelper
 {
 private:
@@ -182,6 +170,11 @@ public:
 [[maybe_unused]] void DebugPrintUV(TUnboxedValuePod& uv)
 {
     Cerr << "----- UV at " << (size_t)(&uv) << Endl;
+    Cerr << "Refcount: " << uv.RefCount() << Endl;
+    Cerr << "IsString: " << uv.IsString() << "; IsEmbedded: " << uv.IsEmbedded() << Endl;
+    if (uv.IsString()) {
+        Cerr << "Raw string ptr: " << (size_t)uv.AsRawStringValue()->Data() << Endl;
+    }
     uv.Dump(Cerr);
     Cerr << Endl;
 }
@@ -269,9 +262,12 @@ public:
             [&](IComputationExternalNode* item){ item->SetValue(Ctx, std::move(*stateIter++)); });
 
         TUnboxedValue* const* outputIter = output;
+
         for (const auto& node : Nodes.FinishResultNodes) {
             *(*outputIter++) = node->GetValue(Ctx);
         }
+
+        ForgetState(rawState);
     }
 
     void ForgetState(void* rawState) override
@@ -318,7 +314,7 @@ protected:
 
     std::optional<size_t> CurrentMemoryUsage;
 
-    using TStore = TStorageWrapper<char, 64ull << 10, TMKQLAllocator<char, EMemorySubPool::Temporary>>;
+    using TStore = TStorageWrapper<char>;
     std::unique_ptr<TStore> Store;
     TMap Map;
     void* KeyStateBuffer;
@@ -377,7 +373,9 @@ protected:
             auto keys = keyBuffer;
             for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
                 auto& keyField = Nodes.KeyNodes[i]->RefValue(Ctx);
-                *keys++ = keyField = Nodes.KeyResultNodes[i]->GetValue(Ctx);
+                *keys = keyField = Nodes.KeyResultNodes[i]->GetValue(Ctx);
+                keys->Ref();
+                keys++;
             }
         } else {
             MKQL_ENSURE(false, "Not implemented yet");
@@ -400,6 +398,14 @@ protected:
                 agg->UpdateState(statePtr, input);
             }
             statePtr += agg->GetStateSize();
+        }
+
+        if (!isNew) {
+            auto keys = keyBuffer;
+            for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
+                keys->UnRef();
+                keys++;
+            }
         }
 
         if (isNew) {
@@ -575,6 +581,13 @@ public:
             statePtr += agg->GetStateSize();
         }
 
+        if (HasGenericAggregation) {
+            auto keyIter = key;
+            for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
+                (keyIter++)->UnRef();
+            }
+        }
+
         Map.Advance(DrainMapIterator);
 
         return true;
@@ -746,7 +759,7 @@ public:
                 blockItem = InputReaders[i]->GetItem(*array, CurrentInputBatchPtr);
             }
             RowBuffer[i] = InputItemConverters[i]->MakeValue(blockItem, Ctx.HolderFactory);
-            RowBuffer[i].Ref();
+            //RowBuffer[i].Ref(); -- might be needed if the RowBuffer is switched to a vector of TUnboxedValuePods
         }
 
         ++CurrentInputBatchPtr;
@@ -789,6 +802,16 @@ public:
             for (size_t i = 0; i < OutputColumns; ++i) {
                 auto blockItem = OutputItemConverters[i]->MakeItem(OutputBuffer[i]);
                 blockBuilders[i]->Add(blockItem);
+                OutputBuffer[i] = TUnboxedValuePod();
+            }
+
+            if (HasGenericAggregation) {
+                auto keyIter = key;
+                for (ui32 i = 0U; i < Nodes.FinishKeyNodes.size(); ++i) {
+                    Nodes.FinishKeyNodes[i]->RefValue(Ctx) = TUnboxedValue();
+                    (keyIter)->UnRef();
+                    keyIter++;
+                }
             }
 
             ++currentBlockSize;
@@ -925,32 +948,13 @@ private:
 IComputationNode* WrapDqHashCombine(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     TDqHashOperatorParams params = ParseCommonDqHashOperatorParams(callable, ctx);
 
-    auto unwrapBlockTypes = [&](const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result) -> bool
-    {
-        bool hasBlock = false;
-        bool hasNonBlock = false;
-
-        result.reserve(typeComponents.size());
-        for (TType* type : typeComponents) {
-            if (type->GetKind() == TType::EKind::Block) {
-                hasBlock = true;
-                type = static_cast<const TBlockType*>(type)->GetItemType();
-            } else {
-                hasNonBlock = true;
-            }
-            result.push_back(type);
-        }
-        MKQL_ENSURE(hasBlock != hasNonBlock, "Inconsistent wide item types: mixing of blocks and non-blocks detected");
-        return hasBlock;
-    };
-
     auto inputComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetInput(NDqHashOperatorParams::Flow).GetStaticType()));
     std::vector<TType*> inputTypes;
-    bool inputIsBlocks = unwrapBlockTypes(inputComponents, inputTypes);
+    bool inputIsBlocks = UnwrapBlockTypes(inputComponents, inputTypes);
 
     const auto outputComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
     std::vector<TType*> outputTypes;
-    bool outputIsBlocks = unwrapBlockTypes(outputComponents, outputTypes);
+    bool outputIsBlocks = UnwrapBlockTypes(outputComponents, outputTypes);
 
     MKQL_ENSURE(inputIsBlocks == outputIsBlocks, "Inconsistent input/output item types: mixing of blocks and non-blocks detected");
 

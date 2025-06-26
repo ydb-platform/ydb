@@ -16,7 +16,7 @@ Example usage:
 
 ![Example](_assets/general-example.gif)
 
-The interactive query execution mode in YDB CLI offers the following features:
+The interactive query execution mode in {{ ydb-short-name }} CLI offers the following features:
 
 * [Syntax highlighting](#syntax-highlighting)
 * [Hotkeys](#hotkeys)

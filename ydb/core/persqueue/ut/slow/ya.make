@@ -9,12 +9,6 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(5)
 SIZE(MEDIUM)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:8)
-ELSE()
-    REQUIREMENTS(ram:24 cpu:4)
-ENDIF()
-
 PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre

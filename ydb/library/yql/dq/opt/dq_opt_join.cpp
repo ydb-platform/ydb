@@ -1581,6 +1581,18 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             .Add(0, std::move(rightWideFlow))
             .Seal()
             .Build();
+        
+        // Convert to block format
+        leftWideFlow = ctx.Builder(join.Pos())
+            .Callable("WideToBlocks")
+            .Add(0, std::move(leftWideFlow))
+            .Seal()
+            .Build();
+        rightWideFlow = ctx.Builder(join.Pos())
+            .Callable("WideToBlocks")
+            .Add(0, std::move(rightWideFlow))
+            .Seal()
+            .Build();
     }
 
     const auto leftFullWidth = leftNames.size();
@@ -1963,6 +1975,17 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
             .Build()
         .Done();
+
+    // Convert back from block format if using block hash join
+    if (useBlockHashJoin) {
+        hashJoin = ctx.Builder(join.Pos())
+            .Callable("ToFlow")
+                .Callable(0, "WideFromBlocks")
+                    .Add(0, std::move(hashJoin))
+                .Seal()
+            .Seal()
+            .Build();
+    }
 }
 
 // TExprBase DqBuildBlockHashJoin(const TDqJoin& join, TExprContext& ctx) {

@@ -1,5 +1,6 @@
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_completion_impl.h"
+#include "blobstorage_pdisk_impl.h"
 
 namespace NKikimr {
 namespace NPDisk {
@@ -86,6 +87,25 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
     }
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TChunkWritePiece
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+TChunkWritePiece::TChunkWritePiece(TPDisk *pdisk, TIntrusivePtr<TChunkWrite> &write, ui32 pieceShift, ui32 pieceSize, NWilson::TSpan span)
+    : TRequestBase(write->Sender, write->ReqId, write->Owner, write->OwnerRound, write->PriorityClass, std::move(span))
+    , PDisk(pdisk)
+    , ChunkWrite(write)
+    , PieceShift(pieceShift)
+    , PieceSize(pieceSize)
+{
+    ChunkWrite->RegisterPiece();
+}
+
+void TChunkWritePiece::Process(void*) {
+    this->ChunkWriteResult = MakeHolder<TChunkWriteResult>(PDisk->ChunkWritePiece(this));
+    PDisk->PushChunkWrite(this);
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TChunkReadPiece

@@ -89,13 +89,16 @@ private:
                     // Last column is block length
                     output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(0)));
                 } else {
-                    // Create empty array for this column type
+                    // Create empty array for this column type using Arrow's MakeArrayOfNull
                     auto blockItemType = AS_TYPE(TBlockType, ResultItemTypes_[i])->GetItemType();
-                    auto builder = MakeArrayBuilder(TTypeInfoHelper(), blockItemType, 
-                                                  const_cast<arrow::MemoryPool&>(*arrow::default_memory_pool()), 
-                                                  0, nullptr);
-                    auto emptyArray = builder->Build(true);
-                    output[i] = HolderFactory_.CreateArrowBlock(std::move(emptyArray));
+                    
+                    std::shared_ptr<arrow::DataType> arrowType;
+                    MKQL_ENSURE(ConvertArrowType(blockItemType, arrowType), "Failed to convert type to arrow");
+                    
+                    auto emptyArray = arrow::MakeArrayOfNull(arrowType, 0);
+                    ARROW_OK(emptyArray.status());
+                    
+                    output[i] = HolderFactory_.CreateArrowBlock(arrow::Datum(emptyArray.ValueOrDie()));
                 }
             }
             

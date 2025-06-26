@@ -176,5 +176,9 @@ TString JsonFromDescribeSchemeResult(const TString& serialized) {
     return json;
 }
 
+bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
+    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
+}
+
 } // NSchemeBoard
 } // NKikimr

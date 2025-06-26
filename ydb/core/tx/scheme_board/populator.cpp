@@ -50,10 +50,6 @@ namespace {
 
 } // anonymous
 
-bool ShouldIgnore(const TStateStorageInfo::TRingGroup& ringGroup) {
-    return ringGroup.WriteOnly || ringGroup.State == ERingGroupState::DISCONNECTED;
-}
-
 bool IsMajorityReached(const TStateStorageInfo::TRingGroup& ringGroup, ui32 ringGroupAcks) {
     return ringGroupAcks > ringGroup.NToSelect / 2;
 }

@@ -4,7 +4,6 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 
-from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 

@@ -11,12 +11,11 @@ class TestYdbWorkload(StressFixture):
     def setup(self):
         yield from self.setup_cluster()
 
-    @classmethod
-    def get_command_prefix(cls, subcmds: list[str], path: str) -> list[str]:
+    def get_command_prefix(self, subcmds: list[str], path: str) -> list[str]:
         return [
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '--verbose',
-            '--endpoint', 'grpc://localhost:%d' % cls.cluster.nodes[1].grpc_port,
+            '--endpoint', 'grpc://localhost:%d' % self.cluster.nodes[1].grpc_port,
             '--database=/Root',
             'workload', 'log'
         ] + subcmds + [

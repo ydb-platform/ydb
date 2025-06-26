@@ -356,6 +356,10 @@ namespace {
 
 } // anonymous
 
+bool ShouldIgnore(const TProxyGroup& proxyGroup) {
+    return proxyGroup.WriteOnly || proxyGroup.State == ERingGroupState::DISCONNECTED;
+}
+
 template <typename TPath, typename TDerived>
 class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
@@ -779,7 +783,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             }
         }
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            if (ProxyGroups[groupIdx].WriteOnly) {
+            if (ShouldIgnore(ProxyGroups[groupIdx])) {
                 continue;
             }
             if (responsesByGroup[groupIdx] <= ProxyGroups[groupIdx].Proxies.size() / 2) {
@@ -1193,16 +1197,6 @@ private:
     const TActorId Owner;
     const TPath Path;
     const ui64 DomainOwnerId;
-
-    struct TProxyInfo {
-        TActorId Proxy;
-        TActorId Replica;
-    };
-
-    struct TProxyGroup {
-        bool WriteOnly;
-        TVector<TProxyInfo> Proxies;
-    };
 
     THashMap<TActorId, ui32> ProxyToGroupMap;
     TVector<TProxyGroup> ProxyGroups;

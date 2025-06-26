@@ -1,12 +1,28 @@
 #pragma once
 
-#include "defs.h"
-
+#include <ydb/core/base/statestorage.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 
 #include <util/generic/string.h>
 
 namespace NKikimr {
+
+namespace NSchemeBoard {
+
+    struct TProxyInfo {
+        TActorId Proxy;
+        TActorId Replica;
+    };
+
+    struct TProxyGroup {
+        bool WriteOnly;
+        ERingGroupState State;
+        TVector<TProxyInfo> Proxies;
+    };
+
+    bool ShouldIgnore(const TProxyGroup& proxyGroup);
+
+}
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,

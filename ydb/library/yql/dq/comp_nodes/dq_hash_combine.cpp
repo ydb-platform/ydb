@@ -872,7 +872,7 @@ public:
             MakeState(ctx, boxedState);
         }
 
-        TWideAggregationState* state = static_cast<TWideAggregationState*>(boxedState.AsBoxed().Get());
+        TBaseAggregationState* state = static_cast<TBaseAggregationState*>(boxedState.AsBoxed().Get());
 
         for (;;) {
             if (!state->IsDraining()) {

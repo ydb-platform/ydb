@@ -168,9 +168,6 @@ public:
 
     void AddValue(const NUdf::TUnboxedValuePod& value, size_t idx) {
         Inputs_[idx] = value;
-        const auto& datum = TArrowBlock::From(value).GetDatum();
-        ARROW_DEBUG_CHECK_DATUM_TYPES(InputsDescr_[idx], datum.descr());
-        TBlockState::AddArray(idx, datum);
         if (0 == idx) {
             InputRows_ = GetBlockCount(value);
         }
@@ -378,8 +375,8 @@ private:
         bool RightFinished_ = false;
 
         NUdf::TUnboxedValue                      JoinState_;
-        const TVector<ui32>&                     LeftKeyColumns_;
-        const TVector<ui32>&                     RightKeyColumns_;
+        [[maybe_unused]] const TVector<ui32>&    LeftKeyColumns_;
+        [[maybe_unused]] const TVector<ui32>&    RightKeyColumns_;
         NUdf::TUnboxedValue                      LeftStream_;
         NUdf::TUnboxedValue                      RightStream_;
         const THolderFactory&                    HolderFactory_;

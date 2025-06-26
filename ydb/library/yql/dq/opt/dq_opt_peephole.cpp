@@ -952,24 +952,28 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         }
     }
 
-    // Expand inputs to wide streams (using ExpandJoinInput like GraceJoin)
-    auto leftWideStream = ExpandJoinInput(*itemTypeLeft, 
+    // Expand inputs to wide flows (using ExpandJoinInput like GraceJoin)
+    auto leftWideFlow = ExpandJoinInput(*itemTypeLeft, 
         ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}), 
         ctx, leftConvertedItems, pos);
-    auto rightWideStream = ExpandJoinInput(*itemTypeRight, 
+    auto rightWideFlow = ExpandJoinInput(*itemTypeRight, 
         ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}), 
         ctx, rightConvertedItems, pos);
 
-    // Convert to block format
+    // Convert wide flows to wide streams, then to block format
     auto leftBlocks = ctx.Builder(pos)
         .Callable("WideToBlocks")
-            .Add(0, std::move(leftWideStream))
+            .Callable(0, "FromFlow")
+                .Add(0, std::move(leftWideFlow))
+            .Seal()
         .Seal()
         .Build();
 
     auto rightBlocks = ctx.Builder(pos)
         .Callable("WideToBlocks")
-            .Add(0, std::move(rightWideStream))
+            .Callable(0, "FromFlow")
+                .Add(0, std::move(rightWideFlow))
+            .Seal()
         .Seal()
         .Build();
 

@@ -598,14 +598,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + level2clusters);
         expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + level2clusters * levelRowBytes);
         if (smallScanBuffer) {
-            // KMEANS reads build table 6 times (SAMPLE + KMEANS * 4 + UPLOAD):
-            expectedReadRows += tableRows * 6;
-            expectedReadBytes += buildBytes * 6;
-        // KMEANS writes build table once and forms K * K level rows:
-        expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows + K * K);
-        expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + postingBytes + K * K * levelRowBytes);
-        if (smallScanBuffer) {
-            // KMEANS reads build table five times (SAMPLE + KMEANS * 3 + UPLOAD):
+            // KMEANS reads build table 5 times (SAMPLE + KMEANS * 4 + UPLOAD):
             expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 5);
             expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  buildBytes * 5);
         } else {
@@ -727,9 +720,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         // SAMPLE reads table once, no writes:
         expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows);
         expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes);
-        // every RECOMPUTE round reads table once, no writes; there are 4 recompute rounds:
-        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 4);
-        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes * 4);
+        // every RECOMPUTE round reads table once, no writes; there are 3 recompute rounds:
+        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 3);
+        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  tableBytes * 3);
         // upload SAMPLE writes K level rows, no reads:
         expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + K);
         expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + K * levelRowBytes);
@@ -834,9 +827,9 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         // KMEANS writes build table once and forms K * K level rows:
         expectedBillingStats.SetUploadRows(expectedBillingStats.GetUploadRows() + tableRows + K * K);
         expectedBillingStats.SetUploadBytes(expectedBillingStats.GetUploadBytes() + postingBytes + K * K * levelRowBytes);
-        // KMEANS reads build table five times (SAMPLE + KMEANS * 3 + UPLOAD):
-        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 6); // TODO: * 5
-        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  buildBytes * 6);
+        // KMEANS reads build table 5 times (SAMPLE + KMEANS * 3 + UPLOAD):
+        expectedBillingStats.SetReadRows(expectedBillingStats.GetReadRows() + tableRows * 5);
+        expectedBillingStats.SetReadBytes(expectedBillingStats.GetReadBytes() +  buildBytes * 5);
         {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
@@ -1005,7 +998,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
-
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 

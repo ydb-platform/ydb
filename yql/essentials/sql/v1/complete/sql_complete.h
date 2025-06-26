@@ -1,5 +1,7 @@
 #pragma once
 
+#include "configuration.h"
+
 #include <yql/essentials/sql/v1/complete/core/input.h>
 #include <yql/essentials/sql/v1/complete/core/environment.h>
 #include <yql/essentials/sql/v1/complete/name/service/name_service.h>
@@ -51,20 +53,8 @@ namespace NSQLComplete {
     public:
         using TPtr = THolder<ISqlCompletionEngine>;
 
-        struct TConfiguration {
-            friend class TSqlCompletionEngine;
-            friend ISqlCompletionEngine::TConfiguration MakeYDBConfiguration();
-            friend ISqlCompletionEngine::TConfiguration MakeYQLConfiguration();
-            friend ISqlCompletionEngine::TConfiguration MakeConfiguration(THashSet<TString> allowedStmts);
-
-        public:
-            size_t Limit = 256;
-
-        private:
-            THashSet<TString> IgnoredRules_;
-            THashMap<TString, THashSet<TString>> DisabledPreviousByToken_;
-            THashMap<TString, THashSet<TString>> ForcedPreviousByToken_;
-        };
+        // TODO(YQL-19747): Deprecated, Migrate YDB CLI to `TConfiguration`
+        using TConfiguration = NSQLComplete::TConfiguration;
 
         virtual ~ISqlCompletionEngine() = default;
 
@@ -77,13 +67,9 @@ namespace NSQLComplete {
 
     using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;
 
-    ISqlCompletionEngine::TConfiguration MakeYDBConfiguration();
-
-    ISqlCompletionEngine::TConfiguration MakeYQLConfiguration();
-
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,
         INameService::TPtr names,
-        ISqlCompletionEngine::TConfiguration configuration = {});
+        TConfiguration configuration = {});
 
 } // namespace NSQLComplete

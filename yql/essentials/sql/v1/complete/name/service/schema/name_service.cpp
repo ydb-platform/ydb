@@ -130,7 +130,7 @@ namespace NSQLComplete {
                     local.Indentifier = std::move(entry.Name);
                     name = std::move(local);
                 } else {
-                    TUnkownName local;
+                    TUnknownName local;
                     local.Content = std::move(entry.Name);
                     local.Type = std::move(entry.Type);
                     name = std::move(local);

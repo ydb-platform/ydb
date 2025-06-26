@@ -29,6 +29,9 @@ class TMisuseException : public yexception {};
 // Print command help
 class TMisuseWithHelpException : public TMisuseException {};
 
+// Help was printed, just need to return EXIT_SUCCESS
+class THelpPrintedException : public yexception {};
+
 class TProfileConfig {
 public:
     TProfileConfig(const TString& profileName);

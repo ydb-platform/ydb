@@ -421,9 +421,9 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
         });
 
-    compiler->AddCallable(TDqPhyBlockHashJoin::CallableName(),
+    compiler->AddCallable({TDqPhyBlockHashJoin::CallableName(), "BlockHashJoin"},
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 5, "DqBlockHashJoin should have 5 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 5, "DqPhyBlockHashJoin/BlockHashJoin should have 5 arguments");
             
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -437,6 +437,14 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             EJoinKind joinKind;
             if (joinKindStr == "Inner") {
                 joinKind = EJoinKind::Inner;
+            } else if (joinKindStr == "Left") {
+                joinKind = EJoinKind::Left;
+            } else if (joinKindStr == "LeftSemi") {
+                joinKind = EJoinKind::LeftSemi;
+            } else if (joinKindStr == "LeftOnly") {
+                joinKind = EJoinKind::LeftOnly;
+            } else if (joinKindStr == "Cross") {
+                joinKind = EJoinKind::Cross;
             } else {
                 YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
             }
@@ -463,6 +471,8 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind, 
                 leftKeyColumns, rightKeyColumns, returnType);
         });
+
+
 
     return compiler;
 }

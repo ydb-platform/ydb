@@ -1,10 +1,12 @@
 # Exporting data to S3-compatible storage
 
-The `export s3` command starts exporting data and information on the server side about data schema objects to S3-compatible storage, in the format described under [File structure](../file-structure.md):
+The `export s3` command starts exporting data and schema objects details to S3-compatible storage, in the format described under [File structure](../file-structure.md):
 
 ```bash
 {{ ydb-cli }} [connection options] export s3 [options]
 ```
+
+{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
 {% note warning %}
 
@@ -17,25 +19,21 @@ The export feature is available only for objects of the following types:
 
 {% endnote %}
 
-{% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
-
 ## Command line parameters {#pars}
 
 `[options]`: Command parameters:
 
-### S3 connection parameters {#s3-conn}
+### S3 parameters {#s3-params}
 
 To run the command to export data to S3 storage, specify the [S3 connection parameters](../auth-s3.md). Since data is exported by the YDB server asynchronously, the specified endpoint must be available to establish a connection on the server side.
+
+`--destination-prefix PREFIX`: Destination prefix in the S3 bucket.
 
 ### Exported schema objects {#objects}
 
 `--root-path PATH`: Root directory for the objects being exported; defaults to the database root if not provided.
 
-`--destination-prefix PREFIX`: Destination prefix in the S3 bucket.
-
 `--include PATH`: Schema objects to be included in the export. Directories are traversed recursively. Paths are relative to the `root-path`. You may specify this parameter multiple times to include several objects. If not specified, all non-system objects in the `root-path` are exported.
-
-`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Paths are relative to the `root-path`. Specify this parameter multiple times for different templates.
 
 {% cut "Alternate syntax" %}
 
@@ -43,14 +41,14 @@ There's an alternate syntax to specify the list of exported objects, supported f
 
 `--item STRING`: Description of the item to export. You can specify the `--item` parameter multiple times if you need to export multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
 
-- `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all of its items whose names do not start with a dot and, recursively, all subdirectories whose names do not start with a dot are exported.
+- `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all its child non-system objects and, recursively, all non-system subdirectories are exported.
 - `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items.
-
-`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Specify this parameter multiple times for different templates.
 
 The exports made using the alternate syntax will not contain a list of objects as part of the backup, so some features may not be available for them (like encryption), and imports are possible only using the corresponding alternate syntax of import.
 
 {% endcut %}
+
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Paths are relative to the `root-path`. You may specify this parameter multiple times for different templates.
 
 ### Additional parameters {#aux}
 
@@ -145,7 +143,7 @@ The `operation list` format is also set by the `--format` option.
 
 ### Exporting a database {#example-full-db}
 
-Exporting all DB objects whose names do not start with a dot and that are not stored in directories whose names start with a dot to the `export1` directory in `mybucket` using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
+Exporting all DB non-system objects to the `export1` directory in `mybucket` using the S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
 
 ```bash
 {{ ydb-cli }} -p quickstart export s3 \

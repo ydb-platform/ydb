@@ -1,6 +1,6 @@
 # Importing data from an S3 compatible storage
 
-The `import s3` command starts, on the server side, the process of importing data and schema object details from an S3-compatible storage, in the format described in the [File structure](../file-structure.md) section:
+The `import s3` command starts, on the server side, the process of importing data and schema objects details from an S3-compatible storage, in the format described in the [File structure](../file-structure.md) section:
 
 ```bash
 {{ ydb-cli }} [connection options] import s3 [options]
@@ -16,13 +16,13 @@ If you need to import some more data to your existing S3 tables (for example, us
 
 `[options]`: Command parameters:
 
-### S3 connection parameters {#s3-conn}
+### S3 parameters {#s3-params}
 
 To run the command to import data from an S3 storage, specify the [S3 connection parameters](../auth-s3.md). As data is imported by the YDB server asynchronously, the specified endpoint must be available so that a connection can be established from the server side.
 
-### Imported schema objects {#objects}
-
 `--source-prefix PREFIX`: Source prefix for export in the bucket.
+
+### Imported schema objects {#objects}
 
 `--destination-path PATH`: Destination folder for the objects being imported; defaults to the database root if not provided.
 

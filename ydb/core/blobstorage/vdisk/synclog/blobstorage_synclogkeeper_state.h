@@ -8,6 +8,7 @@
 
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_state.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
 
 namespace NKikimr {
     namespace NSyncLog {
@@ -161,6 +162,7 @@ namespace NKikimr {
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
             void AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags);
+            TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
 
         private:
             // VDisk Context

@@ -788,7 +788,9 @@ enum ESyncFullStage {
     LogoBlobs = 1;
     Blocks = 2;
     Barriers = 3;
+    PhantomFlags = 4;
 }
+
 // Legacy protocol relies on linear order of blobs, barriers and blocks,
 // because it uses new snapshot on every TEvVSyncFull event and so it requires
 // these keys to know, where to continue from.

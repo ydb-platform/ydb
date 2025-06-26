@@ -11,7 +11,9 @@ PEERDIR(
 
 SRCS(
     phantom_flag_storage_builder.cpp
+    phantom_flag_storage_snapshot.cpp
     phantom_flag_storage_state.cpp
+    phantom_flag_thresholds.cpp
 )
 
 END()

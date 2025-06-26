@@ -4,8 +4,22 @@ namespace NKikimr {
 
 namespace NSyncLog {
 
+TPhantomFlagStorageState::TPhantomFlagStorageState(const TBlobStorageGroupType& gtype)
+    : GType(gtype)
+    , Thresholds(GType)
+{}
+
 void TPhantomFlagStorageState::Activate() {
     Active = true;
+}
+
+void TPhantomFlagStorageState::AddBlobRecord(const TLogoBlobRec& blobRec) {
+    if (blobRec.Ingress.IsDoNotKeep(GType)) {
+        // TODO: use threshold structure
+        if (true || Thresholds.IsBehindThreshold(blobRec.LogoBlobID())) {
+            StoredFlags.push_back(blobRec);
+        }
+    }
 }
 
 void TPhantomFlagStorageState::AddFlags(TPhantomFlags flags) {
@@ -16,8 +30,8 @@ void TPhantomFlagStorageState::Clear() {
     StoredFlags.clear();
 }
 
-TPhantomFlags TPhantomFlagStorageState::GetFlags() const {
-    return StoredFlags;
+TPhantomFlagStorageSnapshot TPhantomFlagStorageState::GetSnapshot() const {
+    return TPhantomFlagStorageSnapshot(StoredFlags);
 }
 
 bool TPhantomFlagStorageState::IsActive() const {

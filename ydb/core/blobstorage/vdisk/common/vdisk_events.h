@@ -2912,7 +2912,7 @@ namespace NKikimr {
         TEvVSyncFull(const TSyncState &syncState, const TVDiskID &sourceVDisk, const TVDiskID &targetVDisk,
                 ui64 cookie, NKikimrBlobStorage::ESyncFullStage stage,
                 const TLogoBlobID &logoBlobFrom, ui64 blockTabletFrom, const TKeyBarrier &barrierFrom,
-                NKikimrBlobStorage::EFullSyncProtocol protocol = NKikimrBlobStorage::EFullSyncProtocol::Legacy);
+                NKikimrBlobStorage::EFullSyncProtocol protocol = NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
 
         bool IsInitial() const {
             return Record.GetCookie() == 0;

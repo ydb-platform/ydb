@@ -44,6 +44,7 @@ namespace NKikimr {
             , SyncLogMaxEntryPointSize(syncLogMaxEntryPointSize)
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
             , SelfId(selfId)
+            , PhantomFlagStorageState(SlCtx->VCtx->Top->GType)
         {}
 
         // Calculate first lsn in recovery log we must keep
@@ -69,6 +70,7 @@ namespace NKikimr {
 
         void TSyncLogKeeperState::PutOne(const TRecordHdr *rec, ui32 size) {
             SyncLogPtr->PutOne(rec, size);
+            // TODO: put blobs and hard barriers in phantom flag storage thresholds
             // Check for memory overflow
             if (SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages)
                 DelayedActions.SetMemOverflow();
@@ -418,6 +420,10 @@ namespace NKikimr {
 
         void TSyncLogKeeperState::AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags) {
             PhantomFlagStorageState.AddFlags(std::forward<TPhantomFlags>(flags));
+        }
+
+        TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {
+            return PhantomFlagStorageState.GetSnapshot();
         }
 
     } // NSyncLog

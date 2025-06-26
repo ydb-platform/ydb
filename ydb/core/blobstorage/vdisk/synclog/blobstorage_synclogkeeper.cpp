@@ -252,6 +252,10 @@ namespace NKikimr {
                 KeepState.AddFlagsToPhantomFlagStorage(std::move(ev->Get()->Flags));
             }
 
+            void Handle(TEvPhantomFlagStorageGetSnapshot::TPtr ev) {
+                Send(ev->Sender, new TEvPhantomFlagStorageGetSnapshotResult(KeepState.GetPhantomFlagStorageSnapshot()));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -265,6 +269,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvPoisonPill, Handle)
                 HFunc(TEvListChunks, Handle)
                 hFunc(TEvPhantomFlagStorageAddFlagsFromSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
             )
 
         public:

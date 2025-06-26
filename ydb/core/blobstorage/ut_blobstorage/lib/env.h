@@ -376,7 +376,7 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_HULLRECS,
 //            NKikimrServices::BS_HULLHUGE,
 //            NKikimrServices::BS_REPL,
-//            NKikimrServices::BS_SYNCER,
+            NKikimrServices::BS_SYNCER,
 //            NKikimrServices::BS_SYNCLOG,
 //            NKikimrServices::BS_SYNCJOB,
 //            NKikimrServices::BS_QUEUE,

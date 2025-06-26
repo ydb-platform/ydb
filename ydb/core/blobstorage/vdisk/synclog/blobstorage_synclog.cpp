@@ -291,7 +291,7 @@ namespace NKikimr {
                 ctx.Send(ev->Forward(KeeperId));
             }
 
-            void Handle(TEvPhantomFlagStorageGetFlags::TPtr ev) {
+            void Handle(TEvPhantomFlagStorageGetSnapshot::TPtr ev) {
                 Send(ev->Forward(KeeperId));
             }
 
@@ -309,7 +309,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvCompleted, HandleActorCompletion)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
                 HFunc(TEvListChunks, Handle)
-                hFunc(TEvPhantomFlagStorageGetFlags, Handle)
+                hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
             )
 
         public:

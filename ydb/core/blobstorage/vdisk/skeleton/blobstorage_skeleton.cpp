@@ -1816,7 +1816,7 @@ namespace NKikimr {
             // which makes VDisk unable to sync with at all
             if (DbBirthLsn) {
                 Db->SyncFullHandlerID.Set(ctx.RegisterWithSameMailbox(CreateHullSyncFullHandler(Db, HullCtx,
-                    SelfVDiskId, ctx.SelfID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
+                    SelfVDiskId, ctx.SelfID, Db->SyncLogID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
                 ActiveActors.Insert(Db->SyncFullHandlerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
 

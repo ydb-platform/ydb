@@ -33,6 +33,7 @@ namespace NKikimr {
         const TIntrusivePtr<TVDiskConfig> &config,
         const TIntrusivePtr<THullCtx> &hullCtx,
         const TActorId &parentId,
+        const TActorId& syncLogActorId,
         THullDsSnap &&fullSnap,
         const TSyncState& syncState,
         const TVDiskID& selfVDiskId,

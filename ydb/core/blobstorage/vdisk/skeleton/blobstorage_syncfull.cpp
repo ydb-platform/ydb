@@ -4,7 +4,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
-#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 
 using namespace NKikimrServices;
@@ -56,7 +56,7 @@ namespace NKikimr {
 
         constexpr static TDuration MaxProcessingTime = TDuration::MilliSeconds(5);  // half of a quota for mailbox
 
-    private:
+    protected:
         // keys are subject to change during the processing
         TKeyLogoBlob KeyLogoBlob;
         TKeyBlock KeyBlock;
@@ -142,58 +142,7 @@ namespace NKikimr {
             return result;
         }
 
-        bool RunStages() {
-            if (!Result) {
-                Result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::OK, SelfVDiskId,
-                        SyncState, CurrentEvent->Get()->Record.GetCookie(), TActivationContext::Now(),
-                        IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, CurrentEvent->GetChannel());
-                LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
-            }
-
-            TString* data = Result->Record.MutableData();
-            ui32 pres = 0;
-            switch (Stage) {
-                case NKikimrBlobStorage::LogoBlobs:
-                    Stage = NKikimrBlobStorage::LogoBlobs;
-                    pres = Process(FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter, data);
-                    if (pres & MsgFullFlag) {
-                        break;
-                    } else if (pres & LongProcessing) {
-                        return false;
-                    }
-                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
-                    [[fallthrough]];
-                case NKikimrBlobStorage::Blocks:
-                    Stage = NKikimrBlobStorage::Blocks;
-                    pres = Process(FullSnap.BlocksSnap, KeyBlock, FakeFilter, data);
-                    if (pres & MsgFullFlag) {
-                        break;
-                    } else if (pres & LongProcessing) {
-                        return false;
-                    }
-                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
-                    [[fallthrough]];
-                case NKikimrBlobStorage::Barriers:
-                    Stage = NKikimrBlobStorage::Barriers;
-                    pres = Process(FullSnap.BarriersSnap, KeyBarrier, FakeFilter, data);
-                    if (pres & LongProcessing) {
-                        return false;
-                    }
-                    break;
-                default: Y_ABORT("Unexpected case: stage=%d", Stage);
-            }
-
-            bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::Barriers;
-
-            // Status, SyncState, Data and VDiskID are already set up; set up other
-            Result->Record.SetFinished(finished);
-            Result->Record.SetStage(Stage);
-            LogoBlobIDFromLogoBlobID(KeyLogoBlob.LogoBlobID(), Result->Record.MutableLogoBlobFrom());
-            Result->Record.SetBlockTabletFrom(KeyBlock.TabletId);
-            KeyBarrier.Serialize(*Result->Record.MutableBarrierFrom());
-        
-            return true;
-        }
+        virtual ui32 ProcessPhantomFlags(TString* data) = 0;
 
         std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> RunStages(const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
             LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
@@ -224,6 +173,13 @@ namespace NKikimr {
                 case NKikimrBlobStorage::Barriers:
                     Stage = NKikimrBlobStorage::Barriers;
                     pres = Process(FullSnap.BarriersSnap, KeyBarrier, FakeFilter, data);
+                    if (pres & (MsgFullFlag | LongProcessing))
+                        break;
+                    [[fallthrough]];
+                case NKikimrBlobStorage::PhantomFlags:
+                    Cerr << "PROCESS PHANTOM FLAGS" << Endl;
+                    pres = ProcessPhantomFlags(data);
+                    Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     break;
                 default: Y_ABORT("Unexpected case: stage=%d", Stage);
             }
@@ -270,6 +226,8 @@ namespace NKikimr {
             , KeyBarrier(keyBarrier)
             , Stage(stage)
         {}
+
+        virtual ~THullSyncFullBase() = default;
     };
 
 
@@ -299,88 +257,9 @@ namespace NKikimr {
             return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
         }
 
-    public:
-        THullSyncFullBase(
-                const TIntrusivePtr<TVDiskConfig> &config,
-                const TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
-                THullDsSnap &&fullSnap,
-                const TSyncState& syncState,
-                const TVDiskID& selfVDiskId,
-                const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
-                const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
-                const TEvBlobStorage::TEvVSyncFull::TPtr& ev,
-                TKeyLogoBlob keyLogoBlob,
-                TKeyBlock keyBlock,
-                TKeyBarrier keyBarrier,
-                NKikimrBlobStorage::ESyncFullStage stage)
-            : Config(config)
-            , HullCtx(hullCtx)
-            , ParentId(parentId)
-            , FullSnap(std::move(fullSnap))
-            , SyncState(syncState)
-            , SelfVDiskId(selfVDiskId)
-            , IFaceMonGroup(ifaceMonGroup)
-            , FullSyncGroup(fullSyncGroup)
-            , CurrentEvent(ev)
-            , FakeFilter()
-            , LogoBlobFilter(HullCtx, VDiskIDFromVDiskID(CurrentEvent->Get()->Record.GetSourceVDiskID()))
-            , KeyLogoBlob(keyLogoBlob)
-            , KeyBlock(keyBlock)
-            , KeyBarrier(keyBarrier)
-            , Stage(stage)
-        {}
-    };
-
-    ////////////////////////////////////////////////////////////////////////////
-    // THullSyncFullActorUnorderedDataProtocol
-    ////////////////////////////////////////////////////////////////////////////
-    class THullSyncFullActorUnorderedDataProtocol : public THullSyncFullBase,
-            public TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol> {
-    public:
-        void Bootstrap() {
-            ++FullSyncGroup->UnorderedDataProtocolActorsCreated();
-            Become(&TThis::StateFunc);
-            Handle(InitialEvent);
-        }
-
-    ////////////////////////////////////////////////////////////////////////////
-    // THullSyncFullActorLegacyProtocol
-    ////////////////////////////////////////////////////////////////////////////
-    class THullSyncFullActorLegacyProtocol : public THullSyncFullBase,
-            public TActorBootstrapped<THullSyncFullActorLegacyProtocol> {
-
-    public:
-        void Bootstrap() {
-            Become(&TThis::StateFunc);
-            Run();
-        }
-
-        void Handle(const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
-            CurrentEvent = ev;
-            Run();
-        }
-
-        void Run() {
-            bool portionCompleted = RunStages();
-            if (portionCompleted) {
-                SendVDiskResponse(TActivationContext::AsActorContext(), CurrentEvent->Sender,
-                        Result.release(), 0, HullCtx->VCtx, {});
-                // notify parent about death
-                Send(ParentId, new TEvents::TEvGone);
-                PassAway();
-            } else {
-                Schedule(TDuration::Zero(), new TEvents::TEvWakeup);
-            }
-        }
-    
-        STRICT_STFUNC(StateFunc,
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
-            cFunc(TEvents::TEvWakeup::EventType, Run)
-        )
-
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return NKikimrServices::TActivity::BS_HULL_SYNC_FULL;
+        virtual ui32 ProcessPhantomFlags(TString*) override {
+            // legacy protocol doesn't work with PhantomFlagStorage
+            return EmptyFlag;
         }
 
         THullSyncFullActorLegacyProtocol(
@@ -412,8 +291,8 @@ namespace NKikimr {
     public:
         void Bootstrap() {
             ++FullSyncGroup->UnorderedDataProtocolActorsCreated();
-            Become(&TThis::StateFunc);
-            Run();
+            Become(&TThis::StateInit);
+            Send(SyncLogActorId, new NSyncLog::TEvPhantomFlagStorageGetSnapshot);
         }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -421,10 +300,11 @@ namespace NKikimr {
         }
     
         THullSyncFullActorUnorderedDataProtocol(
-                const TIntrusivePtr<TVDiskConfig> &config,
-                const TIntrusivePtr<THullCtx> &hullCtx,
-                const TActorId &parentId,
-                THullDsSnap &&fullSnap,
+                const TIntrusivePtr<TVDiskConfig>& config,
+                const TIntrusivePtr<THullCtx>& hullCtx,
+                const TActorId& parentId,
+                const TActorId& syncLogActorId,
+                THullDsSnap&& fullSnap,
                 const TSyncState& syncState,
                 const TVDiskID& selfVDiskId,
                 const std::shared_ptr<NMonGroup::TVDiskIFaceGroup>& ifaceMonGroup,
@@ -434,37 +314,88 @@ namespace NKikimr {
                     syncState, selfVDiskId, ifaceMonGroup, fullSyncGroup, ev, TKeyLogoBlob::First(), 
                     TKeyBlock::First(), TKeyBarrier::First(), NKikimrBlobStorage::LogoBlobs)
             , TActorBootstrapped<THullSyncFullActorUnorderedDataProtocol>()
+            , SyncLogActorId(syncLogActorId)
         {}
-
+    
     private:
-        void Handle(TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
-            CurrentEvent = ev;
-            Run();
+        void Serialize(TString* buf, const NSyncLog::TLogoBlobRec& rec) {
+            char tmpBuf[NSyncLog::MaxRecFullSize];
+            auto s = NSyncLog::TSerializeRoutines::SetLogoBlob;
+            ui32 size = s(HullCtx->VCtx->Top->GType, tmpBuf, 0, rec.LogoBlobID(), rec.Ingress);
+            buf->append(tmpBuf, size);
         }
 
-        void Run() {
-            bool portionCompleted = RunStages();
-            if (portionCompleted) {
-                bool finished = Result->Record.GetFinished();
-                // send reply
-                SendVDiskResponse(TActivationContext::AsActorContext(), CurrentEvent->Sender, Result.release(),
-                        0, HullCtx->VCtx, {});
-                // notify parent about death
-                if (finished) {
-                    Send(ParentId, new TEvents::TEvGone);
-                    ++FullSyncGroup->UnorderedDataProtocolActorsTerminated();
-                    PassAway();
+        virtual ui32 ProcessPhantomFlags(TString* data) override {
+            TFrequentlyCalledHPTimer timer(MaxProcessingTime);
+            Stage = NKikimrBlobStorage::PhantomFlags;
+
+            // reserve some space for data
+            if (data->capacity() < Config->MaxResponseSize) {
+                data->reserve(Config->MaxResponseSize);
+            }
+
+            // copy data until we have some space
+            ui32 result = 0;
+            for (; PhantomFlagIterator != PhantomFlagStorageSnapshot->Flags.end(); ++PhantomFlagIterator) {
+                if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
+                    result |= MsgFullFlag;
+                    break;
                 }
-            } else {
-                Schedule(TDuration::Zero(), new TEvents::TEvWakeup);
+
+                if (timer.Check()) {
+                    result |= LongProcessing;
+                    break;
+                }
+
+                if (true) { // TODO: borders
+                    Serialize(data, *PhantomFlagIterator);
+                }
+            }
+
+            // key points to the last seen key
+            if (PhantomFlagIterator == PhantomFlagStorageSnapshot->Flags.end()) {
+                result |= EmptyFlag;
+            }
+
+            return result;
+        }
+
+        void Handle(const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
+            std::unique_ptr<TEvBlobStorage::TEvVSyncFullResult> result = RunStages(ev);
+            bool finished = result->Record.GetFinished();
+            // send reply
+            SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, result.release(),
+                    0, HullCtx->VCtx, {});
+            // notify parent about death
+            if (finished) {
+                Send(ParentId, new TEvents::TEvGone);
+                ++FullSyncGroup->UnorderedDataProtocolActorsTerminated();
+                PassAway();
             }
         }
+
+        void Handle(NSyncLog::TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
+            PhantomFlagStorageSnapshot = std::move(ev->Get()->Snapshot);
+            PhantomFlagIterator = PhantomFlagStorageSnapshot->Flags.begin();
+            Become(&TThis::StateFunc);
+            Handle(InitialEvent);
+        }
+
+        STRICT_STFUNC(StateInit,
+            hFunc(NSyncLog::TEvPhantomFlagStorageGetSnapshotResult, Handle)
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
+        )
 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvBlobStorage::TEvVSyncFull, Handle)
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
             cFunc(TEvents::TEvWakeup::EventType, Run)
         )
+
+    private:
+        const TActorId SyncLogActorId;
+        std::optional<NSyncLog::TPhantomFlagStorageSnapshot> PhantomFlagStorageSnapshot;
+        NSyncLog::TPhantomFlags::iterator PhantomFlagIterator;
     };
 
     IActor *CreateHullSyncFullActorLegacyProtocol(
@@ -490,6 +421,7 @@ namespace NKikimr {
             const TIntrusivePtr<TVDiskConfig> &config,
             const TIntrusivePtr<THullCtx> &hullCtx,
             const TActorId &parentId,
+            const TActorId& syncLogActorId,
             THullDsSnap &&fullSnap,
             const TSyncState& syncState,
             const TVDiskID& selfVDiskId,
@@ -497,7 +429,7 @@ namespace NKikimr {
             const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
             const TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
         return new THullSyncFullActorUnorderedDataProtocol(config, hullCtx, parentId,
-                std::move(fullSnap), syncState, selfVDiskId, ifaceMonGroup,
+                syncLogActorId, std::move(fullSnap), syncState, selfVDiskId, ifaceMonGroup,
                 fullSyncGroup, ev);
     }
 

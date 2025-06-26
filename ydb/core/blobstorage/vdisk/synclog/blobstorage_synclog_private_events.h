@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "blobstorage_synclogdata.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
 #include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr {
@@ -83,20 +83,20 @@ namespace NKikimr {
             TPhantomFlags Flags;
         };
 
-        struct TEvPhantomFlagStorageGetFlags
-                : public TEventLocal<TEvPhantomFlagStorageGetFlags,
-                                     TEvBlobStorage::EvPhantomFlagStorageGetFlags>
+        struct TEvPhantomFlagStorageGetSnapshot
+                : public TEventLocal<TEvPhantomFlagStorageGetSnapshot,
+                                     TEvBlobStorage::EvPhantomFlagStorageGetSnapshot>
         {};
 
-        struct TEvPhantomFlagStorageGetFlagsResult
-                : public TEventLocal<TEvPhantomFlagStorageGetFlagsResult,
-                                     TEvBlobStorage::EvPhantomFlagStorageGetFlagsResult>
+        struct TEvPhantomFlagStorageGetSnapshotResult
+                : public TEventLocal<TEvPhantomFlagStorageGetSnapshotResult,
+                                     TEvBlobStorage::EvPhantomFlagStorageGetSnapshotResult>
         {
-            TEvPhantomFlagStorageGetFlagsResult(TPhantomFlags&& flags)
-                : Flags(std::forward<TPhantomFlags>(flags))
+            TEvPhantomFlagStorageGetSnapshotResult(TPhantomFlagStorageSnapshot&& snapshot)
+                : Snapshot(std::forward<TPhantomFlagStorageSnapshot>(snapshot))
             {}
 
-            TPhantomFlags Flags;
+            TPhantomFlagStorageSnapshot Snapshot;
         };
     } // NSyncLog
 } // NKikimr

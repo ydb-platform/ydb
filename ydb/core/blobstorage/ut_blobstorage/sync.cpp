@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
     }
 
     Y_UNIT_TEST(SyncWhenDiskGetsDown) {
-        return; // re-enable when protocol issue is resolved
+        // return; // re-enable when protocol issue is resolved
 
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -204,6 +204,8 @@ Y_UNIT_TEST_SUITE(BlobStorageSync) {
         }
         env.Sim(TDuration::Minutes(1));
         auto blobsIntermediate = collectBlobInfo();
+
+        Cerr << " --------- START NODE --------- " << Endl;
 
         env.StartNode(suspendedNodeId);
         env.Sim(TDuration::Minutes(1));

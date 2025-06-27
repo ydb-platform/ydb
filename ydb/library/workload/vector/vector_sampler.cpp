@@ -17,23 +17,16 @@ TVectorSampler::TVectorSampler(const TVectorWorkloadParams& params)
 {
 }
 
-void TVectorSampler::SampleExistingVectors() {
-    Cout << "Sampling " << Params.Targets << " vectors from dataset..." << Endl;
+ui64 TVectorSampler::SelectOneId(bool min) {
+    std::string query = std::format(R"_(--!syntax_v1
+        SELECT CAST({1} AS uint64) AS id FROM {0} ORDER BY {1} {2} LIMIT 1;
+    )_", Params.TableName.c_str(), Params.KeyColumn.c_str(), min ? "" : "DESC");
 
-    // Create a local random generator
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-
-    // First query to get min and max ID range
-    std::string minMaxQuery = std::format(R"_(--!syntax_v1
-        SELECT Unwrap(MIN({1})) as min_id, Unwrap(MAX({1})) as max_id FROM {0};
-    )_", Params.TableName.c_str(), Params.KeyColumn.c_str());
-
-    // Execute the range query
+    // Execute the query
     std::optional<NYdb::TResultSet> rangeResultSet;
-    NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&minMaxQuery, &rangeResultSet](NYdb::NQuery::TSession session) {
+    NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&query, &rangeResultSet](NYdb::NQuery::TSession session) {
         auto result = session.ExecuteQuery(
-            minMaxQuery,
+            query,
             NYdb::NQuery::TTxControl::NoTx())
             .GetValueSync();
 
@@ -46,8 +39,19 @@ void TVectorSampler::SampleExistingVectors() {
     // Parse the range result
     NYdb::TResultSetParser rangeParser(*rangeResultSet);
     Y_ABORT_UNLESS(rangeParser.TryNextRow());
-    ui64 minId = rangeParser.ColumnParser("min_id").GetUint64();
-    ui64 maxId = rangeParser.ColumnParser("max_id").GetUint64();
+    return rangeParser.ColumnParser("id").GetUint64();
+}
+
+void TVectorSampler::SampleExistingVectors() {
+    Cout << "Sampling " << Params.Targets << " vectors from dataset..." << Endl;
+
+    // Create a local random generator
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
+
+    // Select min and max ID
+    ui64 minId = SelectOneId(true);
+    ui64 maxId = SelectOneId(false);
 
     Y_ABORT_UNLESS(minId <= maxId, "Invalid ID range in the dataset: min=%lu, max=%lu", minId, maxId);
 

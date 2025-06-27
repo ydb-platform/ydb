@@ -30,6 +30,8 @@ private:
         std::optional<NYdb::TValue> PrefixValue;    // Sample prefix value
     };
     std::vector<TSelectTarget> SelectTargets;
+
+    ui64 SelectOneId(bool min);
 };
 
 } // namespace NYdbWorkload

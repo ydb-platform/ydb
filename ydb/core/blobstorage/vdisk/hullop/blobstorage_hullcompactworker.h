@@ -310,13 +310,13 @@ namespace NKikimr {
             , LastLsn(lastLsn)
             , It(it)
             , IsFresh(isFresh)
-            , IndexMerger(GType, HullCtx->AddHeader)
+            , IndexMerger(GType, HullCtx->VCfg->AddHeader)
             , ReadBatcher(HullCtx->VCtx->VDiskLogPrefix,
                     PDiskCtx->Dsk->ReadBlockSize,
                     PDiskCtx->Dsk->SeekTimeUs * PDiskCtx->Dsk->ReadSpeedBps / 1000000,
                     HullCtx->HullCompReadBatchEfficiencyThreshold)
             , Arena(&TRopeArenaBackend::Allocate)
-            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->AddHeader)
+            , DeferredItems(HullCtx->VCtx->VDiskLogPrefix, Arena, HullCtx->VCtx->Top->GType, HullCtx->VCfg->AddHeader)
             , Statistics(HullCtx)
             , RestoreDeadline(restoreDeadline)
             , PartitionKey(partitionKey)
@@ -324,14 +324,14 @@ namespace NKikimr {
         {
             if (IsFresh) {
                 ChunksToUse = HullCtx->HullSstSizeInChunksFresh;
-                MaxInFlightWrites = HullCtx->FreshCompMaxInFlightWrites;
-                MaxInFlightReads = HullCtx->FreshCompMaxInFlightReads;
+                MaxInFlightWrites = HullCtx->VCfg->FreshCompMaxInFlightWrites;
+                MaxInFlightReads = HullCtx->VCfg->FreshCompMaxInFlightReads;
                 ReadsInFlight = &LevelIndex->FreshCompReadsInFlight;
                 WritesInFlight = &LevelIndex->FreshCompWritesInFlight;
             } else {
                 ChunksToUse = HullCtx->HullSstSizeInChunksLevel;
-                MaxInFlightWrites = HullCtx->HullCompMaxInFlightWrites;
-                MaxInFlightReads = HullCtx->HullCompMaxInFlightReads;
+                MaxInFlightWrites = HullCtx->VCfg->HullCompMaxInFlightWrites;
+                MaxInFlightReads = HullCtx->VCfg->HullCompMaxInFlightReads;
                 ReadsInFlight = &LevelIndex->HullCompReadsInFlight;
                 WritesInFlight = &LevelIndex->HullCompWritesInFlight;
             }

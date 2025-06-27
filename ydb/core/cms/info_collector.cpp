@@ -206,15 +206,15 @@ void TInfoCollector::Bootstrap() {
 
 using TPileMap = TEvInterconnect::TEvNodesInfo::TPileMap;
 
-THashMap<ui32, ui32> FlipPileMap(const std::shared_ptr<const TPileMap> pileMap) {
-    THashMap<ui32, ui32> result;
+std::shared_ptr<THashMap<ui32, ui32>> FlipPileMap(const std::shared_ptr<const TPileMap> pileMap) {
+    auto result = std::make_shared<THashMap<ui32, ui32>>();
 
     if (!pileMap)
         return result;
 
     for (ui32 i = 0; i < pileMap->size(); ++i) {
         for (ui32 j : pileMap->at(i)) {
-            result.emplace(j, i);
+            result->emplace(j, i);
         }
     }
     return result;

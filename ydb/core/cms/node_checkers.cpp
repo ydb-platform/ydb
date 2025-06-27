@@ -30,27 +30,28 @@ void TNodesCounterBase::AddNode(ui32 nodeId) {
 }
 
 void TNodesCounterBase::UpdateNode(ui32 nodeId, NKikimrCms::EState state) {
+    const ui32 pileId = (*NodeIdToPileId)[nodeId];
     if (!NodeToState.contains(nodeId)) {
         AddNode(nodeId);
     }
 
     if (NodeToState[nodeId] == NODE_STATE_DOWN) {
-        --DownNodesCount;
+        --DownNodesCount[pileId];
     }
 
     if (IsNodeLocked(nodeId)) {
-        --LockedNodesCount;
+        --LockedNodesCount[pileId];
     }
 
     const auto nodeState = NodeState(state);
     NodeToState[nodeId] = nodeState;
 
     if (nodeState == NODE_STATE_RESTART || nodeState == NODE_STATE_LOCKED) {
-        ++LockedNodesCount;
+        ++LockedNodesCount[pileId];
     }
 
     if (nodeState == NODE_STATE_DOWN) {
-        ++DownNodesCount;
+        ++DownNodesCount[pileId];
     }
 }
 
@@ -61,25 +62,29 @@ bool TNodesCounterBase::IsNodeLocked(ui32 nodeId) const {
 
 void TNodesCounterBase::LockNode(ui32 nodeId) {
     Y_ABORT_UNLESS(!IsNodeLocked(nodeId));
+    const ui32 pileId = (*NodeIdToPileId)[nodeId];
+    ENodeState& state = NodeToState[nodeId];
 
-    ++LockedNodesCount;
-    if (NodeToState[nodeId] == NODE_STATE_DOWN) {
-        NodeToState[nodeId] = NODE_STATE_RESTART;
-        --DownNodesCount;
+    ++LockedNodesCount[pileId];
+    if (state == NODE_STATE_DOWN) {
+        state = NODE_STATE_RESTART;
+        --DownNodesCount[pileId];
     } else {
-        NodeToState[nodeId] = NODE_STATE_LOCKED;
+        state = NODE_STATE_LOCKED;
     }
 }
 
 void TNodesCounterBase::UnlockNode(ui32 nodeId) {
     Y_ABORT_UNLESS(IsNodeLocked(nodeId));
+    const ui32 pileId = (*NodeIdToPileId)[nodeId];
+    ENodeState& state = NodeToState[nodeId];
    
-    --LockedNodesCount;
-    if (NodeToState[nodeId] == NODE_STATE_RESTART) {
-        NodeToState[nodeId] = NODE_STATE_DOWN;
-        ++DownNodesCount;
+    --LockedNodesCount[pileId];
+    if (state == NODE_STATE_RESTART) {
+        state = NODE_STATE_DOWN;
+        ++DownNodesCount[pileId];
     } else {
-        NodeToState[nodeId] = NODE_STATE_UP;
+        state = NODE_STATE_UP;
     }
 }
 
@@ -89,14 +94,22 @@ const THashMap<ui32, INodesChecker::ENodeState>& TNodesCounterBase::GetNodeToSta
 
 bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const {
     Y_ABORT_UNLESS(NodeToState.contains(nodeId));
+    const ui32 pileId = (*NodeIdToPileId)[nodeId];
+
+    auto it = LockedNodesCount.find(pileId);
+    const ui32 lockedNodesCount = (it != LockedNodesCount.end()) ? it->second : 0;
+
+    it = DownNodesCount.find(pileId);
+    const ui32 downNodesCount = (it != DownNodesCount.end()) ? it->second : 0;
+    
     auto nodeState = NodeToState.at(nodeId);
 
     NCH_LOG_D("Checking Node: "
             << nodeId << ", with state: " << nodeState
             << ", with limit: " << DisabledNodesLimit
             << ", with ratio limit: " << DisabledNodesRatioLimit
-            << ", locked nodes: " << LockedNodesCount
-            << ", down nodes: " << DownNodesCount);
+            << ", locked nodes: " << lockedNodesCount
+            << ", down nodes: " << downNodesCount);
 
     switch (nodeState) {
         case NODE_STATE_UP:
@@ -117,18 +130,18 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
     }
 
     // Always allow at least one node
-    if (LockedNodesCount + DownNodesCount == 0) {
+    if (lockedNodesCount + downNodesCount == 0) {
         return true;
     }
 
-    const auto disabledNodes = LockedNodesCount + DownNodesCount + 1;
+    const auto disabledNodes = lockedNodesCount + downNodesCount + 1;
 
     if (DisabledNodesLimit > 0 && disabledNodes > DisabledNodesLimit) {
         reason = TReason(
             TStringBuilder() << ReasonPrefix(nodeId)
             << ": too many unavailable nodes."
-            << " Locked: " << LockedNodesCount
-            << ", down: " << DownNodesCount
+            << " Locked: " << lockedNodesCount
+            << ", down: " << downNodesCount
             << ", limit: " << DisabledNodesLimit,
             DisabledNodesLimitReachedReasonType()
         );
@@ -139,8 +152,8 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
         reason = TReason(
             TStringBuilder() << ReasonPrefix(nodeId)
             << ": too many unavailable nodes."
-            << " Locked: " << LockedNodesCount
-            << ", down: " << DownNodesCount
+            << " Locked: " << lockedNodesCount
+            << ", down: " << downNodesCount
             << ", total: " << NodeToState.size()
             << ", limit: " << DisabledNodesRatioLimit << "%",
             DisabledNodesLimitReachedReasonType()
@@ -153,13 +166,21 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
 
 bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TReason& reason) const {
     Y_ABORT_UNLESS(NodeToState.contains(nodeId));
+    const ui32 pileId = (*NodeIdToPileId)[nodeId];
+
+    auto it = LockedNodesCount.find(pileId);
+    const ui32 lockedNodesCount = (it != LockedNodesCount.end()) ? it->second : 0;
+
+    it = DownNodesCount.find(pileId);
+    const ui32 downNodesCount = (it != DownNodesCount.end()) ? it->second : 0;
+
     auto nodeState = NodeToState.at(nodeId);
 
     NCH_LOG_D("Checking limits for sys tablet: " << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)
             << ", on node: " << nodeId
             << ", with state: " << nodeState
-            << ", locked nodes: " << LockedNodesCount
-            << ", down nodes: " << DownNodesCount);
+            << ", locked nodes: " << lockedNodesCount
+            << ", down nodes: " << downNodesCount);
 
     switch (nodeState) {
         case NODE_STATE_UP:
@@ -180,7 +201,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
         return true;
     }
 
-    const auto disabledNodes = LockedNodesCount + DownNodesCount + 1;
+    const auto disabledNodes = lockedNodesCount + downNodesCount + 1;
     ui32 limit = 0;
 
     switch (mode) {
@@ -206,8 +227,8 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
         TStringBuilder() << "Cannot lock node '" << nodeId << "'"
         << ": tablet '" << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType) << "'"
         << " has too many unavailable nodes."
-        << " Locked: " << LockedNodesCount
-        << ", down: " << DownNodesCount
+        << " Locked: " << lockedNodesCount
+        << ", down: " << downNodesCount
         << ", limit: " << limit,
         TReason::EType::SysTabletsNodeLimitReached
     );

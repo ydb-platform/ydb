@@ -153,9 +153,9 @@ class ConnectionParams:
         return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
 
     def parse_token(self, token_file, iam_token_file):
-        if token_file or iam_token_file:
+        if token_file:
             self.token = self.read_stripped_file_and_close(token_file)
-        if iam_token_file:
+        elif iam_token_file:
             self.token = self.read_stripped_file_and_close(iam_token_file)
             self.token_type = 'Bearer'
         if self.token is None:

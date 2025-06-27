@@ -8,8 +8,8 @@ std::string GetCreateTablesSQL(const std::string& prefix) {
     return prefix + NResource::Find("create.sql"sv);
 }
 
-std::string GetLastRevisionSQL(const std::string& prefix) {
-    return prefix + "select nvl(max(`modified`), 1L) from `history`; select nvl(max(`id`), 1L) from `leases`;";
+std::string GetInitializeTablesSQL(const std::string& prefix) {
+    return prefix + "insert into `revision` (`stub`,`revision`,`timestamp`) values (false,0L,CurrentUtcTimestamp()),(true,0L,CurrentUtcTimestamp());";
 }
 
 }

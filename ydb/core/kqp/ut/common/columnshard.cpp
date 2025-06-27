@@ -105,6 +105,12 @@ namespace NKqp {
         }
     }
 
+    void TTestHelper::ExecuteQuery(const TString& query) const {
+        auto session = TableClient->CreateSession().GetValueSync().GetSession();
+        auto it = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString()); // Means stream successfully get
+    }
+
     void TTestHelper::RebootTablets(const TString& tableName) {
         auto runtime = GetKikimr().GetTestServer().GetRuntime();
         TActorId sender = runtime->AllocateEdgeActor();

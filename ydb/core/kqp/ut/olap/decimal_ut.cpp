@@ -44,6 +44,10 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             TestHelper.ReadData(query, expected);
         }
 
+        void ExecuteDataQuery(const TString& query) const {
+            TestHelper.ExecuteQuery(query);
+        }
+
         void PrepareTable1() {
             Schema = {
                 TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
@@ -85,6 +89,16 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
                 inserter.AddRow().Add(4).Add(2).Add(TDecimalValue("8.16", Precision, Scale));
                 Upsert(inserter);
             }
+        }
+
+        void PrepareTable3() {
+            Schema = {
+                TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("int").SetType(NScheme::NTypeIds::Int64),
+                TTestHelper::TColumnSchema().SetName("dec").SetType(NScheme::TDecimalType(Precision, Scale)),
+            };
+            TestTable.SetName("/Root/Table1").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(Schema);
+            TestHelper.CreateTable(TestTable);
         }
 
     private:
@@ -271,6 +285,38 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
 
         check(tester22);
         check(tester35);
+    }
+
+    Y_UNIT_TEST(TestDecimalBrokenArithmetic) {
+        TDecimalTestCase tester12(12, 2);
+        tester12.PrepareTable1();
+
+        auto check = [](const TDecimalTestCase& tester) {
+            tester.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"3.14\"]]]");
+            tester.CheckQuery("SELECT max(dec) FROM `/Root/Table1`", "[[[\"12.46\"]]]");
+            tester.CheckQuery("SELECT sum(dec) FROM `/Root/Table1`", "[[[\"32.252\"]]]");
+        };
+
+        check(tester12);
+    }
+
+    Y_UNIT_TEST(TestDecimalBrokenArithmetic1) {
+        TDecimalTestCase tester12(22, 9);
+        tester12.PrepareTable3();
+
+        const TString insertSql = R"(
+            INSERT INTO `/Root/Table1` (id, int, dec) VALUES
+                (1, 10, CAST("3.14"  AS DECIMAL(12,2))),
+                (2, 20, CAST("8.16"  AS DECIMAL(12,2))),
+                (3, 30, CAST("12.46" AS DECIMAL(12,2)));
+        )";
+
+        auto check = [=](const TDecimalTestCase& tester) {
+            tester.ExecuteDataQuery(insertSql);
+            tester.CheckQuery("SELECT min(dec) FROM `/Root/Table1`", "[[[\"3.14\"]]]");
+        };
+
+        check(tester12);
     }
 }
 

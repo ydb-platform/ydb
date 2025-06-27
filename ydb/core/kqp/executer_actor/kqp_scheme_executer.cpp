@@ -770,7 +770,25 @@ public:
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
         LOG_D("Handle TEvIndexBuilder::TEvGetResponse: record# " << record.ShortDebugString());
-        return ReplyErrorAndDie(record.GetStatus(), record.MutableIssues());
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            // Internal error: we made incorrect request to get status of index build operation
+            NYql::TIssues responseIssues;
+            NYql::IssuesFromMessage(record.GetIssues(), responseIssues);
+
+            NYql::TIssue issue(TStringBuilder() << "Failed to get index build status. Status: " << record.GetStatus());
+            for (const NYql::TIssue& i : responseIssues) {
+                issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
+            }
+
+            NYql::TIssues issues;
+            issues.AddIssue(std::move(issue));
+            return InternalError(issues);
+        }
+
+        NKikimrIndexBuilder::TIndexBuild& indexBuildResult = *record.MutableIndexBuild();
+        const Ydb::Table::IndexBuildState::State state = indexBuildResult.GetState();
+        const Ydb::StatusIds::StatusCode buildStatus = state == Ydb::Table::IndexBuildState::STATE_DONE ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED;
+        return ReplyErrorAndDie(buildStatus, indexBuildResult.MutableIssues());
     }
 
     template<typename TEv>

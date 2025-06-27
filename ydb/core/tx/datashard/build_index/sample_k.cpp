@@ -169,8 +169,8 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
 
         if (HasBuildError) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);

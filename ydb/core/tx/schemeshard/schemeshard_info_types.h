@@ -3274,7 +3274,7 @@ public:
         Ydb::StatusIds::StatusCode UploadStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TString DebugMessage;
 
-        TBillingStats Processed;
+        TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
 
         TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
@@ -3290,7 +3290,7 @@ public:
             result << " UploadStatus: " << Ydb::StatusIds::StatusCode_Name(UploadStatus);
             result << " DebugMessage: " << DebugMessage;
             result << " SeqNoRound: " << SeqNoRound;
-            result << " Processed: " << Processed.ToString();
+            result << " Processed: " << Processed.ShortDebugString();
 
             result << " }";
 
@@ -3304,8 +3304,8 @@ public:
     std::vector<TShardIdx> DoneShards;
     ui32 MaxInProgressShards = 32;
 
-    TBillingStats Processed;
-    TBillingStats Billed;
+    TMeteringStats Processed = TMeteringStatsHelper::ZeroValue();
+    TMeteringStats Billed = TMeteringStatsHelper::ZeroValue();
 
     struct TSample {
         struct TRow {
@@ -3559,24 +3559,21 @@ public:
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
 
-        auto& billed = indexInfo->Billed;
-        billed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
-        };
-        if (billed.GetUploadRows() != 0 && billed.GetReadRows() == 0 && indexInfo->IsFillBuildIndex()) {
-            // old format: assign upload to read
-            billed += {0, 0, billed.GetUploadRows(), billed.GetUploadBytes()};
+        indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
+        indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));
+        indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
+        indexInfo->Billed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0));
+        if (indexInfo->IsFillBuildIndex()) {
+            TMeteringStatsHelper::TryFixOldFormat(indexInfo->Billed);
         }
 
-        indexInfo->Processed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0),
-        };
+        indexInfo->Processed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0));
+        indexInfo->Processed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesProcessed>(0));
+        indexInfo->Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0));
+        indexInfo->Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0));
+        if (indexInfo->IsFillBuildIndex()) {
+            TMeteringStatsHelper::TryFixOldFormat(indexInfo->Processed);
+        }
 
         // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
         if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
@@ -3639,18 +3636,14 @@ public:
             Schema::IndexBuildShardStatus::UploadStatus>(
             Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
 
-        auto& processed = shardStatus.Processed;
-        processed = {
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadBytesProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
-        };
-        if (processed.GetUploadRows() != 0 && processed.GetReadRows() == 0 && IsFillBuildIndex()) {
-            // old format: assign upload to read
-            processed += {0, 0, processed.GetUploadRows(), processed.GetUploadBytes()};
+        shardStatus.Processed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadRowsProcessed>(0));
+        shardStatus.Processed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadBytesProcessed>(0));
+        shardStatus.Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0));
+        shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0));
+        if (IsFillBuildIndex()) {
+            TMeteringStatsHelper::TryFixOldFormat(shardStatus.Processed);
         }
-        Processed += processed;
+        Processed += shardStatus.Processed;
     }
 
     bool IsCancellationRequested() const {
@@ -3824,25 +3817,15 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus& info)
-{
-    o << info.ToString();
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo::TShardStatus, stream, value) {
+    stream << value.ToString();
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TBillingStats>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TBillingStats& stats)
-{
-    o << stats.ToString();
+Y_DECLARE_OUT_SPEC(inline, NKikimrIndexBuilder::TMeteringStats, stream, value) {
+    stream << value.ShortDebugString();
 }
 
-template <>
-inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
-    (IOutputStream& o, const NKikimr::NSchemeShard::TIndexBuildInfo& info)
-{
-
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
     o << "TBuildInfo{";
     o << " IndexBuildId: " << info.Id;
     o << ", Uid: " << info.Uid;

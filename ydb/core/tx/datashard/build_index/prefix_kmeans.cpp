@@ -197,8 +197,8 @@ public:
     TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
     {
         auto& record = Response->Record;
-        record.SetReadRows(ReadRows);
-        record.SetReadBytes(ReadBytes);
+        record.MutableMeteringStats()->SetReadRows(ReadRows);
+        record.MutableMeteringStats()->SetReadBytes(ReadBytes);
 
         Uploader.Finish(record, abort);
 

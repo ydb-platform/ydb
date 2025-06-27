@@ -142,8 +142,9 @@ public:
             UploaderId = {};
         }
 
-        response.SetUploadRows(UploadRows);
-        response.SetUploadBytes(UploadBytes);
+        response.MutableMeteringStats()->SetUploadRows(UploadRows);
+        response.MutableMeteringStats()->SetUploadBytes(UploadBytes);
+
         if (HasBuildError) {
             response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         } else if (abort != NTable::EAbort::None) {

@@ -41,8 +41,8 @@ public:
         Y_ABORT_UNLESS(version);
 
         auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
-        TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+        //TDataShardLocksDb locksDb(DataShard, txc);
+        DataShard.AddUserTable(pathId, tableInfo);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

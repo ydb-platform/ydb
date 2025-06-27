@@ -24,6 +24,7 @@ add_subdirectory(tpcc)
 add_subdirectory(tpcds)
 add_subdirectory(tpc_base)
 add_subdirectory(tpch)
+add_subdirectory(vector)
 
 add_library(ydb-library-workload INTERFACE)
 
@@ -41,5 +42,6 @@ target_link_libraries(ydb-library-workload INTERFACE
   library-workload-tpcc
   library-workload-tpcds
   library-workload-tpch
+  library-workload-vector
 )
 

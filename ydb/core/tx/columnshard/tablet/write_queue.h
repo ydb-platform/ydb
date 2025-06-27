@@ -48,7 +48,8 @@ public:
         , Behaviour(behaviour)
         , Timeout(timeout)
         , TxId(txId)
-        , IsBulk(isBulk) {
+        , IsBulk(isBulk)
+    {
     }
 
     const TInternalPathId& GetInternalPathId() const {

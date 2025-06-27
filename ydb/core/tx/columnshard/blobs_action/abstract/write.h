@@ -23,8 +23,8 @@ private:
     THashSet<TUnifiedBlobId> BlobsWaiting;
     bool Aborted = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
+    YDB_FLAG_ACCESSOR(Bulk, false);
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
-    bool IsBulk = false;
 
 protected:
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) = 0;
@@ -94,14 +94,6 @@ public:
     }
 
     void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId);
-
-    void SetIsBulk(const bool isBulk) {
-        IsBulk = isBulk;
-    }
-
-    bool GetIsBulk() const {
-        return IsBulk;
-    }
 };
 
 class TWriteActionsCollection {

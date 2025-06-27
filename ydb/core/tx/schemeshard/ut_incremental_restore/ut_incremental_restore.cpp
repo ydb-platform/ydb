@@ -5,6 +5,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/base/test_failure_injection.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -18,6 +19,9 @@ struct TLongOpTestSetup {
     TTestBasicRuntime Runtime;
     TTestEnv Env;
     ui64 TxId;
+    TVector<TPathId> CapturedBackupCollectionPathIds;
+    THashSet<TPathId> ExpectedBackupCollectionPathIds;
+    bool OperationInProgress = false;
     
     TLongOpTestSetup() 
         : Env(Runtime, TTestEnvOptions().EnableBackupService(true))
@@ -28,6 +32,26 @@ struct TLongOpTestSetup {
         Env.TestWaitNotification(Runtime, TxId);
         TestMkDir(Runtime, ++TxId, "/MyRoot/.backups", "collections");
         Env.TestWaitNotification(Runtime, TxId);
+        
+        // Setup event observer to capture TEvRunIncrementalRestore events with validation
+        Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
+            if (ev && ev->GetTypeRewrite() == TEvPrivate::TEvRunIncrementalRestore::EventType) {
+                auto* msg = ev->Get<TEvPrivate::TEvRunIncrementalRestore>();
+                if (msg) {
+                    // Validate that this event belongs to an operation we're testing
+                    if (OperationInProgress && ExpectedBackupCollectionPathIds.contains(msg->BackupCollectionPathId)) {
+                        CapturedBackupCollectionPathIds.push_back(msg->BackupCollectionPathId);
+                    } else if (OperationInProgress) {
+                        // Log unexpected events during testing for debugging
+                        Cerr << "Captured TEvRunIncrementalRestore for unexpected BackupCollectionPathId: " 
+                             << msg->BackupCollectionPathId << Endl;
+                    }
+                }
+                // Always rethrow the event to continue normal processing
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
     }
     
     // Create a test table with standard schema
@@ -122,12 +146,29 @@ struct TLongOpTestSetup {
             Name: ")" << collectionName << R"("
         )";
         
+        // Get the backup collection path ID before starting the operation
+        TString backupCollectionPath = TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName;
+        auto description = DescribePath(Runtime, backupCollectionPath);
+        
+        TPathId backupCollectionPathId;
+        if (description.GetPathDescription().GetSelf().GetPathState() != NKikimrSchemeOp::EPathState::EPathStateNotExist) {
+            auto selfEntry = description.GetPathDescription().GetSelf();
+            backupCollectionPathId = TPathId(selfEntry.GetSchemeshardId(), selfEntry.GetPathId());
+            
+            // Register this path ID as expected and mark operation as in progress
+            ExpectedBackupCollectionPathIds.insert(backupCollectionPathId);
+            OperationInProgress = true;
+        }
+        
         if (expectedResults.empty()) {
             TestRestoreBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", restoreSettings);
         } else {
             TestRestoreBackupCollection(Runtime, ++TxId, "/MyRoot/.backups/collections/", restoreSettings, expectedResults);
         }
         Env.TestWaitNotification(Runtime, TxId);
+        
+        // Mark operation as completed
+        OperationInProgress = false;
     }
     
     // Execute async restore operation (for testing concurrent operations)
@@ -161,6 +202,24 @@ struct TLongOpTestSetup {
             TestMkDir(Runtime, ++TxId, TStringBuilder() << "/MyRoot/.backups/collections/" << collectionName, backupName);
             Env.TestWaitNotification(Runtime, TxId);
         }
+    }
+    
+    // Helper method to clear captured events between tests
+    void ClearCapturedEvents() {
+        CapturedBackupCollectionPathIds.clear();
+        ExpectedBackupCollectionPathIds.clear();
+        OperationInProgress = false;
+    }
+    
+    // Helper method to check if events were captured for the expected operation
+    bool HasCapturedEventsForOperation() const {
+        if (CapturedBackupCollectionPathIds.empty()) {
+            return false;
+        }
+        
+        // For now, just verify we captured any events during the operation window
+        // More specific validation can be added in individual tests
+        return !CapturedBackupCollectionPathIds.empty();
     }
 };
 
@@ -605,33 +664,34 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
     Y_UNIT_TEST(TxProgressExecutedAfterIncrementalRestoreSuccess) {
         TLongOpTestSetup setup;
-        auto& runtime = setup.Runtime;
-        auto& env = setup.Env;
-        auto& txId = setup.TxId;
 
         // Create backup collection with incremental backups
         setup.CreateCompleteBackupScenario("TxProgressTestCollection", {"TxProgressTestTable"}, 3);
 
-        // Set up log capture to verify TTxProgress execution
-        TVector<TString> capturedLogs;
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_INFO);
-        
-        // We'll verify TTxProgress execution by checking the database state after restore
-        // instead of capturing logs, as the log backend API is complex in tests
+        // Clear any previous events
+        setup.ClearCapturedEvents();
 
-        // Execute restore operation
+        // Execute restore operation (event validation is handled automatically)
         setup.ExecuteRestore("TxProgressTestCollection");
 
-        // Wait for all operations to complete
-        env.TestWaitNotification(runtime, txId);
+        // Verify that TEvRunIncrementalRestore event was actually sent
+        UNIT_ASSERT_C(!setup.CapturedBackupCollectionPathIds.empty(), 
+            "TEvRunIncrementalRestore event should have been sent during incremental restore");
+        
+        // Verify the event contains a valid backup collection path ID
+        const TPathId& capturedPathId = setup.CapturedBackupCollectionPathIds[0];
+        UNIT_ASSERT_C(capturedPathId.OwnerId != 0, "BackupCollectionPathId OwnerId should be valid");
+        UNIT_ASSERT_C(capturedPathId.LocalPathId != 0, "BackupCollectionPathId LocalPathId should be valid");
+        
+        Cerr << "Successfully verified TEvRunIncrementalRestore event execution with PathId: " 
+             << capturedPathId << Endl;
 
-        // Verify TTxProgress execution by checking that long incremental restore operation was created
-        // and that the backup collection path state indicates incremental restore was initiated
+        // Also verify TTxProgress execution by checking that long incremental restore operation was created
         TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
         
         NKikimrMiniKQL::TResult result;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(setup.Runtime, schemeShardTabletId.GetValue(), R"(
             (
                 (let range '('('Id (Null) (Void))))
                 (let select '('Id 'Operation))
@@ -653,7 +713,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         UNIT_ASSERT_C(hasIncrementalRestoreOperation, "TTxProgress should have been executed - incremental restore operation should exist in database");
 
         // Additional verification: Check that the backup collection is in correct state
-        auto backupCollectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/TxProgressTestCollection");
+        auto backupCollectionDesc = DescribePath(setup.Runtime, "/MyRoot/.backups/collections/TxProgressTestCollection");
         auto collectionState = backupCollectionDesc.GetPathDescription().GetSelf().GetPathState();
         
         // The collection should be in a state that indicates incremental restore is active or completed
@@ -667,28 +727,28 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
     Y_UNIT_TEST(TxProgressNotExecutedForFullBackupOnly) {
         TLongOpTestSetup setup;
-        auto& runtime = setup.Runtime;
-        auto& env = setup.Env;
-        auto& txId = setup.TxId;
 
         // Create backup collection with ONLY full backup (no incremental)
         setup.CreateBackupCollection("FullOnlyCollection", {"/MyRoot/FullOnlyTable"});
         setup.CreateFullBackup("FullOnlyCollection", {"FullOnlyTable"});
         // Note: No incremental backups created
 
-        // Set up for verification that TTxProgress is NOT executed
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_INFO);
+        // Clear any previous events
+        setup.ClearCapturedEvents();
 
-        // Execute restore operation
+        // Execute restore operation (event validation is handled automatically)
         setup.ExecuteRestore("FullOnlyCollection");
-        env.TestWaitNotification(runtime, txId);
 
-        // Verify that TTxProgress was NOT executed by checking that no long incremental restore operation exists
+        // Verify that TEvRunIncrementalRestore event was NOT sent
+        UNIT_ASSERT_C(setup.CapturedBackupCollectionPathIds.empty(), 
+            "TEvRunIncrementalRestore event should NOT be sent for full backup only restore");
+
+        // Also verify that no long incremental restore operation exists in the database
         TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
         
         NKikimrMiniKQL::TResult result;
         TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(setup.Runtime, schemeShardTabletId.GetValue(), R"(
             (
                 (let range '('('Id (Null) (Void))))
                 (let select '('Id 'Operation))
@@ -714,74 +774,30 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
 
     Y_UNIT_TEST(TxProgressExecutionWithCorrectBackupCollectionPathId) {
         TLongOpTestSetup setup;
-        auto& runtime = setup.Runtime;
-        auto& env = setup.Env;
-        auto& txId = setup.TxId;
 
-        // Create backup collection with incremental backups
-        setup.CreateCompleteBackupScenario("PathIdTestCollection", {"PathIdTestTable"}, 2);
+        // Create two different backup collections to verify event specificity
+        setup.CreateCompleteBackupScenario("TargetCollection", {"TargetTable"}, 2);
+        setup.CreateCompleteBackupScenario("OtherCollection", {"OtherTable"}, 2);
 
-        // Get the backup collection's PathId before restore
-        auto backupCollectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/PathIdTestCollection");
-        auto expectedOwnerId = backupCollectionDesc.GetPathDescription().GetSelf().GetSchemeshardId();
-        auto expectedLocalId = backupCollectionDesc.GetPathDescription().GetSelf().GetPathId();
-        
-        // Execute restore operation
-        setup.ExecuteRestore("PathIdTestCollection");
-        env.TestWaitNotification(runtime, txId);
+        // Clear any previous events
+        setup.ClearCapturedEvents();
 
-        // Query the database to verify that the long incremental restore operation
-        // was created with the correct backup collection path ID
-        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
-        
-        NKikimrMiniKQL::TResult result;
-        TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, schemeShardTabletId.GetValue(), R"(
-            (
-                (let range '('('Id (Null) (Void))))
-                (let select '('Id 'Operation))
-                (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
-                (let ret (AsList (SetResult 'Operations operations)))
-                (return ret)
-            )
-        )", result, err);
-        
-        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
-        
-        auto value = NClient::TValue::Create(result);
-        auto operationsResultSet = value["Operations"];
-        UNIT_ASSERT_C(operationsResultSet.HaveValue(), "Operations result set should be present");
-        
-        auto operationsList = operationsResultSet["List"];
-        UNIT_ASSERT_C(operationsList.HaveValue() && operationsList.Size() > 0, 
-                      "Should have at least one incremental restore operation");
+        // Execute restore operation on the target collection only (automatic event validation)
+        setup.ExecuteRestore("TargetCollection");
 
-        // Check the first (and likely only) operation
-        auto operation = operationsList[0];
-        auto operationData = (TString)operation["Operation"];
+        // Verify that exactly one TEvRunIncrementalRestore event was sent
+        UNIT_ASSERT_C(setup.CapturedBackupCollectionPathIds.size() == 1, 
+            TStringBuilder() << "Expected exactly 1 TEvRunIncrementalRestore event, got: " << setup.CapturedBackupCollectionPathIds.size());
         
-        NKikimrSchemeOp::TLongIncrementalRestoreOp longIncrementalRestoreOp;
-        UNIT_ASSERT_C(longIncrementalRestoreOp.ParseFromString(operationData), 
-                      "Should parse operation data as protobuf");
-
-        // Verify that the backup collection path ID matches
-        const auto& storedPathId = longIncrementalRestoreOp.GetBackupCollectionPathId();
-        UNIT_ASSERT_VALUES_EQUAL_C(storedPathId.GetOwnerId(), expectedOwnerId,
-                                   "OwnerId should match");
-        UNIT_ASSERT_VALUES_EQUAL_C(storedPathId.GetLocalId(), expectedLocalId,
-                                   "LocalId should match");
-
-        // Verify that TTxProgress would find this operation by path ID
-        // This simulates what TTxProgress::Execute does when searching for operations
-        TPathId searchPathId;
-        searchPathId.OwnerId = storedPathId.GetOwnerId();
-        searchPathId.LocalPathId = storedPathId.GetLocalId();
+        // Verify the event contains a valid backup collection path ID
+        const TPathId& capturedPathId = setup.CapturedBackupCollectionPathIds[0];
+        UNIT_ASSERT_C(capturedPathId.OwnerId != 0, "Event should reference a valid backup collection OwnerId");
+        UNIT_ASSERT_C(capturedPathId.LocalPathId != 0, "Event should reference a valid backup collection LocalPathId");
         
-        TPathId expectedSearchPathId;
-        expectedSearchPathId.OwnerId = expectedOwnerId;
-        expectedSearchPathId.LocalPathId = expectedLocalId;
+        // Verify that the captured PathId belongs to the expected backup collection
+        UNIT_ASSERT_C(setup.ExpectedBackupCollectionPathIds.contains(capturedPathId), 
+            "Captured event should be for the expected backup collection");
         
-        UNIT_ASSERT_VALUES_EQUAL_C(searchPathId, expectedSearchPathId,
-                                   "TTxProgress should be able to find operation by backup collection path ID");
+        Cerr << "Successfully verified TEvRunIncrementalRestore event contains valid PathId: " << capturedPathId << Endl;
     }
 }

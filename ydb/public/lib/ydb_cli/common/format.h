@@ -74,7 +74,7 @@ private:
 
 class TCommandWithOutput: virtual public TCommandWithFormat {
 protected:
-    void AddOutputFormats(TClientCommand::TConfig& config, 
+    void AddOutputFormats(TClientCommand::TConfig& config,
                          const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat = EDataFormat::Pretty);
     void ParseOutputFormats();
 
@@ -159,6 +159,8 @@ private:
     void PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets);
     void PrintPrettyTable(const NJson::TJsonValue& plan);
     void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table);
+    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast);
+    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast, TVector<bool> hasMore);
     void PrintJson(const TString& plan);
     void PrintSimplifyJson(const NJson::TJsonValue& plan);
     TString JsonToString(const NJson::TJsonValue& jsonValue);

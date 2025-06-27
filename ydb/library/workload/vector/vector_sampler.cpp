@@ -55,35 +55,6 @@ void TVectorSampler::SampleExistingVectors() {
 
     Y_ABORT_UNLESS(minId <= maxId, "Invalid ID range in the dataset: min=%lu, max=%lu", minId, maxId);
 
-    // Query to get total count of vectors in the table
-    std::string countQuery = std::format(R"_(--!syntax_v1
-        SELECT Unwrap(COUNT(*)) FROM {0};
-    )_", Params.TableName.c_str());
-
-    // Execute the count query
-    std::optional<NYdb::TResultSet> countResultSet;
-    NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&countQuery, &countResultSet](NYdb::NQuery::TSession session) {
-        auto result = session.ExecuteQuery(
-            countQuery,
-            NYdb::NQuery::TTxControl::NoTx())
-            .GetValueSync();
-
-        Y_ABORT_UNLESS(result.IsSuccess(), "Count query failed: %s", result.GetIssues().ToString().c_str());
-
-        countResultSet = result.GetResultSet(0);
-        return result;
-    }));
-
-    // Parse the count result
-    NYdb::TResultSetParser countParser(*countResultSet);
-    Y_ABORT_UNLESS(countParser.TryNextRow());
-    ui64 totalVectors = countParser.ColumnParser(0).GetUint64();
-
-    Y_ABORT_UNLESS(totalVectors > 0, "No vectors found in the dataset");
-
-    // If we have fewer vectors than requested targets, adjust Params.Targets
-    Y_ABORT_UNLESS(totalVectors >= Params.Targets,  "Requested more targets than vectors exist in the dataset.");
-
     // Generate random IDs in the range
     std::set<ui64> sampleIds;
     std::uniform_int_distribution<ui64> idDist(minId, maxId);

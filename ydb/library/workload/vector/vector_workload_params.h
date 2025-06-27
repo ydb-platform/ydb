@@ -40,6 +40,7 @@ public:
     size_t KmeansTreeSearchClusters = 0;
     size_t Limit = 0;
     size_t RecallThreads = 0;
+    ui64 TableRowCount = 0;
     bool Recall;
 };
 

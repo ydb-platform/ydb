@@ -77,7 +77,8 @@ void TVectorWorkloadParams::Init() {
     const TString tablePath = GetFullTableName(TableName.c_str());
 
     auto session = TableClient->GetSession().ExtractValueSync().GetSession();
-    auto describeTableResult = session.DescribeTable(tablePath).GetValueSync();
+    auto describeTableResult = session.DescribeTable(tablePath,
+        NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).GetValueSync();
     Y_ABORT_UNLESS(describeTableResult.IsSuccess(), "DescribeTable failed: %s", describeTableResult.GetIssues().ToString().c_str());
 
     // Get the table description
@@ -124,6 +125,14 @@ void TVectorWorkloadParams::Init() {
                 "Key column '%s' in index '%s' must be an integer type. Found type: %s",
                 KeyColumn.c_str(), IndexName.c_str(), column.Type.ToString().c_str());
     }
+
+    if (!TableRowCount) {
+        TableRowCount = tableDescription.GetTableRows();
+    }
+    Y_ABORT_UNLESS(TableRowCount > 0, "Table %s is empty or statistics is not calculated yet", TableName.c_str());
+
+    // If we have fewer vectors than requested targets, adjust Params.Targets
+    Y_ABORT_UNLESS(TableRowCount >= Targets, "Requested more targets than row number in the dataset.");
 
     Y_ABORT_UNLESS(indexFound, "Index %s not found in table %s", IndexName.c_str(), TableName.c_str());
 }

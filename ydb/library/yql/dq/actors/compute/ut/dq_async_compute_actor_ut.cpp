@@ -434,7 +434,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         if (IsWide) {
             TUnboxedValueBatch result(WideRowType);
             result.PushRow([&](ui32 idx) {
-                return idx == 0 ? NUdf::TUnboxedValuePod(value) : NUdf::TUnboxedValuePod(ts);
+                return RowType->GetMemberName(idx) == "id" ? NUdf::TUnboxedValuePod(value) : NUdf::TUnboxedValuePod(ts);
             });
             return result;
         }

@@ -98,12 +98,14 @@ target_sources(core-mind-hive PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__unlock_tablet.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__update_dc_followers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__update_domain.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__update_pile.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_groups.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_metrics.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablet_status.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__update_tablets_object.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/balancer.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/boot_queue.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/bridge_pile_info.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/data_center_info.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/domain_info.h
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/hive.h

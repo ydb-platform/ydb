@@ -29,7 +29,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             Y_ABORT_UNLESS(metaProto.ParseFromString(metadata));
 
             auto operation = std::make_shared<TWriteOperation>(TUnifiedPathId{}, writeId, lockId, cookie, status, TInstant::Seconds(createdAtSec),
-                granuleShardingVersionId, NEvWrite::EModificationType::Upsert, false); // ??
+                granuleShardingVersionId, NEvWrite::EModificationType::Upsert, metaProto.GetIsBulk());
             operation->FromProto(metaProto);
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "register_operation_on_load")("operation_id", operation->GetWriteId());
             AFL_VERIFY(operation->GetStatus() != EOperationStatus::Draft);

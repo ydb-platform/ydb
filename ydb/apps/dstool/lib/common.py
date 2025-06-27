@@ -191,7 +191,10 @@ class ConnectionParams:
     def read_token_file(self, token_file_path, default_token_type):
         if token_file_path is None:
             return default_token_type, None
-        return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
+        try:
+            return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
+        except Exception:
+            return default_token_type, None
 
     def parse_token_value(self, token_value, default_token_type):
         if token_value is None:

@@ -123,27 +123,28 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         , IsWide(isWide)
         , TransportVersion(transportVersion)
     {
-        std::array<TType *, 2> inputTypes {
-            TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
-            TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv),
-        };
+        auto keyType = TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv);
+        auto tsType = TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv);
         RowType = TStructTypeBuilder(TypeEnv)
-                .Add("id", inputTypes[0])
-                .Add("ts", inputTypes[1])
+                .Add("id", keyType)
+                .Add("ts", tsType)
                 .Build();
+        TVector<TType *> inputTypes(Reserve(RowType->GetMembersCount()));
+        for (ui32 i = 0; i < RowType->GetMembersCount(); ++i) {
+            inputTypes.emplace_back(RowType->GetMemberType(i));
+        }
         WideRowType = TMultiType::Create(inputTypes.size(), inputTypes.data(), TypeEnv);
-        std::array<TType *, 4> outputTypes {
-            inputTypes[0],
-            inputTypes[1],
-            TOptionalType::Create(TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv), TypeEnv),
-            TOptionalType::Create(inputTypes[0], TypeEnv),
-        };
+
         RowTransformedType = TStructTypeBuilder(TypeEnv)
-                .Add("e.id", outputTypes[0])
-                .Add("e.ts", outputTypes[1])
-                .Add("u.data", outputTypes[2])
-                .Add("u.key", outputTypes[3])
+                .Add("e.id", keyType)
+                .Add("e.ts", tsType)
+                .Add("u.data", TOptionalType::Create(TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv), TypeEnv))
+                .Add("u.key", TOptionalType::Create(keyType, TypeEnv))
                 .Build();
+        TVector<TType *> outputTypes(Reserve(RowTransformedType->GetMembersCount()));
+        for (ui32 i = 0; i < RowTransformedType->GetMembersCount(); ++i) {
+            inputTypes.emplace_back(RowTransformedType->GetMemberType(i));
+        }
         WideRowTransformedType = TMultiType::Create(outputTypes.size(), outputTypes.data(), TypeEnv);
     }
 
@@ -298,38 +299,12 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         auto& input = *task.MutableInputs()->Mutable(0);
         auto& transform = *input.MutableTransform();
         transform.SetType("StreamLookupInputTransform");
-        auto tsType = TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv);
 
-        std::array<TType *, 2> inputTypes { keyType, tsType };
-        TType* inputType;
-        auto narrowInputType = TStructTypeBuilder(TypeEnv)
-                .Add("id", inputTypes[0])
-                .Add("ts", inputTypes[1])
-                .Build();
-        if (IsWide) {
-            inputType = TMultiType::Create(inputTypes.size(), inputTypes.data(), TypeEnv);
-        } else {
-            inputType = narrowInputType;
-        }
+        auto narrowInputType = RowType;
+        auto narrowOutputType = RowTransformedType;
+        TType* inputType = IsWide ? static_cast<TType *>(WideRowType) : RowType;
         transform.SetInputType(SerializeNode(inputType, TypeEnv));
-        std::array<TType *, 4> outputTypes {
-            keyType,
-            tsType,
-            TOptionalType::Create(valueType, TypeEnv),
-            TOptionalType::Create(keyType, TypeEnv),
-        };
-        auto narrowOutputType = TStructTypeBuilder(TypeEnv)
-                .Add("e.id", outputTypes[0])
-                .Add("e.ts", outputTypes[1])
-                .Add("u.data", outputTypes[2])
-                .Add("u.key", outputTypes[3])
-                .Build();
-        TType* outputType;
-        if (IsWide) {
-            outputType = TMultiType::Create(outputTypes.size(), outputTypes.data(), TypeEnv);
-        } else {
-            outputType = narrowOutputType;
-        }
+        TType* outputType = IsWide ? static_cast<TType *>(WideRowTransformedType) : RowTransformedType;
         transform.SetInputType(SerializeNode(inputType, TypeEnv));
         transform.SetOutputType(SerializeNode(outputType, TypeEnv));
         NDqProto::TDqInputTransformLookupSettings settings;
@@ -383,7 +358,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         settings.TransportVersion = TransportVersion;
         settings.MutableSettings.IsLocalChannel = true;
         return CreateDqOutputChannel(channelId, ThisStageId,
-                (IsWide ? (TType*)WideRowType : (TType *)RowType), HolderFactory,
+                (IsWide ? static_cast<TType*>(WideRowType) : RowType), HolderFactory,
                 settings,
                 logFunc);
     }
@@ -562,7 +537,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             return ctx.template MakeType<TDataExprType>(EDataSlot::Int32);
         });
         auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
-        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? (TType*)WideRowType : (TType *)RowType));
+        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowType) : RowType));
 
         auto asyncCA = CreateTestAsyncCA(task);
         ActorSystem.EnableScheduleForActor(asyncCA, true);
@@ -577,7 +552,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (doWatermark) {
                 NDqProto::TWatermark watermark;
-                watermark.SetTimestampUs((ui64)1'000'000 * packet);
+                watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
             }
             if (isFinal) {
@@ -665,7 +640,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             return structType;
         });
         auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
-        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? (TType*)WideRowTransformedType : (TType *)RowTransformedType));
+        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowTransformedType) : RowTransformedType));
         SetInputTransform(task,
                 TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
                 TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv)
@@ -684,7 +659,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (doWatermark) {
                 NDqProto::TWatermark watermark;
-                watermark.SetTimestampUs((ui64)1'000'000 * packet);
+                watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
             }
             if (isFinal) {

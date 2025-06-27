@@ -113,10 +113,12 @@ void TVectorWorkloadParams::Init() {
 
     // Verify that key and prefix columns have integer types
     for (const auto& column : tableDescription.GetColumns()) {
-        if (PrefixColumn.has_value() && column.Name == PrefixColumn.value())
-            Y_ABORT_UNLESS(column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"),
-                "Prefix column '%s' in index '%s' must be an integer type. Found type: %s",
-                PrefixColumn->c_str(), IndexName.c_str(), column.Type.ToString().c_str());
+        if (PrefixColumn.has_value() && column.Name == PrefixColumn.value()) {
+            auto str = column.Type.ToString();
+            if (str[str.size()-1] == '?')
+                str.resize(str.size()-1);
+            PrefixType = str;
+        }
         if (column.Name == KeyColumn)
             Y_ABORT_UNLESS(column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"),
                 "Key column '%s' in index '%s' must be an integer type. Found type: %s",

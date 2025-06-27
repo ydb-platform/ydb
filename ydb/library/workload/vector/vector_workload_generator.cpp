@@ -78,21 +78,13 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     CurrentIndex = (CurrentIndex + 1) % VectorSampler->GetTargetCount();
 
     // Create the query string
-    std::string query = MakeSelect(
-        Params.TableName,
-        Params.IndexName,
-        Params.KeyColumn,
-        Params.EmbeddingColumn,
-        Params.PrefixColumn,
-        Params.KmeansTreeSearchClusters,
-        Params.Metric
-    );
+    std::string query = MakeSelect(Params, Params.IndexName);
 
     // Get the embedding for the specified target
     const auto& targetEmbedding = VectorSampler->GetTargetEmbedding(CurrentIndex);
 
     // Get the prefix value if needed
-    std::optional<i64> prefixValue;
+    std::optional<NYdb::TValue> prefixValue;
     if (Params.PrefixColumn.has_value()) {
         prefixValue = VectorSampler->GetPrefixValue(CurrentIndex);
     }

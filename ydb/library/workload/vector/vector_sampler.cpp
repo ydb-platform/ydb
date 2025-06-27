@@ -151,43 +151,7 @@ void TVectorSampler::SampleExistingVectors() {
 
         // Get prefix value if column was specified
         if (Params.PrefixColumn) {
-            const auto& prefixCell = vectorParser.ColumnParser("prefix_value");
-            NYdb::EPrimitiveType primitiveType = prefixCell.GetPrimitiveType();
-
-            // Handle different integer types based on primitive type
-            switch (primitiveType) {
-                case NYdb::EPrimitiveType::Int8:
-                    target.PrefixValue = prefixCell.GetInt8();
-                    break;
-                case NYdb::EPrimitiveType::Int16:
-                    target.PrefixValue = prefixCell.GetInt16();
-                    break;
-                case NYdb::EPrimitiveType::Int32:
-                    target.PrefixValue = prefixCell.GetInt32();
-                    break;
-                case NYdb::EPrimitiveType::Int64:
-                    target.PrefixValue = prefixCell.GetInt64();
-                    break;
-                case NYdb::EPrimitiveType::Uint8:
-                    target.PrefixValue = prefixCell.GetUint8();
-                    break;
-                case NYdb::EPrimitiveType::Uint16:
-                    target.PrefixValue = prefixCell.GetUint16();
-                    break;
-                case NYdb::EPrimitiveType::Uint32:
-                    target.PrefixValue = prefixCell.GetUint32();
-                    break;
-                case NYdb::EPrimitiveType::Uint64: {
-                    ui64 uvalue = prefixCell.GetUint64();
-                    Y_ABORT_UNLESS(uvalue <= static_cast<ui64>(std::numeric_limits<i64>::max()),
-                                  "Prefix value %" PRIu64 " is too large for i64", uvalue);
-                    target.PrefixValue = static_cast<i64>(uvalue);
-                    break;
-                }
-                default:
-                    Y_ABORT_UNLESS(false, "Unexpected primitive type for prefix column: %d",
-                                  static_cast<int>(primitiveType));
-            }
+            target.PrefixValue = vectorParser.GetValue("prefix_value");
         }
 
         SelectTargets.push_back(std::move(target));
@@ -209,8 +173,8 @@ size_t TVectorSampler::GetTargetCount() const {
     return SelectTargets.size();
 }
 
-i64 TVectorSampler::GetPrefixValue(size_t targetIndex) const {
-    return SelectTargets.at(targetIndex).PrefixValue;
+NYdb::TValue TVectorSampler::GetPrefixValue(size_t targetIndex) const {
+    return *SelectTargets.at(targetIndex).PrefixValue;
 }
 
 } // namespace NYdbWorkload

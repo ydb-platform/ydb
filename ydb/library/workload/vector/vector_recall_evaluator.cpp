@@ -25,10 +25,10 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
     Cout << "Recall measurement..." << Endl;
 
     // Prepare the query for scan
-    std::string queryScan = MakeSelect(Params.TableName, {}, Params.KeyColumn, Params.EmbeddingColumn, Params.PrefixColumn, 0, Params.Metric);
+    std::string queryScan = MakeSelect(Params, {});
 
     // Create the query for index search
-    std::string queryIndex = MakeSelect(Params.TableName, Params.IndexName, Params.KeyColumn, Params.EmbeddingColumn, Params.PrefixColumn, Params.KmeansTreeSearchClusters, Params.Metric);
+    std::string queryIndex = MakeSelect(Params, Params.IndexName);
 
     // Process targets in batches
     for (size_t batchStart = 0; batchStart < sampler.GetTargetCount(); batchStart += Params.RecallThreads) {
@@ -42,7 +42,7 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
 
         for (size_t i = batchStart; i < batchEnd; i++) {
             const auto& targetEmbedding = sampler.GetTargetEmbedding(i);
-            std::optional<i64> prefixValue;
+            std::optional<NYdb::TValue> prefixValue;
             if (Params.PrefixColumn) {
                 prefixValue = sampler.GetPrefixValue(i);
             }

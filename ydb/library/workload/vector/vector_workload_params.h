@@ -28,6 +28,7 @@ public:
     std::string KeyColumn;
     std::string EmbeddingColumn;
     std::optional<std::string> PrefixColumn;
+    std::optional<std::string> PrefixType;
     NYdb::NTable::TVectorIndexSettings::EMetric Metric;
     TString Distance;
     TString VectorType;

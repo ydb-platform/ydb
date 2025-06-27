@@ -37,38 +37,35 @@ std::tuple<std::string, bool> GetMetricInfo(NYdb::NTable::TVectorIndexSettings::
 
 
 // Utility function to create select query
-std::string MakeSelect(const TString& tableName, const TString& indexName,
-        const std::string& keyColumn, const std::string& embeddingColumn, const std::optional<std::string>& prefixColumn,
-        size_t kmeansTreeClusters, NYdb::NTable::TVectorIndexSettings::EMetric metric) {
-
-    auto [functionName, isAscending] = GetMetricInfo(metric);
+std::string MakeSelect(const TVectorWorkloadParams& params, const TString& indexName) {
+    auto [functionName, isAscending] = GetMetricInfo(params.Metric);
 
     TStringBuilder ret;
     ret << "--!syntax_v1" << "\n";
     ret << "DECLARE $Embedding as String;" << "\n";
-    if (prefixColumn)
-        ret << "DECLARE $PrefixValue as Int64;" << "\n";
-    ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << kmeansTreeClusters << "\";" << "\n";
-    ret << "SELECT " << keyColumn << " FROM " << tableName << "\n";
+    if (params.PrefixColumn)
+        ret << "DECLARE $PrefixValue as " << params.PrefixType << ";" << "\n";
+    ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeClusters << "\";" << "\n";
+    ret << "SELECT " << params.KeyColumn << " FROM " << params.TableName << "\n";
     if (!indexName.empty())
         ret << "VIEW " << indexName << "\n";
-    if (prefixColumn)
-        ret << "WHERE " << prefixColumn << " = $PrefixValue" << "\n";
-    ret << "ORDER BY Knn::" << functionName << "(" << embeddingColumn << ", $Embedding) " << (isAscending ? "ASC" : "DESC") << "\n";
+    if (params.PrefixColumn)
+        ret << "WHERE " << params.PrefixColumn << " = $PrefixValue" << "\n";
+    ret << "ORDER BY Knn::" << functionName << "(" << params.EmbeddingColumn << ", $Embedding) " << (isAscending ? "ASC" : "DESC") << "\n";
     ret << "LIMIT $Limit" << "\n";
     return ret;
 }
 
 
 // Utility function to create parameters for select query
-NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, std::optional<i64> prefixValue, ui64 limit) {
+NYdb::TParams MakeSelectParams(const std::string& embeddingBytes, const std::optional<NYdb::TValue>& prefixValue, ui64 limit) {
     NYdb::TParamsBuilder paramsBuilder;
 
     paramsBuilder.AddParam("$Embedding").String(embeddingBytes).Build();
     paramsBuilder.AddParam("$Limit").Uint64(limit).Build();
 
     if (prefixValue.has_value()) {
-        paramsBuilder.AddParam("$PrefixValue").Int64(*prefixValue).Build();
+        paramsBuilder.AddParam("$PrefixValue", *prefixValue);
     }
 
     return paramsBuilder.Build();

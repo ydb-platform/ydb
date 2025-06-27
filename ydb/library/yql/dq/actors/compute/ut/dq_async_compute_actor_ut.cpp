@@ -126,6 +126,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         {
             TVector<TStructMember> members;
             members.emplace_back("key", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv));
+            members.emplace_back("ts", TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv));
             RowType = TStructType::Create(members.size(), members.data(), TypeEnv);
             TVector<TType*> components;
             for (ui32 i = 0; i < RowType->GetMembersCount(); ++i) {
@@ -136,6 +137,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         {
             TVector<TStructMember> members;
             members.emplace_back("e.id", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv));
+            members.emplace_back("e.ts", TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv));
             members.emplace_back("u.data", TOptionalType::Create(TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv), TypeEnv));
             members.emplace_back("u.key", TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), TypeEnv));
             RowTransformedType = TStructType::Create(members.size(), members.data(), TypeEnv);
@@ -181,14 +183,23 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                                 .Build()
                             .Build()
                         .Build()
+                        .Add<TCoNameValueTuple>()
+                            .Name().Build("ts")
+                            .Value<TCoMember>()
+                                .Name().Build("ts")
+                                .Struct("val")
+                            .Build()
+                        .Build()
                     .Build()
                 .Build()
             .Build()
         .Done();
         auto type = typeMaker(ctx);
+        auto tsType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         auto inStructType = ctx.MakeType<TStructExprType>(
             TVector<const TItemExprType*> {
-                ctx.MakeType<TItemExprType>("key", type)
+                ctx.MakeType<TItemExprType>("key", type),
+                ctx.MakeType<TItemExprType>("ts", tsType),
             }
         );
         auto inStreamType = ctx.MakeType<TStreamExprType>(inStructType);
@@ -214,6 +225,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         coMul.Left().Cast<TCoMember>().Struct().Ptr()->SetTypeAnn(inStructType);
                         coMul.Right().Ptr()->SetTypeAnn(type);
                         coMul.Right().Cast<TCoMember>().Struct().Ptr()->SetTypeAnn(inStructType);
+                    }
+                    {
+                        const auto& coMember = asStruct.Arg(1).Cast<TCoNameValueTuple>().Value().Cast<TCoMember>();
+                        coMember.Ptr()->SetTypeAnn(tsType);
+                        coMember.Struct().Ptr()->SetTypeAnn(inStructType);
                     }
                 }
             }
@@ -284,11 +300,13 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         auto& input = *task.MutableInputs()->Mutable(0);
         auto& transform = *input.MutableTransform();
         transform.SetType("StreamLookupInputTransform");
+        auto tsType = TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv);
 
-        std::array<TType *, 1> inputTypes { keyType };
+        std::array<TType *, 2> inputTypes { keyType, tsType };
         TType* inputType;
         auto narrowInputType = TStructTypeBuilder(TypeEnv)
                 .Add("id", inputTypes[0])
+                .Add("ts", inputTypes[1])
                 .Build();
         if (IsWide) {
             inputType = TMultiType::Create(inputTypes.size(), inputTypes.data(), TypeEnv);
@@ -296,15 +314,17 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             inputType = narrowInputType;
         }
         transform.SetInputType(SerializeNode(inputType, TypeEnv));
-        std::array<TType *, 3> outputTypes {
+        std::array<TType *, 4> outputTypes {
             keyType,
-            TOptionalType::Create(keyType, TypeEnv),
+            tsType,
             TOptionalType::Create(valueType, TypeEnv),
+            TOptionalType::Create(keyType, TypeEnv),
         };
         auto narrowOutputType = TStructTypeBuilder(TypeEnv)
                 .Add("e.id", outputTypes[0])
-                .Add("u.key", outputTypes[1])
+                .Add("e.ts", outputTypes[1])
                 .Add("u.data", outputTypes[2])
+                .Add("u.key", outputTypes[3])
                 .Build();
         TType* outputType;
         if (IsWide) {
@@ -437,17 +457,18 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         return ActorSystem.Register(actor);
     }
 
-    TUnboxedValueBatch CreateRow(ui32 value) {
+    TUnboxedValueBatch CreateRow(ui32 value, ui64 ts) {
         if (IsWide) {
             TUnboxedValueBatch result(WideRowType);
-            result.PushRow([&]([[maybe_unused]] ui32 idx) {
-                return NUdf::TUnboxedValuePod(value);
+            result.PushRow([&](ui32 idx) {
+                return idx == 0 ? NUdf::TUnboxedValuePod(value) : NUdf::TUnboxedValuePod(ts);
             });
             return result;
         }
         NUdf::TUnboxedValue* items;
         auto row = Vb.NewArray(RowType->GetMembersCount(), items);
         items[0] = NUdf::TUnboxedValuePod(value);
+        items[1] = NUdf::TUnboxedValuePod(ts);
         TUnboxedValueBatch result(RowType);
         result.emplace_back(std::move(row));
         return result;
@@ -553,9 +574,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             bool isFinal = packet == packets;
             bool noAck = (packet % 2) == 0; // set noAck on even packets
 
-            PushRow(CreateRow(++val), dqOutputChannel);
-            PushRow(CreateRow(++val), dqOutputChannel);
-            PushRow(CreateRow(++val), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (doWatermark) {
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs((ui64)1'000'000 * packet);
@@ -592,16 +613,19 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TMaybe<TInstant> watermark;
         while (ReceiveData(
                 [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
-                    UNIT_ASSERT_EQUAL(column, 0);
                     UNIT_ASSERT(!!val);
                     UNIT_ASSERT(val.IsEmbedded());
+                    if (RowType->GetMemberName(column) == "ts") {
+                        auto ts = val.Get<ui64>();
+                        if (watermark) {
+                            UNIT_ASSERT_GT(ts, watermark->Seconds());
+                        }
+                        return true;
+                    }
+                    UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "key");
                     auto data = val.Get<i32>();
                     LOG_D(data);
                     ++receivedData[data];
-                    if (watermark) {
-                        auto waterValue = (i32)watermark->Seconds();
-                        UNIT_ASSERT_GE(data, (waterValue*3)*(waterValue*3));
-                    }
                     return true;
                 },
                 [this, &watermark](const auto& receivedWatermark) {
@@ -616,6 +640,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
+#if 0 // TODO: switch when inputtransform will be fixed; just log for now
+#define WEAK_UNIT_ASSERT_GT_C UNIT_ASSERT_GT_C
+#else
+#define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); } while(0)
+#endif
     void InputTransformTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
         LogPrefix = TStringBuilder() << "InputTransform Test for:"
            << " packets=" << packets
@@ -625,10 +654,12 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         NDqProto::TDqTask task;
         GenerateEmptyProgram(task, [](auto& ctx) {
             auto keyType = ctx.template MakeType<TDataExprType>(EDataSlot::Int32);
+            auto tsType = ctx.template MakeType<TDataExprType>(EDataSlot::Uint64);
             auto valueType = ctx.template MakeType<TDataExprType>(EDataSlot::String);
             auto structType = ctx.template MakeType<TStructExprType>(
                     TVector<const TItemExprType*> {
                         ctx.template MakeType<TItemExprType>("e.id", keyType),
+                        ctx.template MakeType<TItemExprType>("e.ts", tsType),
                         ctx.template MakeType<TItemExprType>("u.data", ctx.template MakeType<TOptionalExprType>(valueType)),
                         ctx.template MakeType<TItemExprType>("u.key", ctx.template MakeType<TOptionalExprType>(keyType)),
                     }
@@ -650,9 +681,9 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             bool isFinal = packet == packets;
             bool noAck = (packet % 2) == 0; // set noAck on even packets
 
-            PushRow(CreateRow(++val), dqOutputChannel);
-            PushRow(CreateRow(++val), dqOutputChannel);
-            PushRow(CreateRow(++val), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
             if (doWatermark) {
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs((ui64)1'000'000 * packet);
@@ -691,48 +722,47 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TMaybe<TInstant> watermark;
         while (ReceiveData(
                 [this, &receivedData, &watermark, &col0](const NUdf::TUnboxedValue& val, ui32 column) {
-                    switch(column) {
-                    case 0: // e.id
-                        {
+                    UNIT_ASSERT_LT(column, RowTransformedType->GetMembersCount());
+                    auto columnName = RowTransformedType->GetMemberName(column);
+                    if (columnName == "e.id") {
+                        UNIT_ASSERT(!!val);
+                        UNIT_ASSERT(val.IsEmbedded());
+                        LOG_D(column << "id = " << val.Get<i32>());
+                        col0 = val.Get<i32>();
+                        ++receivedData[val.Get<i32>()];
+                    } else if (columnName == "e.ts") {
+                        UNIT_ASSERT(!!val);
+                        UNIT_ASSERT(val.IsEmbedded());
+                        auto ts = val.Get<ui64>();
+                        LOG_D(column << "ts = " << ts);
+                        if (watermark) {
+                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
+                        }
+                    } else if (columnName == "u.key") {
+                        if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
                             UNIT_ASSERT(!!val);
-                            UNIT_ASSERT(val.IsEmbedded());
-                            LOG_D(val.Get<i32>());
-                            col0 = val.Get<i32>();
-                            if (watermark) {
-                                if (!(col0 >= (i32)watermark->Seconds()*3)) {
-                                    LOG_E("watermark: " << (i32)watermark->Seconds()*3 << " but data is " << col0);
-                                }
-                                //UNIT_ASSERT_GE(col0, (i32)watermark->Seconds()*3);
-                            }
-                            ++receivedData[val.Get<i32>()];
-                            break;
+                            auto cval = val.GetOptionalValue();
+                            UNIT_ASSERT(!!cval);
+                            UNIT_ASSERT(cval.IsEmbedded());
+                            auto data = cval.Get<i32>();
+                            LOG_D(column << "key = " << data);
+                            UNIT_ASSERT_EQUAL_C(data, col0, data << "!=" << col0);
+                        } else {
+                            UNIT_ASSERT_C(!val, "null (1) expected for " << col0);
                         }
-                    case 2: // u.data
-                        {
-                            if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
-                                UNIT_ASSERT(!!val);
-                                auto cval = val.GetOptionalValue();
-                                UNIT_ASSERT(!!cval);
-                                UNIT_ASSERT(cval.IsEmbedded());
-                                UNIT_ASSERT_EQUAL(val.Get<i32>(), col0);
-                            } else {
-                                UNIT_ASSERT_C(!val, "null (1) expected for " << col0);
-                            }
-                            break;
+                    } else if (columnName == "u.data") {
+                        if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
+                            UNIT_ASSERT(!!val);
+                            const auto cval = val.GetOptionalValue();
+                            UNIT_ASSERT(!!cval);
+                            auto ref = TString(cval.AsStringRef());
+                            LOG_D(column << "data = '" << ref << "'");
+                            UNIT_ASSERT_EQUAL(ref, ToString(col0));
+                        } else {
+                            UNIT_ASSERT_C(!val, "null (2) expected for " << col0);
                         }
-                    case 1: // u.key
-                        {
-                            if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
-                                UNIT_ASSERT(!!val);
-                                const auto cval = val.GetOptionalValue();
-                                UNIT_ASSERT(!!cval);
-                                auto ref = TString(cval.AsStringRef());
-                                UNIT_ASSERT_EQUAL(*TryFromString<i32>(ref), col0);
-                            } else {
-                                UNIT_ASSERT_C(!val, "null (2) expected for " << col0);
-                            }
-                            break;
-                        }
+                    } else {
+                        UNIT_ASSERT_C(false, "Unexpected column " << column << " name " << columnName);
                     }
                     return true;
                 },

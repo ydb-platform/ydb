@@ -152,38 +152,55 @@ class ConnectionParams:
             location = endpoint.host_with_port
         return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
 
-    def parse_token(self, token_file, iam_token_file):
+    def parse_token(self, token_file, iam_token_file=None):
         if token_file:
-            self.token = self.read_stripped_file_and_close(token_file)
-        elif iam_token_file:
-            self.token = self.read_stripped_file_and_close(iam_token_file)
-            self.token_type = 'Bearer'
-        if self.token is None:
-            self.token = os.getenv('YDB_TOKEN')
+            self.token_type, self.token = self.read_token_from_file(token_file, 'OAuth')
+            token_file.close()
+            return
+
+        if iam_token_file:
+            self.token_type, self.token = self.read_token_from_file(iam_token_file, 'Bearer')
+            iam_token_file.close()
+            return
+
+        token_value = os.getenv('YDB_TOKEN')
+        if token_value is not None:
+            self.token_type, self.token = self.parse_token_value(token_value, 'OAuth')
+            return
+
+        token_value = os.getenv('IAM_TOKEN')
+        if token_value is not None:
+            self.token_type, self.token = self.parse_token_value(token_value, 'Bearer')
+            return
+
+        default_token_paths = [
+            ('OAuth', os.path.expanduser(os.path.join('~', '.ydb', 'token'))),
+            ('Bearer', os.path.expanduser(os.path.join('~', '.ydb', 'iam_token'))),
+        ]
+        for token_type, token_file_path in default_token_paths:
+            self.token_type, self.token = self.read_token_file(token_file_path, token_type)
             if self.token is not None:
-                self.token = self.token.strip()
-        if self.token is None:
-            self.token = os.getenv('IAM_TOKEN')
-            self.token_type = 'Bearer'
-        if self.token is None:
-            try:
-                path = os.path.expanduser(os.path.join('~', '.ydb', 'token'))
-                with open(path) as f:
-                    self.token = f.readline().strip('\r\n')
-            except Exception:
-                pass
+                return
 
-        if self.token is not None and len(self.token.split(' ')) == 2:
-            self.token_type, self.token = self.token.split(' ')
-        else:
-            self.token_type = 'OAuth'
-
-    def read_stripped_file_and_close(self, token_file):
+    def read_token_from_file(self, token_file, default_token_type):
         if token_file is None:
+            return default_token_type, None
+        token_value = token_file.readline().rstrip('\r\n')
+        return self.parse_token_value(token_value, default_token_type)
+
+    def read_token_file(self, token_file_path, default_token_type):
+        if token_file_path is None:
+            return default_token_type, None
+        return self.read_token_from_file_and_close(open(token_file_path, 'r'), default_token_type)
+
+    def parse_token_value(self, token_value, default_token_type):
+        if token_value is None:
             return None
-        result = token_file.readline().rstrip('\r\n')
-        token_file.close()
-        return result
+        splitted = token_value.strip().split(' ')
+        if len(splitted) == 2:
+            return splitted
+        else:
+            return default_token_type, token_value
 
     def apply_args(self, args, with_localhost=True):
         self.args = args

@@ -117,7 +117,7 @@ struct TQueryStatKeyHash {
 };
 
 struct TAggQueryStat {
-    TAggQueryStat() {}
+    TAggQueryStat() = default;
     TAggQueryStat(const TString& queryId, const ::NMonitoring::TDynamicCounterPtr& counters, const NYql::NPq::NProto::TDqPqTopicSource& sourceParams)
         : QueryId(queryId)
         , SubGroup(counters) {
@@ -129,14 +129,6 @@ struct TAggQueryStat {
         MaxQueuedBytesCounter = topicGroup->GetCounter("MaxQueuedBytes");
         AvgQueuedBytesCounter = topicGroup->GetCounter("AvgQueuedBytes");
         MaxReadLagCounter = topicGroup->GetCounter("MaxReadLag");
-    }
-
-    ~TAggQueryStat() {
-        if (!SubGroup) {
-            return;
-        }
-        SetMetrics(0, 0, 0);
-        SubGroup->RemoveSubgroup("query_id", QueryId);
     }
 
     TString QueryId;
@@ -167,9 +159,20 @@ struct TAggQueryStat {
     }
 
     void SetMetrics(ui64 queuedBytesMax, ui64 queuedBytesAvg, i64 readLagMessagesMax) {
+        if (!SubGroup) {
+            return;
+        }
         MaxQueuedBytesCounter->Set(queuedBytesMax);
         AvgQueuedBytesCounter->Set(queuedBytesAvg);
         MaxReadLagCounter->Set(readLagMessagesMax);
+    }
+
+    void Clear() {
+        if (!SubGroup) {
+            return;
+        }
+        SetMetrics(0, 0, 0);
+        SubGroup->RemoveSubgroup("query_id", QueryId);
     }
 };
 
@@ -614,6 +617,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 }
 
 void TRowDispatcher::UpdateMetrics() {
+    Cerr << "UpdateMetrics" << Endl;
     static TInstant LastUpdateMetricsTime = TInstant::Now();
     auto now = TInstant::Now();
     AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
@@ -645,6 +649,7 @@ void TRowDispatcher::UpdateMetrics() {
                 auto& stats = AggrStats.LastQueryStats.emplace(
                     statKey,
                     TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams)).first->second;
+                Cerr << "UpdateMetrics emplace" << Endl;
                 stats.Add(partition.Stat, partition.FilteredBytes);
                 partition.FilteredBytes = 0;
             }
@@ -653,9 +658,12 @@ void TRowDispatcher::UpdateMetrics() {
     THashSet<TQueryStatKey, TQueryStatKeyHash> toDelete;
     for (auto& [key, stats] : AggrStats.LastQueryStats) {
         if (!stats.Updated) {
+            Cerr << "UpdateMetrics toDelete" << Endl;
             toDelete.insert(key);
+            stats.Clear();
             continue;
         }
+        Cerr << "UpdateMetrics SetMetrics" << Endl;
         stats.SetMetrics();
     }
     for (const auto& key : toDelete) {
@@ -723,11 +731,13 @@ TString TRowDispatcher::GetInternalState() {
     str << "Queries:\n";
     for (const auto& [queryStatKey, stat]: queryState) {
         auto [queryId, readGroup] = queryStatKey;
-        const auto& aggStat = AggrStats.LastQueryStats[queryStatKey];
         auto sessionsBufferSumSize = sessionCountByQuery[queryStatKey] * MaxSessionBufferSizeBytes;
         auto used = sessionsBufferSumSize ? (stat.QueuedBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
         str << "  " << queryId << " / " << readGroup << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.QueuedBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.QueuedBytes.Max) << " data rate";
-        printDataRate(aggStat.FilteredBytes);
+        auto statIt = AggrStats.LastQueryStats.find(queryStatKey);
+        if (statIt != AggrStats.LastQueryStats.end()) {
+            printDataRate(statIt->second.FilteredBytes);
+        }
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";
     }

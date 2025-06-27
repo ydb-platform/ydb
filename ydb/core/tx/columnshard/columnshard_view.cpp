@@ -154,7 +154,7 @@ TString TTxMonitoring::RenderMainPage() {
         }
     }
 
-    html << "<h3><a href=\"app/compaction/?TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
+    html << "<h3><a href=\"app?Compaction=true&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
 
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
@@ -187,7 +187,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     auto path = HttpInfoEvent->Get()->PathInfo();
     TString htmlResult;
 
-    if (path == "/app/compaction/") {
+    if (cgi.Has("Compaction") && cgi.Get("Compaction") == "true") {
         htmlResult = RenderCompactionPage();
     } else {
         htmlResult = RenderMainPage();

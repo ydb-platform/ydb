@@ -76,7 +76,7 @@ class KqpRun(object):
             '--result-rows-limit 0 '
         )
         if user is not None:
-            cmd += f'-U {user}'
+            cmd += f'-U {user} '
 
         if var_templates is not None:
             for var_template in var_templates:

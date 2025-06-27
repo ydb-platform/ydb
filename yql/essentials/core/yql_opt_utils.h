@@ -98,6 +98,8 @@ inline void ExtractSimpleKeys(const TExprNode& keySelectorLambda, TVector<TStrin
     ExtractSimpleKeys(keySelectorLambda.Child(1), keySelectorLambda.Child(0)->Child(0), columns);
 }
 
+TSet<TStringBuf> GetFilteredMembers(const NNodes::TCoFilterNullMembersBase& node);
+
 TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx);
@@ -201,5 +203,14 @@ bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
 extern const char KeepWorldOptName[];
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
+
+template<typename C>
+TExprNode::TPtr MakeAtomList(TPositionHandle pos, const C& container, TExprContext& ctx) {
+    TExprNodeList atoms;
+    for (auto& atom : container) {
+        atoms.push_back(ctx.NewAtom(pos, atom));
+    }
+    return ctx.NewList(pos, std::move(atoms));
+}
 
 }

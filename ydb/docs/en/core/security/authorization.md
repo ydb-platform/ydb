@@ -32,15 +32,15 @@ There is a separate user `root` with maximum rights. It is created during the in
 
 More about initial deployment:
 
-* [Ansible](../devops/ansible/initial-deployment.md)
-* [Kubernetes](../devops/kubernetes/initial-deployment.md)
-* [Manually](../devops/manual/initial-deployment.md)
+* [Ansible](../devops/deployment-options/ansible/initial-deployment.md)
+* [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
+* [Manually](../devops/deployment-options/manual/initial-deployment.md)
 
 {% endnote %}
 
 {{ ydb-short-name }} allows working with [users](../concepts/glossary.md#access-user) from different directories and systems, and they differ by [SID](../concepts/glossary.md#access-sid) using a suffix.
 
-The suffix `@<subsystem>` identifies the "user source" or "auth domain", within which the uniqueness of all `login` is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user names will be `user1@ldap` and `user2@ldap`.  
+The suffix `@<subsystem>` identifies the "user source" or "auth domain", within which the uniqueness of all `login` is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user names will be `user1@ldap` and `user2@ldap`.
 If a `login` without a suffix is specified, it implies users directly created in the {{ ydb-short-name }} cluster.
 
 ## Group {#group}

@@ -388,6 +388,8 @@ enum EServiceKikimr {
     METADATA_MANAGER = 1502;
     METADATA_SECRET = 1503;
 
+    GENERAL_CACHE = 1504;
+
     // Tiering
     TX_TIERING = 1600;
 
@@ -1093,5 +1095,7 @@ message TActivity {
         BS_SYNC_BROKER = 660;
         BS_PROXY_CHECKINTEGRITY_ACTOR = 661;
         CMS_CONFIG_INFO_COLLECTOR = 662;
+        RECOMPUTE_KMEANS_SCAN_ACTOR = 663;
+        BS_HULL_SYNC_FULL_UNORDERED_DATA_PROTOCOL = 664;
     };
 };

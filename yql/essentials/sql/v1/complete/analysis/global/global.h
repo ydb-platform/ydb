@@ -17,30 +17,26 @@ namespace NSQLComplete {
         TString Cluster;
     };
 
-    template <std::regular T>
-    struct TAliased: T {
-        TString Alias;
+    struct TColumnId {
+        TString TableAlias;
+        TString Name;
 
-        TAliased(TString alias, T value)
-            : T(std::move(value))
-            , Alias(std::move(alias))
-        {
-        }
-
-        TAliased(T value)
-            : T(std::move(value))
-        {
-        }
-
-        friend bool operator==(const TAliased& lhs, const TAliased& rhs) = default;
+        friend bool operator<(const TColumnId& lhs, const TColumnId& rhs);
+        friend bool operator==(const TColumnId& lhs, const TColumnId& rhs) = default;
     };
 
     struct TColumnContext {
         TVector<TAliased<TTableId>> Tables;
+        TVector<TColumnId> Columns;
 
-        TVector<TTableId> TablesWithAlias(TStringBuf alias) const;
+        bool IsAsterisk() const;
+        TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);
+        TColumnContext Renamed(TStringBuf alias) &&;
 
         friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
+        friend TColumnContext operator|(TColumnContext lhs, TColumnContext rhs);
+
+        static TColumnContext Asterisk();
     };
 
     struct TGlobalContext {

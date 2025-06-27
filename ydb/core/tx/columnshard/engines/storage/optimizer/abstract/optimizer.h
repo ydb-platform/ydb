@@ -1,9 +1,12 @@
 #pragma once
+#include "counters.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 
+#include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -91,6 +94,10 @@ private:
     virtual bool DoIsOverloaded() const {
         return false;
     }
+    const ui32 NodePortionsCountLimit = 0;
+    static inline TAtomicCounter NodePortionsCounter = 0;
+    TPositiveControlInteger LocalPortionsCount;
+    std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
 
 protected:
     virtual void DoModifyPortions(
@@ -116,10 +123,15 @@ public:
         return baseLevel;
     }
 
-    IOptimizerPlanner(const TInternalPathId pathId)
-        : PathId(pathId) {
+    IOptimizerPlanner(const TInternalPathId pathId, const ui32 nodePortionsCountLimit)
+        : PathId(pathId)
+        , NodePortionsCountLimit(nodePortionsCountLimit) {
+        Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit);
     }
     bool IsOverloaded() const {
+        if (NodePortionsCountLimit <= NodePortionsCounter.Val()) {
+            return true;
+        }
         return DoIsOverloaded();
     }
     TConclusionStatus CheckWriteData() const {
@@ -152,7 +164,10 @@ public:
         return TModificationGuard(*this);
     }
 
-    virtual ~IOptimizerPlanner() = default;
+    virtual ~IOptimizerPlanner() {
+        NodePortionsCounter.Sub(LocalPortionsCount.Val());
+        Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
+    }
     TString DebugString() const {
         return DoDebugString();
     }
@@ -165,6 +180,11 @@ public:
 
     void ModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("path_id", PathId));
+        LocalPortionsCount.Add(add.size());
+        LocalPortionsCount.Sub(remove.size());
+        NodePortionsCounter.Add(add.size());
+        NodePortionsCounter.Sub(remove.size());
+        Counters->NodePortionsCount->Set(NodePortionsCounter.Val());
         DoModifyPortions(add, remove);
     }
 
@@ -207,6 +227,8 @@ public:
     using TProto = NKikimrSchemeOp::TCompactionPlannerConstructorContainer;
 
 private:
+    ui32 NodePortionsCountLimit = 1000000;
+
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
@@ -214,6 +236,10 @@ private:
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const = 0;
 
 public:
+    ui32 GetNodePortionsCountLimit() const {
+        return NodePortionsCountLimit;
+    }
+
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
         auto result = TFactory::MakeHolder("lc-buckets");
         AFL_VERIFY(!!result);
@@ -230,6 +256,13 @@ public:
     }
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+        if (jsonInfo.Has("node_portions_count_limit")) {
+            const auto& jsonValue = jsonInfo["node_portions_count_limit"];
+            if (!jsonValue.IsUInteger()) {
+                return TConclusionStatus::Fail("incorrect node_portions_count_limit value have to be unsigned int");
+            }
+            NodePortionsCountLimit = jsonValue.GetUInteger();
+        }
         return DoDeserializeFromJson(jsonInfo);
     }
 
@@ -239,6 +272,7 @@ public:
 
     virtual TString GetClassName() const = 0;
     void SerializeToProto(TProto& proto) const {
+        proto.SetNodePortionsCountLimit(NodePortionsCountLimit);
         DoSerializeToProto(proto);
     }
 
@@ -255,6 +289,9 @@ public:
     }
 
     bool DeserializeFromProto(const TProto& proto) {
+        if (proto.HasNodePortionsCountLimit()) {
+            NodePortionsCountLimit = proto.GetNodePortionsCountLimit();
+        }
         return DoDeserializeFromProto(proto);
     }
 };

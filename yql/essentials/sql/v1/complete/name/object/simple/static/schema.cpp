@@ -41,16 +41,12 @@ namespace NSQLComplete {
             }
 
             NThreading::TFuture<TVector<TFolderEntry>> List(TString cluster, TString folder) const override {
-                if (!folder.StartsWith('/')) {
-                    folder.prepend('/');
-                }
-
                 TVector<TFolderEntry> entries;
 
                 const THashMap<TString, TVector<TFolderEntry>>* tables = nullptr;
                 const TVector<TFolderEntry>* items = nullptr;
                 if ((tables = Folders_.FindPtr(cluster)) &&
-                    (items = tables->FindPtr(folder))) {
+                    (items = tables->FindPtr(Qualified(folder)))) {
                     entries = *items;
                 }
 
@@ -64,7 +60,7 @@ namespace NSQLComplete {
                     return NThreading::MakeFuture<TMaybe<TTableDetails>>(Nothing());
                 }
 
-                auto* details = tables->FindPtr(path);
+                auto* details = tables->FindPtr(Qualified(path));
                 if (details == nullptr) {
                     return NThreading::MakeFuture<TMaybe<TTableDetails>>(Nothing());
                 }
@@ -73,6 +69,13 @@ namespace NSQLComplete {
             }
 
         private:
+            TString Qualified(TString path) const {
+                if (!path.StartsWith('/')) {
+                    path.prepend('/');
+                }
+                return path;
+            }
+
             THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> Folders_;
             THashMap<TString, THashMap<TString, TTableDetails>> Tables_;
         };

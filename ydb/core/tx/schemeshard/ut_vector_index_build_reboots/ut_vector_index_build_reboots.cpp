@@ -1,8 +1,7 @@
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

@@ -1,59 +1,57 @@
 #pragma once
 
-#include "schemeshard_types.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_path_element.h"
-#include "schemeshard_identificators.h"
-#include "schemeshard_schema.h"
 #include "olap/schema/schema.h"
 #include "olap/schema/update.h"
+#include "schemeshard_identificators.h"
+#include "schemeshard_path_element.h"
+#include "schemeshard_schema.h"
+#include "schemeshard_tx_infly.h"
+#include "schemeshard_types.h"
 
-#include <ydb/core/tx/message_seqno.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/base/storage_pools.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
-#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
-#include <ydb/services/lib/sharding/sharding.h>
+#include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/filestore_config.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/yql_translation_settings.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-
-#include <ydb/core/base/tx_processing.h>
-#include <ydb/core/base/storage_pools.h>
-#include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/message_seqno.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
 #include <ydb/core/util/pb.h>
 
 #include <ydb/library/login/protos/login.pb.h>
 
-#include <ydb/public/api/protos/ydb_import.pb.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-#include <ydb/core/protos/filestore_config.pb.h>
-#include <ydb/core/protos/follower_group.pb.h>
-#include <ydb/core/protos/index_builder.pb.h>
-#include <ydb/core/protos/sys_view_types.pb.h>
-#include <ydb/core/protos/yql_translation_settings.pb.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/api/protos/ydb_coordination.pb.h>
-
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <util/generic/guid.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
 #include <util/generic/vector.h>
-#include <util/generic/guid.h>
-
-#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -3122,15 +3120,17 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
         ui32 K = 0;
         ui32 Levels = 0;
+        ui32 Rounds = 0;
 
         // progress
         enum EState : ui32 {
             Sample = 0,
-            // Recompute,
             Reshuffle,
             MultiLocal,
+            Recompute,
         };
         ui32 Level = 1;
+        ui32 Round = 0;
 
         EState State = Sample;
 
@@ -3162,6 +3162,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 << "State = " << State
                 << ", Level = " << Level << " / " << Levels
                 << ", K = " << K
+                << ", Round = " << Round
                 << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
                 << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
                 << ", TableSize = " << TableSize
@@ -3205,8 +3206,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void Set(ui32 level,
                  NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
                  NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-                 ui32 state, ui64 tableSize) {
+                 ui32 state, ui64 tableSize, ui32 round) {
             Level = level;
+            Round = round;
             ParentBegin = parentBegin;
             Parent = parent;
             ChildBegin = childBegin;
@@ -3471,6 +3473,8 @@ public:
     };
     TSample Sample;
 
+    std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
+
     TString DebugString() const {
         auto result = TStringBuilder() << BuildKind;
 
@@ -3478,7 +3482,8 @@ public:
             result << " "
                 << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
-                << ", Sample = " << Sample.State << " }, "
+                << ", Sample = " << Sample.State
+                << ", Clusters = " << Clusters->GetClusters().size() << " }, "
                 << "{ Done = " << DoneShards.size()
                 << ", ToUpload = " << ToUploadShards.size()
                 << ", InProgress = " << InProgressShards.size() << " }";
@@ -3636,8 +3641,8 @@ public:
 
         auto& billed = indexInfo->Billed;
         billed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
         };
@@ -3669,7 +3674,11 @@ public:
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
-                    indexInfo->SpecializedIndexDescription =std::move(desc);
+                    indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
+                    TString createError;
+                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
+                    Y_ENSURE(indexInfo->Clusters && createError == "");
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
@@ -3712,8 +3721,8 @@ public:
 
         auto& processed = shardStatus.Processed;
         processed = {
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadBytesProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
         };

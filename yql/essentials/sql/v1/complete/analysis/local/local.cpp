@@ -86,6 +86,7 @@ namespace NSQLComplete {
 
             TLocalSyntaxContext result;
 
+            result.IsQuoted = Quotation(input, context);
             result.EditRange = EditRange(context);
             result.EditRange.Begin += statement_position;
 
@@ -286,11 +287,6 @@ namespace NSQLComplete {
                 object.Path = *path;
             }
 
-            if (auto enclosing = context.Enclosing();
-                enclosing.Defined() && enclosing->Base->Name == "ID_QUOTED") {
-                object.IsQuoted = true;
-            }
-
             return object;
         }
 
@@ -339,6 +335,16 @@ namespace NSQLComplete {
 
         bool BindingMatch(const TC3Candidates& candidates) const {
             return AnyOf(candidates.Rules, RuleAdapted(IsLikelyBindingStack));
+        }
+
+        TLocalSyntaxContext::TQuotation Quotation(TCompletionInput input, const TCursorTokenContext& context) const {
+            TLocalSyntaxContext::TQuotation isQuoted;
+            if (auto enclosing = context.Enclosing();
+                enclosing.Defined() && enclosing->Base->Name == "ID_QUOTED") {
+                isQuoted.AtLhs = true;
+                isQuoted.AtRhs = enclosing->End() <= input.Text.size();
+            }
+            return isQuoted;
         }
 
         TEditRange EditRange(const TCursorTokenContext& context) const {

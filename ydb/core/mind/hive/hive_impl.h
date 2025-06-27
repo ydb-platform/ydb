@@ -401,7 +401,6 @@ protected:
     i32 MigrationProgress = 0;
     NKikimrHive::TEvSeizeTablets MigrationFilter;
     TBridgeInfo::TPtr BridgeInfo;
-    bool HaveStorageConfig = false;
 
     TActorId ResponsivenessActorID;
     TTabletResponsivenessPinger *ResponsivenessPinger;

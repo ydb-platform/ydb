@@ -18,14 +18,7 @@ namespace NSchemeBoard {
 
 class TSubscriberTest: public NUnitTest::TTestBase {
     TVector<TActorId> ResolveReplicas() {
-        const TActorId proxy = MakeStateStorageProxyID();
-        const TActorId edge = Context->AllocateEdgeActor();
-
-        Context->Send(proxy, edge, new TEvStateStorage::TEvListSchemeBoard(false));
-        auto ev = Context->GrabEdgeEvent<TEvStateStorage::TEvListSchemeBoardResult>(edge);
-
-        Y_ABORT_UNLESS(ev->Get()->Info);
-        auto allReplicas = ev->Get()->Info->SelectAllReplicas();
+        auto allReplicas = GetStateStorageInfo(*Context)->SelectAllReplicas();
         return TVector<TActorId>(allReplicas.begin(), allReplicas.end());
     }
 
@@ -112,7 +105,7 @@ void TSubscriberTest::NotifyDelete() {
 
     Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "path");
 
-    for (size_t i = 0; i <= replicas.size() / 2 + 1; ++i) {
+    for (size_t i = 0; i < replicas.size() / 2 + 1; ++i) {
         Context->Send(replicas[i], edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 1, true));
     }
 

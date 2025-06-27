@@ -30,6 +30,8 @@ enum class EConsumer {
     WRITING_OPERATOR,
     NORMALIZER,
     STATISTICS,
+    STATISTICS_FLUSH,
+    FETCH_ON_LOAD,
     UNDEFINED,
 
     COUNT

@@ -76,6 +76,40 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
             return ev;
         }
 
+        void BoardCleanup(const TActorId &replica, ui64 gen, ui64 guid) {
+            const TActorId edge = Runtime.AllocateEdgeActor(1);
+            Runtime.WrapInActorContext(edge, [&] {
+                Runtime.Send(new IEventHandle(replica, edge, new TEvStateStorage::TEvReplicaBoardCleanup(gen, guid), IEventHandle::FlagTrackDelivery));
+            });
+            Env.Sim(TDuration::Seconds(10));
+        }
+
+        
+        void ReplicaCleanup(const TActorId &replica, ui64 gen, ui64 guid) {
+            const TActorId edge = Runtime.AllocateEdgeActor(1);
+            Runtime.WrapInActorContext(edge, [&] {
+                Runtime.Send(new IEventHandle(replica, edge, new TEvStateStorage::TEvReplicaCleanup(TabletId, TActorId(), gen, guid), IEventHandle::FlagTrackDelivery));
+            });
+            Env.Sim(TDuration::Seconds(10));
+        }
+
+        auto ReplicaDelete(const TActorId &replica, ui64 gen, ui64 guid) {
+            const TActorId edge = Runtime.AllocateEdgeActor(1);
+            Runtime.WrapInActorContext(edge, [&] {
+                Runtime.Send(new IEventHandle(replica, edge, new TEvStateStorage::TEvReplicaDelete(TabletId, gen, guid), IEventHandle::FlagTrackDelivery));
+            });
+            auto ev = Runtime.WaitForEdgeActorEvent<TEvStateStorage::TEvReplicaInfo>(edge);
+            return ev;
+        }
+
+        void BoardUnsubscribe(const TActorId &replica, ui64 gen, ui64 guid) {
+            const TActorId edge = Runtime.AllocateEdgeActor(1);
+            Runtime.WrapInActorContext(edge, [&] {
+                Runtime.Send(new IEventHandle(replica, edge, new TEvStateStorage::TEvReplicaBoardUnsubscribe(gen, guid), IEventHandle::FlagTrackDelivery));
+            });
+            Env.Sim(TDuration::Seconds(10));
+        }
+
         auto ReplicaLookup(const TActorId &replica, ui64 gen, ui64 guid) {
             const TActorId edge = Runtime.AllocateEdgeActor(1);
             Runtime.WrapInActorContext(edge, [&] {
@@ -151,6 +185,12 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
         UNIT_ASSERT_EQUAL(test.ReplicaLookup(replicas[1], 3, 4)->Get()->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
         UNIT_ASSERT_EQUAL(nw1Cnt, 1);  
         UNIT_ASSERT_EQUAL(nw2Cnt, 1);
+        test.ReplicaDelete(replicas[1], 3, 4);
+        UNIT_ASSERT_EQUAL(nw1Cnt, 2);  
+        UNIT_ASSERT_EQUAL(nw2Cnt, 1);
+        test.ReplicaCleanup(replicas[1], 3, 4);
+        UNIT_ASSERT_EQUAL(nw1Cnt, 3);
+        UNIT_ASSERT_EQUAL(nw2Cnt, 1);
     }
 
     Y_UNIT_TEST(TestBoardConfigMismatch) {
@@ -175,5 +215,9 @@ Y_UNIT_TEST_SUITE(TStateStorageRingGroupState) {
         UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGeneration(), 3);
         UNIT_ASSERT_EQUAL(result->Get()->Record.GetClusterStateGuid(), 4);
         UNIT_ASSERT_EQUAL(nw1Cnt, 2);
+        test.BoardCleanup(replicas[1], 5, 6);
+        UNIT_ASSERT_EQUAL(nw1Cnt, 3);
+        test.BoardUnsubscribe(replicas[1], 5, 6);
+        UNIT_ASSERT_EQUAL(nw1Cnt, 4);
     }
 }

@@ -47,19 +47,19 @@ namespace NUdf {
     template<class TContainer>
     struct TListRefIterator: public TBoxedValue {
         TListRefIterator(const TContainer& listRef, ui32 holePos)
-            : ListRef(listRef)
-            , Index(-1)
-            , HolePos(holePos)
+            : ListRef_(listRef)
+            , Index_(-1)
+            , HolePos_(holePos)
         {}
     private:
-        const TContainer& ListRef;
-        ui32 Index;
-        ui32 HolePos;
+        const TContainer& ListRef_;
+        ui32 Index_;
+        ui32 HolePos_;
 
         bool Next(NUdf::TUnboxedValue& value) final {
-            if (++Index >= ListRef.size())
+            if (++Index_ >= ListRef_.size())
                 return false;
-            value = Index == HolePos ? NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(42)) : ToUnboxedValue(ListRef[Index]);
+            value = Index_ == HolePos_ ? NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(42)) : ToUnboxedValue(ListRef_[Index_]);
             return true;
         }
     };
@@ -67,34 +67,34 @@ namespace NUdf {
     template<class TContainer, ui32 TIndexDictBrokenHole = RAW_INDEX_NO_HOLE, bool TNoDictIndex = false>
     struct TListRef: public NUdf::TBoxedValue {
         TListRef(const TContainer& listRef, ui32 holePos = RAW_INDEX_NO_HOLE)
-            : ListRef(listRef)
-            , HolePos(holePos)
+            : ListRef_(listRef)
+            , HolePos_(holePos)
         {}
 
     private:
-        const TContainer& ListRef;
-        const NUdf::IValueBuilder* ValueBuilder;
-        ui32 HolePos;
+        const TContainer& ListRef_;
+        const NUdf::IValueBuilder* ValueBuilder_;
+        ui32 HolePos_;
 
         bool HasFastListLength() const override {
             return true;
         }
 
         ui64 GetListLength() const override {
-            return ListRef.size();
+            return ListRef_.size();
         }
 
         ui64 GetEstimatedListLength() const override {
-            return ListRef.size();
+            return ListRef_.size();
         }
 
         NUdf::TUnboxedValue GetListIterator() const override {
-            return NUdf::TUnboxedValuePod(new TListRefIterator<TContainer>(ListRef, HolePos));
+            return NUdf::TUnboxedValuePod(new TListRefIterator<TContainer>(ListRef_, HolePos_));
         }
 
         NUdf::IBoxedValuePtr ToIndexDictImpl(const IValueBuilder& builder) const override {
             return TNoDictIndex ? nullptr : builder.ToIndexDict(NUdf::TUnboxedValuePod(
-                new TListRef<TContainer, TIndexDictBrokenHole, true>(ListRef, TIndexDictBrokenHole))).AsBoxed();
+                new TListRef<TContainer, TIndexDictBrokenHole, true>(ListRef_, TIndexDictBrokenHole))).AsBoxed();
         }
     };
 
@@ -206,70 +206,70 @@ namespace NImpl {
 
     struct TBrokenSeqListIterator: public NUdf::TBoxedValue {
         TBrokenSeqListIterator(ui32 size, ui32 holePos)
-            : Size(size)
-            , HolePos(holePos)
-            , Index(-1)
+            : Size_(size)
+            , HolePos_(holePos)
+            , Index_(-1)
         {}
     private:
-        ui32 Size;
-        ui32 HolePos;
-        ui32 Index;
+        ui32 Size_;
+        ui32 HolePos_;
+        ui32 Index_;
 
         bool Skip() final {
-            return ++Index < Size;
+            return ++Index_ < Size_;
         }
 
         bool Next(NUdf::TUnboxedValue& value) final {
             if (!Skip())
                 return false;
-            value = Index == HolePos ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(Index);
+            value = Index_ == HolePos_ ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(Index_);
             return true;
         }
     };
 
     struct TBrokenSeqListBoxedValue: public NUdf::TBoxedValue {
         TBrokenSeqListBoxedValue(ui32 size, ui32 holePos)
-            : ListSize(size)
-            , HolePos(holePos)
+            : ListSize_(size)
+            , HolePos_(holePos)
         {}
 
     private:
-        ui32 ListSize;
-        ui32 HolePos;
+        ui32 ListSize_;
+        ui32 HolePos_;
 
         bool HasFastListLength() const override {
             return true;
         }
 
         ui64 GetListLength() const override {
-            return ListSize;
+            return ListSize_;
         }
 
         ui64 GetEstimatedListLength() const override {
-            return ListSize;
+            return ListSize_;
         }
 
         NUdf::TUnboxedValue GetListIterator() const override {
-            return NUdf::TUnboxedValuePod(new TBrokenSeqListIterator(ListSize, HolePos));
+            return NUdf::TUnboxedValuePod(new TBrokenSeqListIterator(ListSize_, HolePos_));
         }
     };
 
     template<class TStructType>
     struct TBrokenStructBoxedValue: public NUdf::TBoxedValue {
         TBrokenStructBoxedValue(const TStructType& data, ui32 holePos = RAW_INDEX_NO_HOLE)
-            : Struct(data)
-            , HolePos(holePos)
+            : Struct_(data)
+            , HolePos_(holePos)
         {}
 
     private:
-        const TStructType& Struct;
-        ui32 HolePos;
+        const TStructType& Struct_;
+        ui32 HolePos_;
 
         NUdf::TUnboxedValue GetElement(ui32 index) const override {
-            if (index == HolePos) {
+            if (index == HolePos_) {
                 return NUdf::TUnboxedValuePod();
             }
-            return Struct.GetByIndex(TStructType::MetaBackIndexes[index]);
+            return Struct_.GetByIndex(TStructType::MetaBackIndexes[index]);
         }
     };
 
@@ -288,23 +288,23 @@ namespace {
     template<class TTupleType>
     struct TBrokenTupleBoxedValue: public NUdf::TBoxedValue {
         TBrokenTupleBoxedValue(const TTupleType& tuple, ui32 holePos)
-            : Tuple(tuple)
-            , HolePos(holePos)
+            : Tuple_(tuple)
+            , HolePos_(holePos)
         {}
 
     private:
-        const TTupleType& Tuple;
-        ui32 HolePos;
+        const TTupleType& Tuple_;
+        ui32 HolePos_;
 
         NUdf::TUnboxedValue GetElement(ui32 index) const override {
-            if (index == HolePos) {
+            if (index == HolePos_) {
                 return NUdf::TUnboxedValuePod();
             }
             switch (index) {
-                case 0: return ToUnboxedValue(std::get<0>(Tuple));
-                case 1: return ToUnboxedValue(std::get<1>(Tuple));
-                case 2: return ToUnboxedValue(std::get<2>(Tuple));
-                case 3: return ToUnboxedValue(std::get<3>(Tuple));
+                case 0: return ToUnboxedValue(std::get<0>(Tuple_));
+                case 1: return ToUnboxedValue(std::get<1>(Tuple_));
+                case 2: return ToUnboxedValue(std::get<2>(Tuple_));
+                case 3: return ToUnboxedValue(std::get<3>(Tuple_));
                 default: Y_ABORT("Unexpected");
             }
         }
@@ -315,31 +315,31 @@ namespace {
     template<class TKey, class TValue>
     struct TBrokenDictIterator: public NUdf::TBoxedValue {
         TBrokenDictIterator(const std::vector<std::pair<TKey, TValue>>& dictData, PosPair holePos)
-            : DictData(dictData)
-            , HolePos(holePos)
-            , Index(-1)
+            : DictData_(dictData)
+            , HolePos_(holePos)
+            , Index_(-1)
         {}
 
     private:
-        const std::vector<std::pair<TKey, TValue>>& DictData;
-        PosPair HolePos;
-        ui32 Index;
+        const std::vector<std::pair<TKey, TValue>>& DictData_;
+        PosPair HolePos_;
+        ui32 Index_;
 
         bool Skip() final {
-            return ++Index < DictData.size();
+            return ++Index_ < DictData_.size();
         }
 
         bool Next(NUdf::TUnboxedValue& key) final {
             if (!Skip())
                 return false;
-            key = Index == HolePos.first ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(DictData[Index].first);
+            key = Index_ == HolePos_.first ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(DictData_[Index_].first);
             return true;
         }
 
         bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) final {
             if (!Next(key))
                 return false;
-            payload = Index == HolePos.second ? NUdf::TUnboxedValue() : ToUnboxedValue(DictData[Index].second);
+            payload = Index_ == HolePos_.second ? NUdf::TUnboxedValue() : ToUnboxedValue(DictData_[Index_].second);
             return true;
         }
     };
@@ -348,33 +348,33 @@ namespace {
     struct TBrokenDictBoxedValue: public NUdf::TBoxedValue {
         TBrokenDictBoxedValue(const std::vector<std::pair<TKey, TValue>>& dictData,
             PosPair holePos, NUdf::TUnboxedValue&& hole = NUdf::TUnboxedValuePod())
-            : DictData(dictData)
-            , HolePos(holePos)
-            , Hole(std::move(hole))
+            : DictData_(dictData)
+            , HolePos_(holePos)
+            , Hole_(std::move(hole))
         {}
 
     private:
-        const std::vector<std::pair<TKey, TValue>> DictData;
-        PosPair HolePos;
-        NUdf::TUnboxedValue Hole;
+        const std::vector<std::pair<TKey, TValue>> DictData_;
+        PosPair HolePos_;
+        NUdf::TUnboxedValue Hole_;
 
         NUdf::TUnboxedValue GetKeysIterator() const override {
-            return NUdf::TUnboxedValuePod(new TBrokenDictIterator<TKey, TValue>(DictData, HolePos));
+            return NUdf::TUnboxedValuePod(new TBrokenDictIterator<TKey, TValue>(DictData_, HolePos_));
         }
 
         NUdf::TUnboxedValue GetDictIterator() const override {
-            return NUdf::TUnboxedValuePod(new TBrokenDictIterator<TKey, TValue>(DictData, HolePos));
+            return NUdf::TUnboxedValuePod(new TBrokenDictIterator<TKey, TValue>(DictData_, HolePos_));
         }
     };
 
     struct TThrowerValue: public NUdf::TBoxedValue {
         static long Count;
         TThrowerValue(NUdf::IBoxedValuePtr&& owner = NUdf::IBoxedValuePtr())
-            : Owner(std::move(owner))
+            : Owner_(std::move(owner))
         { ++Count; }
         ~TThrowerValue() { --Count; }
     private:
-        const NUdf::IBoxedValuePtr Owner;
+        const NUdf::IBoxedValuePtr Owner_;
 
         bool Skip() override {
             ythrow yexception() << "Throw";
@@ -571,7 +571,7 @@ namespace {
     const ui32 DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX = 1;
     const ui32 DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX = 2;
 
-    const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MAKE_DICT_DIGIT2PERSON_BROKEN() {
+    const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBroken() {
         std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> DICT_DIGIT2PERSON_BROKEN = {
             { 333, new TBrokenStructBoxedValue<NUdf::PersonStruct>(STRUCT_PERSON_HITHCOCK, RAW_INDEX_NO_HOLE) },
             { 5, new TBrokenStructBoxedValue<NUdf::PersonStruct>(STRUCT_PERSON_JONNIE, DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX) },
@@ -583,7 +583,7 @@ namespace {
 
     typedef NUdf::TDict<ui32,NUdf::PersonStruct> NUdfDictDigPerson;
 
-    std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MAKE_DICT_DIGIT2PERSON() {
+    std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2Person() {
         const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> DICT_DIGIT2PERSON = {
             { 333, new TBrokenStructBoxedValue<NUdf::PersonStruct>(STRUCT_PERSON_HITHCOCK, RAW_INDEX_NO_HOLE) },
             { 5, new TBrokenStructBoxedValue<NUdf::PersonStruct>(STRUCT_PERSON_JONNIE, RAW_INDEX_NO_HOLE) },
@@ -597,7 +597,7 @@ namespace {
         Y_UNUSED(args);
         Y_UNUSED(valueBuilder);
         NUdf::IBoxedValuePtr boxed(new TBrokenDictBoxedValue<ui32, NUdf::IBoxedValuePtr>(
-            MAKE_DICT_DIGIT2PERSON(), std::make_pair(RAW_INDEX_NO_HOLE, RAW_INDEX_NO_HOLE)));
+            MakeDictDigiT2Person(), std::make_pair(RAW_INDEX_NO_HOLE, RAW_INDEX_NO_HOLE)));
         return NUdf::TUnboxedValuePod(std::move(boxed));
     }
 
@@ -605,7 +605,7 @@ namespace {
         Y_UNUSED(args);
         Y_UNUSED(valueBuilder);
         NUdf::IBoxedValuePtr boxed(new TBrokenDictBoxedValue<ui32, NUdf::IBoxedValuePtr>(
-            MAKE_DICT_DIGIT2PERSON_BROKEN(), std::make_pair(RAW_INDEX_NO_HOLE, RAW_INDEX_NO_HOLE)));
+            MakeDictDigiT2PersonBroken(), std::make_pair(RAW_INDEX_NO_HOLE, RAW_INDEX_NO_HOLE)));
         return NUdf::TUnboxedValuePod(std::move(boxed));
     }
 
@@ -1120,7 +1120,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
             auto dictIter = value.GetDictIterator();
             NUdf::TUnboxedValue key, payload;
             for (ui32 index = 0; dictIter.NextPair(key, payload); ++index) {
-                UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MAKE_DICT_DIGIT2PERSON()[index].first);
+                UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2Person()[index].first);
                 auto person = payload;
                 auto firstName = person.GetElement(NUdf::PersonStruct::MetaIndexes[0]);
                 UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName);
@@ -1137,7 +1137,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
             auto dictIter = value.GetDictIterator();
             NUdf::TUnboxedValue key, payload;
             for (ui32 index = 0; index < DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX && dictIter.NextPair(key, payload); ++index) {
-                UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MAKE_DICT_DIGIT2PERSON_BROKEN()[index].first);
+                UNIT_ASSERT_VALUES_EQUAL(key.Get<ui32>(), MakeDictDigiT2PersonBroken()[index].first);
                 auto person = payload;
                 auto firstName = person.GetElement(NUdf::PersonStruct::MetaIndexes[0]);
                 UNIT_ASSERT_VALUES_EQUAL(TString(firstName.AsStringRef()), DICT_DIGIT2PERSON_BROKEN_CONTENT_BY_INDEX[index]->FirstName);

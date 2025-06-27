@@ -160,7 +160,6 @@ struct TSettings {
 
         return TConclusionStatus::Success();
     }
-
 };
 
 using TPortionMap = THashMap<ui64, TPortionInfo::TPtr>;

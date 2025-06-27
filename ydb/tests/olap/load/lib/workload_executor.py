@@ -1509,25 +1509,11 @@ class WorkloadTestBase(LoadSuiteBase):
             
             # Проверяем состояние нод и собираем ошибки
             try:
-                # Получаем информацию о состоянии нод
-                nodes_state = self.get_nodes_state()
+                # Используем метод родительского класса для диагностики нод
+                end_time = time()
+                diagnostics_start_time = getattr(result, 'workload_start_time', result.start_time)
+                node_errors = self.check_nodes_diagnostics_with_timing(result, diagnostics_start_time, end_time)
                 
-                # Проверяем каждую ноду на наличие ошибок
-                for node, state in nodes_state.items():
-                    # Создаем объект ошибки, если есть проблемы
-                    if state.get('error') or state.get('cores') or state.get('oom'):
-                        node_error = NodeErrors(node, state.get('error', ''))
-                        
-                        # Добавляем информацию о cores
-                        if state.get('cores'):
-                            for core_id, core_hash in state['cores']:
-                                node_error.core_hashes.append((core_id, core_hash))
-                        
-                        # Добавляем информацию об OOM
-                        if state.get('oom'):
-                            node_error.was_oom = True
-                        
-                        node_errors.append(node_error)
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат

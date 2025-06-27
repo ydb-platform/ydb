@@ -1277,27 +1277,24 @@ class WorkloadTestBase(LoadSuiteBase):
             workload_params = {}
             
             # Извлекаем параметры из статистики
-            if result.stats:
-                # Основные параметры
-                if workload_name in result.stats:
-                    workload_stats = result.stats[workload_name]
-                    
-                    # Добавляем важные параметры в начало
-                    important_params = ['total_runs', 'planned_duration', 'actual_duration', 'use_iterations', 'workload_type', 'table_type']
-                    for param in important_params:
-                        if param in workload_stats:
-                            workload_params[param] = workload_stats[param]
-                    
-                    # Информация об итерациях и потоках
-                    if 'total_iterations' in workload_stats:
-                        workload_params['total_iterations'] = workload_stats['total_iterations']
-                    if 'total_threads' in workload_stats:
-                        workload_params['total_threads'] = workload_stats['total_threads']
-                    
-                    # Добавляем остальные параметры
-                    for key, value in workload_stats.items():
-                        if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
-                            workload_params[key] = value
+            workload_stats = result.get_stats(workload_name)
+            if workload_stats:
+                # Добавляем важные параметры в начало
+                important_params = ['total_runs', 'planned_duration', 'actual_duration', 'use_iterations', 'workload_type', 'table_type']
+                for param in important_params:
+                    if param in workload_stats:
+                        workload_params[param] = workload_stats[param]
+                
+                # Информация об итерациях и потоках
+                if 'total_iterations' in workload_stats:
+                    workload_params['total_iterations'] = workload_stats['total_iterations']
+                if 'total_threads' in workload_stats:
+                    workload_params['total_threads'] = workload_stats['total_threads']
+                
+                # Добавляем остальные параметры
+                for key, value in workload_stats.items():
+                    if key not in workload_params and key not in ['success_rate', 'successful_runs', 'failed_runs']:
+                        workload_params[key] = value
             
             # Собираем информацию об ошибках нод
             node_errors = []

@@ -313,6 +313,21 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
             )", {{NKikimrScheme::StatusPathDoesNotExist, "Check failed: path: '/MyRoot/ExternalDataSource1'"}});
     }
 
+    std::vector<NKikimrSchemeOp::TColumnDescription> CheckExternalTable(TTestBasicRuntime& runtime, ui64 version, const TString& location) {
+        auto describeResult = DescribePath(runtime, "/MyRoot/ExternalTable");
+        TestDescribeResult(describeResult, {NLs::PathExist});
+        UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
+        const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetName(), "ExternalTable");
+        UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetDataSourcePath(), "/MyRoot/ExternalDataSource");
+        UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetLocation(), location);
+        UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetSourceType(), "ObjectStorage");
+        UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetVersion(), version);
+
+        auto& columns = externalTableDescription.GetColumns();
+        return {columns.begin(), columns.end()};
+    }
+
     Y_UNIT_TEST(ReplaceExternalTableIfNotExists) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
@@ -331,20 +346,11 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            auto describeResult = DescribePath(runtime, "/MyRoot/ExternalTable");
-            TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
-            const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetName(), "ExternalTable");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetDataSourcePath(), "/MyRoot/ExternalDataSource");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetLocation(), "/");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetSourceType(), "ObjectStorage");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetVersion(), 1);
-            auto& columns = externalTableDescription.GetColumns();
+            const auto& columns = CheckExternalTable(runtime, 1, "/");
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetName(), "key");
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetType(), "Uint64");
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetNotNull(), false);
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetName(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetNotNull(), false);
         }
 
         TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
@@ -359,23 +365,88 @@ Y_UNIT_TEST_SUITE(TExternalTableTest) {
         env.TestWaitNotification(runtime, txId);
 
         {
-            auto describeResult = DescribePath(runtime, "/MyRoot/ExternalTable");
-            TestDescribeResult(describeResult, {NLs::PathExist});
-            UNIT_ASSERT(describeResult.GetPathDescription().HasExternalTableDescription());
-            const auto& externalTableDescription = describeResult.GetPathDescription().GetExternalTableDescription();
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetName(), "ExternalTable");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetDataSourcePath(), "/MyRoot/ExternalDataSource");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetLocation(), "/new_location");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetSourceType(), "ObjectStorage");
-            UNIT_ASSERT_VALUES_EQUAL(externalTableDescription.GetVersion(), 2);
-            auto& columns = externalTableDescription.GetColumns();
+            const auto& columns = CheckExternalTable(runtime, 2, "/new_location");
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetName(), "key");
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetType(), "Uint64");
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(0).GetNotNull(), false);
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(1).GetName(), "value");
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(1).GetType(), "Uint64");
-            UNIT_ASSERT_VALUES_EQUAL(columns.Get(1).GetNotNull(), false);
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetName(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetNotNull(), false);
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].GetName(), "value");
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].GetNotNull(), false);
+        }
+
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/other_location"
+                Columns { Name: "value" Type: "Uint64" }
+                ReplaceIfExists: true
+            )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            const auto& columns = CheckExternalTable(runtime, 3, "/other_location");
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetName(), "value");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetNotNull(), false);
+        }
+    }
+
+    Y_UNIT_TEST(ParallelReplaceExternalTableIfNotExists) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true));
+        ui64 txId = 100;
+
+        CreateExternalDataSource(runtime, env, ++txId);
+        TestCreateExternalTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "key" Type: "Uint64" }
+                ReplaceIfExists: true
+            )", {NKikimrScheme::StatusAccepted}
+        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        constexpr ui32 TEST_RUNS = 30;
+        TSet<ui64> txIds;
+        for (ui32 i = 0; i < TEST_RUNS; ++i) {
+            AsyncCreateExternalTable(runtime, ++txId, "/MyRoot",R"(
+                    Name: "ExternalTable"
+                    SourceType: "General"
+                    DataSourcePath: "/MyRoot/ExternalDataSource"
+                    Location: "/new_location"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    ReplaceIfExists: true
+                )"
+            );
+
+            txIds.insert(txId);
+        }
+
+        ui32 acceptedCount = 0;
+        for (auto testTx : txIds) {
+            const auto result = TestModificationResults(runtime, testTx, {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            acceptedCount += result == NKikimrScheme::StatusAccepted;
+        }
+        UNIT_ASSERT_GE(acceptedCount, 1);
+
+        env.TestWaitNotification(runtime, txIds);
+
+        {
+            const auto& columns = CheckExternalTable(runtime, acceptedCount + 1, "/new_location");
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetName(), "key");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns[0].GetNotNull(), false);
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].GetName(), "value");
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].GetType(), "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(columns[1].GetNotNull(), false);
         }
     }
 

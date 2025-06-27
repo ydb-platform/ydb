@@ -87,6 +87,7 @@ class TAlterResourcePool : public TSubOperation {
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
+            .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeResourcePool)
             .IsValidLeafName()
             .DepthLimit()

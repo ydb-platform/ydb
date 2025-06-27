@@ -769,7 +769,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
     }
 
     bool IsMajorityReached() const {
-        TVector<ui32> responsesByGroup(ProxyGroups.size());
+        TVector<ui32> responsesByGroup(ProxyGroups.size(), 0);
         for (const auto& [proxy, _] : InitialResponses) {
             if (const auto* groupIdx = ProxyToGroupMap.FindPtr(proxy)) {
                 responsesByGroup[*groupIdx]++;
@@ -939,8 +939,8 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         Y_ABORT_UNLESS(!ReceivedSync.contains(ev->Sender));
         ReceivedSync[ev->Sender] = ev->Get()->Record.GetPartial();
 
-        TVector<ui32> successesByGroup(ProxyGroups.size());
-        TVector<ui32> failuresByGroup(ProxyGroups.size());
+        TVector<ui32> successesByGroup(ProxyGroups.size(), 0);
+        TVector<ui32> failuresByGroup(ProxyGroups.size(), 0);
         for (const auto& [proxy, partial] : ReceivedSync) {
             const auto* groupIdx = ProxyToGroupMap.FindPtr(proxy);
             if (!groupIdx) {

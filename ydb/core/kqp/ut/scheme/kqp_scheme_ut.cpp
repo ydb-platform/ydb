@@ -8730,7 +8730,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     ENDPOINT = "localhost:2135",
@@ -8746,7 +8746,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "localhost:2135"
                 );
@@ -8760,7 +8760,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     DATABASE = "/Root"
                 );
@@ -8774,7 +8774,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     TOKEN = "foo",
@@ -8791,7 +8791,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     TOKEN = "foo",
@@ -8807,7 +8807,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     USER = "user",
@@ -8823,7 +8823,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     PASSWORD = "bar"
@@ -8838,7 +8838,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     USER = "user"
@@ -8854,7 +8854,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     BATCH_SIZE_BYTES = 0
@@ -8870,7 +8870,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     FLUSH_INTERVAL = 'PT1S'
@@ -8886,7 +8886,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     CONSUMER = ''
@@ -8902,7 +8902,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table_not_exists` USING ($x) -> { RETURN <| id:$x._offset |>; }
+                  FROM `/Root/topic` TO `/Root/table_not_exists` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
@@ -8941,7 +8941,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
@@ -8979,7 +8979,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer_fi`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "%s",
                     FLUSH_INTERVAL = Interval('PT1S')
@@ -9004,7 +9004,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     ENDPOINT = "localhost:2135",
@@ -9020,7 +9020,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "localhost:2135"
                 );
@@ -9034,7 +9034,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     DATABASE = "/Root"
                 );
@@ -9048,7 +9048,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     TOKEN = "foo",
@@ -9065,7 +9065,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     TOKEN = "foo",
@@ -9081,7 +9081,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     USER = "user",
@@ -9097,7 +9097,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     PASSWORD = "bar"
@@ -9112,7 +9112,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     USER = "user"
@@ -9128,7 +9128,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     BATCH_SIZE_BYTES = 0
@@ -9144,7 +9144,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     FLUSH_INTERVAL = 'PT1S'
@@ -9160,7 +9160,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     CONSUMER = ''
@@ -9176,7 +9176,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table_not_exists` USING ($x) -> { RETURN <| id:$x._offset |>; }
+                  FROM `/Root/topic` TO `/Root/table_not_exists` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
@@ -9215,7 +9215,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
@@ -9253,7 +9253,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer_fi`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     CONNECTION_STRING = "%s",
                     FLUSH_INTERVAL = Interval('PT1S')
@@ -9321,7 +9321,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                    FROM `/Root/topic` TO `/Root/table`
+                    FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
@@ -9679,7 +9679,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                    FROM `/Root/topic` TO `/Root/table`
+                    FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
@@ -10044,7 +10044,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"
@@ -10116,7 +10116,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = Sprintf(R"(
                 --!syntax_v1
                 CREATE TRANSFER `/Root/transfer`
-                  FROM `/Root/topic` TO `/Root/table`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root"

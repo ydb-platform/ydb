@@ -706,7 +706,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
 
         it->second.AckTo = ev->Sender;
-        it->second.PathAcks.emplace(std::make_pair(pathId, version), TVector<ui32>(GroupInfo->RingGroups.size()));
+        it->second.PathAcks.emplace(std::make_pair(pathId, version), TVector<ui32>(GroupInfo->RingGroups.size(), 0));
 
         Update(pathId, isDeletion, ev->Cookie);
 

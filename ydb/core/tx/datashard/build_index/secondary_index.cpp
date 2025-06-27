@@ -238,10 +238,7 @@ public:
         }
 
         TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-        progress->Record.SetId(BuildIndexId);
-        progress->Record.SetTabletId(DataShardId);
-        progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-        progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+        FillScanResponseCommonFields(progress.Get(), BuildIndexId, DataShardId, SeqNo);
 
         if (status == EStatus::Exception) {
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -349,10 +346,7 @@ private:
 
             //send progress
             TAutoPtr<TEvDataShard::TEvBuildIndexProgressResponse> progress = new TEvDataShard::TEvBuildIndexProgressResponse;
-            progress->Record.SetId(BuildIndexId);
-            progress->Record.SetTabletId(DataShardId);
-            progress->Record.SetRequestSeqNoGeneration(SeqNo.Generation);
-            progress->Record.SetRequestSeqNoRound(SeqNo.Round);
+            FillScanResponseCommonFields(progress.Get(), BuildIndexId, DataShardId, SeqNo);
 
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
@@ -534,12 +528,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
     try {
         auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-        response->Record.SetId(request.GetId());
-        response->Record.SetTabletId(TabletID());
-        response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
-        response->Record.SetRequestSeqNoRound(seqNo.Round);
+        FillScanResponseCommonFields(response.Get(), request.GetId(), TabletID(), seqNo);
 
-        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID() 
+        LOG_N("Starting TBuildIndexScan TabletId: " << TabletID()
             << " " << request.ShortDebugString()
             << " row version " << rowVersion);
 
@@ -639,6 +630,276 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvBuildIndexProgressResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TBuildIndexScan");
+    }
+}
+
+class TValidateUniqueIndexScan: public NTable::IScan {
+public:
+    TValidateUniqueIndexScan(
+        ui64 buildIndexId,
+        const TUserTable& tableInfo,
+        TProtoColumnsCRef targetIndexColumns,
+        const TScanRecord::TSeqNo& seqNo,
+        ui64 dataShardId,
+        NActors::TActorSystem* actorSystem,
+        NActors::TActorId senderActorId)
+        : BuildIndexId(buildIndexId)
+        , SeqNo(seqNo)
+        , DataShardId(dataShardId)
+        , ActorSystem(actorSystem)
+        , SenderActorId(senderActorId)
+        , ScanTags(BuildTags(tableInfo, targetIndexColumns))
+        , IndexColumnNames(targetIndexColumns.begin(), targetIndexColumns.end())
+    {
+    }
+
+    TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme> scheme) override {
+        Scheme = std::move(scheme);
+        MakeTypeInfos();
+        return {EScan::Feed, {}};
+    }
+
+    EScan Seek(TLead& lead, ui64) override {
+        lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        return EScan::Feed;
+    }
+
+    TString DuplicateKeyErrorMessage() const {
+        TStringBuilder res;
+        res << "Duplicate key found: (";
+        for (size_t i = 0; i < IndexColumnNames.size(); ++i) {
+            if (i > 0) {
+                res << ", ";
+            }
+            res << IndexColumnNames[i] << "=";
+            DbgPrintValue(res, LastIndexKey->GetCells()[i], IndexColumnTypeInfos[i].ToTypeInfo());
+        }
+        res << ")";
+        return std::move(res);
+    }
+
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
+        if (row.Size() != ScanTags.size()) {
+            return FinishValidation(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Row size mismatch: expected " << ScanTags.size() << ", got " << row.Size());
+        }
+
+        ++ReadRows;
+        ReadBytes += CountRowCellBytes(key, *row);
+
+        TArrayRef<const TCell> rowCells = *row;
+        if (!FirstIndexKey) {
+            FirstIndexKey.emplace(rowCells);
+            LastIndexKey.emplace(rowCells);
+            return EScan::Feed;
+        }
+
+        if (TypedCellVectorsEqualWithNullSemantics(rowCells.data(), LastIndexKey->GetCells().data(), IndexColumnTypeInfos.data(), IndexColumnTypeInfos.size()) == ETriBool::True) {
+            return FinishValidation(Ydb::StatusIds::PRECONDITION_FAILED, DuplicateKeyErrorMessage());
+        }
+        LastIndexKey.emplace(rowCells);
+        return EScan::Feed;
+    }
+
+    TAutoPtr<IDestructable> Finish(const std::exception& ex) override {
+        Issues.AddIssue(TStringBuilder() << "Scan failed: " << ex.what());
+        return Finish(EStatus::Exception);
+    }
+
+    void SendResponse() {
+        auto response = std::make_unique<TEvDataShard::TEvValidateUniqueIndexResponse>();
+        FillScanResponseCommonFields(response.get(), BuildIndexId, DataShardId, SeqNo);
+        auto& rec = response->Record;
+        rec.SetStatus(StatusCode);
+        rec.SetReadRows(ReadRows);
+        rec.SetReadBytes(ReadBytes);
+        if (Issues) {
+            NYql::IssuesToMessage(Issues, rec.MutableIssues());
+        }
+        if (FirstIndexKey) {
+            rec.SetFirstIndexKey(FirstIndexKey->GetBuffer());
+        }
+        if (LastIndexKey) {
+            rec.SetLastIndexKey(LastIndexKey->GetBuffer());
+        }
+        ActorSystem->Send(SenderActorId, response.release());
+    }
+
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        if (StatusCode == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+            if (status == EStatus::Exception) {
+                StatusCode = Ydb::StatusIds::PRECONDITION_FAILED;
+            } else if (status != EStatus::Done) {
+                StatusCode = Ydb::StatusIds::ABORTED;
+            } else {
+                StatusCode = Ydb::StatusIds::SUCCESS;
+            }
+        }
+
+        SendResponse();
+        return this;
+    }
+
+    EScan Exhausted() override {
+        return EScan::Final;
+    }
+
+    void Describe(IOutputStream& out) const override {
+        out << "TValidateUniqueIndexScan Id: " << BuildIndexId
+            << " Status: " << StatusCode << " Issues: " << Issues.ToOneLineString();
+    }
+
+    TString Debug() const {
+        TStringBuilder res;
+        Describe(res.Out);
+        return std::move(res);
+    }
+
+    void MakeTypeInfos() {
+        IndexColumnTypeInfos.reserve(ScanTags.size());
+        for (NTable::TTag tag : ScanTags) {
+            const NTable::TColInfo* colInfo = Scheme->ColInfo(tag);
+            Y_ENSURE(colInfo, "Column info not found for tag " << tag);
+            IndexColumnTypeInfos.emplace_back(colInfo->TypeInfo);
+        }
+    }
+
+    EScan FinishValidation(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, TString error = {}) {
+        StatusCode = statusCode;
+        Issues.AddIssue(error);
+        return EScan::Final;
+    }
+
+private:
+    const ui64 BuildIndexId;
+    const TString TargetTable;
+    const TScanRecord::TSeqNo SeqNo;
+    const ui64 DataShardId;
+    NActors::TActorSystem* const ActorSystem = nullptr;
+    const NActors::TActorId SenderActorId;
+
+    TTags ScanTags;
+    std::vector<TString> IndexColumnNames;
+    TIntrusiveConstPtr<TScheme> Scheme;
+    std::vector<NScheme::TTypeInfoOrder> IndexColumnTypeInfos;
+
+    // Results
+    Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    NYql::TIssues Issues;
+    std::optional<TSerializedCellVec> FirstIndexKey;
+    std::optional<TSerializedCellVec> LastIndexKey;
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
+};
+
+TAutoPtr<NTable::IScan> CreateValidateUniqueIndexScan(
+    ui64 buildIndexId,
+    const TUserTable& tableInfo,
+    TProtoColumnsCRef targetIndexColumns,
+    const TScanRecord::TSeqNo& seqNo,
+    ui64 dataShardId,
+    NActors::TActorSystem* actorSystem,
+    NActors::TActorId senderActorId)
+{
+    return new TValidateUniqueIndexScan(buildIndexId, tableInfo, targetIndexColumns, seqNo, dataShardId, actorSystem, senderActorId);
+}
+
+class TDataShard::TTxHandleSafeValidateUniqueIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxHandleSafeValidateUniqueIndexScan(TDataShard* self, TEvDataShard::TEvValidateUniqueIndexRequest::TPtr&& ev)
+        : TTransactionBase(self)
+        , Ev(std::move(ev)) {
+    }
+
+    bool Execute(TTransactionContext&, const TActorContext& ctx) {
+        Self->HandleSafe(Ev, ctx);
+        return true;
+    }
+
+    void Complete(const TActorContext&) {
+        // nothing
+    }
+
+private:
+    TEvDataShard::TEvValidateUniqueIndexRequest::TPtr Ev;
+};
+
+void TDataShard::Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext&) {
+    Execute(new TTxHandleSafeValidateUniqueIndexScan(this, std::move(ev)));
+}
+
+void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx) {
+    auto& request = ev->Get()->Record;
+
+    const ui64 id = request.GetId();
+    TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
+
+    try {
+        auto response = MakeHolder<TEvDataShard::TEvValidateUniqueIndexResponse>();
+        FillScanResponseCommonFields(response.Get(), request.GetId(), TabletID(), seqNo);
+
+        LOG_N("Starting TValidateUniqueIndexScan TabletId: " << TabletID()
+            << " " << request.ShortDebugString());
+
+        auto badRequest = [&](const TString& error) {
+            response->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
+            auto issue = response->Record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message(error);
+        };
+        auto trySendBadRequest = [&] {
+            if (response->Record.GetStatus() == Ydb::StatusIds::BAD_REQUEST) {
+                LOG_E("Rejecting TValidateUniqueIndexScan bad request TabletId: " << TabletID()
+                    << " " << request.ShortDebugString()
+                    << " with response " << response->Record.ShortDebugString());
+                ctx.Send(ev->Sender, std::move(response));
+                return true;
+            } else {
+                return false;
+            }
+        };
+
+        const auto tableId = TTableId(request.GetOwnerId(), request.GetPathId());
+        if (request.GetTabletId() != TabletID()) {
+            badRequest(TStringBuilder() << "Wrong shard " << request.GetTabletId() << " this is " << TabletID());
+        }
+        if (!IsStateActive()) {
+            badRequest(TStringBuilder() << "Shard " << TabletID() << " is " << State << " and not ready for requests");
+        }
+        if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
+            badRequest(TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
+        }
+        if (request.GetIndexColumns().empty()) {
+            badRequest("Empty index columns list");
+        }
+
+        if (trySendBadRequest()) {
+            return;
+        }
+
+        const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
+        auto tags = GetAllTags(userTable);
+        for (auto column : request.GetIndexColumns()) {
+            if (!tags.contains(column)) {
+                badRequest(TStringBuilder() << "Unknown index column: " << column);
+            }
+        }
+
+        if (trySendBadRequest()) {
+            return;
+        }
+
+        TAutoPtr<NTable::IScan> scan = CreateValidateUniqueIndexScan(
+            id,
+            userTable,
+            request.GetIndexColumns(),
+            seqNo,
+            request.GetTabletId(),
+            TActivationContext::ActorSystem(),
+            ev->Sender);
+
+        StartScan(this, std::move(scan), id, seqNo, std::nullopt, userTable.LocalTid);
+    } catch (const std::exception& exc) {
+        FailScan<TEvDataShard::TEvValidateUniqueIndexResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TValidateUniqueIndexScan");
     }
 }
 

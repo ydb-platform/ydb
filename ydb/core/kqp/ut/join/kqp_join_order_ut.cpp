@@ -92,7 +92,17 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
     CreateView(session, "view/tpch_random_join_view.sql");
 }
 
-static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
+struct TExecuteParams {
+    bool RemoveLimitOperator = false;
+    bool EnableSeparationComputeActorsFromRead = true;
+};
+
+static TKikimrRunner GetKikimrWithJoinSettings(
+    bool useStreamLookupJoin = false,
+    TString stats = "",
+    bool useCBO = true,
+    const TExecuteParams& params = {}
+){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
@@ -116,6 +126,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(true);
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    serverSettings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(params.EnableSeparationComputeActorsFromRead);
     serverSettings.SetKqpSettings(settings);
     return TKikimrRunner(serverSettings);
 }

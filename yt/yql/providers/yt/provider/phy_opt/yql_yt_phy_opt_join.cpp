@@ -327,6 +327,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EarlyMergeJoin(TExprBase node, TExprContext& ctx) const {
     if (State_->Configuration->JoinMergeTablesLimit.Get()) {
         auto equiJoin = node.Cast<TYtEquiJoin>();
+
+        const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false);
+        if (waitAllInputs && !AreJoinInputsReady(equiJoin)) {
+            return node;
+        }
+
         const auto tree = ImportYtEquiJoin(equiJoin, ctx);
         if (State_->Configuration->JoinMergeForce.Get() || tree->LinkSettings.ForceSortedMerge) {
             const auto rewriteStatus = RewriteYtEquiJoinLeaves(equiJoin, *tree, State_, ctx);
@@ -479,19 +485,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBa
         && !HasSetting(equiJoin.JoinOptions().Ref(), "cbo_passed");
 
     const bool waitAllInputs = State_->Configuration->JoinWaitAllInputs.Get().GetOrElse(false) || tryReorder;
-
-    if (waitAllInputs) {
-        for (auto section: equiJoin.Input()) {
-            for (auto path: section.Paths()) {
-                TYtPathInfo pathInfo(path);
-                if (!pathInfo.Table->Stat) {
-                    return node;
-                }
-            }
-        }
+    if (waitAllInputs && !AreJoinInputsReady(equiJoin)) {
+        return node;
     }
-    const auto tree = ImportYtEquiJoin(equiJoin, ctx);
 
+    const auto tree = ImportYtEquiJoin(equiJoin, ctx);
     if (tryReorder) {
         YQL_CLOG(INFO, ProviderYt) << "Collecting cbo stats for equiJoin";
         auto collectStatus = CollectCboStats(*tree, State_, ctx);

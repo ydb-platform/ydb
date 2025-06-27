@@ -9,7 +9,6 @@ TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
     TShardState::TPtr result = std::make_shared<TShardState>(std::move(state));
-    result->Generation = 1;
     AFL_ENSURE(Shards.emplace(result->TabletId, result).second)("tablet_id", result->TabletId);
     return result;
 }

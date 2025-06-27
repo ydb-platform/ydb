@@ -110,7 +110,7 @@ class WorkloadTestBase(LoadSuiteBase):
     @classmethod
     def _manage_nemesis(cls, enable_nemesis: bool, operation_context: str = None, existing_log: list = None):
         """
-        Управляет сервисом nemesis на всех уникальных хостах кластера
+        Управляет сервисом nemesis на всех уникальных хостах кластера (параллельное выполнение)
         
         Args:
             enable_nemesis: True для запуска, False для остановки
@@ -131,63 +131,96 @@ class WorkloadTestBase(LoadSuiteBase):
             if enable_nemesis:
                 action = "restart"
                 action_name = "Starting"
-                logging.info(f"Starting nemesis on {len(unique_hosts)} hosts")
+                logging.info(f"Starting nemesis on {len(unique_hosts)} hosts in parallel")
                 
                 # Создаем сводный лог для Allure для файловых операций
                 file_ops_log = []
-                file_ops_log.append(f"Preparing nemesis configuration on {len(unique_hosts)} hosts")
+                file_ops_log.append(f"Preparing nemesis configuration on {len(unique_hosts)} hosts in parallel")
                 
                 # Добавляем информацию о времени операций
                 current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 file_ops_log.append(f"Time: {current_time}")
                 
-                # Выполняем операции с файлами на каждом уникальном хосте
+                # Функция для выполнения файловых операций на одном хосте
+                def prepare_nemesis_config(host):
+                    host_log = []
+                    host_log.append(f"\n--- {host} ---")
+                    
+                    try:
+                        # 1. Удаляем cluster.yaml
+                        delete_cmd = "sudo rm -f /Berkanavt/kikimr/cfg/cluster.yaml"
+                        delete_result = execute_command(
+                            host=host,
+                            cmd=delete_cmd,
+                            raise_on_error=False
+                        )
+                        
+                        delete_stderr = delete_result.stderr if delete_result.stderr else ""
+                        if delete_stderr and "error" in delete_stderr.lower():
+                            error_msg = f"Error deleting cluster.yaml on {host}: {delete_stderr}"
+                            host_log.append(error_msg)
+                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                        else:
+                            host_log.append("Deleted cluster.yaml")
+                        
+                        # 2. Копируем config.yaml в cluster.yaml
+                        copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
+                        copy_result = execute_command(
+                            host=host,
+                            cmd=copy_cmd,
+                            raise_on_error=False
+                        )
+                        
+                        copy_stderr = copy_result.stderr if copy_result.stderr else ""
+                        if copy_stderr and "error" in copy_stderr.lower():
+                            error_msg = f"Error copying config.yaml to cluster.yaml on {host}: {copy_stderr}"
+                            host_log.append(error_msg)
+                            return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                        else:
+                            host_log.append("Copied config.yaml to cluster.yaml")
+                            return {'host': host, 'success': True, 'log': host_log}
+                            
+                    except Exception as e:
+                        error_msg = f"Exception on {host}: {e}"
+                        host_log.append(error_msg)
+                        return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                
+                # Выполняем файловые операции параллельно
+                file_ops_start_time = time()
                 success_count = 0
                 error_count = 0
                 errors = []
                 
-                for host in unique_hosts:
-                    file_ops_log.append(f"\n--- {host} ---")
+                with ThreadPoolExecutor(max_workers=min(len(unique_hosts), 20)) as executor:
+                    future_to_host = {executor.submit(prepare_nemesis_config, host): host for host in unique_hosts}
                     
-                    # 1. Удаляем cluster.yaml
-                    delete_cmd = "sudo rm -f /Berkanavt/kikimr/cfg/cluster.yaml"
-                    delete_result = execute_command(
-                        host=host,
-                        cmd=delete_cmd,
-                        raise_on_error=False
-                    )
-                    
-                    delete_stderr = delete_result.stderr if delete_result.stderr else ""
-                    if delete_stderr and "error" in delete_stderr.lower():
-                        error_msg = f"Error deleting cluster.yaml on {host}: {delete_stderr}"
-                        file_ops_log.append(error_msg)
-                        errors.append(error_msg)
-                        error_count += 1
-                    else:
-                        file_ops_log.append("Deleted cluster.yaml")
-                    
-                    # 2. Копируем config.yaml в cluster.yaml
-                    copy_cmd = "sudo cp /Berkanavt/kikimr/cfg/config.yaml /Berkanavt/kikimr/cfg/cluster.yaml"
-                    copy_result = execute_command(
-                        host=host,
-                        cmd=copy_cmd,
-                        raise_on_error=False
-                    )
-                    
-                    copy_stderr = copy_result.stderr if copy_result.stderr else ""
-                    if copy_stderr and "error" in copy_stderr.lower():
-                        error_msg = f"Error copying config.yaml to cluster.yaml on {host}: {copy_stderr}"
-                        file_ops_log.append(error_msg)
-                        errors.append(error_msg)
-                        error_count += 1
-                    else:
-                        file_ops_log.append("Copied config.yaml to cluster.yaml")
-                        success_count += 1
+                    for future in as_completed(future_to_host):
+                        try:
+                            result = future.result()
+                            host_log = result['log']
+                            file_ops_log.extend(host_log)
+                            
+                            if result['success']:
+                                success_count += 1
+                            else:
+                                error_count += 1
+                                errors.append(result['error'])
+                                
+                        except Exception as e:
+                            host = future_to_host[future]
+                            error_msg = f"Exception processing {host}: {e}"
+                            file_ops_log.append(f"\n--- {host} ---")
+                            file_ops_log.append(error_msg)
+                            errors.append(error_msg)
+                            error_count += 1
+                
+                file_ops_time = time() - file_ops_start_time
                 
                 # Добавляем итоговую статистику файловых операций
                 file_ops_log.append(f"\n--- File Operations Summary ---")
                 file_ops_log.append(f"Successful hosts: {success_count}/{len(unique_hosts)}")
                 file_ops_log.append(f"Failed hosts: {error_count}/{len(unique_hosts)}")
+                file_ops_log.append(f"Execution time: {file_ops_time:.2f}s")
                 
                 if errors:
                     file_ops_log.append("\nErrors:")
@@ -195,61 +228,95 @@ class WorkloadTestBase(LoadSuiteBase):
                         file_ops_log.append(f"- {error}")
                 
                 # Добавляем сводный лог файловых операций в Allure
-                allure.attach("\n".join(file_ops_log), 'Nemesis Config Preparation', attachment_type=allure.attachment_type.TEXT)
+                allure.attach("\n".join(file_ops_log), 'Nemesis Config Preparation (Parallel)', attachment_type=allure.attachment_type.TEXT)
             else:
                 action = "stop"
                 action_name = "Stopping"
-                logging.info(f"Stopping nemesis on {len(unique_hosts)} hosts")
+                logging.info(f"Stopping nemesis on {len(unique_hosts)} hosts in parallel")
             
             # Добавляем в лог информацию об операции
             if operation_context:
-                nemesis_log.append(f"{operation_context}: {action_name} nemesis service on {len(unique_hosts)} hosts")
+                nemesis_log.append(f"{operation_context}: {action_name} nemesis service on {len(unique_hosts)} hosts in parallel")
             else:
-                nemesis_log.append(f"{action_name} nemesis service on {len(unique_hosts)} hosts")
+                nemesis_log.append(f"{action_name} nemesis service on {len(unique_hosts)} hosts in parallel")
             
             # Добавляем информацию о времени запуска/остановки
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             nemesis_log.append(f"Time: {current_time}")
             
-            # Выполняем команду на каждом уникальном хосте
+            # Функция для выполнения команды сервиса на одном хосте
+            def execute_service_command(host):
+                host_log = []
+                host_log.append(f"\n--- {host} ---")
+                
+                try:
+                    cmd = f"sudo service nemesis {action}"
+                    result = execute_command(
+                        host=host,
+                        cmd=cmd,
+                        raise_on_error=False
+                    )
+                    
+                    stdout = result.stdout if result.stdout else ""
+                    stderr = result.stderr if result.stderr else ""
+                    
+                    if stderr and "error" in stderr.lower():
+                        error_msg = f"Error on {host}: {stderr}"
+                        host_log.append(error_msg)
+                        
+                        # Только для ошибок создаем отдельный шаг и лог
+                        with allure.step(f'Error {action.lower()}ing nemesis on {host}'):
+                            allure.attach(f"Command: {cmd}\nstdout: {stdout}\nstderr: {stderr}", 
+                                        f'Nemesis {action} error', 
+                                        attachment_type=allure.attachment_type.TEXT)
+                            logging.warning(f"Error during nemesis {action} on {host}: {stderr}")
+                        
+                        return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+                    else:
+                        host_log.append(f"Success")
+                        return {'host': host, 'success': True, 'log': host_log}
+                        
+                except Exception as e:
+                    error_msg = f"Exception on {host}: {e}"
+                    host_log.append(error_msg)
+                    return {'host': host, 'success': False, 'error': error_msg, 'log': host_log}
+            
+            # Выполняем команды сервиса параллельно
+            service_start_time = time()
             success_count = 0
             error_count = 0
             errors = []
             
-            for host in unique_hosts:
-                cmd = f"sudo service nemesis {action}"
-                nemesis_log.append(f"\n--- {host} ---")
+            with ThreadPoolExecutor(max_workers=min(len(unique_hosts), 20)) as executor:
+                future_to_host = {executor.submit(execute_service_command, host): host for host in unique_hosts}
                 
-                result = execute_command(
-                    host=host,
-                    cmd=cmd,
-                    raise_on_error=False
-                )
-                
-                stdout = result.stdout if result.stdout else ""
-                stderr = result.stderr if result.stderr else ""
-                
-                # Для Allure сохраняем только важную информацию
-                if stderr and "error" in stderr.lower():
-                    error_msg = f"Error on {host}: {stderr}"
-                    nemesis_log.append(error_msg)
-                    errors.append(error_msg)
-                    error_count += 1
-                    
-                    # Только для ошибок создаем отдельный шаг и лог
-                    with allure.step(f'Error {action.lower()}ing nemesis on {host}'):
-                        allure.attach(f"Command: {cmd}\nstdout: {stdout}\nstderr: {stderr}", 
-                                    f'Nemesis {action} error', 
-                                    attachment_type=allure.attachment_type.TEXT)
-                        logging.warning(f"Error during nemesis {action} on {host}: {stderr}")
-                else:
-                    nemesis_log.append(f"Success")
-                    success_count += 1
+                for future in as_completed(future_to_host):
+                    try:
+                        result = future.result()
+                        host_log = result['log']
+                        nemesis_log.extend(host_log)
+                        
+                        if result['success']:
+                            success_count += 1
+                        else:
+                            error_count += 1
+                            errors.append(result['error'])
+                            
+                    except Exception as e:
+                        host = future_to_host[future]
+                        error_msg = f"Exception processing {host}: {e}"
+                        nemesis_log.append(f"\n--- {host} ---")
+                        nemesis_log.append(error_msg)
+                        errors.append(error_msg)
+                        error_count += 1
+            
+            service_time = time() - service_start_time
             
             # Добавляем итоговую статистику
             nemesis_log.append(f"\n--- Summary ---")
             nemesis_log.append(f"Successful hosts: {success_count}/{len(unique_hosts)}")
             nemesis_log.append(f"Failed hosts: {error_count}/{len(unique_hosts)}")
+            nemesis_log.append(f"Service operations time: {service_time:.2f}s")
             
             if errors:
                 nemesis_log.append("\nErrors:")
@@ -265,7 +332,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 nemesis_log.append("Nemesis service stopped successfully")
             
             # Добавляем сводный лог в Allure
-            allure.attach("\n".join(nemesis_log), f'Nemesis {action_name} Summary', attachment_type=allure.attachment_type.TEXT)
+            allure.attach("\n".join(nemesis_log), f'Nemesis {action_name} Summary (Parallel)', attachment_type=allure.attachment_type.TEXT)
             
             return nemesis_log
                 

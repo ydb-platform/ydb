@@ -86,7 +86,7 @@ protected:
                 continue;
             }
             PortionsInfo->AddPortion(i);
-            if (i->GetCompactionLevel() && i->GetCompactionLevel() >= Levels.size()) {
+            if (i->GetCompactionLevel() >= Levels.size()) {
                 problemPortions.emplace_back(i);
             } else {
                 addPortionsByLevels[i->GetMeta().GetCompactionLevel()].emplace_back(i);

@@ -1096,8 +1096,7 @@ public:
         AFL_VERIFY(PortionInfo);
         AFL_VERIFY(Records)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
         AFL_VERIFY(Indexes)("portion_id", PortionInfo->GetPortionId())("path_id", PortionInfo->GetPathId());
-        std::vector<NOlap::TColumnChunkLoadContextV1> records = Records->BuildRecordsV1();
-        return NOlap::TPortionAccessorConstructor::BuildForLoading(std::move(PortionInfo), std::move(records), std::move(*Indexes));
+        return NOlap::TPortionAccessorConstructor::BuildForLoading(std::move(PortionInfo), Records->CreateBuildInfo(), std::move(*Indexes));
     }
 };
 
@@ -1126,9 +1125,7 @@ public:
     TAccessorsParsingTask(
         const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback, std::vector<TPortionConstructorV2>&& portions)
         : FetchCallback(callback)
-        , Portions(std::move(portions))
-    {
-
+        , Portions(std::move(portions)) {
     }
 };
 
@@ -1176,7 +1173,7 @@ public:
                         } else {
                             AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
-                            NOlap::TColumnChunkLoadContextV2 info(rowset);
+                            NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
                     }

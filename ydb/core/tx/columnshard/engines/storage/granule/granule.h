@@ -199,7 +199,7 @@ public:
             auto accessorCopy = portion.SwitchPortionInfo(std::move(copy));
             accessorCopy.SaveToDatabase(wrapper, firstPKColumnId, false);
         } else {
-            wrapper.WritePortion(*copy);
+            wrapper.WritePortion(portion.GetBlobIds(), *copy);
         }
     }
 
@@ -228,7 +228,7 @@ public:
         it->second->SetCommitSnapshot(ssRemove);
         it->second->SetRemoveSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);
-        wrapper.WritePortion(*it->second);
+        wrapper.WritePortion({}, *it->second);
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {

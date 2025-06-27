@@ -80,7 +80,6 @@ public:
     };
 
 private:
-    friend class TPortionDataAccessor;
     friend class TPortionInfoConstructor;
     friend class TCompactedPortionInfo;
     friend class TWrittenPortionInfo;
@@ -97,6 +96,14 @@ private:
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
 
+    virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
+
+    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
+    virtual TString DoDebugString(const bool /*withDetails*/) const {
+        return "";
+    }
+
+public:
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
@@ -105,34 +112,6 @@ private:
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
-
-    virtual void DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const = 0;
-
-    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
-    virtual TString DoDebugString(const bool /*withDetails*/) const {
-        return "";
-    }
-
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return Meta.GetBlobIds();
-    }
-
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
-
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        return Meta.GetBlobId(linkId);
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return Meta.GetBlobIdsCount();
-    }
-
-public:
-    const TUnifiedBlobId& GetBlobIdPrivate(const TBlobRangeLink16::TLinkId linkId) const {
-        return Meta.GetBlobId(linkId);
-    }
 
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
@@ -169,12 +148,12 @@ public:
         return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
     }
 
-    void SaveMetaToDatabase(NIceDb::TNiceDb& db) const {
+    void SaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
         FullValidation();
-        DoSaveMetaToDatabase(db);
+        DoSaveMetaToDatabase(blobIds, db);
     }
 
-    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const = 0;
+    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const = 0;
 
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
@@ -250,7 +229,7 @@ public:
     ui64 GetApproxChunksCount(const ui32 schemaColumnsCount) const;
     ui64 GetMetadataMemorySize() const;
 
-    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
+    void SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     TInternalPathId GetPathId() const {
         return PathId;

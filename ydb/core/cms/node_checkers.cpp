@@ -91,8 +91,6 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
     Y_ABORT_UNLESS(NodeToState.contains(nodeId));
     auto nodeState = NodeToState.at(nodeId);
 
-    bool isForceRestart = mode == NKikimrCms::MODE_FORCE_RESTART;
-
     NCH_LOG_D("Checking Node: "
             << nodeId << ", with state: " << nodeState
             << ", with limit: " << DisabledNodesLimit
@@ -114,12 +112,12 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
             return true;
     }
 
-    // Always allow at least one node
-    if (LockedNodesCount + DownNodesCount == 0) {
+    if (mode == NKikimrCms::MODE_FORCE_RESTART) {
         return true;
     }
 
-    if (isForceRestart && !LockedNodesCount) {
+    // Always allow at least one node
+    if (LockedNodesCount + DownNodesCount == 0) {
         return true;
     }
 

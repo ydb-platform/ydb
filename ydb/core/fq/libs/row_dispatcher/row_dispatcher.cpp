@@ -617,7 +617,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 }
 
 void TRowDispatcher::UpdateMetrics() {
-    Cerr << "UpdateMetrics" << Endl;
     static TInstant LastUpdateMetricsTime = TInstant::Now();
     auto now = TInstant::Now();
     AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
@@ -649,7 +648,6 @@ void TRowDispatcher::UpdateMetrics() {
                 auto& stats = AggrStats.LastQueryStats.emplace(
                     statKey,
                     TAggQueryStat(consumer->QueryId, Metrics.Counters, consumer->SourceParams)).first->second;
-                Cerr << "UpdateMetrics emplace" << Endl;
                 stats.Add(partition.Stat, partition.FilteredBytes);
                 partition.FilteredBytes = 0;
             }
@@ -658,12 +656,10 @@ void TRowDispatcher::UpdateMetrics() {
     THashSet<TQueryStatKey, TQueryStatKeyHash> toDelete;
     for (auto& [key, stats] : AggrStats.LastQueryStats) {
         if (!stats.Updated) {
-            Cerr << "UpdateMetrics toDelete" << Endl;
             toDelete.insert(key);
             stats.Clear();
             continue;
         }
-        Cerr << "UpdateMetrics SetMetrics" << Endl;
         stats.SetMetrics();
     }
     for (const auto& key : toDelete) {

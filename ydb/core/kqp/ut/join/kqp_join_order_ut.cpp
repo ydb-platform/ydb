@@ -98,17 +98,7 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
     CreateView(session, "view/tpch_random_join_view.sql");
 }
 
-struct TExecuteParams {
-    bool RemoveLimitOperator = false;
-    bool EnableSeparationComputeActorsFromRead = true;
-};
-
-static TKikimrRunner GetKikimrWithJoinSettings(
-    bool useStreamLookupJoin = false,
-    TString stats = "",
-    bool useCBO = true,
-    const TExecuteParams& params = {}
-){
+static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
@@ -131,7 +121,6 @@ static TKikimrRunner GetKikimrWithJoinSettings(
     }
 
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
-    serverSettings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(params.EnableSeparationComputeActorsFromRead);
     serverSettings.SetKqpSettings(settings);
 
     serverSettings.SetNodeCount(1);
@@ -565,6 +554,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TChainTester(65).Test();
     }
 
+    struct TExecuteParams {
+        bool RemoveLimitOperator = false;
+    };
+
     std::pair<TString, std::vector<NYdb::TResultSet>> ExecuteJoinOrderTestGenericQueryWithStats(
         const TString& queryPath,
         const TString& statsPath,
@@ -573,7 +566,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         bool useCBO = true,
         const TExecuteParams& params = {}
     ) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, params);
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
@@ -851,8 +844,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, false, ColumnStore);
     }
 
-    Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
+    Y_UNIT_TEST(ShuffleEliminationOneJoin) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"customer", "orders"});
         UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
@@ -860,8 +853,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(join.RhsShuffled);
     }
 
-    Y_UNIT_TEST_TWIN(ShuffleEliminationReuseShuffleTwoJoins, EnableSeparationComputeActorsFromRead) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_reuse_shuffle_two_joins.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
+    Y_UNIT_TEST(ShuffleEliminationReuseShuffleTwoJoins) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_reuse_shuffle_two_joins.sql", "stats/tpch1000s.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);
 
         {
@@ -879,9 +872,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ShuffleEliminationDifferentJoinPredicateKeyTypeCorrectness1, EnableSeparationComputeActorsFromRead) {
+    Y_UNIT_TEST(ShuffleEliminationDifferentJoinPredicateKeyTypeCorrectness1) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/shuffle_elimination_different_join_predicate_key_type_correctness1.sql", "stats/different_join_predicate_key_types.json", false, false, true, {.EnableSeparationComputeActorsFromRead=EnableSeparationComputeActorsFromRead}
+            "queries/shuffle_elimination_different_join_predicate_key_type_correctness1.sql", "stats/different_join_predicate_key_types.json", false, false, true
         );
 
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -895,9 +888,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_EQUAL_C(resultSet, "[[1;1;1]]", resultSet);
     }
 
-    Y_UNIT_TEST_TWIN(ShuffleEliminationDifferentJoinPredicateKeyTypeCorrectness2, EnableSeparationComputeActorsFromRead) {
+    Y_UNIT_TEST(ShuffleEliminationDifferentJoinPredicateKeyTypeCorrectness2) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/shuffle_elimination_different_join_predicate_key_type_correctness2.sql", "stats/different_join_predicate_key_types.json", false, false, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
+            "queries/shuffle_elimination_different_join_predicate_key_type_correctness2.sql", "stats/different_join_predicate_key_types.json", false, false, true
         );
 
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -920,9 +913,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_EQUAL_C(resultSet, "[[1;1;1;1]]", resultSet);
     }
 
-    Y_UNIT_TEST_TWIN(ShuffleEliminationManyKeysJoinPredicate, EnableSeparationComputeActorsFromRead) {
+    Y_UNIT_TEST(ShuffleEliminationManyKeysJoinPredicate) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/shuffle_elimination_many_keys_join_predicate.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
+            "queries/shuffle_elimination_many_keys_join_predicate.sql", "stats/tpch1000s.json", false, true, true
         );
 
         auto joinFinder = TFindJoinWithLabels(plan);
@@ -934,9 +927,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ShuffleEliminationTpcdsMapJoinBug, EnableSeparationComputeActorsFromRead) {
+    Y_UNIT_TEST(ShuffleEliminationTpcdsMapJoinBug) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/shuffle_elimination_tpcds_map_join_bug.sql", "stats/tpcds1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead}
+            "queries/shuffle_elimination_tpcds_map_join_bug.sql", "stats/tpcds1000s.json", false, true, true
         );
 
         auto joinFinder = TFindJoinWithLabels(plan);

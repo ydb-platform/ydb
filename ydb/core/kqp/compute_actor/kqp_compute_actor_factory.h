@@ -42,9 +42,9 @@ public:
         return true;
     }
 
-    TMetaScan& MergeMetaReads(const NYql::NDqProto::TDqTask& task, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {
+    TMetaScan& MergeMetaReads(const NYql::NDqProto::TDqTask& task, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const bool forceOneToMany) {
         YQL_ENSURE(meta.ReadsSize(), "unexpected merge with no reads");
-        if (!task.HasMetaId()) {
+        if (forceOneToMany || !task.HasMetaId()) {
             MetaInfo.emplace_back(TMetaScan(meta));
             return MetaInfo.back();
         } else {
@@ -83,12 +83,12 @@ public:
         }
     }
 
-    TMetaScan& UpsertTaskWithScan(const NYql::NDqProto::TDqTask& dqTask, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {
+    TMetaScan& UpsertTaskWithScan(const NYql::NDqProto::TDqTask& dqTask, const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const bool forceOneToMany) {
         auto it = Stages.find(dqTask.GetStageId());
         if (it == Stages.end()) {
             it = Stages.emplace(dqTask.GetStageId(), TComputeStageInfo()).first;
         }
-        return it->second.MergeMetaReads(dqTask, meta);
+        return it->second.MergeMetaReads(dqTask, meta, forceOneToMany);
     }
 };
 

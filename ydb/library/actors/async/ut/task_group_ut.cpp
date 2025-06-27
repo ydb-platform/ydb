@@ -1,5 +1,6 @@
-#include "common.h"
 #include <ydb/library/actors/async/task_group.h>
+
+#include "common.h"
 #include <ydb/library/actors/async/timeout.h>
 #include <ydb/library/actors/async/yield.h>
 
@@ -28,7 +29,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(finishedInnerNormally);
             UNIT_ASSERT(finishedNormally);
@@ -61,7 +61,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!innerTaskStarted);
             UNIT_ASSERT(finishedInnerNormally);
@@ -99,7 +98,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(finishedInnerNormally);
             UNIT_ASSERT(finishedNormally);
@@ -144,7 +142,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT_VALUES_EQUAL(secondTaskStarted, false);
             UNIT_ASSERT(finishedInnerNormally);
@@ -179,7 +176,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(finishedInnerNormally);
             UNIT_ASSERT(finishedNormally);
@@ -214,7 +210,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(finishedInnerNormally);
             UNIT_ASSERT(finishedNormally);
@@ -255,7 +250,7 @@ namespace NAsyncTest {
             UNIT_ASSERT(!groupFinishedNormally);
             UNIT_ASSERT(resume);
             UNIT_ASSERT(!cancel);
-            runtime.Step(actor);
+            actor.Step();
 
             UNIT_ASSERT(resume);
             UNIT_ASSERT(cancel);
@@ -264,7 +259,7 @@ namespace NAsyncTest {
             UNIT_ASSERT(!finishedNormally);
             UNIT_ASSERT(!finished);
 
-            runtime.ResumeCoroutine(actor, resume);
+            actor.ResumeCoroutine(resume);
 
             UNIT_ASSERT(taskFinishedNormally);
             UNIT_ASSERT(finishedNormally);
@@ -304,15 +299,15 @@ namespace NAsyncTest {
             UNIT_ASSERT(gresume);
             UNIT_ASSERT(!gcancel);
 
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(gcancel);
             UNIT_ASSERT(!tcancel);
 
-            runtime.ResumeCoroutine(actor, gresume);
+            actor.ResumeCoroutine(gresume);
             UNIT_ASSERT(groupFinishedNormally);
             UNIT_ASSERT(!finished);
 
-            runtime.ResumeCoroutine(actor, tresume);
+            actor.ResumeCoroutine(tresume);
             UNIT_ASSERT(taskFinishedNormally);
             UNIT_ASSERT(finishedNormally);
             UNIT_ASSERT(finished);
@@ -356,16 +351,16 @@ namespace NAsyncTest {
             UNIT_ASSERT(gresume);
             UNIT_ASSERT(!gcancel);
 
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(gcancel);
             UNIT_ASSERT(!tcancel);
 
-            runtime.ResumeCoroutine(actor, gcancel);
+            actor.ResumeCoroutine(gcancel);
             UNIT_ASSERT(groupFinished);
             UNIT_ASSERT(!groupFinishedNormally);
             UNIT_ASSERT(!finished);
 
-            runtime.ResumeCoroutine(actor, tcancel);
+            actor.ResumeCoroutine(tcancel);
             UNIT_ASSERT(taskFinished);
             UNIT_ASSERT(!taskFinishedNormally);
             UNIT_ASSERT(finished);
@@ -425,7 +420,7 @@ namespace NAsyncTest {
             runtime.SimulateSleep(TDuration::MilliSeconds(2));
             UNIT_ASSERT_VALUES_EQUAL(groupState, 2);
 
-            runtime.ResumeCoroutine(actor, tresume);
+            actor.ResumeCoroutine(tresume);
             UNIT_ASSERT(taskFinishedNormally);
             UNIT_ASSERT(groupFinishedNormally);
             UNIT_ASSERT(finishedNormally);
@@ -434,7 +429,7 @@ namespace NAsyncTest {
         /**
          * This is a testing infra test
          *
-         * It validates we can actually step one event at a time with runtime.Step()
+         * It validates we can actually step one event at a time with actor.Step()
          */
         Y_UNIT_TEST(TestSingleStepTesting) {
             bool finished = false;
@@ -479,17 +474,17 @@ namespace NAsyncTest {
             UNIT_ASSERT(!resume1);
             UNIT_ASSERT(!resume2);
 
-            runtime.Step(actor);
+            actor.Step();
             UNIT_ASSERT(resume1);
             UNIT_ASSERT(!resume2);
 
-            runtime.Step(actor);
+            actor.Step();
             UNIT_ASSERT(resume2);
 
-            runtime.ResumeCoroutine(actor, resume1);
+            actor.ResumeCoroutine(resume1);
             UNIT_ASSERT_VALUES_EQUAL(finishedTasks, 1);
 
-            runtime.ResumeCoroutine(actor, resume2);
+            actor.ResumeCoroutine(resume2);
             UNIT_ASSERT_VALUES_EQUAL(finishedTasks, 2);
 
             UNIT_ASSERT(groupFinishedNormally);

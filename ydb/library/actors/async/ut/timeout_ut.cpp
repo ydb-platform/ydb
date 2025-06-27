@@ -1,5 +1,6 @@
-#include "common.h"
 #include <ydb/library/actors/async/timeout.h>
+
+#include "common.h"
 
 namespace NAsyncTest {
 
@@ -28,7 +29,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(resume);
@@ -40,7 +40,7 @@ namespace NAsyncTest {
             UNIT_ASSERT(cancel);
 
             // Confirm cancellation, it must throw a timeout exception
-            runtime.ResumeCoroutine(actor, cancel);
+            actor.ResumeCoroutine(cancel);
             UNIT_ASSERT(finished);
             UNIT_ASSERT(finishedWithTimeout);
             UNIT_ASSERT(!state.Destroyed);
@@ -69,7 +69,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
@@ -104,7 +103,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
@@ -141,7 +139,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
@@ -176,7 +173,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(resume);
@@ -188,7 +184,7 @@ namespace NAsyncTest {
             UNIT_ASSERT(!cancel);
 
             // Resume, it must not throw exceptions
-            runtime.ResumeCoroutine(actor, resume);
+            actor.ResumeCoroutine(resume);
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
             UNIT_ASSERT(finishedNormally);
@@ -222,7 +218,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(resume);
@@ -234,7 +229,7 @@ namespace NAsyncTest {
             UNIT_ASSERT(cancel);
 
             // Resume instead of cancelling, it must not throw exceptions
-            runtime.ResumeCoroutine(actor, resume);
+            actor.ResumeCoroutine(resume);
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
             UNIT_ASSERT(finishedNormally);
@@ -266,7 +261,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(resume);
@@ -280,12 +274,12 @@ namespace NAsyncTest {
 
             // After PassAway upstream cancellation must be properly handled
             // Most importantly AwaitCancel must not be called again
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(!cancel);
 
             // Resume instead of cancelling, it must not throw exceptions
-            runtime.ResumeCoroutine(actor, resume);
+            actor.ResumeCoroutine(resume);
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
             UNIT_ASSERT(finishedNormally);
@@ -318,7 +312,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(resume);
@@ -330,11 +323,11 @@ namespace NAsyncTest {
             UNIT_ASSERT(cancel);
 
             // After PassAway upstream cancellation must be properly handled
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(!finished);
 
             // Confirm cancellation, it must not throw an exception since upstream cancelled
-            runtime.ResumeCoroutine(actor, cancel);
+            actor.ResumeCoroutine(cancel);
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
             UNIT_ASSERT(!finishedNormally);
@@ -367,14 +360,13 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(resume);
             UNIT_ASSERT(!cancel);
 
             // After PassAway upstream cancellation must be passed downstream
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(cancel);
             std::swap(cancel, cancelCopy);
@@ -386,7 +378,7 @@ namespace NAsyncTest {
             UNIT_ASSERT(!cancel);
 
             // Resume instead of cancelling, it must not throw exceptions
-            runtime.ResumeCoroutine(actor, resume);
+            actor.ResumeCoroutine(resume);
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
             UNIT_ASSERT(finishedNormally);
@@ -419,14 +411,13 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(resume);
             UNIT_ASSERT(!cancel);
 
             // After PassAway upstream cancellation must be passed downstream
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(!finished);
             UNIT_ASSERT(cancel);
 
@@ -435,7 +426,7 @@ namespace NAsyncTest {
             UNIT_ASSERT(!finished);
 
             // Confirm cancellation, it must not throw exceptions
-            runtime.ResumeCoroutine(actor, cancel);
+            actor.ResumeCoroutine(cancel);
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedWithTimeout);
             UNIT_ASSERT(!finishedNormally);

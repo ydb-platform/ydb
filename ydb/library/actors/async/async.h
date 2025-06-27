@@ -14,11 +14,6 @@ namespace NActors {
     }
 
     /**
-     * Used when callee produces no result due to cancellation
-     */
-    class TAsyncCancellation : public yexception {};
-
-    /**
      * A marker-type for actor coroutines (async functions)
      *
      * This class cannot be copied or moved, and may only be used directly in a
@@ -153,6 +148,109 @@ namespace NActors {
         std::bool_constant<(std::decay_t<TAwaiter>::IsActorAwareAwaiter == true)>::value ||
         requires { typename std::decay_t<TAwaiter>::IsActorAwareAwaiter; });
 
+    // Forward declarations, defined below
+    class TAsyncCancellable;
+    class TAsyncCancellationSource;
+
+    /**
+     * Raised when callee produces no result due to cancellation
+     */
+    class TAsyncCancellation : public yexception {};
+
+    /**
+     * Abstract interface for tasks which may be dynamically cancelled
+     */
+    class TAsyncCancellable : private TIntrusiveListItem<TAsyncCancellable> {
+        friend TIntrusiveListItem<TAsyncCancellable>;
+        friend TAsyncCancellationSource;
+
+    protected:
+        ~TAsyncCancellable() = default;
+
+    public:
+        virtual void Cancel() noexcept = 0;
+
+        using TIntrusiveListItem<TAsyncCancellable>::Unlink;
+    };
+
+    /**
+     * Abstract cancellation source which may cancel multiple cancellable tasks
+     */
+    class TAsyncCancellationSource {
+    public:
+        void AddSink(TAsyncCancellable& sink) noexcept {
+            if (!Cancelled) [[likely]] {
+                Sinks.PushBack(&sink);
+            } else {
+                sink.Cancel();
+            }
+        }
+
+        bool HasSinks() const noexcept {
+            return !Sinks.Empty();
+        }
+
+        void Cancel() noexcept {
+            Cancelled = true;
+            CancelSinks();
+        }
+
+        bool IsCancelled() const noexcept {
+            return Cancelled;
+        }
+
+        TAsyncCancellationSource& operator+=(TAsyncCancellationSource&& rhs) noexcept {
+            if (this != &rhs) [[likely]] {
+                Sinks.Append(rhs.Sinks);
+                if (Cancelled) {
+                    CancelSinks();
+                }
+            }
+            return *this;
+        }
+
+        /**
+         * Returns a new TAsyncCancellationSource with currently running and
+         * non-cancelled handler attached as a sink when awaited. May only be
+         * used directly inside an async actor event handler.
+         *
+         * Defined in cancellation.h
+         */
+        static auto WithCurrentHandler();
+
+        /**
+         * Runs the wrapped coroutine attached to this cancellation source when
+         * awaited. This allows cancelling this coroutine independently from
+         * caller cancellation.
+         *
+         * Defined in cancellation.h
+         */
+        template<class T>
+        auto WithCancellation(async<T> wrapped);
+
+        /**
+         * Runs the wrapped coroutine attached to this cancellation source when
+         * awaited. This allows cancelling this coroutine independently from
+         * caller cancellation.
+         *
+         * Defined in cancellation.h
+         */
+        template<IsAsyncCoroutineCallable TCallback>
+        auto WithCancellation(TCallback&& callback);
+
+    private:
+        void CancelSinks() noexcept {
+            while (!Sinks.Empty()) {
+                auto* sink = Sinks.PopFront();
+                sink->Cancel();
+            }
+        }
+
+    private:
+        TIntrusiveList<TAsyncCancellable> Sinks;
+        bool Cancelled = false;
+    };
+
     namespace NDetail {
 
         /**
@@ -160,7 +258,7 @@ namespace NActors {
          * runnable item to run on the specified actor when resumed. Used to
          * interface with generic C++ coroutines.
          *
-         * Exactly one call to either resume or destroy is allowed.
+         * Exactly one call to either resume or destroy is required.
          */
         std::coroutine_handle<> MakeBridgeCoroutine(IActor& actor, TActorRunnableItem& item);
 
@@ -1054,6 +1152,7 @@ namespace NActors {
 
         class TActorAsyncHandlerPromise final
             : private TActorTask
+            , private TAsyncCancellable
             , private TAwaitCancelSource
             , private TActorRunnableItem::TImpl<TActorAsyncHandlerPromise>
             , private TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>
@@ -1104,6 +1203,28 @@ namespace NActors {
             ~TActorAsyncHandlerPromise() {
                 Actor.UnregisterActorTask(this);
             }
+
+            struct [[nodiscard]] TCreateAttachedCancellationSourceOp {};
+
+            auto await_transform(TCreateAttachedCancellationSourceOp) noexcept {
+                struct TAwaiter {
+                    TAsyncCancellationSource Source;
+
+                    static constexpr bool await_ready() noexcept { return true; }
+                    static constexpr void await_suspend(std::coroutine_handle<>) noexcept {}
+                    TAsyncCancellationSource await_resume() noexcept {
+                        return std::move(Source);
+                    }
+                };
+
+                TAwaiter awaiter;
+                if (!this->GetCancellation()) {
+                    awaiter.Source.AddSink(*this);
+                }
+                return awaiter;
+            }
+
+            using TAsyncAwaitTransform::await_transform;
 
         private:
             bool Finish() noexcept {

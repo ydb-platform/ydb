@@ -56,7 +56,7 @@ namespace NActors::NDetail {
             return TBase::Start();
         }
 
-        std::coroutine_handle<> Cancel() noexcept {
+        std::coroutine_handle<> OnCancel() noexcept {
             if (Detach()) {
                 // Propagate cancellation, since timer was still active,
                 // which means async body was not cancelled yet. We also

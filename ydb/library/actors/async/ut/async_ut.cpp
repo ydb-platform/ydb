@@ -211,7 +211,7 @@ namespace NAsyncTest {
             });
             UNIT_ASSERT(state.CallbackReturned);
 
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(state.Destroyed);
         }
 
@@ -288,7 +288,7 @@ namespace NAsyncTest {
 
             if (passAway == EPassAway::AfterSuspend) {
                 killing = true;
-                runtime.Poison(actor);
+                actor.Poison();
                 if (WithCancelSupport) {
                     UNIT_ASSERT(cancel);
                 }
@@ -301,7 +301,7 @@ namespace NAsyncTest {
                     break;
                 case EAction::ResumeWithEvent:
                     Y_ABORT_UNLESS(resume, "Cannot resume without resume coroutine");
-                    runtime.ResumeCoroutine(actor, resume);
+                    actor.ResumeCoroutine(resume);
                     UNIT_ASSERT(finished);
                     UNIT_ASSERT(finishedNormally);
                     if (killing) {
@@ -312,7 +312,7 @@ namespace NAsyncTest {
                     break;
                 case EAction::CancelWithEvent:
                     Y_ABORT_UNLESS(cancel, "Cannot cancel without cancel coroutine");
-                    runtime.ResumeCoroutine(actor, cancel);
+                    actor.ResumeCoroutine(cancel);
                     UNIT_ASSERT(finished);
                     UNIT_ASSERT(!finishedNormally);
                     if (killing) {
@@ -328,7 +328,7 @@ namespace NAsyncTest {
             if (passAway == EPassAway::AfterResume) {
                 Y_ABORT_UNLESS(finished, "EPassAway::AfterResume without actually resuming");
                 killing = true;
-                runtime.Poison(actor);
+                actor.Poison();
                 UNIT_ASSERT(state.Destroyed);
             }
 
@@ -402,7 +402,7 @@ namespace NAsyncTest {
 
             if (passAway == EPassAway::AfterSuspend) {
                 killing = true;
-                runtime.Poison(actor);
+                actor.Poison();
                 if (WithCancelSupport) {
                     UNIT_ASSERT(cancel);
                 }
@@ -415,7 +415,7 @@ namespace NAsyncTest {
                     break;
                 case EAction::ResumeWithEvent:
                     Y_ABORT_UNLESS(resume, "Cannot resume without resume coroutine");
-                    runtime.ResumeCoroutine(actor, resume);
+                    actor.ResumeCoroutine(resume);
                     break;
                 case EAction::ResumeOutside:
                 case EAction::ResumeOutsideAndDispatch:
@@ -427,7 +427,7 @@ namespace NAsyncTest {
                     break;
                 case EAction::CancelWithEvent:
                     Y_ABORT_UNLESS(cancel, "Cannot cancel without cancel coroutine");
-                    runtime.ResumeCoroutine(actor, cancel);
+                    actor.ResumeCoroutine(cancel);
                     break;
                 case EAction::CancelOutside:
                 case EAction::CancelOutsideAndDispatch:
@@ -471,7 +471,7 @@ namespace NAsyncTest {
 
             if (passAway == EPassAway::AfterResume) {
                 killing = true;
-                runtime.Poison(actor);
+                actor.Poison();
                 if (finished) {
                     UNIT_ASSERT(state.Destroyed);
                 } else {

@@ -25,8 +25,6 @@ namespace NActors::NDetail {
             friend TCallbackCoroutine<TResumeCallback>;
 
         public:
-            TResumeCallback() = default;
-
             IActor& GetActor() noexcept {
                 return *Self->Actor;
             }
@@ -159,26 +157,10 @@ namespace NActors::NDetail {
         /**
          * Allows modifying behavior when caller requests cancellation
          *
-         * By default passes cancellation to the decorated async body.
-         *
-         * When calling this method manually and the returned handle is not
-         * nullptr it must be resumed either with symmetric transfer or in
-         * background. Usually this starts some cancellation work, which may
-         * eventually result in OnCancel being called, but not necessarily.
-         *
-         * Important: when scheduling the returned handle to execute in the
-         * background it is important to remember async body may return normally
-         * before such a handle is resumed, which may cause destructors to free
-         * memory where you stored it. Care must be taken to properly wait until
-         * background unwind is processed before returning to caller.
+         * Default calls Cancel().
          */
-        [[nodiscard]] std::coroutine_handle<> Cancel() {
-            Y_DEBUG_ABORT_UNLESS(ResumeProxy, "cannot cancel bypassed coroutines");
-            if (!ResumeProxy->GetCancellation()) [[likely]] {
-                return ResumeProxy->Cancel(CreateUnwindProxy());
-            } else {
-                return nullptr;
-            }
+        [[nodiscard]] std::coroutine_handle<> OnCancel() noexcept {
+            return Cancel();
         }
 
         /**
@@ -246,6 +228,29 @@ namespace NActors::NDetail {
         }
 
         /**
+         * Requests async body cancellation
+         *
+         * When the returned handle is not nullptr it must be resumed either
+         * with symmetric transfer or in the background. Usually this starts
+         * some cancellation related activity, which may eventually result in
+         * OnUnwind being called, but not necessarily.
+         *
+         * Important: when scheduling the returned handle to execute in the
+         * background it is important to remember async body may return normally
+         * before such a handle is resumed, which may cause destructors to free
+         * memory when you let it continue. Care must be taken to properly wait
+         * until background unwind is processed before returning to caller.
+         */
+        [[nodiscard]] std::coroutine_handle<> Cancel() noexcept {
+            Y_DEBUG_ABORT_UNLESS(ResumeProxy, "cannot cancel bypassed coroutines");
+            if (!ResumeProxy->GetCancellation()) [[likely]] {
+                return ResumeProxy->Cancel(CreateUnwindProxy());
+            } else {
+                return nullptr;
+            }
+        }
+
+        /**
          * Requests async body cancellation without interception
          *
          * This is a performance optimization, valid when decorator always
@@ -274,7 +279,7 @@ namespace NActors::NDetail {
     private:
         std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) noexcept {
             Cancellation = h;
-            return static_cast<TDerived&>(*this).Cancel();
+            return static_cast<TDerived&>(*this).OnCancel();
         }
 
         std::coroutine_handle<> OnResumeCallback() noexcept {

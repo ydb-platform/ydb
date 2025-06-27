@@ -3,6 +3,30 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/join.h>
+
+#define ASYNC_ASSERT_NO_RETURN(A) \
+    do { \
+        try { \
+            (void)(A); \
+        } catch (const ::NUnitTest::TAssertException&) { \
+            throw; \
+        } catch (...) { \
+            UNIT_FAIL_IMPL("no return assertion failed", Sprintf("%s throws exception: %s", #A, CurrentExceptionMessage().c_str())); \
+        } \
+        UNIT_FAIL_IMPL("no-return assertion failed", Sprintf("%s returned", #A)); \
+    } while (false)
+
+#define ASYNC_ASSERT_SEQUENCE(S, ...) \
+    do { \
+        UNIT_ASSERT_NO_DIFF(::JoinSeq('\n', S), ::JoinSeq('\n', TVector<TString>{ __VA_ARGS__ })); \
+        S.clear(); \
+    } while (false)
+
+#define ASYNC_ASSERT_SEQUENCE_EMPTY(S) \
+    do { \
+        UNIT_ASSERT_NO_DIFF(::JoinSeq('\n', S), ""); \
+    } while (false)
 
 namespace NAsyncTest {
 
@@ -67,12 +91,30 @@ namespace NAsyncTest {
         struct TEvPrivate {
             enum EEv {
                 EvResumeCoroutine = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvRunAsync,
+                EvRunSync,
             };
 
             struct TEvResumeCoroutine : public TEventLocal<TEvResumeCoroutine, EvResumeCoroutine> {
                 std::coroutine_handle<> Handle;
 
                 TEvResumeCoroutine(std::coroutine_handle<> h) : Handle(h) {}
+            };
+
+            struct TEvRunAsync : public TEventLocal<TEvRunAsync, EvRunAsync> {
+                std::function<async<void>()> Callable;
+
+                TEvRunAsync(std::function<async<void>()> callable)
+                    : Callable(std::move(callable))
+                {}
+            };
+
+            struct TEvRunSync : public TEventLocal<TEvRunSync, EvRunSync> {
+                std::function<void()> Callable;
+
+                TEvRunSync(std::function<void()> callable)
+                    : Callable(std::move(callable))
+                {}
             };
         };
 
@@ -109,6 +151,8 @@ namespace NAsyncTest {
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvResumeCoroutine, Handle);
+                hFunc(TEvPrivate::TEvRunAsync, Handle);
+                hFunc(TEvPrivate::TEvRunSync, Handle);
                 hFunc(TEvents::TEvPoison, Handle);
                 default:
                     Y_ABORT("Unexpected event");
@@ -117,6 +161,14 @@ namespace NAsyncTest {
 
         void Handle(TEvPrivate::TEvResumeCoroutine::TPtr& ev) {
             ev->Get()->Handle.resume();
+        }
+
+        void Handle(TEvPrivate::TEvRunAsync::TPtr ev) {
+            co_await ev->Get()->Callable();
+        }
+
+        void Handle(TEvPrivate::TEvRunSync::TPtr ev) {
+            ev->Get()->Callable();
         }
 
         void Handle(TEvents::TEvPoison::TPtr&) {
@@ -147,27 +199,50 @@ namespace NAsyncTest {
             }
         }
 
-        TActorId StartAsyncActor(TAsyncTestActor::TState& state, std::function<async<void>(TAsyncTestActor*)> callback) {
+        class TAsyncActorOperations {
+        public:
+            TAsyncActorOperations(TAsyncTestActorRuntime& runtime, const TActorId& actorId)
+                : Runtime(runtime)
+                , ActorId(actorId)
+            {}
+
+            ~TAsyncActorOperations() { /* silence unused warnings */ }
+
+            void Step() const {
+                TDispatchOptions options;
+                options.OnlyMailboxes.push_back(ActorId);
+                options.CustomFinalCondition = []() { return true; };
+                Runtime.DispatchEvents(options);
+            }
+
+            void Poison() const {
+                Runtime.Send(ActorId, TActorId(), new TEvents::TEvPoison);
+            }
+
+            void ResumeCoroutine(std::coroutine_handle<> h) const {
+                Runtime.Send(ActorId, TActorId(), new TAsyncTestActor::TEvPrivate::TEvResumeCoroutine(h));
+            }
+
+            void RunAsync(std::function<async<void>()> callable) const {
+                Runtime.Send(ActorId, TActorId(), new TAsyncTestActor::TEvPrivate::TEvRunAsync(std::move(callable)));
+            }
+
+            void RunSync(std::function<void()> callable) const {
+                Runtime.Send(ActorId, TActorId(), new TAsyncTestActor::TEvPrivate::TEvRunSync(std::move(callable)));
+            }
+
+        private:
+            TAsyncTestActorRuntime& Runtime;
+            const TActorId ActorId;
+        };
+
+        TAsyncActorOperations StartAsyncActor(TAsyncTestActor::TState& state, std::function<async<void>(TAsyncTestActor*)> callback) {
             auto actorId = Register(new TAsyncTestActor(state, std::move(callback)));
             EnableScheduleForActor(actorId);
+            TAsyncActorOperations actor(*this, actorId);
             // Run bootstrap for this actor
-            Step(actorId);
-            return actorId;
-        }
-
-        void Step(const TActorId& actorId) {
-            TDispatchOptions options;
-            options.OnlyMailboxes.push_back(actorId);
-            options.CustomFinalCondition = []() { return true; };
-            DispatchEvents(options);
-        }
-
-        void Poison(const TActorId& actor) {
-            Send(actor, TActorId(), new TEvents::TEvPoison);
-        }
-
-        void ResumeCoroutine(const TActorId& actor, std::coroutine_handle<> h) {
-            Send(actor, TActorId(), new TAsyncTestActor::TEvPrivate::TEvResumeCoroutine{ h });
+            actor.Step();
+            return actor;
         }
     };
 

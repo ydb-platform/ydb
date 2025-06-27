@@ -3,6 +3,7 @@
 #include <ydb/library/actors/async/async.h>
 #include <ydb/library/actors/async/continuation.h>
 #include <ydb/library/actors/async/sleep.h>
+#include <ydb/library/actors/async/timeout.h>
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

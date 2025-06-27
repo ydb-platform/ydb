@@ -1,5 +1,5 @@
-#include "common.h"
 #include <ydb/library/actors/async/sleep.h>
+#include "common.h"
 #include <ydb/library/actors/async/yield.h>
 
 namespace NAsyncTest {
@@ -36,7 +36,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             // We expect only bootstrap to be handled, all yields must be enqueued
             UNIT_ASSERT(!finished);
@@ -84,7 +83,7 @@ namespace NAsyncTest {
             UNIT_ASSERT_VALUES_EQUAL(scheduled, 0);
 
             // This delay must be cancellable
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedNormally);
             UNIT_ASSERT(state.Destroyed);
@@ -105,7 +104,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             // We expect actor to immediately stop
             UNIT_ASSERT(finished);
@@ -129,7 +127,7 @@ namespace NAsyncTest {
 
             UNIT_ASSERT(!finished);
 
-            runtime.Poison(actor);
+            actor.Poison();
 
             // We expect yield to immediately cancel
             UNIT_ASSERT(finished);
@@ -158,7 +156,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
             UNIT_ASSERT_VALUES_EQUAL(scheduled, 1);
@@ -187,7 +184,7 @@ namespace NAsyncTest {
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
             UNIT_ASSERT(!finished);
 
-            runtime.Poison(actor);
+            actor.Poison();
             UNIT_ASSERT(finished);
             UNIT_ASSERT(!finishedNormally);
             UNIT_ASSERT(state.Destroyed);
@@ -208,7 +205,6 @@ namespace NAsyncTest {
 
                 finishedNormally = true;
             });
-            Y_UNUSED(actor);
 
             UNIT_ASSERT(!finished);
 

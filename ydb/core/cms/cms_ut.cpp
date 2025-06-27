@@ -1050,17 +1050,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TestAvailabilityMode(MODE_FORCE_RESTART, true);
     }
 
-    void TestAvailabilityModeScheduled(EAvailabilityMode mode,  bool disconnectNodes)
+    void TestKeepAvailabileModeScheduled(bool disconnectNodes)
     {
-        Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
-                 || mode == MODE_FORCE_RESTART);
-
         TCmsTestEnv env(8);
         env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", true, false, true,
-                                        true, mode, TStatus::ALLOW_PARTIAL,
+                                        true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
@@ -1068,21 +1065,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
         }
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW_PARTIAL, 1);
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL, 1);
         if (disconnectNodes) {
             TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
         }
 
-        env.CheckRequest("user", res1.first, false, mode,
-                         mode == MODE_KEEP_AVAILABLE ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
-                         mode == MODE_KEEP_AVAILABLE ? 0 : 1);
-        if (mode != MODE_KEEP_AVAILABLE) {
-            return;
-        }
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP, 0);
 
         env.CheckDonePermission("user", res1.second[0]);
 
-        env.CheckRequest("user", res1.first, false, mode,
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE,
                          disconnectNodes ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
                          disconnectNodes ? 0 : 1);
         if (!disconnectNodes) {
@@ -1091,27 +1083,17 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW, 1);
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::ALLOW, 1);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeScheduled)
     {
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, false);
-    }
-
-    Y_UNIT_TEST(TestForceRestartModeScheduled)
-    {
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, false);
+        TestKeepAvailabileModeScheduled(false);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeScheduledDisconnects)
     {
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, true);
-    }
-
-    Y_UNIT_TEST(TestForceRestartModeScheduledDisconnects)
-    {
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, true);
+        TestKeepAvailabileModeScheduled(true);
     }
 
     Y_UNIT_TEST(TestOutdatedState)
@@ -1498,10 +1480,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckPermissionRequest("user", true, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+
+        // But it is possible for FORCE RESTART mode
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
 
@@ -1538,14 +1522,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // But it is possible for FORCE RESTART mode
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
-                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
-                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
 
         // It's ok to get two permissions for one group if PartialPermissionAllowed is set to false
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,

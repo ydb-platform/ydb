@@ -1006,9 +1006,13 @@ private:
     YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(TString, MetadataProto);
-    std::vector<TUnifiedBlobId> BlobIds;
+    YDB_READONLY_DEF(std::vector<TUnifiedBlobId>, BlobIds);
 
 public:
+    TPortionAddress GetPortionAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
     template <class TSource>
     TColumnChunkLoadContextV2(const TSource& rowset, const NOlap::IBlobGroupSelector& dsGroupSelector) {
         PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());

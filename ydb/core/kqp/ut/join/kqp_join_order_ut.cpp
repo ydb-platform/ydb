@@ -376,20 +376,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TChainTester(65).Test();
     }
 
-<<<<<<< HEAD
     TString ExecuteJoinOrderTestGenericQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
-=======
-    std::pair<TString, std::vector<NYdb::TResultSet>> ExecuteJoinOrderTestGenericQueryWithStats(
-        const TString& queryPath,
-        const TString& statsPath,
-        bool useStreamLookupJoin,
-        bool useColumnStore,
-        bool useCBO = true,
-        const TExecuteParams& params = {}
-    ) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, params);
->>>>>>> 62f01135b35 ([KQP] Add ShuffleEliminated flag (#20175))
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -715,13 +703,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TVector<TString> RequestedLabels;
     };
 
-<<<<<<< HEAD
     Y_UNIT_TEST(ShuffleEliminationOneJoin) {
         auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true);
-=======
-    Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
->>>>>>> 62f01135b35 ([KQP] Add ShuffleEliminated flag (#20175))
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"customer", "orders"});
         UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
@@ -729,13 +712,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(join.RhsShuffled);
     }
 
-<<<<<<< HEAD
     Y_UNIT_TEST(ShuffleEliminationReuseShuffleTwoJoins) {
         auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_reuse_shuffle_two_joins.sql", "stats/tpch1000s.json", false, true, true);
-=======
-    Y_UNIT_TEST_TWIN(ShuffleEliminationReuseShuffleTwoJoins, EnableSeparationComputeActorsFromRead) {
-        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_reuse_shuffle_two_joins.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
->>>>>>> 62f01135b35 ([KQP] Add ShuffleEliminated flag (#20175))
         auto joinFinder = TFindJoinWithLabels(plan);
 
         {

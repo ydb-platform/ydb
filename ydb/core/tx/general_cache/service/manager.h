@@ -234,6 +234,13 @@ public:
         }
         DrainQueue();
     }
+
+    void UpdateMaxCacheSize(const size_t maxCacheSize) {
+        if (Cache.GetMaxSize() == maxCacheSize) {
+            return;
+        }
+        Cache.SetMaxSize(maxCacheSize);
+    }
 };
 
 }   // namespace NKikimr::NGeneralCache::NPrivate

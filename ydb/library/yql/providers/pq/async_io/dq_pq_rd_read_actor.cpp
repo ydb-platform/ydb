@@ -78,13 +78,16 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
+    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (!counters) {
             return;
         }
         SubGroup = Counters->GetSubgroup("source", "RdPqRead");
+        for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
+            SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+        }
         auto source = SubGroup->GetSubgroup("tx_id", TxId);
         auto task = source->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
@@ -515,7 +518,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , Cluster(cluster)
         , Token(token)
         , LocalRowDispatcherActorId(localRowDispatcherActorId)
-        , Metrics(txId, taskId, counters)
+        , Metrics(txId, taskId, counters, SourceParams)
         , PqGateway(pqGateway)
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)

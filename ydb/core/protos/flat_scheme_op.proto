@@ -2296,3 +2296,8 @@ message TChangePathState {
     optional string Path = 1;
     optional EPathState TargetState = 2;
 }
+
+message TIndexValidationShardResult {
+    optional bytes FirstIndexKey = 1; // absent if no data in shard
+    optional bytes LastIndexKey = 2; // absent if no data in shard
+}

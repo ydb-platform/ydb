@@ -3089,6 +3089,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildVectorIndex = 11,
         BuildPrefixedVectorIndex = 12,
         BuildColumns = 20,
+        ValidateUniqueIndex = 30, // This build kind is set after filling the index
     };
 
     TActorId CreateSender;
@@ -3640,6 +3641,10 @@ public:
 
     bool IsBuildColumns() const {
         return BuildKind == EBuildKind::BuildColumns;
+    }
+
+    bool IsValidateUniqueIndex() const {
+        return BuildKind == EBuildKind::ValidateUniqueIndex;
     }
 
     bool IsDone() const {

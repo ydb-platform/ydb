@@ -15,7 +15,7 @@ void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, co
     ui64 blobsWritten = BlobBatch.GetBlobCount();
     ui64 bytesWritten = BlobBatch.GetTotalSize();
     if (blobsWroteSuccessfully) {
-        if (GetIsBulk()) {
+        if (IsBulk()) {
             self.Counters.GetTabletCounters()->OnBulkWriteSuccess(blobsWritten, bytesWritten);
         } else {
             self.Counters.GetTabletCounters()->OnWriteSuccess(blobsWritten, bytesWritten);

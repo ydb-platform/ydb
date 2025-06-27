@@ -25,7 +25,8 @@ TWriteOperation::TWriteOperation(const TUnifiedPathId& pathId, const TOperationW
     , Cookie(cookie)
     , GranuleShardingVersionId(granuleShardingVersionId)
     , ModificationType(mType)
-    , IsBulk(isBulk) {
+    , BulkFlag(isBulk)
+{
 }
 
 void TWriteOperation::Start(
@@ -37,9 +38,9 @@ void TWriteOperation::Start(
         context.GetWritingCounters()->GetWriteFlowCounters());
     writeMeta->SetLockId(LockId);
     writeMeta->SetModificationType(ModificationType);
-    writeMeta->SetIsBulk(IsBulk);
+    writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);
-    writingAction->SetIsBulk(IsBulk);
+    writingAction->SetBulk(IsBulk());
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(), std::move(writingAction));
     std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
     NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
@@ -98,7 +99,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     }
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(true);
-    proto.SetIsBulk(IsBulk);
+    proto.SetIsBulk(IsBulk());
     PathId.InternalPathId.ToProto(proto);
 }
 
@@ -113,7 +114,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
     } else {
         ModificationType = NEvWrite::EModificationType::Replace;
     }
-    IsBulk = proto.GetIsBulk();
+    BulkFlag = proto.GetIsBulk();
 }
 
 void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {

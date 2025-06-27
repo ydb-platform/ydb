@@ -77,7 +77,6 @@ private:
         LOG_D("Navigated key sets: " << results.size());
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                Cerr << "HERE RESOLVE NAMES:: " << "Failed to resolve table with tableId: " << entry.TableId << " ( " << CanonizePath(entry.Path) <<")" << " status: " << entry.Status << '.' << Endl;
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
                         << "Failed to resolve table with tableId: " << entry.TableId << " status: " << entry.Status << '.'));
@@ -227,7 +226,6 @@ private:
         LOG_D("Navigated key sets: " << results.size());
         for (auto& entry : results) {
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                Cerr << "HERE RESOLVE KEYS" << Endl;
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
                         << "Failed to resolve table with tableId: " << entry.TableId << " status: " << entry.Status << '.'));

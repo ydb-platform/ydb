@@ -3,7 +3,7 @@
 - [Официальная документация Dev Containers](https://containers.dev/)
 - [Документация расширения VS Code Dev Containers](https://code.visualstudio.com/docs/devcontainers/containers)
 
-Dev Container позволяет быстро развернуть воспроизводимую и изолированную среду для разработки и тестирования клиентских SDK {{ ydb-short-name }}.
+Dev Container позволяет быстро развернуть воспроизводимую и изолированную среду для разработки и тестирования клиентских {{ ydb-short-name }} SDK.
 
 ## Преимущества Dev Container
 

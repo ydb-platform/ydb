@@ -13,7 +13,7 @@ class TVectorWorkloadParams;
 class TVectorSampler {
 public:
     TVectorSampler(const TVectorWorkloadParams& params);
-    
+
     // Core functionality for vector sampling
     void SampleExistingVectors();
 
@@ -32,4 +32,4 @@ private:
     std::vector<TSelectTarget> SelectTargets;
 };
 
-} // namespace NYdbWorkload 
+} // namespace NYdbWorkload

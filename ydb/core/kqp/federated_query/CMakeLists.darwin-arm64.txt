@@ -28,9 +28,11 @@ target_link_libraries(core-kqp-federated_query PUBLIC
   fq-libs-grpc
   fq-libs-db_id_async_resolver_impl
   library-db_pool-protos
+  ydb-library-logger
   providers-common-http_gateway
   generic-connector-libcpp
   providers-s3-actors_factory
+  pq-gateway-native
   providers-solomon-gateway
   core-dq_integration-transform
   essentials-public-issue

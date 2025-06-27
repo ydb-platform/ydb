@@ -24,6 +24,7 @@ target_link_libraries(common-token_accessor-client PUBLIC
   providers-common-structured_token
   common-token_accessor-grpc
   client-types-credentials
+  types-credentials-login
 )
 
 target_sources(common-token_accessor-client PRIVATE

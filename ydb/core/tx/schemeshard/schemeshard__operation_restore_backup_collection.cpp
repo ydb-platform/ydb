@@ -36,8 +36,9 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 } // namespace NOperation
 
 // Forward declarations
-void CreateLongIncrementalRestoreOp(
+bool CreateLongIncrementalRestoreOp(
     TOperationId opId,
+    const TPath& bcPath,
     TVector<ISubOperation::TPtr>& result);
 
 class TDoneWithIncrementalRestore: public TDone {
@@ -429,18 +430,26 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
         }
 
         // we don't need long op when we don't have incremental backups
-        CreateLongIncrementalRestoreOp(opId, result);
+        CreateLongIncrementalRestoreOp(opId, bcPath, result);
     }
 
     return result;
 }
 
-void CreateLongIncrementalRestoreOp(
+bool CreateLongIncrementalRestoreOp(
     TOperationId opId,
+    const TPath& bcPath,
     TVector<ISubOperation::TPtr>& result)
 {
-    // Create the long incremental restore operation control plane
-    result.push_back(CreateLongIncrementalRestoreOpControlPlane(opId, TTxState::Invalid));
+    TTxTransaction tx;
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+    tx.SetInternal(true);
+
+    tx.SetWorkingDir(bcPath.PathString());
+
+    result.push_back(CreateLongIncrementalRestoreOpControlPlane(NextPartId(opId, result), tx));
+
+    return true;
 }
 
 bool CreateIncrementalBackupPathStateOps(

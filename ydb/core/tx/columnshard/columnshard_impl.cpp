@@ -795,7 +795,7 @@ void TColumnShard::SetupCleanupPortions() {
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     NOlap::NDataFetcher::TRequestInput rInput(
-        changes->GetPortionsToDrop(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier());
+        changes->GetPortionsToAccess(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier());
     auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
     NOlap::NDataFetcher::TPortionsDataFetcher::StartAccessorPortionsFetching(std::move(rInput),
         std::make_shared<TCompactionExecutor>(

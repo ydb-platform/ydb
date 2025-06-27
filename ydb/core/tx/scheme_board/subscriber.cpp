@@ -780,7 +780,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return &it->second;
     }
 
-    bool ShouldIgnore(const TProxyGroup& proxyGroup) {
+    static bool ShouldIgnore(const TProxyGroup& proxyGroup) {
         return proxyGroup.WriteOnly || proxyGroup.State == ERingGroupState::DISCONNECTED;
     }
 

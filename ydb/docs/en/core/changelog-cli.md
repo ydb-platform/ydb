@@ -7,6 +7,7 @@ Released on June 27, 2025. To update to version **2.23.0**, select the [Download
 ### Features
 
 * Added the `{{ ydb-cli }} workload tpcc` command as a TPC-C benchmark.
+* Added the `{{ ydb-cli }} workload vector select` command to benchmark vector index performance and recall.
 * Added the `{{ ydb-cli }} tools infer csv` command to generate a `CREATE TABLE` SQL query from a CSV data file.
 
 ### Improvements

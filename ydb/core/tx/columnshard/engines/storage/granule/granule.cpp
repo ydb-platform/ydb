@@ -247,9 +247,7 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     {
         if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
-                for (auto&& i : loadContext.BuildRecordsV1()) {
-                    constructor->LoadRecord(std::move(i));
-                }
+                constructor->AddBuildInfo(loadContext.CreateBuildInfo());
             })) {
             return false;
         }
@@ -300,7 +298,7 @@ void TGranuleMeta::CommitPortionOnExecute(
     AFL_VERIFY(it != InsertedPortions.end());
     it->second->SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
-    wrapper.WritePortion(*it->second);
+    it->second->CommitToDatabase(wrapper);
 }
 
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {

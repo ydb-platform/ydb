@@ -17,6 +17,8 @@ ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestD
 ydb/core/blobstorage/pdisk/ut TPDiskTest.FailedToFormatDiskInfoUpdate
 ydb/core/blobstorage/pdisk/ut TPDiskTest.PDiskSlotSizeInUnits
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
+ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
@@ -169,6 +171,7 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1_and_24-4-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1_and_24-4-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_25-1_and_24-4-row]
+ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_25-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_25-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_25-1-row]
@@ -206,6 +209,7 @@ ydb/tests/functional/bridge test_bridge.py.flake8
 ydb/tests/functional/config [test_distconf.py */*] chunk chunk
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationToV2.test_migration_to_v2
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_distconf
+ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_is_operational_with_distconf
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageBadCases.test_cluster_change_state_storage
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfReassignStateStorageMultipleRingGroup.test_cluster_change_state_storage
@@ -236,6 +240,7 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[59]
 ydb/tests/functional/tpc/medium test_workload_oltp.py.TestWorkloadSimpleQueue.test_workload_oltp
 ydb/tests/functional/tpc/medium test_workload_simple_queue.py.TestWorkloadSimpleQueue.test_workload_simple_queue[row]
+ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args3-column]
 ydb/tests/olap [*/*] chunk chunk
 ydb/tests/olap sole chunk chunk
@@ -243,6 +248,7 @@ ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
+ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayScanBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSlicetoUUID]

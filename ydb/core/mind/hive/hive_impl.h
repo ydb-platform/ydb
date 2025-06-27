@@ -56,6 +56,7 @@
 #include "boot_queue.h"
 #include "object_distribution.h"
 #include "data_center_info.h"
+#include "bridge_pile_info.h"
 
 #define DEPRECATED_CTX (ActorContext())
 #define DEPRECATED_NOW (TActivationContext::Now())
@@ -243,6 +244,7 @@ protected:
     friend class TLoggedMonTransaction;
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
+    friend class TTxUpdatePiles;
 
     friend class TDeleteTabletActor;
 
@@ -311,6 +313,7 @@ protected:
     ITransaction* CreateGenerateTestData(uint64_t seed);
     ITransaction* CreateDeleteNode(TNodeId nodeId);
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
+    ITransaction* CreateUpdatePiles();
 
 public:
     TDomainsView DomainsView;
@@ -342,6 +345,7 @@ protected:
     TObjectDistributions ObjectDistributions;
     double StorageScatter = 0;
     std::set<TTabletTypes::EType> SeenTabletTypes;
+    std::unordered_map<TBridgePileId, TBridgePileInfo> BridgePiles;
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
@@ -602,6 +606,7 @@ protected:
     void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateFollowers::TPtr& ev);
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
+    void HandleInit(TEvNodeWardenStorageConfig::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -729,6 +734,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void ProcessPendingStopTablet();
     void ProcessPendingResumeTablet();
     bool IsAllowedPile(TBridgePileId pile) const;
+    TBridgePileInfo& GetPile(TBridgePileId pileId);
+    void UpdatePiles();
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();

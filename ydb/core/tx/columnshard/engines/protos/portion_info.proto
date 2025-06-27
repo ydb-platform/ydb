@@ -53,3 +53,7 @@ message TColumnChunkInfo {
 message TIndexPortionAccessor {
     repeated TColumnChunkInfo Chunks = 1;
 }
+
+message TIndexPortionBlobsInfo {
+    repeated string BlobIds = 1;
+}

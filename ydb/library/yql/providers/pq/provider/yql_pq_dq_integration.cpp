@@ -261,6 +261,12 @@ public:
                     srcDesc.SetSharedReading(true);
                 }
                 *srcDesc.MutableDisposition() = State_->Disposition;
+
+                for (const auto& [label, value] : State_->TaskSensorLabels) {
+                    auto taskSensorLabel = srcDesc.AddTaskSensorLabel();
+                    taskSensorLabel->SetLabel(label);
+                    taskSensorLabel->SetValue(value);
+                }
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));

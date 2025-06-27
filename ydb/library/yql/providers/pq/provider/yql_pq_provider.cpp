@@ -13,8 +13,9 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     IPqGateway::TPtr gateway,
     bool supportRtmrMode,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
-    const NPq::NProto::StreamingDisposition& disposition) {
-    return [gateway, supportRtmrMode, dbResolver, disposition] (
+    const NPq::NProto::StreamingDisposition& disposition,
+    const std::set<std::pair<TString, TString>>& taskSensorLabels) {
+    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -40,12 +41,12 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
             state->Disposition = disposition;
+            state->TaskSensorLabels = taskSensorLabels;
             if (gatewaysConfig) {
                 state->Configuration->Init(gatewaysConfig->GetPq(), typeCtx, dbResolver, state->DatabaseIds);
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);
-
             TDataProviderInfo info;
 
             info.Names.insert({TString{PqProviderName}});

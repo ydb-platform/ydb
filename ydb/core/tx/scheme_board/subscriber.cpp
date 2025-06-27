@@ -356,10 +356,6 @@ namespace {
 
 } // anonymous
 
-bool ShouldIgnore(const TProxyGroup& proxyGroup) {
-    return proxyGroup.WriteOnly || proxyGroup.State == ERingGroupState::DISCONNECTED;
-}
-
 template <typename TPath, typename TDerived>
 class TReplicaSubscriber: public TMonitorableActor<TDerived> {
     void Handle(NInternalEvents::TEvNotify::TPtr& ev) {
@@ -712,6 +708,18 @@ public:
 
 template <typename TPath, typename TDerived, typename TProxyDerived>
 class TSubscriber: public TMonitorableActor<TDerived> {
+
+    struct TProxyInfo {
+        TActorId Proxy;
+        TActorId Replica;
+    };
+
+    struct TProxyGroup {
+        bool WriteOnly;
+        ERingGroupState State;
+        TVector<TProxyInfo> Proxies;
+    };
+
     template <typename TNotify, typename... Args>
     static THolder<TNotify> BuildNotify(const NKikimrSchemeBoard::TEvNotify& record, Args&&... args) {
         THolder<TNotify> notify;
@@ -770,6 +778,10 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         Y_ABORT_UNLESS(it != InitialResponses.end());
 
         return &it->second;
+    }
+
+    bool ShouldIgnore(const TProxyGroup& proxyGroup) {
+        return proxyGroup.WriteOnly || proxyGroup.State == ERingGroupState::DISCONNECTED;
     }
 
     bool IsMajorityReached() const {

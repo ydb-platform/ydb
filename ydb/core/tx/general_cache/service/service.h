@@ -26,9 +26,15 @@ private:
     void HandleMain(NPublic::TEvents<TPolicy>::TEvAskData::TPtr& ev) {
         Manager->AddRequest(std::make_shared<TRequest>(ev->Get()->ExtractAddresses(), ev->Get()->ExtractCallback(), ev->Get()->GetConsumer()));
     }
+
+    void HandleMain(NPublic::TEvents<TPolicy>::TEvUpdateMaxCacheSize::TPtr& ev) {
+        Manager->UpdateMaxCacheSize(ev->Get()->GetMaxCacheSize());
+    }
+
     void HandleMain(NSource::TEvents<TPolicy>::TEvObjectsInfo::TPtr& ev) {
         Manager->OnRequestResult(ev->Get()->GetSourceId(), ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors());
     }
+
     void HandleMain(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo::TPtr& ev) {
         Manager->OnAdditionalObjectsInfo(ev->Get()->GetSourceId(), ev->Get()->ExtractAddObjects(), ev->Get()->ExtractRemoveObjects());
     }
@@ -48,6 +54,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NPublic::TEvents<TPolicy>::TEvAskData, HandleMain);
             hFunc(NPublic::TEvents<TPolicy>::TEvKillSource, HandleMain);
+            hFunc(NPublic::TEvents<TPolicy>::TEvUpdateMaxCacheSize, HandleMain);
             hFunc(NSource::TEvents<TPolicy>::TEvObjectsInfo, HandleMain);
             hFunc(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo, HandleMain);
             hFunc(NActors::TEvents::TEvUndelivered, HandleMain);

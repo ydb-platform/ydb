@@ -31,21 +31,30 @@ public:
         context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvAskData(consumer, std::move(addresses), std::move(callback)));
     }
 
+    static void UpdateMaxCacheSize(const ui64 maxCacheSize) {
+        AFL_VERIFY(NActors::TlsActivationContext);
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Send(GetCurrentNodeServiceId(), new NPublic::TEvents<TPolicy>::TEvUpdateMaxCacheSize(maxCacheSize));
+    }
+
     static void ModifyObjects(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& remove) {
         AFL_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         context.Send(
             GetCurrentNodeServiceId(), new NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo(sourceId, std::move(add), std::move(remove)));
     }
+
     static NActors::TActorId MakeServiceId(const ui32 nodeId) {
         return NActors::TActorId(nodeId, "SrvcCach" + TPolicy::GetServiceCode());
     }
+
     static NActors::TActorId GetCurrentNodeServiceId() {
         AFL_VERIFY(NActors::TlsActivationContext);
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
         return MakeServiceId(selfId.NodeId());
     }
+
     static NActors::IActor* CreateService(const NPublic::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
         return new NPrivate::TDistributor<TPolicy>(config, conveyorSignals);
     }

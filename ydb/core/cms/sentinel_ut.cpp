@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(TSentinelTests) {
             env.SetPDiskState(pdisks, ErrorStates[0]);
         }
 
-        // for full pile pdisks are not expected to become FAULTY, so they become ACTIVE immediatetly
+        // for full pile pdisks are not expected to become FAULTY, so they become ACTIVE immediately
         // after pdisk becomes Normal
         env.SetPDiskState(pdisks, NKikimrBlobStorage::TPDiskState::Normal, EPDiskStatus::ACTIVE);
     }

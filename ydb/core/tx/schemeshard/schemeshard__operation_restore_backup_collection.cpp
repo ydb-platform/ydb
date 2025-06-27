@@ -21,9 +21,6 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection>;
 
-// Forward declarations
-void CreateLongIncrementalRestoreOp(TOperationId opId, TVector<ISubOperation::TPtr>& result);
-
 namespace NOperation {
 
 template <>
@@ -37,6 +34,11 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
 }
 
 } // namespace NOperation
+
+// Forward declarations
+void CreateLongIncrementalRestoreOp(
+    TOperationId opId,
+    TVector<ISubOperation::TPtr>& result);
 
 class TDoneWithIncrementalRestore: public TDone {
 public:
@@ -174,32 +176,30 @@ class TCreateRestoreOpControlPlane: public TSubOperationWithContext {
         }
     }
 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state, TOperationContext& context) override {
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch(state) {
         case TTxState::Waiting:
         case TTxState::Propose:
             return MakeHolder<TEmptyPropose>(OperationId);
         case TTxState::CopyTableBarrier:
             return MakeHolder<TWaitCopyTableBarrier>(OperationId, "TCreateRestoreOpControlPlane");
-        case TTxState::Done: {
-            const auto* txState = context.SS->FindTx(OperationId);
-            if (txState && txState->TxType == TTxState::TxCreateLongIncrementalRestoreOp) {
-                return MakeHolder<TDoneWithIncrementalRestore>(OperationId);
-            }
-            if (txState && txState->TargetPathTargetState.Defined()) {
-                auto targetState = static_cast<TPathElement::EPathState>(*txState->TargetPathTargetState);
-                return MakeHolder<TDone>(OperationId, targetState);
-            }
-            return MakeHolder<TDone>(OperationId);
-        }
+        case TTxState::Done:
+            return MakeHolder<TDoneWithIncrementalRestore>(OperationId);
         default:
             return nullptr;
         }
     }
 
 public:
-    using TSubOperationWithContext::TSubOperationWithContext;
-    using TSubOperationWithContext::SelectStateFunc;
+    TCreateRestoreOpControlPlane(TOperationId id, const TTxTransaction& tx)
+        : TSubOperationWithContext(id, tx)
+    {
+    }
+
+    TCreateRestoreOpControlPlane(TOperationId id, TTxState::ETxState state)
+        : TSubOperationWithContext(id, state)
+    {
+    }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {

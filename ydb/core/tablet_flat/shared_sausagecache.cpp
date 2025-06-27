@@ -61,6 +61,7 @@ struct TCollection {
     TSet<TActorId> InMemoryOwners;
     TSet<TActorId> Owners;
     TPageMap<TIntrusivePtr<TPage>> PageMap;
+    ui64 TotalSize;
     TMap<TPageId, TPendingRequests> PendingRequests;
     TDeque<TPageId> DroppedPages;
 
@@ -365,6 +366,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_ENSURE(pageCollectionId);
             collection.Id = pageCollectionId;
             collection.PageMap.resize(pageCollection.Total());
+            collection.TotalSize = sizeof(TPage) * pageCollection.Total() + pageCollection.BackingSize();
         } else {
             Y_DEBUG_ABORT_UNLESS(collection.Id == pageCollectionId);
             Y_ENSURE(collection.PageMap.size() == pageCollection.Total(),
@@ -731,7 +733,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 droppedPages[pageCollectionId].insert(touchedPages.begin(), touchedPages.end());
                 continue;
             }
-            ui32 cacheTierHint = collection->GetCacheTier();
+            ui32 cacheTier = collection->GetCacheTier();
 
             for (auto pageId : touchedPages) {
                 Y_ENSURE(pageId < collection->PageMap.size());
@@ -755,7 +757,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     AddActivePage(page);
                     [[fallthrough]];
                 case PageStateLoaded:
-                    Evict(Cache.Touch(page, cacheTierHint));
+                    Evict(Cache.Touch(page));
+                    if (cacheTier != page->CacheTier) {
+                        // TODO: make async?
+                        Evict(Cache.TryMove(page, cacheTier));
+                    }
                     break;
                 default:
                     Y_TABLET_ERROR("unknown load state");
@@ -1158,10 +1164,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (collection.InMemoryOwners.erase(sender) && collection.InMemoryOwners.empty()) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
                 << " to " << RegularCacheTier);
+            Cache.SubDesiredSize(TryInMemoryCacheTier, collection.TotalSize);
             // TODO: move pages async and batched
             for (const auto kv : collection.PageMap) {
                 auto* page = kv.second.Get();
-                Cache.TryMove(page, RegularCacheTier);
+                Evict(Cache.TryMove(page, RegularCacheTier));
             }
         }
     }
@@ -1172,6 +1179,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (collection.InMemoryOwners.insert(sender).second && collection.InMemoryOwners.size() == 1) {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Change tier of page collection " << collection.Id
                 << " to " << TryInMemoryCacheTier);
+            Cache.AddDesiredSize(TryInMemoryCacheTier, collection.TotalSize);
             // TODO: pages async and batched and re-request when evicted
             TVector<TPageId> pagesToRequest(::Reserve(pageCollection->Total()));
             ui64 pagesToRequestBytes = 0;

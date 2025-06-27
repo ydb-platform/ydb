@@ -49,6 +49,8 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 
     TCounterPtr ActivePagesTier(ui32 tier);
     TCounterPtr ActiveBytesTier(ui32 tier);
+    TCounterPtr DesiredSizeTier(ui32 tier);
+    TCounterPtr LimitBytesTier(ui32 tier);
 };
 
 } // namespace NKikimr::NSharedCache

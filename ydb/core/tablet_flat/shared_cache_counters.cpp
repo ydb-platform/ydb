@@ -4,6 +4,21 @@
 
 namespace NKikimr::NSharedCache {
 
+namespace {
+
+    TString GetTierName(ui32 tier) {
+        switch (tier) {
+        case RegularCacheTier:
+            return "TierRegularCache";
+        case TryInMemoryCacheTier:
+            return "TierTryKeepInMemory";
+        default:
+            return TStringBuilder() << "Tier" << tier;
+        }
+    }
+
+}
+
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
     // lru cache counters:
@@ -41,25 +56,19 @@ TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolic
 }
 
 TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActivePagesTier(ui32 tier) {
-    switch (tier) {
-    case RegularCacheTier:
-        return Counters->GetCounter("TierRegularCacheActivePages");
-    case TryInMemoryCacheTier:
-        return Counters->GetCounter("TierTryKeepInMemoryActivePages");
-    default:
-        return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActivePages");
-    }
+    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "ActivePagesA");
 }
 
 TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ActiveBytesTier(ui32 tier) {
-    switch (tier) {
-    case RegularCacheTier:
-        return Counters->GetCounter("TierRegularCacheActiveBytes");
-    case TryInMemoryCacheTier:
-        return Counters->GetCounter("TierTryKeepInMemoryActiveBytes");
-    default:
-        return Counters->GetCounter(TStringBuilder() << "Tier" << tier << "ActiveBytes");
-    }
+    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "ActiveBytesA");
+}
+
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::DesiredSizeTier(ui32 tier) {
+    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "DesiredSize");
+}
+
+TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::LimitBytesTier(ui32 tier) {
+    return Counters->GetCounter(TStringBuilder() << GetTierName(tier) << "LimitBytes");
 }
 
 } // namespace NKikimr::NSharedCache

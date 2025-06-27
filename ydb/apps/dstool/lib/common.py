@@ -152,14 +152,21 @@ class ConnectionParams:
             location = endpoint.host_with_port
         return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
 
-    def parse_token(self, token_file):
+    def parse_token(self, token_file, iam_token_file):
         if token_file:
             self.token = token_file.readline().rstrip('\r\n')
             token_file.close()
+        if iam_token_file:
+            self.token = iam_token_file.readline().rstrip('\r\n')
+            self.token_type = 'Bearer'
+            iam_token_file.close()
         if self.token is None:
             self.token = os.getenv('YDB_TOKEN')
             if self.token is not None:
                 self.token = self.token.strip()
+        if self.token is None:
+            self.token = os.getenv('IAM_TOKEN')
+            self.token_type = 'Bearer'
         if self.token is None:
             try:
                 path = os.path.expanduser(os.path.join('~', '.ydb', 'token'))
@@ -199,7 +206,7 @@ class ConnectionParams:
         if 'http' not in protocols and 'https' in protocols:
             self.mon_protocol = 'https'
 
-        self.parse_token(args.token_file)
+        self.parse_token(args.token_file, args.iam_token_file)
         self.domain = 1
         self.verbose = args.verbose or args.debug
         self.debug = args.debug
@@ -218,7 +225,9 @@ class ConnectionParams:
             g.add_argument('--endpoint', '-e', metavar='[PROTOCOL://]HOST[:PORT]', type=str, required=True, action='append', help=ConnectionParams.ENDPOINT_HELP)
         g.add_argument('--grpc-port', type=int, default=2135, metavar='PORT', help='GRPC port to use for procedure invocation')
         g.add_argument('--mon-port', type=int, default=8765, metavar='PORT', help='HTTP monitoring port for viewer JSON access')
-        g.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
+        token_group = g.add_mutually_exclusive_group()
+        token_group.add_argument('--token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to token file')
+        token_group.add_argument('--iam-token-file', type=FileType(encoding='ascii'), metavar='PATH', help='Path to IAM token file')
         g.add_argument('--ca-file', metavar='PATH', dest='cafile', type=str, help='File containing PEM encoded root certificates for SSL/TLS connections. '
                                                                                   'If this parameter is empty, the default roots will be used.')
         g.add_argument('--http-timeout', type=int, default=5, help='Timeout for blocking socket I/O operations during HTTP(s) queries')

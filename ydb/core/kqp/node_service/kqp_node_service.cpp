@@ -16,8 +16,11 @@
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
-#include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
-#include <ydb/core/kqp/runtime/scheduler/old/kqp_compute_scheduler.h>
+#if !defined(USE_OLD_SCHEDULER)
+#   include <ydb/core/kqp/runtime/scheduler/new/kqp_compute_scheduler_service.h>
+#else
+#   include <ydb/core/kqp/runtime/scheduler/old/kqp_compute_scheduler.h>
+#endif
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -88,7 +91,7 @@ public:
             SetWriteActorSettings(config.GetWriteActorSettings());
         }
 
-#if !defined(USE_HDRF_SCHEDULER)
+#if defined(USE_OLD_SCHEDULER)
         SchedulerOptions = {
             .AdvanceTimeInterval = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetAdvanceTimeIntervalUsec()),
             .ForgetOverflowTimeout = TDuration::MicroSeconds(config.GetComputeSchedulerSettings().GetForgetOverflowTimeoutUsec()),
@@ -117,7 +120,7 @@ public:
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         Become(&TKqpNodeService::WorkState);
 
-#if !defined(USE_HDRF_SCHEDULER)
+#if defined(USE_OLD_SCHEDULER)
         Scheduler = std::make_shared<NSchedulerOld::TComputeScheduler>();
         SchedulerOptions.Scheduler = Scheduler;
         SchedulerActorId = RegisterWithSameMailbox(CreateSchedulerActor(SchedulerOptions));
@@ -168,7 +171,7 @@ private:
         LOG_D("TxId: " << txId << ", new compute tasks request from " << requester
             << " with " << msg.GetTasks().size() << " tasks: " << TasksIdsStr(msg.GetTasks()));
 
-#if defined(USE_HDRF_SCHEDULER)
+#if !defined(USE_OLD_SCHEDULER)
         Y_ASSERT(!msg.GetPoolId().empty());
 
         const auto& databaseId = msg.GetDatabaseId();
@@ -225,7 +228,7 @@ private:
         const TString& serializedGUCSettings = ev->Get()->Record.HasSerializedGUCSettings() ?
             ev->Get()->Record.GetSerializedGUCSettings() : "";
 
-#if !defined(USE_HDRF_SCHEDULER)
+#if defined(USE_OLD_SCHEDULER)
         auto schedulerNow = TlsActivationContext->Monotonic();
 
         TString schedulerGroup = msg.GetPoolId();
@@ -267,7 +270,7 @@ private:
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-#if !defined(USE_HDRF_SCHEDULER)
+#if defined(USE_OLD_SCHEDULER)
             NSchedulerOld::TComputeActorSchedulingOptions schedulingTaskOptions {
                 .Now = schedulerNow,
                 .SchedulerActorId = SchedulerActorId,
@@ -309,7 +312,7 @@ private:
                 .RlPath = rlPath,
                 .ComputesByStages = &computesByStage,
                 .State = State_,
-#if !defined(USE_HDRF_SCHEDULER)
+#if defined(USE_OLD_SCHEDULER)
                 .SchedulableOptions = std::move(schedulingTaskOptions),
 #endif
                 // TODO: block tracking mode is not set!
@@ -345,7 +348,7 @@ private:
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
         }
 
-#if !defined(USE_HDRF_SCHEDULER)
+#if defined(USE_OLD_SCHEDULER)
         if (!schedulerGroup.empty()) {
             Scheduler->AdvanceTime(TlsActivationContext->Monotonic());
         }
@@ -581,7 +584,7 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-#if !defined(USE_HDRF_SCHEDULER)
+#if defined(USE_OLD_SCHEDULER)
     std::shared_ptr<NSchedulerOld::TComputeScheduler> Scheduler;
     NSchedulerOld::TSchedulerActorOptions SchedulerOptions;
     TActorId SchedulerActorId;

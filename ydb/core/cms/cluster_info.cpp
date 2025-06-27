@@ -916,22 +916,27 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
     Y_ABORT_UNLESS(info->RingGroups.size() > 0);
-    auto& groupInfo = info->RingGroups[0];
-    for (ui32 ringId = 0; ringId < groupInfo.Rings.size(); ++ringId) {
-        auto &ring = groupInfo.Rings[ringId];
-        TStateStorageRingInfoPtr ringInfo = MakeIntrusive<TStateStorageRingInfo>();
-        ringInfo->RingId = ringId;
-        if (ring.IsDisabled)
-            ringInfo->SetDisabled();
+    const ui64 rGroupSize = IsBridgeMode ? info->RingGroups.size() : 1;
+    StateStorageRings.resize(rGroupSize);
 
-        for(auto replica : ring.Replicas) {
-            CheckNodeExistenceWithVerify(replica.NodeId());
-            ringInfo->AddNode(Nodes[replica.NodeId()]);
-            StateStorageReplicas.insert(replica.NodeId());
-            StateStorageNodeToRingId[replica.NodeId()] = ringId;
+    for (ui64 rGroupId = 0; rGroupId < rGroupSize; ++rGroupId) {
+        auto& groupInfo = info->RingGroups[rGroupId];
+        for (ui32 ringId = 0; ringId < groupInfo.Rings.size(); ++ringId) {
+            auto &ring = groupInfo.Rings[ringId];
+            TStateStorageRingInfoPtr ringInfo = MakeIntrusive<TStateStorageRingInfo>();
+            ringInfo->RingId = ringId;
+            if (ring.IsDisabled)
+                ringInfo->SetDisabled();
+
+            for(auto replica : ring.Replicas) {
+                CheckNodeExistenceWithVerify(replica.NodeId());
+                ringInfo->AddNode(Nodes[replica.NodeId()]);
+                StateStorageReplicas.insert(replica.NodeId());
+                StateStorageNodeToRingId[replica.NodeId()] = ringId;
+            }
+
+            StateStorageRings[rGroupId].push_back(ringInfo);
         }
-
-        StateStorageRings.push_back(ringInfo);
     }
 }
 

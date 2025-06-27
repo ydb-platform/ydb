@@ -227,6 +227,7 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     RequestBridgeInfo();
 
     const auto& pileMap = ev->Get()->PileMap;
+    Info->IsBridgeMode = static_cast<bool>(pileMap);
     Info->NodeIdToPileId = FlipPileMap(pileMap);
     for (const auto& node : ev->Get()->Nodes) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());
@@ -318,7 +319,9 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
         }
 
         for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
-            Info->AddBSGroup(group);
+            if (!group.GetIsProxyGroup()) {
+                Info->AddBSGroup(group);
+            }
         }
 
         MaybeReplyAndDie();

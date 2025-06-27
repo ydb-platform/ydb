@@ -708,6 +708,18 @@ public:
 
 template <typename TPath, typename TDerived, typename TProxyDerived>
 class TSubscriber: public TMonitorableActor<TDerived> {
+
+    struct TProxyInfo {
+        TActorId Proxy;
+        TActorId Replica;
+    };
+
+    struct TProxyGroup {
+        bool WriteOnly;
+        ERingGroupState State;
+        TVector<TProxyInfo> Proxies;
+    };
+
     template <typename TNotify, typename... Args>
     static THolder<TNotify> BuildNotify(const NKikimrSchemeBoard::TEvNotify& record, Args&&... args) {
         THolder<TNotify> notify;
@@ -768,6 +780,10 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         return &it->second;
     }
 
+    static bool ShouldIgnore(const TProxyGroup& proxyGroup) {
+        return proxyGroup.WriteOnly || proxyGroup.State == ERingGroupState::DISCONNECTED;
+    }
+
     bool IsMajorityReached() const {
         TVector<ui32> responsesByGroup(ProxyGroups.size(), 0);
         for (const auto& [proxy, _] : InitialResponses) {
@@ -779,7 +795,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             }
         }
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            if (ProxyGroups[groupIdx].WriteOnly) {
+            if (ShouldIgnore(ProxyGroups[groupIdx])) {
                 continue;
             }
             if (responsesByGroup[groupIdx] <= ProxyGroups[groupIdx].Proxies.size() / 2) {
@@ -1193,16 +1209,6 @@ private:
     const TActorId Owner;
     const TPath Path;
     const ui64 DomainOwnerId;
-
-    struct TProxyInfo {
-        TActorId Proxy;
-        TActorId Replica;
-    };
-
-    struct TProxyGroup {
-        bool WriteOnly;
-        TVector<TProxyInfo> Proxies;
-    };
 
     THashMap<TActorId, ui32> ProxyToGroupMap;
     TVector<TProxyGroup> ProxyGroups;

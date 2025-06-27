@@ -84,7 +84,7 @@ public:
         backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
         backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
 
-        if (AppData()->DisableCdcAutoSwitchingToReadyStateForTests) {
+        if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::DisableIncrementalRestoreAutoSwitchingToReadyStateForTests))) {
             return true;
         }
 

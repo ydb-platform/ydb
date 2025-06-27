@@ -31,7 +31,7 @@ namespace NKikimr::NBsController {
         const TClusterBalancingSettings Settings;
 
         struct TStorageInfo {
-            std::unordered_set<NKikimr::TGroupId> HealthyGroups;
+            std::unordered_set<TGroupId> HealthyGroups;
             std::unordered_map<TPDiskId, ui32> PDiskUsageMap;
             ui32 PDisksWithReplicatingVDisks;
             ui32 ReplicatingVDisks;

@@ -551,14 +551,6 @@ TString FormatPrettyTableDouble(TString stringValue) {
     return ToString(stream.str());
 }
 
-void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table) {
-    PrintPrettyTableImpl(plan, offset, table, true);
-}
-
-void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast) {
-    PrintPrettyTableImpl(plan, offset, table, isLast, TVector<bool>());
-}
-
 void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast, TVector<bool> hasMore) {
     const auto& node = plan.GetMapSafe();
 

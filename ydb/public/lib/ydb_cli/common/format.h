@@ -158,9 +158,7 @@ private:
     void PrintPretty(const NJson::TJsonValue& plan);
     void PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets);
     void PrintPrettyTable(const NJson::TJsonValue& plan);
-    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table);
-    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast);
-    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast, TVector<bool> hasMore);
+    void PrintPrettyTableImpl(const NJson::TJsonValue& plan, TString& offset, TPrettyTable& table, bool isLast = true, TVector<bool> hasMore = TVector<bool>());
     void PrintJson(const TString& plan);
     void PrintSimplifyJson(const NJson::TJsonValue& plan);
     TString JsonToString(const NJson::TJsonValue& jsonValue);

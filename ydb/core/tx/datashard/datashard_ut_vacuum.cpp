@@ -5,7 +5,7 @@ namespace NKikimr {
 
 using namespace Tests;
 
-Y_UNIT_TEST_SUITE(DataCleanup) {
+Y_UNIT_TEST_SUITE(Vacuum) {
 
     static const TString DeletedSubkey1("Subkey1");
     static const TString PresentSubkey2("Subkey2");
@@ -85,10 +85,10 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         return std::make_tuple(server, sender, shards, proxyDSs);
     }
 
-    void CheckResultEvent(const TEvDataShard::TEvForceDataCleanupResult& ev, ui64 tabletId, ui64 generation) {
-        UNIT_ASSERT_EQUAL(ev.Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::OK);
+    void CheckResultEvent(const TEvDataShard::TEvVacuumResult& ev, ui64 tabletId, ui64 generation) {
+        UNIT_ASSERT_EQUAL(ev.Record.GetStatus(), NKikimrTxDataShard::TEvVacuumResult::OK);
         UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetTabletId(), tabletId);
-        UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetDataCleanupGeneration(), generation);
+        UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetVacuumGeneration(), generation);
     }
 
     void CheckTableData(Tests::TServer::TPtr server, const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSs, const TString& table) {
@@ -109,20 +109,20 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT(!BlobStorageContains(proxyDSs, DeletedLongValue4));
     }
 
-    Y_UNIT_TEST(ForceDataCleanup) {
+    Y_UNIT_TEST(Vacuum) {
         auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true);
         auto& runtime = *server->GetRuntime();
 
         ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 4);");
         SimulateSleep(runtime, TDuration::Seconds(2));
 
-        auto cleanupAndCheck = [&runtime, &sender, &tableShards](ui64 expectedDataCleanupGeneration) {
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(expectedDataCleanupGeneration);
+        auto cleanupAndCheck = [&runtime, &sender, &tableShards](ui64 expectedVacuumGeneration) {
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedDataCleanupGeneration);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedVacuumGeneration);
         };
 
         cleanupAndCheck(24);
@@ -133,20 +133,20 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
     }
 
 
-    Y_UNIT_TEST(ForceDataCleanupWithoutCompaction) {
+    Y_UNIT_TEST(VacuumWithoutCompaction) {
         auto [server, sender, tableShards, proxyDSs] = SetupWithTable(false);
         auto& runtime = *server->GetRuntime();
 
         ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 4);");
         SimulateSleep(runtime, TDuration::Seconds(2));
 
-        auto cleanupAndCheck = [&runtime, &sender, &tableShards](ui64 expectedDataCleanupGeneration) {
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(expectedDataCleanupGeneration);
+        auto cleanupAndCheck = [&runtime, &sender, &tableShards](ui64 expectedVacuumGeneration) {
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedDataCleanupGeneration);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), expectedVacuumGeneration);
         };
 
         cleanupAndCheck(24);
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         CheckTableData(server, proxyDSs, "/Root/table-1");
     }
 
-    Y_UNIT_TEST(MultipleDataCleanups) {
+    Y_UNIT_TEST(MultipleVacuums) {
         auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true);
         auto& runtime = *server->GetRuntime();
 
@@ -163,26 +163,26 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         ui64 expectedGenFirst = 42;
         ui64 expectedGenLast = 43;
-        auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(expectedGenFirst);
-        auto request2 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(expectedGenLast);
+        auto request1 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenFirst);
+        auto request2 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenLast);
 
         runtime.SendToPipe(tableShards.at(0), sender, request1.Release(), 0, GetPipeConfigWithRetries());
         runtime.SendToPipe(tableShards.at(0), sender, request2.Release(), 0, GetPipeConfigWithRetries());
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
             CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenLast);
         }
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
             CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenLast);
         }
 
         CheckTableData(server, proxyDSs, "/Root/table-1");
     }
 
-    Y_UNIT_TEST(MultipleDataCleanupsWithOldGenerations) {
+    Y_UNIT_TEST(MultipleVacuumsWithOldGenerations) {
         auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true);
         auto& runtime = *server->GetRuntime();
 
@@ -191,26 +191,26 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         ui64 expectedGenFirst = 42;
         ui64 expectedGenOld = 10;
-        auto request1 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(expectedGenFirst);
-        auto request2 = MakeHolder<TEvDataShard::TEvForceDataCleanup>(expectedGenOld);
+        auto request1 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenFirst);
+        auto request2 = MakeHolder<TEvDataShard::TEvVacuum>(expectedGenOld);
 
         runtime.SendToPipe(tableShards.at(0), sender, request1.Release(), 0, GetPipeConfigWithRetries());
         runtime.SendToPipe(tableShards.at(0), sender, request2.Release(), 0, GetPipeConfigWithRetries());
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
             CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenFirst);
         }
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
             CheckResultEvent(*ev->Get(), tableShards.at(0), expectedGenFirst);
         }
 
         CheckTableData(server, proxyDSs, "/Root/table-1");
     }
 
-    Y_UNIT_TEST(ForceDataCleanupWithRestart) {
+    Y_UNIT_TEST(VacuumWithRestart) {
         auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true);
         auto& runtime = *server->GetRuntime();
 
@@ -222,20 +222,20 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         ui64 olderGeneration = 5;
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(cleanupGeneration);
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(cleanupGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
             CheckResultEvent(*ev->Get(), tableShards.at(0), cleanupGeneration);
         }
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(oldGeneration);
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(oldGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
             CheckResultEvent(*ev->Get(), tableShards.at(0), cleanupGeneration);
         }
 
@@ -244,11 +244,11 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         {
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(olderGeneration);
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(olderGeneration);
 
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
             // more recent generation should be persisted
             CheckResultEvent(*ev->Get(), tableShards.at(0), cleanupGeneration);
         }
@@ -292,13 +292,13 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_VALUES_EQUAL(CountBlobsWithSubstring(tableShards.at(0), proxyDSs, DeletedSubkey1), 5); // + deletion in log
         UNIT_ASSERT_VALUES_EQUAL(CountBlobsWithSubstring(table2Shards.at(0), proxyDSs, DeletedSubkey1), 2); // + deletion in log
 
-        auto cleanupAndCheck = [&runtime, &sender](ui64 tabletId, ui64 expectedDataCleanupGeneration) {
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(expectedDataCleanupGeneration);
+        auto cleanupAndCheck = [&runtime, &sender](ui64 tabletId, ui64 expectedVacuumGeneration) {
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(expectedVacuumGeneration);
 
             runtime.SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            CheckResultEvent(*ev->Get(), tabletId, expectedDataCleanupGeneration);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
+            CheckResultEvent(*ev->Get(), tabletId, expectedVacuumGeneration);
         };
 
         cleanupAndCheck(table2Shards.at(0), 24);
@@ -321,33 +321,33 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         ExecSQL(server, sender, "DELETE FROM `/Root/table-2` WHERE key IN (1, 4);");
         SimulateSleep(runtime, TDuration::Seconds(2));
 
-        ui64 dataCleanupGeneration = 24;
+        ui64 vacuumGeneration = 24;
         {
             // cleanup for the first table should be failed due to borrowed parts
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(vacuumGeneration);
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::BORROWED);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
+            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvVacuumResult::BORROWED);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletId(), tableShards.at(0));
-            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), dataCleanupGeneration);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetVacuumGeneration(), vacuumGeneration);
         }
         {
             // cleanup for the second table
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(vacuumGeneration);
             runtime.SendToPipe(table2Shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            CheckResultEvent(*ev->Get(), table2Shards.at(0), dataCleanupGeneration);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
+            CheckResultEvent(*ev->Get(), table2Shards.at(0), vacuumGeneration);
         }
         {
             // next cleanup for the first table should succeed after compaction of the second table
-            ++dataCleanupGeneration;
-            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            ++vacuumGeneration;
+            auto request = MakeHolder<TEvDataShard::TEvVacuum>(vacuumGeneration);
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            CheckResultEvent(*ev->Get(), tableShards.at(0), dataCleanupGeneration);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(sender);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), vacuumGeneration);
         }
 
         CheckTableData(server, proxyDSs, "/Root/table-1");

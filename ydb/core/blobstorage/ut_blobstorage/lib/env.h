@@ -59,6 +59,7 @@ struct TEnvironmentSetup {
         const ui64 PDiskSize = 10_TB;
         const ui64 PDiskChunkSize = 0;
         const bool TrackSharedQuotaInPDiskMock = false;
+        const bool SelfManagementConfig = false;
     };
 
     const TSettings Settings;
@@ -430,6 +431,10 @@ struct TEnvironmentSetup {
                 warden.reset(new TNodeWardenMockActor(Settings.NodeWardenMockSetup));
             } else {
                 auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
+                if (Settings.SelfManagementConfig) {
+                    config->SelfManagementConfig = std::make_optional(NKikimrConfig::TSelfManagementConfig());
+                    config->SelfManagementConfig->SetEnabled(true);
+                }
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
                 if (Settings.ReplMaxQuantumBytes) {
@@ -637,6 +642,7 @@ struct TEnvironmentSetup {
         cmd->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
         cmd->SetVDiskKind("Default");
         cmd->SetNumGroups(1);
+        cmd->SetDefaultGroupSizeInUnits(defaultGroupSizeInUnits);
         cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
         if (Settings.Encryption) {
             cmd->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
@@ -709,7 +715,7 @@ struct TEnvironmentSetup {
                 for (const auto& [vdiskId, vdiskActorId] : vdisks) {
                     dyn.PushBackActorId(vdiskActorId);
                 }
-                return new TBlobStorageGroupInfo(std::move(topology), std::move(dyn), "storage_pool");
+                return new TBlobStorageGroupInfo(std::move(topology), std::move(dyn), "storage_pool", {}, NPDisk::DEVICE_TYPE_UNKNOWN, group.GetGroupSizeInUnits());
             }
         }
         return nullptr;

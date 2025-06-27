@@ -123,30 +123,28 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         , IsWide(isWide)
         , TransportVersion(transportVersion)
     {
-        {
-            TVector<TStructMember> members;
-            members.emplace_back("key", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv));
-            members.emplace_back("ts", TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv));
-            RowType = TStructType::Create(members.size(), members.data(), TypeEnv);
-            TVector<TType*> components;
-            for (ui32 i = 0; i < RowType->GetMembersCount(); ++i) {
-                components.push_back(RowType->GetMemberType(i));
-            }
-            WideRowType = TMultiType::Create(components.size(), components.data(), TypeEnv);
-        }
-        {
-            TVector<TStructMember> members;
-            members.emplace_back("e.id", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv));
-            members.emplace_back("e.ts", TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv));
-            members.emplace_back("u.data", TOptionalType::Create(TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv), TypeEnv));
-            members.emplace_back("u.key", TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), TypeEnv));
-            RowTransformedType = TStructType::Create(members.size(), members.data(), TypeEnv);
-            TVector<TType*> components;
-            for (ui32 i = 0; i < RowType->GetMembersCount(); ++i) {
-                components.push_back(RowType->GetMemberType(i));
-            }
-            WideRowTransformedType = TMultiType::Create(components.size(), components.data(), TypeEnv);
-        }
+        std::array<TType *, 2> inputTypes {
+            TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
+            TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv),
+        };
+        RowType = TStructTypeBuilder(TypeEnv)
+                .Add("id", inputTypes[0])
+                .Add("ts", inputTypes[1])
+                .Build();
+        WideRowType = TMultiType::Create(inputTypes.size(), inputTypes.data(), TypeEnv);
+        std::array<TType *, 4> outputTypes {
+            inputTypes[0],
+            inputTypes[1],
+            TOptionalType::Create(TDataType::Create(NUdf::TDataType<char *>::Id, TypeEnv), TypeEnv),
+            TOptionalType::Create(inputTypes[0], TypeEnv),
+        };
+        RowTransformedType = TStructTypeBuilder(TypeEnv)
+                .Add("e.id", outputTypes[0])
+                .Add("e.ts", outputTypes[1])
+                .Add("u.data", outputTypes[2])
+                .Add("u.key", outputTypes[3])
+                .Build();
+        WideRowTransformedType = TMultiType::Create(outputTypes.size(), outputTypes.data(), TypeEnv);
     }
 
     void SetUp(NUnitTest::TTestContext& /* context */) override {
@@ -171,14 +169,14 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     .Args({"val"})
                     .Body<TCoAsStruct>()
                         .Add<TCoNameValueTuple>()
-                            .Name().Build("key")
+                            .Name().Build("id")
                             .Value<TCoMul>()
                                 .Left<TCoMember>()
-                                    .Name().Build("key")
+                                    .Name().Build("id")
                                     .Struct("val")
                                 .Build()
                                 .Right<TCoMember>()
-                                    .Name().Build("key")
+                                    .Name().Build("id")
                                     .Struct("val")
                                 .Build()
                             .Build()
@@ -198,7 +196,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         auto tsType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
         auto inStructType = ctx.MakeType<TStructExprType>(
             TVector<const TItemExprType*> {
-                ctx.MakeType<TItemExprType>("key", type),
+                ctx.MakeType<TItemExprType>("id", type),
                 ctx.MakeType<TItemExprType>("ts", tsType),
             }
         );
@@ -622,7 +620,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         }
                         return true;
                     }
-                    UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "key");
+                    UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
                     auto data = val.Get<i32>();
                     LOG_D(data);
                     ++receivedData[data];

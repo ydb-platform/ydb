@@ -5,22 +5,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#//include <ydb/library/yql/dq/actors/compute/dq_compute_actor_channels.h>
-//#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 #include <ydb/library/yql/dq/actors/compute/ut/proto/mock.pb.h>
-//#include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
-//#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
-//#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
-//#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-//#include <yql/essentials/minikql/computation/mkql_value_builder.h>
-//#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-//#include <yql/essentials/minikql/mkql_function_registry.h>
-//#include <yql/essentials/minikql/mkql_node.h>
-//#include <yql/essentials/minikql/mkql_node_builder.h>
-//#include <yql/essentials/minikql/mkql_node_printer.h>
-//#include <yql/essentials/minikql/mkql_node_serialization.h>
-//#include <yql/essentials/minikql/mkql_program_builder.h>
-//#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include "mock_lookup_factory.h"
 
@@ -38,13 +24,13 @@ class TMockLookupActor
 public:
     TMockLookupActor(
         NActors::TActorId&& parentId,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
+        ::NMonitoring::TDynamicCounterPtr /*taskCounters*/,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         Mock::TLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
-        const NKikimr::NMiniKQL::TTypeEnvironment& /*typeEnv*/,
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest)
         : ParentId(std::move(parentId))
@@ -61,14 +47,13 @@ public:
         if (key1Type->IsOptional()) {
             key1Type = static_cast<NKikimr::NMiniKQL::TOptionalType *>(key1Type)->GetItemType();
         }
-        //Y_ENSURE(key1Type->IsSameType(Int32));
+        Y_ENSURE(key1Type->IsSameType(*NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<i32>::Id, typeEnv)));
         Y_ENSURE(PayloadType->GetMembersCount() == 1);
         auto payload1Type = PayloadType->GetMemberType(0);
         if (payload1Type->IsOptional()) {
             payload1Type = static_cast<NKikimr::NMiniKQL::TOptionalType *>(payload1Type)->GetItemType();
         }
-        //Y_ENSURE(payload1Type->IsSameType(String));
-        InitMonCounters(taskCounters);
+        Y_ENSURE(payload1Type->IsSameType(*NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<char *>::Id, typeEnv)));
     }
 
     ~TMockLookupActor() {
@@ -78,26 +63,8 @@ public:
 private:
     void Free() {
         auto guard = Guard(*Alloc);
-        if (Request && InFlight) {
-            // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight (when request successfully completed, @Request is nullptr)
-            InFlight->Dec();
-        }
         Request.reset();
         KeyTypeHelper.reset();
-    }
-    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
-        if (!taskCounters) {
-            return;
-        }
-        auto component = taskCounters->GetSubgroup("component", "LookupSrc");
-        Count = component->GetCounter("Reqs");
-        Keys = component->GetCounter("Keys");
-        ResultChunks = component->GetCounter("Chunks");
-        ResultRows = component->GetCounter("Rows");
-        ResultBytes = component->GetCounter("Bytes");
-        AnswerTime = component->GetCounter("AnswerMs");
-        CpuTime = component->GetCounter("CpuUs");
-        InFlight = component->GetCounter("InFlight");
     }
 public:
 
@@ -135,43 +102,29 @@ private: // events
     }
 
 private:
-    static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
-        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
-    }
-
     void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) {
         if (!request) {
             return;
         }
-        SentTime = TInstant::Now();
         Y_ABORT_IF(request->size() == 0 || request->size() > MaxKeysInRequest);
-        if (Count) {
-            Count->Inc();
-            InFlight->Inc();
-            Keys->Add(request->size());
-        }
         Request = std::move(request);
         SendRequest();
     }
 
     void SendRequest() {
-        auto startCycleCount = GetCycleCountFast();
         FinalizeRequest();
-        if (CpuTime) {
-            CpuTime->Add(GetCpuTimeDelta(startCycleCount).MicroSeconds());
-        }
     }
 
     void FinalizeRequest() {
-        //YQL_CLOG(DEBUG, ProviderMock) << "Sending lookup results for " << Request->size() << " keys";
         auto guard = Guard(*Alloc);
         i32 minValue = LookupSource.GetMinValue();
         i32 maxValue = LookupSource.GetMaxValue();
+        auto key1Type = KeyType->GetMemberType(0);
         for (auto& [key, value]: *Request) {
             Y_ENSURE(key);
             auto key1 = key.GetElement(0);
             Y_ENSURE(key1);
-            if (KeyType->GetMemberType(0)->IsOptional()) {
+            if (key1Type->IsOptional()) {
                 key1 = key1.GetOptionalValue();
                 Y_ENSURE(key1);
             }
@@ -192,13 +145,10 @@ private:
             }
         }
         auto ev = new IDqAsyncLookupSource::TEvLookupResult(Request);
-        if (AnswerTime) {
-            AnswerTime->Add((TInstant::Now() - SentTime).MilliSeconds());
-            InFlight->Dec();
-        }
         Request.reset();
         TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
     }
+
     void SendError() {
         auto actorSystem = TActivationContext::ActorSystem();
         TIssues issues;
@@ -220,15 +170,6 @@ private:
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     const size_t MaxKeysInRequest;
     std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> Request;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Count;
-    ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ResultBytes;
-    ::NMonitoring::TDynamicCounters::TCounterPtr ResultChunks;
-    ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
-    ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
-    ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
-    TInstant SentTime;
 };
 
 std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateMockLookupActor(

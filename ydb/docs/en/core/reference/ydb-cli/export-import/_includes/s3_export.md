@@ -35,6 +35,8 @@ To run the command to export data to S3 storage, specify the [S3 connection para
 
 `--include PATH`: Schema objects to be included in the export. Directories are traversed recursively. Paths are relative to the `root-path`. You may specify this parameter multiple times to include several objects. If not specified, all non-system objects in the `root-path` are exported.
 
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Paths are relative to the `root-path`. You may specify this parameter multiple times for different templates.
+
 {% cut "Alternate syntax" %}
 
 There's an alternate syntax to specify the list of exported objects, supported for backward compatibility.
@@ -44,11 +46,11 @@ There's an alternate syntax to specify the list of exported objects, supported f
 - `source`, `src`, or `s`: Path to the exported directory or table, `.` indicates the DB root directory. If you specify a directory, all its child non-system objects and, recursively, all non-system subdirectories are exported.
 - `destination`, `dst`, or `d`: Path (key prefix) in S3 storage to store exported items.
 
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Paths are relative to the `root-path`. You may specify this parameter multiple times for different templates.
+
 The exports made using the alternate syntax will not contain a list of objects as part of the backup, so some features may not be available for them (like encryption), and imports are possible only using the corresponding alternate syntax of import.
 
 {% endcut %}
-
-`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from export. Paths are relative to the `root-path`. You may specify this parameter multiple times for different templates.
 
 ### Additional parameters {#aux}
 

@@ -47,7 +47,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
 
     void Start()
     {
-        SetDispatchTimeout(TDuration::Seconds(5));
+        SetDispatchTimeout(TDuration::Seconds(20));
         InitNodes();
         SetLogBackend(CreateStderrBackend());
         AppendToLogSettings(

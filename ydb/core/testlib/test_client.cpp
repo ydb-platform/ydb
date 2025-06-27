@@ -1300,6 +1300,7 @@ namespace Tests {
                         );
                     }
                 }
+                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1314,8 +1315,11 @@ namespace Tests {
                     Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory,
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
-                    Settings->DqTaskTransformFactory
-                );
+                    Settings->DqTaskTransformFactory,
+                    NYql::TPqGatewayConfig{},
+                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+                    std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr),
+                    driver);
             }
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),

@@ -67,4 +67,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     const std::set<std::pair<TString, TString>>& taskSensorLabels = {}
 );
 
+TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
+TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);
+
 } // namespace NYql

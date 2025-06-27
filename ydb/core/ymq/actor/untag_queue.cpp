@@ -122,6 +122,7 @@ private:
                 << "Type,"
                 << "CloudId,"
                 << "FolderId,"
+                << "ResourceId,"
                 << "UserSID,"
                 << "MaskedToken,"
                 << "AuthType,"
@@ -134,10 +135,11 @@ private:
             << "("
                 << createdAt << ","
                 << evId << ","
-                << "\"" << GetQueueName() << "\"" << ","
+                << "\"" << "CustomQueueName_" << "\"" << ","
                 << "\"" << "UpdateMessageQueue" << "\"" << ","
                 << "\"" << UserName_ << "\"" << ","
                 << "\"" << FolderId_ << "\"" << ","
+                << "\"" << GetQueueName() << "\"" << ","
                 << "\"" << UserSID_ << "\"" << ","
                 << "\"" << MaskedToken_ << "\"" << ","
                 << "\"" << AuthType_ << "\"" << ","
@@ -199,6 +201,7 @@ private:
 private:
     TVector<TString> TagKeys_;
     bool IsCloudEventsEnabled;
+    TString CustomQueueName_ = "";
 };
 
 IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

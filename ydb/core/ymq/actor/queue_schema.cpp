@@ -752,13 +752,14 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
         result +=
         R"__(
                 (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
-                (let cloudEventsQueueName               (Parameter 'NAME (DataType 'Utf8String)))
+                (let cloudEventsQueueName               (Parameter 'CUSTOMNAME (DataType 'Utf8String)))
                 (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
                 (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
                 (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
                 (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+                (let cloudEventsResourceId              (Parameter 'NAME (DataType 'Utf8String)))
                 (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
-                (let cloudEventsMaskedToken      (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
                 (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
                 (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
                 (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
@@ -778,6 +779,7 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                     '('Type cloudEventsType)
                     '('CloudId cloudEventsCloudId)
                     '('FolderId cloudEventsFolderId)
+                    '('ResourceId cloudEventsResourceId)
                     '('UserSID cloudEventsUserSID)
                     '('MaskedToken cloudEventsMaskedToken)
                     '('AuthType cloudEventsAuthType)
@@ -1353,50 +1355,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
             (let now                (Parameter 'NOW (DataType 'Uint64)))
             (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
             (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
-    )__";
 
-    if (isCloudEventsEnabled) {
-        result +=
-        R"__(
-                (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
-                (let cloudEventsQueueName               (Parameter 'NAME (DataType 'Utf8String)))
-                (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
-                (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
-                (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
-                (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
-                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
-                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
-                (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
-                (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
-                (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
-                (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
-                (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
-        )__";
-
-        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
-
-        result += R"__(
-                (let cloudEventsRow '(
-                    '('CreatedAt cloudEventsCreatedAt)
-                    '('Id cloudEventsId)))
-
-                (let cloudEventsUpdate '(
-                    '('QueueName cloudEventsQueueName)
-                    '('Type cloudEventsType)
-                    '('CloudId cloudEventsCloudId)
-                    '('FolderId cloudEventsFolderId)
-                    '('UserSID cloudEventsUserSID)
-                    '('MaskedToken cloudEventsMaskedToken)
-                    '('AuthType cloudEventsAuthType)
-                    '('PeerName cloudEventsPeerName)
-                    '('RequestId cloudEventsRequestId)
-                    '('IdempotencyId cloudEventsIdempotencyId)
-                    '('Labels cloudEventsQueueTags)))
-        )__";
-    }
-
-    result +=
-    R"__(
             (let queuesTable '%2$s/.Queues)
             (let removedQueuesTable '%2$s/.RemovedQueues)
             (let eventsTable '%2$s/.Events)
@@ -1463,7 +1422,51 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
                     (Utf8String '"")
                 )
             )
+    )__";
 
+    if (isCloudEventsEnabled) {
+        result +=
+        R"__(
+                (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
+                (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
+                (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
+                (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
+                (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+                (let cloudEventsResourceId              (Parameter 'NAME (DataType 'Utf8String)))
+                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
+                (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
+                (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
+                (let cloudEventsIdempotencyId           (Parameter 'CLOUD_EVENT_IDEMPOTENCY_ID (DataType 'Utf8String)))
+                (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
+        )__";
+
+        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
+
+        result += R"__(
+                (let cloudEventsRow '(
+                    '('CreatedAt cloudEventsCreatedAt)
+                    '('Id cloudEventsId)))
+
+                (let cloudEventsUpdate '(
+                    '('QueueName customName)
+                    '('Type cloudEventsType)
+                    '('CloudId cloudEventsCloudId)
+                    '('FolderId cloudEventsFolderId)
+                    '('ResourceId cloudEventsResourceId)
+                    '('UserSID cloudEventsUserSID)
+                    '('MaskedToken cloudEventsMaskedToken)
+                    '('AuthType cloudEventsAuthType)
+                    '('PeerName cloudEventsPeerName)
+                    '('RequestId cloudEventsRequestId)
+                    '('IdempotencyId cloudEventsIdempotencyId)
+                    '('Labels cloudEventsQueueTags)))
+        )__";
+    }
+
+    result +=
+    R"__(
             (let tablesFormat
                 (Coalesce
                     (Member queuesRead 'TablesFormat)
@@ -1543,6 +1546,7 @@ TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
             ))
         )
     )__";
+
     return result;
 }
 

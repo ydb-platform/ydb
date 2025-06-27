@@ -119,6 +119,7 @@ private:
                 << "Type,"
                 << "CloudId,"
                 << "FolderId,"
+                << "ResourceId,"
                 << "UserSID,"
                 << "MaskedToken,"
                 << "AuthType,"
@@ -131,10 +132,11 @@ private:
             << "("
                 << createdAt << ","
                 << evId << ","
-                << "\"" << GetQueueName() << "\"" << ","
+                << "\"" << "CustomQueueName_" << "\"" << ","
                 << "\"" << "UpdateMessageQueue" << "\"" << ","
                 << "\"" << UserName_ << "\"" << ","
                 << "\"" << FolderId_ << "\"" << ","
+                << "\"" << GetQueueName() << "\"" << ","
                 << "\"" << UserSID_ << "\"" << ","
                 << "\"" << MaskedToken_ << "\"" << ","
                 << "\"" << AuthType_ << "\"" << ","
@@ -197,6 +199,7 @@ private:
     NJson::TJsonMap Tags_;
     TString TagsJson_;
     bool IsCloudEventsEnabled;
+    TString CustomQueueName_ = "";
 };
 
 IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

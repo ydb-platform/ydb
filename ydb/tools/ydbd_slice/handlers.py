@@ -109,7 +109,7 @@ class Slice:
             cmd = "sudo sh -c 'echo {} > {}/bridge-pile'".format(pile, self.slice_tenants_path)
             self.nodes.execute_async(cmd, nodes=hosts)
 
-    def _clean_locations(self):
+    def _clear_locations(self):
         self.nodes.execute_async("sudo rm -f {}/{{location,bridge-pile}}".format(self.slice_tenants_path))
 
     def slice_format(self):
@@ -120,6 +120,7 @@ class Slice:
     def slice_clear(self):
         self.slice_stop()
         self._clear_config()
+        self._clear_locations()
 
         if 'dynamic_slots' in self.components:
             for slot in self.cluster_details.dynamic_slots:

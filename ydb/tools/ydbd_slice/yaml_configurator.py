@@ -186,6 +186,8 @@ class YamlConfigurator(object):
         """
         datacenter_to_hosts = {}
         for host, datacenter in self.hosts_datacenters.items():
+            if not datacenter:
+                continue
             if datacenter not in datacenter_to_hosts:
                 datacenter_to_hosts[datacenter] = []
             datacenter_to_hosts[datacenter].append(host)
@@ -201,6 +203,8 @@ class YamlConfigurator(object):
         """
         pile_to_hosts = {}
         for host, pile in self.hosts_bridge_piles.items():
+            if not pile:
+                continue
             if pile not in pile_to_hosts:
                 pile_to_hosts[pile] = []
             pile_to_hosts[pile].append(host)

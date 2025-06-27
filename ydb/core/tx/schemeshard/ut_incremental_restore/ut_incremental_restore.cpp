@@ -800,4 +800,88 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         
         Cerr << "Successfully verified TEvRunIncrementalRestore event contains valid PathId: " << capturedPathId << Endl;
     }
+
+    Y_UNIT_TEST(MultipleCollectionsGenerateMultipleTEvRunIncrementalRestoreEvents) {
+        TLongOpTestSetup setup;
+
+        // Create 3 different backup collections with incremental backups
+        setup.CreateCompleteBackupScenario("Collection1", {"Table1"}, 2);
+        setup.CreateCompleteBackupScenario("Collection2", {"Table2"}, 3);
+        setup.CreateCompleteBackupScenario("Collection3", {"Table3"}, 1);
+
+        // Clear any previous events
+        setup.ClearCapturedEvents();
+
+        // Execute restore operations on all 3 collections sequentially
+        // We need to execute them one by one to ensure proper event tracking
+        
+        // Restore Collection1
+        setup.ExecuteRestore("Collection1");
+        
+        // Restore Collection2
+        setup.ExecuteRestore("Collection2");
+        
+        // Restore Collection3
+        setup.ExecuteRestore("Collection3");
+
+        // Verify that exactly 3 TEvRunIncrementalRestore events were sent (one per collection)
+        UNIT_ASSERT_C(setup.CapturedBackupCollectionPathIds.size() == 3, 
+            TStringBuilder() << "Expected exactly 3 TEvRunIncrementalRestore events (one per collection), got: " 
+                            << setup.CapturedBackupCollectionPathIds.size());
+        
+        // Verify that all captured events contain valid backup collection path IDs
+        for (size_t i = 0; i < setup.CapturedBackupCollectionPathIds.size(); ++i) {
+            const TPathId& capturedPathId = setup.CapturedBackupCollectionPathIds[i];
+            UNIT_ASSERT_C(capturedPathId.OwnerId != 0, 
+                TStringBuilder() << "Event " << i << " should reference a valid backup collection OwnerId");
+            UNIT_ASSERT_C(capturedPathId.LocalPathId != 0, 
+                TStringBuilder() << "Event " << i << " should reference a valid backup collection LocalPathId");
+            
+            // Verify that each captured PathId belongs to one of the expected backup collections
+            UNIT_ASSERT_C(setup.ExpectedBackupCollectionPathIds.contains(capturedPathId), 
+                TStringBuilder() << "Event " << i << " should be for one of the expected backup collections, got PathId: " 
+                                << capturedPathId);
+        }
+
+        // Verify that we captured events for all 3 unique collections (no duplicates)
+        THashSet<TPathId> uniquePathIds(setup.CapturedBackupCollectionPathIds.begin(), 
+                                       setup.CapturedBackupCollectionPathIds.end());
+        UNIT_ASSERT_C(uniquePathIds.size() == 3, 
+            TStringBuilder() << "Expected 3 unique backup collection PathIds, got: " << uniquePathIds.size());
+
+        // Also verify TTxProgress execution by checking the database for multiple operations
+        TTabletId schemeShardTabletId = TTabletId(TTestTxConfig::SchemeShard);
+        
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(setup.Runtime, schemeShardTabletId.GetValue(), R"(
+            (
+                (let range '('('Id (Null) (Void))))
+                (let select '('Id 'Operation))
+                (let operations (SelectRange 'IncrementalRestoreOperations range select '()))
+                (let ret (AsList (SetResult 'Operations operations)))
+                (return ret)
+            )
+        )", result, err);
+        
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        
+        auto value = NClient::TValue::Create(result);
+        auto operationsResultSet = value["Operations"];
+        UNIT_ASSERT_C(operationsResultSet.HaveValue(), "Operations result set should be present");
+        
+        auto operationsList = operationsResultSet["List"];
+        ui32 operationsCount = 0;
+        if (operationsList.HaveValue()) {
+            operationsCount = operationsList.Size();
+        }
+        
+        UNIT_ASSERT_C(operationsCount == 3, 
+            TStringBuilder() << "TTxProgress should have been executed for all 3 collections - expected exactly 3 incremental restore operations, got: " 
+                            << operationsCount);
+
+        Cerr << "Successfully verified " << setup.CapturedBackupCollectionPathIds.size() 
+             << " TEvRunIncrementalRestore events for " << uniquePathIds.size() 
+             << " unique collections with " << operationsCount << " operations in database" << Endl;
+    }
 }

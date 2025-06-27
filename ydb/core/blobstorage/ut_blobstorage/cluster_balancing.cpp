@@ -58,12 +58,8 @@ struct TTestEnv {
 
     bool EachPDiskHasNVDisks(ui32 n) {
         auto usageMap = BuildPDiskUsageMap();
-        for (const auto& [pdiskId, usage] : usageMap) {
-            if (usage != n) {
-                return false;
-            }
-        }
-        return true;
+
+        return std::all_of(usageMap.begin(), usageMap.end(), [&](std::pair<TPDiskId, ui32> val) { return val.second == n; });
     }
 
     template<class TCondition>
@@ -123,6 +119,17 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         UNIT_ASSERT(success);
 
         auto usageMap1 = env.BuildPDiskUsageMap();
+
+        env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                const auto& response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse();
+                    
+                const auto& status = response.GetStatus(0);                
+
+                UNIT_ASSERT_VALUES_EQUAL(0, status.ReassignedItemSize());
+            }
+            return true;
+        };
 
         env.Env.Sim(TDuration::Seconds(5));
 

@@ -24,23 +24,17 @@ namespace NKikimr::NBsController {
 
     class TClusterBalancingActor : public TActorCoroImpl {
     private:
-        using TGroupId = ui32;
+        using TGroupId = NKikimr::TGroupId;
         using TVSlot = NKikimrBlobStorage::TBaseConfig_TVSlot;
 
         const TActorId ControllerId;
         const TClusterBalancingSettings Settings;
 
         struct TStorageInfo {
-            std::unordered_set<TGroupId> HealthyGroups;
+            std::unordered_set<NKikimr::TGroupId> HealthyGroups;
             std::unordered_map<TPDiskId, ui32> PDiskUsageMap;
-            ui32 ReplicatingPDisks;
+            ui32 PDisksWithReplicatingVDisks;
             ui32 ReplicatingVDisks;
-        };
-
-        enum class ReassignCheckResult {
-            BscIssue,
-            ReassignNotViable,
-            CanReassign,
         };
 
         enum class ReassignResult {
@@ -48,10 +42,6 @@ namespace NKikimr::NBsController {
             FailedToReassign,
             Reassigned,
         };
-
-        bool IsDynamicGroup(TGroupId groupId) {
-            return groupId & 0x80000000;
-        }
 
         TStorageInfo BuildStorageInfo(const NKikimrBlobStorage::TBaseConfig& config) {
             TStorageInfo storageInfo;
@@ -63,7 +53,7 @@ namespace NKikimr::NBsController {
             }
 
             ui32 replicatingVDisks = 0;
-            std::unordered_set<TPDiskId> replicatingPDisks;
+            std::unordered_set<TPDiskId> pdisksWithReplicatingVDisks;
 
             THashMap<TVSlotId, const TVSlot*> vslotMap;
             for (const auto& vslot : config.GetVSlot()) {
@@ -72,7 +62,7 @@ namespace NKikimr::NBsController {
 
                 TPDiskId pdiskId = key.ComprisingPDiskId();
 
-                if (!IsDynamicGroup(vslot.GetGroupId())) { // don't count vslots from static groups twice
+                if (!NKikimr::IsDynamicGroup(TGroupId::FromValue(vslot.GetGroupId()))) { // don't count vslots from static groups twice
                     continue;
                 }
 
@@ -86,7 +76,7 @@ namespace NKikimr::NBsController {
                         break;
                     case NKikimrBlobStorage::INIT_PENDING:
                     case NKikimrBlobStorage::REPLICATING:
-                        replicatingPDisks.insert(pdiskId);
+                        pdisksWithReplicatingVDisks.insert(pdiskId);
                         replicatingVDisks++;
                         break;
                 }
@@ -98,11 +88,11 @@ namespace NKikimr::NBsController {
                 it->second += 1;
             }
 
-            storageInfo.ReplicatingPDisks = replicatingPDisks.size();
+            storageInfo.PDisksWithReplicatingVDisks = pdisksWithReplicatingVDisks.size();
             storageInfo.ReplicatingVDisks = replicatingVDisks;
 
             for (const auto& group : config.GetGroup()) {
-                if (!IsDynamicGroup(group.GetGroupId())) {
+                if (!NKikimr::IsDynamicGroup(TGroupId::FromValue(group.GetGroupId()))) {
                     continue;
                 }
                 
@@ -126,7 +116,7 @@ namespace NKikimr::NBsController {
                 }
 
                 if (isHealthy) {
-                    storageInfo.HealthyGroups.insert(group.GetGroupId());
+                    storageInfo.HealthyGroups.insert(TGroupId::FromValue(group.GetGroupId()));
                 }
             }
 
@@ -174,7 +164,7 @@ namespace NKikimr::NBsController {
             return ev;
         }
 
-        THolder<TEvBlobStorage::TEvControllerConfigRequest> CreateReassignRequest(const TVSlot* vslot, const bool rollback) {
+        THolder<TEvBlobStorage::TEvControllerConfigRequest> CreateReassignRequest(const TVSlot* vslot) {
             auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
             auto& record = ev->Record;
             auto *request = record.MutableRequest();
@@ -186,82 +176,21 @@ namespace NKikimr::NBsController {
             cmd->SetFailRealmIdx(vslot->GetFailRealmIdx());
             cmd->SetFailDomainIdx(vslot->GetFailDomainIdx());
             cmd->SetVDiskIdx(vslot->GetVDiskIdx());
-            request->SetRollback(rollback);
+            cmd->SetOnlyToLessOccupiedPDisk(true);
 
             return ev;
         }
 
-        ReassignCheckResult CheckCanReassign(const TVSlot* vslot, const TStorageInfo& storageInfo, const ui64 expectedConfigTxSeqNo) {
-            TVSlotId vslotId(vslot->GetVSlotId());
-            ui32 groupId = vslot->GetGroupId();
-            ui32 vdiskIdx = vslot->GetVDiskIdx();
-
-            auto request = CreateReassignRequest(vslot, true);
-
-            Send(ControllerId, request.Release());
-
-            auto ev = WaitForResponse<TEvBlobStorage::TEvControllerConfigResponse>();
-
-            // See TODO about coroutine timeout.
-            // if (!ev) {
-            //     STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB03, "Failed to get response for reassign check", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId));
-            //     return ReassignCheckResult::BscIssue;
-            // }
-
-            const auto& record = ev->Get()->Record;
-            const auto& response = record.GetResponse();
-
-            if (!response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
-                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB04, "Failed to find where to move VDisk", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (Record, record));
-                return ReassignCheckResult::BscIssue;
-            }
-
-            const auto& status = response.GetStatus(0);
-            
-            ui64 actualConfigTxSeqNo = response.GetConfigTxSeqNo();
-            if (expectedConfigTxSeqNo != actualConfigTxSeqNo) {
-                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB05, "Can't proceed, BS config might have changed", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (ExpectedConfigTxSeqNo, expectedConfigTxSeqNo), (ActualConfigTxSeqNo, actualConfigTxSeqNo));
-                return ReassignCheckResult::BscIssue;
-            }
-
-            const auto& reassigned = status.GetReassignedItem(0);
-
-            TPDiskId pdiskFrom(reassigned.GetFrom().GetNodeId(), reassigned.GetFrom().GetPDiskId());
-            TPDiskId pdiskTo(reassigned.GetTo().GetNodeId(), reassigned.GetTo().GetPDiskId());
-
-            const auto itFrom = storageInfo.PDiskUsageMap.find(pdiskFrom);
-            ui32 usageFrom = (itFrom != storageInfo.PDiskUsageMap.end()) ? itFrom->second : 0;
-
-            const auto itTo = storageInfo.PDiskUsageMap.find(pdiskTo);
-            ui32 usageTo = (itTo != storageInfo.PDiskUsageMap.end()) ? itTo->second : 0;
-
-            if (usageTo + 1 > usageFrom - 1) {
-                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB06, "Moving VDisk is not viable", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (PDiskFrom, pdiskFrom), (usageFrom, usageFrom), (PDiskTo, pdiskTo), (usageTo, usageTo));
-                return ReassignCheckResult::ReassignNotViable;
-            }
-
-            return ReassignCheckResult::CanReassign;
-        }
-
         ReassignResult TryReassign(const TVSlot* vslot, const TStorageInfo& storageInfo, const ui64 expectedConfigTxSeqNo) {
+            Y_UNUSED(storageInfo);
+
             TVSlotId vslotId(vslot->GetVSlotId());
             ui32 groupId = vslot->GetGroupId();
             ui32 vdiskIdx = vslot->GetVDiskIdx();
 
             STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB07, "Trying to move VDisk", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId));
 
-            switch (CheckCanReassign(vslot, storageInfo, expectedConfigTxSeqNo)) {
-                case ReassignCheckResult::BscIssue:
-                    return ReassignResult::BscIssue;
-
-                case ReassignCheckResult::ReassignNotViable:
-                    return ReassignResult::FailedToReassign;
-
-                case ReassignCheckResult::CanReassign:
-                    break;
-            }
-
-            auto request = CreateReassignRequest(vslot, false);
+            auto request = CreateReassignRequest(vslot);
 
             Send(ControllerId, request.Release());
 
@@ -276,8 +205,13 @@ namespace NKikimr::NBsController {
             const auto& record = ev->Get()->Record;
             const auto& response = record.GetResponse();
             if (!response.GetSuccess() || !response.StatusSize() || !response.GetStatus(0).GetSuccess()) {
-                STLOG(PRI_WARN, BS_CLUSTER_BALANCING, BSCB09, "Failed to move VDisk", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (Response, record));
-                return ReassignResult::BscIssue;
+                if (response.GetStatus(0).GetFailReason() != NKikimrBlobStorage::TConfigResponse::TStatus::kReassignNotViable) {
+                    // This is a real BSC error.
+                    STLOG(PRI_WARN, BS_CLUSTER_BALANCING, BSCB09, "Failed to move VDisk", (GroupId, groupId), (VDiskIdx, vdiskIdx), (VSlotId, vslotId), (Response, record));
+                    return ReassignResult::BscIssue;
+                }
+                // This means that there was no better PDisk to reassign the VDisk to.
+                return ReassignResult::FailedToReassign;
             }
 
             ui64 actualConfigTxSeqNo = response.GetConfigTxSeqNo();
@@ -307,16 +241,16 @@ namespace NKikimr::NBsController {
             return WaitForSpecificEvent<TEventType>(&ProcessUnexpectedEvent/*, NActors::TMonotonic::Now() + TIMEOUT*/);
         }
 
-        void Yield(ui64 timeoutMs = 0) {
+        void Yield(TDuration timeout = TDuration::Zero()) {
             auto* event = new TEvResume();
 
-            if (timeoutMs > 0) {
-                Schedule(TDuration::MilliSeconds(timeoutMs), event);
+            if (timeout > TDuration::Zero()) {
+                Schedule(timeout, event);
             } else {
                 Send(SelfActorId, event);
             }
 
-            // TODO: Wait with deadline when CoroActor's deadline is fixed
+            // TODO: Wait with a deadline set when CoroActor's deadline handling is fixed
             auto ev = WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; }, &ProcessUnexpectedEvent/*, NActors::TMonotonic::Now() + TIMEOUT*/);
 
             // if (!ev) {
@@ -342,8 +276,8 @@ namespace NKikimr::NBsController {
 
             const auto storageInfo = BuildStorageInfo(config);
 
-            if (storageInfo.ReplicatingPDisks > Settings.MaxReplicatingPDisks) {
-                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB13, "Skip balancing, too many replicating PDisks", (ReplicatingPDisks, storageInfo.ReplicatingPDisks));
+            if (storageInfo.PDisksWithReplicatingVDisks > Settings.MaxReplicatingPDisks) {
+                STLOG(PRI_DEBUG, BS_CLUSTER_BALANCING, BSCB13, "Skip balancing, too many replicating PDisks", (ReplicatingPDisks, storageInfo.PDisksWithReplicatingVDisks));
                 return;
             }
 
@@ -355,17 +289,12 @@ namespace NKikimr::NBsController {
             std::vector<const TVSlot*> candidateVSlots;
 
             for (const auto& vslot : config.GetVSlot()) {
-                if (storageInfo.HealthyGroups.contains(vslot.GetGroupId())) {
+                if (storageInfo.HealthyGroups.contains(TGroupId::FromValue(vslot.GetGroupId()))) {
                     candidateVSlots.push_back(&vslot);
                 }
             }
 
             auto groupSlotsOrdered = OrderVSlotsByPDiskUsage(candidateVSlots, storageInfo);
-
-            if (groupSlotsOrdered.empty()) {
-                // No groups to balance.
-                return;
-            }
 
             // Reading the config also increments the config transaction sequence number.
             // We need to increment it again to get the next one. Reassignment check 
@@ -402,7 +331,7 @@ namespace NKikimr::NBsController {
                 while (true) {
                     RunBalancing();
                     
-                    Yield(Settings.IterationIntervalMs);
+                    Yield(TDuration::MilliSeconds(Settings.IterationIntervalMs));
                 }
             } catch (const TDtorException&) {
                 return; // actor system terminated

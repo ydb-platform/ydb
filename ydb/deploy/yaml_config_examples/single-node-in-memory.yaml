@@ -3,20 +3,12 @@ metadata:
   cluster: ""
   version: 0
 config:
-  erasure: none
   self_management_config:
     enabled: true
-  default_disk_type: SSD
-  host_configs:
-  - drive:
-    - path: SectorMap:1:64
   hosts:
   - host: localhost
-    port: 19001
-    location:
-      body: 1
-      data_center: '1'
-      rack: '1'
+    drive:
+    - type: RAM
   actor_system_config:
     use_auto_config: true
     cpu_count: 8

@@ -1043,10 +1043,11 @@ public:
     THashMap<NKikimrConfig::TBootstrap::ETabletType, TSimpleSharedPtr<TSysTabletsNodesCounter>> SysNodesCheckers;
 
     TIntrusiveConstPtr<TStateStorageInfo> StateStorageInfo;
-    TVector<TStateStorageRingInfoPtr> StateStorageRings;
+    TVector<TVector<TStateStorageRingInfoPtr>> StateStorageRings;
 
     std::vector<NKikimr::TBridgeInfo::TPile> Piles;
     THashMap<ui32, ui32> NodeIdToPileId;
+    bool IsBridgeMode = false;
 };
 
 inline bool ActionRequiresHost(NKikimrCms::TAction::EType type) {

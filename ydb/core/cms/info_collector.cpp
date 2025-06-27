@@ -227,6 +227,7 @@ void TInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
     RequestBridgeInfo();
 
     const auto& pileMap = ev->Get()->PileMap;
+    Info->IsBridgeMode = static_cast<bool>(pileMap);
     Info->NodeIdToPileId = FlipPileMap(pileMap);
     for (const auto& node : ev->Get()->Nodes) {
         Info->AddNode(node, &TlsActivationContext->AsActorContext());

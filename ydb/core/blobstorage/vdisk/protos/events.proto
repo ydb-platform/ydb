@@ -108,6 +108,7 @@ message LogoBlobIdRange {
 message GetLogoBlobRequest {
     LogoBlobIdRange range = 1;
     bool show_internals = 5;
+    bool need_data = 6;
 };
 
 message GetLogoBlobResponse {
@@ -115,6 +116,7 @@ message GetLogoBlobResponse {
         string status = 1;
         optional string ingress = 2;
         string id = 3;
+        optional string data_base64 = 4;
     };
 
     repeated LogoBlob logoblobs = 1;

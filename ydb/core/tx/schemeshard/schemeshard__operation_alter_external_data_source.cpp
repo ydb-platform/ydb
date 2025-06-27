@@ -95,6 +95,7 @@ class TAlterExternalDataSource : public TSubOperation {
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
+            .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalDataSource)
             .IsValidLeafName()
             .DepthLimit()

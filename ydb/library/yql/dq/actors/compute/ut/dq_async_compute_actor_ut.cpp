@@ -143,7 +143,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 .Build();
         TVector<TType *> outputTypes(Reserve(RowTransformedType->GetMembersCount()));
         for (ui32 i = 0; i < RowTransformedType->GetMembersCount(); ++i) {
-            inputTypes.emplace_back(RowTransformedType->GetMemberType(i));
+            outputTypes.emplace_back(RowTransformedType->GetMemberType(i));
         }
         WideRowTransformedType = TMultiType::Create(outputTypes.size(), outputTypes.data(), TypeEnv);
     }

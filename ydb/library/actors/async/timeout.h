@@ -174,7 +174,7 @@ namespace NActors {
     }
 
     template<class TCallback, class... TArgs>
-    inline auto ActorWithDeadline(TMonotonic deadline, TCallback&& callback, TArgs&&... args)
+    inline auto WithDeadline(TMonotonic deadline, TCallback&& callback, TArgs&&... args)
         requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
     {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));
@@ -183,7 +183,7 @@ namespace NActors {
     }
 
     template<class TCallback, class... TArgs>
-    inline auto ActorWithDeadline(TInstant deadline, TCallback&& callback, TArgs&&... args)
+    inline auto WithDeadline(TInstant deadline, TCallback&& callback, TArgs&&... args)
         requires (IsAsyncCoroutineCallable<TCallback, TArgs&&...>)
     {
         using TCallbackResult = decltype(std::forward<TCallback>(callback)(std::forward<TArgs>(args)...));

@@ -1,17 +1,8 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
-#include <format>
-#include <ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public/topic_parser.h>
-#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
-#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/testing/unittest/tests_data.h>
-#include <library/cpp/threading/future/future.h>
-#include <library/cpp/threading/future/async.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -258,105 +249,9 @@ namespace NYdb::NTopic::NTests {
             }
         }
 
-        Y_UNIT_TEST(Basic) {
+        Y_UNIT_TEST(LocationWithKillTablets) {
             TTopicSdkTestSetup setup(TEST_CASE_NAME);
             TTopicClient client = setup.MakeClient();
-
-            DescribeTopic(setup, client, false, false, false, false);
-            DescribeConsumer(setup, client, false, false, false, false);
-            DescribePartition(setup, client, false, false, false, false);
-        }
-
-        Y_UNIT_TEST(Statistics) {
-            // TODO(abcdef): temporarily deleted
-            return;
-
-            TTopicSdkTestSetup setup(TEST_CASE_NAME);
-            TTopicClient client = setup.MakeClient();
-
-            // Get empty description
-            DescribeTopic(setup, client, true, false, false, false);
-            DescribeConsumer(setup, client, true, false, false, false);
-            DescribePartition(setup, client, true, false, false, false);
-
-            const size_t messagesCount = 1;
-
-            // Write a message
-            {
-                auto writeSettings = TWriteSessionSettings().Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID).Codec(ECodec::RAW);
-                auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-                std::string message(32_MB, 'x');
-
-                for(size_t i = 0; i < messagesCount; ++i) {
-                    UNIT_ASSERT(writeSession->Write(message, {}, TInstant::Now() - TDuration::Seconds(100)));
-                }
-                writeSession->Close();
-            }
-
-            // Read a message
-            {
-                auto readSettings = TReadSessionSettings().ConsumerName(TEST_CONSUMER).AppendTopics(TEST_TOPIC);
-                auto readSession = client.CreateReadSession(readSettings);
-
-                // Event 1: start partition session
-                {
-                    std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
-                    UNIT_ASSERT(event);
-                    auto startPartitionSession = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&event.value());
-                    UNIT_ASSERT_C(startPartitionSession, DebugString(*event));
-
-                    startPartitionSession->Confirm();
-                }
-
-                // Event 2: data received
-                {
-                    std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
-                    UNIT_ASSERT(event);
-                    auto dataReceived = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event.value());
-                    UNIT_ASSERT_C(dataReceived, DebugString(*event));
-
-                    dataReceived->Commit();
-                }
-
-                // Event 3: commit acknowledgement
-                {
-                    std::optional<TReadSessionEvent::TEvent> event = readSession->GetEvent(true);
-                    UNIT_ASSERT(event);
-                    auto commitOffsetAck = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event.value());
-
-                    UNIT_ASSERT_C(commitOffsetAck, DebugString(*event));
-
-                    UNIT_ASSERT_VALUES_EQUAL(commitOffsetAck->GetCommittedOffset(), messagesCount);
-                }
-            }
-
-            // Additional write
-            {
-                auto writeSettings = TWriteSessionSettings().Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID).Codec(ECodec::RAW);
-                auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
-                std::string message(32, 'x');
-
-                for(size_t i = 0; i < messagesCount; ++i) {
-                    UNIT_ASSERT(writeSession->Write(message));
-                }
-                writeSession->Close();
-            }
-            Sleep(TDuration::Seconds(3));
-
-            // Get non-empty description
-
-            DescribeTopic(setup, client, true, true, false, false);
-            DescribeConsumer(setup, client, true, true, false, false);
-            DescribePartition(setup, client, true, true, false, false);
-        }
-
-        Y_UNIT_TEST(Location) {
-            TTopicSdkTestSetup setup(TEST_CASE_NAME);
-            TTopicClient client = setup.MakeClient();
-
-            DescribeTopic(setup, client, false, false, true, false);
-            DescribeConsumer(setup, client, false, false, true, false);
-            DescribePartition(setup, client, false, false, true, false);
 
             // Describe with KillTablets
             DescribeTopic(setup, client, false, false, true, true);

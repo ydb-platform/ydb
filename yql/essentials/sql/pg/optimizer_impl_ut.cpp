@@ -15,8 +15,8 @@ extern "C" {
 #define __restrict
 #endif
 
-#define TypeName PG_TypeName
-#define SortBy PG_SortBy
+#define TypeName PG_TypeName // NOLINT(readability-identifier-naming)
+#define SortBy PG_SortBy // NOLINT(readability-identifier-naming)
 #undef SIZEOF_SIZE_T
 
 extern "C" {

@@ -145,7 +145,8 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
             if (ShouldExit(customersResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customers query failed: "
                     << customersResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-                std::quick_exit(1);
+                RequestStop();
+                co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
             }
             LOG_T("Terminal " << context.TerminalID << " customers query failed: "
                 << customersResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -158,7 +159,8 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
         if (!selectedCustomer) {
             LOG_E("Terminal " << context.TerminalID << " no customer found by name: "
                 << warehouseID << ", " << districtID << ", " << lastName);
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         customer = std::move(*selectedCustomer);
     } else {
@@ -171,7 +173,8 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
             if (ShouldExit(customerResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customer query failed: "
                     << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-                std::quick_exit(1);
+                RequestStop();
+                co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
             }
             LOG_T("Terminal " << context.TerminalID << " customer query failed: "
                 << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -198,7 +201,8 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
         if (ShouldExit(orderResult)) {
             LOG_E("Terminal " << context.TerminalID << " order query failed: "
                 << orderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " order query failed: "
             << orderResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -220,7 +224,8 @@ NThreading::TFuture<TStatus> GetOrderStatusTask(
         if (ShouldExit(orderLinesResult)) {
             LOG_E("Terminal " << context.TerminalID << " order lines query failed: "
                 << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " order lines query failed: "
             << orderLinesResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());

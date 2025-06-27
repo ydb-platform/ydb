@@ -19,15 +19,15 @@ enum class EWarningAction {
 
 class TWarningRule {
 public:
-    const TString& GetPattern() const { return IssueCodePattern; }
-    EWarningAction GetAction() const  { return Action; }
+    const TString& GetPattern() const { return IssueCodePattern_; }
+    EWarningAction GetAction() const  { return Action_; }
 
     enum class EParseResult { PARSE_OK, PARSE_PATTERN_FAIL, PARSE_ACTION_FAIL };
     static EParseResult ParseFrom(const TString& codePattern, const TString& action,
                                   TWarningRule& result, TString& errorMessage);
 private:
-    TString IssueCodePattern;
-    EWarningAction Action = EWarningAction::DEFAULT;
+    TString IssueCodePattern_;
+    EWarningAction Action_ = EWarningAction::DEFAULT;
 };
 
 using TWarningRules = TVector<TWarningRule>;
@@ -40,15 +40,15 @@ public:
 
     EWarningAction GetAction(TIssueCode code) const;
 
-    const TWarningRules& GetRules() const { return Rules; }
+    const TWarningRules& GetRules() const { return Rules_; }
 
     void Clear();
 
 private:
-    const  bool IsReplay;
-    TWarningRules Rules;
-    EWarningAction BaseAction = EWarningAction::DEFAULT;
-    THashMap<TIssueCode, EWarningAction> Overrides;
+    const  bool IsReplay_;
+    TWarningRules Rules_;
+    EWarningAction BaseAction_ = EWarningAction::DEFAULT;
+    THashMap<TIssueCode, EWarningAction> Overrides_;
 };
 
 }

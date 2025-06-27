@@ -40,6 +40,7 @@
 #include <yql/essentials/protos/yql_mount.pb.h>
 #include <yql/essentials/protos/pg_ext.pb.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/v1/complete/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/sql.h>
@@ -438,6 +439,7 @@ void TFacadeRunOptions::Parse(int argc, const char *argv[]) {
         opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
         opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
+        opts.AddLongOption("test-complete", "check completion engine").NoArgument().SetFlag(&TestComplete);
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&ValidateResultFormat);
     }
 
@@ -598,17 +600,49 @@ int TFacadeRunner::DoMain(int argc, const char *argv[]) {
     }
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
-    if (RunOptions_.TestLexers) {
-        moduleChecker = [](const TString& query, const TString& fileName, TExprContext& ctx) {
-            TIssues issues;
-            if (!NSQLTranslationV1::CheckLexers(TPosition(0, 0, fileName), query, issues)) {
-                auto issue = TIssue(TPosition(0, 0, fileName), "Lexers mismatched");
-                for (const auto& i : issues) {
-                    issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+    if (RunOptions_.TestLexers || RunOptions_.TestComplete) {
+        moduleChecker = [
+            lexers, parsers,
+            testLexers = RunOptions_.TestLexers,
+            testComplete = RunOptions_.TestComplete,
+            clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
+
+            if (testLexers) {
+                TIssues issues;
+                if (!NSQLTranslationV1::CheckLexers(TPosition(0, 0, fileName), query, issues)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Lexers mismatched");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
+            }
+
+            if (testComplete) {
+                google::protobuf::Arena arena;
+
+                NSQLTranslation::TTranslationSettings settings;
+                settings.Arena = &arena;
+                settings.ClusterMapping = clusters;
+                settings.SyntaxVersion = 1;
+
+                auto ast = NSQLTranslationV1::SqlToYql(lexers, parsers, query, settings);
+                if (!ast.IsOk()) {
+                    return true;
                 }
 
-                ctx.AddError(issue);
-                return false;
+                TIssues issues;
+                if (!NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Completion failed");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
             }
 
             return true;
@@ -794,6 +828,18 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             TIssues issues;
             if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
+                issues.PrintTo(*RunOptions_.ErrStream);
+                return -1;
+            }
+        }
+        if (!fail && RunOptions_.TestComplete && 1 == RunOptions_.SyntaxVersion) {
+            TIssues issues;
+            if (!NSQLComplete::CheckComplete(
+                    RunOptions_.ProgramText,
+                    program->ExprRoot(),
+                    program->ExprCtx(),
+                    issues)) {
+                *RunOptions_.ErrStream << "Completion failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
             }

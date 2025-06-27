@@ -124,11 +124,12 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     auto districtResult = co_await TSuspendWithFuture(districtFuture, context.TaskQueue, context.TerminalID);
     if (!districtResult.IsSuccess()) {
         if (ShouldExit(districtResult)) {
-            LOG_E("Terminal " << context.TerminalID << " district query (stockleve) failed: "
+            LOG_E("Terminal " << context.TerminalID << " district query (stocklevel) failed: "
                 << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
-        LOG_T("Terminal " << context.TerminalID << " district query (stockleve) failed: "
+        LOG_T("Terminal " << context.TerminalID << " district query (stocklevel) failed: "
             << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
         co_return districtResult;
     }
@@ -140,7 +141,8 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
     if (!districtParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID
             << ", warehouseId " << warehouseID << ", districtId " << districtID << " not found");
-        std::quick_exit(1);
+        RequestStop();
+        co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
     }
 
     int nextOrderID = *districtParser.ColumnParser("D_NEXT_O_ID").GetOptionalInt32();
@@ -152,7 +154,8 @@ NThreading::TFuture<TStatus> GetStockLevelTask(
         if (ShouldExit(stockCountResult)) {
             LOG_E("Terminal " << context.TerminalID << " stock count query failed: "
                 << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " stock count query failed: "
             << stockCountResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());

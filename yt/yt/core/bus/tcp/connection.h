@@ -89,7 +89,7 @@ public:
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
         IMemoryUsageTrackerPtr memoryUsageTracker,
-        bool needRejectConnectionOnMemoryOvercommit);
+        bool rejectConnectionOnMemoryOvercommit);
 
     ~TTcpConnection();
 
@@ -191,7 +191,7 @@ private:
     const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
-    const std::optional<TString> EndpointAddress_;
+    const std::optional<std::string> EndpointAddress_;
     const std::optional<TString> UnixDomainSocketPath_;
     const std::optional<TString> AbstractUnixDomainSocketName_;
     const IMessageHandlerPtr Handler_;
@@ -280,7 +280,7 @@ private:
     const EVerificationMode VerificationMode_;
 
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
-    const bool NeedRejectConnectionOnMemoryOvercommit_;
+    const bool RejectConnectionOnMemoryOvercommit_;
 
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 

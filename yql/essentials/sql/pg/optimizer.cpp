@@ -13,8 +13,8 @@
 #define __restrict
 #endif
 
-#define TypeName PG_TypeName
-#define SortBy PG_SortBy
+#define TypeName PG_TypeName // NOLINT(readability-identifier-naming)
+#define SortBy PG_SortBy // NOLINT(readability-identifier-naming)
 #undef SIZEOF_SIZE_T
 
 extern "C" {
@@ -120,8 +120,8 @@ List* MakeRelOptInfoList(const IOptimizer::TInput& input) {
 TPgOptimizer::TPgOptimizer(
     const TInput& input,
     const std::function<void(const TString&)>& log)
-    : Input(input)
-    , Log(log)
+    : Input_(input)
+    , Log_(log)
 {
     get_relation_stats_hook = RelationStatsHook;
 }
@@ -143,7 +143,7 @@ TPgOptimizer::TOutput TPgOptimizer::JoinSearch()
 }
 
 Var* TPgOptimizer::MakeVar(TVarId varId) {
-    auto*& var = Vars[varId];
+    auto*& var = Vars_[varId];
     return var
         ? var
         : (var = ::NYql::MakeVar(std::get<0>(varId), std::get<1>(varId)));
@@ -152,7 +152,7 @@ Var* TPgOptimizer::MakeVar(TVarId varId) {
 EquivalenceClass* TPgOptimizer::MakeEqClass(int i) {
     EquivalenceClass* eq = makeNode(EquivalenceClass);
 
-    for (auto [relno, varno] : Input.EqClasses[i].Vars) {
+    for (auto [relno, varno] : Input_.EqClasses[i].Vars) {
         EquivalenceMember* m = makeNode(EquivalenceMember);
         m->em_expr = (Expr*)MakeVar(TVarId{relno, varno});
         m->em_relids = bms_add_member(nullptr, relno);
@@ -166,7 +166,7 @@ EquivalenceClass* TPgOptimizer::MakeEqClass(int i) {
 
 List* TPgOptimizer::MakeEqClasses() {
     List* l = nullptr;
-    for (int i = 0; i < (int)Input.EqClasses.size(); i++) {
+    for (int i = 0; i < (int)Input_.EqClasses.size(); i++) {
         l = lappend(l, MakeEqClass(i));
     }
     return l;
@@ -174,17 +174,17 @@ List* TPgOptimizer::MakeEqClasses() {
 
 void TPgOptimizer::LogNode(const TString& prefix, void* node)
 {
-    if (Log) {
+    if (Log_) {
         auto* str = nodeToString(node);
         auto* fmt = pretty_format_node_dump(str);
         pfree(str);
-        Log(TStringBuilder() << prefix << ": " << fmt);
+        Log_(TStringBuilder() << prefix << ": " << fmt);
         pfree(fmt);
     }
 }
 
 IOptimizer::TOutput TPgOptimizer::MakeOutput(Path* path) {
-    TOutput output = {{}, &Input};
+    TOutput output = {{}, &Input_};
     output.Rows = path->rows;
     output.TotalCost = path->total_cost;
     MakeOutputJoin(output, path);
@@ -200,7 +200,7 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
 
     int relid = -1;
     while ((relid = bms_next_member(path->parent->relids, relid)) >= 0)
-	{
+    {
         node.Rels.emplace_back(relid);
     }
 
@@ -301,32 +301,32 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
             }
             oe->args = lappend(oe->args, MakeVar(TVarId{relId, varId}));
 
-            RestrictInfos[relId].emplace_back(ri);
+            RestrictInfos_[relId].emplace_back(ri);
         }
         dst.emplace_back(ri);
     }
 }
 
 RelOptInfo* TPgOptimizer::JoinSearchInternal() {
-    RestrictInfos.clear();
-    RestrictInfos.resize(Input.Rels.size()+1);
-    LeftRestriction.clear();
-    LeftRestriction.reserve(Input.Left.size());
-    MakeLeftOrRightRestrictions(LeftRestriction, Input.Left);
-    MakeLeftOrRightRestrictions(RightRestriction, Input.Right);
+    RestrictInfos_.clear();
+    RestrictInfos_.resize(Input_.Rels.size()+1);
+    LeftRestriction_.clear();
+    LeftRestriction_.reserve(Input_.Left.size());
+    MakeLeftOrRightRestrictions(LeftRestriction_, Input_.Left);
+    MakeLeftOrRightRestrictions(RightRestriction_, Input_.Right);
 
-    List* rels = MakeRelOptInfoList(Input);
+    List* rels = MakeRelOptInfoList(Input_);
     ListCell* l;
 
     int relId = 1;
     foreach (l, rels) {
         RelOptInfo* rel = (RelOptInfo*)lfirst(l);
-        for (auto* ri : RestrictInfos[relId++]) {
+        for (auto* ri : RestrictInfos_[relId++]) {
             rel->joininfo = lappend(rel->joininfo, ri);
         }
     }
 
-    if (Log) {
+    if (Log_) {
         int i = 1;
         foreach (l, rels) {
             LogNode(TStringBuilder() << "Input: " << i++, lfirst(l));
@@ -351,7 +351,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     root.all_baserels = bms_add_range(nullptr, 1, rels->length);
     root.eq_classes = MakeEqClasses();
 
-    for (auto* ri : LeftRestriction) {
+    for (auto* ri : LeftRestriction_) {
         root.left_join_clauses = lappend(root.left_join_clauses, ri);
         root.hasJoinRTEs = 1;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->right_relids);
@@ -368,7 +368,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         root.join_info_list = lappend(root.join_info_list, ji);
     }
 
-    for (auto* ri : RightRestriction) {
+    for (auto* ri : RightRestriction_) {
         root.right_join_clauses = lappend(root.right_join_clauses, ri);
         root.hasJoinRTEs = 1;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->left_relids);
@@ -392,8 +392,8 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         root.simple_rel_array[i+1] = r;
     }
 
-    for (int eqId = 0; eqId < (int)Input.EqClasses.size(); eqId++) {
-        for (auto& [relno, _] : Input.EqClasses[eqId].Vars) {
+    for (int eqId = 0; eqId < (int)Input_.EqClasses.size(); eqId++) {
+        for (auto& [relno, _] : Input_.EqClasses[eqId].Vars) {
             root.simple_rel_array[relno]->eclass_indexes = bms_add_member(
                 root.simple_rel_array[relno]->eclass_indexes,
                 eqId);
@@ -689,21 +689,21 @@ class TPgOptimizerNew: public IOptimizerNew
 public:
     TPgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, const std::function<void(const TString&)>& log)
         : IOptimizerNew(pctx)
-        , Ctx(ctx)
-        , Log(log)
+        , Ctx_(ctx)
+        , Log_(log)
     { }
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
-        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree,
         const TOptimizerHints& hints = {}) override
     {
         Y_UNUSED(hints);
-        return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
+        return TPgOptimizerImpl(joinTree, Ctx_, Log_).Do();
     }
 
 private:
-    TExprContext& Ctx;
-    std::function<void(const TString&)> Log;
+    TExprContext& Ctx_;
+    std::function<void(const TString&)> Log_;
 };
 
 IOptimizer* MakePgOptimizerInternal(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)

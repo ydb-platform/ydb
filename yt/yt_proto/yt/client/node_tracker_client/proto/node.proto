@@ -90,6 +90,7 @@ message TMediumStatistics
 {
     required int32 medium_index = 1;
     required double io_weight = 3;
+    optional int64 max_write_sessions_per_location = 4;
 }
 
 message TNetworkStatistics
@@ -229,6 +230,7 @@ message TDataNodeStatistics
     required bool full = 9;
     repeated TChunkLocationStatistics chunk_locations = 10;
     repeated TMediumStatistics media = 11;
+    optional int32 max_write_sessions = 12;
 }
 
 message TExecNodeStatistics

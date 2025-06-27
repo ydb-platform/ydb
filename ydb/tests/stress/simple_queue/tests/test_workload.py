@@ -12,6 +12,8 @@ class TestYdbWorkload(object):
     def setup_class(cls):
         config_generator = KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC)
         config_generator.yaml_config["table_service_config"]["allow_olap_data_query"] = True
+        config_generator.yaml_config["table_service_config"]["enable_oltp_sink"] = True
+        config_generator.yaml_config["table_service_config"]["enable_batch_updates"] = True
         cls.cluster = KiKiMR(config_generator)
         cls.cluster.start()
 

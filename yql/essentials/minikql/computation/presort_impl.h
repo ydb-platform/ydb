@@ -189,31 +189,31 @@ namespace NDetail {
 
         while (!value.empty()) {
             union {
-                ui8 buffer[BlockSize + 1];
-                ui64 buffer64[BlockSizeUi64];
+                ui8 Buffer[BlockSize + 1];
+                ui64 Buffer64[BlockSizeUi64];
             };
 
             part = std::min(value.size(), BlockSize);
             if (part == BlockSize) {
-                std::memcpy(buffer + 1, value.data(), BlockSize);
+                std::memcpy(Buffer + 1, value.data(), BlockSize);
             }
             else {
                 for (size_t i = 0; i < BlockSizeUi64; ++i) {
-                    buffer64[i] = 0;
+                    Buffer64[i] = 0;
                 }
-                std::memcpy(buffer + 1, value.data(), part);
+                std::memcpy(Buffer + 1, value.data(), part);
             }
             value.Skip(part);
 
-            buffer[0] = BlockCode;
+            Buffer[0] = BlockCode;
 
             if (Desc) {
                 for (size_t i = 0; i < BlockSizeUi64; ++i) {
-                    buffer64[i] ^= std::numeric_limits<ui64>::max();
+                    Buffer64[i] ^= std::numeric_limits<ui64>::max();
                 }
             }
 
-            output.insert(output.end(), buffer, buffer + BlockSize + 1);
+            output.insert(output.end(), Buffer, Buffer + BlockSize + 1);
         }
 
         auto lastLength = ui8(part);
@@ -234,22 +234,22 @@ namespace NDetail {
 
         while (code == BlockCode) {
             union {
-                ui8 buffer[BlockSize + 1];
-                ui64 buffer64[BlockSizeUi64];
+                ui8 Buffer[BlockSize + 1];
+                ui64 Buffer64[BlockSizeUi64];
             };
 
             EnsureInputSize(input, BlockSize + 1);
-            std::memcpy(buffer, input.data(), BlockSize + 1);
+            std::memcpy(Buffer, input.data(), BlockSize + 1);
             input.Skip(BlockSize + 1);
 
             if (Desc) {
                 for (size_t i = 0; i < BlockSizeUi64; ++i) {
-                    buffer64[i] ^= std::numeric_limits<ui64>::max();
+                    Buffer64[i] ^= std::numeric_limits<ui64>::max();
                 }
             }
 
-            value.insert(value.end(), buffer, buffer + BlockSize);
-            code = buffer[BlockSize];
+            value.insert(value.end(), Buffer, Buffer + BlockSize);
+            code = Buffer[BlockSize];
         }
 
         auto begin = (const char*)value.begin();

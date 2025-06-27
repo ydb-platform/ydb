@@ -352,12 +352,12 @@ public:
     template <typename TType, EConfSettingType SettingType>
     TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
         TIntrusivePtr<TSettingHandlerImpl<TType, SettingType>> handler = new TSettingHandlerImpl<TType, SettingType>(name, setting);
-        if (!Handlers.insert({NormalizeName(name), handler}).second) {
+        if (!Handlers_.insert({NormalizeName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }
 
         if (!name.StartsWith('_')) {
-            Names.insert(name);
+            Names_.insert(name);
         }
 
         return *handler;
@@ -402,9 +402,12 @@ public:
     void Enumerate(std::function<void(std::string_view)> callback);
 
 protected:
-    THashSet<TString> ValidClusters;
-    THashMap<TString, TSettingHandler::TPtr> Handlers;
-    TSet<TString> Names;
+    // FIXME switch usages to an acesssor
+    const THashSet<TString>& GetValidClusters() const;
+
+    THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
+    THashMap<TString, TSettingHandler::TPtr> Handlers_;
+    TSet<TString> Names_;
 };
 
 } // namespace NCommon

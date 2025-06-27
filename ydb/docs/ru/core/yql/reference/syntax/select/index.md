@@ -23,7 +23,9 @@ SELECT 2 + 2;
 * к входным таблицам применяется [MATCH_RECOGNIZE](match_recognize.md)
 * вычисляется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
 * выполняется [FLATTEN COLUMNS](flatten.md#flatten-columns) или [FLATTEN BY](flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
+{% if feature_join %}
 * выполняются все [JOIN](join.md);
+{% endif %}
 * к полученным данным добавляются (или заменяются) колонки, заданные в [GROUP BY ... AS ...](group-by.md);
 * выполняется [WHERE](where.md): все данные, не удовлетворяющие предикату, отфильтровываются;
 * выполняется [GROUP BY](group-by.md), вычисляются значения агрегатных функций;
@@ -53,7 +55,9 @@ SELECT 2 + 2;
 * `SELECT` с явным перечислением колонок задает соответствующий порядок;
 * `SELECT` со звездочкой (`SELECT * FROM ...`) наследует порядок из своего входа;
 
+{% if feature_join %}
 * порядок колонок после [JOIN](join.md): сначала колонки левой стороны, потом правой. Если порядок какой-либо из сторон, присутствующей в выходе `JOIN`, не определен, порядок колонок результата также не определен;
+{% endif %}
 
 * порядок `UNION ALL` зависит от режима выполнения [UNION ALL](union.md#union-all);
 * порядок колонок для [AS_TABLE](from_as_table.md) не определен;
@@ -218,10 +222,14 @@ SELECT * FROM FILTER(
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
 * [MATCH_RECOGNIZE](match_recognize.md)
+{% if feature_join %}
 * [JOIN](join.md)
+{% endif %}
 * [GROUP BY](group-by.md)
 * [FLATTEN](flatten.md)
+{% if feature_window_functions %}
 * [WINDOW](window.md)
+{% endif %}
 
 {% if yt %}
 

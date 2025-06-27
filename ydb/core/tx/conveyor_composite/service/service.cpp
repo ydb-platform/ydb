@@ -6,10 +6,9 @@
 
 namespace NKikimr::NConveyorComposite {
 
-TDistributor::TDistributor(
-    const NConfig::TConfig& config, const TString& conveyorName, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
+TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
     : Config(config)
-    , ConveyorName(conveyorName)
+    , ConveyorName("COMPOSITE_CONVEYOR")
     , Counters(ConveyorName, conveyorSignals) {
 }
 
@@ -24,46 +23,46 @@ void TDistributor::Bootstrap() {
     TBase::Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(1));
 }
 
-void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& evExt) {
-    if (evExt->Get()->Tag == 1) {
-        Manager->DoQuant(TMonotonic::Now());
-        TBase::Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(1));
-    }
-}
-
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
-    TWorkersPool& workersPool = Manager->MutableWorkersPool(evExt->Get()->GetWorkersPoolId());
-    workersPool.AddDeliveryDuration(evExt->Get()->GetForwardSendDuration() + (TMonotonic::Now() - evExt->Get()->GetConstructInstant()));
-    workersPool.ReleaseWorker(evExt->Get()->GetWorkerIdx());
-    for (auto&& i : evExt->Get()->DetachResults()) {
-        workersPool.PutTaskResult(std::move(i));
-    }
+    auto& ev = *evExt->Get();
+    const TDuration backSendDuration = (TMonotonic::Now() - ev.GetConstructInstant());
+    TWorkersPool& workersPool = Manager->MutableWorkersPool(ev.GetWorkersPoolId());
+    workersPool.GetCounters()->PackExecuteHistogram->Collect(
+        (ev.GetResults().back().GetFinish() - ev.GetResults().front().GetStart()).MicroSeconds());
+    workersPool.GetCounters()->PackSizeHistogram->Collect(ev.GetResults().size());
+    workersPool.GetCounters()->SendBackHistogram->Collect(backSendDuration.MicroSeconds());
+    workersPool.GetCounters()->SendFwdHistogram->Collect(ev.GetForwardSendDuration().MicroSeconds());
+
+    workersPool.GetCounters()->SendBackDuration->Add(backSendDuration.MicroSeconds());
+    workersPool.GetCounters()->SendFwdDuration->Add(ev.GetForwardSendDuration().MicroSeconds());
+
+    workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
+    workersPool.ReleaseWorker(ev.GetWorkerIdx());
+    workersPool.PutTaskResults(ev.DetachResults());
     if (workersPool.HasTasks()) {
         AFL_VERIFY(workersPool.DrainTasks());
     }
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
-    Manager->MutableCategoryVerified(ev->Get()->GetCategory())
-        .UpsertScope(ev->Get()->GetScopeId(), ev->Get()->GetCPULimits())
-        .RegisterProcess(ev->Get()->GetProcessId());
+    auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
+    std::shared_ptr<TProcessScope> scope = cat.UpsertScope(ev->Get()->GetScopeId(), ev->Get()->GetCPULimits());
+    cat.RegisterProcess(ev->Get()->GetInternalProcessId(), std::move(scope));
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto* evData = ev->Get();
-    if (Manager->MutableCategoryVerified(evData->GetCategory())
-            .MutableProcessScope(evData->GetScopeId())
-            .UnregisterProcess(evData->GetProcessId())) {
-        Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterScope(evData->GetScopeId());
-    }
+    Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetInternalProcessId());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
+    const TDuration d = TMonotonic::Now() - ev->Get()->GetConstructInstant();
+    Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
+    Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
     auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.MutableProcessScope(ev->Get()->GetScopeId())
-        .MutableProcessVerified(ev->Get()->GetProcessId())
-        .RegisterTask(ev->Get()->GetTask(), ev->Get()->GetScopeId(), cat.GetCounters());
+    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
     Y_UNUSED(Manager->DrainTasks());
+    cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }
 
 }   // namespace NKikimr::NConveyorComposite

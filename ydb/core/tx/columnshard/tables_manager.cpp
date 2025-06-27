@@ -443,6 +443,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     }
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
+    AFL_VERIFY(SchemeShardLocalToInternal.erase(itTable->second.GetPathId().GetSchemeShardLocalPathId()));
     Tables.erase(itTable);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "TryFinalizeDropPathOnComplete")("path_id", pathId)("size", Tables.size());
     return true;

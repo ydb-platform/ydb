@@ -5229,6 +5229,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
         // } // NIndexBuilder
 
         //namespace NCdcStreamScan {

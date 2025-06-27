@@ -277,7 +277,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     TPath table = TPath::Init(info.TablePathId, Self);
     settings.set_source_path(table.PathString());
 
-    if (info.IsBuildIndex()) {
+    if (info.IsBuildIndex() || info.IsValidateUniqueIndex()) {
         Ydb::Table::TableIndex& index = *settings.mutable_index();
         index.set_name(info.IndexName);
 
@@ -461,7 +461,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
 
         return true;
     } catch (const std::exception& handleExc) {
-        LOG_E("OnUnhandledException throws unhandled exception " 
+        LOG_E("OnUnhandledException throws unhandled exception "
             << TypeName(handleExc) << ": " << handleExc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString());
         return false;

@@ -109,62 +109,6 @@ void TPrintErrorTable(TStringStream& html, THashMap<TString, std::queue<T>> erro
 }
 
 TString TTxMonitoring::RenderMainPage() {
-    //     return;
-    // } else if (path == "/counters") {
-    //     Executor()->RenderHtmlCounters(ev);
-    //     return;
-    // } else if (path == "/db") {
-    //     Executor()->RenderHtmlDb(ev, ExecutorCtx(ctx));
-    //     return;
-    // } else {
-    //     const TDuration uptime = TAppData::TimeProvider->Now() - StartTime0;
-    //     TStringStream str;
-    //     HTML(str) {
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "NodeID: " << ctx.SelfID.NodeId(); }
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "Uptime: " << uptime.ToString(); }
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()); }
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower() ? Sprintf(" Follower %u", Executor()->GetStats().FollowerId) : " Leader"); }
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") { str << "Tenant id: " << Info()->TenantPathId; }
-    //         }
-
-    //         if (OnRenderAppHtmlPage(nullptr, ctx)) {
-    //             DIV_CLASS("row") {
-    //                 DIV_CLASS("col-md-12") {str << "<a href=\"tablets/app?" << queryString << "\">App</a>";}
-    //             }
-    //         }
-
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "<a href=\"tablets/counters?" << queryString << "\">Counters</a>"; }
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "<a href=\"tablets?SsId=" << TabletID() << "\">State Storage</a>";}
-    //         }
-    //         DIV_CLASS("row") {
-    //             DIV_CLASS("col-md-12") {str << "<a href=\"tablets?RestartTabletID=" << TabletID() << "\">Restart</a>";}
-    //         }
-    //     }
-
-    //     ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
-    //     return;
-    // }
     const auto& cgi = HttpInfoEvent->Get()->Cgi();
     std::map<std::pair<ui64, ui64>, NJson::TJsonValue> schemaVersions;
     for (const auto& item : JsonReport["tables_manager"]["schema_versions"].GetArray()) {

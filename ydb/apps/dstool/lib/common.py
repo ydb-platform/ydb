@@ -195,7 +195,7 @@ class ConnectionParams:
 
     def parse_token_value(self, token_value, default_token_type):
         if token_value is None:
-            return None
+            return default_token_type, None
         splitted = token_value.strip().split(' ')
         if len(splitted) == 2:
             return splitted

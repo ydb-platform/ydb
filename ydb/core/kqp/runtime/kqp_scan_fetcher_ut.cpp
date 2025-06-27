@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TKqpScanFetcher) {
         }
         runtime.Send(scanFetcher, pipeCache, new NKikimr::TEvPipeCache::TEvDeliveryProblem(TABLET_ID, false));
 
-        // 3. Now we havs 250ms until next retry, send late reply
+        // 3. Now we have 250ms until next retry, send late reply
         runtime.Send(scanFetcher, scan, new NKikimr::NKqp::TEvKqpCompute::TEvScanInitActor(0, scan, 2, TABLET_ID, true));
 
         // 4. Check for Fetcher failure

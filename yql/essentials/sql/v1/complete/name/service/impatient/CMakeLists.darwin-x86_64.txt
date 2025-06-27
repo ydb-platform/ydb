@@ -12,26 +12,16 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ranking)
-add_subdirectory(binding)
-add_subdirectory(static)
-add_subdirectory(union)
-add_subdirectory(column)
-add_subdirectory(impatient)
-add_subdirectory(schema)
-add_subdirectory(cluster)
-
-add_library(complete-name-service)
+add_library(name-service-impatient)
 
 
-target_link_libraries(complete-name-service PUBLIC
+target_link_libraries(name-service-impatient PUBLIC
   contrib-libs-cxxsupp
   yutil
-  essentials-core-sql_types
-  v1-complete-core
+  complete-name-service
 )
 
-target_sources(complete-name-service PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/name_service.cpp
+target_sources(name-service-impatient PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/service/impatient/name_service.cpp
 )
 

@@ -24,6 +24,7 @@ target_link_libraries(commands-interactive-complete PUBLIC
   complete-name-object
   name-object-simple
   object-simple-cached
+  name-service-impatient
   name-service-schema
   name-service-static
   name-service-union

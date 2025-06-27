@@ -150,12 +150,12 @@ protected:
     }
 
     template <typename TAddRow>
-    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) noexcept {
-        LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
+    EScan FeedImpl([[maybe_unused]] TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) noexcept {
+        // LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
 
-        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
+        if (!ReadBuf.HasReachedLimits(ScanSettings)) {
             return EScan::Feed;
         }
 
@@ -271,8 +271,8 @@ public:
         return TStringBuilder() << "TBuildIndexScan TabletId: " << DataShardId << " Id: " << BuildIndexId
             << ", requested range: " << DebugPrintRange(KeyTypes, RequestedRange.ToTableRange(), *AppData()->TypeRegistry)
             << ", last acked point: " << DebugPrintPoint(KeyTypes, LastUploadedKey.GetCells(), *AppData()->TypeRegistry)
-            << Stats.ToString()
-            << UploadStatus.ToString();
+            << " " << Stats.ToString()
+            << " " << UploadStatus.ToString();
     }
 
     EScan PageFault() noexcept override {
@@ -327,7 +327,7 @@ private:
         UploadStatus.Issues.AddIssues(ev->Get()->Issues);
 
         if (UploadStatus.IsSuccess()) {
-            Stats.Aggr(&WriteBuf);
+            Stats.Aggr(WriteBuf.GetRows(), WriteBuf.GetRowCellBytes());
             LastUploadedKey = WriteBuf.ExtractLastKey();
 
             //send progress
@@ -340,7 +340,8 @@ private:
             // TODO(mbkkt) ReleaseBuffer isn't possible, we use LastUploadedKey for logging
             progress->Record.SetLastKeyAck(LastUploadedKey.GetBuffer());
             progress->Record.SetRowsDelta(WriteBuf.GetRows());
-            progress->Record.SetBytesDelta(WriteBuf.GetBytes());
+            // TODO: use GetRowCellBytes method?
+            progress->Record.SetBytesDelta(WriteBuf.GetBufferBytes());
             WriteBuf.Clear();
 
             progress->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
@@ -348,7 +349,7 @@ private:
 
             this->Send(ProgressActorId, progress.Release());
 
-            if (HasReachedLimits(ReadBuf, ScanSettings)) {
+            if (ReadBuf.HasReachedLimits(ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload();
             }
@@ -420,14 +421,15 @@ public:
             const auto rowCells = *row;
 
             ReadBuf.AddRow(
-                TSerializedCellVec(rowCells.Slice(0, TargetDataColumnPos)),
-                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)),
-                TSerializedCellVec(key));
+                rowCells.Slice(0, TargetDataColumnPos),
+                rowCells.Slice(TargetDataColumnPos),
+                key);
         });
     }
 };
 
 class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR> {
+    TVector<TCell> Value;
     TString ValueSerialized;
 
 public:
@@ -446,21 +448,19 @@ public:
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
 
         TMemoryPool valueDataPool(256);
-        TVector<TCell> cells;
         TString err;
-        Y_ABORT_UNLESS(BuildExtraColumns(cells, columnBuildSettings, err, valueDataPool));
-        ValueSerialized = TSerializedCellVec::Serialize(cells);
+        Y_ABORT_UNLESS(BuildExtraColumns(Value, columnBuildSettings, err, valueDataPool));
+        ValueSerialized = TSerializedCellVec::Serialize(Value);
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
         return FeedImpl(key, row, [&] {
-            TSerializedCellVec pk(key);
-            auto pkTarget = pk;
-            auto valueTarget = ValueSerialized;
+            auto valueSerializedCopy = ValueSerialized;
             ReadBuf.AddRow(
-                std::move(pkTarget),
-                std::move(valueTarget),
-                std::move(pk));
+                key,
+                Value,
+                std::move(valueSerializedCopy),
+                key);
         });
     }
 };

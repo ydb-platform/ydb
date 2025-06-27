@@ -14,9 +14,11 @@
 
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_vector_index.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
@@ -2941,53 +2943,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 }; // TImportInfo
 // } // NImport
 
-class TBillingStats {
-public:
-    TBillingStats() = default;
-    TBillingStats(const TBillingStats& other) = default;
-    TBillingStats& operator = (const TBillingStats& other) = default;
-
-    TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes);
-
-    TBillingStats operator - (const TBillingStats& other) const;
-    TBillingStats& operator -= (const TBillingStats& other) {
-        return *this = *this - other;
-    }
-
-    TBillingStats operator + (const TBillingStats& other) const;
-    TBillingStats& operator += (const TBillingStats& other) {
-        return *this = *this + other;
-    }
-
-    bool operator == (const TBillingStats& other) const = default;
-
-    explicit operator bool () const {
-        return *this != TBillingStats{};
-    }
-
-    TString ToString() const;
-
-    ui64 GetUploadRows() const {
-        return UploadRows;
-    }
-    ui64 GetUploadBytes() const {
-        return UploadBytes;
-    }
-
-    ui64 GetReadRows() const {
-        return ReadRows;
-    }
-    ui64 GetReadBytes() const {
-        return ReadBytes;
-    }
-
-private:
-    ui64 UploadRows = 0;
-    ui64 UploadBytes = 0;
-    ui64 ReadRows = 0;
-    ui64 ReadBytes = 0;
-};
-
 // TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
 struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     using TPtr = TIntrusivePtr<TIndexBuildInfo>;
@@ -3085,15 +3040,17 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
         ui32 K = 0;
         ui32 Levels = 0;
+        ui32 Rounds = 0;
 
         // progress
         enum EState : ui32 {
             Sample = 0,
-            // Recompute,
             Reshuffle,
             MultiLocal,
+            Recompute,
         };
         ui32 Level = 1;
+        ui32 Round = 0;
 
         EState State = Sample;
 
@@ -3104,7 +3061,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         NTableIndex::TClusterId Child = ChildBegin;
 
         ui64 TableSize = 0;
-
 
         ui64 ParentEnd() const noexcept {  // included
             return ChildBegin - 1;
@@ -3122,11 +3078,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TString DebugString() const {
             return TStringBuilder()
-                << "{ K = " << K
+                << "{ " 
+                << "State = " << State
                 << ", Level = " << Level << " / " << Levels
-                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd()
-                << "], Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd()
-                << "], State = " << State << " }";
+                << ", K = " << K
+                << ", Round = " << Round
+                << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
+                << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
+                << ", TableSize = " << TableSize
+                << " }";
         }
 
         bool NeedsAnotherLevel() const noexcept {
@@ -3166,8 +3126,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         void Set(ui32 level, 
                  NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent, 
                  NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
-                 ui32 state, ui64 tableSize) {
+                 ui32 state, ui64 tableSize, ui32 round) {
             Level = level;
+            Round = round;
             ParentBegin = parentBegin;
             Parent = parent;
             ChildBegin = childBegin;
@@ -3306,7 +3267,7 @@ public:
         TSerializedTableRange Range;
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
-        size_t Index = 0;  // size of Shards map before this element was added
+        size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
 
         NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
@@ -3315,7 +3276,7 @@ public:
 
         TBillingStats Processed;
 
-        TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount);
+        TShardStatus(TSerializedTableRange range, TString lastKeyAck);
 
         TString ToString(TShardIdx shardIdx = InvalidShardIdx) const {
             TStringBuilder result;
@@ -3372,6 +3333,15 @@ public:
         };
         EState State = EState::Collect;
 
+        TString DebugString() const {
+            return TStringBuilder()
+                << "{ " 
+                << "State = " << State
+                << ", Rows = " << Rows.size()
+                << ", MaxProbability = " << MaxProbability
+                << " }";
+        }
+
         bool MakeWeakTop(ui64 k) {
             // 2 * k is needed to make it linear, 2 * N at all.
             // x * k approximately is x / (x - 1) * N, but with larger x more memory used
@@ -3423,6 +3393,8 @@ public:
     };
     TSample Sample;
 
+    std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
+
     TString DebugString() const {
         auto result = TStringBuilder() << BuildKind;
 
@@ -3430,7 +3402,8 @@ public:
             result << " "
                 << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
-                << ", Sample = " << Sample.State << " }, "
+                << ", Sample = " << Sample.State
+                << ", Clusters = " << Clusters->GetClusters().size() << " }, "
                 << "{ Done = " << DoneShards.size()
                 << ", ToUpload = " << ToUploadShards.size()
                 << ", InProgress = " << InProgressShards.size() << " }";
@@ -3588,8 +3561,8 @@ public:
 
         auto& billed = indexInfo->Billed;
         billed = {
-            row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
             row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
         };
@@ -3621,7 +3594,11 @@ public:
                     auto& desc = *creationConfig.MutableVectorIndexKmeansTreeDescription();
                     indexInfo->KMeans.K = std::max<ui32>(2, desc.settings().clusters());
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + std::max<ui32>(1, desc.settings().levels());
-                    indexInfo->SpecializedIndexDescription =std::move(desc);
+                    indexInfo->KMeans.Rounds = NTableIndex::NTableVectorKmeansTreeIndex::DefaultKMeansRounds;
+                    TString createError;
+                    indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
+                    Y_ENSURE(indexInfo->Clusters && createError == "");
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
                 } break;
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
@@ -3650,7 +3627,7 @@ public:
             AddParent(bound, shardIdx);
         }
         Shards.emplace(
-            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));
+            shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck)));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
 
         shardStatus.Status =
@@ -3664,8 +3641,8 @@ public:
 
         auto& processed = shardStatus.Processed;
         processed = {
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
-            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::UploadBytesProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
             row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
         };

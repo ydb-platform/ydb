@@ -29,12 +29,14 @@ TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
     return result;
 }
 
-ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row) {
+// amount of read data is calculated based only on row cells as it is done in KQP part
+// complex scan read bytes metric would be too hard to be explained for users
+ui64 CountRowCellBytes(TConstArrayRef<TCell> key, TConstArrayRef<TCell> value) {
     ui64 bytes = 0;
     for (auto& cell : key) {
         bytes += cell.Size();
     }
-    for (auto& cell : *row) {
+    for (auto& cell : value) {
         bytes += cell.Size();
     }
     return bytes;

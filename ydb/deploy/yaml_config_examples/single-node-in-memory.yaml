@@ -3,20 +3,15 @@ metadata:
   cluster: ""
   version: 0
 config:
-  yaml_config_enabled: true
   erasure: none
-  fail_domain_type: none
   self_management_config:
     enabled: true
   default_disk_type: SSD
   host_configs:
   - drive:
     - path: SectorMap:1:64
-      type: SSD
-    host_config_id: 1
   hosts:
   - host: localhost
-    host_config_id: 1
     port: 19001
     location:
       body: 1

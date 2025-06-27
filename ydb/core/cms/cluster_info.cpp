@@ -361,7 +361,9 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
     node->IcPort = info.Port;
     node->Location = info.Location;
     node->State = NKikimrCms::UNKNOWN;
-    node->PileId = IsBridgeMode ? NodeIdToPileId->at(info.NodeId) : 0;
+    if (auto it = NodeIdToPileId->find(info.NodeId); it != NodeIdToPileId->end()) {
+        node->PileId = it->second;
+    }
 
     if (ctx) {
         const auto maxStaticNodeId = AppData(*ctx)->DynamicNameserviceConfig->MaxStaticNodeId;

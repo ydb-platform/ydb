@@ -110,6 +110,7 @@ def create_cloud_events_table(root, session):
         ('Type', ydb.PrimitiveType.Utf8),
         ('CloudId', ydb.PrimitiveType.Utf8),
         ('FolderId', ydb.PrimitiveType.Utf8),
+        ('ResourceId', ydb.PrimitiveType.Utf8),
         ('UserSID', ydb.PrimitiveType.Utf8),
         ('MaskedToken', ydb.PrimitiveType.Utf8),
         ('AuthType', ydb.PrimitiveType.Utf8),

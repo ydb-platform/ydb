@@ -418,6 +418,7 @@ namespace NSchemeShardUT_Private {
     NKikimrIndexBuilder::TEvListResponse TestListBuildIndex(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName);
     TEvIndexBuilder::TEvGetRequest* GetBuildIndexRequest(const TString& dbName, ui64 id);
     NKikimrIndexBuilder::TEvGetResponse TestGetBuildIndex(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName, ui64 id);
+    TString TestGetBuildIndexHtml(TTestActorRuntime& runtime, ui64 schemeShard, ui64 id);
     TEvIndexBuilder::TEvForgetRequest* ForgetBuildIndexRequest(const ui64 id, const TString &dbName, const ui64 buildIndexId);
     NKikimrIndexBuilder::TEvForgetResponse TestForgetBuildIndex(TTestActorRuntime& runtime, const ui64 id, const ui64 schemeShard, const TString &dbName, const ui64 buildIndexId, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 

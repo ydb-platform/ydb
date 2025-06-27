@@ -2010,6 +2010,14 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
+    TString TestGetBuildIndexHtml(TTestActorRuntime& runtime, ui64 schemeShard, ui64 id) {
+        auto sender = runtime.AllocateEdgeActor();
+        auto httpRequest = std::make_unique<NActors::NMon::TEvRemoteHttpInfo>(TStringBuilder() << "/app?Page=BuildIndexInfo&BuildIndexId=" << id);
+        runtime.SendToPipe(schemeShard, sender, httpRequest.release(), 0, {});
+        auto httpResponse = runtime.GrabEdgeEventRethrow<NActors::NMon::TEvRemoteHttpInfoRes>(sender);
+        return httpResponse->Get()->Html;
+    }
+
     TEvIndexBuilder::TEvForgetRequest* ForgetBuildIndexRequest(const ui64 id, const TString &dbName, const ui64 buildIndexId) {
         return new TEvIndexBuilder::TEvForgetRequest(id, dbName, buildIndexId);
     }

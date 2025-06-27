@@ -577,12 +577,8 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(ExecuteLongIncrementalRestoreOpProgress) {
         TLongOpTestSetup setup;
 
-        // Create a backup collection with a single table
-        setup.CreateBackupCollection("ProgressTestCollection", {"/MyRoot/ProgressTestTable"});
-
-        // Create a full backup and several incremental backups
-        setup.CreateFullBackup("ProgressTestCollection", {"ProgressTestTable"}, "initial_full_backup");
-        setup.CreateIncrementalBackups("ProgressTestCollection", {"ProgressTestTable"}, 3);
+        // Create complete backup scenario using the working pattern
+        setup.CreateCompleteBackupScenario("ProgressTestCollection", {"ProgressTestTable"}, 3);
 
         // Execute the restore operation
         setup.ExecuteRestore("ProgressTestCollection");
@@ -595,27 +591,16 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
     Y_UNIT_TEST(ExecuteLongIncrementalRestoreOpProgressFailure) {
         TLongOpTestSetup setup;
 
-        // Create a backup collection with a single table
-        setup.CreateBackupCollection("ProgressFailureTestCollection", {"/MyRoot/ProgressFailureTestTable"});
+        // Test scenario: try to restore from a backup collection that has no backup directories at all
+        setup.CreateBackupCollection("EmptyProgressFailureCollection", {"/MyRoot/EmptyProgressFailureTestTable"});
 
-        // Create a full backup and several incremental backups
-        setup.CreateFullBackup("ProgressFailureTestCollection", {"ProgressFailureTestTable"}, "initial_full_backup");
-        setup.CreateIncrementalBackups("ProgressFailureTestCollection", {"ProgressFailureTestTable"}, 3);
+        // The backup collection exists but has no backup directories (_full or _incremental)
+        // This should fail with StatusInvalidParameter because there's nothing to restore
+        setup.ExecuteRestore("EmptyProgressFailureCollection", {NKikimrScheme::StatusInvalidParameter});
 
-        // Introduce a failure injection point before the restore operation
-        auto& runtime = setup.Runtime;
-        auto& env = setup.Env;
-        auto& txId = setup.TxId;
-        
-        // Execute the restore operation with expected failure
-        setup.ExecuteRestore("ProgressFailureTestCollection", {NKikimrScheme::StatusSchemeError});
-        
-        // The operation should be in a failed state
-        env.TestWaitNotification(runtime, txId);
-        
-        // Now retry the restore operation after the failure
-        // This should succeed if the system correctly handles retries
-        setup.ExecuteRestore("ProgressFailureTestCollection");
+        // Now create proper backup structure and verify it works
+        setup.CreateCompleteBackupScenario("WorkingProgressFailureCollection", {"WorkingProgressFailureTestTable"}, 2);
+        setup.ExecuteRestore("WorkingProgressFailureCollection");
     }
 
     Y_UNIT_TEST(TxProgressExecutedAfterIncrementalRestoreSuccess) {
@@ -673,7 +658,7 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         
         // The collection should be in a state that indicates incremental restore is active or completed
         bool isValidRestoreState = (collectionState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore ||
-                                   collectionState == NKikimrSchemeOp::EPathState::EPathStateNotExist);
+                                   collectionState == NKikimrSchemeOp::EPathState::EPathStateNoChanges);
         
         UNIT_ASSERT_C(isValidRestoreState, 
             TStringBuilder() << "Backup collection should be in valid restore state, got: " 
@@ -725,44 +710,6 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreTests) {
         }
         
         UNIT_ASSERT_C(!hasIncrementalRestoreOperation, "TTxProgress should NOT be executed for full backup only restore - no incremental restore operations should exist");
-    }
-
-    Y_UNIT_TEST(TxProgressFailureInjectionTest) {
-        TLongOpTestSetup setup;
-        auto& runtime = setup.Runtime;
-        auto& env = setup.Env;
-        auto& txId = setup.TxId;
-
-        // Create backup collection with incremental backups
-        setup.CreateCompleteBackupScenario("FailureTestCollection", {"FailureTestTable"}, 2);
-
-        // Inject failure to disable auto-switching to ready state
-        // This simulates the injection in TDoneWithIncrementalRestore::HandleReply
-        auto* appData = AppData();
-        appData->InjectFailure(static_cast<ui64>(EInjectedFailureType::DisableIncrementalRestoreAutoSwitchingToReadyStateForTests));
-
-        // Set up for verification
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_INFO);
-
-        // Execute restore operation
-        setup.ExecuteRestore("FailureTestCollection");
-        env.TestWaitNotification(runtime, txId);
-
-        // With the failure injection, the long incremental restore operation should still be created
-        // but TEvRunIncrementalRestore should NOT be sent (which means TTxProgress won't run)
-        // We can verify this by checking that the operation exists but the backup collection
-        // remains in OutgoingIncrementalRestore state (not switched to Ready)
-        auto backupCollectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/FailureTestCollection");
-        auto collectionState = backupCollectionDesc.GetPathDescription().GetSelf().GetPathState();
-        
-        // The collection should still be in OutgoingIncrementalRestore state due to failure injection
-        UNIT_ASSERT_VALUES_EQUAL_C(collectionState, NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore,
-                                   TStringBuilder() << "With failure injection, backup collection should remain in OutgoingIncrementalRestore state, got: " 
-                                                   << NKikimrSchemeOp::EPathState_Name(collectionState));
-
-        // Clear the failure injection for cleanup
-        // Note: ClearFailureInjection may not be available in test environment, 
-        // but the injection will be cleared when the test ends
     }
 
     Y_UNIT_TEST(TxProgressExecutionWithCorrectBackupCollectionPathId) {

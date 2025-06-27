@@ -61,5 +61,6 @@ target_sources(columnshard-normalizer-portion.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/clean_unused_tables_template.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/clean_ttl_preset_setting_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/clean_ttl_preset_setting_version_info.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/copy_blob_ids_to_v2.cpp
 )
 

@@ -31,8 +31,10 @@ target_link_libraries(ydb-library-yql-dq-comp_nodes-ut PUBLIC
   yql-dq-comp_nodes
   udf-service-exception_policy
   essentials-sql-pg_dummy
-  cpp-testing-unittest
   core-kqp-runtime
+  cpp-testing-unittest
+  library-cpp-dwarf_backtrace
+  cpp-dwarf_backtrace-registry
 )
 
 target_allocator(ydb-library-yql-dq-comp_nodes-ut
@@ -49,6 +51,7 @@ target_link_options(ydb-library-yql-dq-comp_nodes-ut PRIVATE
 
 target_sources(ydb-library-yql-dq-comp_nodes-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/ut/dq_factories.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/ut/dq_hash_combine_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/comp_nodes/ut/dq_block_hash_join_ut.cpp
 )
 

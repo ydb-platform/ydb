@@ -93,7 +93,7 @@ protected:
     };
 
 public:
-    explicit TNodesLimitsCounterBase(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit, TNodeToPileMapPtr nodeIdToPileId, )
+    explicit TNodesLimitsCounterBase(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit, TNodeToPileMapPtr nodeIdToPileId)
         : TNodesCounterBase(nodeIdToPileId)
         , DisabledNodesLimit(disabledNodesLimit)
         , DisabledNodesRatioLimit(disabledNodesRatioLimit)

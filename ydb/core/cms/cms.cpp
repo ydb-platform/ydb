@@ -715,7 +715,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     }
 
     Y_ABORT_UNLESS(ClusterInfo->StateStorageInfo->RingGroups.size() > 0);
-    const ui32 ringGroupId = ClusterInfo->IsBridgeMode ? node.PileId.GetRef() : 0;
+    const ui32 ringGroupId = ClusterInfo->IsBridgeMode ? node.PileId : 0;
     const ui32 nToSelect = ClusterInfo->StateStorageInfo->RingGroups[ringGroupId].NToSelect;
     const ui32 currentRing = ClusterInfo->GetRingId(node.NodeId);
     ui8 currentRingState = TStateStorageRingInfo::Unknown;

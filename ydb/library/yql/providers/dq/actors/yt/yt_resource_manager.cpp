@@ -627,6 +627,9 @@ namespace NYql {
                                 })
                             .EndList();
                     })
+                    .DoIf(!Options.YtBackend.GetSchedulingTagFilter().empty(), [&] (NYT::TFluentMap fluent) {
+                        fluent.Item("scheduling_tag_filter").Value(Options.YtBackend.GetSchedulingTagFilter());
+                    })
                     .Item("tasks")
                         .BeginMap()
                             .DoFor(nodes, [&] (NYT::TFluentMap fluent1, const auto& nodeId) {

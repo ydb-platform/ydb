@@ -216,7 +216,6 @@ private:
 
         // Metrics
         ui64 InitialOffset = 0;
-        TStats Stat;
         TStats FilteredStat;
         ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
@@ -904,11 +903,10 @@ void TTopicSession::SendStatistics() {
         clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
         clientStatistic.FilteredBytes = info.FilteredStat.Bytes;
         clientStatistic.FilteredRows = info.FilteredStat.Events;
-        clientStatistic.ReadBytes = info.Stat.Bytes;
+        clientStatistic.ReadBytes = Statistics.Bytes;
         clientStatistic.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.value_or(0);
         clientStatistic.ReadLagMessages = info.NextMessageOffset.value_or(0) - LastMessageOffset - 1;
         clientStatistic.InitialOffset = info.InitialOffset;
-        info.Stat.Clear();
         info.FilteredStat.Clear();
         sessionStatistic.Clients.emplace_back(std::move(clientStatistic));
     }

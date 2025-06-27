@@ -115,6 +115,9 @@ private:
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(ev->Get()->Record.GetSource().GetReconnectPeriod(), ReconnectPeriod));
+            for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+                Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
             auto queryGroup = Counters->GetSubgroup("query_id", QueryId);
             auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
@@ -215,7 +218,7 @@ private:
         ui64 InitialOffset = 0;
         TStats Stat;
         TStats FilteredStat;
-        const ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
     };
@@ -885,7 +888,7 @@ void TTopicSession::SendStatistics() {
     auto& commonStatistic = sessionStatistic.Common;
     commonStatistic.QueuedBytes = QueuedBytes;
     commonStatistic.RestartSessionByOffsets = RestartSessionByOffsets;
-    commonStatistic.ReadBytes = 777;//Statistics.Bytes;
+    commonStatistic.ReadBytes = Statistics.Bytes;
     commonStatistic.ReadEvents = Statistics.Events;
     commonStatistic.LastReadedOffset = LastMessageOffset;
 

@@ -47,6 +47,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);
+
             TDataProviderInfo info;
 
             info.Names.insert({TString{PqProviderName}});

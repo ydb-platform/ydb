@@ -989,7 +989,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         }
         bool syncIsComplete = true;
         for (size_t groupIdx : xrange(ProxyGroups.size())) {
-            if (ProxyGroups[groupIdx].WriteOnly) {
+            if (ShouldIgnore(ProxyGroups[groupIdx])) {
                 continue;
             }
             const ui32 size = ProxyGroups[groupIdx].Proxies.size();
@@ -1059,7 +1059,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
         for (size_t groupIdx = 0; groupIdx < replicaGroups.size(); ++groupIdx) {
             const auto& replicaGroup = replicaGroups[groupIdx];
-            if (replicaGroup.WriteOnly) {
+            if (replicaGroup.WriteOnly || replicaGroup.State == ERingGroupState::DISCONNECTED) {
                 continue;
             }
             auto& proxyGroup = ProxyGroups.emplace_back();

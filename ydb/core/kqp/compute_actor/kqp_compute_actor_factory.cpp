@@ -227,7 +227,7 @@ public:
 
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
-            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta, args.Task->HasMetaId());
+            auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId,
                 args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,

@@ -916,14 +916,10 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
     Y_ABORT_UNLESS(info->RingGroups.size() > 0);
-    const ui64 rGroupSize = IsBridgeMode ? 1 : info->RingGroups.size();
+    const ui64 rGroupSize = IsBridgeMode ? info->RingGroups.size() : 1;
     StateStorageRings.resize(rGroupSize);
 
     for (ui64 rGroupId = 0; rGroupId < rGroupSize; ++rGroupId) {
-        // if not in bridge mode, then we don't need to add rings from extra groups
-        if (!IsBridgeMode && rGroupId > 0) {
-            break;
-        }
         auto& groupInfo = info->RingGroups[rGroupId];
         for (ui32 ringId = 0; ringId < groupInfo.Rings.size(); ++ringId) {
             auto &ring = groupInfo.Rings[ringId];

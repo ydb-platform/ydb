@@ -60,7 +60,7 @@ public:
     TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
         : ScanId(scanId)
         , TabletId(state.TabletId)
-        , Generation(++state.Generation)
+        , Generation(state.Generation)
     {
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
@@ -392,6 +392,7 @@ public:
             state->ActorId = {};
             state->State = NComputeActor::EShardState::Initial;
             state->SubscribedOnTablet = false;
+            state->Generation++;
 
             auto it = ShardScanners.find(tabletId);
             AFL_ENSURE(it != ShardScanners.end())("tablet_id", tabletId);

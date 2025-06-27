@@ -6,6 +6,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
 import time as time_module
+from datetime import datetime, timedelta
 
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import execute_command, deploy_binaries_to_hosts
@@ -39,19 +40,70 @@ class WorkloadTestBase(LoadSuiteBase):
         # Останавливаем nemesis сервис на всех нодах кластера
         try:
             logging.info("Stopping nemesis service on all cluster nodes during setup")
+            
+            # Создаем сводный лог для Allure
+            nemesis_log = []
+            setup_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            nemesis_log.append(f"Setup class started at {setup_time}")
+            nemesis_log.append("Stopping nemesis service on all cluster nodes during setup")
+            
             nodes = YdbCluster.get_cluster_nodes()
             unique_hosts = set(node.host for node in nodes)
+            nemesis_log.append(f"Found {len(unique_hosts)} unique hosts")
+            
+            success_count = 0
+            error_count = 0
+            errors = []
             
             for host in unique_hosts:
                 logging.info(f"Stopping nemesis on {host}")
-                execute_command(
+                
+                cmd = "sudo service nemesis stop"
+                result = execute_command(
                     host=host,
-                    cmd="sudo service nemesis stop",
+                    cmd=cmd,
                     raise_on_error=False
                 )
+                
+                # Добавляем в лог только проблемные случаи
+                stdout = result.stdout if result.stdout else ""
+                stderr = result.stderr if result.stderr else ""
+                
+                if stderr and "error" in stderr.lower():
+                    error_msg = f"Error stopping nemesis on {host}: {stderr}"
+                    logging.warning(error_msg)
+                    errors.append(error_msg)
+                    error_count += 1
+                else:
+                    success_count += 1
+            
+            # Добавляем итоговую статистику
+            nemesis_log.append(f"\n--- Summary ---")
+            nemesis_log.append(f"Successful hosts: {success_count}/{len(unique_hosts)}")
+            nemesis_log.append(f"Failed hosts: {error_count}/{len(unique_hosts)}")
+            
+            # Добавляем детали ошибок, если они есть
+            if errors:
+                nemesis_log.append("\nErrors:")
+                for error in errors:
+                    nemesis_log.append(f"- {error}")
+            
             logging.info("Nemesis service stopped on all nodes")
+            nemesis_log.append("Nemesis service stopped on all nodes")
+            
+            # Добавляем сводный лог в Allure
+            try:
+                allure.attach("\n".join(nemesis_log), 'Setup - Nemesis Stop Log', attachment_type=allure.attachment_type.TEXT)
+            except Exception as e:
+                logging.warning(f"Failed to attach nemesis log to Allure: {e}")
+                
         except Exception as e:
-            logging.error(f"Error stopping nemesis during setup: {e}")
+            error_msg = f"Error stopping nemesis during setup: {e}"
+            logging.error(error_msg)
+            try:
+                allure.attach(error_msg, 'Setup - Nemesis Error', attachment_type=allure.attachment_type.TEXT)
+            except Exception:
+                pass
         
         # Наследуемся от LoadSuiteBase
         super().setup_class()
@@ -91,16 +143,61 @@ class WorkloadTestBase(LoadSuiteBase):
             nodes = YdbCluster.get_cluster_nodes()
             unique_hosts = set(node.host for node in nodes)
             
+            # Создаем сводный лог для Allure
+            nemesis_log = []
+            nemesis_log.append(f"Stopping nemesis service on {len(unique_hosts)} hosts")
+            
+            success_count = 0
+            error_count = 0
+            errors = []
+            
             for host in unique_hosts:
                 logging.info(f"Stopping nemesis on {host}")
-                execute_command(
+                
+                result = execute_command(
                     host=host,
                     cmd="sudo service nemesis stop",
                     raise_on_error=False
                 )
+                
+                # Добавляем результат выполнения в лог только для ошибок
+                stdout = result.stdout if result.stdout else ""
+                stderr = result.stderr if result.stderr else ""
+                
+                if stderr and "error" in stderr.lower():
+                    error_msg = f"Error on {host}: {stderr}"
+                    errors.append(error_msg)
+                    logging.warning(f"Error stopping nemesis on {host}: {stderr}")
+                    error_count += 1
+                else:
+                    success_count += 1
+                    
             cls._nemesis_started = False
+            
+            # Добавляем итоговую статистику
+            nemesis_log.append(f"\n--- Summary ---")
+            nemesis_log.append(f"Successful hosts: {success_count}/{len(unique_hosts)}")
+            nemesis_log.append(f"Failed hosts: {error_count}/{len(unique_hosts)}")
+            
+            # Добавляем детали ошибок, если они есть
+            if errors:
+                nemesis_log.append("\nErrors:")
+                for error in errors:
+                    nemesis_log.append(f"- {error}")
+            
+            # Добавляем сводный лог в Allure
+            try:
+                allure.attach("\n".join(nemesis_log), 'Nemesis Stop Log', attachment_type=allure.attachment_type.TEXT)
+            except Exception as e:
+                logging.warning(f"Failed to attach nemesis log to Allure: {e}")
+                
         except Exception as e:
-            logging.error(f"Error stopping nemesis: {e}")
+            error_msg = f"Error stopping nemesis: {e}"
+            logging.error(error_msg)
+            try:
+                allure.attach(error_msg, 'Nemesis Stop Error', attachment_type=allure.attachment_type.TEXT)
+            except Exception:
+                pass
 
     def _manage_nemesis(self, enable_nemesis: bool):
         """
@@ -120,41 +217,80 @@ class WorkloadTestBase(LoadSuiteBase):
                 
                 if enable_nemesis:
                     action = "restart"
+                    action_name = "Starting"
                     logging.info(f"Starting nemesis on {len(unique_hosts)} hosts")
                 else:
                     action = "stop"
+                    action_name = "Stopping"
                     logging.info(f"Stopping nemesis on {len(unique_hosts)} hosts")
                 
+                # Создаем сводный лог для Allure
+                nemesis_log = []
+                nemesis_log.append(f"{action_name} nemesis service on {len(unique_hosts)} hosts")
+                
+                # Добавляем информацию о времени запуска/остановки
+                current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                nemesis_log.append(f"Time: {current_time}")
+                
                 # Выполняем команду на каждом уникальном хосте
+                success_count = 0
+                error_count = 0
+                errors = []
+                
                 for host in unique_hosts:
-                    with allure.step(f'{action.capitalize()} nemesis on {host}'):
-                        cmd = f"sudo service nemesis {action}"
-                        allure.attach(cmd, 'Nemesis Command', attachment_type=allure.attachment_type.TEXT)
+                    cmd = f"sudo service nemesis {action}"
+                    nemesis_log.append(f"\n--- {host} ---")
+                    
+                    result = execute_command(
+                        host=host,
+                        cmd=cmd,
+                        raise_on_error=False
+                    )
+                    
+                    stdout = result.stdout if result.stdout else ""
+                    stderr = result.stderr if result.stderr else ""
+                    
+                    # Для Allure сохраняем только важную информацию
+                    if stderr and "error" in stderr.lower():
+                        error_msg = f"Error on {host}: {stderr}"
+                        nemesis_log.append(error_msg)
+                        errors.append(error_msg)
+                        error_count += 1
                         
-                        result = execute_command(
-                            host=host,
-                            cmd=cmd,
-                            raise_on_error=False
-                        )
-                        
-                        stdout = result.stdout if result.stdout else ""
-                        stderr = result.stderr if result.stderr else ""
-                        
-                        allure.attach(f"stdout: {stdout}\nstderr: {stderr}", 
-                                    f'Nemesis {action} result', 
-                                    attachment_type=allure.attachment_type.TEXT)
-                        
-                        if stderr and "error" in stderr.lower():
+                        # Только для ошибок создаем отдельный шаг и лог
+                        with allure.step(f'Error {action.lower()}ing nemesis on {host}'):
+                            allure.attach(f"Command: {cmd}\nstdout: {stdout}\nstderr: {stderr}", 
+                                        f'Nemesis {action} error', 
+                                        attachment_type=allure.attachment_type.TEXT)
                             logging.warning(f"Error during nemesis {action} on {host}: {stderr}")
+                    else:
+                        nemesis_log.append(f"Success")
+                        success_count += 1
+                
+                # Добавляем итоговую статистику
+                nemesis_log.append(f"\n--- Summary ---")
+                nemesis_log.append(f"Successful hosts: {success_count}/{len(unique_hosts)}")
+                nemesis_log.append(f"Failed hosts: {error_count}/{len(unique_hosts)}")
+                
+                if errors:
+                    nemesis_log.append("\nErrors:")
+                    for error in errors:
+                        nemesis_log.append(f"- {error}")
                 
                 # Устанавливаем флаг запуска nemesis
                 if enable_nemesis:
                     self.__class__._nemesis_started = True
+                    nemesis_log.append("Nemesis service started successfully")
                 else:
                     self.__class__._nemesis_started = False
+                    nemesis_log.append("Nemesis service stopped successfully")
+                
+                # Добавляем сводный лог в Allure
+                allure.attach("\n".join(nemesis_log), f'Nemesis {action_name} Summary', attachment_type=allure.attachment_type.TEXT)
                     
             except Exception as e:
-                logging.error(f"Error managing nemesis: {e}")
+                error_msg = f"Error managing nemesis: {e}"
+                logging.error(error_msg)
                 allure.attach(str(e), 'Nemesis Error', attachment_type=allure.attachment_type.TEXT)
 
     def create_workload_result(self, workload_name: str, stdout: str, stderr: str,
@@ -693,17 +829,39 @@ class WorkloadTestBase(LoadSuiteBase):
             delay_seconds: Задержка в секундах перед запуском nemesis
         """
         try:
-            logging.info(f"Nemesis will start in {delay_seconds} seconds...")
-            time_module.sleep(delay_seconds)
-            logging.info("Starting nemesis after delay")
+            # Создаем лог для Allure
+            nemesis_log = []
+            start_time = datetime.now()
+            nemesis_log.append(f"Nemesis scheduled start at {start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            nemesis_log.append(f"Delay: {delay_seconds} seconds")
             
-            with allure.step('Start nemesis after delay'):
+            logging.info(f"Nemesis will start in {delay_seconds} seconds...")
+            
+            # Добавляем информацию о запланированном времени запуска
+            planned_start_time = start_time + timedelta(seconds=delay_seconds)
+            nemesis_log.append(f"Planned start time: {planned_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            # Добавляем предварительный лог в Allure
+            allure.attach("\n".join(nemesis_log), 'Nemesis Scheduled Start', attachment_type=allure.attachment_type.TEXT)
+            
+            # Ждем указанное время
+            time_module.sleep(delay_seconds)
+            
+            # Обновляем лог
+            actual_start_time = datetime.now()
+            nemesis_log.append(f"Actual start time: {actual_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logging.info(f"Starting nemesis after {delay_seconds}s delay at {actual_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            with allure.step(f'Start nemesis after {delay_seconds}s delay'):
+                allure.attach("\n".join(nemesis_log), 'Nemesis Delayed Start Info', attachment_type=allure.attachment_type.TEXT)
                 self._manage_nemesis(enable_nemesis=True)
                 
             logging.info("Nemesis started successfully after delay")
+            
         except Exception as e:
-            logging.error(f"Error starting nemesis after delay: {e}")
-            allure.attach(str(e), 'Nemesis Error', attachment_type=allure.attachment_type.TEXT)
+            error_msg = f"Error starting nemesis after delay: {e}"
+            logging.error(error_msg)
+            allure.attach(f"{error_msg}\n\nDelay: {delay_seconds} seconds", 'Nemesis Delayed Start Error', attachment_type=allure.attachment_type.TEXT)
 
     def _deploy_workload_binary(self, workload_name: str, nodes_percentage: int = 100):
         """

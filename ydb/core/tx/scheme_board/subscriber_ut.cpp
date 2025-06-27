@@ -105,7 +105,7 @@ void TSubscriberTest::NotifyDelete() {
 
     Context->CreateSubscriber<TSchemeBoardEvents::TEvNotifyUpdate>(edge, "path");
 
-    for (size_t i = 0; i <= replicas.size() / 2 + 1; ++i) {
+    for (size_t i = 0; i < replicas.size() / 2 + 1; ++i) {
         Context->Send(replicas[i], edge, GenerateUpdate(GenerateDescribe("path", TPathId(1, 1)), 1, 1, true));
     }
 

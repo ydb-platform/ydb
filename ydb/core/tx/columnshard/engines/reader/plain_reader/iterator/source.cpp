@@ -94,7 +94,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(Portion->RestoreBlobRange(c->BlobRange));
+                reading->AddRange(GetStageData().GetPortionAccessor().RestoreBlobRange(c->BlobRange));
                 ++fetchedChunks;
             } else {
                 defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),

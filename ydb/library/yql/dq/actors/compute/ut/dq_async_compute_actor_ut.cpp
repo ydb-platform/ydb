@@ -326,7 +326,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         settings.AddRightJoinKeyNames("key");
         settings.SetNarrowInputRowType(SerializeNode(narrowInputType, TypeEnv));
         settings.SetNarrowOutputRowType(SerializeNode(narrowOutputType, TypeEnv));
-        settings.SetCacheLimit(1);
+        settings.SetCacheLimit(10);
         settings.SetCacheTtlSeconds(1);
         settings.SetMaxDelayedRows(5);
         transform.MutableSettings()->PackFrom(settings);
@@ -639,6 +639,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             );
             return structType;
         });
+        TMap<i32, ui32> expectedData;
         auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
         auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowTransformedType) : RowTransformedType));
         SetInputTransform(task,
@@ -655,8 +656,18 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             bool noAck = (packet % 2) == 0; // set noAck on even packets
 
             PushRow(CreateRow(++val, packet), dqOutputChannel);
+            ++expectedData[val];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
+            ++expectedData[val];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
+            ++expectedData[val];
+            // below row may be served from cache
+            PushRow(CreateRow(++val % (MaxTransformedValue*2), packet), dqOutputChannel);
+            ++expectedData[val % (MaxTransformedValue*2)];
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            ++expectedData[val];
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            ++expectedData[val];
             if (doWatermark) {
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
@@ -689,7 +700,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             }
         }
 
-        TMap<i32, i32> receivedData;
+        TMap<i32, ui32> receivedData;
 
         i32 col0 = ~0;
         TMaybe<TInstant> watermark;
@@ -745,15 +756,15 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 },
                 dqInputChannel))
         {}
-        UNIT_ASSERT_EQUAL(receivedData.size(), val);
-        for (; val > 0; --val) {
-            UNIT_ASSERT_EQUAL_C(receivedData[val], 1, "expected count for " << (val));
+        UNIT_ASSERT_EQUAL(receivedData.size(), expectedData.size());
+        for (auto [receivedVal, receivedCnt]: receivedData) {
+            UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
         }
         //UNIT_ASSERT(!!watermark);
         if (watermark) {
             LOG_D("Last watermark " << *watermark);
         } else {
-            LOG_D("NO WATERMARK");
+            LOG_E("NO WATERMARK");
         }
     }
 };
@@ -776,7 +787,7 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(InputTransform, TAsyncCATestFixture) {
         for (bool waitIntermediateAcks: { false, true }) {
             for (bool doWatermark: { false, true }) {
-                for (ui32 packets: { 1, 2, 3, 4, 5 }) {
+                for (ui32 packets: { 1, 2, 3, 4, 5, 111 }) {
                     InputTransformTests(packets, doWatermark, waitIntermediateAcks);
                 }
             }

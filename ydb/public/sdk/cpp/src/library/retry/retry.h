@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb-cpp-sdk/library/retry/retry_policy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/retry/retry_policy.h>
 #include "utils.h"
 
-#include <src/library/retry/protos/retry_options.pb.h>
+#include <ydb/public/sdk/cpp/src/library/retry/protos/retry_options.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/typetraits.h>
@@ -104,9 +104,9 @@ public:
         {
         }
 
-        std::optional<TDuration> GetNextRetryDelay(const TException&) override {
+        TMaybe<TDuration> GetNextRetryDelay(const TException&) override {
             if (Attempt == Opts.RetryCount) {
-                return std::nullopt;
+                return {};
             }
             return Opts.GetTimeToSleep(Attempt++);
         }
@@ -151,7 +151,7 @@ std::optional<TResult> DoWithRetry(std::function<TResult()> func, const typename
                 retryState = retryPolicy->CreateRetryState();
             }
 
-            if (const std::optional<TDuration> delay = retryState->GetNextRetryDelay(ex)) {
+            if (const TMaybe<TDuration> delay = retryState->GetNextRetryDelay(ex)) {
                 if (*delay) {
                     if (sleepFunction) {
                         sleepFunction(*delay);
@@ -167,7 +167,7 @@ std::optional<TResult> DoWithRetry(std::function<TResult()> func, const typename
             }
         }
     }
-    return std::nullopt;
+    return {};
 }
 
 template <typename TResult, typename TException = yexception>
@@ -204,7 +204,7 @@ TRetCode DoWithRetryOnRetCode(std::function<TRetCode()> func, const typename IRe
     auto retryState = retryPolicy->CreateRetryState();
     while (true) {
         TRetCode code = func();
-        if (const std::optional<TDuration> delay = retryState->GetNextRetryDelay(code)) {
+        if (const TMaybe<TDuration> delay = retryState->GetNextRetryDelay(code)) {
             if (*delay) {
                 if (sleepFunction) {
                     sleepFunction(*delay);

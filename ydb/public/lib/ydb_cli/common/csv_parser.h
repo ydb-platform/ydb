@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <google/protobuf/arena.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
 
@@ -81,6 +82,9 @@ private:
         const TString& filename
     ) const;
 };
+
+// Checks if a string value can be converted to a YDB type
+bool IsConvertibleToYdbValue(const TString& value, const Ydb::Type& type);
 
 }
 }

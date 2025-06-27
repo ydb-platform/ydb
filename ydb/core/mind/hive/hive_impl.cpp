@@ -722,7 +722,7 @@ void THive::Cleanup() {
 }
 
 void THive::MaybeLoadEverything() {
-    if (!NodesInfo.empty() && HaveStorageConfig && CurrentStateFunc() == &TThis::StateInit) {
+    if (!NodesInfo.empty() && (!IsBridgeMode(TActivationContext::AsActorContext()) || BridgeInfo)) {
         Execute(CreateLoadEverything());
     }
 }
@@ -3599,7 +3599,6 @@ void THive::Handle(TEvPrivate::TEvUpdateFollowers::TPtr&) {
 void THive::Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
     BLOG_D("Handle TEvNodeWardenStorageConfig");
     BridgeInfo = ev->Get()->BridgeInfo;
-    HaveStorageConfig = true;
     MaybeLoadEverything();
 }
 

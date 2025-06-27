@@ -1090,12 +1090,12 @@ private:
             if (buildInfo.KMeans.Rounds > 1) {
                 LOG_D("FillVectorIndex Recompute " << buildInfo.DebugString());
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
-                buildInfo.KMeans.Round = 0;
+                buildInfo.KMeans.Round = 1;
                 // Initialize Clusters
                 NIceDb::TNiceDb db(txc.DB);
                 buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
                 Self->PersistBuildIndexSampleToClusters(db, buildInfo);
-                buildInfo.Clusters->SetRound(0);
+                buildInfo.Clusters->SetRound(1);
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
             } else {

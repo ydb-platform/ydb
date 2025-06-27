@@ -103,6 +103,13 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     }
 
     ColumnIds = {recordOperation.GetColumnIds().begin(), recordOperation.GetColumnIds().end()};
+    DefaultFilledColumnCount = recordOperation.GetDefaultFilledColumnCount();
+    
+    if (DefaultFilledColumnCount != 0 && 
+        OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT) 
+    {
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " doesn't support DefaultFilledColumnsIds"};
+    }
 
     const NKikimrDataEvents::TTableId& tableIdRecord = recordOperation.GetTableId();
 
@@ -157,6 +164,12 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
             if (cell.Size() > NLimits::MaxWriteValueSize)
                 return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Row cell size of " << cell.Size() << " bytes is larger than the allowed threshold " << NLimits::MaxWriteValueSize};
         }
+    }
+    
+    if (DefaultFilledColumnCount + tableInfo.KeyColumnIds.size() > ColumnIds.size()) {
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Column count mismatch: DefaultFilledColumnCount " << 
+                                                                            DefaultFilledColumnCount << " is bigger than count of data columns " << 
+                                                                            ColumnIds.size() - tableInfo.KeyColumnIds.size()};
     }
 
     if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT) {

@@ -64,10 +64,46 @@ ui64 CalculateValueBytes(const TArrayRef<const NIceDb::TUpdateOp> ops) {
     return bytes;
 };
 
+TArrayRef<const NIceDb::TUpdateOp> TDataShardUserDb::RemoveDefaultColumnsIfNeeded(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    const ui32 DefaultFilledColumnCount
+)
+{
+    if (DefaultFilledColumnCount == 0 || !RowExists(tableId, key)) {
+        // no default columns - no changes need
+        // row not exist - no changes need
+        return ops;
+    }
+    
+    //newOps is ops without last DefaultFilledColumnCount values
+    auto newOps = TArrayRef<const NIceDb::TUpdateOp> (ops.begin(), ops.end() - DefaultFilledColumnCount);
+    
+    return newOps;  
+}
+
+
 void TDataShardUserDb::UpsertRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    const TArrayRef<const NIceDb::TUpdateOp> ops)
+    const TArrayRef<const NIceDb::TUpdateOp> ops,
+    const ui32 DefaultFilledColumnCount
+)
+{
+    auto localTableId = Self.GetLocalTableId(tableId);
+    Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
+
+    auto opsWithoutNoNeedDefault = RemoveDefaultColumnsIfNeeded(tableId, key, ops, DefaultFilledColumnCount);
+
+    UpsertRow(tableId, key, opsWithoutNoNeedDefault);
+}
+
+void TDataShardUserDb::UpsertRow(
+    const TTableId& tableId,
+    const TArrayRef<const TRawTypeValue> key,
+    const TArrayRef<const NIceDb::TUpdateOp> ops
+)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
@@ -111,11 +147,9 @@ void TDataShardUserDb::UpsertRow(
             addExtendedOp(specUpdates.ColIdUpdateNo, specUpdates.UpdateNo);
         }
         UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, extendedOps);
-
         IncreaseUpdateCounters(key, extendedOps);
     } else {
         UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
-
         IncreaseUpdateCounters(key, ops);
     }
 }

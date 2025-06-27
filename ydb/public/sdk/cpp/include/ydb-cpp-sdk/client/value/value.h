@@ -272,7 +272,7 @@ class TTableClient;
 class TValue {
     friend class TValueParser;
     friend class TProtoAccessor;
-    friend class ::NYdb::Dev::NTable::TTableClient;
+    friend class NTable::TTableClient;
 public:
     TValue(const TType& type, const Ydb::Value& valueProto);
     TValue(const TType& type, Ydb::Value&& valueProto);

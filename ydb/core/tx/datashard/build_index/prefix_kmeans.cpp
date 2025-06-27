@@ -425,6 +425,7 @@ protected:
             }
             bool ok = Clusters->SetClusters(std::move(rows));
             Y_ENSURE(ok);
+            Clusters->SetRound(1);
             return false; // do KMEANS
         }
 

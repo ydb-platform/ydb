@@ -69,6 +69,126 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(UpsertWithDefaults) {
+
+        auto [runtime, server, sender] = TestCreateServer();
+        
+        // Define a table with different column types
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint64", true, false},           // key (id=1)
+                {"uint8_val", "Uint8", false, false},     // id=2
+                {"uint16_val", "Uint16", false, false},   // id=3
+                {"uint32_val", "Uint32", false, false},   // id=4
+                {"uint64_val", "Uint64", false, false},   // id=5
+            });
+    
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+
+        Cout << "========= Insert initial data =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5}; // all columns
+            TVector<TCell> cells = {
+                TCell::Make(ui64(1)),     // key = 1
+                TCell::Make(ui8(2)),
+                TCell::Make(ui16(3)),
+                TCell::Make(ui32(4)), 
+                TCell::Make(ui64(5)),
+            };
+
+            auto result = Upsert(runtime, sender, shard, tableId, txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);          
+        }
+    
+        Cout << "========= Verify initial data =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 4, uint64_val = 5\n");
+        }
+
+        Cout << "========= Upsert exist row with default values in columns 2, 3 =========\n";
+        {
+            TVector<ui32> columnIds = {1, 4, 5, 2, 3}; // key and numerical columns
+            ui32 defaultFilledColumns = 2;
+            
+            TVector<TCell> cells = {
+                TCell::Make(ui64(1)),    // key = 1
+                TCell::Make(ui32(44)),
+                TCell::Make(ui64(55)),
+                TCell::Make(ui8(22)),
+                TCell::Make(ui16(33)),
+                
+                TCell::Make(ui64(333)),    // key = 333
+                TCell::Make(ui32(44)),
+                TCell::Make(ui64(55)),
+                TCell::Make(ui8(22)),
+                TCell::Make(ui16(33))
+
+            };
+
+            auto result = UpsertWithDefaultValues(runtime, sender, shard, tableId, txId, 
+                                    NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, defaultFilledColumns);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+        
+        Cout << "========= Verify results =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 44, uint64_val = 55\n"
+                "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, uint64_val = 55\n");
+        }
+
+        Cout << "========= Try replace with default values in columns 2, 3 (should fail) =========\n";
+        {
+            TVector<ui32> columnIds = {1, 4, 5, 2, 3};
+            ui32 defaultFilledColumns = 2;
+            TVector<TCell> cells = {
+                TCell::Make(ui64(1)),    // key = 1
+                TCell::Make(ui32(944)),
+                TCell::Make(ui64(955)),
+                TCell::Make(ui8(92)),
+                TCell::Make(ui16(933))
+            };
+            
+            auto request = MakeWriteRequest(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, tableId, columnIds, cells, defaultFilledColumns);
+            auto result = Write(runtime, sender, shard, std::move(request), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            
+            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        }
+
+        Cout << "========= Verify results after fail operations =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = 2, uint16_val = 3, uint32_val = 44, uint64_val = 55\n"
+                "key = 333, uint8_val = 22, uint16_val = 33, uint32_val = 44, uint64_val = 55\n");
+        }
+        
+        Cout << "========= Try upsert with default values in too much columns  (should fail) =========\n";
+        {
+            TVector<ui32> columnIds = {1, 4, 5, 2, 3};
+            ui32 defaultFilledColumns = 9;
+            TVector<TCell> cells = {
+                TCell::Make(ui64(1)),    // key = 1
+                TCell::Make(ui32(944)),
+                TCell::Make(ui64(955)),
+                TCell::Make(ui8(92)),
+                TCell::Make(ui16(933))
+            };
+            
+            auto result = UpsertWithDefaultValues(runtime, sender, shard, tableId, txId, 
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, cells, defaultFilledColumns, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT(result.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        }
+    }
+
     Y_UNIT_TEST(IncrementImmediate) {
         
         auto [runtime, server, sender] = TestCreateServer();
@@ -95,7 +215,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
         Cout << "========= Insert initial data =========\n";
         {
-            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7,8,9,10,11}; // all columns
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}; // all columns
             TVector<TCell> cells = {
                 TCell::Make(ui64(1)),     // key = 1
                 TCell::Make(ui8(10)),     // uint8_val

@@ -32,10 +32,10 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
     Y_UNIT_TEST(DescribeConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
 
         auto describe = [&]() {
-            return setup.DescribeConsumer(TString{TEST_TOPIC}, TString{TEST_CONSUMER});
+            return setup.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER);
         };
 
         auto write = [&](size_t seqNo) {
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetLastReadOffset());
         }
 
-        UNIT_ASSERT(setup.Commit(TString{TEST_TOPIC}, TEST_CONSUMER, 0, 1).IsSuccess());
+        UNIT_ASSERT(setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1).IsSuccess());
 
         // Check describe for topic whis contains messages, has commited offset but hasn`t read (restart tablet for example)
         {

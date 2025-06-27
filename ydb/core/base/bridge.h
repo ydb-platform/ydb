@@ -1,5 +1,6 @@
 #pragma once
 
+#include "appdata_fwd.h"
 #include "defs.h"
 #include "blobstorage_common.h"
 
@@ -45,5 +46,7 @@ namespace NKikimr {
             }
         }
     };
+
+    bool IsBridgeMode(const TActorContext &ctx);
 
 } // NKikimr

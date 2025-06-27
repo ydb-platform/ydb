@@ -138,5 +138,13 @@ int PrintProtoJsonBase64(const google::protobuf::Message& msg) {
     return EXIT_SUCCESS;
 }
 
+FHANDLE GetStdinFileno() {
+#if defined(_win32_)
+    return GetStdHandle(STD_INPUT_HANDLE);
+#elif defined(_unix_)
+    return STDIN_FILENO;
+#endif
+}
+
 }
 }

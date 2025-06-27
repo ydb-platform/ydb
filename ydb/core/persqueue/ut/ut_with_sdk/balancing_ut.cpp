@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
     void Simple(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 10);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
 
         auto readSession0 = CreateTestReadSession({ .Name="Session-0", .Setup=setup, .Sdk = sdk });
         {
@@ -116,8 +116,8 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
     void ManyTopics(SdkVersion sdk) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 10);
-        setup.CreateTopic("other-test-topic", std::string{TEST_CONSUMER}, 10);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 10);
+        setup.CreateTopic("other-test-topic", TEST_CONSUMER, 10);
 
         TTopicClient client = setup.MakeClient();
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
         {
             auto p = readSession0->GetPartitionsA();
-            UNIT_ASSERT_VALUES_EQUAL(10, p[std::string{TEST_TOPIC}].size());
+            UNIT_ASSERT_VALUES_EQUAL(10, p[TString{TEST_TOPIC}].size());
             UNIT_ASSERT_VALUES_EQUAL(10, p["other-test-topic"].size());
         }
 
@@ -135,12 +135,12 @@ Y_UNIT_TEST_SUITE(Balancing) {
 
         {
             auto p = readSession0->GetPartitionsA();
-            UNIT_ASSERT_VALUES_EQUAL(5, p[std::string{TEST_TOPIC}].size());
+            UNIT_ASSERT_VALUES_EQUAL(5, p[TString{TEST_TOPIC}].size());
             UNIT_ASSERT_VALUES_EQUAL(5, p["other-test-topic"].size());
         }
         {
             auto p = readSession1->GetPartitionsA();
-            UNIT_ASSERT_VALUES_EQUAL(5, p[std::string{TEST_TOPIC}].size());
+            UNIT_ASSERT_VALUES_EQUAL(5, p[TString{TEST_TOPIC}].size());
             UNIT_ASSERT_VALUES_EQUAL(5, p["other-test-topic"].size());
         }
 

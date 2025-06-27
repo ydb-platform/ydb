@@ -1,30 +1,25 @@
 # -*- coding: utf-8 -*-
 import os
 import yatest
+import pytest
 
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 
 
-class TestYdbWorkload(object):
-    @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                erasure=Erasure.MIRROR_3_DC,
-                additional_log_configs={
-                    "NODE_BROKER": LogLevels.TRACE,
-                    "NAMESERVICE": LogLevels.TRACE,
-                },
-            )
-        )
-        cls.cluster.start()
+from ydb.tests.library.stress.fixtures import StressFixture
 
-    @classmethod
-    def teardown_class(cls):
-        cls.cluster.stop()
+
+class TestYdbWorkload(StressFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            erasure=Erasure.MIRROR_3_DC,
+            additional_log_configs={
+                "NODE_BROKER": LogLevels.TRACE,
+                "NAMESERVICE": LogLevels.TRACE,
+            },
+        )
 
     def test(self):
         cmd = [

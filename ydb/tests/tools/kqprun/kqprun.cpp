@@ -710,7 +710,7 @@ protected:
             .RequiredArgument("user-SID")
             .EmplaceTo(&ExecutionOptions.UserSIDs);
 
-        options.AddLongOption("group", "User group SIDs (should be splitted by ',') -p queries")
+        options.AddLongOption("group", "User group SIDs (should be split by ',') -p queries")
             .RequiredArgument("SIDs")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.GroupSIDs.emplace_back(TVector<NACLib::TSID>());

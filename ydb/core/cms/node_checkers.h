@@ -47,17 +47,20 @@ public:
  * Base class for simple nodes counter with some limits
  */
 class TNodesCounterBase : public INodesChecker {
+public:
+    using TNodeToPileMap = THashMap<ui32, ui32>;
+    using TNodeToPileMapPtr = std::shared_ptr<TNodeToPileMap>;
+
 protected:
+    TNodeToPileMapPtr NodeIdToPileId;
     THashMap<ui32, ENodeState> NodeToState;
-    ui32 LockedNodesCount;
-    ui32 DownNodesCount;
+    THashMap<ui32, ui32> LockedNodesCount; // {key: PileId; value: LockedNodesCount}
+    THashMap<ui32, ui32> DownNodesCount; // {key: PileId; value: DownNodesCount}
 
 public:
-    TNodesCounterBase()
-        : LockedNodesCount(0)
-        , DownNodesCount(0)
-    {
-    }
+    explicit TNodesCounterBase(TNodeToPileMapPtr nodeIdToPileId)
+        : NodeIdToPileId(nodeIdToPileId) 
+    {}
 
     void AddNode(ui32 nodeId) override;
     void UpdateNode(ui32 nodeId, NKikimrCms::EState) override;
@@ -90,8 +93,9 @@ protected:
     };
 
 public:
-    explicit TNodesLimitsCounterBase(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
-        : DisabledNodesLimit(disabledNodesLimit)
+    explicit TNodesLimitsCounterBase(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit, TNodeToPileMapPtr nodeIdToPileId, )
+        : TNodesCounterBase(nodeIdToPileId)
+        , DisabledNodesLimit(disabledNodesLimit)
         , DisabledNodesRatioLimit(disabledNodesRatioLimit)
     {
     }
@@ -118,8 +122,8 @@ protected:
     }
 
 public:
-    explicit TTenantLimitsCounter(const TString& tenantName, ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
-        : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit)
+    explicit TTenantLimitsCounter(const TString& tenantName, ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit, TNodeToPileMapPtr nodeIdToPileId)
+        : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit, nodeIdToPileId)
         , TenantName(tenantName)
     {
     }
@@ -127,8 +131,8 @@ public:
 
 class TClusterLimitsCounter : public TNodesLimitsCounterBase {
 public:
-    explicit TClusterLimitsCounter(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
-        : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit)
+    explicit TClusterLimitsCounter(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit, TNodeToPileMapPtr nodeIdToPileId)
+        : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit, nodeIdToPileId)
     {
     }
 };
@@ -144,8 +148,9 @@ private:
     const NKikimrConfig::TBootstrap::ETabletType TabletType;
 
 public:
-    explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType)
-        : TabletType(tabletType)
+    explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType, TNodeToPileMapPtr nodeIdToPileId)
+        : TNodesCounterBase(nodeIdToPileId)
+        , TabletType(tabletType)
     {
     }
 

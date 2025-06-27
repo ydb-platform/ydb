@@ -361,7 +361,7 @@ void TClusterInfo::AddNode(const TEvInterconnect::TNodeInfo &info, const TActorC
     node->IcPort = info.Port;
     node->Location = info.Location;
     node->State = NKikimrCms::UNKNOWN;
-    node->PileId = NodeIdToPileId[info.NodeId];
+    node->PileId = NodeIdToPileId->at(info.NodeId);
 
     if (ctx) {
         const auto maxStaticNodeId = AppData(*ctx)->DynamicNameserviceConfig->MaxStaticNodeId;
@@ -944,7 +944,7 @@ void TClusterInfo::GenerateTenantNodesCheckers() {
     for (auto &[nodeId, nodeInfo] : Nodes) {
         if (nodeInfo->Tenant) {
             if (!TenantNodesChecker.contains(nodeInfo->Tenant))
-                TenantNodesChecker[nodeInfo->Tenant] = TSimpleSharedPtr<TNodesLimitsCounterBase>(new TTenantLimitsCounter(nodeInfo->Tenant, 0, 0));
+                TenantNodesChecker[nodeInfo->Tenant] = TSimpleSharedPtr<TNodesLimitsCounterBase>(new TTenantLimitsCounter(nodeInfo->Tenant, 0, 0, NodeIdToPileId));
 
             nodeInfo->AddNodeGroup(TenantNodesChecker[nodeInfo->Tenant]);
         }
@@ -953,7 +953,7 @@ void TClusterInfo::GenerateTenantNodesCheckers() {
 
 void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     for (auto tablet : BootstrapConfig.GetTablet()) {
-        SysNodesCheckers[tablet.GetType()] = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
+        SysNodesCheckers[tablet.GetType()] = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType(), NodeIdToPileId));
 
         for (auto nodeId : tablet.GetNode()) {
             if (!HasNode(nodeId)) {

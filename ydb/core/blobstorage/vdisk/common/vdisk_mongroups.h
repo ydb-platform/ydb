@@ -114,6 +114,19 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TFreshDataSpaceGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TFreshDataSpaceGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TFreshDataSpaceGroup)
+            {
+                COUNTER_INIT(DskSpaceFreshSize, false);
+            }
+
+            COUNTER_DEF(DskSpaceFreshSize);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TSkeletonOverloadGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TSkeletonOverloadGroup : public TBase {
@@ -230,6 +243,24 @@ public:                                                                         
             COUNTER_DEF(DefragCostNs);
             COUNTER_DEF(CompactionCostNs);
             COUNTER_DEF(ScrubCostNs);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TUserBlobSpaceGroup
+        // Metrics for user blob space consumption reporting
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TUserBlobSpaceGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TUserBlobSpaceGroup)
+            {
+                COUNTER_INIT(UserBlobBytesStored, false);
+                COUNTER_INIT(UserBlobBytesAfterCompaction, false);
+                COUNTER_INIT(UserBlobBytesCanBeFreed, false);
+            }
+
+            COUNTER_DEF(UserBlobBytesStored);
+            COUNTER_DEF(UserBlobBytesAfterCompaction);
+            COUNTER_DEF(UserBlobBytesCanBeFreed);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

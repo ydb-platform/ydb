@@ -302,14 +302,17 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
         auto narrowInputType = RowType;
         auto narrowOutputType = RowTransformedType;
+
         TType* inputType = IsWide ? static_cast<TType *>(WideRowType) : RowType;
         transform.SetInputType(SerializeNode(inputType, TypeEnv));
+
         TType* outputType = IsWide ? static_cast<TType *>(WideRowTransformedType) : RowTransformedType;
-        transform.SetInputType(SerializeNode(inputType, TypeEnv));
         transform.SetOutputType(SerializeNode(outputType, TypeEnv));
+
         NDqProto::TDqInputTransformLookupSettings settings;
         settings.SetLeftLabel("e");
         settings.SetRightLabel("u");
+
         auto& rightSource = *settings.MutableRightSource();
         rightSource.SetProviderName("MockLookup");
         auto rightType = TStructTypeBuilder(TypeEnv)

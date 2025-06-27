@@ -156,11 +156,24 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     return TListMetricsResponse(std::move(result));
 }
 
-TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response) {
+TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, ui64 downsampledPointsCount) {
+    static std::set<TString> whitelistIssues = {
+        "Not able to apply function count on vector with size 0"
+    };
+
     TGetPointsCountResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << response.Issues.ToOneLineString());
+        TString issues = response.Issues.ToOneLineString();
+
+        for (const auto& whitelistIssue : whitelistIssues) {
+            if (issues.find(whitelistIssue) != issues.npos) {
+                result.PointsCount = 0;
+                return TGetPointsCountResponse(std::move(result));
+            }
+        }
+
+        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << issues);
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
@@ -178,7 +191,7 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
         return TGetPointsCountResponse("Invalid points count result from monitoring api");
     }
 
-    result.PointsCount = json["scalar"].GetInteger();
+    result.PointsCount = json["scalar"].GetInteger() + downsampledPointsCount;
 
     return TGetPointsCountResponse(std::move(result));
 }
@@ -187,7 +200,7 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     TGetDataResult result;
 
     if (!status.Ok()) {
-        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED) {
+        if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE) {
             return TGetDataResponse();
         }
         return TGetDataResponse(TStringBuilder{} << "Error while sending data request to monitoring api: " << status.Msg);
@@ -276,24 +289,41 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const override final {
-        auto fullSelectors = AddRequiredLabels(selectors);
-        TString program = TStringBuilder() << "count(" << BuildSelectorsProgram(fullSelectors) << ")";
-
-        auto requestUrl = BuildGetPointsCountUrl();
-        auto requestBody = BuildGetPointsCountBody(program);
-
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const override final {        
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& response) mutable {
-            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response)));
-        };
+        TInstant from = TInstant::Seconds(Settings.GetFrom());
+        TInstant to = TInstant::Seconds(Settings.GetTo());
+        TInstant sevenDaysAgo = TInstant::Now() - TDuration::Days(7); // points older then a week ago are automatically downsampled by solomon backend
 
-        DoHttpRequest(
-            std::move(cb),
-            std::move(requestUrl),
-            std::move(requestBody)
-        );
+        TInstant downsamplingFrom = from;
+        TInstant downsamplingTo = Settings.GetDownsampling().GetDisabled() ? std::max(std::min(sevenDaysAgo, to), from) : to;
+
+        ui64 downsampledPointsCount = floor((downsamplingTo - downsamplingFrom).Seconds() * 1000.0 / Settings.GetDownsampling().GetGridMs()) + 1;
+
+        if (downsamplingTo < to) {
+            auto fullSelectors = AddRequiredLabels(selectors);
+            TString program = TStringBuilder() << "count(" << BuildSelectorsProgram(fullSelectors) << ")";
+            
+            auto requestUrl = BuildGetPointsCountUrl();
+            auto requestBody = BuildGetPointsCountBody(program, downsamplingTo, to);
+            
+            auto cb = [resultPromise, downsampledPointsCount](NYql::IHTTPGateway::TResult&& response) mutable {
+                resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), downsampledPointsCount));
+            };
+    
+            DoHttpRequest(
+                std::move(cb),
+                std::move(requestUrl),
+                std::move(requestBody)
+            );
+
+        } else {
+            TGetPointsCountResult result;
+            result.PointsCount = downsampledPointsCount;
+
+            resultPromise.SetValue(TGetPointsCountResponse(std::move(result)));
+        }
 
         return resultPromise.GetFuture();
     }
@@ -465,12 +495,12 @@ private:
         return builder.Build();
     }
 
-    TString BuildGetPointsCountBody(const TString& program) const {
+    TString BuildGetPointsCountBody(const TString& program, TInstant from, TInstant to) const {
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;
         w.BeginObject()
-            .UnsafeWriteKey("from").WriteString(TInstant::Seconds(Settings.GetFrom()).ToString())
-            .UnsafeWriteKey("to").WriteString(TInstant::Seconds(Settings.GetTo()).ToString())
+            .UnsafeWriteKey("from").WriteString(from.ToString())
+            .UnsafeWriteKey("to").WriteString(to.ToString())
             .UnsafeWriteKey("program").WriteString(program)
             .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
             .UnsafeWriteKey("downsampling")

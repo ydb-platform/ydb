@@ -7,213 +7,204 @@ namespace NAsyncTest {
     Y_UNIT_TEST_SUITE(Sleep) {
 
         Y_UNIT_TEST(ZeroDelay) {
-            bool finished = false;
-            bool finishedNormally = false;
-            int resumed = 0;
-            int scheduled = 0;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto observer = runtime.AddObserver([&](auto& ev) {
                 if (ev->GetTypeRewrite() == TEvents::TSystem::ResumeRunnable) {
-                    ++resumed;
+                    sequence.push_back("resume received");
                 }
             });
+
             runtime.SetScheduledEventFilter([&](auto&, auto& ev, auto, auto&) {
                 if (ev->GetTypeRewrite() == TEvents::TSystem::ResumeRunnable) {
-                    ++scheduled;
+                    sequence.push_back("resume scheduled");
                 }
                 return false;
             });
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 co_await AsyncSleepFor(TDuration::Zero());
+                sequence.push_back("returned from 1");
                 co_await AsyncSleepUntil(TMonotonic::Zero());
+                sequence.push_back("returned from 2");
                 co_await AsyncSleepUntil(TInstant::Zero());
+                sequence.push_back("returned from 3");
                 co_await AsyncYield();
-
-                finishedNormally = true;
+                sequence.push_back("returned from 4");
             });
 
-            // We expect only bootstrap to be handled, all yields must be enqueued
-            UNIT_ASSERT(!finished);
-            UNIT_ASSERT_VALUES_EQUAL(scheduled, 0);
-            UNIT_ASSERT_VALUES_EQUAL(resumed, 0);
+            // We expect only bootstrap to be handled, all sleeps must be enqueued
+            ASYNC_ASSERT_SEQUENCE(sequence, "started");
 
             runtime.DispatchEvents();
-
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(finishedNormally);
-
-            UNIT_ASSERT_VALUES_EQUAL(scheduled, 0);
-            UNIT_ASSERT_VALUES_EQUAL(resumed, 4);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "resume received", "returned from 1",
+                "resume received", "returned from 2",
+                "resume received", "returned from 3",
+                "resume received", "returned from 4",
+                "finished");
         }
 
         Y_UNIT_TEST(InfiniteDelay) {
-            bool finished = false;
-            bool finishedNormally = false;
-            int scheduled = 0;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             runtime.SetScheduledEventFilter([&](auto&, auto& ev, auto, auto&) {
                 if (ev->GetTypeRewrite() == TEvents::TSystem::ResumeRunnable) {
-                    ++scheduled;
+                    sequence.push_back("resume scheduled");
                 }
                 return false;
             });
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 co_await AsyncSleepFor(TDuration::Max());
-
-                finishedNormally = true;
+                sequence.push_back("returned from infinite sleep");
             });
 
             // We must wait indefinitely without scheduling anything
-            UNIT_ASSERT(!finished);
-            UNIT_ASSERT_VALUES_EQUAL(scheduled, 0);
+            ASYNC_ASSERT_SEQUENCE(sequence, "started");
 
-            // Sanity check, no wakeup later
+            // Sanity check, no wakeups later
             runtime.SimulateSleep(TDuration::MilliSeconds(10));
-            UNIT_ASSERT(!finished);
-            UNIT_ASSERT_VALUES_EQUAL(scheduled, 0);
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
 
             // This delay must be cancellable
             actor.Poison();
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(!finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence, "finished");
             UNIT_ASSERT(state.Destroyed);
         }
 
         Y_UNIT_TEST(PassAwayBeforeYield) {
-            bool finished = false;
-            bool finishedNormally = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto* self) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 self->PassAway();
 
                 co_await AsyncYield();
-
-                finishedNormally = true;
+                sequence.push_back("returned from yield");
             });
 
             // We expect actor to immediately stop
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(!finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence, "started", "finished");
             UNIT_ASSERT(state.Destroyed);
         }
 
         Y_UNIT_TEST(PassAwayAfterYield) {
-            bool finished = false;
-            bool finishedNormally = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 co_await AsyncYield();
-
-                finishedNormally = true;
+                sequence.push_back("returned from yield");
             });
 
-            UNIT_ASSERT(!finished);
+            ASYNC_ASSERT_SEQUENCE(sequence, "started");
 
             actor.Poison();
 
             // We expect yield to immediately cancel
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(!finishedNormally);
-            UNIT_ASSERT(state.Destroyed);
+            ASYNC_ASSERT_SEQUENCE(sequence, "finished");
         }
 
         Y_UNIT_TEST(Delay) {
-            bool finished = false;
-            bool finishedNormally = false;
-            int scheduled = 0;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
+            auto observer = runtime.AddObserver([&](auto& ev) {
+                if (ev->GetTypeRewrite() == TEvents::TSystem::ResumeRunnable) {
+                    sequence.push_back("resume received");
+                }
+            });
+
             runtime.SetScheduledEventFilter([&](auto&, auto& ev, auto, auto&) {
                 if (ev->GetTypeRewrite() == TEvents::TSystem::ResumeRunnable) {
-                    ++scheduled;
+                    sequence.push_back("resume scheduled");
                 }
                 return false;
             });
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 co_await AsyncSleepFor(TDuration::MilliSeconds(1));
-
-                finishedNormally = true;
+                sequence.push_back("returned from sleep");
             });
 
-            UNIT_ASSERT(!finished);
-            UNIT_ASSERT_VALUES_EQUAL(scheduled, 1);
+            ASYNC_ASSERT_SEQUENCE(sequence, "started", "resume scheduled");
 
-            runtime.WaitFor("sleep to finish", [&]{ return finished; }, TDuration::Seconds(1), /* quiet */ true);
+            runtime.WaitFor("sleep to finish", [&]{ return !sequence.empty(); }, TDuration::Seconds(1), /* quiet */ true);
 
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence, "resume received", "returned from sleep", "finished");
         }
 
         Y_UNIT_TEST(DelayCancelWhileScheduled) {
-            bool finished = false;
-            bool finishedNormally = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 co_await AsyncSleepFor(TDuration::MilliSeconds(2));
-
-                finishedNormally = true;
+                sequence.push_back("returned from sleep");
             });
-            UNIT_ASSERT(!finished);
+            ASYNC_ASSERT_SEQUENCE(sequence, "started");
 
             runtime.SimulateSleep(TDuration::MilliSeconds(1));
-            UNIT_ASSERT(!finished);
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
 
             actor.Poison();
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(!finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence, "finished");
             UNIT_ASSERT(state.Destroyed);
 
             runtime.SimulateSleep(TDuration::MilliSeconds(10));
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
         }
 
         Y_UNIT_TEST(DelayDestroyedBeforeDelivery) {
-            bool finished = false;
-            bool finishedNormally = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 co_await AsyncSleepFor(TDuration::MilliSeconds(2));
-
-                finishedNormally = true;
+                sequence.push_back("returned from sleep");
             });
 
-            UNIT_ASSERT(!finished);
+            ASYNC_ASSERT_SEQUENCE(sequence, "started");
 
             TEvents::TEvResumeRunnable::TPtr captured;
             auto observer = runtime.AddObserver<TEvents::TEvResumeRunnable>([&](auto& ev) {
                 captured = std::move(ev);
+                sequence.push_back("resume captured");
             });
 
-            runtime.WaitFor("captured event", [&]{ return !!captured; }, TDuration::Seconds(1), /* quiet */ true);
+            runtime.WaitFor("captured event", [&]{ return !sequence.empty(); }, TDuration::Seconds(1), /* quiet */ true);
+            ASYNC_ASSERT_SEQUENCE(sequence, "resume captured");
 
             // Destroy the event (as if scheduler is shutting down)
             captured.Reset();
@@ -221,8 +212,7 @@ namespace NAsyncTest {
             // Destroy mailboxes (as if actor system is shutting down)
             runtime.CleanupNode();
 
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(!finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence, "finished");
             UNIT_ASSERT(state.Destroyed);
         }
 

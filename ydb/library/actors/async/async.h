@@ -353,7 +353,7 @@ namespace NActors {
         class TAwaitCancelCleanup;
 
         /**
-         * Handles propagation of AwaitCancel to at most one awaiter at a time
+         * Handles propagation of await_cancel to at most one awaiter at a time
          */
         class TAwaitCancelSource {
             friend TAwaitCancelCleanup;
@@ -546,7 +546,7 @@ namespace NActors {
         };
 
         /**
-         * Transparently handles optional AwaitCancel subscriptions for single-threaded awaiters
+         * Transparently handles optional await_cancel subscriptions for single-threaded awaiters
          */
         template<class TAwaiter>
         class TAwaiterProxy {
@@ -577,8 +577,8 @@ namespace NActors {
                     }
 
                     if constexpr (HasAwaitCancel<TAwaiter>) {
-                        // Awaiter has AwaitCancel, which means it clearly
-                        // supports cancellation, but not AwaitCancelled, so
+                        // Awaiter has await_cancel, which means it clearly
+                        // supports cancellation, but not await_cancelled, so
                         // it won't be able to unwind after suspending. Avoid
                         // starting potentially expensive and uncancellable
                         // async operations.

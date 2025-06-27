@@ -9,421 +9,435 @@ namespace NAsyncTest {
     Y_UNIT_TEST_SUITE(TaskGroup) {
 
         Y_UNIT_TEST(ImmediateReturn) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool finishedInnerNormally = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     UNIT_ASSERT_VALUES_EQUAL(g.Ready(), false);
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 0u);
-                    finishedInnerNormally = true;
+                    sequence.push_back("group returning");
                     co_return 42;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(finishedInnerNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
         Y_UNIT_TEST(TaskDiscardedBeforeStart) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool finishedInnerNormally = false;
-            bool innerTaskStarted = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     size_t index = g.Add([&]() -> async<void> {
-                        innerTaskStarted = false;
+                        sequence.push_back("task started");
                         co_return;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(index, 0u);
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 1u);
-                    finishedInnerNormally = true;
+                    sequence.push_back("group returning");
                     co_return 42;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(!innerTaskStarted);
-            UNIT_ASSERT(finishedInnerNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            // Note: task doesn't even start
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
         Y_UNIT_TEST(TaskStartNotRecursive) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool finishedInnerNormally = false;
-            bool innerTaskStarted = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup<int>([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     size_t index = g.Add([&]() -> async<int> {
-                        innerTaskStarted = true;
+                        sequence.push_back("task started");
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(index, 0u);
                     UNIT_ASSERT_VALUES_EQUAL(g.Ready(), false);
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 1u);
-                    UNIT_ASSERT_VALUES_EQUAL(innerTaskStarted, false);
+                    sequence.push_back("group waiting");
                     int value = co_await g.Next();
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 0u);
-                    finishedInnerNormally = true;
+                    sequence.push_back("group returning");
                     co_return value;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(finishedInnerNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            // Note: task starts after group starts waiting
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group waiting", "task started",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
         Y_UNIT_TEST(TaskImmediateReturnBeforeNextTask) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool finishedInnerNormally = false;
-            bool innerTaskStarted = false;
-            bool secondTaskStarted = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup<int>([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     size_t index = g.Add([&]() -> async<int> {
-                        innerTaskStarted = true;
+                        sequence.push_back("task 1 started");
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(index, 0u);
                     size_t index2 = g.Add([&]() -> async<int> {
-                        secondTaskStarted = true;
+                        sequence.push_back("task 2 started");
                         co_return 43;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(index2, 1u);
                     UNIT_ASSERT_VALUES_EQUAL(g.Ready(), false);
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 2u);
-                    UNIT_ASSERT_VALUES_EQUAL(innerTaskStarted, false);
-                    UNIT_ASSERT_VALUES_EQUAL(secondTaskStarted, false);
+                    sequence.push_back("group waiting");
                     int value = co_await g.Next();
-                    UNIT_ASSERT_VALUES_EQUAL(secondTaskStarted, false);
+                    sequence.push_back("group resumed");
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 1u);
-                    finishedInnerNormally = true;
+                    sequence.push_back("group returning");
                     co_return value;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT_VALUES_EQUAL(secondTaskStarted, false);
-            UNIT_ASSERT(finishedInnerNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group waiting", "task 1 started", "group resumed",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
         Y_UNIT_TEST(TaskThrowsImmediately) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool finishedInnerNormally = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup<int>([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     size_t index = g.Add([&]() -> async<int> {
                         // Note: not a coroutine and throws immediately
+                        sequence.push_back("task callback throwing");
                         throw TTestException() << "throws immediately";
                     });
                     UNIT_ASSERT_VALUES_EQUAL(index, 0u);
                     UNIT_ASSERT_VALUES_EQUAL(g.Ready(), false);
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 1u);
+                    sequence.push_back("group waiting");
                     UNIT_ASSERT_EXCEPTION_CONTAINS(co_await g.Next(), TTestException, "throws immediately");
-                    finishedInnerNormally = true;
+                    sequence.push_back("group returning");
                     co_return 42;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(finishedInnerNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group waiting", "task callback throwing",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
         Y_UNIT_TEST(TaskThrowsFromCoroutine) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool finishedInnerNormally = false;
+            TVector<TString> sequence;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup<int>([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     size_t index = g.Add([&]() -> async<int> {
-                        // Note: not a coroutine and throws immediately
+                        sequence.push_back("task throwing");
                         throw TTestException() << "throws immediately";
                         co_return 42;
                     });
                     UNIT_ASSERT_VALUES_EQUAL(index, 0u);
                     UNIT_ASSERT_VALUES_EQUAL(g.Ready(), false);
                     UNIT_ASSERT_VALUES_EQUAL(g.Running(), 1u);
+                    sequence.push_back("group waiting");
                     UNIT_ASSERT_EXCEPTION_CONTAINS(co_await g.Next(), TTestException, "throws immediately");
-                    finishedInnerNormally = true;
+                    sequence.push_back("group returning");
                     co_return 42;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(finishedInnerNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group waiting", "task throwing",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
         Y_UNIT_TEST(TaskAwaitedBeforeReturn) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool groupFinishedNormally = false;
-            bool taskFinishedNormally = false;
-            std::coroutine_handle<> resume, cancel;
+            TVector<TString> sequence;
+            std::coroutine_handle<> tresume, tcancel;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     g.Add([&]() -> async<void> {
-                        co_await TSuspendAwaiter{ &resume, &cancel };
-                        taskFinishedNormally = true;
+                        Y_DEFER { sequence.push_back("task finished"); };
+                        sequence.push_back("task suspending");
+                        co_await TSuspendAwaiter{ &tresume, &tcancel };
+                        sequence.push_back("task resumed");
                     });
-                    UNIT_ASSERT(!resume);
+                    UNIT_ASSERT(!tresume);
+                    sequence.push_back("group yielding");
                     co_await AsyncYield();
-                    UNIT_ASSERT(resume);
-                    UNIT_ASSERT(!cancel);
-                    groupFinishedNormally = true;
+                    sequence.push_back("group resumed");
+                    UNIT_ASSERT(tresume && !tcancel);
+                    sequence.push_back("group returning");
                     co_return 42;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
             // Note: AsyncYield pending on the mailbox, but task must have started
-            UNIT_ASSERT(!groupFinishedNormally);
-            UNIT_ASSERT(resume);
-            UNIT_ASSERT(!cancel);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group yielding", "task suspending");
+            UNIT_ASSERT(tresume && !tcancel);
+
             actor.Step();
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "group resumed", "group returning", "group finished");
+            UNIT_ASSERT(tcancel);
 
-            UNIT_ASSERT(resume);
-            UNIT_ASSERT(cancel);
-            UNIT_ASSERT(groupFinishedNormally);
-            UNIT_ASSERT(!taskFinishedNormally);
-            UNIT_ASSERT(!finishedNormally);
-            UNIT_ASSERT(!finished);
-
-            actor.ResumeCoroutine(resume);
-
-            UNIT_ASSERT(taskFinishedNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            actor.ResumeCoroutine(tresume);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task resumed", "task finished",
+                "returning", "finished");
         }
 
         Y_UNIT_TEST(TaskNotCancelledUntilGroupReturns) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool groupFinishedNormally = false;
-            bool taskFinishedNormally = false;
-            std::coroutine_handle<> tresume, tcancel;
+            TVector<TString> sequence;
             std::coroutine_handle<> gresume, gcancel;
+            std::coroutine_handle<> tresume, tcancel;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     g.Add([&]() -> async<void> {
+                        Y_DEFER { sequence.push_back("task finished"); };
+                        sequence.push_back("task suspending");
                         co_await TSuspendAwaiter{ &tresume, &tcancel };
-                        taskFinishedNormally = true;
+                        sequence.push_back("task resumed");
                     });
+                    sequence.push_back("group suspending");
                     co_await TSuspendAwaiter{ &gresume, &gcancel };
-                    groupFinishedNormally = true;
+                    sequence.push_back("group returning");
                     co_return 42;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(tresume);
-            UNIT_ASSERT(!tcancel);
-            UNIT_ASSERT(gresume);
-            UNIT_ASSERT(!gcancel);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group suspending", "task suspending");
+            UNIT_ASSERT(gresume && !gcancel);
+            UNIT_ASSERT(tresume && !tcancel);
 
             actor.Poison();
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
             UNIT_ASSERT(gcancel);
             UNIT_ASSERT(!tcancel);
 
             actor.ResumeCoroutine(gresume);
-            UNIT_ASSERT(groupFinishedNormally);
-            UNIT_ASSERT(!finished);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "group returning", "group finished");
+            UNIT_ASSERT(tcancel);
 
             actor.ResumeCoroutine(tresume);
-            UNIT_ASSERT(taskFinishedNormally);
-            UNIT_ASSERT(finishedNormally);
-            UNIT_ASSERT(finished);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task resumed", "task finished",
+                "returning", "finished");
             UNIT_ASSERT(state.Destroyed);
         }
 
         Y_UNIT_TEST(TaskCancelAfterGroupCancel) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool groupFinished = false;
-            bool groupFinishedNormally = false;
-            bool taskFinished = false;
-            bool taskFinishedNormally = false;
-            std::coroutine_handle<> tresume, tcancel;
+            TVector<TString> sequence;
             std::coroutine_handle<> gresume, gcancel;
+            std::coroutine_handle<> tresume, tcancel;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup([&](auto& g) -> async<int> {
-                    Y_DEFER { groupFinished = true; };
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     g.Add([&]() -> async<void> {
-                        Y_DEFER { taskFinished = true; };
+                        Y_DEFER { sequence.push_back("task finished"); };
+                        sequence.push_back("task suspending");
                         co_await TSuspendAwaiter{ &tresume, &tcancel };
-                        taskFinishedNormally = true;
+                        sequence.push_back("task resumed");
                     });
+                    sequence.push_back("group suspending");
                     co_await TSuspendAwaiter{ &gresume, &gcancel };
-                    groupFinishedNormally = true;
+                    sequence.push_back("group returning");
                     co_return 42;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(tresume);
-            UNIT_ASSERT(!tcancel);
-            UNIT_ASSERT(gresume);
-            UNIT_ASSERT(!gcancel);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group suspending", "task suspending");
+            UNIT_ASSERT(gresume && !gcancel);
+            UNIT_ASSERT(tresume && !tcancel);
 
             actor.Poison();
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
             UNIT_ASSERT(gcancel);
             UNIT_ASSERT(!tcancel);
 
             actor.ResumeCoroutine(gcancel);
-            UNIT_ASSERT(groupFinished);
-            UNIT_ASSERT(!groupFinishedNormally);
-            UNIT_ASSERT(!finished);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "group finished");
+            UNIT_ASSERT(tcancel);
 
             actor.ResumeCoroutine(tcancel);
-            UNIT_ASSERT(taskFinished);
-            UNIT_ASSERT(!taskFinishedNormally);
-            UNIT_ASSERT(finished);
-            UNIT_ASSERT(!finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task finished", "finished");
             UNIT_ASSERT(state.Destroyed);
         }
 
         Y_UNIT_TEST(TaskAwaitCancelThenRetry) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool groupFinished = false;
-            bool groupFinishedNormally = false;
-            bool taskFinished = false;
-            bool taskFinishedNormally = false;
-            int groupValue = 0;
-            int groupState = 0;
+            TVector<TString> sequence;
             std::coroutine_handle<> tresume, tcancel;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 int value = co_await WithTaskGroup<int>([&](auto& g) -> async<int> {
-                    Y_DEFER { groupFinished = true; };
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     g.Add([&]() -> async<int> {
-                        Y_DEFER { taskFinished = true; };
+                        Y_DEFER { sequence.push_back("task finished"); };
+                        sequence.push_back("task suspending");
                         co_await TSuspendAwaiter{ &tresume, &tcancel };
-                        taskFinishedNormally = true;
+                        sequence.push_back("task resumed");
                         co_return 42;
                     });
-                    groupState = 1;
-                    try {
-                        co_await WithTimeout(TDuration::MilliSeconds(1), [&]() -> async<void> {
-                            groupValue = co_await g.Next();
-                        });
-                    } catch (const TAsyncTimeout&) {}
-                    groupState = 2;
-                    int value = co_await WithTimeout(TDuration::MilliSeconds(10), [&]() -> async<int> {
-                        groupValue = co_await g.Next();
-                        co_return groupValue;
-                    });
-                    groupState = 3;
-                    groupFinishedNormally = true;
-                    co_return value;
+                    auto callNext = [&]() -> async<int> {
+                        co_return co_await g.Next();
+                    };
+                    sequence.push_back("group g.Next() with timeout 1ms");
+                    UNIT_ASSERT_EXCEPTION(co_await WithTimeout(TDuration::MilliSeconds(1), callNext), TAsyncTimeout);
+                    sequence.push_back("group g.Next() with timeout 10ms");
+                    int groupValue = co_await WithTimeout(TDuration::MilliSeconds(10), callNext);
+                    sequence.push_back("group returning");
+                    co_return groupValue;
                 });
 
                 UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(tresume);
-            UNIT_ASSERT(!tcancel);
-            UNIT_ASSERT_VALUES_EQUAL(groupState, 1);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started",
+                "group g.Next() with timeout 1ms",
+                "task suspending");
+            UNIT_ASSERT(tresume && !tcancel);
 
             runtime.SimulateSleep(TDuration::MilliSeconds(2));
-            UNIT_ASSERT_VALUES_EQUAL(groupState, 2);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "group g.Next() with timeout 10ms");
 
             actor.ResumeCoroutine(tresume);
-            UNIT_ASSERT(taskFinishedNormally);
-            UNIT_ASSERT(groupFinishedNormally);
-            UNIT_ASSERT(finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task resumed", "task finished",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
         /**
@@ -432,63 +446,68 @@ namespace NAsyncTest {
          * It validates we can actually step one event at a time with actor.Step()
          */
         Y_UNIT_TEST(TestSingleStepTesting) {
-            bool finished = false;
-            bool finishedNormally = false;
-            bool groupFinished = false;
-            bool groupFinishedNormally = false;
-            bool startedTask1 = false;
-            bool startedTask2 = false;
-            int finishedTasks = 0;
+            TVector<TString> sequence;
             std::coroutine_handle<> resume1, cancel1;
             std::coroutine_handle<> resume2, cancel2;
             TAsyncTestActor::TState state;
             TAsyncTestActorRuntime runtime;
 
             auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
-                Y_DEFER { finished = true; };
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
 
                 co_await WithTaskGroup([&](auto& g) -> async<void> {
-                    Y_DEFER { groupFinished = true; };
+                    sequence.push_back("group started");
+                    Y_DEFER { sequence.push_back("group finished"); };
                     g.Add([&]() -> async<void> {
-                        startedTask1 = true;
+                        sequence.push_back("task 1 started");
                         co_await AsyncYield();
+                        sequence.push_back("task 1 suspending");
                         co_await TSuspendAwaiter{ &resume1, &cancel1 };
+                        sequence.push_back("task 1 resumed");
                     });
                     g.Add([&]() -> async<void> {
-                        startedTask2 = true;
+                        sequence.push_back("task 2 started");
                         co_await AsyncYield();
+                        sequence.push_back("task 2 suspending");
                         co_await TSuspendAwaiter{ &resume2, &cancel2 };
+                        sequence.push_back("task 2 resumed");
                     });
                     while (g) {
+                        sequence.push_back("group waiting");
                         co_await g.Next();
-                        finishedTasks++;
+                        sequence.push_back("group resumed");
                     }
-                    groupFinishedNormally = true;
+                    sequence.push_back("group returning");
                 });
 
-                finishedNormally = true;
+                sequence.push_back("returning");
             });
 
-            UNIT_ASSERT(startedTask1);
-            UNIT_ASSERT(startedTask2);
-            UNIT_ASSERT(!resume1);
-            UNIT_ASSERT(!resume2);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "started", "group started", "group waiting",
+                "task 1 started", "task 2 started");
+            UNIT_ASSERT(!resume1 && !resume2);
 
             actor.Step();
-            UNIT_ASSERT(resume1);
-            UNIT_ASSERT(!resume2);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task 1 suspending");
+            UNIT_ASSERT(resume1 && !cancel1);
 
             actor.Step();
-            UNIT_ASSERT(resume2);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task 2 suspending");
+            UNIT_ASSERT(resume2 && !cancel2);
 
             actor.ResumeCoroutine(resume1);
-            UNIT_ASSERT_VALUES_EQUAL(finishedTasks, 1);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task 1 resumed", "group resumed", "group waiting");
 
             actor.ResumeCoroutine(resume2);
-            UNIT_ASSERT_VALUES_EQUAL(finishedTasks, 2);
-
-            UNIT_ASSERT(groupFinishedNormally);
-            UNIT_ASSERT(finishedNormally);
+            ASYNC_ASSERT_SEQUENCE(sequence,
+                "task 2 resumed", "group resumed",
+                "group returning", "group finished",
+                "returning", "finished");
         }
 
     } // Y_UNIT_TEST_SUITE(TaskGroup)

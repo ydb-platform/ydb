@@ -86,9 +86,10 @@ protected:
                 continue;
             }
             PortionsInfo->AddPortion(i);
-            addPortionsByLevels[i->GetMeta().GetCompactionLevel()].emplace_back(i);
             if (i->GetCompactionLevel() && i->GetCompactionLevel() >= Levels.size()) {
                 problemPortions.emplace_back(i);
+            } else {
+                addPortionsByLevels[i->GetMeta().GetCompactionLevel()].emplace_back(i);
             }
         }
         for (ui32 i = 0; i < Levels.size(); ++i) {

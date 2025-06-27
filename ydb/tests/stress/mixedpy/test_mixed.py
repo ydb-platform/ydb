@@ -69,7 +69,7 @@ class TestYdbWorkload(StressFixture):
 
     @pytest.mark.parametrize('store_type', ['row', 'column'])
     def test(self, store_type):
-        duration = get_external_param('duration', '120')
+        duration = str(self.duration/2)
         self.endpoint = get_external_param('endpoint', 'grpc://localhost:%d' % self.cluster.nodes[1].grpc_port)
         self.database = get_external_param('database', '/Root')
         yatest.common.execute(

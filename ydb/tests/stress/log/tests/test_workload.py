@@ -37,13 +37,13 @@ class TestYdbLogWorkload(StressFixture):
             # import command
             self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator'], path=store_type) + self.get_insert_command_params() + ['--rows', '100000'],
             # bulk upsert workload
-            self.get_command_prefix(subcmds=['run', 'bulk_upsert'], path=store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'bulk_upsert'], path=store_type) + self.get_insert_command_params() + ['--seconds', str(self.duration//3), '--threads', '10'],
 
             # upsert workload
-            self.get_command_prefix(subcmds=['run', 'upsert'], path=store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'upsert'], path=store_type) + self.get_insert_command_params() + ['--seconds', str(self.duration//3), '--threads', '10'],
 
             # insert workload
-            self.get_command_prefix(subcmds=['run', 'insert'], path=store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'insert'], path=store_type) + self.get_insert_command_params() + ['--seconds', str(self.duration//3), '--threads', '10'],
         ]
 
         # init
@@ -60,7 +60,7 @@ class TestYdbLogWorkload(StressFixture):
             self.get_command_prefix(subcmds=['run', 'select'], path=store_type) + [
                 '--client-timeout', '10000',
                 '--threads', '10',
-                '--seconds', str(10 * len(upload_commands)),
+                '--seconds', str(self.duration),
             ], wait=False)
 
         for command in upload_commands:

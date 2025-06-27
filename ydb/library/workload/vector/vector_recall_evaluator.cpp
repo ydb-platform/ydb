@@ -85,7 +85,7 @@ void TVectorRecallEvaluator::MeasureRecall(const TVectorSampler& sampler) {
 
             // Extract all IDs from the result set
             while (parser.TryNextRow()) {
-                ui64 id = parser.ColumnParser(Params.KeyColumn).GetUint64();
+                ui64 id = parser.ColumnParser("id").GetUint64();
                 etalons.push_back(id);
             }
             if (etalons.empty()) {
@@ -143,7 +143,7 @@ void TVectorRecallEvaluator::ProcessIndexQueryResult(const NYdb::NQuery::TExecut
     // Extract IDs from index search results
     std::vector<ui64> indexResults;
     while (parser.TryNextRow()) {
-        ui64 id = parser.ColumnParser(Params.KeyColumn).GetUint64();
+        ui64 id = parser.ColumnParser("id").GetUint64();
         indexResults.push_back(id);
     }
 

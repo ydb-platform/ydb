@@ -82,13 +82,13 @@ void TVectorSampler::SampleExistingVectors() {
         std::string vectorQuery;
         if (Params.PrefixColumn) {
             vectorQuery = std::format(R"_(--!syntax_v1
-                SELECT {0}, Unwrap({1}) as embedding, Unwrap({2}) as prefix_value
+                SELECT CAST({0} as uint64) as id, Unwrap({1}) as embedding, Unwrap({2}) as prefix_value
                 FROM {3}
                 WHERE {0} = {4};
             )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.PrefixColumn->c_str(), Params.TableName.c_str(), randomId);
         } else {
             vectorQuery = std::format(R"_(--!syntax_v1
-                SELECT {0}, Unwrap({1}) as embedding
+                SELECT CAST({0} as uint64) as id, Unwrap({1}) as embedding
                 FROM {2}
                 WHERE {0} = {3};
             )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.TableName.c_str(), randomId);
@@ -114,7 +114,7 @@ void TVectorSampler::SampleExistingVectors() {
             continue;
         }
 
-        ui64 id = vectorParser.ColumnParser(Params.KeyColumn).GetUint64();
+        ui64 id = vectorParser.ColumnParser("id").GetUint64();
         std::string embeddingBytes = vectorParser.ColumnParser(Params.EmbeddingColumn).GetString();
 
         // Ensure we got a valid embedding

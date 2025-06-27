@@ -153,13 +153,11 @@ class ConnectionParams:
         return urllib.parse.urlunsplit((endpoint.protocol, location, path, urllib.parse.urlencode(params), ''))
 
     def parse_token(self, token_file, iam_token_file):
-        if token_file:
-            self.token = token_file.readline().rstrip('\r\n')
-            token_file.close()
+        if token_file or iam_token_file:
+            self.token = self.read_stripped_file_and_close(token_file)
         if iam_token_file:
-            self.token = iam_token_file.readline().rstrip('\r\n')
+            self.token = self.read_stripped_file_and_close(iam_token_file)
             self.token_type = 'Bearer'
-            iam_token_file.close()
         if self.token is None:
             self.token = os.getenv('YDB_TOKEN')
             if self.token is not None:
@@ -179,6 +177,13 @@ class ConnectionParams:
             self.token_type, self.token = self.token.split(' ')
         else:
             self.token_type = 'OAuth'
+
+    def read_stripped_file_and_close(self, token_file):
+        if token_file is None:
+            return None
+        result = token_file.readline().rstrip('\r\n')
+        token_file.close()
+        return result
 
     def apply_args(self, args, with_localhost=True):
         self.args = args

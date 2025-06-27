@@ -51,10 +51,21 @@ void TDbWrapper::WritePortion(const std::vector<TUnifiedBlobId>& blobIds, const 
 void TDbWrapper::CommitPortion(const NOlap::TPortionInfo& portion, const TSnapshot& commitSnapshot) {
     NIceDb::TNiceDb db(Database);
     using IndexPortions = NColumnShard::Schema::IndexPortions;
-    db.Table<IndexPortions>()
-        .Key(portion.GetPathId().GetRawValue(), portion.GetPortionId())
-        .Update(NIceDb::TUpdate<IndexPortions::CommitPlanStep>(commitSnapshot.GetPlanStep()),
-            NIceDb::TUpdate<IndexPortions::CommitTxId>(commitSnapshot.GetTxId()));
+    if (portion.HasRemoveSnapshot()) {
+        db.Table<IndexPortions>()
+            .Key(portion.GetPathId().GetRawValue(), portion.GetPortionId())
+            .Update(
+                NIceDb::TUpdate<IndexPortions::CommitPlanStep>(commitSnapshot.GetPlanStep()),
+                NIceDb::TUpdate<IndexPortions::CommitTxId>(commitSnapshot.GetTxId()),
+                NIceDb::TUpdate<IndexPortions::XPlanStep>(portion.GetRemoveSnapshotVerified().GetPlanStep()),
+                NIceDb::TUpdate<IndexPortions::XTxId>(portion.GetRemoveSnapshotVerified().GetTxId())
+                );
+    } else {
+        db.Table<IndexPortions>()
+            .Key(portion.GetPathId().GetRawValue(), portion.GetPortionId())
+            .Update(NIceDb::TUpdate<IndexPortions::CommitPlanStep>(commitSnapshot.GetPlanStep()),
+                NIceDb::TUpdate<IndexPortions::CommitTxId>(commitSnapshot.GetTxId()));
+    }
 }
 
 void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {

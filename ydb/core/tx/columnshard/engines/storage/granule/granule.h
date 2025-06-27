@@ -228,7 +228,7 @@ public:
         it->second->SetCommitSnapshot(ssRemove);
         it->second->SetRemoveSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);
-        wrapper.WritePortion({}, *it->second);
+        it->second->CommitToDatabase(wrapper);
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {

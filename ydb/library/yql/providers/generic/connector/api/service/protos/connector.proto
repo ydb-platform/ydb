@@ -428,6 +428,7 @@ message TPredicate {
     message TIn {
         TExpression value = 1;
         repeated TExpression set = 2;
+        Ydb.TypedValue list = 3;
     }
 
     // "$column IS NULL"

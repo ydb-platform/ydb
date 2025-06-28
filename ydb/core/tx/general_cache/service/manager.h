@@ -103,17 +103,18 @@ private:
             }
             AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
             auto& addresses = requestedAddresses[request->GetConsumer()];
+            Counters->DirectRequests->Inc();
             for (auto&& i : request->GetWait()) {
                 auto it = RequestedObjects.find(i);
                 if (it == RequestedObjects.end()) {
                     it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
                     AFL_VERIFY(addresses.emplace(i).second);
+                    Counters->DirectObjects->Inc();
                 }
                 it->second.emplace_back(request);
             }
         }
         ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor);
-        Counters->DirectRequests->Inc();
         Counters->RequestsQueueSize->Set(RequestsQueue.size());
         Counters->ObjectsQueueSize->Set(QueueObjectsCount.Val());
         Counters->ObjectsInFlight->Set(RequestedObjects.size());

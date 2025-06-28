@@ -54,6 +54,8 @@ private:
     mutable TMonotonic LastStageInstant = TMonotonic::Now();
     mutable EWriteStage CurrentStage = EWriteStage::Created;
 
+    YDB_FLAG_ACCESSOR(Bulk, false);
+
 public:
     void OnStage(const EWriteStage stage) const;
 

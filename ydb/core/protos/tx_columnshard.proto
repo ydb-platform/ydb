@@ -354,4 +354,5 @@ message TInternalOperationData {
     optional uint32 ModificationType = 2;
     optional uint64 PathId = 3;
     optional bool WritePortions = 4;
+    optional bool IsBulk = 5;
 }

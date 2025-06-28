@@ -27,6 +27,6 @@ class TestYdbWorkload(StressFixture):
             "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
             "--mon-endpoint", f"http://localhost:{self.cluster.nodes[1].mon_port}",
             "--database", "/Root",
-            "--duration", "120",
+            "--duration", str(self.duration),
         ]
         yatest.common.execute(cmd, wait=True)

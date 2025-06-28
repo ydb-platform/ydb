@@ -36,7 +36,7 @@ class TestYdbWorkload(StressFixture):
             "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
             "--database=/Root",
             "workload", "kv", "run", "mixed",
-            "--seconds", "100",
+            "--seconds", str(self.duration),
             "--threads", "10",
             "--cols", "5",
             "--len", "200",

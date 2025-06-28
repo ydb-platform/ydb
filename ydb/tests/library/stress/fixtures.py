@@ -29,5 +29,6 @@ class StressFixture:
             )
         )
         self.driver.wait()
+        self.duration = 120
         yield
         self.cluster.stop()

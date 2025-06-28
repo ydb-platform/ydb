@@ -20,5 +20,5 @@ class TestYdbWorkload(StressFixture):
     def test(self):
         client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', True)
         client.wait_connection()
-        with WorkloadRunner(client, 'oltp_workload', 120) as runner:
+        with WorkloadRunner(client, 'oltp_workload', self.duration) as runner:
             runner.run()

@@ -18,8 +18,8 @@ class TestYdbWorkload(StressFixture):
     @pytest.mark.parametrize(
         "duration, path_prefix",
         [
-            (30, None),
-            (30, "test_scv"),
+            (120, None),
+            (120, "test_scv"),
         ],
     )
     def test_show_create_view_workload(self, duration, path_prefix):

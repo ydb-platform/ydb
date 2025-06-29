@@ -38,13 +38,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (snapshot.IsZero()) {
         snapshot = Self->GetLastTxSnapshot();
     }
-    const TReadMetadataBase::ESorting sorting =
-        [&]() {
-            if (request.HasReverse()) {
-                return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
-            } else {
-                return TReadMetadataBase::ESorting::NONE;
-            }
+    const TReadMetadataBase::ESorting sorting = [&]() {
+        if (request.HasReverse()) {
+            return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+        } else {
+            return TReadMetadataBase::ESorting::NONE;
+        }
     }();
 
     TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, sorting);
@@ -74,12 +73,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
         const auto& schemeShardLocalPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
         const auto& internalPathId = Self->TablesManager.ResolveInternalPathId(schemeShardLocalPathId);
-        read.PathId = NColumnShard::TUnifiedPathId{internalPathId ? *internalPathId : TInternalPathId{}, schemeShardLocalPathId};
+        read.PathId = NColumnShard::TUnifiedPathId{ internalPathId ? *internalPathId : TInternalPathId{}, schemeShardLocalPathId };
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId.InternalPathId);
         read.TableName = table;
 
-        const TString defaultReader =
-            [&]() {
+        const TString defaultReader = [&]() {
             const TString defGlobal =
                 AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
             if (Self->HasIndex()) {
@@ -164,9 +162,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
     AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(),
-        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId,
-        txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat, Self->Counters.GetScanCounters(),
-        cpuLimits));
+        Self->DataAccessorsManager.GetObjectPtrVerified(), shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout,
+        readMetadataRange, dataFormat, Self->Counters.GetScanCounters(), cpuLimits));
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxScan started")("actor_id", scanActorId)("trace_detailed", detailedInfo);

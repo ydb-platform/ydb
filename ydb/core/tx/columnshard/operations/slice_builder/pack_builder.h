@@ -50,7 +50,7 @@ public:
         , Context(context) {
         AFL_VERIFY(WriteUnits.size());
         for (auto&& i : WriteUnits) {
-            i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlicesPack);
+            i.GetData()->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::PackSlicesConstruction);
         }
     }
 };

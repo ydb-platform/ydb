@@ -1,15 +1,19 @@
 #include "context.h"
 #include "openid_connect.h"
-#include "oidc_settings.h"
+
+#include <ydb/core/util/wildcard.h>
 #include <ydb/library/security/util.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
+
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
+
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
 
 namespace NMVP::NOIDC {
 
@@ -100,7 +104,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     if (context.IsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
-    responseHeaders.Set("Location", redirectUrl);
+    responseHeaders.Set(LOCATION_HEADER, redirectUrl);
     return request->CreateResponse("302", "Authorization required", responseHeaders);
 }
 
@@ -256,6 +260,54 @@ TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) 
         BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
     }
     return cookieValue;
+}
+
+NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {
+    auto outRequest = NHttp::THttpOutgoingRequest::CreateRequest(params.Request->Method, params.ProtectedPage.Url);
+    NHttp::THeadersBuilder headers(params.Request->Headers);
+    for (const auto& header : params.Settings.REQUEST_HEADERS_WHITE_LIST) {
+        if (headers.Has(header)) {
+            outRequest->Set(header, headers.Get(header));
+        }
+    }
+    outRequest->Set("Accept-Encoding", "deflate");
+
+    if (!params.AuthHeader.empty()) {
+        outRequest->Set(AUTHORIZATION_HEADER, params.AuthHeader);
+    }
+    if (params.Request->HaveBody()) {
+        outRequest->SetBody(params.Request->Body);
+    }
+    if (params.ProtectedPage.Scheme.empty()) {
+        outRequest->Secure = params.Secure;
+    }
+
+    return outRequest;
+}
+
+NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage) {
+    NHttp::THeadersBuilder headers;
+    headers.Set("Content-Type", "text/html");
+    SetCORS(request, &headers);
+
+    TStringBuilder html;
+    html << "<html><head><title>403 Forbidden</title></head><body bgcolor=\"white\"><center><h1>";
+    html << "403 Forbidden host: " << protectedPage.Host;
+    html << "</h1></center></body></html>";
+
+    return request->CreateResponse("403", "Forbidden", headers, html);
+}
+
+NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage) {
+    NHttp::THeadersBuilder headers;
+    headers.Set("Content-Type", "text/html");
+    SetCORS(request, &headers);
+
+    TStringBuilder html;
+    html << "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>";
+    html << "400 Bad Request. Can not process request to protected resource: " << errorMessage;
+    html << "</h1></center></body></html>";
+    return request->CreateResponse("400", "Bad Request", headers, html);
 }
 
 } // NMVP::NOIDC
